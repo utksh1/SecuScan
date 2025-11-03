@@ -6,7 +6,7 @@
 **Document Version:** 1.0  
 **Classification:** Internal Release  
 **Target Audience:** Engineering Team, Security Researchers, Pentesting Students  
-**Last Updated:** October 29, 2025  
+**Last Updated:** November 2, 2025  
 
 ---
 
