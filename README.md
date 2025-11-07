@@ -1,5 +1,5 @@
 # SecuScan — Local-First Pentesting Toolkit
-## Final Detailed Product Specification, October 2025
+## Final Detailed Product Specification, November 2025
 
 ---
 
