@@ -1,0 +1,73 @@
+version: "3.9"
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: secuscan
+      POSTGRES_USER: secuscan
+      POSTGRES_PASSWORD: secuscan
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U secuscan -d secuscan"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    volumes:
+      - ./backend:/app
+      - ./plugins:/app/plugins
+      - ./data:/app/data
+    ports:
+      - "127.0.0.1:8081:8081"
+    environment:
+      - SECUSCAN_BIND_ADDRESS=127.0.0.1
+      - SECUSCAN_BIND_PORT=8081
+      - SECUSCAN_POSTGRES_DSN=postgresql://secuscan:secuscan@postgres:5432/secuscan
+      - SECUSCAN_REDIS_URL=redis://redis:6379/0
+      - SECUSCAN_PLUGINS_DIR=/app/plugins
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm ci && npm run dev"
+    ports:
+      - "127.0.0.1:5173:5173"
+    environment:
+      - VITE_API_BASE=http://127.0.0.1:8081/api
+    volumes:
+      - ./frontend:/app
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
