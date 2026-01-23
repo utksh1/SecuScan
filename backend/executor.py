@@ -13,11 +13,11 @@ from typing import Optional, Dict, Any, List
 import logging
 import re
 
-from cache import get_cache
-from config import settings
-from database import get_db
-from plugins import get_plugin_manager
-from models import TaskStatus
+from .cache import get_cache
+from .config import settings
+from .database import get_db
+from .plugins import get_plugin_manager
+from .models import TaskStatus
 
 logger = logging.getLogger(__name__)
 

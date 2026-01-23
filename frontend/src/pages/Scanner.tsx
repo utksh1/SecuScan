@@ -1,6 +1,25 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { scanTools, getToolsByCategory, getToolById, tabCategories, ScanTool } from '../data/scanTools'
+import { motion, AnimatePresence } from 'framer-motion'
+import { scanTools, getToolsByCategory, tabCategories, ScanTool } from '../data/scanTools'
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.05 }
+  }
+}
+
+const itemVariants = {
+  hidden: { opacity: 0, scale: 0.95, y: 20 },
+  visible: { 
+    opacity: 1, 
+    scale: 1, 
+    y: 0,
+    transition: { type: 'spring', stiffness: 200, damping: 20 }
+  }
+}
 
 export default function Scanner() {
     const navigate = useNavigate()
@@ -12,190 +31,153 @@ export default function Scanner() {
         navigate(`/scans/${tool.id}`)
     }
 
-    const renderToolCard = (tool: ScanTool) => (
-        <button
-            key={tool.id}
-            className={`p-10 bg-charcoal border border-accent-silver/10 hover:border-silver/40 transition-all text-left group relative flex flex-col justify-between h-72 rounded-sm shadow-2xl ${tool.disabled ? 'opacity-40 cursor-not-allowed grayscale' : 'cursor-pointer hover:bg-charcoal-light'}`}
-            onClick={() => handleToolSelect(tool)}
-            disabled={tool.disabled}
-        >
-            <div className="absolute inset-0 opacity-0 group-hover:opacity-5 transition-opacity bg-[radial-gradient(circle_at_center,_white_1px,_transparent_1px)] [background-size:20px_20px]"></div>
-            
-            <div className="space-y-6 relative z-10">
-                <div className="flex justify-between items-start">
-                    <span className={`text-[10px] font-bold uppercase tracking-[0.3em] italic px-3 py-1 border ${
-                        tool.riskLevel === 'aggressive' ? 'text-rag-red border-rag-red/20 bg-rag-red/5' : 
-                        tool.riskLevel === 'active' ? 'text-rag-amber border-rag-amber/20 bg-rag-amber/5' : 
-                        'text-rag-green border-rag-green/20 bg-rag-green/5'
-                    }`}>{tool.riskLevel} PROTOCOL</span>
-                    {tool.presetCompatibility !== 'none' && (
-                        <div className="flex items-center gap-2">
-                             <span className="text-[8px] text-silver/20 font-bold uppercase tracking-widest hidden group-hover:block transition-all italic">COMPATIBLE</span>
-                             <span className="material-symbols-outlined text-base text-silver/20 group-hover:text-silver-bright transition-colors">
-                                {tool.presetCompatibility === 'quick-recon' ? 'bolt' : 'psychology'}
-                             </span>
-                        </div>
-                    )}
-                </div>
-                <div>
-                  <h3 className="text-2xl font-serif font-light text-silver-bright italic tracking-tight group-hover:underline underline-offset-8 decoration-silver/20 leading-snug">{tool.name}</h3>
-                  <div className="h-0.5 w-12 bg-accent-silver/20 mt-4 group-hover:w-24 transition-all duration-500"></div>
-                </div>
-                <p className="text-[10px] text-silver/40 uppercase tracking-[0.1em] leading-relaxed line-clamp-3 italic font-medium">{tool.purpose}</p>
-            </div>
-            
-            <div className="flex justify-between items-end opacity-20 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0 relative z-10 pt-4 border-t border-accent-silver/5">
-                <span className="text-[9px] font-bold text-silver-bright uppercase tracking-[0.5em]">Initialize Operation</span>
-                <span className="material-symbols-outlined text-lg text-silver-bright translate-x-2 group-hover:translate-x-0 transition-transform">arrow_right_alt</span>
-            </div>
-
-            {tool.disabled && tool.disabledReason && (
-                <div className="absolute inset-0 bg-charcoal-dark/90 flex flex-col items-center justify-center p-8 text-center backdrop-blur-[4px] z-20">
-                    <span className="material-symbols-outlined text-rag-red/40 text-4xl mb-4">lock</span>
-                    <span className="text-[10px] text-rag-red font-bold uppercase tracking-[0.4em] leading-loose italic">{tool.disabledReason}</span>
-                </div>
-            )}
-        </button>
-    )
+    const filteredTools = scanTools.filter(t => {
+        const matchesTab = activeTab === 'quick-start' ? t.category === 'quick-start' : (
+            (activeTab === 'recon' && t.category === 'recon') ||
+            (activeTab === 'vulnerability' && t.category === 'vulnerability') ||
+            (activeTab === 'utility' && t.category === 'utility')
+        )
+        const matchesSearch = t.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                            t.purpose.toLowerCase().includes(searchQuery.toLowerCase())
+        return matchesTab && matchesSearch
+    })
 
     return (
-        <div className="min-h-screen flex flex-col">
-            <header className="w-full px-12 py-10 flex justify-between items-center border-b border-accent-silver/10">
-                <div className="flex items-center gap-8">
-                    <div className="header-decoration hidden xl:block">
-                        <span className="material-symbols-outlined text-accent-silver/30 text-4xl animate-pulse">radar</span>
-                    </div>
-                    <div>
-                        <h1 className="text-3xl font-serif font-light text-silver-bright tracking-tight italic uppercase leading-none">Operations Intelligence</h1>
-                        <p className="text-[10px] font-light text-silver/40 uppercase tracking-[0.4em] mt-3 italic">Surface Analysis • Reconnaissance Toolkit • DEPLOYMENT CENTER</p>
-                    </div>
+        <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
+            
+            {/* Neo-Brutalist Header */}
+            <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10 font-black">
+                <div className="space-y-4">
+                  <div className="bg-rag-red text-black px-4 py-1 text-xs uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                    Strike_Toolkit v12
+                  </div>
+                  <h1 className="text-6xl md:text-8xl text-silver-bright uppercase tracking-tighter leading-none italic">
+                    Combat <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '2px var(--accent-silver-bright)' }}>Scanner</span>
+                  </h1>
+                  <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic leading-relaxed">
+                    SELECT_TOOL_PROTOCOL // DEPLOY_PAYLOAD // MONITOR_FEED
+                  </p>
                 </div>
-                
-                <div className="flex items-center gap-12">
-                   <div className="relative hidden xl:block">
+
+                <div className="flex items-center gap-6">
+                   <div className="relative group">
+                        <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-silver/20 group-focus-within:text-rag-red transition-colors text-sm">search</span>
                         <input
                             type="text"
-                            placeholder="FILTER PROTOCOLS..."
-                            className="bg-transparent border-b border-accent-silver/20 py-1 px-4 text-[10px] uppercase tracking-widest text-silver-bright focus:outline-none focus:border-silver-bright transition-colors w-72 placeholder:text-silver/10 italic"
+                            placeholder="SEARCH_PROTOCOLS..."
+                            className="bg-charcoal border-4 border-black pl-12 pr-4 py-4 text-xs font-black uppercase tracking-widest text-silver-bright focus:outline-none focus:border-rag-red transition-all w-80 placeholder:text-silver/10 italic shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
-                        <span className="absolute right-2 top-1 material-symbols-outlined text-sm text-silver/20">search</span>
                    </div>
-                   <div className="text-right border-l border-accent-silver/10 pl-8">
-                        <span className="text-[10px] font-medium text-silver/40 uppercase tracking-widest block mb-1">Active Agents</span>
-                        <span className="text-xl font-light text-silver-bright font-mono italic">{scanTools.length.toString().padStart(3, '0')}</span>
-                    </div>
                 </div>
             </header>
 
-            <main className="flex-1 p-12 space-y-12 max-w-[1600px] mx-auto w-full animate-in fade-in duration-1000">
-                
-                {/* Tactical Status Strip */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-px bg-accent-silver/10 executive-border overflow-hidden rounded-sm relative">
-                    <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#3f3f46_1px,transparent_1px)] [background-size:24px_24px]"></div>
-                    <div className="bg-charcoal p-8 flex items-center gap-6 group hover:bg-charcoal-light/50 transition-all">
-                        <div className="w-12 h-12 flex items-center justify-center border border-rag-green/20 text-rag-green bg-rag-green/5 group-hover:scale-110 transition-transform">
-                            <span className="material-symbols-outlined text-2xl">verified_user</span>
-                        </div>
-                        <div>
-                            <span className="text-[9px] font-bold text-silver/30 uppercase tracking-[0.2em] italic block">Auth Status</span>
-                            <span className="text-xs font-mono text-silver-bright uppercase">VERIFIED</span>
-                        </div>
-                    </div>
-                    <div className="bg-charcoal p-8 flex items-center gap-6 group hover:bg-charcoal-light/50 transition-all">
-                        <div className="w-12 h-12 flex items-center justify-center border border-accent-silver/20 text-silver/40 bg-white/5">
-                            <span className="material-symbols-outlined text-2xl">security</span>
-                        </div>
-                        <div>
-                            <span className="text-[9px] font-bold text-silver/30 uppercase tracking-[0.2em] italic block">Safe Mode</span>
-                            <span className="text-xs font-mono text-rag-green/80 uppercase">ENABLED</span>
-                        </div>
-                    </div>
-                    <div className="bg-charcoal p-8 flex items-center gap-6 group hover:bg-charcoal-light/50 transition-all">
-                        <div className="w-12 h-12 flex items-center justify-center border border-accent-silver/20 text-silver/40 bg-white/5">
-                            <span className="material-symbols-outlined text-2xl">dns</span>
-                        </div>
-                        <div>
-                            <span className="text-[9px] font-bold text-silver/30 uppercase tracking-[0.2em] italic block">Compute Proxy</span>
-                            <span className="text-xs font-mono text-silver-bright uppercase">LOCAL_CLUSTER</span>
-                        </div>
-                    </div>
-                    <div className="bg-charcoal p-8 flex items-center gap-6 group hover:bg-charcoal-light/50 transition-all">
-                        <div className="w-12 h-12 flex items-center justify-center border border-accent-silver/20 text-silver/40 bg-white/5">
-                            <span className="material-symbols-outlined text-2xl">monitor_heart</span>
-                        </div>
-                        <div>
-                            <span className="text-[9px] font-bold text-silver/30 uppercase tracking-[0.2em] italic block">Network Load</span>
-                            <span className="text-xs font-mono text-silver-bright uppercase italic">OPTIMAL</span>
-                        </div>
-                    </div>
-                </div>
+            {/* Tactical Navigation */}
+            <nav className="flex flex-wrap gap-4">
+                {tabCategories.map(tab => (
+                    <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`px-8 py-4 text-[10px] font-black uppercase tracking-[0.3em] transition-all border-4 flex items-center gap-3 ${
+                            activeTab === tab.id 
+                            ? 'bg-rag-red text-black border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] -translate-x-1 -translate-y-1' 
+                            : 'bg-charcoal text-silver/40 border-black hover:border-silver-bright/20'
+                        }`}
+                    >
+                        {tab.name}
+                        {activeTab === tab.id && <span className="w-2 h-2 bg-black"></span>}
+                    </button>
+                ))}
+            </nav>
 
-                <nav className="flex gap-16 border-b border-accent-silver/10 pb-4">
-                    {tabCategories.map(tab => (
-                        <button
-                            key={tab.id}
-                            className={`text-[10px] font-bold uppercase tracking-[0.4em] transition-all relative pb-4 ${
-                                activeTab === tab.id ? 'text-silver-bright italic scale-110' : 'text-silver/20 hover:text-silver/40'
-                            }`}
-                            onClick={() => setActiveTab(tab.id)}
-                        >
-                            {tab.name}
-                            {activeTab === tab.id && (
-                                <span className="absolute bottom-0 left-0 w-full h-px bg-silver-bright animate-in slide-in-from-left duration-700 shadow-[0_0_10px_white]"></span>
-                            )}
-                        </button>
-                    ))}
-                </nav>
-
-                <div className="animate-in fade-in slide-in-from-bottom-8 duration-1000">
-                    {activeTab === 'quick-start' ? (
-                        <div className="space-y-12">
-                            <div className="flex items-center gap-6">
-                                <h3 className="text-xs font-bold uppercase tracking-[0.5em] text-silver/20 italic">Primary Deployment Agents</h3>
-                                <div className="h-px flex-1 bg-accent-silver/5"></div>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-px bg-accent-silver/5 executive-border overflow-hidden rounded-sm">
-                                {getToolsByCategory('quick-start').map(renderToolCard)}
-                                {/* Placeholder for visual balance if list is short */}
-                                {[...Array(Math.max(0, 4 - getToolsByCategory('quick-start').length))].map((_, i) => (
-                                    <div key={i} className="p-10 bg-charcoal/30 border border-dashed border-accent-silver/5 flex items-center justify-center grayscale opacity-10">
-                                        <span className="material-symbols-outlined text-6xl">add</span>
+            {/* Tools Grid Section */}
+            <main>
+                <AnimatePresence mode='wait'>
+                    <motion.div 
+                        key={activeTab}
+                        variants={containerVariants}
+                        initial="hidden"
+                        animate="visible"
+                        exit={{ opacity: 0, y: 20 }}
+                        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8"
+                    >
+                        {filteredTools.map((tool) => (
+                            <motion.button
+                                key={tool.id}
+                                variants={itemVariants}
+                                disabled={tool.disabled}
+                                onClick={() => handleToolSelect(tool)}
+                                className={`group relative p-8 bg-charcoal border-4 border-black text-left flex flex-col justify-between h-80 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all overflow-hidden ${
+                                    tool.disabled 
+                                    ? 'opacity-30 cursor-not-allowed grayscale' 
+                                    : 'hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] hover:-translate-x-1 hover:-translate-y-1'
+                                }`}
+                            >
+                                <div className="space-y-6 relative z-10">
+                                    <div className="flex justify-between items-start">
+                                        <div className={`px-2 py-0.5 text-[8px] font-black uppercase tracking-widest italic border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
+                                            tool.riskLevel === 'aggressive' ? 'bg-rag-red text-black' : 
+                                            tool.riskLevel === 'active' ? 'bg-rag-amber text-black' : 
+                                            'bg-rag-green text-black'
+                                        }`}>
+                                            {tool.riskLevel}_STRIKE
+                                        </div>
+                                        <span className="material-symbols-outlined text-silver/10 group-hover:text-silver-bright transition-colors duration-500">
+                                            {tool.presetCompatibility === 'quick-recon' ? 'bolt' : 'psychology'}
+                                        </span>
                                     </div>
-                                ))}
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="space-y-20">
-                            {/* Generic category rendering with more density */}
-                             <section className="space-y-12">
-                                <div className="flex items-center gap-6">
-                                    <h3 className="text-xs font-bold uppercase tracking-[0.5em] text-silver/20 italic">Operational Sub-Matrix</h3>
-                                    <div className="h-px flex-1 bg-accent-silver/5"></div>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-px bg-accent-silver/5 executive-border overflow-hidden rounded-sm">
-                                    {scanTools.filter(t => 
-                                        (activeTab === 'recon' && t.category === 'recon') ||
-                                        (activeTab === 'vulnerability' && t.category === 'vulnerability') ||
-                                        (activeTab === 'utility' && t.category === 'utility')
-                                    ).map(renderToolCard)}
-                                </div>
-                            </section>
-                        </div>
-                    )}
-                </div>
+                                    
+                                    <div>
+                                        <h3 className="text-3xl font-black text-silver-bright uppercase tracking-tighter italic leading-none group-hover:text-rag-red transition-colors">
+                                            {tool.name}
+                                        </h3>
+                                        <div className="w-12 h-1 bg-silver-bright/10 mt-4 group-hover:w-full group-hover:bg-rag-red/30 transition-all duration-700"></div>
+                                    </div>
 
-                {/* Tactical Footer / Disclaimer */}
-                <div className="pt-20 opacity-20 hover:opacity-100 transition-opacity">
-                    <div className="p-10 border border-dashed border-accent-silver/20 text-center space-y-4 rounded-sm">
-                        <span className="material-symbols-outlined text-silver/20 text-4xl mb-4">gavel</span>
-                        <p className="text-[10px] text-silver/60 uppercase tracking-[0.3em] font-light leading-loose max-w-4xl mx-auto">
-                            The use of these tools is subject to active monitoring and strict operational engagement rules. Unauthorized utilization or escalation without valid mission authorization will result in immediate protocol revocation and administrative review.
+                                    <p className="text-[10px] text-silver/40 uppercase tracking-widest leading-relaxed line-clamp-3 font-bold italic">
+                                        {tool.purpose}
+                                    </p>
+                                </div>
+
+                                <div className="pt-6 border-t-2 border-black border-dashed flex justify-between items-end">
+                                    <span className="text-[9px] font-black text-silver-bright/20 uppercase tracking-[0.4em] group-hover:text-silver-bright transition-colors">INIT_DEPLOYMENT</span>
+                                    <span className="material-symbols-outlined text-silver/20 group-hover:text-rag-red group-hover:translate-x-1 transition-all duration-300">double_arrow</span>
+                                </div>
+
+                                {tool.disabled && tool.disabledReason && (
+                                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center p-8 text-center z-20">
+                                        <span className="material-symbols-outlined text-rag-red text-3xl mb-4">lock_reset</span>
+                                        <span className="text-[10px] text-rag-red font-black uppercase tracking-widest italic">{tool.disabledReason}</span>
+                                    </div>
+                                )}
+                            </motion.button>
+                        ))}
+
+                        {/* Visual Balance Empty Blocks */}
+                        {filteredTools.length > 0 && Array.from({ length: Math.max(0, 4 - (filteredTools.length % 4 || 4)) }).map((_, i) => (
+                            <div key={i} className="bg-charcoal/30 border-4 border-black/5 border-dashed flex items-center justify-center opacity-10 p-10">
+                                <span className="material-symbols-outlined text-4xl">add_box</span>
+                            </div>
+                        ))}
+                    </motion.div>
+                </AnimatePresence>
+            </main>
+
+            {/* Warning Section */}
+            <footer className="pt-24 opacity-20 hover:opacity-100 transition-opacity duration-700 pointer-events-none md:pointer-events-auto">
+                <div className="p-12 border-4 border-black border-dashed flex flex-col md:flex-row items-center gap-10 bg-charcoal/50">
+                    <span className="material-symbols-outlined text-rag-red text-6xl">gavel</span>
+                    <div className="space-y-4">
+                        <p className="text-xs font-black text-rag-amber uppercase tracking-[0.4em] italic leading-relaxed">
+                            UNAUTHORIZED_DEPLOYMENT_IS_MONITORED
+                        </p>
+                        <p className="text-[10px] text-silver/40 uppercase tracking-widest font-bold leading-loose max-w-4xl">
+                            Operation engagement rules strictly apply. By initializing any protocol, you acknowledge the jurisdiction of the Secure Enclave and provide full consent for activity recording and auditing. Escalate only under valid mission authorization.
                         </p>
                     </div>
                 </div>
-            </main>
+            </footer>
         </div>
     )
 }

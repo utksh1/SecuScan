@@ -68,6 +68,13 @@ export function startTask(plugin_id: string, inputs: Record<string, unknown>, co
   })
 }
 
+export function cancelTask(taskId: string) {
+  return request(`/task/${taskId}/cancel`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
 export function streamTask(taskId: string, onEvent: (ev: MessageEvent) => void) {
   const url = `${API_BASE}/task/${taskId}/stream`
   const es = new EventSource(url)

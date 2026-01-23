@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Dict, Optional, List
 import logging
 
-from models import PluginMetadata
-from config import settings
+from .models import PluginMetadata
+from .config import settings
 
 logger = logging.getLogger(__name__)
 

@@ -11,11 +11,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from config import settings
-from cache import init_cache, cache as global_cache
-from database import init_db, db as global_db
-from plugins import init_plugins
-from routes import router
+from .config import settings
+from .cache import init_cache, cache as global_cache
+from .database import init_db, db as global_db
+from .plugins import init_plugins
+from .routes import router
 
 
 # Configure logging

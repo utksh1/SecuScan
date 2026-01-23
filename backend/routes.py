@@ -23,18 +23,18 @@ def parse_json_fields(rows: List[Dict], fields: List[str]) -> List[Dict]:
 
 logger = logging.getLogger(__name__)
 
-from cache import get_cache
-from models import (
+from .cache import get_cache
+from .models import (
     TaskCreateRequest, TaskResponse, TaskResult,
     PluginListResponse, ErrorResponse
 )
-from config import settings
-from database import get_db
-from plugins import get_plugin_manager
-from executor import executor
-from ratelimit import rate_limiter, concurrent_limiter
-from validation import validate_target
-from reporting import reporting
+from .config import settings
+from .database import get_db
+from .plugins import get_plugin_manager
+from .executor import executor
+from .ratelimit import rate_limiter, concurrent_limiter
+from .validation import validate_target
+from .reporting import reporting
 
 from sse_starlette.sse import EventSourceResponse
 
@@ -302,6 +302,30 @@ async def get_task_result(task_id: str):
     
     if not task_row:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    structured = {}
+    if task_row["structured_json"]:
+        try:
+            structured = json.loads(task_row["structured_json"])
+        except json.JSONDecodeError:
+            structured = {}
+
+    findings = structured.get("findings", []) if isinstance(structured, dict) else []
+    severity_counts: Dict[str, int] = {}
+    for finding in findings:
+        severity = str(finding.get("severity", "info")).lower()
+        severity_counts[severity] = severity_counts.get(severity, 0) + 1
+
+    summary: List[str] = []
+    if severity_counts:
+        ordered = ["critical", "high", "medium", "low", "info"]
+        parts = [f"{severity_counts[level]} {level}" for level in ordered if severity_counts.get(level)]
+        if parts:
+            summary.append(f"Findings profile: {', '.join(parts)}.")
+    if structured.get("open_ports"):
+        summary.append(f"Observed {len(structured['open_ports'])} exposed ports.")
+    if structured.get("technologies"):
+        summary.append(f"Identified {len(structured['technologies'])} technologies.")
     
     # Read raw output excerpt
     raw_excerpt = None
@@ -320,9 +344,9 @@ async def get_task_result(task_id: str):
         "timestamp": task_row["created_at"],
         "duration_seconds": task_row["duration_seconds"],
         "status": task_row["status"],
-        "summary": [],
-        "severity_counts": {},
-        "structured": {},
+        "summary": summary,
+        "severity_counts": severity_counts,
+        "structured": structured,
         "raw_output_path": task_row["raw_output_path"],
         "raw_output_excerpt": raw_excerpt,
         "errors": [{"message": task_row["error_message"]}] if task_row["error_message"] else [],
@@ -404,9 +428,21 @@ async def get_dashboard_summary():
                 "completed": int(task_stats["completed"]) if task_stats and task_stats.get("completed") is not None else 0,
                 "running": int(task_stats["running"]) if task_stats and task_stats.get("running") is not None else 0,
             },
+            "running_tasks": parse_json_fields(
+                await db.fetchall(
+                    "SELECT id, plugin_id, tool_name, target, status, created_at FROM tasks WHERE status = 'running' ORDER BY created_at DESC LIMIT 5"
+                ),
+                []
+            ),
+            "recent_tasks": parse_json_fields(
+                await db.fetchall(
+                    "SELECT id, plugin_id, tool_name, target, status, created_at, duration_seconds FROM tasks ORDER BY created_at DESC LIMIT 5"
+                ),
+                []
+            )
         }
 
-    return await get_or_set_cached("summary:dashboard", build)
+    return await build()
 
 
 @router.get("/assets")
