@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import { API_BASE } from '../api'
 
 interface Task {
@@ -21,6 +22,24 @@ const statusFilters = [
     { value: 'failed', label: 'SYSTEM_FAILURE' },
     { value: 'cancelled', label: 'MANUAL_ABORT' }
 ]
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.1 }
+  }
+}
+
+const itemVariants = {
+  hidden: { opacity: 0, scale: 0.95, y: 20 },
+  visible: { 
+    opacity: 1, 
+    scale: 1, 
+    y: 0,
+    transition: { type: 'spring', stiffness: 200, damping: 20 }
+  }
+}
 
 export default function History() {
     const navigate = useNavigate()
@@ -58,187 +77,207 @@ export default function History() {
         return `${Math.round(seconds / 3600)}h`
     }
 
-    const formatDateLong = (dateStr: string) =>
-        new Date(dateStr).toLocaleString('en-US', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) + ' GMT'
-
     return (
-        <div className="min-h-screen flex flex-col scale-in-center overflow-x-hidden">
-            <header className="w-full px-12 py-10 flex justify-between items-center border-b border-accent-silver/10 bg-charcoal-dark/50 backdrop-blur-md sticky top-0 z-40">
-                <div className="flex items-center gap-8">
-                    <div className="header-decoration hidden xl:block">
-                        <span className="material-symbols-outlined text-accent-silver/30 text-4xl animate-pulse font-light">history_edu</span>
-                    </div>
-                    <div>
-                        <h1 className="text-3xl font-serif font-light text-silver-bright tracking-tight italic uppercase leading-none">Operational Registry Ledger</h1>
-                        <p className="text-[10px] font-light text-silver/40 uppercase tracking-[0.4em] mt-3 italic">Historical Signal Repository • Execution Metadata • SYSTEMS ARCHIVE</p>
-                    </div>
+        <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
+            
+            {/* Neo-Brutalist Header */}
+            <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10">
+                <div className="space-y-4">
+                  <div className="bg-rag-blue text-black px-4 py-1 text-xs font-black uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                    Operational_Registry_v9.0
+                  </div>
+                  <h1 className="text-6xl md:text-8xl font-black text-silver-bright uppercase tracking-tighter leading-none italic">
+                    Scan <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '1px var(--accent-silver-bright)' }}>Archive</span>
+                  </h1>
+                  <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic flex items-center gap-4">
+                    Total_Registry_Keys: {tasks.length} // SYSTEM_STATUS: {loading ? 'SYNCING...' : 'SYNCED'}
+                    <span className={`w-2 h-2 rounded-full ${loading ? 'bg-rag-amber animate-pulse' : 'bg-rag-green'}`}></span>
+                  </p>
                 </div>
-                
-                <div className="flex items-center gap-12">
-                   <div className="text-right border-l border-accent-silver/10 pl-8">
-                        <span className="text-[10px] font-medium text-silver/40 uppercase tracking-widest block mb-1">Total Signals</span>
-                        <span className="text-xl font-light text-silver-bright font-mono">{tasks.length.toString().padStart(3, '0')}</span>
-                    </div>
-                    <div className="flex items-center gap-4">
-                       <button 
-                            className={`material-symbols-outlined text-silver/20 hover:text-silver-bright transition-all p-2 border border-accent-silver/10 rounded-full ${loading ? 'animate-spin' : ''}`}
-                            onClick={loadTasks}
-                        >sync</button>
+
+                <div className="flex items-center gap-12 border-l-4 border-silver-bright/10 pl-12 hidden lg:flex">
+                    <div className="text-right">
+                        <span className="text-[10px] font-black text-silver/40 uppercase tracking-[0.3em] block mb-2 italic">Integrity_Check</span>
+                        <span className="text-xs font-mono text-rag-green uppercase font-black">OPSEC_CLEARANCE_L5</span>
                     </div>
                 </div>
             </header>
 
-            <main className="flex-1 p-12 space-y-12 max-w-[1600px] mx-auto w-full animate-in fade-in duration-1000">
-                
-                {/* Filtration Bar */}
-                <section className="flex flex-col md:flex-row gap-12 items-center justify-between bg-charcoal-dark border border-accent-silver/10 p-8 rounded-sm shadow-xl">
-                    <div className="flex flex-wrap gap-8">
-                        {statusFilters.map(f => (
-                            <button
-                                key={f.value}
-                                className={`text-[10px] font-bold uppercase tracking-[0.3em] transition-all relative pb-2 group ${
-                                    filter === f.value ? 'text-silver-bright italic' : 'text-silver/20 hover:text-silver/40'
-                                }`}
-                                onClick={() => setFilter(f.value)}
-                            >
-                                <span className={filter === f.value ? '' : 'opacity-50'}>{f.label}</span>
-                                {filter === f.value && (
-                                    <span className="absolute bottom-0 left-0 w-full h-px bg-silver-bright shadow-[0_0_10px_white]"></span>
-                                )}
-                            </button>
-                        ))}
-                    </div>
-                    <div className="flex items-center gap-4 font-mono italic">
-                        <span className="text-[9px] text-silver/10 uppercase tracking-widest leading-none">Registry Isolation Protocol: ACTIVE</span>
-                        <div className="w-2 h-2 rounded-full bg-rag-blue animate-pulse shadow-[0_0_8px_#3b82f6]"></div>
-                    </div>
-                </section>
-
-                {/* Operations Feed */}
-                <div className="space-y-4">
-                    {tasks.length > 0 ? tasks.map(task => (
-                        <div 
-                            key={task.task_id} 
-                            className={`bg-charcoal border border-accent-silver/5 hover:border-accent-silver/20 transition-all cursor-pointer relative group rounded-sm shadow-2xl overflow-hidden ${expandedId === task.task_id ? 'ring-1 ring-silver/20' : ''}`}
-                            onClick={() => setExpandedId(expandedId === task.task_id ? null : task.task_id)}
+            {/* Filtration Block */}
+            <section className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col xl:flex-row justify-between items-center gap-12">
+                <div className="flex flex-wrap items-center gap-4">
+                    {statusFilters.map(f => (
+                        <button
+                            key={f.value}
+                            onClick={() => setFilter(f.value)}
+                            className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-2 ${
+                                filter === f.value 
+                                ? 'bg-silver-bright text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-x-0.5 -translate-y-0.5' 
+                                : 'bg-charcoal-dark text-silver/30 border-silver-bright/5 hover:border-silver-bright/20'
+                            }`}
                         >
-                            <div className={`absolute left-0 top-0 bottom-0 w-1 transition-all group-hover:w-2 ${
-                                task.status === 'completed' ? 'bg-rag-green' : 
-                                task.status === 'failed' ? 'bg-rag-red' : 
-                                task.status === 'running' ? 'bg-rag-amber' : 'bg-silver/10'
-                            }`}></div>
+                            {f.label}
+                            {filter === f.value && <span className="w-1 h-3 bg-black"></span>}
+                        </button>
+                    ))}
+                </div>
+                <div className="flex items-center gap-4 text-[10px] font-mono text-silver/20 uppercase italic tracking-widest">
+                   Isolation_Protocol_Active // <span className="text-rag-blue">v4_stable</span>
+                </div>
+            </section>
 
-                            <div className="p-8 flex flex-col md:flex-row md:items-center justify-between gap-8">
-                                <div className="flex items-center gap-10 flex-1 min-w-0">
-                                    <div className={`material-symbols-outlined text-3xl font-light shrink-0 ${
-                                        task.status === 'completed' ? 'text-rag-green/20' : 
-                                        task.status === 'failed' ? 'text-rag-red/20' : 
-                                        task.status === 'running' ? 'text-rag-amber/20 animate-pulse' : 'text-silver/10'
-                                    }`}>
-                                        {task.status === 'completed' ? 'check_circle' : 
-                                         task.status === 'failed' ? 'error' : 
-                                         task.status === 'running' ? 'sensors' : 'schedule'}
-                                    </div>
-                                    
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-4 mb-2">
-                                            <span className={`text-[9px] font-black tracking-[0.2em] uppercase px-2 py-0.5 border ${
-                                                task.status === 'completed' ? 'text-rag-green border-rag-green/20' : 
-                                                task.status === 'failed' ? 'text-rag-red border-rag-red/20' : 
-                                                'text-silver/20 border-accent-silver/10'
-                                            }`}>{task.status}</span>
-                                            <span className="text-[9px] text-silver/20 uppercase tracking-[0.3em] italic font-mono">OP_SIG_{task.task_id.split('-')[0].toUpperCase()}</span>
-                                        </div>
-                                        <h4 className="text-lg font-serif font-light text-silver-bright uppercase tracking-tight italic line-clamp-1 group-hover:text-white transition-colors">
-                                            {task.tool} <span className="text-silver/20 mx-4 uppercase not-italic font-sans text-xs font-black select-none opacity-50">BYPASSING_NODES_ON</span> {task.target}
-                                        </h4>
-                                        <div className="flex items-center gap-6 mt-2">
-                                            <p className="text-[10px] text-silver/40 uppercase tracking-widest italic font-mono flex items-center gap-2 shrink-0">
-                                                <span className="material-symbols-outlined text-[10px]">timer</span>
-                                                INITIATED: {formatDateLong(task.created_at)}
-                                            </p>
-                                            <div className="h-px flex-1 bg-accent-silver/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                        </div>
-                                    </div>
-                                </div>
+            {/* Timeline Operations Feed */}
+            <section className="relative">
+                {/* Vertical Timeline Cable */}
+                <div className="absolute left-[39px] top-0 bottom-0 w-1 bg-silver-bright/5 hidden md:block"></div>
 
-                                <div className="flex items-center gap-16 shrink-0">
-                                    {task.duration_seconds && (
-                                        <div className="text-right">
-                                            <p className="text-[8px] text-silver/20 font-bold uppercase tracking-[0.3em] mb-1 italic">Temporal Shift</p>
-                                            <p className="text-xl font-mono font-light text-silver-bright">{formatDuration(task.duration_seconds)}</p>
-                                        </div>
-                                    )}
-                                    <div className="w-12 h-12 flex items-center justify-center border border-accent-silver/5 rounded-full group-hover:border-accent-silver/20 group-hover:bg-charcoal-light transition-all">
-                                        <span className={`material-symbols-outlined text-silver/20 transition-all duration-700 ${expandedId === task.task_id ? 'rotate-180 text-silver-bright' : ''}`}>expand_more</span>
-                                    </div>
-                                </div>
-                            </div>
+                <AnimatePresence mode='popLayout'>
+                    {tasks.length > 0 ? (
+                        <motion.div 
+                            variants={containerVariants}
+                            initial="hidden"
+                            animate="visible"
+                            className="space-y-8"
+                        >
+                            {tasks.map((task) => (
+                                <motion.div 
+                                    key={task.task_id}
+                                    variants={itemVariants}
+                                    layout
+                                    className={`relative group md:pl-20 transition-all`}
+                                >
+                                    {/* Timeline Node */}
+                                    <div className={`absolute left-[31px] top-12 w-5 h-5 border-4 border-black z-10 hidden md:block transition-all duration-500 ${
+                                        task.status === 'completed' ? 'bg-rag-green shadow-[0_0_15px_rgba(34,197,94,0.3)]' :
+                                        task.status === 'failed' ? 'bg-rag-red' :
+                                        task.status === 'running' ? 'bg-rag-amber animate-pulse' : 'bg-silver/10'
+                                    }`}></div>
 
-                            {expandedId === task.task_id && (
-                                <div className="p-px bg-accent-silver/10 animate-in slide-in-from-top-12 duration-700 ease-out">
-                                    <div className="grid grid-cols-1 md:grid-cols-4 gap-px">
-                                        <div className="p-10 bg-charcoal-dark space-y-4">
-                                            <p className="text-[10px] text-silver/20 font-black uppercase tracking-[0.4em] italic flex items-center gap-2">
-                                                <div className="w-1 h-3 bg-rag-blue"></div>
-                                                Execution Script
-                                            </p>
-                                            <div className="space-y-1">
-                                                <p className="text-xs font-black text-silver-bright uppercase tracking-widest font-mono italic">{task.plugin_id}</p>
-                                                <p className="text-[9px] text-silver/20 uppercase tracking-tighter">VERSION_BETA_2.4.1</p>
-                                            </div>
-                                        </div>
-                                        <div className="p-10 bg-charcoal-dark space-y-4 col-span-2">
-                                            <p className="text-[10px] text-silver/20 font-black uppercase tracking-[0.4em] italic flex items-center gap-2">
-                                                <div className="w-1 h-3 bg-rag-blue"></div>
-                                                Temporal Synchronization
-                                            </p>
-                                            <div className="grid grid-cols-2 gap-12 font-mono">
-                                                <div className="space-y-1">
-                                                    <span className="text-[9px] text-silver/20 uppercase tracking-tighter block">Signal_Lock</span>
-                                                    <span className="text-xs text-silver-bright">{task.started_at ? new Date(task.started_at).toLocaleTimeString() : 'WAITING...'}</span>
+                                    <div 
+                                        className={`bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer relative overflow-hidden group/card ${
+                                            expandedId === task.task_id ? 'border-rag-blue/40 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]' : ''
+                                        }`}
+                                        onClick={() => setExpandedId(expandedId === task.task_id ? null : task.task_id)}
+                                    >
+                                        <div className="flex flex-col xl:flex-row justify-between gap-8">
+                                            <div className="flex-1 space-y-6">
+                                                <div className="flex flex-wrap items-center gap-4">
+                                                    <span className={`px-2 py-0.5 text-[9px] font-black uppercase italic border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
+                                                        task.status === 'completed' ? 'bg-rag-green text-black' :
+                                                        task.status === 'failed' ? 'bg-rag-red text-black' :
+                                                        'bg-charcoal-dark text-silver-bright/50'
+                                                    }`}>
+                                                        {task.status}
+                                                    </span>
+                                                    <span className="text-[10px] font-mono text-silver/20 uppercase tracking-widest italic">
+                                                        OP_ID_{task.task_id.split('-')[0].toUpperCase()}
+                                                    </span>
                                                 </div>
-                                                <div className="space-y-1">
-                                                    <span className="text-[9px] text-silver/20 uppercase tracking-tighter block">Signal_Release</span>
-                                                    <span className="text-xs text-silver-bright">{task.completed_at ? new Date(task.completed_at).toLocaleTimeString() : 'N/A'}</span>
+
+                                                <div className="space-y-2">
+                                                    <h3 className="text-3xl font-black text-silver-bright uppercase tracking-tighter italic leading-none group-hover/card:text-rag-blue transition-colors">
+                                                        {task.tool}
+                                                    </h3>
+                                                    <p className="text-xs font-mono text-silver/40 uppercase tracking-widest flex items-center gap-3">
+                                                        <span className="material-symbols-outlined text-sm">target</span>
+                                                        {task.target}
+                                                    </p>
                                                 </div>
                                             </div>
+
+                                            <div className="flex flex-row xl:flex-col items-center xl:items-end justify-between xl:justify-center gap-8 shrink-0">
+                                                <div className="text-left xl:text-right">
+                                                    <p className="text-[8px] font-black uppercase text-silver/20 tracking-[0.3em] mb-1 italic">Historical_Execution</p>
+                                                    <p className="text-xs font-mono text-silver-bright/80 uppercase">
+                                                        {new Date(task.created_at).toLocaleDateString()} // {new Date(task.created_at).toLocaleTimeString([], { hour12: false })}
+                                                    </p>
+                                                </div>
+                                                {task.duration_seconds && (
+                                                    <div className="bg-charcoal-dark border-2 border-black px-4 py-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                                                        <p className="text-[10px] font-black font-mono text-rag-blue leading-none">{formatDuration(task.duration_seconds).toUpperCase()}</p>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
-                                        <div className="p-10 bg-charcoal-dark flex flex-col justify-center items-center group/btn">
-                                            <button 
-                                                className="relative px-12 py-4 bg-transparent border border-silver/20 text-silver-bright text-[10px] font-black uppercase tracking-[0.4em] overflow-hidden transition-all hover:bg-silver-bright hover:text-charcoal-dark italic whitespace-nowrap group-hover/btn:shadow-[0_0_30px_rgba(255,255,255,0.1)]"
-                                                onClick={(e) => {
-                                                    e.stopPropagation()
-                                                    navigate(`/task/${task.task_id}`)
-                                                }}
-                                            >
-                                                <span className="relative z-10">Inspect_Briefing</span>
-                                                <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover/btn:translate-x-[100%] transition-transform duration-700 skew-x-12"></div>
-                                            </button>
-                                        </div>
+
+                                        {/* Expandable Details Block */}
+                                        <AnimatePresence>
+                                            {expandedId === task.task_id && (
+                                                <motion.div 
+                                                    initial={{ height: 0, opacity: 0 }}
+                                                    animate={{ height: 'auto', opacity: 1 }}
+                                                    exit={{ height: 0, opacity: 0 }}
+                                                    className="overflow-hidden"
+                                                >
+                                                    <div className="mt-12 pt-12 border-t-4 border-black grid grid-cols-1 md:grid-cols-3 gap-12 bg-charcoal-dark/20 -mx-8 -mb-8 p-8 border-dashed">
+                                                        <div className="space-y-4">
+                                                            <h5 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.3em] italic flex items-center gap-3">
+                                                                <span className="w-1.5 h-3 bg-rag-blue"></span> Signal_Metadata
+                                                            </h5>
+                                                            <div className="space-y-2">
+                                                                <p className="text-[10px] font-mono text-silver/40">PLUGIN: <span className="text-silver-bright uppercase">{task.plugin_id}</span></p>
+                                                                <p className="text-[10px] font-mono text-silver/40">SESSION: <span className="text-silver-bright uppercase">ENCRYPTED_VTX</span></p>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="space-y-4">
+                                                            <h5 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.3em] italic flex items-center gap-3">
+                                                                <span className="w-1.5 h-3 bg-rag-amber"></span> Time_Matrix
+                                                            </h5>
+                                                            <div className="grid grid-cols-2 gap-4">
+                                                                <div className="space-y-1">
+                                                                    <span className="text-[8px] text-silver/20 uppercase font-black tracking-widest">In_Lock</span>
+                                                                    <span className="text-[10px] font-mono text-silver-bright block">{task.started_at ? new Date(task.started_at).toLocaleTimeString([], { hour12: false }) : 'PENDING'}</span>
+                                                                </div>
+                                                                <div className="space-y-1">
+                                                                    <span className="text-[8px] text-silver/20 uppercase font-black tracking-widest">Release</span>
+                                                                    <span className="text-[10px] font-mono text-silver-bright block">{task.completed_at ? new Date(task.completed_at).toLocaleTimeString([], { hour12: false }) : 'N/A'}</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="flex items-center justify-end">
+                                                            <button 
+                                                                className="bg-rag-blue text-black px-8 py-4 text-[10px] font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3 group/btn italic"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation()
+                                                                    navigate(`/task/${task.task_id}`)
+                                                                }}
+                                                            >
+                                                                Open_Deep_Brief
+                                                                <span className="material-symbols-outlined text-sm group-hover/btn:translate-x-1 transition-transform">arrow_right_alt</span>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
                                     </div>
-                                </div>
-                            )}
-                        </div>
-                    )) : (
-                        <div className="p-32 bg-charcoal/30 border border-dashed border-accent-silver/10 rounded-sm text-center space-y-8 animate-pulse">
-                            <span className="material-symbols-outlined text-silver/5 text-8xl font-light">inventory_2</span>
+                                </motion.div>
+                            ))}
+                        </motion.div>
+                    ) : (
+                        <div className="py-40 bg-charcoal/30 border-4 border-dashed border-silver-bright/5 text-center flex flex-col items-center gap-8">
+                            <span className="material-symbols-outlined text-silver/5 text-9xl">inventory_2</span>
                             <div className="space-y-2">
-                                <p className="text-[12px] text-silver/20 uppercase tracking-[0.8em] font-black italic">End of Signal Stream</p>
-                                <p className="text-[9px] text-silver/10 uppercase tracking-[0.4em]">Historical data purge scheduled: 04:00 GMT</p>
+                                <p className="text-xl font-black text-silver/20 uppercase tracking-[0.4em] italic">Archive Isolated</p>
+                                <p className="text-xs font-mono text-silver/10 uppercase tracking-widest">No historical signal streams available for current selection</p>
                             </div>
                         </div>
                     )}
-                </div>
+                </AnimatePresence>
+            </section>
 
-                {/* Decorative End Note */}
-                <div className="pt-20 border-t border-accent-silver/5 flex justify-between items-center opacity-30 select-none pointer-events-none">
-                    <div className="text-[9px] text-silver/40 uppercase tracking-[0.6em] italic">SecuScan Operational Integrity Guaranteed</div>
-                    <div className="flex gap-4">
-                         {[1,2,3,4,5].map(i => <div key={i} className="w-4 h-0.5 bg-silver/20"></div>)}
-                    </div>
+            {/* Restricted Footer */}
+            <footer className="pt-24 opacity-20 pointer-events-none select-none flex flex-col md:flex-row justify-between items-center gap-8 text-[9px] font-black uppercase tracking-[0.5em] italic">
+                <div className="flex items-center gap-4">
+                    <span className="w-8 h-8 border-4 border-silver/20 flex items-center justify-center font-serif text-lg">S</span>
+                    SECUSCAN ARCHIVE INTEGRITY PROTOCOL v9.0
                 </div>
-            </main>
+                <div className="flex gap-2">
+                    {[1,2,3,4,5,6,7,8,9,10,11,12].map(i => <div key={i} className="w-1.5 h-3 bg-silver/20"></div>)}
+                </div>
+            </footer>
         </div>
     )
 }
