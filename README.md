@@ -651,12 +651,12 @@ High-risk tools requiring mature safety frameworks:
 
 SecuScan runs as a **single-page web application (SPA)** served from a local Python backend. The entire application stack operates on `127.0.0.1`, eliminating network exposure risks.
 
-**Access URL:** `http://127.0.0.1:8080`  
-**Backend API:** `http://127.0.0.1:8080/api/v1`  
+**Access URL (Frontend):** `http://127.0.0.1:3000`  
+**Backend API:** `http://127.0.0.1:8000/api/v1`  
 
 ### 3.2 Visual Layout
 
-The interface follows a dashboard-style layout optimized for both learning and productivity:
+The interface has been modernized with a high-density, **Neo-Brutalist** design aesthetic optimized for both learning and productivity. This includes thick black borders, hard offset shadows, high-contrast tactical color palettes (Charcoal, Silver, Rag-Red/Amber/Blue/Green), monospaced typography, and massive italicized headers to emulate a professional cybersecurity SOC environment.
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
