@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import List, Optional
 from pydantic_settings import BaseSettings
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables"""
@@ -13,21 +15,21 @@ class Settings(BaseSettings):
     # Server Configuration
     bind_address: str = "127.0.0.1"
     bind_port: int = 8000
-    debug: bool = False
+    debug: bool = True
     
     # Primary data store
-    database_path: str = "./data/secuscan.db"
+    database_path: str = str(PROJECT_ROOT / "data" / "secuscan.db")
 
     # Cache store (In-memory used when redis_url is None or Docker is disabled)
     redis_url: Optional[str] = None
     cache_ttl_seconds: int = 30
     
     # Storage
-    data_dir: str = "./data"
-    raw_output_dir: str = "./data/raw"
-    reports_dir: str = "./data/reports"
-    plugins_dir: str = "../plugins"
-    wordlists_dir: str = "./wordlists"
+    data_dir: str = str(PROJECT_ROOT / "data")
+    raw_output_dir: str = str(PROJECT_ROOT / "data" / "raw")
+    reports_dir: str = str(PROJECT_ROOT / "data" / "reports")
+    plugins_dir: str = str(PROJECT_ROOT.parent / "plugins")
+    wordlists_dir: str = str(PROJECT_ROOT / "wordlists")
     
     # Security
     safe_mode_default: bool = True
@@ -47,7 +49,7 @@ class Settings(BaseSettings):
     
     # Logging
     log_level: str = "INFO"
-    log_file: str = "./logs/secuscan.log"
+    log_file: str = str(PROJECT_ROOT / "logs" / "secuscan.log")
     
     class Config:
         env_prefix = "SECUSCAN_"

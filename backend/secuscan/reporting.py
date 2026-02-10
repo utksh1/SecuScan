@@ -26,9 +26,7 @@ class ReportGenerator:
 
         # Write Findings
         structured_data = result.get('structured', {})
-        findings = structured_data.get('findings', [])
-
-        if findings:
+        if findings := structured_data.get('findings', []):
             for finding in findings:
                 writer.writerow([
                     finding.get('severity', 'info'),
@@ -76,9 +74,7 @@ class ReportGenerator:
 
         pdf.ln(10)
 
-        # Summary
-        summary = result.get('summary', [])
-        if summary:
+        if summary := result.get('summary', []):
             pdf.set_font("helvetica", "B", 16)
             pdf.cell(0, 10, "Summary", new_x="LMARGIN", new_y="NEXT")
             pdf.ln(2)
@@ -93,9 +89,7 @@ class ReportGenerator:
         pdf.ln(5)
 
         structured_data = result.get('structured', {})
-        findings = structured_data.get('findings', [])
-
-        if findings:
+        if findings := structured_data.get('findings', []):
             for finding in findings:
                 # Severity Badge Simulation
                 pdf.set_font("helvetica", "B", 12)
@@ -110,8 +104,7 @@ class ReportGenerator:
                 pdf.set_text_color(0, 0, 0)
                 pdf.multi_cell(0, 8, title, new_x="LMARGIN", new_y="NEXT")
 
-                description = finding.get('description', '')
-                if description:
+                if description := finding.get('description', ''):
                     pdf.set_font("helvetica", "", 11)
                     pdf.multi_cell(0, 6, description, new_x="LMARGIN", new_y="NEXT")
 

@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks, Response
 from typing import Any, Optional, List, Dict, Callable
 import json
 import logging
+import re
 
 def parse_json_fields(rows: List[Dict], fields: List[str]) -> List[Dict]:
     """Helper to parse stringified JSON fields from SQLite."""
@@ -20,6 +21,17 @@ def parse_json_fields(rows: List[Dict], fields: List[str]) -> List[Dict]:
                     pass
         parsed.append(item)
     return parsed
+
+
+def is_filesystem_target(target: str) -> bool:
+    """Best-effort detection for path-based targets that should bypass host validation."""
+    if target.startswith(("/", "./", "../", "~")):
+        return True
+    if re.match(r"^[A-Za-z]:[\\/]", target):
+        return True
+    if "/" in target and not target.startswith(("http://", "https://")):
+        return True
+    return False
 
 logger = logging.getLogger(__name__)
 
@@ -76,24 +88,20 @@ async def list_plugins():
 async def get_plugin_schema(plugin_id: str):
     """Get plugin schema for UI generation"""
     plugin_manager = get_plugin_manager()
-    schema = plugin_manager.get_plugin_schema(plugin_id)
-    
-    if not schema:
+    if schema := plugin_manager.get_plugin_schema(plugin_id):
+        return schema
+    else:
         raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
-    
-    return schema
 
 
 @router.get("/presets")
 async def get_all_presets():
     """Get all plugin presets"""
     plugin_manager = get_plugin_manager()
-    presets = {}
-    
-    for plugin_id, plugin in plugin_manager.plugins.items():
-        presets[plugin_id] = plugin.presets
-    
-    return presets
+    return {
+        plugin_id: plugin.presets
+        for plugin_id, plugin in plugin_manager.plugins.items()
+    }
 
 
 @router.post("/task/start")
@@ -111,40 +119,42 @@ async def start_task(
             status_code=400,
             detail="Consent required. You must acknowledge the legal notice."
         )
-    
+
     # Get plugin
     plugin_manager = get_plugin_manager()
     plugin = plugin_manager.get_plugin(request.plugin_id)
-    
+
     if not plugin:
         logger.warning(f"Task start failed: Plugin not found: {request.plugin_id}")
         raise HTTPException(status_code=404, detail=f"Plugin not found: {request.plugin_id}")
-    
-    # Validate target if present
-    target = request.inputs.get("target")
-    if target:
+
+    if target := request.inputs.get("target"):
         safe_mode = request.inputs.get("safe_mode", settings.safe_mode_default)
-        is_valid, error_msg = validate_target(target, safe_mode)
-        
-        if not is_valid:
-            logger.warning(f"Task start failed: Target validation failed for '{target}': {error_msg}")
-            raise HTTPException(status_code=400, detail=error_msg)
-    
+        target_str = str(target)
+        should_validate_target = plugin.category != "code" and not is_filesystem_target(target_str)
+
+        if should_validate_target:
+            is_valid, error_msg = validate_target(target_str, safe_mode)
+
+            if not is_valid:
+                logger.warning(f"Task start failed: Target validation failed for '{target}': {error_msg}")
+                raise HTTPException(status_code=400, detail=error_msg)
+
     # Check rate limits
     can_execute, error_msg = await rate_limiter.can_execute(
         request.plugin_id,
         plugin.safety.get("rate_limit", {}).get("max_per_hour", settings.max_tasks_per_hour)
     )
-    
+
     if not can_execute:
         raise HTTPException(status_code=429, detail=error_msg)
-    
+
     # Check concurrent task limit
     can_acquire, error_msg = await concurrent_limiter.acquire("temp")
     if not can_acquire:
         raise HTTPException(status_code=503, detail=error_msg)
     await concurrent_limiter.release("temp")
-    
+
     # Create task
     try:
         task_id = await executor.create_task(
@@ -153,20 +163,20 @@ async def start_task(
             request.preset,
             request.consent_granted
         )
-        
+
         # Execute task in background
         background_tasks.add_task(executor.execute_task, task_id)
         await invalidate_view_cache()
-        
+
         return {
             "task_id": task_id,
             "status": "queued",
             "created_at": "now",
             "stream_url": f"/api/v1/task/{task_id}/stream"
         }
-        
+
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.get("/task/{task_id}/status")
@@ -289,7 +299,7 @@ async def download_pdf_report(task_id: str):
 async def get_task_result(task_id: str):
     """Get task execution result"""
     db = await get_db()
-    
+
     task_row = await db.fetchone(
         """
         SELECT id, plugin_id, tool_name, target, status,
@@ -299,7 +309,7 @@ async def get_task_result(task_id: str):
         """,
         (task_id,)
     )
-    
+
     if not task_row:
         raise HTTPException(status_code=404, detail="Task not found")
 
@@ -319,23 +329,26 @@ async def get_task_result(task_id: str):
     summary: List[str] = []
     if severity_counts:
         ordered = ["critical", "high", "medium", "low", "info"]
-        parts = [f"{severity_counts[level]} {level}" for level in ordered if severity_counts.get(level)]
-        if parts:
+        if parts := [
+            f"{severity_counts[level]} {level}"
+            for level in ordered
+            if severity_counts.get(level)
+        ]:
             summary.append(f"Findings profile: {', '.join(parts)}.")
     if structured.get("open_ports"):
         summary.append(f"Observed {len(structured['open_ports'])} exposed ports.")
     if structured.get("technologies"):
         summary.append(f"Identified {len(structured['technologies'])} technologies.")
-    
+
     # Read raw output excerpt
     raw_excerpt = None
     if task_row["raw_output_path"]:
         try:
             with open(task_row["raw_output_path"], 'r') as f:
                 raw_excerpt = f.read(1000)  # First 1000 chars
-        except:
+        except Exception:
             pass
-    
+
     return {
         "task_id": task_row["id"],
         "plugin_id": task_row["plugin_id"],
@@ -398,29 +411,43 @@ async def get_dashboard_summary():
             """
         )
 
-        critical_findings: int = sum(1 for item in findings if item.get("severity") == "critical")
-        high_findings: int = sum(1 for item in findings if item.get("severity") == "high")
-        medium_findings: int = sum(1 for item in findings if item.get("severity") == "medium")
-        low_findings: int = len(findings) - critical_findings - high_findings - medium_findings
+        critical_findings: int = sum(bool(item.get("severity") == "critical")
+                                 for item in findings)
+        high_findings: int = sum(bool(item.get("severity") == "high")
+                             for item in findings)
+        medium_findings: int = sum(bool(item.get("severity") == "medium")
+                               for item in findings)
+        low_findings: int = sum(bool(item.get("severity") == "low")
+                            for item in findings)
+        info_findings: int = sum(bool(item.get("severity") == "info")
+                             for item in findings)
 
         recent_findings: List[Dict] = findings[:5]
-        high_risk_assets: List[Dict] = [item for item in assets if item.get("risk_level") in {"critical", "high"}][:4]
+        high_risk_assets = [item for item in assets if item.get("risk_level") in {"critical", "high"}]
+        has_real_risk = len(high_risk_assets) > 0
+        if not has_real_risk:
+            high_risk_assets = assets[:5]
 
         return {
             "total_assets": len(assets),
-            "active_assets": sum(1 for item in assets if item.get("status") == "active"),
-            "critical_assets": sum(1 for item in assets if item.get("risk_level") == "critical"),
+            "active_assets": sum(bool(item.get("status") == "active")
+                             for item in assets),
+            "critical_assets": sum(bool(item.get("risk_level") == "critical")
+                               for item in assets),
             "total_attack_surface": len(attack_surface),
             "total_findings": len(findings),
             "critical_findings": critical_findings,
             "high_findings": high_findings,
             "medium_findings": medium_findings,
             "low_findings": low_findings,
+            "info_findings": info_findings,
             "last_scan_time": assets[0].get("last_scanned") if assets else None,
             "recent_findings": recent_findings,
+            "has_high_risk_assets": has_real_risk,
             "high_risk_assets": high_risk_assets,
             "attack_surface_by_category": {
-                str(item.get("category", "unknown")): sum(1 for x in attack_surface if x.get("category") == item.get("category"))
+                str(item.get("category", "unknown")): sum(bool(x.get("category") == item.get("category"))
+                                                      for x in attack_surface)
                 for item in attack_surface
             },
             "scan_activity": {
@@ -504,11 +531,11 @@ async def list_tasks(
 ):
     """List all tasks with pagination"""
     db = await get_db()
-    
+
     # Build query
     query = "SELECT id, plugin_id, tool_name, target, status, created_at, duration_seconds FROM tasks"
     params = []
-    
+
     where_clauses = []
     if plugin_id:
         where_clauses.append("plugin_id = ?")
@@ -516,33 +543,30 @@ async def list_tasks(
     if status:
         where_clauses.append("status = ?")
         params.append(status)
-    
+
     if where_clauses:
         query += " WHERE " + " AND ".join(where_clauses)
-    
+
     query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
     params.extend([per_page, (page - 1) * per_page])
-    
+
     tasks = await db.fetchall(query, tuple(params))
-    
+
     # Get total count
     count_query = "SELECT COUNT(*) as total FROM tasks"
     if where_clauses:
         count_query += " WHERE " + " AND ".join(where_clauses)
-    
+
     count_result = await db.fetchone(count_query, tuple(params[:-2]) if where_clauses else ())
     total: int = int(count_result["total"]) if count_result and count_result.get("total") is not None else 0
-    
+
     # Parse JSON fields and format for frontend
     tasks_list = parse_json_fields(tasks, ["structured_json", "config_json", "metadata_json"])
     for t in tasks_list:
         if "id" in t:
             t["task_id"] = t.pop("id")
-    
-    total_pages = 0
-    if per_page > 0:
-        total_pages = (total + per_page - 1) // per_page
 
+    total_pages = (total + per_page - 1) // per_page if per_page > 0 else 0
     return {
         "tasks": tasks_list,
         "pagination": {

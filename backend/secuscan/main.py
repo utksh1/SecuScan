@@ -68,23 +68,34 @@ async def lifespan(app: FastAPI):
 # Create FastAPI application
 app = FastAPI(
     title="SecuScan API",
-    description="Local-first pentesting toolkit backend",
-    version="0.1.0-alpha",
-    lifespan=lifespan,
-    docs_url="/api/docs" if settings.debug else None,
-    redoc_url="/api/redoc" if settings.debug else None,
+    description="Backend for SecuScan Pentesting Toolkit",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+    lifespan=lifespan
 )
+
+@app.get("/api/docs", include_in_schema=False)
+async def redirect_api_docs():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/docs")
+
+@app.get("/api/redoc", include_in_schema=False)
+async def redirect_api_redoc():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/redoc")
+
+@app.get("/api/openapi.json", include_in_schema=False)
+async def redirect_api_openapi():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/openapi.json")
 
 
 # CORS middleware (restrict to localhost in production)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://127.0.0.1:5173",
-        "http://localhost:5173",
-        "http://127.0.0.1:3000",
-        "http://localhost:3000"
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -141,7 +152,7 @@ def main():
     """)
     
     uvicorn.run(
-        "backend.main:app",
+        "backend.secuscan.main:app",
         host=settings.bind_address,
         port=settings.bind_port,
         reload=settings.debug,

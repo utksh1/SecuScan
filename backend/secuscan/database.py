@@ -242,7 +242,7 @@ async def init_db(db_path: Optional[str] = None) -> Database:
     """Initialize the global database connection."""
     global db
     # Fallback to config path if not provided
-    path = db_path or settings.data_dir + "/secuscan.db"
+    path = db_path or f"{settings.data_dir}/secuscan.db"
     db_instance = Database(path)
     await db_instance.connect()
     db = db_instance

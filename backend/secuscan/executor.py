@@ -136,28 +136,28 @@ class TaskExecutor:
             task_id: Task identifier
         """
         db = await get_db()
-        
+
         try:
             # Update status to running
             await db.execute(
                 "UPDATE tasks SET status = ?, started_at = ? WHERE id = ?",
                 (TaskStatus.RUNNING.value, datetime.now().isoformat(), task_id)
             )
-            
+
             # Get task details
             task_row = await db.fetchone(
                 "SELECT plugin_id, inputs_json, safe_mode FROM tasks WHERE id = ?",
                 (task_id,)
             )
-            
+
             if not task_row:
                 raise ValueError(f"Task not found: {task_id}")
-            
+
             plugin_id = task_row["plugin_id"]
             inputs = json.loads(task_row["inputs_json"])
             safe_mode = bool(task_row["safe_mode"])
             target = extract_target(inputs)
-            
+
             # Build command
             plugin_manager = get_plugin_manager()
             plugin = plugin_manager.get_plugin(plugin_id)
@@ -170,12 +170,17 @@ class TaskExecutor:
             if settings.docker_enabled:
                 docker_image = plugin.docker_image or "alpine:latest"
                 docker_cmd = [
-                    "docker", "run", "--rm",
-                    "--name", f"secuscan_task_{task_id}",
-                    "--memory", f"{settings.sandbox_memory_mb}m",
-                    "--cpus", str(settings.sandbox_cpu_quota)
+                    "docker",
+                    "run",
+                    "--rm",
+                    "--name",
+                    f"secuscan_task_{task_id}",
+                    "--memory",
+                    f"{settings.sandbox_memory_mb}m",
+                    "--cpus",
+                    str(settings.sandbox_cpu_quota),
+                    docker_image,
                 ]
-                docker_cmd.append(docker_image)
                 command = docker_cmd + command
 
             logger.info(f"Executing task {task_id}: {' '.join(command)}")
@@ -234,9 +239,9 @@ class TaskExecutor:
                 task_id=task_id,
                 plugin_id=plugin_id
             )
-            
+
             logger.info(f"Task {task_id} completed in {duration:.2f}s")
-            
+
         except Exception as e:
             logger.error(f"Task {task_id} failed: {e}")
 
@@ -299,9 +304,7 @@ class TaskExecutor:
                 if stdout is None:
                     return
                     
-                while True:
-                    if stdout.at_eof():
-                        break
+                while not stdout.at_eof():
                     line = await stdout.readline()
                     if line:
                         decoded_line = line.decode('utf-8', errors='replace')
@@ -332,40 +335,39 @@ class TaskExecutor:
         Returns:
             True if cancelled successfully
         """
-        if task_id in self.running_tasks:
-            task = self.running_tasks[task_id]
-            task.cancel()
+        if task_id not in self.running_tasks:
+            return False
+        task = self.running_tasks[task_id]
+        task.cancel()
 
-            # If docker is enabled, forcefully kill the sandbox container
-            if settings.docker_enabled:
-                try:
-                    killer = await asyncio.create_subprocess_exec(
-                        "docker", "kill", f"secuscan_task_{task_id}",
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE
-                    )
-                    await killer.communicate()
-                except Exception as e:
-                    logger.error(f"Failed to kill docker container for {task_id}: {e}")
+        # If docker is enabled, forcefully kill the sandbox container
+        if settings.docker_enabled:
+            try:
+                killer = await asyncio.create_subprocess_exec(
+                    "docker", "kill", f"secuscan_task_{task_id}",
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                await killer.communicate()
+            except Exception as e:
+                logger.error(f"Failed to kill docker container for {task_id}: {e}")
 
-            db = await get_db()
-            await db.execute(
-                "UPDATE tasks SET status = ?, completed_at = ? WHERE id = ?",
-                (TaskStatus.CANCELLED.value, datetime.now().isoformat(), task_id)
-            )
+        db = await get_db()
+        await db.execute(
+            "UPDATE tasks SET status = ?, completed_at = ? WHERE id = ?",
+            (TaskStatus.CANCELLED.value, datetime.now().isoformat(), task_id)
+        )
 
-            await self._broadcast(task_id, "status", TaskStatus.CANCELLED.value)
-            await self._invalidate_cached_views()
+        await self._broadcast(task_id, "status", TaskStatus.CANCELLED.value)
+        await self._invalidate_cached_views()
 
-            await db.log_audit(
-                "task_cancelled",
-                "Task cancelled by user",
-                task_id=task_id
-            )
-            
-            return True
-        
-        return False
+        await db.log_audit(
+            "task_cancelled",
+            "Task cancelled by user",
+            task_id=task_id
+        )
+
+        return True
     
     async def get_task_status(self, task_id: str) -> Optional[Dict]:
         """Get task status and progress"""
@@ -517,13 +519,51 @@ class TaskExecutor:
     def _parse_results(self, plugin, output: str) -> Dict[str, Any]:
         """Route to appropriate parser based on plugin metadata."""
         parser_type = plugin.output.get("parser")
+        parser_input = self._resolve_parser_input(plugin, output)
         
+        # 1. Check for custom parser.py in plugin directory (Recommended)
+        plugin_manager = get_plugin_manager()
+        plugin_dir = plugin_manager.plugins_dir / plugin.id
+        parser_path = plugin_dir / "parser.py"
+        
+        if parser_path.exists():
+            try:
+                import importlib.util
+                spec = importlib.util.spec_from_file_location(f"parser_{plugin.id}", parser_path)
+                if spec is not None:
+                    loader = spec.loader
+                    if loader is not None:
+                        module = importlib.util.module_from_spec(spec)
+                        loader.exec_module(module)
+                        if hasattr(module, "parse"):
+                            logger.info(f"Using custom parser for {plugin.id}")
+                            return module.parse(parser_input)
+                        else:
+                            logger.warning(f"Custom parser {parser_path} missing 'parse' function")
+            except Exception as e:
+                logger.error(f"Error executing custom parser for {plugin.id}: {e}")
+
+        # 2. Fallback to legacy built-in parsers
         if parser_type == "builtin_nmap":
-            return self._parse_nmap_output(output)
+            return self._parse_nmap_output(parser_input)
         elif parser_type == "builtin_http":
-            return self._parse_http_output(output)
+            return self._parse_http_output(parser_input)
         
-        return {"findings": [], "raw": output}
+        return {"findings": [], "raw": parser_input}
+
+    def _resolve_parser_input(self, plugin, output: str) -> str:
+        """Prefer report-file content when configured, fallback to command output."""
+        report_path = plugin.output.get("report_path")
+        if isinstance(report_path, str) and report_path.strip():
+            path = Path(report_path)
+            if path.exists() and path.is_file():
+                try:
+                    logger.info("Using parser report file for %s: %s", plugin.id, path)
+                    return path.read_text(encoding="utf-8", errors="replace")
+                except Exception as exc:
+                    logger.warning("Failed to read parser report file %s: %s", path, exc)
+
+        return output
 
     def _parse_nmap_output(self, output: str) -> Dict[str, Any]:
         """Simple regex-based nmap output parser."""
@@ -557,11 +597,9 @@ class TaskExecutor:
         """Simple regex-based curl/http output parser."""
         findings = []
         techs = []
-        
-        # Check for Server header
-        server_match = re.search(r"(?i)Server:\s*(.+)", output)
-        if server_match:
-            server = server_match.group(1).strip()
+
+        if server_match := re.search(r"(?i)Server:\s*(.+)", output):
+            server = server_match[1].strip()
             techs.append(server)
             findings.append({
                 "title": f"Web Server Disclosed: {server}",
@@ -571,11 +609,9 @@ class TaskExecutor:
                 "remediation": "Disable the Server header in web server configuration.",
                 "metadata": {"server": server}
             })
-            
-        # Check for X-Powered-By
-        powered_match = re.search(r"(?i)X-Powered-By:\s*(.+)", output)
-        if powered_match:
-            powered = powered_match.group(1).strip()
+
+        if powered_match := re.search(r"(?i)X-Powered-By:\s*(.+)", output):
+            powered = powered_match[1].strip()
             techs.append(powered)
             findings.append({
                 "title": f"X-Powered-By Disclosed: {powered}",

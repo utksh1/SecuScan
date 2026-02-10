@@ -29,45 +29,50 @@ BLOCKED_TLDS = [".mil", ".gov"]
 
 def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
     """
-    Validate scan target address.
+    Validate scan target address (IP, Hostname, or CIDR).
     
     Args:
-        target: IP address or hostname to validate
+        target: IP address, hostname, or network range to validate
         safe_mode: Whether to enforce safe mode restrictions
     
     Returns:
         Tuple of (is_valid, error_message)
     """
     target = target.strip()
-    
-    # Try parsing as IP address
+
+    # Try parsing as IP network (handles single IP and CIDR)
     try:
-        ip = ipaddress.ip_address(target)
-        
+        net = ipaddress.ip_network(target, strict=False)
+
         # Check blocked networks
-        if any(ip in net for net in BLOCKED_NETWORKS):
-            return False, "Target is in blocked network range"
-        
+        if any(net.overlaps(blocked) for blocked in BLOCKED_NETWORKS):
+            return False, "Target overlaps with blocked network range"
+
         # Safe mode: only allow private IPs
-        if safe_mode and not any(ip in net for net in ALLOWED_PRIVATE):
-            return False, "Public IPs not allowed in safe mode"
-        
+        if safe_mode:
+            is_private = any(
+                (net.version == allowed.version and (net.subnet_of(allowed) or net.overlaps(allowed)))
+                for allowed in ALLOWED_PRIVATE
+            )
+            if not is_private:
+                return False, "Public IPs/networks not allowed in safe mode"
+
         return True, ""
-        
+
     except ValueError:
-        # Not an IP address, treat as hostname
+        # Not an IP address or network, treat as hostname
         pass
-    
+
     # Validate hostname format
     if not re.match(r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$', target):
         return False, "Invalid hostname format"
-    
+
     # Check blocked TLDs in safe mode
     if safe_mode:
         for tld in BLOCKED_TLDS:
             if target.lower().endswith(tld):
                 return False, f"Domains ending in {tld} are blocked in safe mode"
-    
+
     return True, ""
 
 
@@ -108,26 +113,23 @@ def validate_port_range(port_range: str) -> Tuple[bool, str]:
             except ValueError:
                 return False, f"Invalid port number: {port_str}"
         return True, ""
-    
+
     # Handle port ranges
     if '-' in port_range:
         try:
             start, end = map(int, port_range.split('-'))
             if start > end:
                 return False, "Port range start must be less than end"
-            
+
             is_valid, msg = validate_port(start)
             if not is_valid:
                 return False, msg
-            
+
             is_valid, msg = validate_port(end)
-            if not is_valid:
-                return False, msg
-            
-            return True, ""
+            return (True, "") if is_valid else (False, msg)
         except ValueError:
             return False, "Invalid port range format"
-    
+
     # Single port
     try:
         port = int(port_range)
@@ -155,11 +157,8 @@ def validate_url(url: str) -> Tuple[bool, str]:
         r'(?::\d+)?'  # optional port
         r'(?:/?|[/?]\S+)$', re.IGNORECASE
     )
-    
-    if not url_pattern.match(url):
-        return False, "Invalid URL format"
-    
-    return True, ""
+
+    return (True, "") if url_pattern.match(url) else (False, "Invalid URL format")
 
 
 def sanitize_input(value: str) -> str:
@@ -196,7 +195,7 @@ def is_safe_path(path: str, base_dir: str) -> bool:
         real_base = os.path.realpath(base_dir)
         real_path = os.path.realpath(os.path.join(base_dir, path))
         return real_path.startswith(real_base)
-    except:
+    except Exception:
         return False
 
 
