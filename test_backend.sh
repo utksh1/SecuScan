@@ -2,6 +2,7 @@
 
 # SecuScan Backend Test Suite
 # Tests all API endpoints and functionality
+# For unit/integration pytest workflow, run: ./test_python.sh
 
 set -e
 
@@ -22,12 +23,12 @@ echo ""
 # Helper functions
 test_pass() {
     echo -e "${GREEN}✓${NC} $1"
-    ((PASSED++))
+    ((PASSED+=1))
 }
 
 test_fail() {
     echo -e "${RED}✗${NC} $1"
-    ((FAILED++))
+    ((FAILED+=1))
 }
 
 test_warn() {
@@ -88,7 +89,7 @@ echo ""
 # Test 4: Get Presets
 echo "Test 4: Get All Presets"
 RESPONSE=$(curl -s "$BASE_URL/presets")
-if echo "$RESPONSE" | grep -q '"presets"'; then
+if echo "$RESPONSE" | grep -q '"http_inspector"'; then
     PRESET_COUNT=$(echo "$RESPONSE" | grep -o '"id"' | wc -l | xargs)
     test_pass "Presets endpoint returns $PRESET_COUNT presets"
 else
@@ -99,10 +100,10 @@ echo ""
 # Test 5: Get Settings
 echo "Test 5: Get Settings"
 RESPONSE=$(curl -s "$BASE_URL/settings")
-if echo "$RESPONSE" | grep -q '"version"'; then
+if echo "$RESPONSE" | grep -q '"network"' && echo "$RESPONSE" | grep -q '"safety"'; then
     test_pass "Settings endpoint returns configuration"
     
-    if echo "$RESPONSE" | grep -q '"safe_mode"'; then
+    if echo "$RESPONSE" | grep -q '"safe_mode_default"'; then
         test_pass "Settings include safe_mode"
     else
         test_warn "Settings missing safe_mode"
@@ -144,7 +145,7 @@ if echo "$RESPONSE" | grep -q '"task_id"'; then
     echo "Test 8: Get Task Result"
     sleep 2
     RESPONSE=$(curl -s "$BASE_URL/task/$TASK_ID/result")
-    if echo "$RESPONSE" | grep -q '"output"'; then
+    if echo "$RESPONSE" | grep -q '"raw_output_excerpt"'; then
         test_pass "Task result retrieved"
     else
         test_warn "Task result may not be ready yet"
@@ -165,7 +166,7 @@ if echo "$RESPONSE" | grep -q '"task_id"'; then
     echo ""
     echo "Test 10: Delete Task"
     RESPONSE=$(curl -s -X DELETE "$BASE_URL/task/$TASK_ID")
-    if echo "$RESPONSE" | grep -q '"message"' || echo "$RESPONSE" | grep -q '"detail"'; then
+    if echo "$RESPONSE" | grep -q '"deleted":true'; then
         test_pass "Task deletion endpoint responded"
     else
         test_fail "Task deletion endpoint failed"

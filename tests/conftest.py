@@ -5,14 +5,15 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-# Add backend directory to sys.path so we can import its modules
-backend_dir = Path(__file__).parent.parent / "backend"
-sys.path.insert(0, str(backend_dir))
+# Add repo root to sys.path so package imports work (backend.*)
+repo_root = Path(__file__).parent.parent
+sys.path.insert(0, str(repo_root))
 
-from config import settings
-from database import init_db, db as global_db
-from main import app
-from plugins import init_plugins
+from backend.secuscan.config import settings
+from backend.secuscan import database as database_module
+from backend.secuscan.database import init_db
+from backend.secuscan.main import app
+from backend.secuscan.plugins import init_plugins
 
 
 @pytest.fixture(autouse=True)
@@ -25,7 +26,7 @@ def setup_test_environment(monkeypatch):
     monkeypatch.setattr(settings, "raw_output_dir", f"{temp_path}/raw")
     monkeypatch.setattr(settings, "reports_dir", f"{temp_path}/reports")
     monkeypatch.setattr(settings, "plugins_dir", str(Path(__file__).parent.parent / "plugins"))
-    monkeypatch.setattr(settings, "db_path", f"{temp_path}/test_secuscan.db")
+    monkeypatch.setattr(settings, "database_path", f"{temp_path}/test_secuscan.db")
 
     settings.ensure_directories()
 
@@ -40,7 +41,7 @@ def test_client(setup_test_environment):
     import asyncio
 
     async def setup():
-        await init_db(settings.db_path)
+        await init_db(settings.database_path)
         await init_plugins(settings.plugins_dir)
 
     asyncio.run(setup())
@@ -48,5 +49,5 @@ def test_client(setup_test_environment):
     with TestClient(app) as client:
         yield client
 
-    if global_db:
-        asyncio.run(global_db.disconnect())
+    if database_module.db:
+        asyncio.run(database_module.db.disconnect())

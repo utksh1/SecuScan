@@ -7,3 +7,4 @@ redis==5.2.1
 sse-starlette==2.1.0
 python-multipart==0.0.9
 fpdf2>=2.7.0
+aiosqlite==0.20.0
