@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { API_BASE } from '../api'
+import { routes } from '../routes'
 
 interface Task {
     task_id: string
@@ -30,6 +31,31 @@ interface TaskResult {
     }
     raw_output_excerpt?: string
     errors?: Array<{ message: string }>
+}
+
+function parseDateSafe(rawValue?: string): Date | null {
+    if (!rawValue) return null
+    const raw = rawValue.trim()
+    if (!raw) return null
+    if (raw.toLowerCase() === 'now') return new Date()
+
+    const sqliteAsIso = raw.includes('T') ? raw : raw.replace(' ', 'T')
+    const hasTimezone = /(?:Z|[+-]\d{2}:\d{2})$/.test(sqliteAsIso)
+    const candidates = hasTimezone ? [sqliteAsIso, raw] : [`${sqliteAsIso}Z`, sqliteAsIso, raw]
+
+    for (const candidate of candidates) {
+        const d = new Date(candidate)
+        if (!Number.isNaN(d.getTime())) return d
+    }
+    return null
+}
+
+function formatToolLabel(tool?: string, pluginId?: string) {
+    const normalized = (tool || '').trim()
+    if (!normalized || normalized.toLowerCase() === 'history') {
+        return (pluginId || 'scan').replace(/[-_]/g, ' ').toUpperCase()
+    }
+    return normalized.toUpperCase()
 }
 
 const containerVariants = {
@@ -93,9 +119,13 @@ export default function TaskDetails() {
     async function loadTask() {
         try {
             const [statusRes, resultRes] = await Promise.all([
-                fetch(`${API_BASE}/tasks/${taskId}`),
-                fetch(`${API_BASE}/tasks/${taskId}/result`).catch(() => null)
+                fetch(`${API_BASE}/task/${taskId}/status`),
+                fetch(`${API_BASE}/task/${taskId}/result`).catch(() => null)
             ])
+
+            if (!statusRes.ok) {
+                throw new Error(`Failed to load task status (${statusRes.status})`)
+            }
 
             const statusData = await statusRes.json()
             setTask(statusData)
@@ -124,8 +154,20 @@ export default function TaskDetails() {
     }
 
     const findings = result?.structured?.findings || []
-    const formatDateLong = (dateStr: string) =>
-        new Date(dateStr).toLocaleString('en-US', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+    const formatDateLong = (dateStr: string) => {
+        const parsed = parseDateSafe(dateStr)
+        if (!parsed) return 'UNKNOWN_DATE'
+        return `${parsed.toLocaleString('en-US', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+            timeZone: 'Asia/Kolkata',
+        })} IST`
+    }
+    const toolLabel = formatToolLabel(task.tool, task.plugin_id)
 
     return (
         <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
@@ -134,7 +176,7 @@ export default function TaskDetails() {
             <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10 font-black">
                 <div className="flex items-center gap-8">
                     <button 
-                        onClick={() => navigate('/history')}
+                        onClick={() => navigate(routes.history)}
                         className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
                     >
                         <span className="material-symbols-outlined">arrow_back</span>
@@ -143,7 +185,7 @@ export default function TaskDetails() {
                       <div className="bg-rag-blue text-black px-4 py-1 text-xs uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-black">
                         Mission_Dossier_SIG#{taskId?.split('-')[0].toUpperCase()}
                       </div>
-                      <h1 className="text-5xl md:text-7xl text-silver-bright uppercase tracking-tighter leading-none italic font-black">
+                      <h1 className="text-5xl md:text-7xl text-silver-bright uppercase tracking-tighter leading-none italic font-black whitespace-nowrap">
                         Intel <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '2px var(--accent-silver-bright)' }}>Briefing</span>
                       </h1>
                     </div>
@@ -177,7 +219,7 @@ export default function TaskDetails() {
                     {/* Target Detail Block */}
                     <section className="bg-charcoal border-4 border-black p-10 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden group">
                         <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-                            <span className="text-7xl font-black italic select-none uppercase font-mono">{task.tool}</span>
+                            <span className="text-7xl font-black italic select-none uppercase font-mono">{toolLabel}</span>
                         </div>
                         <div className="flex flex-col md:flex-row justify-between gap-10 relative z-10">
                             <div className="space-y-6">
@@ -190,11 +232,19 @@ export default function TaskDetails() {
                                 <div className="flex flex-wrap gap-8 text-[10px] font-black uppercase tracking-[0.2em] font-mono italic text-silver/40">
                                     <div className="flex items-center gap-2">
                                         <span className="material-symbols-outlined text-xs text-rag-blue">terminal</span>
-                                        TOOL::{task.tool}
+                                        TOOL::{toolLabel}
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <span className="material-symbols-outlined text-xs text-rag-blue">history</span>
                                         INIT::{formatDateLong(task.created_at)}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-xs text-rag-blue">fingerprint</span>
+                                        PLUGIN::{task.plugin_id || 'N/A'}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-xs text-rag-blue">badge</span>
+                                        TASK::{task.task_id?.slice(0, 8) || 'UNKNOWN'}
                                     </div>
                                     {task.duration_seconds && (
                                         <div className="flex items-center gap-2">
@@ -284,19 +334,20 @@ export default function TaskDetails() {
                         <div className="grid grid-cols-1 gap-4">
                             {['critical', 'high', 'medium', 'low'].map(sev => {
                                 const count = result?.severity_counts?.[sev] || 0
+                                const isActive = count > 0
                                 return (
                                     <div key={sev} className={`p-6 border-4 border-black flex justify-between items-center transition-all ${
-                                        count > 0 
+                                        isActive
                                         ? (sev === 'critical' ? 'bg-rag-red text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' : 
                                            sev === 'high' ? 'bg-rag-amber text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' : 
                                            'bg-rag-blue text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]')
-                                        : 'bg-charcoal opacity-10 grayscale border-dashed'
+                                        : 'bg-charcoal border-accent-silver/20 border-dashed'
                                     }`}>
                                         <div className="space-y-1">
-                                            <span className="text-[10px] font-black uppercase tracking-[0.3em] italic">{sev}</span>
-                                            <p className="text-[8px] font-mono uppercase tracking-widest opacity-60">STRIKE_PROB</p>
+                                            <span className={`text-[10px] font-black uppercase tracking-[0.3em] italic ${isActive ? 'text-black' : 'text-silver-bright'}`}>{sev}</span>
+                                            <p className={`text-[8px] font-mono uppercase tracking-widest ${isActive ? 'text-black/70' : 'text-silver/75'}`}>STRIKE_PROB</p>
                                         </div>
-                                        <span className="text-4xl font-black italic">{count.toString().padStart(2, '0')}</span>
+                                        <span className={`text-4xl font-black italic ${isActive ? 'text-black' : 'text-silver-bright'}`}>{count.toString().padStart(2, '0')}</span>
                                     </div>
                                 )
                             })}

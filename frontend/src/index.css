@@ -1,10 +1,14 @@
+/* Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
 /* ============================================
    SecuScan Design System
    Professional Cybersecurity SOC Aesthetic
    ============================================ */
 
-/* Google Fonts */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 /* ============================================
    Design Tokens
@@ -31,6 +35,18 @@
   --font-serif: 'Playfair Display', serif; /* For headers */
   --font-sans: 'Inter', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
+
+  /* Text Color Tokens */
+  --text-primary:   #f4f4f5;    /* silver-bright — headings, values */
+  --text-secondary: #a1a1aa;    /* silver — body text */
+  --text-muted:     #858b99;    /* dim — hints, labels (raised for readability) */
+  --text-sm: 0.9375rem;
+  --text-xs: 0.8125rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+  --text-3xl: 1.875rem;
 
   /* Spacing */
   --space-unit: 4px;
@@ -424,6 +440,75 @@ button,
 
 .text-accent {
   color: var(--accent-primary);
+}
+
+/* ============================================
+   Global Contrast Safety Net
+   Keeps low-opacity silver text readable on dark UI surfaces.
+   ============================================ */
+@layer utilities {
+  /* Slight global typography bump for tiny text utilities */
+  .text-\[8px\] {
+    font-size: 9px !important;
+    line-height: 1.35 !important;
+  }
+
+  .text-\[9px\] {
+    font-size: 10px !important;
+    line-height: 1.35 !important;
+  }
+
+  .text-\[10px\] {
+    font-size: 11px !important;
+    line-height: 1.4 !important;
+  }
+
+  .text-\[11px\] {
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+  }
+
+  .text-silver\/5 {
+    color: rgb(161 161 170 / 0.38) !important;
+  }
+
+  .text-silver\/10 {
+    color: rgb(161 161 170 / 0.48) !important;
+  }
+
+  .text-silver\/20 {
+    color: rgb(161 161 170 / 0.60) !important;
+  }
+
+  .text-silver\/25 {
+    color: rgb(161 161 170 / 0.64) !important;
+  }
+
+  .text-silver\/30 {
+    color: rgb(161 161 170 / 0.68) !important;
+  }
+
+  .text-silver\/40 {
+    color: rgb(161 161 170 / 0.76) !important;
+  }
+
+  .placeholder\:text-silver\/10::placeholder {
+    color: rgb(161 161 170 / 0.58) !important;
+  }
+
+  .placeholder\:text-silver\/20::placeholder {
+    color: rgb(161 161 170 / 0.66) !important;
+  }
+}
+
+/*
+  Prevent dark text from disappearing when placed inside muted silver tiles.
+*/
+.bg-silver\/10 .text-black,
+.bg-silver\/20 .text-black,
+.bg-accent-silver\/20 .text-black,
+.bg-accent-silver\/30 .text-black {
+  color: var(--accent-silver-bright) !important;
 }
 
 .text-xs {

@@ -7,26 +7,27 @@ export default {
   theme: {
     extend: {
       colors: {
+        'charcoal-dark': '#0a0a0c',
         charcoal: {
-          light: '#2a2d34',
-          DEFAULT: '#1a1c23',
-          dark: '#0f1115',
+          light: '#1d1d21',
+          DEFAULT: '#121214',
+          dark: '#0a0a0c', /* mapped for backward compatibility */
         },
         silver: {
-          bright: '#e2e8f0',
-          DEFAULT: '#94a3b8',
+          bright: '#f4f4f5',
+          DEFAULT: '#a1a1aa',
           dark: '#475569',
         },
         rag: {
-          red: '#ff3366',
-          amber: '#ffaa00',
-          'amber-bright': '#ffcc00',   
-          green: '#00e676',
+          red: '#ef4444',
+          amber: '#f59e0b',
+          'amber-bright': '#fbbf24',   
+          green: '#10b981',
           blue: '#1e88e5',
-          'blue-bright': '#42a5f5',    
+          'blue-bright': '#3b82f6',    
         },
         accent: {
-          silver: '#cbd5e1'
+          silver: '#3f3f46'
         }
       },
       fontFamily: {
