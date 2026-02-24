@@ -1,0 +1,203 @@
+{
+  "id": "nikto",
+  "name": "Nikto",
+  "version": "1.0.0",
+  "description": "Web server vulnerability scanner",
+  "long_description": "Automated scanner for common web server misconfigurations, outdated software versions, dangerous HTTP methods, missing security headers, and known vulnerabilities. Operates in passive (read-only) and active (low-risk probes) modes.",
+  "category": "web",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udd0e",
+  "engine": {
+    "type": "cli",
+    "binary": "nikto"
+  },
+  "command_template": [
+    "nikto",
+    "-h",
+    "{target}",
+    "--if:safe_mode:then:-Tuning:else:-Tuning",
+    "--if:safe_mode:then:1234:else:123456789",
+    "-Format",
+    "json",
+    "-output",
+    "-",
+    "--if:timeout:then:-timeout",
+    "--if:timeout:then:{timeout}"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target URL",
+      "type": "string",
+      "required": true,
+      "placeholder": "https://example.com",
+      "validation": {
+        "pattern": "^https?://",
+        "message": "Must be a valid URL"
+      },
+      "help": "Web application URL to scan"
+    },
+    {
+      "id": "preset",
+      "label": "Scan Mode",
+      "type": "select",
+      "required": false,
+      "default": "passive",
+      "options": [
+        {
+          "value": "passive",
+          "label": "Passive Health Check"
+        },
+        {
+          "value": "standard",
+          "label": "Standard Scan"
+        },
+        {
+          "value": "active",
+          "label": "Active Assessment (Advanced)"
+        }
+      ],
+      "help": "Scan intensity and test coverage"
+    },
+    {
+      "id": "check_categories",
+      "label": "Check Categories",
+      "type": "multiselect",
+      "required": false,
+      "options": [
+        {
+          "value": "headers",
+          "label": "Security Headers"
+        },
+        {
+          "value": "ssl",
+          "label": "SSL/TLS Configuration"
+        },
+        {
+          "value": "methods",
+          "label": "HTTP Methods"
+        },
+        {
+          "value": "paths",
+          "label": "Sensitive Paths"
+        },
+        {
+          "value": "versions",
+          "label": "Software Versions"
+        },
+        {
+          "value": "injections",
+          "label": "Injection Tests (Active Only)"
+        }
+      ],
+      "help": "Specific security checks to perform"
+    },
+    {
+      "id": "timeout",
+      "label": "Timeout (seconds)",
+      "type": "integer",
+      "required": false,
+      "default": 600,
+      "help": "Maximum scan duration"
+    },
+    {
+      "id": "safe_mode",
+      "label": "Safe Mode",
+      "type": "boolean",
+      "required": false,
+      "default": true,
+      "help": "Disable intrusive and exploit checks"
+    },
+    {
+      "id": "ssl_check",
+      "label": "SSL/TLS Check",
+      "type": "boolean",
+      "required": false,
+      "default": true,
+      "help": "Perform SSL/TLS configuration checks"
+    },
+    {
+      "id": "follow_redirects",
+      "label": "Follow Redirects",
+      "type": "boolean",
+      "required": false,
+      "default": true,
+      "help": "Follow HTTP redirects"
+    }
+  ],
+  "presets": {
+    "passive": {
+      "check_categories": [
+        "headers",
+        "ssl",
+        "versions"
+      ],
+      "timeout": 300,
+      "safe_mode": true,
+      "ssl_check": true,
+      "follow_redirects": true
+    },
+    "standard": {
+      "check_categories": [
+        "headers",
+        "ssl",
+        "methods",
+        "paths",
+        "versions"
+      ],
+      "timeout": 600,
+      "safe_mode": true,
+      "ssl_check": true,
+      "follow_redirects": true
+    },
+    "active": {
+      "check_categories": [
+        "headers",
+        "ssl",
+        "methods",
+        "paths",
+        "versions",
+        "injections"
+      ],
+      "timeout": 1800,
+      "safe_mode": false,
+      "ssl_check": true,
+      "follow_redirects": true
+    }
+  },
+  "output": {
+    "format": "json",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "\u26a0\ufe0f Nikto can trigger security alerts and may attempt exploit checks in active mode. Only scan authorized targets with explicit permission.",
+    "allowed_targets": [
+      "*"
+    ],
+    "rate_limit": {
+      "max_per_hour": 3,
+      "max_concurrent": 1
+    }
+  },
+  "learning": {
+    "difficulty": "intermediate",
+    "estimated_duration": "10-30 minutes",
+    "tutorial_url": "https://docs.secuscan.local/plugins/nikto"
+  },
+  "dependencies": {
+    "binaries": [
+      "nikto"
+    ],
+    "python_packages": [],
+    "system_packages": [
+      "perl"
+    ]
+  },
+  "docker_image": "sullo/nikto"
+}

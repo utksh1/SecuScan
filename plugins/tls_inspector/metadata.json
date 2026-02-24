@@ -1,0 +1,140 @@
+{
+  "id": "tls_inspector",
+  "name": "TLS Inspector",
+  "version": "1.0.0",
+  "description": "Examine TLS/SSL certificates and cipher configurations",
+  "long_description": "Inspects TLS/SSL configurations, certificate validity, cipher suites, and protocol versions. Identifies weak cryptographic implementations, expired certificates, and misconfigured trust chains.",
+  "category": "security",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udd10",
+  "engine": {
+    "type": "cli",
+    "binary": "openssl"
+  },
+  "command_template": [
+    "sh",
+    "-c",
+    "echo | openssl s_client -connect {host}:{port} -servername {hostname} 2>/dev/null | openssl x509 -noout -text"
+  ],
+  "fields": [
+    {
+      "id": "host",
+      "label": "Target Host",
+      "type": "string",
+      "required": true,
+      "placeholder": "example.com",
+      "validation": {
+        "pattern": "^[a-zA-Z0-9.-]+$",
+        "message": "Must be valid hostname or IP"
+      },
+      "help": "Hostname or IP address to inspect"
+    },
+    {
+      "id": "port",
+      "label": "Port",
+      "type": "integer",
+      "required": false,
+      "default": 443,
+      "placeholder": "443",
+      "help": "TLS port (usually 443 for HTTPS)"
+    },
+    {
+      "id": "hostname",
+      "label": "SNI Hostname",
+      "type": "string",
+      "required": false,
+      "placeholder": "example.com",
+      "help": "Server Name Indication for virtual hosting (usually same as host)"
+    },
+    {
+      "id": "show_chain",
+      "label": "Show Certificate Chain",
+      "type": "boolean",
+      "required": false,
+      "default": true,
+      "help": "Display full certificate chain"
+    },
+    {
+      "id": "check_ciphers",
+      "label": "Check Cipher Suites",
+      "type": "boolean",
+      "required": false,
+      "default": true,
+      "help": "Test supported cipher suites"
+    },
+    {
+      "id": "check_protocols",
+      "label": "Check Protocol Versions",
+      "type": "boolean",
+      "required": false,
+      "default": true,
+      "help": "Test TLS protocol version support"
+    },
+    {
+      "id": "timeout",
+      "label": "Timeout (seconds)",
+      "type": "integer",
+      "required": false,
+      "default": 10,
+      "help": "Connection timeout"
+    }
+  ],
+  "presets": {
+    "quick": {
+      "port": 443,
+      "show_chain": true,
+      "check_ciphers": false,
+      "check_protocols": false,
+      "timeout": 5
+    },
+    "full": {
+      "port": 443,
+      "show_chain": true,
+      "check_ciphers": true,
+      "check_protocols": true,
+      "timeout": 30
+    },
+    "custom_port": {
+      "port": 8443,
+      "show_chain": true,
+      "check_ciphers": true,
+      "check_protocols": true,
+      "timeout": 15
+    }
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": true,
+    "consent_message": "This tool will connect to the target server to inspect TLS configuration.",
+    "allowed_targets": [
+      "*"
+    ],
+    "rate_limit": {
+      "max_per_hour": 50,
+      "max_concurrent": 3
+    }
+  },
+  "learning": {
+    "difficulty": "beginner",
+    "estimated_duration": "30 seconds",
+    "tutorial_url": "https://docs.secuscan.local/plugins/tls-inspector"
+  },
+  "dependencies": {
+    "binaries": [
+      "openssl"
+    ],
+    "python_packages": [
+      "cryptography"
+    ],
+    "system_packages": []
+  },
+  "docker_image": "alpine:latest"
+}

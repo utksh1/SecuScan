@@ -1,0 +1,205 @@
+{
+  "id": "nmap",
+  "name": "Nmap",
+  "version": "1.0.0",
+  "description": "Network discovery and port scanning tool",
+  "long_description": "Nmap performs host discovery, port enumeration, service version detection, and OS fingerprinting. It's the industry standard for network reconnaissance.",
+  "category": "network",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udd0d",
+  "engine": {
+    "type": "cli",
+    "binary": "nmap"
+  },
+  "command_template": [
+    "nmap",
+    "--if:safe_mode:then:-T3:else:-T4",
+    "--if:scan_type:then:-s{scan_type}",
+    "--if:ports:then:-p:else:--top-ports",
+    "--if:ports:then:{ports}:else:100",
+    "--if:service_detection:then:-sV",
+    "--if:os_detection:then:-O",
+    "{target}"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target",
+      "type": "string",
+      "required": true,
+      "placeholder": "192.168.1.1 or example.com",
+      "validation": {
+        "pattern": "^[a-zA-Z0-9.-]+$",
+        "message": "Must be valid IP or hostname"
+      },
+      "help": "IP address, hostname, or CIDR range to scan"
+    },
+    {
+      "id": "preset",
+      "label": "Scan Preset",
+      "type": "select",
+      "required": false,
+      "default": "quick",
+      "options": [
+        {
+          "value": "quick",
+          "label": "Quick Host Check"
+        },
+        {
+          "value": "top100",
+          "label": "Top 100 Ports"
+        },
+        {
+          "value": "top1000",
+          "label": "Top 1000 Ports"
+        },
+        {
+          "value": "service_fingerprint",
+          "label": "Service Fingerprint"
+        },
+        {
+          "value": "comprehensive",
+          "label": "Comprehensive Scan (Advanced)"
+        }
+      ],
+      "help": "Predefined scan configuration profiles"
+    },
+    {
+      "id": "ports",
+      "label": "Port Specification",
+      "type": "string",
+      "required": false,
+      "placeholder": "80,443 or 1-1000",
+      "help": "Specific ports (22,80,443) or ranges (1-1000). Leave empty to use preset defaults."
+    },
+    {
+      "id": "scan_type",
+      "label": "Scan Type",
+      "type": "select",
+      "required": false,
+      "default": "T",
+      "options": [
+        {
+          "value": "S",
+          "label": "SYN Scan (stealth)"
+        },
+        {
+          "value": "T",
+          "label": "Connect Scan"
+        },
+        {
+          "value": "U",
+          "label": "UDP Scan"
+        }
+      ],
+      "help": "TCP SYN scan is default and most common"
+    },
+    {
+      "id": "service_detection",
+      "label": "Service Detection",
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "help": "Detect service versions (slower but more informative)"
+    },
+    {
+      "id": "os_detection",
+      "label": "OS Detection",
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "help": "Attempt to detect operating system (requires elevated privileges)"
+    },
+    {
+      "id": "timeout",
+      "label": "Timeout (seconds)",
+      "type": "integer",
+      "required": false,
+      "default": 300,
+      "help": "Maximum scan duration"
+    },
+    {
+      "id": "safe_mode",
+      "label": "Safe Mode",
+      "type": "boolean",
+      "required": false,
+      "default": true,
+      "help": "Enable conservative timing and rate limits"
+    }
+  ],
+  "presets": {
+    "quick": {
+      "ports": "",
+      "scan_type": "T",
+      "service_detection": false,
+      "os_detection": false,
+      "safe_mode": true
+    },
+    "top100": {
+      "ports": "",
+      "scan_type": "T",
+      "service_detection": false,
+      "os_detection": false,
+      "safe_mode": true
+    },
+    "top1000": {
+      "ports": "",
+      "scan_type": "T",
+      "service_detection": true,
+      "os_detection": false,
+      "safe_mode": true
+    },
+    "service_fingerprint": {
+      "ports": "",
+      "scan_type": "T",
+      "service_detection": true,
+      "os_detection": false,
+      "safe_mode": false
+    },
+    "comprehensive": {
+      "ports": "1-65535",
+      "scan_type": "T",
+      "service_detection": true,
+      "os_detection": true,
+      "safe_mode": false
+    }
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": true,
+    "consent_message": "Port scanning may trigger IDS/IPS alerts. Only scan authorized targets.",
+    "allowed_targets": [
+      "127.0.0.1",
+      "192.168.*.*",
+      "10.*.*.*",
+      "172.16.*.*"
+    ],
+    "rate_limit": {
+      "max_per_hour": 10,
+      "max_concurrent": 2
+    }
+  },
+  "learning": {
+    "difficulty": "intermediate",
+    "estimated_duration": "2-5 minutes",
+    "tutorial_url": "https://docs.secuscan.local/plugins/nmap"
+  },
+  "dependencies": {
+    "binaries": [
+      "nmap"
+    ],
+    "python_packages": [
+      "python-nmap"
+    ],
+    "system_packages": []
+  },
+  "docker_image": "instrumentisto/nmap"
+}
