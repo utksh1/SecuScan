@@ -1,0 +1,69 @@
+{
+  "id": "secret_scanner",
+  "name": "Secret Scanner",
+  "version": "1.0.0",
+  "description": "Scan directories for hardcoded secrets",
+  "long_description": "Gitleaks is a SAST tool for detecting and preventing hardcoded secrets like passwords, api keys, and tokens in git repos. It's an effective tool for preventing data leaks.",
+  "category": "code",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udd11",
+  "engine": {
+    "type": "cli",
+    "binary": "gitleaks"
+  },
+  "command_template": [
+    "gitleaks",
+    "detect",
+    "--source",
+    "{target}",
+    "--report-format",
+    "json",
+    "--report-path",
+    "/tmp/gitleaks-report.json",
+    "--no-git",
+    "--silent"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Source Directory",
+      "type": "string",
+      "required": true,
+      "placeholder": "/path/to/project",
+      "help": "Absolute path to the directory or repository to scan for secrets."
+    }
+  ],
+  "presets": {
+    "default": {}
+  },
+  "output": {
+    "format": "json",
+    "report_path": "/tmp/gitleaks-report.json",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": false,
+    "rate_limit": {
+      "max_per_hour": 10,
+      "max_concurrent": 1
+    }
+  },
+  "learning": {
+    "difficulty": "intermediate",
+    "estimated_duration": "1-5 minutes",
+    "tutorial_url": "https://docs.secuscan.local/plugins/secret_scanner"
+  },
+  "dependencies": {
+    "binaries": [
+      "gitleaks"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  },
+  "docker_image": "zricethezav/gitleaks:latest"
+}

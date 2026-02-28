@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SecuScan Final Project Report - 2026-03-25</title>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --surface: #ffffff;
+      --text: #111827;
+      --muted: #4b5563;
+      --accent: #1d4ed8;
+      --line: #d1d5db;
+      --ok: #15803d;
+      --warn: #b45309;
+      --high: #b91c1c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "SF Pro Text", "Segoe UI", Arial, sans-serif;
+      background: linear-gradient(180deg, #f9fafb 0%, #eef2f7 100%);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 28px 20px 40px;
+    }
+    .hero {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 26px;
+      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.06);
+    }
+    h1 { margin: 0 0 8px; font-size: 34px; letter-spacing: -0.02em; }
+    .sub { color: var(--muted); margin: 0; }
+    h2 { margin: 30px 0 12px; font-size: 22px; }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+    .value { font-size: 26px; font-weight: 700; margin-top: 2px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-top: 10px;
+    }
+    th, td {
+      border-bottom: 1px solid #e5e7eb;
+      text-align: left;
+      padding: 10px 12px;
+      vertical-align: top;
+    }
+    th { background: #eef2ff; font-weight: 700; }
+    .bar-row { margin: 10px 0; }
+    .bar-label { font-size: 14px; margin-bottom: 4px; color: var(--muted); }
+    .bar {
+      height: 12px;
+      border-radius: 999px;
+      background: #e5e7eb;
+      overflow: hidden;
+    }
+    .fill { height: 100%; background: var(--accent); }
+    .critical { background: var(--high); }
+    .high { background: #d97706; }
+    ul { margin: 8px 0 0 20px; }
+    .foot { margin-top: 30px; color: var(--muted); font-size: 13px; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <h1>SecuScan Final Project Report</h1>
+      <p class="sub">Engineering Status and UX Audit Synthesis · Generated 2026-03-25</p>
+      <div class="cards">
+        <div class="card"><div class="label">Frontend Pages</div><div class="value">11</div></div>
+        <div class="card"><div class="label">Backend Routes</div><div class="value">18</div></div>
+        <div class="card"><div class="label">Plugins</div><div class="value">7</div></div>
+        <div class="card"><div class="label">UX Findings</div><div class="value">3</div></div>
+      </div>
+    </section>
+
+    <h2>Summary</h2>
+    <p>SecuScan is functionally complete for local-first pentesting workflows, with a mature plugin and reporting architecture. Primary execution risk is user-flow quality, especially route mismatches and mobile navigation discoverability.</p>
+
+    <h2>Key Metrics</h2>
+    <table>
+      <thead>
+        <tr><th>Metric</th><th>Value</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Frontend pages</td><td>11</td><td>Implemented</td></tr>
+        <tr><td>Shared components</td><td>6</td><td>Implemented</td></tr>
+        <tr><td>Backend route handlers</td><td>18</td><td>Implemented</td></tr>
+        <tr><td>Plugin presets</td><td>20</td><td>Implemented</td></tr>
+        <tr><td>Plugin fields</td><td>43</td><td>Implemented</td></tr>
+        <tr><td>Report formats</td><td>PDF, CSV</td><td>Implemented</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Distribution Charts</h2>
+    <div class="bar-row">
+      <div class="bar-label">Plugin safety: Safe (42.9%)</div>
+      <div class="bar"><div class="fill" style="width:42.9%"></div></div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">Plugin safety: Intrusive (42.9%)</div>
+      <div class="bar"><div class="fill" style="width:42.9%"></div></div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">Plugin safety: Exploit (14.3%)</div>
+      <div class="bar"><div class="fill" style="width:14.3%"></div></div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">UX findings: Critical (1 of 3)</div>
+      <div class="bar"><div class="fill critical" style="width:33.3%"></div></div>
+    </div>
+    <div class="bar-row">
+      <div class="bar-label">UX findings: High (2 of 3)</div>
+      <div class="bar"><div class="fill high" style="width:66.7%"></div></div>
+    </div>
+
+    <h2>Priority Actions</h2>
+    <ul>
+      <li>Fix all route mismatches (`/scanner` to `/scans`) and enforce route constants.</li>
+      <li>Add scanner empty-state guidance for currently empty tab categories.</li>
+      <li>Ship mobile global navigation to unlock first-run flow on 375px screens.</li>
+      <li>Bind theme settings controls to shared `ThemeContext` and add regression tests.</li>
+      <li>Install and lock test dependencies so local verification can run consistently.</li>
+    </ul>
+
+    <p class="foot">Sources: STATUS.md, COMPLETION_SUMMARY.md, docs/ux-audit-2026-03-25.md, docs/ux-audit-artifacts/ux-audit-results.json, frontend/src/App.tsx, backend/routes.py, plugins/*/metadata.json.</p>
+  </main>
+</body>
+</html>
