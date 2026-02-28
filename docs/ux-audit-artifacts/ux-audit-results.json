@@ -1,0 +1,51 @@
+{
+  "scenario": "First-time user runs a scan and reviews output/findings",
+  "findings": [
+    {
+      "severity": "Critical",
+      "title": "Scanner tabs render empty states without explanation",
+      "where": "Scanner page tab navigation",
+      "details": "These visible tabs have zero tools: Exploit Detection, Utils, Robots. As a first-time user, this looks broken because there is no explanatory empty-state guidance.",
+      "screenshot": "docs/ux-audit-artifacts/03-scanner-empty-exploit-detection.png",
+      "fix": "Fix category mapping for tabs and add explicit empty-state messaging with next actions when a category has no available tools."
+    },
+    {
+      "severity": "High",
+      "title": "Back navigation routes to non-existent page",
+      "where": "Tool configuration header back button",
+      "details": "Back action sends users to `/scanner`, but the defined route is `/scans`, causing navigation confusion.",
+      "screenshot": "docs/ux-audit-artifacts/05-broken-back-route.png",
+      "fix": "Change hardcoded navigation targets from `/scanner` to `/scans` and add wildcard redirect handling."
+    },
+    {
+      "severity": "High",
+      "title": "Settings theme controls are not wired to global theme state",
+      "where": "Settings > Visual Spectrum",
+      "details": "Switching to Light does not toggle the app-level theme class; users perceive the setting as non-functional.",
+      "screenshot": "docs/ux-audit-artifacts/11-settings-theme-no-effect.png",
+      "fix": "Use shared ThemeContext in Settings instead of local component state."
+    }
+  ],
+  "notes": [
+    "Desktop sidebar links: 8",
+    "Tab \"Quick Start\" tool cards: 6",
+    "Tab \"Recon Tools\" tool cards: 9",
+    "Tab \"Vulnerability Scanners\" tool cards: 12",
+    "Tab \"Exploit Detection\" tool cards: 0",
+    "Tab \"Utils\" tool cards: 0",
+    "Tab \"Robots\" tool cards: 0",
+    "Selected tool card: NETWORK SCANNER",
+    "URL after selecting tool: /scans/network-scanner",
+    "Back button destination path: /scanner",
+    "Console error: Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Console error: Failed to load resource: the server responded with a status of 404 (Not Found)",
+    "Task start API status: 200",
+    "Task details path: /task/29f65b4c-467f-4f18-be1e-e86e1407f94c",
+    "Console error: EventSource error: Event",
+    "Mobile sidebar visible: false",
+    "Mobile route links count: 15",
+    "Mobile horizontal scroll: false",
+    "Theme light class before/after settings toggle: true -> true"
+  ],
+  "generatedAt": "2026-03-24T22:05:56.148Z"
+}

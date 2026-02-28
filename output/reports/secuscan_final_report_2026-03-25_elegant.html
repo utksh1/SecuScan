@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SecuScan Final Project Report</title>
+  <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  font-size: 9pt;
+  line-height: 1.35;
+  color: #1a1a1a;
+  background: #fff;
+}
+
+.page {
+  max-width: 8.5in;
+  padding: 0.4in 0.5in;
+}
+
+/* Ultra-compact header */
+.report-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #0a0a0a;
+  margin-bottom: 12px;
+}
+
+.report-title {
+  font-size: 16pt;
+  font-weight: 700;
+  color: #0a0a0a;
+  line-height: 1.1;
+}
+
+.report-subtitle {
+  font-size: 9pt;
+  color: #666;
+  margin-top: 2px;
+}
+
+.report-meta {
+  text-align: right;
+  font-size: 8pt;
+  color: #666;
+}
+
+/* DENSE content styling */
+.report-content h1 {
+  font-size: 11pt;
+  font-weight: 700;
+  color: #0a0a0a;
+  margin: 14px 0 6px 0;
+  padding-bottom: 2px;
+  border-bottom: 1px solid #ddd;
+}
+
+.report-content h1:first-child { margin-top: 0; }
+
+.report-content h2 {
+  font-size: 10pt;
+  font-weight: 600;
+  color: #333;
+  margin: 10px 0 4px 0;
+}
+
+.report-content h3 {
+  font-size: 9pt;
+  font-weight: 600;
+  color: #444;
+  margin: 8px 0 3px 0;
+}
+
+.report-content p {
+  margin: 4px 0;
+  text-align: justify;
+  hyphens: auto;
+}
+
+.report-content ul, .report-content ol {
+  margin: 4px 0;
+  padding-left: 14px;
+}
+
+.report-content li { margin: 2px 0; }
+
+.report-content strong { font-weight: 600; }
+
+/* Ultra-compact tables */
+.report-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 6px 0;
+  font-size: 8pt;
+}
+
+.report-content th {
+  background: #0a0a0a;
+  color: #fff;
+  padding: 4px 6px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 7pt;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.report-content td {
+  padding: 3px 6px;
+  border-bottom: 1px solid #e5e5e5;
+  vertical-align: top;
+}
+
+.report-content tr:nth-child(even) { background: #fafafa; }
+
+/* Compact code */
+.report-content pre {
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  padding: 6px;
+  font-size: 7pt;
+  margin: 6px 0;
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+
+.report-content code {
+  font-family: 'SF Mono', monospace;
+  font-size: 8pt;
+  background: #f0f0f0;
+  padding: 0 3px;
+}
+
+.report-content pre code { background: none; padding: 0; }
+
+.report-content blockquote {
+  border-left: 2px solid #2563EB;
+  padding-left: 8px;
+  margin: 6px 0;
+  color: #555;
+  font-style: italic;
+  font-size: 9pt;
+}
+
+.report-content hr {
+  border: none;
+  border-top: 1px solid #ddd;
+  margin: 10px 0;
+}
+
+.report-footer {
+  margin-top: 12px;
+  padding-top: 6px;
+  border-top: 1px solid #ddd;
+  font-size: 7pt;
+  color: #888;
+  display: flex;
+  justify-content: space-between;
+}
+
+@media print {
+  .page { padding: 0.35in 0.45in; }
+  h1, h2, h3 { page-break-after: avoid; }
+  table, pre { page-break-inside: avoid; }
+}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="report-header">
+      <div>
+        <h1 class="report-title">SecuScan Final Project Report</h1>
+        <p class="report-subtitle">Engineering Status and UX Audit Synthesis</p>
+      </div>
+      <div class="report-meta">
+        <div>March 25, 2026</div>
+        <div>Codex</div>
+      </div>
+    </header>
+    <div class="report-content">
+
+<h1>SecuScan Final Project Report</h1>
+
+<p>Generated: 2026-03-25</p>
+
+<h2>Table of Contents</h2>
+
+<p>1. Executive Summary</p>
+<p>2. Scope and Data Sources</p>
+<p>3. Key Metrics Snapshot</p>
+<p>4. Architecture and Delivery Status</p>
+<p>5. UX Audit Analysis</p>
+<p>6. Risk Register</p>
+<p>7. Recommendations and Next Actions</p>
+
+<h2>Executive Summary</h2>
+
+<p>SecuScan is a functioning local-first pentesting platform with a React frontend, FastAPI backend, and plugin-driven scanning model.</p>
+
+<p>The repository currently shows strong implementation depth (7 plugins, dynamic forms, reporting endpoints, streaming endpoints), but there are user-flow issues from the latest UX audit that impact first-run usability. The highest-priority work is route integrity and mobile navigation.</p>
+
+<h2>Scope and Data Sources</h2>
+
+<p>This report was generated from repository artifacts:</p>
+
+<table class="no-break"><thead><tr><th>Source</th><th>Date</th><th>Purpose</th></tr></thead><tbody><tr><td><code>STATUS.md</code></td><td>2026-03-25</td><td>Verified implementation status</td></tr><tr><td><code>COMPLETION_SUMMARY.md</code></td><td>2026-03-25</td><td>Product and architecture summary</td></tr><tr><td><code>docs/ux-audit-2026-03-25.md</code></td><td>2026-03-25</td><td>UX walkthrough findings</td></tr><tr><td><code>docs/ux-audit-artifacts/ux-audit-results.json</code></td><td>2026-03-24</td><td>Structured UX finding data</td></tr><tr><td><code>frontend/src/App.tsx</code></td><td>current</td><td>Actual frontend route inventory</td></tr><tr><td><code>backend/routes.py</code></td><td>current</td><td>API route inventory</td></tr><tr><td><code>plugins/*/metadata.json</code></td><td>current</td><td>Plugin inventory and safety levels</td></tr></tbody></table>
+<h2>Key Metrics Snapshot</h2>
+
+<h3>Delivery Metrics</h3>
+
+<table class="no-break"><thead><tr><th>Metric</th><th>Value</th><th>Status</th></tr></thead><tbody><tr><td>Frontend pages (current files)</td><td>11</td><td>Implemented</td></tr><tr><td>Shared frontend components</td><td>6</td><td>Implemented</td></tr><tr><td>Backend API route handlers</td><td>18</td><td>Implemented</td></tr><tr><td>Plugins</td><td>7</td><td>Implemented</td></tr><tr><td>Plugin presets (total)</td><td>20</td><td>Implemented</td></tr><tr><td>Plugin input fields (total)</td><td>43</td><td>Implemented</td></tr><tr><td>Report formats</td><td>PDF, CSV</td><td>Implemented</td></tr></tbody></table>
+<h3>Plugin Safety Distribution</h3>
+
+<table class="no-break"><thead><tr><th>Safety level</th><th>Count</th><th>Percent</th></tr></thead><tbody><tr><td>Safe</td><td>3</td><td>42.9%</td></tr><tr><td>Intrusive</td><td>3</td><td>42.9%</td></tr><tr><td>Exploit</td><td>1</td><td>14.3%</td></tr></tbody></table>
+<h3>UX Findings Distribution</h3>
+
+<table class="no-break"><thead><tr><th>Severity</th><th>Count</th></tr></thead><tbody><tr><td>Critical</td><td>1</td></tr><tr><td>High</td><td>2</td></tr><tr><td>Total</td><td>3</td></tr></tbody></table>
+<h3>Testability Note</h3>
+
+<p>Automated tests are documented as passing in project docs, but local test execution could not be re-run in this environment because <code>pytest</code> is not installed in the active Python interpreter.</p>
+
+<h2>Architecture and Delivery Status</h2>
+
+<h3>System Layers</h3>
+
+<table class="no-break"><thead><tr><th>Layer</th><th>Current State</th></tr></thead><tbody><tr><td>Frontend</td><td>React + Vite app with scanner, reporting, findings, history, and settings views</td></tr><tr><td>Backend</td><td>FastAPI service with task orchestration, SSE status streaming, and report export</td></tr><tr><td>Plugin Engine</td><td>JSON metadata plugins with dynamic UI schema and parser-based outputs</td></tr><tr><td>Data</td><td>SQLite + file outputs for raw scan logs and generated reports</td></tr></tbody></table>
+<h3>Route Integrity Snapshot</h3>
+
+<p>Current frontend route definitions include <code>/scans</code> and <code>/scans/:toolId</code>; UX findings show a back-navigation path still pointing to <code>/scanner</code> in one flow. This mismatch is a confirmed source of user confusion and should be treated as a production defect.</p>
+
+<h2>UX Audit Analysis</h2>
+
+<h3>Critical Issue</h3>
+
+<p>1. Scanner categories (<code>Exploit Detection</code>, <code>Utils</code>, <code>Robots</code>) show empty tool states without guidance.</p>
+
+<h3>High Priority Issues</h3>
+
+<p>1. Back button in tool configuration points to <code>/scanner</code> instead of <code>/scans</code>.</p>
+<p>2. Theme controls in settings are not wired to global theme state.</p>
+
+<h3>User Impact</h3>
+
+<table class="no-break"><thead><tr><th>Journey stage</th><th>Impact</th></tr></thead><tbody><tr><td>Tool discovery</td><td>Users assume core scanner tabs are broken</td></tr><tr><td>Navigation recovery</td><td>Users hit invalid route while moving back</td></tr><tr><td>Personalization</td><td>Theme setting appears non-functional</td></tr><tr><td>Mobile workflow</td><td>Primary navigation discoverability is insufficient</td></tr></tbody></table>
+<h2>Risk Register</h2>
+
+<table class="no-break"><thead><tr><th>Risk</th><th>Likelihood</th><th>Impact</th><th>Mitigation</th></tr></thead><tbody><tr><td>Route mismatch regression</td><td>High</td><td>High</td><td>Centralize route constants and enforce route tests</td></tr><tr><td>Empty state ambiguity</td><td>High</td><td>Medium</td><td>Add explicit empty-state messaging and category validation</td></tr><tr><td>Mobile nav discoverability gap</td><td>High</td><td>High</td><td>Add mobile global nav (drawer or tabs)</td></tr><tr><td>Theme state divergence</td><td>Medium</td><td>Medium</td><td>Bind settings controls to shared <code>ThemeContext</code></td></tr><tr><td>Security hardening gap (plugin signatures pending)</td><td>Medium</td><td>High</td><td>Add plugin signature verification in loader path</td></tr></tbody></table>
+<h2>Recommendations and Next Actions</h2>
+
+<p>1. Fix route consistency in one pass: update all <code>/scanner</code> references to <code>/scans</code>, validate dashboard task links, and add a wildcard route fallback.</p>
+<p>2. Implement explicit empty-state UX for scanner tabs with corrective guidance.</p>
+<p>3. Ship mobile global navigation to unblock end-to-end first-run flow on 375px viewport.</p>
+<p>4. Wire settings theme controls to the shared theme provider and add regression tests.</p>
+<p>5. Add a quality gate check that fails on undefined route targets and dead links.</p>
+<p>6. Re-enable executable local test workflow by installing/locking <code>pytest</code> in the active dev environment.</p>
+
+<h2>Appendix: Plugin Inventory</h2>
+
+<table class="no-break"><thead><tr><th>Plugin</th><th>ID</th><th>Safety</th><th>Presets</th><th>Fields</th></tr></thead><tbody><tr><td>Nmap</td><td><code>nmap</code></td><td>safe</td><td>5</td><td>8</td></tr><tr><td>HTTP Inspector</td><td><code>http_inspector</code></td><td>safe</td><td>2</td><td>3</td></tr><tr><td>TLS Inspector</td><td><code>tls_inspector</code></td><td>safe</td><td>3</td><td>7</td></tr><tr><td>Directory Discovery</td><td><code>dir_discovery</code></td><td>intrusive</td><td>3</td><td>9</td></tr><tr><td>Nikto</td><td><code>nikto</code></td><td>intrusive</td><td>3</td><td>7</td></tr><tr><td>Nuclei</td><td><code>nuclei</code></td><td>intrusive</td><td>2</td><td>4</td></tr><tr><td>SQLMap</td><td><code>sqlmap</code></td><td>exploit</td><td>2</td><td>5</td></tr></tbody></table>
+    </div>
+    <footer class="report-footer">
+      <span>Codex</span>
+      <span>March 25, 2026</span>
+    </footer>
+  </div>
+</body>
+</html>
