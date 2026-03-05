@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "plugin": {
+    "id": "droopescan",
+    "name": "DroopeScan",
+    "version": "1.0.0",
+    "author": "SecuScan Team",
+    "description": "Drupal, SilverStripe, and Moodle vulnerability scanner.",
+    "category": "cms",
+    "tags": ["drupal", "vuln-scan"],
+    "icon": "drupal",
+    "documentation_url": "https://github.com/droope/droopescan"
+  },
+  "execution": {
+    "engine": "cli",
+    "command_template": [
+      "droopescan", "scan", "drupal", "-u", "{{target}}", "-o", "json"
+    ],
+    "timeout_seconds": 600,
+    "container": {
+      "required": true,
+      "image": "secuscan/droopescan:latest"
+    }
+  },
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target URL",
+      "type": "string",
+      "required": true,
+      "validation": {
+        "pattern": "^https?://[a-zA-Z0-9.-]+(/.*)?$"
+      }
+    }
+  ],
+  "presets": {
+    "default": {
+      "parameters": {},
+      "safety_level": "safe"
+    }
+  },
+  "safety": {
+    "level": "safe"
+  }
+}
