@@ -1,0 +1,66 @@
+{
+  "schema_version": "1.0",
+  "plugin": {
+    "id": "hashcat",
+    "name": "Hashcat (Expert Mode)",
+    "version": "6.2.6",
+    "author": "SecuScan Team",
+    "description": "World's fastest and most advanced password recovery utility.",
+    "category": "expert",
+    "tags": ["password", "cracking", "expert"],
+    "icon": "password",
+    "documentation_url": "https://hashcat.net/"
+  },
+  "execution": {
+    "engine": "cli",
+    "command_template": [
+      "hashcat", "-m", "{{hash_type}}", "-a", "{{attack_mode}}", "{{target}}", "{{wordlist}}"
+    ],
+    "timeout_seconds": 3600,
+    "container": {
+      "required": true,
+      "image": "secuscan/hashcat:latest"
+    }
+  },
+  "fields": [
+    {
+      "id": "target",
+      "label": "Hash File Path",
+      "type": "string",
+      "required": true
+    },
+    {
+      "id": "hash_type",
+      "label": "Hash Type (Mode)",
+      "type": "integer",
+      "default": 0,
+      "description": "MD5=0, SHA1=100, etc."
+    },
+    {
+      "id": "attack_mode",
+      "label": "Attack Mode",
+      "type": "integer",
+      "default": 3,
+      "description": "3 = Brute-force, 0 = Dictionary"
+    },
+    {
+      "id": "wordlist",
+      "label": "Wordlist Path",
+      "type": "string",
+      "required": false
+    }
+  ],
+  "presets": {
+    "md5_brute": {
+      "parameters": {
+        "hash_type": 0,
+        "attack_mode": 3
+      },
+      "safety_level": "high"
+    }
+  },
+  "safety": {
+    "level": "expert",
+    "description": "Use for authorized audits only. Resource intensive."
+  }
+}

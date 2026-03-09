@@ -22,6 +22,17 @@ interface CatalogTool {
   availability?: PluginListItem['availability']
 }
 
+const LEGACY_TAB_ORDER = ['quick-start', 'recon', 'vulnerability', 'exploit', 'utils', 'robots'] as const
+
+const LEGACY_TAB_LABELS: Record<string, string> = {
+  'quick-start': 'Quick Start',
+  recon: 'Recon Tools',
+  vulnerability: 'Vulnerability Scanners',
+  exploit: 'Exploit Detection',
+  utils: 'Utils',
+  robots: 'Robots',
+}
+
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
@@ -51,13 +62,30 @@ function normalizeCategoryId(raw: string): string {
 }
 
 function formatCategoryLabel(category: string): string {
+  if (LEGACY_TAB_LABELS[category]) return LEGACY_TAB_LABELS[category]
   return category
     .split('-')
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
 }
 
+function mapPluginCategoryToLegacyTab(category: string): string {
+  switch (category) {
+    case 'vulnerability':
+    case 'code':
+      return 'vulnerability'
+    case 'execution':
+    case 'exploit':
+      return 'exploit'
+    case 'utils':
+      return 'utils'
+    default:
+      return 'recon'
+  }
+}
+
 function mapPluginToCatalogTool(plugin: PluginListItem): CatalogTool {
+  const normalizedCategory = normalizeCategoryId(plugin.category)
   return {
     id: plugin.id,
     name: plugin.name,
@@ -65,7 +93,7 @@ function mapPluginToCatalogTool(plugin: PluginListItem): CatalogTool {
     riskLevel: mapSafetyToRiskLevel(plugin.safety_level),
     presetCompatibility: 'both',
     requiresConsent: plugin.requires_consent,
-    category: normalizeCategoryId(plugin.category),
+    category: mapPluginCategoryToLegacyTab(normalizedCategory),
     disabled: false,
     isPlugin: true,
     availability: plugin.availability,
@@ -110,13 +138,8 @@ export default function Scanner() {
         const pluginIds = new Set(pluginTools.map((tool) => tool.id))
         const legacyTools = mapLegacyToolsToCatalogTools(pluginIds)
         const mergedTools = [...pluginTools, ...legacyTools]
-        const pluginCategories = Array.from(new Set(pluginTools.map((tool) => tool.category)))
-        const legacyCategories = Array.from(new Set(legacyTools.map((tool) => tool.category))).filter(
-          (category) => !pluginCategories.includes(category),
-        )
-        const fallbackCategories = ['quick-start', 'recon', 'vulnerability', 'exploit', 'utils', 'robots']
-        const mergedCategories = [...pluginCategories, ...legacyCategories]
-        for (const category of fallbackCategories) {
+        const mergedCategories = [...LEGACY_TAB_ORDER]
+        for (const category of legacyTools.map((tool) => tool.category)) {
           if (!mergedCategories.includes(category)) mergedCategories.push(category)
         }
 

@@ -1,0 +1,56 @@
+{
+  "schema_version": "1.0",
+  "plugin": {
+    "id": "volatility",
+    "name": "Volatility Framework",
+    "version": "3.0.0",
+    "author": "SecuScan Team",
+    "description": "Advanced memory forensics framework for analyzing memory dumps.",
+    "category": "forensics",
+    "tags": ["forensics", "memory", "volatility"],
+    "icon": "memory",
+    "documentation_url": "https://github.com/volatilityfoundation/volatility3"
+  },
+  "execution": {
+    "engine": "cli",
+    "command_template": [
+      "volaf", "-f", "{{target}}", "{{plugin_name}}"
+    ],
+    "timeout_seconds": 1800,
+    "container": {
+      "required": true,
+      "image": "secuscan/volatility3:latest"
+    }
+  },
+  "fields": [
+    {
+      "id": "target",
+      "label": "Memory Dump Path",
+      "type": "string",
+      "required": true
+    },
+    {
+      "id": "plugin_name",
+      "label": "Volatility Plugin",
+      "type": "enum",
+      "default": "windows.pslist",
+      "options": [
+        {"value": "windows.pslist", "label": "Process List"},
+        {"value": "windows.netstat", "label": "Network Stats"},
+        {"value": "windows.malfind", "label": "Malware Finding"},
+        {"value": "linux.pslist", "label": "Linux Process List"}
+      ]
+    }
+  ],
+  "presets": {
+    "analysis": {
+      "parameters": {
+        "plugin_name": "windows.pslist"
+      },
+      "safety_level": "safe"
+    }
+  },
+  "safety": {
+    "level": "moderate"
+  }
+}
