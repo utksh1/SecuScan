@@ -1,4 +1,61 @@
-# SecuScan — Local-First Pentesting Toolkit
+<p align="center">
+  <img src="assets/banner.png" alt="SecuScan Banner" width="100%">
+</p>
+
+<p align="center">
+  <img src="assets/logo.png" alt="SecuScan Logo" width="200">
+</p>
+
+<h1 align="center">SecuScan — Local-First Pentesting Toolkit</h1>
+
+<p align="center">
+  <strong>The premium, local-first platform for secure, ethical, and learning-driven penetration testing.</strong>
+</p>
+
+<p align="center">
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT">
+  </a>
+  <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome">
+  <img src="https://img.shields.io/badge/Python-3.11%2B-blue" alt="Python 3.11+">
+  <img src="https://img.shields.io/badge/Status-Development-orange" alt="Work In Progress">
+</p>
+
+---
+
+## 🛡️ At a Glance
+
+SecuScan is a **safety-first** penetration testing suite designed to run entirely on your local infrastructure. It bridges the gap between learning and professional practice by providing:
+
+- **Local-First Architecture**: 100% data sovereignty; no data ever leaves your machine.
+- **Sandboxed Execution**: Automated tool isolation using Docker and Namespaces.
+- **Guided Workflows**: Interactive modals and consent checks for ethical learning.
+- **Plugin-Driven Core**: Declarative expansion for Nmap, Nikto, and more.
+
+---
+
+## 🚀 Quick Start
+
+Launch the full **SecuScan** environment with a single command:
+
+1. **Clone & Enter**:
+   ```bash
+   git clone https://github.com/utksh1/SecuScan.git
+   cd SecuScan
+   ```
+
+2. **Run the Dev Stack**:
+   ```bash
+   chmod +x start.sh
+   ./start.sh
+   ```
+
+3. **Explore**:
+   - **Frontend**: http://127.0.0.1:5173
+   - **API Docs**: http://127.0.0.1:8000/docs
+
+---
+
 ## Final Detailed Product Specification, November 2025
 
 ---
@@ -73,31 +130,31 @@ SecuScan bridges the gap between theoretical security knowledge and practical ap
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    SecuScan Platform                     │
+│                    SecuScan Platform                    │
 ├─────────────────────────────────────────────────────────┤
-│  Frontend Layer                                          │
+│  Frontend Layer                                         │
 │  ├─ Lightweight SPA (React/Vue/Svelte)                  │
 │  ├─ Dynamic Form Generator                              │
 │  └─ Real-time Task Monitor                              │
 ├─────────────────────────────────────────────────────────┤
-│  Backend Layer                                           │
+│  Backend Layer                                          │
 │  ├─ Python FastAPI/Flask REST Server                    │
 │  ├─ Plugin Loader & Registry                            │
 │  ├─ Task Execution Engine                               │
 │  └─ Output Parser & Normalizer                          │
 ├─────────────────────────────────────────────────────────┤
-│  Data Layer                                              │
+│  Data Layer                                             │
 │  ├─ SQLite Database (tasks, plugins, settings, audit)   │
 │  ├─ Filesystem Storage (raw outputs, reports)           │
 │  └─ Encrypted Credential Vault                          │
 ├─────────────────────────────────────────────────────────┤
-│  Execution Layer                                         │
+│  Execution Layer                                        │
 │  ├─ Docker Container Orchestrator                       │
 │  ├─ Namespace Isolation (fallback)                      │
 │  └─ Resource Limiter                                    │
 ├─────────────────────────────────────────────────────────┤
-│  Plugin Ecosystem                                        │
-│  ├─ Core Tools (Nmap, Nikto, etc.)                     │
+│  Plugin Ecosystem                                       │
+│  ├─ Core Tools (Nmap, Nikto, etc.)                      │
 │  ├─ Community Plugins (verified)                        │
 │  └─ Custom User Scripts                                 │
 └─────────────────────────────────────────────────────────┘
@@ -4105,3 +4162,11 @@ SecuScan welcomes community contributions. See `CONTRIBUTING.md` for:
 *SecuScan — Empowering Ethical Security Education*
 
 *Version 1.0 | October 2025 | Confidential Internal Release*
+
+---
+
+## ⚖️ License
+
+Distributed under the **MIT License**. See [LICENSE](LICENSE) for more information.
+
+Copyright (c) 2025 SecuScan Contributors
