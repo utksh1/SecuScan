@@ -1,4 +1,20 @@
-export const API_BASE = (import.meta as any).env.VITE_API_BASE || '/api/v1'
+function resolveApiBase(): string {
+  const configured = (import.meta as any).env.VITE_API_BASE
+  if (configured) return configured
+
+  if (typeof window !== 'undefined') {
+    const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    const isViteDevServer = window.location.port === '5173'
+
+    // For localhost preview/static modes (e.g. :8080), call backend directly.
+    if (isLocalHost && !isViteDevServer) return 'http://127.0.0.1:8000/api/v1'
+  }
+
+  // Default for Vite dev server where /api is proxied to backend.
+  return '/api/v1'
+}
+
+export const API_BASE = resolveApiBase()
 
 export type PluginFieldType =
   | 'string'
@@ -118,12 +134,12 @@ export function getTasks(params?: URLSearchParams) {
   return request(`/tasks${suffix}`)
 }
 
-export function getTaskStatus(taskId: string) {
-  return request(`/task/${taskId}/status`)
+export function getTaskStatus(taskId: string): Promise<any> {
+  return request<any>(`/task/${taskId}/status`)
 }
 
-export function getTaskResult(taskId: string) {
-  return request(`/task/${taskId}/result`)
+export function getTaskResult(taskId: string): Promise<any> {
+  return request<any>(`/task/${taskId}/result`)
 }
 
 export function startTask(plugin_id: string, inputs: Record<string, unknown>, consent_granted: boolean, preset?: string) {
