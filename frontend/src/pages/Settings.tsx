@@ -1,4 +1,18 @@
 import React, { useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.1 }
+  }
+}
+
+const itemVariants = {
+  hidden: { opacity: 0, x: -20 },
+  visible: { opacity: 1, x: 0 }
+}
 
 export default function Settings() {
     const [theme, setTheme] = useState('dark')
@@ -9,243 +23,240 @@ export default function Settings() {
         weeklyDigest: false,
         systemAlerts: true
     })
-    const [scanDefaults, setScanDefaults] = useState({
-        defaultMode: 'light',
-        autoConsent: false,
-        saveHistory: true
-    })
 
     const Toggle = ({ checked, onChange, label, description }: any) => (
-        <div className="flex items-center justify-between p-6 bg-charcoal border border-accent-silver/5 hover:border-accent-silver/20 transition-all group">
-            <div className="space-y-1">
-                <label className="text-[10px] font-bold text-silver-bright uppercase tracking-widest block">{label}</label>
-                <span className="text-[9px] text-silver/30 uppercase tracking-tighter italic font-mono">{description}</span>
+        <button 
+            onClick={() => onChange(!checked)}
+            className={`flex items-center justify-between p-8 bg-charcoal border-4 border-black transition-all group hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 ${
+                checked ? 'shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' : 'shadow-none'
+            }`}
+        >
+            <div className="space-y-2 text-left">
+                <label className="text-xs font-black text-silver-bright uppercase tracking-widest block group-hover:text-rag-blue transition-colors">{label}</label>
+                <span className="text-[10px] text-silver/40 uppercase tracking-tighter italic font-mono font-bold">{description}</span>
             </div>
-            <button 
-                onClick={() => onChange(!checked)}
-                className={`w-12 h-6 border transition-all relative flex items-center px-1 ${
-                    checked ? 'bg-rag-green/10 border-rag-green/40' : 'bg-charcoal-dark border-accent-silver/10'
-                }`}
-            >
-                <div className={`w-3 h-3 transition-all ${checked ? 'translate-x-6 bg-rag-green shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'translate-x-0 bg-silver/20'}`}></div>
-            </button>
-        </div>
+            <div className={`w-16 h-8 border-4 border-black relative transition-all ${checked ? 'bg-rag-green' : 'bg-charcoal-dark shadow-inner'}`}>
+                <div className={`absolute top-0 w-6 h-full bg-black transition-all ${checked ? 'left-8' : 'left-0'}`}></div>
+            </div>
+        </button>
     )
 
     return (
-        <div className="min-h-screen flex flex-col">
-            <header className="w-full px-12 py-10 flex justify-between items-center border-b border-accent-silver/10">
-                <div className="flex items-center gap-8">
-                    <div className="header-decoration hidden xl:block">
-                        <span className="material-symbols-outlined text-accent-silver/30 text-4xl animate-pulse">settings</span>
-                    </div>
-                    <div>
-                        <h1 className="text-3xl font-serif font-light text-silver-bright tracking-tight italic uppercase leading-none">Protocol Configuration</h1>
-                        <p className="text-[10px] font-light text-silver/40 uppercase tracking-[0.4em] mt-3 italic">System Parameters • Operational Overrides • SECURITY ENCLAVE</p>
-                    </div>
+        <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
+            
+            {/* Neo-Brutalist Header */}
+            <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10 font-black">
+                <div className="space-y-4">
+                  <div className="bg-rag-blue text-black px-4 py-1 text-xs uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-black">
+                    Protocol_Control v4.0
+                  </div>
+                  <h1 className="text-6xl md:text-8xl text-silver-bright uppercase tracking-tighter leading-none italic font-black">
+                    System <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '2px var(--accent-silver-bright)' }}>Config</span>
+                  </h1>
+                  <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic leading-relaxed">
+                    OVERRIDE_PARAMETERS // CORE_STABILITY // ACCESS_VECTORS
+                  </p>
                 </div>
-                
-                <div className="flex items-center gap-12">
-                   <div className="text-right border-l border-accent-silver/10 pl-8">
-                        <span className="text-[10px] font-medium text-silver/40 uppercase tracking-widest block mb-1">Node Identification</span>
-                        <span className="text-xs font-mono text-silver-bright uppercase">SECUSCAN-LX-01</span>
+
+                <div className="flex items-center gap-6">
+                   <div className="bg-charcoal border-4 border-black px-8 py-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+                        <span className="text-[10px] font-black text-silver/20 uppercase tracking-[0.4em] block mb-1 italic">ENCLAVE_ID</span>
+                        <span className="text-xs font-black font-mono text-silver-bright tracking-widest">SECUSCAN-LX-01</span>
                     </div>
                 </div>
             </header>
 
-            <main className="flex-1 p-12 space-y-12 max-w-[1600px] mx-auto w-full animate-in fade-in duration-1000">
-                
-                <div className="flex flex-col lg:flex-row gap-12 items-stretch pt-4">
-                    {/* Main Settings Area */}
-                    <div className="flex-1 space-y-12 min-w-0">
-                        
-                        {/* Appearance & Interface */}
-                        <section className="space-y-6">
-                            <div className="flex items-center gap-6">
-                                <h3 className="text-[10px] font-bold uppercase tracking-[0.4em] text-silver/30 italic">User interface dynamics</h3>
-                                <div className="h-px flex-1 bg-accent-silver/5"></div>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-accent-silver/10 executive-border overflow-hidden rounded-sm shadow-xl">
-                                <div className="p-8 bg-charcoal space-y-4">
-                                    <div className="flex flex-col gap-1.5">
-                                        <label className="text-[10px] font-bold text-silver-bright uppercase tracking-widest">Visual Matrix Theme</label>
-                                        <span className="text-[9px] text-silver/30 uppercase italic font-mono mb-4">Select the primary rendering spectrum</span>
-                                    </div>
-                                    <div className="grid grid-cols-3 gap-2">
-                                        {['dark', 'light', 'system'].map(t => (
-                                            <button 
-                                                key={t}
-                                                onClick={() => setTheme(t)}
-                                                className={`py-3 text-[9px] uppercase tracking-widest border transition-all ${
-                                                    theme === t ? 'bg-silver-bright text-charcoal-dark border-silver-bright font-bold italic' : 'bg-charcoal-dark border-accent-silver/10 text-silver/30 hover:border-silver/40'
-                                                }`}
-                                            >
-                                                {t}
-                                            </button>
-                                        ))}
-                                    </div>
+            <div className="grid grid-cols-1 xl:grid-cols-4 gap-12 pt-4">
+                {/* Main Settings Grid */}
+                <main className="xl:col-span-3 space-y-16">
+                    
+                    {/* UI Architecture */}
+                    <section className="space-y-8">
+                        <div className="flex items-center gap-4">
+                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Interface_Matrix</h3>
+                            <div className="h-0.5 flex-1 bg-black/10"></div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <motion.div variants={itemVariants} initial="hidden" animate="visible" className="bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-8">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-silver-bright uppercase tracking-widest block italic">Visual Spectrum</label>
+                                    <p className="text-[10px] text-silver/40 uppercase font-bold italic mb-6">Select primary rendering engine</p>
                                 </div>
-                                <div className="p-8 bg-charcoal space-y-4">
-                                    <div className="flex flex-col gap-1.5">
-                                        <label className="text-[10px] font-bold text-silver-bright uppercase tracking-widest">Interface Density</label>
-                                        <span className="text-[9px] text-silver/30 uppercase italic font-mono mb-4">Set information granularity baseline</span>
-                                    </div>
-                                    <div className="flex gap-4 items-center">
-                                        <span className="text-[10px] text-silver/20 uppercase tracking-widest">Low</span>
-                                        <div className="flex-1 h-1.5 bg-charcoal-dark border border-accent-silver/10 relative">
-                                            <div className="absolute top-0 left-0 w-3/4 h-full bg-silver/20"></div>
-                                        </div>
-                                        <span className="text-[10px] text-silver-bright uppercase tracking-widest italic">High</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </section>
-
-                        {/* Security Protocols */}
-                        <section className="space-y-6">
-                            <div className="flex items-center gap-6">
-                                <h3 className="text-[10px] font-bold uppercase tracking-[0.4em] text-silver/30 italic">Access security architecture</h3>
-                                <div className="h-px flex-1 bg-accent-silver/5"></div>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-accent-silver/10 executive-border overflow-hidden rounded-sm shadow-xl">
-                                <div className="p-8 bg-charcoal space-y-6">
-                                    <div className="flex justify-between items-start">
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-bold text-silver-bright uppercase tracking-widest">Session Expiration</label>
-                                            <span className="text-[9px] text-silver/30 uppercase italic font-mono">Automated protocol termination</span>
-                                        </div>
-                                        <select 
-                                            className="bg-charcoal-dark border border-accent-silver/10 px-4 py-2 text-[10px] text-silver-bright focus:outline-none focus:border-silver/40 rounded-sm italic font-mono"
-                                            value={sessionTimeout}
-                                            onChange={(e) => setSessionTimeout(e.target.value)}
+                                <div className="grid grid-cols-3 gap-4">
+                                    {['dark', 'light', 'system'].map(t => (
+                                        <button 
+                                            key={t}
+                                            onClick={() => setTheme(t)}
+                                            className={`py-4 text-[10px] font-black uppercase tracking-[0.3em] border-4 transition-all ${
+                                                theme === t 
+                                                ? 'bg-rag-red text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' 
+                                                : 'bg-charcoal-dark border-black text-silver/20 hover:text-white hover:border-silver-bright/20'
+                                            }`}
                                         >
-                                            <option value="15">15M_SECURE</option>
-                                            <option value="30">30M_NORMAL</option>
-                                            <option value="60">1H_EXTENDED</option>
-                                            <option value="never">INF_PERSISTENT</option>
-                                        </select>
-                                    </div>
-                                    <div className="h-px bg-accent-silver/5"></div>
-                                    <div className="flex justify-between items-center group">
-                                        <div className="space-y-1">
-                                            <span className="text-[10px] font-bold text-silver-bright uppercase tracking-widest block">Authorized IP Range</span>
-                                            <span className="text-[9px] text-silver/30 uppercase italic font-mono">Restricted access vectors</span>
-                                        </div>
-                                        <span className="text-[10px] text-rag-green font-mono italic">GLOBAL_ANY</span>
-                                    </div>
-                                </div>
-                                <div className="p-8 bg-charcoal flex flex-col justify-center items-center gap-6">
-                                    <div className="w-16 h-16 border border-dashed border-accent-silver/20 flex items-center justify-center rounded-full group hover:border-silver-bright/40 transition-all cursor-pointer">
-                                        <span className="material-symbols-outlined text-silver/20 group-hover:text-silver-bright transition-colors text-3xl">shield_lock</span>
-                                    </div>
-                                    <div className="text-center space-y-2">
-                                        <span className="text-[10px] font-extrabold text-silver/20 uppercase tracking-[0.4em] italic mb-1 block">Multi-Factor Intel</span>
-                                        <button className="text-[10px] text-silver-bright uppercase tracking-widest border border-accent-silver/10 px-6 py-2 hover:bg-white/5 transition-all italic">Synchronize MFA Agent</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </section>
-
-                        {/* Signaling & Transmission */}
-                        <section className="space-y-6">
-                            <div className="flex items-center gap-6">
-                                <h3 className="text-[10px] font-bold uppercase tracking-[0.4em] text-silver/30 italic">Notification Signal paths</h3>
-                                <div className="h-px flex-1 bg-accent-silver/5"></div>
-                            </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-accent-silver/5 overflow-hidden rounded-sm border border-accent-silver/10">
-                                <Toggle 
-                                    label="Mission End Signal" 
-                                    description="Transmission upon scan finalization" 
-                                    checked={notifications.scanComplete} 
-                                    onChange={(val: boolean) => setNotifications({...notifications, scanComplete: val})}
-                                />
-                                <Toggle 
-                                    label="Criticality Alert" 
-                                    description="Urgent signal for risk_level:critical" 
-                                    checked={notifications.criticalFindings} 
-                                    onChange={(val: boolean) => setNotifications({...notifications, criticalFindings: val})}
-                                />
-                                <Toggle 
-                                    label="Temporal Deep Archive" 
-                                    description="Weekly briefing packet transmission" 
-                                    checked={notifications.weeklyDigest} 
-                                    onChange={(val: boolean) => setNotifications({...notifications, weeklyDigest: val})}
-                                />
-                                <Toggle 
-                                    label="Enclave System Logs" 
-                                    description="Core stability and update notifications" 
-                                    checked={notifications.systemAlerts} 
-                                    onChange={(val: boolean) => setNotifications({...notifications, systemAlerts: val})}
-                                />
-                            </div>
-                        </section>
-                    </div>
-
-                    {/* Technical Sidebar Infrastructure */}
-                    <aside className="w-full lg:w-96 space-y-12 flex-shrink-0 relative">
-                        {/* System Health / Data Visualization in Sidebar to fill empty space */}
-                        <div className="p-10 bg-charcoal-dark border border-accent-silver/10 rounded-sm space-y-10 relative overflow-hidden group shadow-2xl">
-                             <div className="absolute top-0 right-0 w-32 h-32 opacity-[0.02] -mr-16 -mt-16 pointer-events-none group-hover:scale-150 transition-transform duration-[3s]">
-                                <span className="material-symbols-outlined text-[200px]">dns</span>
-                            </div>
-                            
-                            <div className="space-y-6 relative z-10">
-                                <h3 className="text-[11px] font-bold text-silver-bright uppercase tracking-[0.5em] italic flex items-center gap-4">
-                                    Enclave Diagnostics
-                                    <div className="flex-1 h-px bg-accent-silver/10"></div>
-                                </h3>
-                                
-                                <div className="space-y-8">
-                                    {[
-                                        { label: 'Compute Version', val: '1.0.0-PROX', color: 'text-silver-bright' },
-                                        { label: 'Latency Matrix', val: '14 MS', color: 'text-rag-green' },
-                                        { label: 'Signal Strength', val: '-42 dBm', color: 'text-rag-green' },
-                                        { label: 'Disk Persistence', val: 'RAID-0_STRIPED', color: 'text-silver/40' },
-                                    ].map((row, i) => (
-                                        <div key={i} className="flex justify-between items-end border-b border-accent-silver/5 pb-3 group/row">
-                                            <span className="text-[9px] text-silver/20 uppercase tracking-widest font-mono group-hover/row:text-silver-bright/20 transition-colors">{row.label}</span>
-                                            <span className={`text-[10px] font-mono leading-none ${row.color} italic`}>{row.val}</span>
-                                        </div>
+                                            {t}
+                                        </button>
                                     ))}
                                 </div>
-                            </div>
+                            </motion.div>
 
-                            <div className="space-y-6 pt-10">
-                                <div className="flex justify-between items-baseline">
-                                     <span className="text-[9px] font-bold text-silver/30 uppercase tracking-widest">Memory Allocation</span>
-                                     <span className="text-[8px] text-silver/10 font-mono italic">ACTIVE_POOL</span>
+                            <motion.div variants={itemVariants} initial="hidden" animate="visible" className="bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-8">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-silver-bright uppercase tracking-widest block italic">Information Density</label>
+                                    <p className="text-[10px] text-silver/40 uppercase font-bold italic mb-6">Granular telemetry distribution</p>
                                 </div>
-                                <div className="flex gap-1 h-12">
-                                    {[30, 45, 20, 60, 80, 40, 55, 30, 25, 40, 65, 50, 20, 15].map((h, i) => (
-                                        <div key={i} className="flex-1 flex flex-col justify-end">
-                                            <div className="w-full bg-accent-silver/5 relative group/bar">
-                                                <div 
-                                                    className={`w-full bg-silver/10 group-hover/bar:bg-rag-green/40 transition-all ${i % 3 === 0 ? 'bg-rag-amber/20' : ''}`} 
-                                                    style={{ height: `${h}%` }}
-                                                ></div>
-                                            </div>
-                                        </div>
-                                    ))}
+                                <div className="flex items-center gap-6 pt-4">
+                                    <span className="text-[10px] font-black text-silver/20 uppercase tracking-[0.2em]">MIN</span>
+                                    <div className="flex-1 h-4 bg-charcoal-dark border-4 border-black p-1">
+                                        <div className="h-full bg-rag-blue w-[85%] shadow-[0_0_10px_#3b82f6]"></div>
+                                    </div>
+                                    <span className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic">MAX</span>
                                 </div>
+                            </motion.div>
+                        </div>
+                    </section>
+
+                    {/* Access Protocols */}
+                    <section className="space-y-8">
+                        <div className="flex items-center gap-4">
+                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Security_Protocols</h3>
+                            <div className="h-0.5 flex-1 bg-black/10"></div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <motion.div variants={itemVariants} initial="hidden" animate="visible" className="bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-8">
+                                <div className="flex justify-between items-start">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-silver-bright uppercase tracking-widest block italic">Session_Dormancy</label>
+                                        <p className="text-[10px] text-silver/40 uppercase font-bold italic">Automatic termination interval</p>
+                                    </div>
+                                    <select 
+                                        className="bg-charcoal-dark border-4 border-black p-4 text-[10px] font-black font-mono text-silver-bright uppercase focus:outline-none appearance-none cursor-pointer italic"
+                                        value={sessionTimeout}
+                                        onChange={(e) => setSessionTimeout(e.target.value)}
+                                    >
+                                        <option value="15">15M_SECURE</option>
+                                        <option value="30">30M_NORMAL</option>
+                                        <option value="60">1H_EXTENDED</option>
+                                        <option value="never">INF_PERSISTENT</option>
+                                    </select>
+                                </div>
+                                <div className="h-0.5 bg-black/10 w-full mb-4"></div>
+                                <div className="flex justify-between items-center group">
+                                    <div className="space-y-1">
+                                        <span className="text-[10px] font-black text-silver-bright uppercase tracking-widest block italic">Authorized Vectors</span>
+                                        <span className="text-[9px] text-silver/20 uppercase italic font-mono font-bold tracking-widest">Global IP Isolation</span>
+                                    </div>
+                                    <span className="text-[10px] text-rag-green font-black font-mono italic px-4 py-2 border-2 border-black bg-rag-green/10">0.0.0.0/0_ACTIVE</span>
+                                </div>
+                            </motion.div>
+
+                            <motion.div variants={itemVariants} initial="hidden" animate="visible" className="bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-center items-center gap-8 group">
+                                <div className="w-20 h-20 border-4 border-black border-dashed flex items-center justify-center bg-charcoal-dark group-hover:border-solid group-hover:bg-rag-amber transition-all duration-500 cursor-pointer shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+                                    <span className="material-symbols-outlined text-silver/20 group-hover:text-black transition-colors text-4xl">shield_person</span>
+                                </div>
+                                <div className="text-center space-y-4">
+                                    <p className="text-[10px] font-black text-silver/20 uppercase tracking-[0.4em] italic leading-none block">MULTI_FACTOR_SYNC</p>
+                                    <button className="bg-silver-bright border-4 border-black px-8 py-3 text-[10px] font-black uppercase text-black italic tracking-widest hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all">ESTABLISH_MFA_HANDSHAKE</button>
+                                </div>
+                            </motion.div>
+                        </div>
+                    </section>
+
+                    {/* Notification Signal Matrix */}
+                    <section className="space-y-8">
+                        <div className="flex items-center gap-4">
+                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Transmission_Signal_Matrix</h3>
+                            <div className="h-0.5 flex-1 bg-black/10"></div>
+                        </div>
+                        <motion.div variants={containerVariants} initial="hidden" animate="visible" className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <Toggle 
+                                label="Mission_Final_Signal" 
+                                description="TX_FINALIZATION_PACKET" 
+                                checked={notifications.scanComplete} 
+                                onChange={(val: boolean) => setNotifications({...notifications, scanComplete: val})}
+                            />
+                            <Toggle 
+                                label="Criticality_Override" 
+                                description="URGENT_LEVEL_CRITICAL_RX" 
+                                checked={notifications.criticalFindings} 
+                                onChange={(val: boolean) => setNotifications({...notifications, criticalFindings: val})}
+                            />
+                            <Toggle 
+                                label="Temporal_Archive_RX" 
+                                description="WEEKLY_BRIEFING_BULLET_IN" 
+                                checked={notifications.weeklyDigest} 
+                                onChange={(val: boolean) => setNotifications({...notifications, weeklyDigest: val})}
+                            />
+                            <Toggle 
+                                label="Enclave_Stabilizer" 
+                                description="CORE_UPTIME_AND_HEALTH_LOGS" 
+                                checked={notifications.systemAlerts} 
+                                onChange={(val: boolean) => setNotifications({...notifications, systemAlerts: val})}
+                            />
+                        </motion.div>
+                    </section>
+                </main>
+
+                {/* Sidebar Diagnostics */}
+                <aside className="xl:col-span-1 space-y-12">
+                    <section className="bg-charcoal-dark border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-10 group overflow-hidden relative">
+                         <div className="absolute top-0 right-0 w-32 h-32 opacity-[0.02] -mr-16 -mt-16 pointer-events-none group-hover:scale-150 transition-transform duration-[4s]">
+                            <span className="material-symbols-outlined text-[200px] text-silver-bright">construction</span>
+                        </div>
+                        <div className="space-y-8 relative z-10">
+                            <h3 className="text-[11px] font-black text-silver-bright uppercase tracking-[0.5em] italic border-b-4 border-black pb-4">Internal_Diagnostics</h3>
+                            <div className="space-y-6">
+                                {[
+                                    { label: 'Core Version', val: '2.4.0-STABLE', color: 'text-silver-bright' },
+                                    { label: 'Uptime', val: '00:12:44:02', color: 'text-rag-green' },
+                                    { label: 'IOPS', val: '4,221 REQ/S', color: 'text-rag-blue' },
+                                    { label: 'Latency', val: '12.2 MS', color: 'text-rag-green' },
+                                ].map((row, i) => (
+                                    <div key={i} className="flex justify-between items-end border-b-2 border-black border-dashed pb-3">
+                                        <span className="text-[9px] font-black text-silver/20 uppercase tracking-[0.2em] italic">{row.label}</span>
+                                        <span className={`text-[10px] font-black font-mono italic ${row.color}`}>{row.val}</span>
+                                    </div>
+                                ))}
                             </div>
                         </div>
-
-                        <div className="p-10 space-y-8 border border-dashed border-accent-silver/10 rounded-sm">
-                            <h3 className="text-[10px] font-bold text-silver-bright uppercase tracking-[0.3em] italic">Archive Maintenance</h3>
-                            <div className="space-y-4">
-                                <button className="w-full py-4 bg-charcoal border border-accent-silver/10 text-[9px] text-silver/40 uppercase tracking-[0.4em] hover:bg-silver/5 hover:text-white transition-all italic font-bold">Encrypted Data Export</button>
-                                <button className="w-full py-4 bg-charcoal border border-accent-silver/10 text-[9px] text-silver/40 uppercase tracking-[0.4em] hover:bg-silver/5 hover:text-white transition-all italic font-bold">Clear Operational Cache</button>
-                                <button className="w-full py-4 bg-rag-red/5 border border-rag-red/20 text-[9px] text-rag-red/40 uppercase tracking-[0.4em] hover:bg-rag-red/10 hover:text-rag-red transition-all italic font-bold">Nuclear Data Purge</button>
+                        <div className="space-y-4 pt-10">
+                             <div className="flex justify-between items-baseline">
+                                 <span className="text-[9px] font-black text-silver/20 uppercase tracking-widest italic leading-none">MEM_ALLOCATION</span>
+                                 <span className="text-[8px] font-mono text-rag-green font-black">STABLE</span>
+                            </div>
+                            <div className="flex gap-1.5 h-16 items-end">
+                                {[40, 60, 30, 80, 50, 70, 45, 90, 30, 55, 65, 40].map((h, i) => (
+                                    <div key={i} className="flex-1 bg-black/10 relative overflow-hidden h-full group/bar">
+                                        <div 
+                                            className={`absolute bottom-0 w-full transition-all duration-700 bg-rag-blue/20 group-hover/bar:bg-rag-blue ${i === 7 ? 'bg-rag-red' : ''}`} 
+                                            style={{ height: `${h}%` }}
+                                        ></div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
+                    </section>
 
-                        {/* Subtle Background Watermark */}
-                        <div className="absolute -bottom-20 -right-20 pointer-events-none opacity-[0.03] select-none rotate-[-15deg] hidden lg:block">
-                            <h2 className="text-[200px] font-serif font-black italic tracking-tighter leading-none">ALPHA</h2>
+                    <section className="bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
+                        <h3 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.4em] italic mb-6">Enclave_Health</h3>
+                        <div className="space-y-4">
+                            <button className="w-full py-4 bg-charcoal-dark border-4 border-black text-[10px] font-black text-silver/40 uppercase tracking-[0.3em] hover:bg-black hover:text-white transition-all italic">ENCRYPTED_DB_EXPORT</button>
+                            <button className="w-full py-4 bg-charcoal-dark border-4 border-black text-[10px] font-black text-silver/40 uppercase tracking-[0.3em] hover:bg-black hover:text-white transition-all italic">REVALIDATE_PROTOCOLS</button>
+                            <button className="w-full py-4 bg-rag-red border-4 border-black text-[10px] font-black text-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all italic">NUCLEAR_PURGE</button>
                         </div>
-                    </aside>
+                    </section>
+                </aside>
+            </div>
+
+            {/* Tactical Footer */}
+            <footer className="pt-24 border-t-4 border-black/5 flex flex-col md:flex-row justify-between items-center gap-8 text-[9px] font-black uppercase tracking-[0.5em] italic opacity-20">
+                <div className="flex items-center gap-6">
+                    <div className="w-12 h-1 bg-silver/20"></div>
+                    RESTRICTED_ACCESS_VIEW // PROTOCOL_LEVEL_SEVEN // ENCLAVE_REVISION_ALPHA
                 </div>
-            </main>
+                <div className="flex gap-4">
+                    {[1,2,3,4,5,6,7,8].map(i => <div key={i} className="w-2 h-2 bg-silver/20 rounded-full"></div>)}
+                </div>
+            </footer>
         </div>
     )
 }

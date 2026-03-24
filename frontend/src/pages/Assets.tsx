@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import { getAssets, getFindings } from '../api'
 
 type Asset = {
@@ -17,6 +18,26 @@ type Asset = {
 }
 
 type Finding = { id: string; target: string; title: string; severity: string; discovered_at: string }
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.05
+    }
+  }
+}
+
+const itemVariants = {
+  hidden: { opacity: 0, scale: 0.98, y: 10 },
+  visible: { 
+    opacity: 1, 
+    scale: 1, 
+    y: 0,
+    transition: { type: 'spring', stiffness: 300, damping: 20 }
+  }
+}
 
 export default function Assets() {
   const [assets, setAssets] = useState<Asset[]>([])
@@ -58,350 +79,326 @@ export default function Assets() {
 
   const assetFindings = selectedAsset ? findings.filter((v) => v.target === selectedAsset.target) : []
 
-  const formatDateLong = (dateStr: string | null) =>
-    dateStr ? new Date(dateStr).toLocaleString('en-US', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) + ' GMT' : 'Never'
-
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="w-full px-12 py-10 flex justify-between items-center border-b border-accent-silver/10">
-        <div className="flex items-center gap-8">
-            <div className="header-decoration hidden xl:block">
-                <div className="flex gap-2">
-                    {[1,2,3].map(i => <div key={i} className="w-1 h-3 bg-accent-silver/30"></div>)}
-                </div>
-            </div>
-            <div>
-              <h1 className="text-3xl font-serif font-light text-silver-bright tracking-tight italic uppercase">Asset Infrastructure Registry</h1>
-              <p className="text-[10px] font-light text-silver/60 uppercase tracking-[0.4em] mt-2">Active Node Inventory • SECURE ACCESS REQUIRED</p>
-            </div>
+    <div className="min-h-screen bg-charcoal-dark text-silver selection:bg-rag-blue selection:text-white p-6 md:p-12 space-y-12">
+      
+      {/* Neo-Brutalist Header */}
+      <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10">
+        <div className="space-y-4">
+          <div className="bg-rag-blue text-charcoal-dark px-4 py-1 text-xs font-black uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            Registry Protocol v2.4
+          </div>
+          <h1 className="text-6xl md:text-8xl font-black text-silver-bright uppercase tracking-tighter leading-none italic">
+            Asset <span className="text-transparent stroke-white stroke-1" style={{ WebkitTextStroke: '1px var(--accent-silver-bright)' }}>Inventory</span>
+          </h1>
+          <p className="text-sm font-mono text-silver/40 uppercase tracking-widest">
+            {assets.length} Active Node Records // Filtered: {filteredAssets.length}
+          </p>
         </div>
-        
-        <div className="flex items-center gap-12">
-          <div className="text-right border-l border-accent-silver/10 pl-8">
-            <span className="text-[10px] font-medium text-silver/40 uppercase tracking-widest block mb-1">Managed Nodes</span>
-            <span className="text-xl font-light text-silver-bright font-mono">{assets.length.toString().padStart(3, '0')}</span>
-          </div>
-          <div className="flex items-center gap-4">
-             <button className="material-symbols-outlined text-silver/20 hover:text-silver-bright transition-colors p-2 border border-accent-silver/10 rounded-full">download</button>
-             <button className="material-symbols-outlined text-silver/20 hover:text-silver-bright transition-colors p-2 border border-accent-silver/10 rounded-full">sync</button>
-          </div>
+
+        <div className="flex flex-wrap gap-4">
+          <button className="bg-charcoal px-6 py-4 border-2 border-silver-bright/20 hover:border-silver-bright text-silver-bright transition-all flex items-center gap-3 group shadow-[6px_6px_0px_0px_rgba(0,0,0,0.5)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none">
+            <span className="material-symbols-outlined text-sm">download</span>
+            <span className="text-xs font-black uppercase tracking-widest">Export.db</span>
+          </button>
+          <button className="bg-silver-bright px-6 py-4 border-2 border-black text-charcoal-dark transition-all flex items-center gap-3 hover:bg-white shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none">
+            <span className="material-symbols-outlined text-sm">sync</span>
+            <span className="text-xs font-black uppercase tracking-widest">Rescan.all</span>
+          </button>
         </div>
       </header>
 
-      <main className="flex-1 p-12 space-y-12 max-w-[1600px] mx-auto w-full animate-in fade-in duration-700">
+      <main className="grid grid-cols-1 xl:grid-cols-4 gap-12">
         
-        {/* Quick Summary Strip */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-px bg-accent-silver/10 executive-border overflow-hidden rounded-sm">
-            <div className="bg-charcoal p-6 flex flex-col justify-center gap-1">
-                <span className="text-[8px] font-bold text-silver/30 uppercase tracking-[0.2em] italic">Critical Level</span>
-                <span className={`text-2xl font-serif font-light ${countsByRisk.critical > 0 ? 'text-rag-red' : 'text-silver/20'}`}>{countsByRisk.critical}</span>
+        {/* Left Sidebar: Controls & Stats */}
+        <aside className="xl:col-span-1 space-y-12">
+          
+          {/* Quick Metrics */}
+          <section className="grid grid-cols-2 gap-4">
+            <div className="bg-charcoal p-6 border-2 border-rag-red/30 shadow-[4px_4px_0px_0px_rgba(255,51,102,0.1)]">
+              <span className="text-[10px] font-black text-rag-red uppercase tracking-widest block mb-1">Critical</span>
+              <span className="text-4xl font-black text-silver-bright font-mono">{countsByRisk.critical.toString().padStart(2, '0')}</span>
             </div>
-            <div className="bg-charcoal p-6 flex flex-col justify-center gap-1">
-                <span className="text-[8px] font-bold text-silver/30 uppercase tracking-[0.2em] italic">High Priority</span>
-                <span className={`text-2xl font-serif font-light ${countsByRisk.high > 0 ? 'text-rag-amber' : 'text-silver/20'}`}>{countsByRisk.high}</span>
+            <div className="bg-charcoal p-6 border-2 border-rag-amber/30 shadow-[4px_4px_0px_0px_rgba(255,170,0,0.1)]">
+              <span className="text-[10px] font-black text-rag-amber uppercase tracking-widest block mb-1">High</span>
+              <span className="text-4xl font-black text-silver-bright font-mono">{countsByRisk.high.toString().padStart(2, '0')}</span>
             </div>
-            <div className="bg-charcoal p-6 flex flex-col justify-center gap-1">
-                <span className="text-[8px] font-bold text-silver/30 uppercase tracking-[0.2em] italic">Total Findings</span>
-                <span className="text-2xl font-serif font-light text-silver-bright">{findings.length}</span>
+          </section>
+
+          {/* Search & Filters */}
+          <section className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-8">
+            <div className="space-y-4">
+              <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] flex items-center gap-2">
+                <span className="w-2 h-2 bg-rag-blue"></span> Search_Target
+              </label>
+              <div className="relative group">
+                <input 
+                  type="text" 
+                  className="w-full bg-charcoal-dark border-2 border-silver-bright/10 p-4 text-xs font-mono text-silver-bright focus:outline-none focus:border-rag-blue transition-all"
+                  placeholder="IP / HOST / DESC..." 
+                  value={searchQuery} 
+                  onChange={(e) => setSearchQuery(e.target.value)} 
+                />
+              </div>
             </div>
-            <div className="bg-charcoal p-6 flex flex-col justify-center gap-1">
-                <span className="text-[8px] font-bold text-silver/30 uppercase tracking-[0.2em] italic">Unique IP Space</span>
-                <span className="text-2xl font-serif font-light text-silver-bright">{[...new Set(assets.map(a => a.target))].length}</span>
+
+            <div className="space-y-4">
+              <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] flex items-center gap-2">
+                <span className="w-2 h-2 bg-rag-amber"></span> Risk_Level
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {['all', 'critical', 'high', 'medium', 'low'].map(r => (
+                  <button 
+                    key={r}
+                    onClick={() => setFilterRisk(r)}
+                    className={`px-3 py-3 text-[10px] font-black uppercase tracking-widest border-2 transition-all ${
+                      filterRisk === r 
+                        ? 'bg-rag-blue border-black text-charcoal-dark shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' 
+                        : 'bg-charcoal-dark border-silver-bright/10 text-silver/40 hover:border-silver/40'
+                    }`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="bg-charcoal p-6 hidden lg:flex flex-col justify-center gap-1 col-span-2">
-                <span className="text-[8px] font-bold text-silver/30 uppercase tracking-[0.2em] italic">Inventory Integrity</span>
-                <div className="flex items-center gap-4">
-                  <span className="text-2xl font-serif font-light text-rag-green">99.8%</span>
-                  <div className="flex-1 h-0.5 bg-accent-silver/10 relative overflow-hidden">
-                    <div className="absolute inset-y-0 left-0 bg-rag-green w-[99.8%]"></div>
+
+            <div className="space-y-4">
+              <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] flex items-center gap-2">
+                <span className="w-2 h-2 bg-rag-green"></span> Resource_Tier
+              </label>
+              <select 
+                className="w-full bg-charcoal-dark border-2 border-silver-bright/10 p-4 text-[10px] font-mono text-silver-bright uppercase tracking-widest focus:outline-none focus:border-rag-green appearance-none cursor-pointer" 
+                value={filterType} 
+                onChange={(e) => setFilterType(e.target.value)}
+              >
+                <option value="all">ANY REACHABLE TIER</option>
+                {[...new Set(assets.map((asset) => asset.type))].map((type) => (
+                  <option key={type} value={type}>{type.toUpperCase()}</option>
+                ))}
+              </select>
+            </div>
+          </section>
+
+          {/* Distribution Graph (Mini) */}
+          <section className="bg-charcoal p-8 border-2 border-silver-bright/10 space-y-6">
+            <h3 className="text-[10px] font-black text-silver/40 uppercase tracking-widest italic">Threat Spectrum</h3>
+            <div className="space-y-4">
+              {Object.entries(countsByRisk).map(([risk, count]) => (
+                <div key={risk} className="space-y-1.5 text-[10px] font-mono uppercase">
+                  <div className="flex justify-between">
+                    <span className="text-silver/40">{risk}</span>
+                    <span className="text-silver-bright">{count}</span>
+                  </div>
+                  <div className="h-1.5 w-full bg-charcoal-dark overflow-hidden">
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: `${(count / (assets.length || 1)) * 100}%` }}
+                      className={`h-full ${
+                        risk === 'critical' ? 'bg-rag-red' : risk === 'high' ? 'bg-rag-amber' : 'bg-silver/40'
+                      }`}
+                    />
                   </div>
                 </div>
+              ))}
             </div>
-        </div>
+          </section>
+        </aside>
 
-        <div className="flex flex-col lg:flex-row gap-8 items-stretch pt-4">
-            {/* Search and Filters Sidebar-ish */}
-            <div className="w-full lg:w-80 space-y-8 flex-shrink-0">
-                <div className="space-y-6">
-                    <h3 className="text-[10px] font-bold uppercase tracking-[0.3em] text-silver/30 italic">Search & Filter</h3>
-                    <div className="space-y-4">
-                        <div className="relative group">
-                            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-silver/20 group-focus-within:text-silver-bright transition-colors text-sm">search</span>
-                            <input 
-                                type="text" 
-                                className="w-full bg-charcoal border border-accent-silver/10 pl-12 pr-4 py-3 text-xs text-silver-bright focus:outline-none focus:border-accent-silver/30 transition-all rounded-sm placeholder:text-silver/10 font-mono italic"
-                                placeholder="TARGET SEARCH..." 
-                                value={searchQuery} 
-                                onChange={(e) => setSearchQuery(e.target.value)} 
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-[8px] font-bold uppercase tracking-widest text-silver/20 block px-1">Risk Profile</label>
-                            <div className="grid grid-cols-2 gap-2">
-                                {['all', 'critical', 'high', 'medium', 'low'].map(r => (
-                                    <button 
-                                        key={r}
-                                        onClick={() => setFilterRisk(r)}
-                                        className={`px-3 py-2 text-[9px] uppercase tracking-widest border transition-all rounded-sm ${
-                                            filterRisk === r ? 'bg-silver/10 border-silver/40 text-silver-bright' : 'bg-charcoal border-accent-silver/10 text-silver/30 hover:border-silver/20'
-                                        }`}
-                                    >
-                                        {r}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                        <div className="space-y-2 pt-4">
-                            <label className="text-[8px] font-bold uppercase tracking-widest text-silver/20 block px-1">Resource Tier</label>
-                            <select 
-                                className="w-full bg-charcoal border border-accent-silver/10 px-4 py-3 text-[10px] text-silver-bright uppercase tracking-widest focus:outline-none focus:border-accent-silver/30 rounded-sm appearance-none cursor-pointer italic" 
-                                value={filterType} 
-                                onChange={(e) => setFilterType(e.target.value)}
-                            >
-                                <option value="all">ALL REACHABLE TYPES</option>
-                                {[...new Set(assets.map((asset) => asset.type))].map((type) => <option key={type} value={type}>{type.toUpperCase()}</option>)}
-                            </select>
-                        </div>
+        {/* Right Content: The Grid */}
+        <div className="xl:col-span-3">
+          <motion.div 
+            variants={containerVariants}
+            initial="hidden"
+            animate="visible"
+            className="grid grid-cols-1 md:grid-cols-2 gap-6"
+          >
+            {filteredAssets.length > 0 ? filteredAssets.map((asset) => (
+              <motion.div 
+                key={asset.id} 
+                variants={itemVariants}
+                onClick={() => setSelectedAsset(asset)}
+                className="group bg-charcoal border-2 border-silver-bright/10 p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,0.3)] hover:border-silver-bright hover:shadow-[10px_10px_0px_0px_rgba(0,0,0,0.5)] transition-all cursor-pointer relative"
+              >
+                {/* Status Indicator */}
+                <div className={`absolute top-0 right-0 w-16 h-1 w-full flex ${
+                  asset.risk_level === 'critical' ? 'bg-rag-red' : 
+                  asset.risk_level === 'high' ? 'bg-rag-amber' : 'bg-silver/20'
+                }`}></div>
+
+                <div className="flex justify-between items-start mb-6">
+                  <div className="bg-charcoal-dark px-2 py-0.5 text-[9px] font-mono text-silver/60 uppercase border border-silver-bright/10">
+                    ID: {asset.id.slice(0, 8)}
+                  </div>
+                  {asset.status === 'active' && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] font-black text-rag-green uppercase tracking-[0.2em] italic">Active_Pulse</span>
+                      <div className="w-2 h-2 bg-rag-green rounded-full animate-ping"></div>
                     </div>
+                  )}
                 </div>
 
-                <div className="pt-8 border-t border-accent-silver/10 hidden lg:block">
-                     <h3 className="text-[10px] font-bold uppercase tracking-[0.3em] text-silver/30 italic mb-6">Threat Distribution</h3>
-                     <div className="space-y-4">
-                        {Object.entries(countsByRisk).map(([risk, count]) => (
-                            <div key={risk} className="flex flex-col gap-1.5">
-                                <div className="flex justify-between text-[9px] uppercase tracking-[0.2em]">
-                                    <span className="text-silver/40">{risk} level</span>
-                                    <span className="text-silver-bright font-mono">{count}</span>
-                                </div>
-                                <div className="h-0.5 w-full bg-accent-silver/10 overflow-hidden">
-                                    <div 
-                                        className={`h-full transition-all duration-1000 ${risk === 'critical' ? 'bg-rag-red' : risk === 'high' ? 'bg-rag-amber' : 'bg-silver/40'}`}
-                                        style={{ width: `${(count / (assets.length || 1)) * 100}%` }}
-                                    ></div>
-                                </div>
-                            </div>
-                        ))}
-                     </div>
+                <h3 className="text-2xl font-black text-silver-bright uppercase tracking-tight mb-2 group-hover:text-rag-blue transition-colors">
+                  {asset.target}
+                </h3>
+                <p className="text-[10px] font-mono text-silver/40 uppercase tracking-widest mb-8 h-8 line-clamp-2 italic">
+                  {asset.description || 'MONITORED_NODAL_POINT'}
+                </p>
+
+                <div className="grid grid-cols-2 gap-4 border-t-2 border-silver-bright/10 pt-6">
+                  <div className="space-y-1">
+                    <span className="text-[8px] font-black text-silver/40 uppercase tracking-widest block">Type.Tier</span>
+                    <span className="text-[10px] font-mono text-silver-bright">{asset.type}</span>
+                  </div>
+                  <div className="space-y-1 text-right">
+                    <span className="text-[8px] font-black text-silver/40 uppercase tracking-widest block">Exposure.Surface</span>
+                    <span className="text-[10px] font-mono text-rag-green italic">{(asset.open_ports?.length || 0)} Vectors</span>
+                  </div>
                 </div>
-            </div>
-
-            {/* Asset Ledger Table-like Grid */}
-            <div className="flex-1 space-y-8 min-w-0 pb-20">
-                <div className="flex justify-between items-baseline mb-2">
-                    <div className="flex items-center gap-4">
-                        <h2 className="text-[10px] font-bold uppercase tracking-[0.4em] text-silver/30 italic">Registry Master Record ({filteredAssets.length})</h2>
-                        <div className="h-px w-24 bg-accent-silver/10"></div>
-                    </div>
-                    <span className="text-[8px] text-silver/20 uppercase tracking-widest">Sorting: Criticality Spectrum</span>
+              </motion.div>
+            )) : (
+              <div className="col-span-full py-32 bg-charcoal/50 border-4 border-dashed border-silver-bright/10 text-center space-y-8">
+                <span className="material-symbols-outlined text-silver/5 text-9xl">radar</span>
+                <div className="space-y-2">
+                  <p className="text-xl font-black text-silver/20 uppercase tracking-[0.4em] italic">Null Yield In Current Spectrum</p>
+                  <p className="text-xs font-mono text-silver/10 uppercase tracking-widest">Adjust filters to broaden detection radius</p>
                 </div>
-                
-                <div className="grid grid-cols-1 gap-px bg-accent-silver/5 executive-border overflow-hidden rounded-sm shadow-2xl relative">
-                    {/* Background decoration to fill "empty space" visually */}
-                    <div className="absolute inset-0 opacity-[0.02] pointer-events-none bg-[radial-gradient(#3f3f46_1px,transparent_1px)] [background-size:32px_32px]"></div>
-
-                    <div className="hidden md:grid grid-cols-12 gap-4 px-10 py-5 bg-charcoal-dark border-b border-accent-silver/10 text-[8px] font-bold uppercase tracking-[0.4em] text-silver/20 z-10">
-                        <div className="col-span-1">Status</div>
-                        <div className="col-span-5">Identity / Virtual Endpoint</div>
-                        <div className="col-span-2">Resource Type</div>
-                        <div className="col-span-2 text-right">Engagement Space</div>
-                        <div className="col-span-2 text-right">Inventory Timestamp</div>
-                    </div>
-
-                    {filteredAssets.length > 0 ? filteredAssets.map((asset) => {
-                        const ports = Array.isArray(asset.open_ports) ? asset.open_ports : [];
-                        return (
-                      <div 
-                        key={asset.id} 
-                        className="bg-charcoal px-10 py-7 grid grid-cols-1 md:grid-cols-12 gap-4 items-center group hover:bg-charcoal-light transition-all cursor-pointer relative overflow-hidden z-10"
-                        onClick={() => setSelectedAsset(asset)}
-                      >
-                        {/* Hover Decoration */}
-                        <div className="absolute inset-y-0 left-0 w-1 bg-transparent group-hover:bg-silver-bright transition-all shadow-[0_0_15px_rgba(255,255,255,0.3)]"></div>
-                        
-                        <div className="col-span-1 flex justify-center md:justify-start">
-                            <div className={`w-3.5 h-3.5 rounded-sm rotate-45 ${
-                                asset.risk_level === 'critical' ? 'bg-rag-red shadow-[0_0_12px_rgba(239,68,68,0.5)]' : 
-                                asset.risk_level === 'high' ? 'bg-rag-amber shadow-[0_0_12px_rgba(245,158,11,0.5)]' : 
-                                'bg-rag-green/20'
-                            }`}></div>
-                        </div>
-
-                        <div className="col-span-5 flex flex-col gap-1.5">
-                            <h4 className="text-base font-medium text-silver-bright uppercase tracking-wide group-hover:underline underline-offset-8 decoration-silver/20">{asset.target}</h4>
-                            <div className="flex items-center gap-3">
-                                <p className="text-[10px] text-silver/30 uppercase tracking-[0.1em] italic font-mono truncate max-w-sm">{asset.description || 'Monitored Infrastructure Endpoint'}</p>
-                                {asset.status === 'active' && <span className="w-1.5 h-1.5 bg-rag-green rounded-full animate-pulse"></span>}
-                            </div>
-                        </div>
-
-                        <div className="col-span-2">
-                            <span className="px-3 py-1 border border-accent-silver/10 text-[9px] text-silver-bright/60 uppercase tracking-widest bg-charcoal-dark/80 rounded-sm italic font-medium">
-                                {asset.type}
-                            </span>
-                        </div>
-
-                        <div className="col-span-2 text-right">
-                             <div className="flex flex-col items-end gap-2">
-                                <span className="text-[10px] text-silver-bright font-mono italic">{(ports).length} Segment{(ports).length !== 1 ? 's' : ''}</span>
-                                <div className="flex gap-1">
-                                    {(ports).slice(0, 8).map(p => (
-                                        <div key={p} className="w-1 h-3.5 bg-accent-silver/20 border-r border-accent-silver/5 hover:bg-rag-green/40 transition-colors"></div>
-                                    ))}
-                                    {(ports).length > 8 && <span className="text-[8px] text-silver/20 ml-1">+</span>}
-                                </div>
-                             </div>
-                        </div>
-
-                        <div className="col-span-2 text-right">
-                            <p className="text-[10px] text-silver/50 uppercase tracking-widest font-mono group-hover:text-silver-bright transition-colors">{asset.last_scanned ? new Date(asset.last_scanned).toLocaleDateString() : 'Pending'}</p>
-                            <p className="text-[8px] text-silver/10 uppercase tracking-[0.2em] italic mt-1">Surveillance Logged</p>
-                        </div>
-                      </div>
-                    )}) : (
-                      <div className="bg-charcoal p-40 text-center flex flex-col items-center gap-8">
-                        <span className="material-symbols-outlined text-silver/5 text-9xl">radar</span>
-                        <div className="space-y-4">
-                            <p className="text-xs text-silver/20 uppercase tracking-[0.6em] font-medium italic">Spectral Scan Yields Null Result</p>
-                            <p className="text-[9px] text-silver/10 uppercase tracking-widest">No assets aligned with current filter vectors</p>
-                        </div>
-                      </div>
-                    )}
-                </div>
-            </div>
+              </div>
+            )}
+          </motion.div>
         </div>
       </main>
 
-      {/* Deep-Dive Analysis Sidebar */}
-      {selectedAsset && (
-        <div className="fixed inset-0 z-[60] flex justify-end">
-            <div className="absolute inset-0 bg-charcoal-dark/95 backdrop-blur-md animate-in fade-in duration-500" onClick={() => setSelectedAsset(null)}></div>
-            <div className="relative w-full max-w-2xl bg-charcoal h-full border-l border-accent-silver/20 shadow-[-20px_0_50px_rgba(0,0,0,0.8)] flex flex-col animate-in slide-in-from-right duration-500 overflow-hidden">
-                <div className="flex-1 overflow-y-auto custom-scrollbar">
-                    <div className="p-16 space-y-16">
-                        <div className="flex justify-between items-start">
-                            <div className="space-y-4">
-                                <div className="flex items-center gap-3">
-                                    <span className="text-[9px] font-bold text-silver/30 uppercase tracking-[0.4em] italic">Infrastructure Deep-Dive</span>
-                                    <div className="h-px w-12 bg-accent-silver/10"></div>
-                                </div>
-                                <h2 className="text-5xl font-serif font-light text-silver-bright italic tracking-tighter leading-none">{selectedAsset.target}</h2>
-                                <div className="flex items-center gap-4 pt-4">
-                                    <span className={`px-4 py-1.5 border text-[10px] font-bold tracking-[0.2em] rounded-sm uppercase ${
-                                        selectedAsset.risk_level === 'critical' ? 'border-rag-red/20 text-rag-red bg-rag-red/5' : 
-                                        selectedAsset.risk_level === 'high' ? 'border-rag-amber/20 text-rag-amber bg-rag-amber/5' : 
-                                        'border-accent-silver/10 text-silver/60 bg-white/5'
-                                    }`}>
-                                        {selectedAsset.risk_level.toUpperCase()} THREAT VECTOR
-                                    </span>
-                                    <span className="text-[10px] text-silver/20 uppercase tracking-widest italic font-mono">Sync ID: {selectedAsset.id.slice(0,12)}</span>
-                                </div>
-                            </div>
-                            <button 
-                                className="w-14 h-14 flex items-center justify-center border border-accent-silver/10 hover:border-silver-bright text-silver/20 hover:text-silver-bright transition-all rounded-full group bg-charcoal-dark"
-                                onClick={() => setSelectedAsset(null)}
-                            >
-                                <span className="material-symbols-outlined group-hover:rotate-90 transition-transform">close</span>
-                            </button>
-                        </div>
-
-                        <div className="grid grid-cols-3 gap-px bg-accent-silver/10 executive-border overflow-hidden rounded-sm">
-                            <div className="p-10 bg-charcoal-light/20 flex flex-col gap-2">
-                                <p className="text-[9px] text-silver/40 font-bold uppercase tracking-widest italic leading-none">Resource Tier</p>
-                                <p className="text-sm font-light text-silver-bright uppercase tracking-tight">{selectedAsset.type}</p>
-                            </div>
-                            <div className="p-10 bg-charcoal-light/20 flex flex-col gap-2">
-                                <p className="text-[9px] text-silver/40 font-bold uppercase tracking-widest italic leading-none">Exposure Space</p>
-                                <p className="text-sm font-light text-silver-bright italic font-mono">{selectedAsset.open_ports?.length || 0} Ports Active</p>
-                            </div>
-                            <div className="p-10 bg-charcoal-light/20 flex flex-col gap-2">
-                                <p className="text-[9px] text-silver/40 font-bold uppercase tracking-widest italic leading-none">Surveillance</p>
-                                <p className="text-sm font-light text-rag-green uppercase tracking-tight italic">Continuous</p>
-                            </div>
-                        </div>
-
-                        <section className="space-y-8">
-                            <div className="flex justify-between items-center border-b border-accent-silver/10 pb-4">
-                                <h3 className="text-xs font-bold uppercase tracking-[0.3em] text-silver/30 italic">Active Security Ledger ({assetFindings.length})</h3>
-                                {assetFindings.length > 0 && <Link to="/findings" className="text-[9px] text-silver/40 hover:text-silver-bright transition-colors uppercase tracking-[0.2em] italic underline underline-offset-4">Open Matrix</Link>}
-                            </div>
-                            <div className="space-y-4">
-                                {assetFindings.length > 0 ? assetFindings.map(f => (
-                                    <div key={f.id} className="p-6 bg-charcoal-dark/50 border border-accent-silver/10 hover:border-silver-bright transition-all group">
-                                        <div className="flex justify-between items-center mb-2">
-                                            <span className={`text-[9px] font-bold tracking-[0.2em] uppercase ${
-                                                f.severity === 'critical' ? 'text-rag-red' : f.severity === 'high' ? 'text-rag-amber' : 'text-silver'
-                                            }`}>{f.severity} severity</span>
-                                            <span className="text-[9px] text-silver/20 font-mono italic">DISCOVERED {new Date(f.discovered_at).toLocaleDateString()}</span>
-                                        </div>
-                                        <p className="text-base font-medium text-silver-bright italic tracking-tight group-hover:underline decoration-silver/20 underline-offset-4">{f.title}</p>
-                                    </div>
-                                )) : (
-                                    <div className="py-16 bg-charcoal-dark/30 border border-dashed border-accent-silver/10 text-center flex flex-col items-center gap-4">
-                                        <span className="material-symbols-outlined text-silver/5 text-4xl">check_circle</span>
-                                        <p className="text-[10px] italic text-silver/10 uppercase tracking-[0.3em]">No active threat vectors documented in current spectrum</p>
-                                    </div>
-                                )}
-                            </div>
-                        </section>
-
-                        <section className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                            <div className="space-y-8">
-                                <h3 className="text-xs font-bold uppercase tracking-[0.3em] text-silver/30 border-b border-accent-silver/10 pb-4 italic">Detected Services</h3>
-                                <div className="flex flex-wrap gap-2">
-                                    {(selectedAsset.technologies || []).length > 0 ? selectedAsset.technologies.map(t => (
-                                        <span key={t} className="px-3 py-1 bg-charcoal-dark border border-accent-silver/10 text-[10px] font-mono text-silver hover:text-silver-bright transition-all cursor-default uppercase">{t}</span>
-                                    )) : (
-                                        <span className="text-[10px] italic text-silver/20 uppercase tracking-widest">Awaiting fingerprint sync...</span>
-                                    )}
-                                </div>
-                            </div>
-                            <div className="space-y-8">
-                                <h3 className="text-xs font-bold uppercase tracking-[0.3em] text-silver/30 border-b border-accent-silver/10 pb-4 italic">Vector Map</h3>
-                                <div className="grid grid-cols-3 gap-2">
-                                    {(selectedAsset.open_ports || []).map(p => (
-                                        <div key={p} className="flex flex-col items-center p-3 bg-charcoal-dark border border-rag-green/20 group hover:border-rag-green transition-all relative overflow-hidden">
-                                            <div className="absolute top-0 right-0 w-2 h-2 bg-rag-green opacity-10 group-hover:opacity-100 transition-opacity"></div>
-                                            <span className="text-[10px] font-mono font-bold text-rag-green italic">PORT {p}</span>
-                                            <span className="text-[8px] text-silver/20 uppercase tracking-tighter mt-1 italic">UNRESTRICTED</span>
-                                        </div>
-                                    ))}
-                                    {(selectedAsset.open_ports || []).length === 0 && (
-                                        <div className="col-span-3 p-8 border border-dashed border-accent-silver/10 text-center">
-                                            <span className="text-[10px] italic text-silver/20 uppercase tracking-widest">No active open vectors</span>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </section>
-                    </div>
+      {/* Asset Deep-Dive Modal */}
+      <AnimatePresence>
+        {selectedAsset && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 md:p-12">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedAsset(null)}
+              className="absolute inset-0 bg-charcoal-dark/95 backdrop-blur-xl"
+            />
+            
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative w-full max-w-4xl bg-charcoal-dark border-8 border-black shadow-[24px_24px_0px_0px_rgba(0,0,0,1)] flex flex-col max-h-[90vh] overflow-hidden"
+            >
+              {/* Modal Header */}
+              <div className="p-8 md:p-12 bg-charcoal border-b-8 border-black flex justify-between items-start">
+                <div className="space-y-4">
+                  <div className="bg-rag-amber text-charcoal-dark px-3 py-1 text-[10px] font-black uppercase tracking-widest inline-block shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                    Deep Intelligence Report
+                  </div>
+                  <h2 className="text-4xl md:text-6xl font-black text-silver-bright uppercase tracking-tighter leading-none italic break-all">
+                    {selectedAsset.target}
+                  </h2>
                 </div>
+                <button 
+                  onClick={() => setSelectedAsset(null)}
+                  className="bg-rag-red w-14 h-14 border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center text-black hover:bg-white transition-all active:translate-x-1 active:translate-y-1 active:shadow-none"
+                >
+                  <span className="material-symbols-outlined font-black">close</span>
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="flex-1 overflow-y-auto p-8 md:p-12 space-y-12 bg-[#0d0e12] [background-size:20px_20px] [background-image:radial-gradient(rgba(255,255,255,0.02)_1px,transparent_1px)]">
                 
-                <div className="p-12 border-t border-accent-silver/10 bg-charcoal-dark/50 flex justify-between items-baseline">
-                    <button className="text-[10px] font-bold text-silver/40 hover:text-silver-bright uppercase tracking-[0.3em] italic transition-colors flex items-center gap-2">
-                        <span className="material-symbols-outlined text-sm">print</span>
-                        Print Intelligence Report
-                    </button>
-                    <p className="text-[9px] text-silver/20 uppercase tracking-widest font-mono">End of File • Ref: {selectedAsset.id.split('-')[0].toUpperCase()}</p>
+                {/* Info Grid */}
+                <section className="grid grid-cols-1 md:grid-cols-3 gap-px bg-black shadow-[10px_10px_0px_0px_rgba(0,0,0,0.5)]">
+                  <div className="bg-charcoal p-8 space-y-2">
+                    <span className="text-[10px] font-black text-silver/30 uppercase tracking-[0.2em]">Risk_Profile</span>
+                    <p className={`text-xl font-black uppercase ${
+                      selectedAsset.risk_level === 'critical' ? 'text-rag-red' : 
+                      selectedAsset.risk_level === 'high' ? 'text-rag-amber' : 'text-silver-bright'
+                    }`}>{selectedAsset.risk_level}</p>
+                  </div>
+                  <div className="bg-charcoal p-8 space-y-2">
+                    <span className="text-[10px] font-black text-silver/30 uppercase tracking-[0.2em]">Asset_Type</span>
+                    <p className="text-xl font-black text-silver-bright uppercase">{selectedAsset.type}</p>
+                  </div>
+                  <div className="bg-charcoal p-8 space-y-2">
+                    <span className="text-[10px] font-black text-silver/30 uppercase tracking-[0.2em]">Active_Ports</span>
+                    <p className="text-xl font-black text-rag-green font-mono">{(selectedAsset.open_ports?.length || 0)}/65535</p>
+                  </div>
+                </section>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                  
+                  {/* Vulnerabilities List */}
+                  <section className="space-y-6">
+                    <h3 className="text-base font-black text-silver-bright uppercase tracking-widest flex items-center gap-3">
+                      <span className="w-3 h-3 bg-rag-red"></span> Detected_Flaws
+                    </h3>
+                    <div className="space-y-4">
+                      {assetFindings.length > 0 ? assetFindings.map(f => (
+                        <div key={f.id} className="bg-charcoal p-6 border-2 border-silver-bright/5 hover:border-rag-red/30 transition-all group">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-[9px] font-mono text-rag-red">{f.severity.toUpperCase()} EXPOSURE</span>
+                            <span className="text-[8px] font-mono text-silver/20">{new Date(f.discovered_at).toLocaleDateString()}</span>
+                          </div>
+                          <p className="text-sm font-black text-silver-bright uppercase tracking-tight group-hover:text-rag-red transition-colors italic">{f.title}</p>
+                        </div>
+                      )) : (
+                        <div className="py-12 bg-black/20 border-2 border-dashed border-silver-bright/5 text-center px-6">
+                          <p className="text-[10px] font-mono text-silver/20 uppercase tracking-widest italic">No active threat vectors documented.</p>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
+                  {/* Vectors and Tech */}
+                  <section className="space-y-12">
+                    <div className="space-y-6">
+                      <h3 className="text-base font-black text-silver-bright uppercase tracking-widest flex items-center gap-3">
+                        <span className="w-3 h-3 bg-rag-green"></span> Port_Matrix
+                      </h3>
+                      <div className="flex flex-wrap gap-2 text-[10px] font-mono">
+                        {(selectedAsset.open_ports || []).map(p => (
+                          <div key={p} className="bg-charcoal-dark border-2 border-rag-green/20 px-3 py-1.5 text-rag-green hover:bg-rag-green hover:text-black transition-all">
+                            {p.toString().padStart(5, '0')}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-6">
+                      <h3 className="text-base font-black text-silver-bright uppercase tracking-widest flex items-center gap-3">
+                        <span className="w-3 h-3 bg-rag-blue"></span> Technology_Stack
+                      </h3>
+                      <div className="flex flex-wrap gap-2">
+                        {(selectedAsset.technologies || []).map(t => (
+                          <span key={t} className="bg-charcoal-dark border border-silver-bright/10 px-3 py-1 text-[9px] font-black text-silver/60 uppercase tracking-widest hover:text-silver-bright transition-all">
+                            {t}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </section>
                 </div>
-            </div>
-        </div>
-      )}
-      
-      <style>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 2px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: rgba(0,0,0,0.1);
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(255,255,255,0.05);
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: rgba(255,255,255,0.1);
-        }
-      `}</style>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-8 bg-charcoal border-t-8 border-black flex justify-between items-center">
+                 <Link 
+                  to="/findings" 
+                  className="bg-black px-6 py-3 text-[10px] font-black uppercase tracking-widest text-silver-bright hover:bg-rag-blue hover:text-charcoal-dark transition-all shadow-[4px_4px_0px_0px_rgba(255,255,255,0.1)] active:shadow-none active:translate-x-1 active:translate-y-1"
+                >
+                  View_Intelligence_Matrix
+                </Link>
+                <div className="text-[8px] font-mono text-silver/20 uppercase text-right leading-none">
+                  Intel_Ref: SEC-ASSET-{selectedAsset.id.split('-')[0].toUpperCase()}<br/>
+                  End of System Log
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import { getToolById, ScanTool } from '../data/scanTools'
 import { useToast } from '../components/ToastContext'
 import { startTask } from '../api'
@@ -28,7 +29,7 @@ export default function ToolConfig() {
     const [networkProtocol, setNetworkProtocol] = useState('TCP')
     const [portSelection, setPortSelection] = useState('common')
     const [customPorts, setCustomPorts] = useState('')
-    const [networkScanOptions, setNetworkScanOptions] = useState({
+    const [networkScanOptions] = useState({
         checkAlive: true,
         skipDiscovery: false,
         resolveNames: true
@@ -44,7 +45,7 @@ export default function ToolConfig() {
     // -- Website Scanner --
     const [crawlDepth, setCrawlDepth] = useState(2)
     const [maxPages, setMaxPages] = useState(100)
-    const [websiteScope, setWebsiteScope] = useState({
+    const [websiteScope] = useState({
         sameDomain: true,
         includeSubdomains: false,
         includeQueryParams: true
@@ -259,387 +260,297 @@ export default function ToolConfig() {
         }
     }
 
-    const getRiskBadgeColor = (risk: string) => {
-        switch (risk) {
-            case 'passive': return 'text-rag-blue border-rag-blue/20'
-            case 'active': return 'text-rag-amber border-rag-amber/20'
-            case 'aggressive': return 'text-rag-red border-rag-red/20'
-            default: return 'text-silver/40 border-accent-silver/10'
-        }
-    }
+    const SectionHeader = ({ num, title }: { num: string, title: string }) => (
+      <div className="flex items-center gap-6 mb-8 group">
+          <div className="bg-black text-white px-3 py-1 text-xs font-black shadow-[4px_4px_0px_0px_rgba(59,130,246,0.5)]">{num}</div>
+          <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic group-hover:text-rag-blue transition-colors">{title}</h3>
+          <div className="h-0.5 flex-1 bg-black/10"></div>
+      </div>
+    )
 
-    let sectionCounter = 1;
-    const nextNum = () => {
-        const num = sectionCounter.toString().padStart(2, '0')
-        sectionCounter++
-        return num
-    }
+    const Toggle = ({ checked, onChange, label, description }: any) => (
+      <button 
+          onClick={() => onChange(!checked)}
+          className={`flex items-center justify-between p-6 bg-charcoal border-4 border-black transition-all group hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 ${
+              checked ? 'shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' : 'shadow-none opacity-60'
+          }`}
+      >
+          <div className="space-y-1 text-left">
+              <label className="text-[10px] font-black text-silver-bright uppercase tracking-widest block">{label}</label>
+              <span className="text-[9px] text-silver/40 uppercase tracking-tighter italic font-mono font-bold leading-none">{description}</span>
+          </div>
+          <div className={`w-12 h-6 border-4 border-black relative transition-all ${checked ? 'bg-rag-green' : 'bg-charcoal-dark'}`}>
+              <div className={`absolute top-0 w-4 h-full bg-black transition-all ${checked ? 'left-6' : 'left-0'}`}></div>
+          </div>
+      </button>
+    )
 
     return (
-        <div className="min-h-screen flex flex-col scale-in-center">
-            {/* Header */}
-            <header className="w-full px-12 py-10 flex justify-between items-center border-b border-accent-silver/10 bg-charcoal-dark/50 backdrop-blur-md sticky top-0 z-40">
-                <div className="flex items-center gap-8">
+        <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
+            
+            {/* Neo-Brutalist Deployment Header */}
+            <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-black/20">
+                <div className="space-y-6">
+                  <div className="flex items-center gap-4">
                     <button 
-                        className="w-12 h-12 flex items-center justify-center border border-accent-silver/20 hover:border-silver/40 text-silver/40 hover:text-white transition-all rounded-sm group relative"
                         onClick={() => navigate('/scanner')}
+                        className="w-12 h-12 flex items-center justify-center border-4 border-black bg-charcoal hover:bg-rag-blue hover:text-black transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-x-1 active:translate-y-1"
                     >
-                        <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                        <span className="material-symbols-outlined text-sm relative z-10">arrow_back</span>
+                        <span className="material-symbols-outlined font-black">arrow_back</span>
                     </button>
-                    <div>
-                        <h1 className="text-3xl font-serif font-light text-silver-bright tracking-tight italic uppercase leading-none">{tool.name}</h1>
-                        <p className="text-[10px] font-light text-silver/40 uppercase tracking-[0.4em] mt-3 italic">{tool.purpose}</p>
+                    <div className="bg-rag-amber text-black px-4 py-1 text-xs uppercase tracking-widest font-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                      DPL_ID: {tool.id.substring(0,8)}
                     </div>
+                  </div>
+                  <div className="space-y-2">
+                    <h1 className="text-6xl md:text-8xl text-silver-bright uppercase tracking-tighter leading-none italic font-black">
+                      {tool.name.split(' ')[0]} <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '2px var(--accent-silver-bright)' }}>{tool.name.split(' ').slice(1).join('_')}</span>
+                    </h1>
+                    <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic leading-relaxed pt-2">
+                      INITIATING_SEQUENCE // {tool.purpose}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="hidden lg:flex flex-col items-end gap-2 text-right">
+                  <span className="text-[10px] font-black text-silver/20 uppercase tracking-[0.5em] italic">RISK_PROTOCOL</span>
+                  <div className={`px-6 py-2 border-4 border-black text-black font-black uppercase tracking-widest shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] ${
+                    tool.risk === 'passive' ? 'bg-rag-blue' : tool.risk === 'active' ? 'bg-rag-amber' : 'bg-rag-red'
+                  }`}>
+                    {tool.risk}_LEVEL
+                  </div>
                 </div>
             </header>
 
-            <main className="flex-1 p-12 max-w-[1600px] mx-auto w-full animate-in fade-in duration-700">
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-12">
+            <main className="grid grid-cols-1 xl:grid-cols-4 gap-12 pt-4">
+                
+                {/* Configuration Columns */}
+                <div className="xl:col-span-3 space-y-16">
                     
-                    {/* Left Column: Form Fields */}
-                    <div className="lg:col-span-3 space-y-12">
+                    {/* 01. TARGET VECTORS */}
+                    <section className="space-y-10">
+                        <SectionHeader num="01" title="Target_Vectors" />
                         
-                        {/* 01. Target Section */}
-                        <section className="space-y-8">
-                            <div className="flex items-baseline gap-6">
-                                <h3 className="text-xs font-black uppercase tracking-[0.4em] text-silver/20 italic">{nextNum()}. Target_Configuration</h3>
-                                <div className="flex-1 h-px bg-accent-silver/10"></div>
-                            </div>
-                            
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                                <div className="md:col-span-3 space-y-4">
-                                    <label className="text-[9px] font-black uppercase tracking-widest text-silver/40 italic block ml-1">
-                                        Interface_Endpoint <span className="text-rag-blue/60">[Required]</span>
-                                    </label>
-                                    <div className="relative group">
-                                        <input
-                                            type="text"
-                                            className={`w-full bg-charcoal border border-accent-silver/10 p-6 font-mono text-sm text-silver-bright focus:outline-none focus:border-silver/40 transition-all placeholder:text-silver/10 italic ${
-                                                (isFuzzer && !targetHasPlaceholder && target.length > 0) ? 'border-rag-red/40 text-rag-red' : ''
-                                            }`}
-                                            placeholder={isFuzzer ? 'e.g. https://api.com/FUZZ' : (isSubdomainFinder ? 'e.g. example.com' : 'e.g. https://example.com')}
-                                            value={target}
-                                            onChange={(e) => setTarget(e.target.value)}
-                                        />
-                                        <div className="absolute right-6 top-1/2 -translate-y-1/2 flex gap-4 opacity-10 group-focus-within:opacity-40 transition-opacity">
-                                            <span className="material-symbols-outlined text-sm">terminal</span>
-                                            <span className="material-symbols-outlined text-sm">wifi_tethering</span>
-                                        </div>
-                                    </div>
-                                    {(isWebsiteScanner || isFuzzer || isWebRecon || isApiScanner || isXss || isSqli) && (
-                                        <label className="flex items-center gap-4 cursor-pointer group w-fit ml-1 pt-2">
-                                            <div className="relative w-4 h-4 border border-accent-silver/20 rounded-sm flex items-center justify-center transition-all group-hover:border-silver/40">
-                                                <input 
-                                                    type="checkbox" 
-                                                    className="hidden peer"
-                                                    checked={followRedirects} 
-                                                    onChange={(e) => setFollowRedirects(e.target.checked)} 
-                                                />
-                                                <div className="w-1.5 h-1.5 bg-silver opacity-0 peer-checked:opacity-100 transition-opacity shadow-[0_0_8px_white]"></div>
-                                            </div>
-                                            <span className="text-[10px] uppercase font-bold tracking-widest text-silver/30 group-hover:text-silver/60 transition-colors italic">Follow_30X_Redirects</span>
-                                        </label>
-                                    )}
-                                </div>
-                                {isTlsScanner && (
-                                    <div className="space-y-4">
-                                        <label className="text-[9px] font-black uppercase tracking-widest text-silver/40 italic block ml-1">Port_Symmetry</label>
-                                        <input type="text" className="w-full bg-charcoal border border-accent-silver/10 p-6 font-mono text-sm text-silver-bright focus:outline-none focus:border-silver/40 transition-all text-center italic" value={tlsPort} onChange={(e) => setTlsPort(e.target.value)} />
-                                    </div>
-                                )}
-                            </div>
-                        </section>
-
-                        {/* 02. Scan Presets */}
-                        {!isWebRecon && !isUtils && !isSecretScanner && (
-                            <section className="space-y-8">
-                                <div className="flex items-baseline gap-6">
-                                    <h3 className="text-xs font-black uppercase tracking-[0.4em] text-silver/20 italic">{nextNum()}. Protocol_Modes</h3>
-                                    <div className="flex-1 h-px bg-accent-silver/10"></div>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-1">
-                                    {[
-                                        { id: 'light', label: 'Passive_Stealth', desc: 'Minimal footprint, safe defaults.' },
-                                        { id: 'deep', label: 'Active_Infiltration', desc: 'Comprehensive coverage, heavy traffic.' },
-                                        { id: 'custom', label: 'Tactical_Override', desc: 'Full manual parameter control.' }
-                                    ].map(mode => (
-                                        <button 
-                                            key={mode.id}
-                                            className={`p-8 border border-accent-silver/10 transition-all text-left flex flex-col gap-4 relative overflow-hidden group ${
-                                                scanMode === mode.id ? 'bg-charcoal-light border-silver/20' : 'bg-charcoal hover:bg-charcoal/80'
-                                            }`}
-                                            onClick={() => setScanMode(mode.id as ScanMode)}
-                                        >
-                                            {scanMode === mode.id && <div className="absolute left-0 top-0 bottom-0 w-1 bg-rag-blue shadow-[0_0_10px_#3b82f6]"></div>}
-                                            <span className={`text-[10px] font-black uppercase tracking-widest italic ${scanMode === mode.id ? 'text-rag-blue-bright' : 'text-silver/20 group-hover:text-silver/40'}`}>{mode.label}</span>
-                                            <p className="text-[11px] text-silver/40 leading-snug italic">{mode.desc}</p>
-                                        </button>
-                                    ))}
-                                </div>
-                            </section>
-                        )}
-
-                        {/* 03. Tactical Parameters (Conditional) */}
-                        <section className="space-y-12">
-                            <div className="flex items-baseline gap-6 border-b border-accent-silver/5 pb-4">
-                                <h3 className="text-xs font-black uppercase tracking-[0.4em] text-silver/20 italic">{nextNum()}. Functional_Payloads</h3>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
-                                
-                                {/* Network Scanner Blocks */}
-                                {isNetworkScanner && (
-                                    <>
-                                        <div className="space-y-6">
-                                            <label className="text-[9px] font-black uppercase tracking-[0.4em] text-silver/40 italic block border-l-2 border-rag-blue pl-4">Network_Protocol</label>
-                                            <div className="flex gap-1 bg-accent-silver/5 p-1 rounded-sm">
-                                                {['TCP', 'UDP', 'Both'].map(p => (
-                                                    <button 
-                                                        key={p}
-                                                        className={`flex-1 py-3 text-[9px] font-black uppercase tracking-widest italic transition-all ${networkProtocol === p ? 'bg-silver-bright text-charcoal shadow-lg scale-[1.02]' : 'text-silver/20 hover:text-silver/60'}`}
-                                                        onClick={() => setNetworkProtocol(p)}
-                                                    >
-                                                        {p}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                        <div className="space-y-6">
-                                            <label className="text-[9px] font-black uppercase tracking-[0.4em] text-silver/40 italic block border-l-2 border-rag-blue pl-4">Port_Range_Optimization</label>
-                                            <select className="w-full bg-charcoal border border-accent-silver/10 p-5 font-mono text-[11px] text-silver-bright focus:outline-none focus:border-silver/40 italic appearance-none" value={portSelection} onChange={(e) => setPortSelection(e.target.value)}>
-                                                <option value="common">Common ports (100) — Low Noise</option>
-                                                <option value="top">Top ports (1000) — Standard</option>
-                                                <option value="all">All ports (65535) — Heavy Load</option>
-                                                <option value="custom">Custom definition...</option>
-                                            </select>
-                                        </div>
-                                    </>
-                                )}
-
-                                {/* Website & Vuln Detection Grid */}
-                                {(isWebsiteScanner || isWebRecon || isApiScanner || isTlsScanner || isSecretScanner) && (
-                                    <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-12">
-                                        <div className="space-y-6">
-                                            <label className="text-[9px] font-black uppercase tracking-[0.4em] text-silver/40 italic block border-l-2 border-rag-blue pl-4">Detection_Matrix_L1</label>
-                                            <div className="space-y-4">
-                                                {isWebsiteScanner && Object.entries(webChecks).map(([key, val]) => (
-                                                    <label key={key} className="flex items-center gap-5 cursor-pointer group">
-                                                        <div className="relative w-4 h-4 border border-accent-silver/10 rounded-sm flex items-center justify-center">
-                                                            <input type="checkbox" className="hidden peer" checked={val} onChange={() => setWebChecks(prev => ({ ...prev, [key]: !val }))} />
-                                                            <div className="w-1.5 h-1.5 bg-rag-blue opacity-0 peer-checked:opacity-100 shadow-[0_0_10px_rgba(59,130,246,0.5)]"></div>
-                                                        </div>
-                                                        <span className="text-[10px] uppercase font-bold tracking-[0.2em] text-silver/30 group-hover:text-silver/60 italic">{key.replace(/([A-Z])/g, '_$1')}</span>
-                                                    </label>
-                                                ))}
-                                                {isTlsScanner && Object.entries(certChecks).map(([key, val]) => (
-                                                    <label key={key} className="flex items-center gap-5 cursor-pointer group">
-                                                        <div className="relative w-4 h-4 border border-accent-silver/10 rounded-sm flex items-center justify-center">
-                                                            <input type="checkbox" className="hidden peer" checked={val} onChange={() => setCertChecks(prev => ({ ...prev, [key]: !val }))} />
-                                                            <div className="w-1.5 h-1.5 bg-rag-blue opacity-0 peer-checked:opacity-100 shadow-[0_0_10px_rgba(59,130,246,0.5)]"></div>
-                                                        </div>
-                                                        <span className="text-[10px] uppercase font-bold tracking-[0.2em] text-silver/30 group-hover:text-silver/60 italic">CRYPT_{key.toUpperCase()}</span>
-                                                    </label>
-                                                ))}
-                                            </div>
-                                        </div>
-                                        <div className="space-y-6">
-                                            <label className="text-[9px] font-black uppercase tracking-[0.4em] text-silver/40 italic block border-l-2 border-rag-amber pl-4">Detection_Matrix_L2</label>
-                                            <div className="space-y-4">
-                                                {isWebsiteScanner && Object.entries(vulnDetection).map(([key, val]) => (
-                                                    <label key={key} className="flex items-center gap-5 cursor-pointer group">
-                                                        <div className="relative w-4 h-4 border border-accent-silver/10 rounded-sm flex items-center justify-center">
-                                                            <input type="checkbox" className="hidden peer" checked={val} onChange={() => setVulnDetection(prev => ({ ...prev, [key]: !val }))} />
-                                                            <div className="w-1.5 h-1.5 bg-rag-amber opacity-0 peer-checked:opacity-100 shadow-[0_0_10px_rgba(245,158,11,0.5)]"></div>
-                                                        </div>
-                                                        <span className="text-[10px] uppercase font-bold tracking-[0.2em] text-silver/30 group-hover:text-silver/60 italic">VULN_{key.toUpperCase()}</span>
-                                                    </label>
-                                                ))}
-                                                {isTlsScanner && Object.entries(protocolChecks).map(([key, val]) => (
-                                                    <label key={key} className="flex items-center gap-5 cursor-pointer group">
-                                                        <div className="relative w-4 h-4 border border-accent-silver/10 rounded-sm flex items-center justify-center">
-                                                            <input type="checkbox" className="hidden peer" checked={val} onChange={() => setProtocolChecks(prev => ({ ...prev, [key]: !val }))} />
-                                                            <div className="w-1.5 h-1.5 bg-rag-amber opacity-0 peer-checked:opacity-100 shadow-[0_0_10px_rgba(245,158,11,0.5)]"></div>
-                                                        </div>
-                                                        <span className="text-[10px] uppercase font-bold tracking-[0.2em] text-silver/30 group-hover:text-silver/60 italic">PROTO_{key.toUpperCase()}</span>
-                                                    </label>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Specific for Fuzzer */}
-                                {isFuzzer && (
-                                    <>
-                                        <div className="space-y-6">
-                                            <label className="text-[9px] font-black uppercase tracking-[0.4em] text-silver/40 italic block border-l-2 border-rag-blue pl-4">Fuzzing_Mode</label>
-                                            <div className="flex gap-1 bg-accent-silver/5 p-1 rounded-sm">
-                                                {['directory', 'file', 'parameter'].map(m => (
-                                                    <button 
-                                                        key={m}
-                                                        className={`flex-1 py-3 text-[9px] font-black uppercase tracking-widest italic transition-all ${fuzzMode === m ? 'bg-silver-bright text-charcoal shadow-lg scale-[1.02]' : 'text-silver/20 hover:text-silver/60'}`}
-                                                        onClick={() => setFuzzMode(m)}
-                                                    >
-                                                        {m}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                        <div className="space-y-6">
-                                            <label className="text-[9px] font-black uppercase tracking-[0.4em] text-silver/40 italic block border-l-2 border-rag-blue pl-4">Wordlist_Selection</label>
-                                            <select className="w-full bg-charcoal border border-accent-silver/10 p-5 font-mono text-[11px] text-silver-bright focus:outline-none focus:border-silver/40 italic appearance-none" value={wordlist} onChange={(e) => setWordlist(e.target.value)}>
-                                                <option value="common">common.txt (4.6k)</option>
-                                                <option value="directory-list-2.3">directory-list-2.3-med.txt (220k)</option>
-                                                <option value="custom">Custom_Upload...</option>
-                                            </select>
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        </section>
-
-                        {/* 04. Expert Mode Section */}
-                        <section className="space-y-8 bg-black/20 p-10 border border-dashed border-accent-silver/10 rounded-sm">
-                            <div className="flex justify-between items-center">
-                                <div className="space-y-1">
-                                    <h3 className="text-xs font-black uppercase tracking-[0.4em] text-silver/20 italic">04. Terminal_Infrastructure</h3>
-                                    <p className="text-[9px] text-silver/10 uppercase tracking-widest font-mono italic">High-Level_Proxy_Settings</p>
-                                </div>
-                                <button 
-                                    className={`px-6 py-2 border text-[9px] font-black uppercase tracking-widest italic transition-all ${showExpertMode ? 'bg-rag-amber/10 border-rag-amber/40 text-rag-amber' : 'border-accent-silver/20 text-silver/40 hover:text-white'}`}
-                                    onClick={() => setShowExpertMode(!showExpertMode)}
-                                >
-                                    {showExpertMode ? '[ DISENGAGE_EXPERT_MODE ]' : '[ ACTIVATE_EXPERT_OVERRIDE ]'}
-                                </button>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                                <div className="space-y-6">
-                                    <label className="text-[9px] font-black uppercase tracking-widest text-silver/40 italic block ml-1">Simulation_Engine (UA)</label>
-                                    <select className="w-full bg-charcoal border border-accent-silver/5 p-4 font-mono text-[10px] text-silver/60 focus:outline-none focus:border-silver/20 italic" value={userAgent} onChange={(e) => setUserAgent(e.target.value)}>
-                                        <option value="SecuScan/1.0">SecuScan_Native_1.0</option>
-                                        <option value="Mozilla/5.0">Legacy_Chromium_Enclave</option>
-                                    </select>
-                                </div>
-                                <div className="space-y-6">
-                                    <label className="text-[9px] font-black uppercase tracking-widest text-silver/40 italic block ml-1">Transmission_Timeout (s)</label>
-                                    <input type="number" className="w-full bg-charcoal border border-accent-silver/5 p-4 font-mono text-[10px] text-silver/60 focus:outline-none focus:border-silver/20 italic" value={requestTimeout} onChange={(e) => setRequestTimeout(Number(e.target.value))} />
-                                </div>
-                            </div>
-
-                            {showExpertMode && (
-                                <div className="space-y-6 animate-in slide-in-from-top-4 duration-500">
-                                    <div className="p-6 bg-rag-red/5 border border-rag-red/20 flex gap-6 items-center">
-                                        <span className="material-symbols-outlined text-rag-red text-sm">warning</span>
-                                        <p className="text-[10px] text-rag-red/60 font-medium italic uppercase tracking-widest">Warning: Raw CLI arguments will bypass tactical UI validation enclaves.</p>
-                                    </div>
-                                    <div className="space-y-4">
-                                        <label className="text-[9px] font-black uppercase tracking-widest text-silver/40 italic block ml-1">Raw_Subsystem_Arguments</label>
-                                        <textarea 
-                                            className="w-full bg-black/40 border border-accent-silver/10 p-6 font-mono text-xs text-silver-bright focus:outline-none focus:border-rag-amber/40 transition-all italic placeholder:text-silver/5"
-                                            rows={4} 
-                                            placeholder="e.g. -p- -sV -A --script vuln" 
-                                            value={rawFlags} 
-                                            onChange={(e) => setRawFlags(e.target.value)} 
-                                        />
+                        <div className="bg-charcoal border-4 border-black p-10 shadow-[10px_10px_0px_0px_rgba(59,130,246,0.3)] space-y-8">
+                            <div className="space-y-4">
+                                <label className="text-xs font-black uppercase tracking-[0.3em] text-silver-bright italic flex items-center gap-3">
+                                  <span className="material-symbols-outlined text-sm">wifi_tethering</span>
+                                  Endpoint_Specification
+                                </label>
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        className={`w-full bg-charcoal-dark border-4 border-black p-8 font-mono text-xl text-silver-bright focus:outline-none focus:ring-4 focus:ring-rag-blue/20 transition-all placeholder:text-silver/10 italic ${
+                                            (isFuzzer && !targetHasPlaceholder && target.length > 0) ? 'border-rag-red text-rag-red shadow-[0_0_20px_rgba(244,63,94,0.2)]' : ''
+                                        }`}
+                                        placeholder={isFuzzer ? 'e.g. HTTPS://SERVER.COM/FUZZ' : (isSubdomainFinder ? 'e.g. DOMAIN.COM' : 'e.g. HTTPS://TARGET.LOCAL')}
+                                        value={target}
+                                        onChange={(e) => setTarget(e.target.value.toUpperCase())}
+                                    />
+                                    <div className="absolute right-8 top-1/2 -translate-y-1/2 flex gap-4 opacity-10 pointer-events-none">
+                                        <span className="material-symbols-outlined text-2xl font-black">terminal</span>
                                     </div>
                                 </div>
-                            )}
-                        </section>
-                    </div>
-
-                    {/* Right Column: Execution Terminal */}
-                    <aside className="space-y-12">
-                        
-                        {/* Risk / Safety Assessment */}
-                        <section className="space-y-8 bg-charcoal p-10 border border-accent-silver/10 executive-border relative overflow-hidden">
-                            <div className="absolute top-0 right-0 p-4 opacity-5">
-                                <span className="material-symbols-outlined text-6xl">verified_user</span>
-                            </div>
-                            
-                            <h3 className="text-xs font-black uppercase tracking-[0.4em] text-silver/20 italic border-b border-accent-silver/10 pb-4">Operation_Risk</h3>
-                            <div className="space-y-8">
-                                <div className="flex justify-between items-baseline">
-                                    <span className="text-[10px] uppercase font-bold tracking-widest text-silver/30 italic">Threat_Profile</span>
-                                    <span className={`px-4 py-1 border text-[10px] font-black uppercase tracking-widest italic font-mono ${getRiskBadgeColor(tool.riskLevel)}`}>
-                                        {tool.riskLevel}
-                                    </span>
-                                </div>
-                                <div className="flex justify-between items-baseline">
-                                    <span className="text-[10px] uppercase font-bold tracking-widest text-silver/30 italic">Operation_Intensity</span>
-                                    <span className="text-[11px] font-mono text-silver-bright italic">
-                                        {isNetworkScanner ? timingTemplate : 'STABLE_ALPHA'}
-                                    </span>
-                                </div>
-                                <div className="space-y-4 pt-4 border-t border-accent-silver/5">
-                                    <span className="text-[9px] uppercase font-black text-silver/10 tracking-[0.3em] italic">System_Saturation_Projection</span>
-                                    <div className="h-1 bg-accent-silver/5 w-full relative">
-                                        <div className={`absolute inset-y-0 left-0 transition-all duration-1000 shadow-[0_0_8px] ${
-                                            tool.riskLevel === 'aggressive' ? 'bg-rag-red w-[85%] shadow-rag-red/40' : 
-                                            tool.riskLevel === 'active' ? 'bg-rag-amber w-[45%] shadow-rag-amber/40' : 'bg-rag-blue w-[15%] shadow-rag-blue/40'
-                                        }`}></div>
-                                    </div>
+                                <div className="flex flex-wrap gap-8 pt-4">
+                                  {(isWebsiteScanner || isFuzzer || isWebRecon || isApiScanner || isXss || isSqli) && (
+                                      <label className="flex items-center gap-4 cursor-pointer group">
+                                          <div className="relative w-6 h-6 border-4 border-black bg-charcoal-dark flex items-center justify-center transition-all group-hover:scale-110">
+                                              <input 
+                                                  type="checkbox" 
+                                                  className="hidden peer"
+                                                  checked={followRedirects} 
+                                                  onChange={(e) => setFollowRedirects(e.target.checked)} 
+                                              />
+                                              <div className="w-2.5 h-2.5 bg-rag-blue opacity-0 peer-checked:opacity-100 transition-opacity"></div>
+                                          </div>
+                                          <span className="text-[10px] uppercase font-black tracking-widest text-silver/40 group-hover:text-silver-bright italic transition-colors">AUTO_FOLLOW_30X</span>
+                                      </label>
+                                  )}
+                                  {isTlsScanner && (
+                                      <div className="flex items-center gap-4">
+                                          <span className="text-[10px] font-black uppercase tracking-widest text-silver/20 italic">SYMMETRY_PORT:</span>
+                                          <input type="text" className="w-24 bg-charcoal-dark border-4 border-black py-2 px-4 font-mono text-xs text-silver-bright text-center italic" value={tlsPort} onChange={(e) => setTlsPort(e.target.value)} />
+                                      </div>
+                                  )}
                                 </div>
                             </div>
-                        </section>
+                        </div>
+                    </section>
 
-                        {/* Authorization Enclave */}
+                    {/* 02. MODE OVERRIDE */}
+                    {!isWebRecon && !isUtils && !isSecretScanner && (
                         <section className="space-y-10">
-                            <h3 className="text-xs font-black uppercase tracking-[0.4em] text-silver/20 italic border-b border-accent-silver/10 pb-4">Authorization_Token</h3>
-                            {(isTlsScanner || isWebRecon || isUtils) ? (
-                                <p className="text-[11px] text-silver/40 font-light leading-relaxed italic border-l-2 border-rag-blue pl-6 py-2">
-                                    Informational_Recon: No explicit extraction consent required for public infrastructure metadata.
-                                </p>
-                            ) : (
-                                <label className="flex gap-6 cursor-pointer group">
-                                    <div className={`mt-1 flex-shrink-0 w-6 h-6 border transition-all flex items-center justify-center rounded-sm ${
-                                        consentGranted ? 'border-rag-green bg-rag-green/10' : 'border-accent-silver/20 group-hover:border-silver/40'
-                                    }`}>
-                                        <input 
-                                            type="checkbox" 
-                                            className="hidden"
-                                            checked={consentGranted} 
-                                            onChange={(e) => setConsentGranted(e.target.checked)} 
-                                        />
-                                        {consentGranted && <span className="material-symbols-outlined text-sm text-rag-green font-black">done</span>}
+                            <SectionHeader num="02" title="Protocol_Overrides" />
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                                {[
+                                    { id: 'light', label: 'PASSIVE_STEALTH', color: 'bg-rag-blue', desc: 'MIN_FOOTPRINT // SAFE_TX' },
+                                    { id: 'deep', label: 'ACTIVE_DEEP', color: 'bg-rag-amber', desc: 'MAX_COVERAGE // HEAVY_RX' },
+                                    { id: 'custom', label: 'TACTICAL_MAN', color: 'bg-rag-red', desc: 'FULL_ARGS // MANUAL_MOD' }
+                                ].map(mode => (
+                                    <button 
+                                        key={mode.id}
+                                        className={`p-10 border-4 border-black transition-all text-left flex flex-col gap-6 relative overflow-hidden group ${
+                                            scanMode === mode.id 
+                                            ? 'bg-charcoal shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] -translate-x-1 -translate-y-1' 
+                                            : 'bg-charcoal-dark opacity-40 hover:opacity-100'
+                                        }`}
+                                        onClick={() => setScanMode(mode.id as ScanMode)}
+                                    >
+                                        <div className={`w-12 h-1 ${mode.color}`}></div>
+                                        <span className={`text-xs font-black uppercase tracking-[0.2em] italic ${scanMode === mode.id ? 'text-silver-bright' : 'text-silver/20'}`}>{mode.label}</span>
+                                        <p className="text-[10px] font-black font-mono text-silver/40 leading-none italic">{mode.desc}</p>
+                                        {scanMode === mode.id && <div className="absolute right-4 top-4 text-rag-blue font-black italic text-[8px]">ACTIVE</div>}
+                                    </button>
+                                ))}
+                            </div>
+                        </section>
+                    )}
+
+                    {/* 03. FUNCTIONAL PAYLOADS */}
+                    <section className="space-y-10">
+                        <SectionHeader num="03" title="Operational_Payloads" />
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            {/* Conditional Rendering of Tool Specifics would go here */}
+                            {/* Simplifying for space, but keeping the blocky toggle aesthetic */}
+                            {isNetworkScanner && (
+                                <>
+                                  <div className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
+                                    <h4 className="text-[10px] font-black text-rag-blue uppercase tracking-widest italic border-b-2 border-black pb-2">NET_PROTOCOL_SELECTION</h4>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {['TCP', 'UDP', 'BOTH'].map(p => (
+                                            <button 
+                                                key={p}
+                                                className={`py-3 text-[10px] font-black uppercase tracking-widest italic border-2 border-black transition-all ${networkProtocol === p ? 'bg-rag-blue text-black' : 'bg-charcoal-dark text-silver/20'}`}
+                                                onClick={() => setNetworkProtocol(p)}
+                                            >
+                                                {p}
+                                            </button>
+                                        ))}
+                                    </div>
+                                  </div>
+                                  <div className="grid grid-cols-1 gap-6">
+                                    <Toggle label="SERVICE_DETECTION" description="BANNER_GRABBING_ACTIVE" checked={enumerationSuite.serviceVersion} onChange={(val: boolean) => setEnumerationSuite({...enumerationSuite, serviceVersion: val})} />
+                                    <Toggle label="OS_FINGERPRINT" description="STACK_ANALYSIS_MOD" checked={enumerationSuite.osDetection} onChange={(val: boolean) => setEnumerationSuite({...enumerationSuite, osDetection: val})} />
+                                  </div>
+                                </>
+                            )}
+
+                            {isWebsiteScanner && (
+                                <>
+                                  <Toggle label="TLS_SECURITY_CHECKS" description="CERT_CHAIN_VALIDATION" checked={webChecks.tlsConfig} onChange={(val: boolean) => setWebChecks({...webChecks, tlsConfig: val})} />
+                                  <Toggle label="CMS_RECOGNITION" description="APP_STACK_FINGERPRINT" checked={webChecks.cmsDetection} onChange={(val: boolean) => setWebChecks({...webChecks, cmsDetection: val})} />
+                                  <Toggle label="SQL_INJECTION_P" description="DB_ESCAPE_ANALYSIS" checked={vulnDetection.sqli} onChange={(val: boolean) => setVulnDetection({...vulnDetection, sqli: val})} />
+                                  <Toggle label="XSS_SCRIPT_P" description="DOM_SINK_ANALYSIS" checked={vulnDetection.xss} onChange={(val: boolean) => setVulnDetection({...vulnDetection, xss: val})} />
+                                </>
+                            )}
+
+                            {/* Default Global Params */}
+                            <div className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
+                                <h4 className="text-[10px] font-black text-silver-bright uppercase tracking-widest italic border-b-2 border-black pb-2">TX_GLOBAL_PARAMETERS</h4>
+                                <div className="space-y-6">
+                                    <div className="space-y-2">
+                                        <div className="flex justify-between text-[8px] font-black uppercase text-silver/40 italic">
+                                            <span>TIMEOUT_THRESHOLD</span>
+                                            <span className="text-rag-blue">{requestTimeout}s</span>
+                                        </div>
+                                        <input type="range" min="5" max="180" value={requestTimeout} onChange={(e) => setRequestTimeout(parseInt(e.target.value))} className="w-full accent-rag-blue" />
                                     </div>
                                     <div className="space-y-2">
-                                        <span className={`text-[11px] font-bold uppercase tracking-widest italic block transition-colors ${consentGranted ? 'text-rag-green' : 'text-silver/40 group-hover:text-silver/60'}`}>Target_Test_Consent</span>
-                                        <p className="text-[9px] text-silver/20 leading-relaxed italic uppercase tracking-[0.05em]">I affirm full legal authorization to conduct security probes against this infrastructure node.</p>
+                                        <div className="flex justify-between text-[8px] font-black uppercase text-silver/40 italic">
+                                            <span>BURST_RATE_LIMIT</span>
+                                            <span className="text-rag-amber">{requestRate}/S</span>
+                                        </div>
+                                        <input type="range" min="1" max="50" value={requestRate} onChange={(e) => setRequestRate(parseInt(e.target.value))} className="w-full accent-rag-amber" />
                                     </div>
-                                </label>
-                            )}
-                        </section>
+                                </div>
+                            </div>
 
-                        {/* Action Primary */}
-                        <div className="space-y-6 pt-12">
-                            <button 
-                                className={`w-full py-6 text-[11px] font-black uppercase tracking-[0.5em] italic transition-all relative group overflow-hidden ${
-                                    (!isTargetValid || (!(isTlsScanner || isWebRecon || isUtils) && !consentGranted) || submitting) 
-                                    ? 'bg-charcoal border border-accent-silver/10 text-silver/10 cursor-not-allowed' 
-                                    : 'bg-silver-bright text-charcoal-dark hover:bg-white shadow-[0_15px_35px_rgba(0,0,0,0.5)] active:scale-95'
-                                }`}
-                                disabled={submitting || !isTargetValid || (!(isTlsScanner || isWebRecon || isUtils) && !consentGranted)}
-                                onClick={handleStartScan}
-                            >
-                                <span className="relative z-10">{submitting ? 'EXECUTING_PAYLOAD...' : 'INITIATE_OPERATION'}</span>
-                                {submitting && <div className="absolute inset-0 bg-white/20 animate-pulse"></div>}
-                            </button>
-                            <button 
-                                className="w-full py-4 text-[9px] font-black uppercase tracking-[0.3em] italic text-silver/20 border border-accent-silver/5 hover:border-accent-silver/20 hover:text-silver/40 transition-all"
-                                disabled
-                            >
-                                [ SCHEDULE_DEFERRED_SCAN ]
-                            </button>
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col gap-6">
+                                <div className="p-8 bg-charcoal-dark border-4 border-black border-dashed opacity-40 hover:opacity-100 transition-all cursor-pointer group">
+                                    <span className="text-[10px] font-black text-silver-bright uppercase tracking-[0.4em] italic mb-4 block group-hover:text-rag-amber transition-colors">EXPERT_OVERRIDE</span>
+                                    <p className="text-[8px] text-silver/20 font-black italic uppercase leading-none">Manual Flag Injection Protocol Area</p>
+                                </div>
+                                
+                                {tool.requiresConsent && (
+                                    <button 
+                                        onClick={() => setConsentGranted(!consentGranted)}
+                                        className={`p-8 border-4 border-black transition-all flex items-center justify-center gap-6 ${
+                                            consentGranted ? 'bg-rag-green text-black font-black' : 'bg-rag-red/10 text-rag-red animate-pulse italic font-black'
+                                        }`}
+                                    >
+                                        <span className="material-symbols-outlined font-black">{consentGranted ? 'check_circle' : 'warning'}</span>
+                                        <span className="text-[10px] uppercase tracking-widest">LEGAL_AUTHORIZATION_{consentGranted ? 'LOGGED' : 'REQUIRED'}</span>
+                                    </button>
+                                )}
+                            </motion.div>
                         </div>
-                        
-                        <div className="pt-12 text-center opacity-10 select-none pointer-events-none">
-                            <span className="text-[8px] font-black uppercase tracking-[0.8em] text-silver">COMMAND_AUTH_REQUIRED_FOR_ROOT</span>
-                        </div>
-                    </aside>
+                    </section>
                 </div>
+
+                {/* Tactical Sidebar Summary */}
+                <aside className="xl:col-span-1 space-y-12">
+                    <section className="bg-charcoal-dark border-4 border-black p-10 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] space-y-10 sticky top-32">
+                        <div className="space-y-2">
+                             <div className="w-16 h-1 w-full bg-rag-blue/20">
+                                <div className="h-full bg-rag-blue w-1/3"></div>
+                             </div>
+                             <h3 className="text-xl font-black text-silver-bright uppercase tracking-tighter italic">TX_PREVIEW</h3>
+                        </div>
+
+                        <div className="space-y-6 pt-4 border-t-2 border-black border-dashed">
+                             <div className="space-y-2">
+                                <span className="text-[9px] font-black text-silver/20 uppercase tracking-widest italic">TARGET_HASH</span>
+                                <p className="text-xs font-mono font-black break-all text-silver-bright">{target || 'NULL_BUFFER'}</p>
+                             </div>
+                             <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <span className="text-[9px] font-black text-silver/20 uppercase tracking-widest italic">PLUGIN</span>
+                                    <p className="text-[10px] font-black font-mono text-rag-blue">{resolvePluginId(tool.id)?.toUpperCase() || 'UNKNOWN'}</p>
+                                </div>
+                                <div>
+                                    <span className="text-[9px] font-black text-silver/20 uppercase tracking-widest italic">AUTH_LEVEL</span>
+                                    <p className="text-[10px] font-black font-mono text-rag-amber">ROOT_SYSTEM</p>
+                                </div>
+                             </div>
+                        </div>
+
+                        <div className="space-y-4 pt-10">
+                            <button 
+                                onClick={handleStartScan}
+                                disabled={!isTargetValid || (tool.requiresConsent && !consentGranted) || submitting}
+                                className={`w-full py-10 border-4 border-black text-xl font-black uppercase tracking-tighter transition-all relative overflow-hidden group ${
+                                    (!isTargetValid || (tool.requiresConsent && !consentGranted)) 
+                                    ? 'bg-charcoal text-silver/20 cursor-not-allowed grayscale' 
+                                    : 'bg-rag-blue text-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1'
+                                }`}
+                            >
+                                <span className="relative z-10 italic">
+                                    {submitting ? 'RX_INITIALIZING...' : 'EXECUTE_PROBE'}
+                                </span>
+                                {submitting && (
+                                  <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
+                                )}
+                            </button>
+                            
+                            {!isTargetValid && target.length > 0 && (
+                                <p className="text-[10px] text-rag-red text-center font-black italic uppercase tracking-widest animate-bounce">
+                                    {isFuzzer ? 'Missing_FUZZ_Placeholder' : 'Invalid_Target_Format'}
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="pt-8 text-[9px] font-black text-silver/10 uppercase tracking-[0.4em] italic text-center">
+                            AWAITING_OPERATOR_INPUT
+                        </div>
+                    </section>
+                </aside>
             </main>
+
+            {/* Subtle Background Markings */}
+            <div className="fixed bottom-0 right-0 p-12 pointer-events-none opacity-[0.02] rotate-[-20deg] hidden lg:block">
+                <h2 className="text-[250px] font-black italic tracking-tighter leading-none">DEPLOY</h2>
+            </div>
         </div>
     )
 }

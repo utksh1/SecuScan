@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import { API_BASE } from '../api'
 
 interface Task {
@@ -31,6 +32,19 @@ interface TaskResult {
     errors?: Array<{ message: string }>
 }
 
+const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+        opacity: 1,
+        transition: { staggerChildren: 0.05 }
+    }
+}
+
+const itemVariants = {
+    hidden: { opacity: 0, y: 10 },
+    visible: { opacity: 1, y: 0 }
+}
+
 export default function TaskDetails() {
     const { taskId } = useParams()
     const navigate = useNavigate()
@@ -50,13 +64,12 @@ export default function TaskDetails() {
             try {
                 const data = JSON.parse(e.data)
                 setTask(prev => prev ? { ...prev, status: data.status } : null)
-
                 if (['completed', 'failed', 'cancelled'].includes(data.status)) {
                     es.close()
                     loadTask()
                 }
             } catch (err) {
-                console.error("Failed to parse status event", err)
+                console.error("Status stream error", err)
             }
         })
 
@@ -65,7 +78,7 @@ export default function TaskDetails() {
                 const data = JSON.parse(e.data)
                 setRawOutput(prev => prev + data.chunk)
             } catch (err) {
-                console.error("Failed to parse output event", err)
+                console.error("Output stream error", err)
             }
         })
 
@@ -101,10 +114,10 @@ export default function TaskDetails() {
 
     if (loading || !task) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
-                <div className="flex flex-col items-center gap-4">
-                    <span className="material-symbols-outlined animate-spin text-4xl text-silver/20 font-light">sync</span>
-                    <span className="text-[10px] font-bold uppercase tracking-[0.4em] italic opacity-40 animate-pulse">Decrypting System Log...</span>
+            <div className="min-h-screen bg-charcoal-dark flex items-center justify-center p-12">
+                <div className="space-y-4 text-center">
+                    <div className="w-20 h-20 border-8 border-silver-bright/10 border-t-rag-blue animate-spin mx-auto shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"></div>
+                    <p className="text-xs font-black text-silver-bright uppercase tracking-[0.5em] italic">Decrypting_Briefing...</p>
                 </div>
             </div>
         )
@@ -112,227 +125,237 @@ export default function TaskDetails() {
 
     const findings = result?.structured?.findings || []
     const formatDateLong = (dateStr: string) =>
-        new Date(dateStr).toLocaleString('en-US', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) + ' GMT'
+        new Date(dateStr).toLocaleString('en-US', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
 
     return (
-        <div className="min-h-screen flex flex-col scale-in-center overflow-x-hidden">
-            <header className="w-full px-12 py-10 flex justify-between items-center border-b border-accent-silver/10 bg-charcoal-dark/50 backdrop-blur-md sticky top-0 z-40">
+        <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
+            
+            {/* Neo-Brutalist Header */}
+            <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10 font-black">
                 <div className="flex items-center gap-8">
                     <button 
-                        className="w-12 h-12 flex items-center justify-center border border-accent-silver/20 hover:border-silver/40 text-silver/40 hover:text-white transition-all rounded-sm group relative overflow-hidden"
                         onClick={() => navigate('/history')}
+                        className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
                     >
-                         <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                        <span className="material-symbols-outlined text-sm relative z-10">arrow_back</span>
+                        <span className="material-symbols-outlined">arrow_back</span>
                     </button>
-                    <div>
-                        <h1 className="text-3xl font-serif font-light text-silver-bright tracking-tight italic uppercase leading-none">Intelligence Briefing Dossier</h1>
-                        <p className="text-[10px] font-light text-silver/40 uppercase tracking-[0.4em] mt-3 italic">Ref_ID: SIG_{taskId?.split('-')[0].toUpperCase()} • CLASSIFIED DATA ENCLAVE</p>
+                    <div className="space-y-4">
+                      <div className="bg-rag-blue text-black px-4 py-1 text-xs uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-black">
+                        Mission_Dossier_SIG#{taskId?.split('-')[0].toUpperCase()}
+                      </div>
+                      <h1 className="text-5xl md:text-7xl text-silver-bright uppercase tracking-tighter leading-none italic font-black">
+                        Intel <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '2px var(--accent-silver-bright)' }}>Briefing</span>
+                      </h1>
                     </div>
                 </div>
-                
-                <div className="flex items-center gap-6">
+
+                <div className="flex gap-4">
                     {task.status === 'completed' && (
-                        <div className="flex gap-4">
-                             <button 
-                                className="px-8 py-3 bg-transparent border border-accent-silver/20 text-[9px] text-silver/60 uppercase font-black tracking-widest hover:border-silver/60 hover:text-white transition-all italic whitespace-nowrap"
+                        <>
+                            <button 
                                 onClick={() => window.open(`${API_BASE}/task/${taskId}/report/csv`)}
+                                className="bg-charcoal px-6 py-4 border-4 border-black text-xs font-black uppercase tracking-widest italic shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none transition-all flex items-center gap-3"
                             >
-                                [ Export_Spreadsheet ]
+                                <span className="material-symbols-outlined text-sm">download</span>
+                                CSV_EXPORT
                             </button>
                             <button 
-                                className="px-8 py-3 bg-silver-bright text-charcoal-dark text-[9px] font-black uppercase tracking-widest hover:bg-white transition-all italic shadow-2xl relative group"
                                 onClick={() => window.open(`${API_BASE}/task/${taskId}/report/pdf`)}
+                                className="bg-silver-bright px-6 py-4 border-4 border-black text-black text-xs font-black uppercase tracking-widest italic shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none transition-all flex items-center gap-3"
                             >
-                                <span className="relative z-10">Generate_Briefing_PDF</span>
-                                <div className="absolute inset-x-0 bottom-0 h-0.5 bg-black/20 group-hover:h-1 transition-all"></div>
+                                <span className="material-symbols-outlined text-sm">picture_as_pdf</span>
+                                PDF_REPORT
                             </button>
-                        </div>
+                        </>
                     )}
                 </div>
             </header>
 
-            <main className="flex-1 p-12 space-y-12 max-w-[1600px] mx-auto w-full animate-in fade-in duration-1000">
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-12">
-                    {/* Left Column: Core Analysis */}
-                    <div className="lg:col-span-3 space-y-12 min-w-0">
-                        {/* Target Summary Section */}
-                        <section className="space-y-6">
-                            <div className="flex justify-between items-center bg-charcoal-dark border border-accent-silver/5 p-1 relative group overflow-hidden">
-                                <div className={`absolute left-0 top-0 bottom-0 w-1 ${
-                                    task.status === 'completed' ? 'bg-rag-green' : 'bg-rag-amber'
-                                }`}></div>
-                                <div className="p-10 flex-1 space-y-6">
-                                     <div className="flex justify-between items-start">
-                                        <div className="space-y-1">
-                                            <span className="text-[8px] text-silver/20 font-black uppercase tracking-[0.4em] italic block">Subject Node Infrastructure</span>
-                                            <h2 className="text-6xl font-serif font-light text-silver-bright italic tracking-tighter leading-none">{task.target}</h2>
-                                        </div>
-                                        <div className={`px-4 py-2 border text-[10px] font-black uppercase tracking-[0.4em] italic italic font-mono ${
-                                            task.status === 'completed' ? 'text-rag-green border-rag-green/20' : 'text-rag-amber border-rag-amber/20'
-                                        }`}>{task.status}</div>
+            <div className="grid grid-cols-1 xl:grid-cols-4 gap-12">
+                {/* Core Result Section */}
+                <main className="xl:col-span-3 space-y-12">
+                    {/* Target Detail Block */}
+                    <section className="bg-charcoal border-4 border-black p-10 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                            <span className="text-7xl font-black italic select-none uppercase font-mono">{task.tool}</span>
+                        </div>
+                        <div className="flex flex-col md:flex-row justify-between gap-10 relative z-10">
+                            <div className="space-y-6">
+                                <div className="space-y-2">
+                                    <p className="text-[10px] font-black uppercase tracking-[0.4em] text-silver/20 italic">SUBJECT_ENCLAVE_NODE</p>
+                                    <h2 className="text-4xl md:text-6xl font-black text-silver-bright uppercase tracking-tighter italic font-mono group-hover:text-rag-blue transition-colors">
+                                        {task.target}
+                                    </h2>
+                                </div>
+                                <div className="flex flex-wrap gap-8 text-[10px] font-black uppercase tracking-[0.2em] font-mono italic text-silver/40">
+                                    <div className="flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-xs text-rag-blue">terminal</span>
+                                        TOOL::{task.tool}
                                     </div>
-                                    
-                                    <div className="flex flex-wrap gap-12 text-[10px] font-bold uppercase tracking-[0.3em] text-silver/30 italic font-mono border-t border-accent-silver/5 pt-6">
-                                        <span className="flex items-center gap-2">
-                                            <span className="material-symbols-outlined text-[10px] text-rag-blue">terminal</span>
-                                            AGENT_PROTOCOL: {task.tool}
-                                        </span>
-                                        <span className="flex items-center gap-2">
-                                            <span className="material-symbols-outlined text-[10px] text-rag-blue">schedule</span>
-                                            SIGNAL_INIT: {formatDateLong(task.created_at)}
-                                        </span>
-                                        {task.duration_seconds && (
-                                            <span className="flex items-center gap-2">
-                                                <span className="material-symbols-outlined text-[10px] text-rag-blue">hourglass_top</span>
-                                                PROCESS_TIME: {Math.round(task.duration_seconds).toString().padStart(3, '0')}s
+                                    <div className="flex items-center gap-2">
+                                        <span className="material-symbols-outlined text-xs text-rag-blue">history</span>
+                                        INIT::{formatDateLong(task.created_at)}
+                                    </div>
+                                    {task.duration_seconds && (
+                                        <div className="flex items-center gap-2">
+                                            <span className="material-symbols-outlined text-xs text-rag-blue">timer</span>
+                                            TIME::{Math.round(task.duration_seconds)}S
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="shrink-0 flex items-center">
+                                <div className={`px-8 py-4 border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-xs font-black uppercase tracking-[0.4em] italic ${
+                                    task.status === 'completed' ? 'bg-rag-green text-black' : 
+                                    task.status === 'failed' ? 'bg-rag-red text-black' : 'bg-rag-amber text-black animate-pulse'
+                                }`}>
+                                    {task.status}
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* Findings Ledger */}
+                    {findings.length > 0 && (
+                        <section className="space-y-8">
+                            <div className="flex items-center gap-4">
+                                <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Tactical_Findings</h3>
+                                <div className="h-0.5 flex-1 bg-black/10"></div>
+                                <span className="text-[10px] font-mono text-silver/20 uppercase font-black">{findings.length} ANOMALIES</span>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                {findings.map((f, idx) => (
+                                    <div key={idx} className="bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all relative overflow-hidden group">
+                                        <div className="flex justify-between items-start mb-6">
+                                            <span className={`px-2 py-0.5 text-[9px] font-black uppercase italic border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
+                                                f.severity === 'critical' ? 'bg-rag-red text-black' :
+                                                f.severity === 'high' ? 'bg-rag-amber text-black' : 'bg-rag-blue text-black'
+                                            }`}>
+                                                {f.severity}_SEVERITY
                                             </span>
+                                            <span className="text-[10px] font-mono text-silver/10 select-none font-black italic">ENTRY_0{idx + 1}</span>
+                                        </div>
+                                        <h4 className="text-xl font-black text-silver-bright uppercase tracking-tight italic mb-4 font-mono group-hover:text-rag-red transition-colors">
+                                            {f.title}
+                                        </h4>
+                                        {f.description && (
+                                            <p className="text-[11px] font-mono text-silver/40 uppercase tracking-widest leading-relaxed italic border-t-2 border-black border-dashed pt-4">
+                                                {f.description}
+                                            </p>
                                         )}
                                     </div>
-                                </div>
+                                ))}
                             </div>
                         </section>
+                    )}
 
-                        {/* Findings Grid */}
-                        {findings.length > 0 && (
-                            <section className="space-y-8">
-                                <div className="flex items-baseline gap-6">
-                                    <h3 className="text-xs font-black uppercase tracking-[0.4em] text-silver/20 italic">Tactical Findings Ledger</h3>
-                                    <div className="flex-1 h-px bg-accent-silver/10"></div>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {findings.map((f, idx) => (
-                                        <div key={idx} className="p-8 bg-charcoal border border-accent-silver/5 hover:border-silver/20 transition-all group relative">
-                                            <div className={`absolute left-0 top-0 bottom-0 w-1 transition-all group-hover:w-2 ${
-                                                f.severity === 'critical' ? 'bg-rag-red' : 
-                                                f.severity === 'high' ? 'bg-rag-amber' : 'bg-rag-blue'
-                                            }`}></div>
-                                            <div className="flex justify-between items-start mb-6 font-mono italic">
-                                                <span className={`text-[9px] font-black tracking-widest uppercase ${
-                                                    f.severity === 'critical' ? 'text-rag-red' : 
-                                                    f.severity === 'high' ? 'text-rag-amber' : 'text-rag-blue-bright/60'
-                                                }`}>[ {f.severity}_THREAT_DETECTED ]</span>
-                                                <span className="text-[10px] text-silver/10 select-none">#{idx + 1}</span>
-                                            </div>
-                                            <h4 className="text-md font-serif font-light text-silver-bright uppercase tracking-wide italic mb-4 group-hover:text-white transition-colors">{f.title}</h4>
-                                            {f.description && <p className="text-[11px] text-silver/40 font-light leading-relaxed italic border-t border-accent-silver/5 pt-4">{f.description}</p>}
-                                        </div>
-                                    ))}
-                                </div>
-                            </section>
-                        )}
-
-                        {/* TTY Stream Monitor */}
-                        <section className="space-y-8">
-                             <div className="flex justify-between items-center border-b border-accent-silver/10 pb-4">
-                                <h3 className="text-xs font-black uppercase tracking-[0.4em] text-silver/20 italic">Subprocess_Intervention_Stream</h3>
-                                <button 
-                                    onClick={() => setShowRawOutput(!showRawOutput)}
-                                    className="text-[9px] font-black uppercase tracking-widest text-silver/30 hover:text-white transition-colors border border-accent-silver/20 px-4 py-1 italic"
-                                >
-                                    {showRawOutput ? '[ DISCONNECT_MONITOR ]' : '[ ATTACH_MONITOR ]'}
-                                </button>
+                    {/* Raw Stream Terminal */}
+                    <section className="space-y-6">
+                        <div className="flex justify-between items-center bg-black border-4 border-black p-4 text-silver-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+                            <div className="flex items-center gap-4">
+                                <span className="material-symbols-outlined text-sm text-rag-green">terminal</span>
+                                <h3 className="text-[10px] font-black uppercase tracking-[0.4em] italic leading-none">TTY_DAEMON_PIPE_ACTIVE</h3>
                             </div>
-                            {showRawOutput && (
-                                <div className="bg-black/40 border border-accent-silver/10 p-10 rounded-sm font-mono text-[11px] overflow-x-auto leading-relaxed shadow-inner backdrop-blur-sm group/tty">
-                                    <div className="flex items-center gap-3 mb-10 border-b border-accent-silver/5 pb-6 opacity-40">
-                                        <div className="flex gap-1.5">
-                                            <div className="w-2.5 h-2.5 rounded-full border border-rag-red opacity-80 shadow-[0_0_8px_red]"></div>
-                                            <div className="w-2.5 h-2.5 rounded-full border border-rag-amber opacity-80 shadow-[0_0_8px_orange]"></div>
-                                            <div className="w-2.5 h-2.5 rounded-full border border-rag-green opacity-80 shadow-[0_0_8px_green]"></div>
-                                        </div>
-                                        <span className="ml-6 text-[9px] uppercase tracking-[0.5em] font-black italic">ACTIVE_DAEMON_PIPE_TX#8821</span>
-                                        <div className="flex-1 h-px bg-accent-silver/5 ml-4"></div>
-                                    </div>
-                                    <pre className="text-silver/60 whitespace-pre-wrap selection:bg-rag-blue/30 selection:text-white group-hover/tty:text-silver/80 transition-colors duration-700 italic">
-                                        {rawOutput || 'Awaiting signal transmission from remote node...'}
-                                        {task.status === 'running' && <span className="inline-block w-2 h-4 bg-rag-blue animate-pulse ml-2 align-middle shadow-[0_0_10px_#3b82f6]"></span>}
-                                    </pre>
-                                </div>
-                            )}
-                        </section>
-                    </div>
-
-                    {/* Right Column: Briefing Sidebar */}
-                    <aside className="space-y-12">
-                        {/* Risk Matrix Component */}
-                        <section className="space-y-8">
-                            <h3 className="text-xs font-black uppercase tracking-[0.4em] text-silver/20 italic border-b border-accent-silver/10 pb-4 flex justify-between items-center">
-                                Risk_Matrix 
-                                <span className="material-symbols-outlined text-xs">grid_view</span>
-                            </h3>
-                            <div className="grid grid-cols-1 gap-px bg-accent-silver/5 executive-border overflow-hidden rounded-sm">
-                                {['critical', 'high', 'medium', 'low'].map(sev => {
-                                    const count = result?.severity_counts?.[sev] || 0
-                                    return (
-                                        <div key={sev} className={`p-8 bg-charcoal flex justify-between items-center transition-all ${count > 0 ? 'bg-charcoal-light shadow-inner' : 'opacity-10 opacity-5 grayscale'}`}>
-                                            <div className="space-y-1">
-                                                <span className={`text-[10px] font-black uppercase tracking-[.3em] italic ${
-                                                    sev === 'critical' ? 'text-rag-red' : 
-                                                    sev === 'high' ? 'text-rag-amber' : 'text-rag-blue'
-                                                }`}>{sev}</span>
-                                                <span className="text-[8px] text-silver/20 uppercase tracking-widest block font-mono italic">SIGNAL_STRENGTH</span>
-                                            </div>
-                                            <span className="text-4xl font-serif font-light text-silver-bright">{count.toString().padStart(2, '0')}</span>
-                                        </div>
-                                    )
-                                })}
-                            </div>
-                        </section>
-
-                        {/* Intelligence Summary Section */}
-                        {result?.summary && result.summary.length > 0 && (
-                            <section className="space-y-8">
-                                <h3 className="text-xs font-black uppercase tracking-[0.4em] text-silver/20 italic border-b border-accent-silver/10 pb-4">Briefing_Intelligence</h3>
-                                <div className="space-y-6">
-                                    {result.summary.map((s, idx) => (
-                                        <div key={idx} className="flex gap-6 items-start group">
-                                            <span className="text-[9px] text-silver/10 font-mono mt-1 font-black group-hover:text-rag-blue transition-colors">[{ (idx + 1).toString().padStart(2, '0') }]</span>
-                                            <p className="text-[11px] font-light text-silver/60 leading-relaxed italic group-hover:text-silver-bright transition-colors">{s}</p>
-                                        </div>
-                                    ))}
-                                </div>
-                            </section>
-                        )}
-
-                        {/* Operational Diagnostics Section */}
-                        <section className="p-10 border border-dashed border-accent-silver/10 rounded-sm bg-charcoal/5 space-y-8">
-                             <h3 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.3em] italic">System_Stability</h3>
-                             <div className="space-y-6">
-                                <div className="flex justify-between items-center font-mono italic">
-                                    <span className="text-[9px] text-silver/20 uppercase tracking-widest">Memory_Saturation</span>
-                                    <span className="text-[10px] text-rag-green">0.45GB</span>
-                                </div>
-                                <div className="h-0.5 bg-accent-silver/5 w-full relative overflow-hidden">
-                                    <div className="absolute inset-y-0 left-0 bg-rag-green w-[32%] opacity-60"></div>
-                                </div>
-                                <div className="flex justify-between items-center font-mono italic">
-                                    <span className="text-[9px] text-silver/20 uppercase tracking-widest">Network_Latency</span>
-                                    <span className="text-[10px] text-rag-green">14MS</span>
-                                </div>
-                                <div className="h-0.5 bg-accent-silver/5 w-full relative overflow-hidden">
-                                     <div className="absolute inset-y-0 left-0 bg-rag-blue w-[12%] opacity-60"></div>
-                                </div>
-                             </div>
-                             
-                             {result?.errors && result.errors.length > 0 && (
-                                <div className="pt-8 space-y-4">
-                                    <p className="text-[9px] font-black text-rag-red uppercase tracking-[0.4em] italic border-t border-rag-red/20 pt-6">Corruption_Detected</p>
-                                    <div className="space-y-3">
-                                        {result.errors.map((e, idx) => (
-                                            <p key={idx} className="text-[10px] font-mono text-rag-red/60 italic leading-tight">ERR_{idx.toString().padStart(3, '0')}: {e.message}</p>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                        </section>
-                         
-                        <div className="pt-12 text-center select-none pointer-events-none opacity-10">
-                            <span className="text-[8px] font-black uppercase tracking-[1em] text-silver">SECURITY_CLEARANCE_ALFA_SEVEN</span>
+                            <button 
+                                onClick={() => setShowRawOutput(!showRawOutput)}
+                                className="text-[8px] font-black uppercase text-silver/40 hover:text-white transition-colors"
+                            >
+                                {showRawOutput ? '[ DISCONNECT ]' : '[ ATTACH ]'}
+                            </button>
                         </div>
-                    </aside>
+                        {showRawOutput && (
+                            <div className="bg-black border-4 border-black p-10 font-mono text-[12px] leading-loose shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] relative group overflow-hidden h-[600px]">
+                                {/* Minimal decorative grid */}
+                                <div className="absolute inset-x-0 h-4 top-0 bg-gradient-to-b from-rag-blue/5 to-transparent pointer-events-none"></div>
+                                <pre className="text-silver/50 whitespace-pre-wrap selection:bg-rag-blue/30 selection:text-white h-full overflow-y-auto scrollbar-thin scrollbar-thumb-rag-blue/20">
+                                    {rawOutput || 'Awaiting transmission data...'}
+                                    {task.status === 'running' && <span className="inline-block w-2.5 h-5 bg-rag-blue animate-pulse ml-2 align-middle shadow-[0_0_15px_#3b82f6]"></span>}
+                                </pre>
+                            </div>
+                        )}
+                    </section>
+                </main>
+
+                {/* Sidebar Metrics */}
+                <aside className="space-y-12">
+                    {/* Severity Grid */}
+                    <section className="space-y-6">
+                        <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic border-b-4 border-black pb-4">Threat_Distribution</h3>
+                        <div className="grid grid-cols-1 gap-4">
+                            {['critical', 'high', 'medium', 'low'].map(sev => {
+                                const count = result?.severity_counts?.[sev] || 0
+                                return (
+                                    <div key={sev} className={`p-6 border-4 border-black flex justify-between items-center transition-all ${
+                                        count > 0 
+                                        ? (sev === 'critical' ? 'bg-rag-red text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' : 
+                                           sev === 'high' ? 'bg-rag-amber text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' : 
+                                           'bg-rag-blue text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]')
+                                        : 'bg-charcoal opacity-10 grayscale border-dashed'
+                                    }`}>
+                                        <div className="space-y-1">
+                                            <span className="text-[10px] font-black uppercase tracking-[0.3em] italic">{sev}</span>
+                                            <p className="text-[8px] font-mono uppercase tracking-widest opacity-60">STRIKE_PROB</p>
+                                        </div>
+                                        <span className="text-4xl font-black italic">{count.toString().padStart(2, '0')}</span>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </section>
+
+                    {/* Briefing Text */}
+                    {result?.summary && result.summary.length > 0 && (
+                        <section className="bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] space-y-6">
+                            <h3 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.4em] italic border-b-2 border-black border-dashed pb-4">Briefing_Executive</h3>
+                            <div className="space-y-6">
+                                {result.summary.map((s, idx) => (
+                                    <div key={idx} className="flex gap-4 group">
+                                        <span className="text-[10px] font-mono text-rag-blue font-black group-hover:text-rag-red transition-colors">[{idx + 1}]</span>
+                                        <p className="text-[11px] font-black text-silver/60 uppercase tracking-widest leading-loose italic group-hover:text-silver-bright transition-colors">
+                                            {s}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+                    )}
+
+                    {/* Diagnostic Monitor */}
+                    <div className="bg-charcoal-dark border-4 border-black p-8 space-y-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+                         <div className="flex items-center gap-3">
+                            <div className="w-2 h-2 bg-rag-green animate-pulse rounded-full"></div>
+                            <h3 className="text-[9px] font-black text-silver-bright uppercase tracking-[0.3em] italic">Telemetry_Stream</h3>
+                         </div>
+                         <div className="space-y-4">
+                             <div className="flex justify-between items-center text-[9px] font-black text-silver/20 uppercase tracking-[0.2em] font-mono italic">
+                                <span>MEM_SATURATION</span>
+                                <span className="text-rag-blue">0.42GB</span>
+                             </div>
+                             <div className="h-1 bg-black w-full">
+                                <div className="h-full bg-rag-blue w-[35%]"></div>
+                             </div>
+                             <div className="flex justify-between items-center text-[9px] font-black text-silver/20 uppercase tracking-[0.2em] font-mono italic">
+                                <span>NET_LATENCY</span>
+                                <span className="text-rag-green">12MS</span>
+                             </div>
+                             <div className="h-1 bg-black w-full">
+                                <div className="h-full bg-rag-green w-[15%]"></div>
+                             </div>
+                         </div>
+                    </div>
+                </aside>
+            </div>
+
+            {/* Tactical Footer */}
+            <footer className="pt-24 border-t-4 border-black/5 flex flex-col md:flex-row justify-between items-center gap-8 text-[9px] font-black uppercase tracking-[0.5em] italic opacity-20">
+                <div className="flex items-center gap-6">
+                    <div className="w-12 h-1 bg-silver/20"></div>
+                    CLASSIFIED_EXECUTIVE_SUMMARY // CORE_DAEMON_LOG_ID::{taskId?.split('-')[0].toUpperCase()}
                 </div>
-            </main>
+                <div className="flex gap-4">
+                    {[1,2,3,4].map(i => <div key={i} className="w-20 h-1 bg-silver/20"></div>)}
+                </div>
+            </footer>
         </div>
     )
 }

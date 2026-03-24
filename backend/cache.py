@@ -6,7 +6,7 @@ import json
 from typing import Any, Optional, Dict
 import time
 
-from config import settings
+from .config import settings
 
 
 class CacheClient:

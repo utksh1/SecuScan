@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Optional, List, Dict
 
 import aiosqlite
-from config import settings
+from .config import settings
 
 
 class Database:
