@@ -269,7 +269,11 @@ export default function ToolConfig() {
     }
 
     let sectionCounter = 1;
-    const nextNum = () => sectionCounter++.toString().padStart(2, '0');
+    const nextNum = () => {
+        const num = sectionCounter.toString().padStart(2, '0')
+        sectionCounter++
+        return num
+    }
 
     return (
         <div className="min-h-screen flex flex-col scale-in-center">
