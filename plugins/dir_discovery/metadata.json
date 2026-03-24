@@ -1,0 +1,188 @@
+{
+  "id": "dir_discovery",
+  "name": "Directory Discovery",
+  "version": "1.0.0",
+  "description": "Discover hidden directories and files on web servers",
+  "long_description": "Systematically probes for unlinked resources using wordlists. Discovers hidden directories, files, and endpoints that may contain sensitive information or administrative interfaces.",
+  "category": "web",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udcc2",
+  "engine": {
+    "type": "cli",
+    "binary": "ffuf"
+  },
+  "command_template": [
+    "ffuf",
+    "-u",
+    "{base_url}/FUZZ",
+    "-w",
+    "{wordlist}",
+    "--if:extensions:then:-e",
+    "--if:extensions:then:{extensions}",
+    "-t",
+    "{threads:8}",
+    "-p",
+    "{delay_ms:50}",
+    "-mc",
+    "{match_codes:200,301,302,403}",
+    "--if:recursive:then:-recursion",
+    "--if:max_depth:then:-recursion-depth",
+    "--if:max_depth:then:{max_depth}",
+    "-o",
+    "/tmp/output.json",
+    "-of",
+    "json"
+  ],
+  "fields": [
+    {
+      "id": "base_url",
+      "label": "Target URL",
+      "type": "string",
+      "required": true,
+      "placeholder": "https://example.com",
+      "validation": {
+        "pattern": "^https?://",
+        "message": "Must be a valid URL"
+      },
+      "help": "Base URL to scan (e.g., https://example.com)"
+    },
+    {
+      "id": "wordlist",
+      "label": "Wordlist",
+      "type": "select",
+      "required": false,
+      "default": "medium",
+      "options": [
+        {
+          "value": "small",
+          "label": "Small (500 entries) - Fast"
+        },
+        {
+          "value": "medium",
+          "label": "Medium (5,000 entries) - Balanced"
+        },
+        {
+          "value": "large",
+          "label": "Large (50,000 entries) - Comprehensive"
+        }
+      ],
+      "help": "Discovery dictionary size"
+    },
+    {
+      "id": "extensions",
+      "label": "File Extensions",
+      "type": "string",
+      "required": false,
+      "placeholder": "php,html,txt",
+      "help": "Comma-separated file extensions to check (leave empty for directories only)"
+    },
+    {
+      "id": "threads",
+      "label": "Threads",
+      "type": "integer",
+      "required": false,
+      "default": 8,
+      "help": "Number of concurrent requests"
+    },
+    {
+      "id": "delay_ms",
+      "label": "Delay (milliseconds)",
+      "type": "integer",
+      "required": false,
+      "default": 50,
+      "help": "Delay between requests to avoid overwhelming server"
+    },
+    {
+      "id": "match_codes",
+      "label": "HTTP Status Codes",
+      "type": "string",
+      "required": false,
+      "default": "200,301,302,403",
+      "help": "HTTP status codes to report"
+    },
+    {
+      "id": "recursive",
+      "label": "Recursive Scan",
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "help": "Scan discovered directories recursively"
+    },
+    {
+      "id": "max_depth",
+      "label": "Max Recursion Depth",
+      "type": "integer",
+      "required": false,
+      "default": 2,
+      "help": "Maximum directory depth for recursive scans"
+    },
+    {
+      "id": "timeout",
+      "label": "Timeout (seconds)",
+      "type": "integer",
+      "required": false,
+      "default": 600,
+      "help": "Maximum scan duration"
+    }
+  ],
+  "presets": {
+    "quick": {
+      "wordlist": "small",
+      "extensions": "",
+      "threads": 6,
+      "delay_ms": 100,
+      "recursive": false,
+      "timeout": 300
+    },
+    "standard": {
+      "wordlist": "medium",
+      "extensions": "",
+      "threads": 8,
+      "delay_ms": 50,
+      "recursive": false,
+      "timeout": 600
+    },
+    "deep": {
+      "wordlist": "large",
+      "extensions": "php,html,txt,asp,aspx,jsp",
+      "threads": 12,
+      "delay_ms": 10,
+      "recursive": true,
+      "max_depth": 3,
+      "timeout": 1800
+    }
+  },
+  "output": {
+    "format": "json",
+    "parser": "builtin_dir_discovery"
+  },
+  "safety": {
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "Directory brute-forcing generates significant traffic and may trigger rate limiting or security alerts. Only scan authorized targets.",
+    "allowed_targets": [
+      "*"
+    ],
+    "rate_limit": {
+      "max_per_hour": 5,
+      "max_concurrent": 1
+    }
+  },
+  "learning": {
+    "difficulty": "intermediate",
+    "estimated_duration": "5-30 minutes",
+    "tutorial_url": "https://docs.secuscan.local/plugins/dir-discovery"
+  },
+  "dependencies": {
+    "binaries": [
+      "ffuf"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  },
+  "docker_image": "secuscan/ffuf"
+}

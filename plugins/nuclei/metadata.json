@@ -1,0 +1,115 @@
+{
+  "id": "nuclei",
+  "name": "Nuclei",
+  "version": "1.0.0",
+  "description": "Fast and customizable vulnerability scanner",
+  "long_description": "Nuclei is used to send requests across targets based on a template, leading to zero false positives and providing fast scanning on a large number of hosts.",
+  "category": "web",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "🧬",
+
+  "engine": {
+    "type": "cli",
+    "binary": "nuclei"
+  },
+
+  "docker_image": "projectdiscovery/nuclei:latest",
+
+  "command_template": [
+    "nuclei",
+    "-u",
+    "{target}",
+    "--if:templates:then:-t",
+    "--if:templates:then:{templates}",
+    "--if:severity:then:-s",
+    "--if:severity:then:{severity}",
+    "-nc"
+  ],
+
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target URL/Host",
+      "type": "string",
+      "required": true,
+      "placeholder": "https://example.com",
+      "help": "URL or Hostname to scan"
+    },
+    {
+      "id": "preset",
+      "label": "Scan Preset",
+      "type": "select",
+      "required": false,
+      "default": "cves",
+      "options": [
+        {"value": "cves", "label": "Known CVEs"},
+        {"value": "full", "label": "Full Template Scan"}
+      ],
+      "help": "Predefined scan configuration profiles"
+    },
+    {
+      "id": "templates",
+      "label": "Templates",
+      "type": "string",
+      "required": false,
+      "placeholder": "cves,vulnerabilities",
+      "help": "Comma-separated list of templates to run"
+    },
+    {
+      "id": "severity",
+      "label": "Severity Filter",
+      "type": "select",
+      "required": false,
+      "options": [
+        {"value": "critical,high", "label": "High & Critical"},
+        {"value": "medium", "label": "Medium"},
+        {"value": "low", "label": "Low"},
+        {"value": "info", "label": "Info"}
+      ],
+      "help": "Filter templates to run based on severity"
+    }
+  ],
+
+  "presets": {
+    "cves": {
+      "templates": "cves",
+      "severity": "critical,high"
+    },
+    "full": {
+      "templates": "",
+      "severity": ""
+    }
+  },
+
+  "output": {
+    "format": "text",
+    "parser": "builtin_nuclei"
+  },
+
+  "safety": {
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "Nuclei will send hundreds of payloads looking for known vulnerabilities. Proceed with caution.",
+    "allowed_targets": ["127.0.0.1", "192.168.*.*", "10.*.*.*", "172.16.*.*"],
+    "rate_limit": {
+      "max_per_hour": 10,
+      "max_concurrent": 1
+    }
+  },
+
+  "learning": {
+    "difficulty": "intermediate",
+    "estimated_duration": "1-10 minutes",
+    "tutorial_url": "https://docs.secuscan.local/plugins/nuclei"
+  },
+
+  "dependencies": {
+    "binaries": [],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

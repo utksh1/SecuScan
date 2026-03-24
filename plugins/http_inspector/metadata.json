@@ -1,0 +1,95 @@
+{
+  "id": "http_inspector",
+  "name": "HTTP Inspector",
+  "version": "1.0.0",
+  "description": "Inspect HTTP/HTTPS endpoints for headers, cookies, and TLS configuration",
+  "long_description": "Performs safe, read-only HTTP requests to validate endpoint availability, examine response headers, trace redirections, and inspect TLS configurations.",
+  "category": "web",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83c\udf10",
+  "engine": {
+    "type": "python",
+    "entrypoint": "python3 -m httpx"
+  },
+  "command_template": [
+    "curl",
+    "-i",
+    "-L",
+    "--max-time",
+    "{timeout:10}",
+    "{url}"
+  ],
+  "fields": [
+    {
+      "id": "url",
+      "label": "Target URL",
+      "type": "string",
+      "required": true,
+      "placeholder": "https://example.com",
+      "validation": {
+        "pattern": "^https?://",
+        "message": "Must be a valid HTTP(S) URL"
+      },
+      "help": "The URL to inspect (http:// or https://)"
+    },
+    {
+      "id": "follow_redirects",
+      "label": "Follow Redirects",
+      "type": "boolean",
+      "required": false,
+      "default": true,
+      "help": "Follow HTTP 3xx redirect chains"
+    },
+    {
+      "id": "timeout",
+      "label": "Timeout (seconds)",
+      "type": "integer",
+      "required": false,
+      "default": 10,
+      "help": "Maximum time to wait for response"
+    }
+  ],
+  "presets": {
+    "quick": {
+      "follow_redirects": false,
+      "timeout": 5
+    },
+    "full": {
+      "follow_redirects": true,
+      "timeout": 30
+    }
+  },
+  "output": {
+    "format": "text",
+    "parser": "builtin_http"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": true,
+    "consent_message": "This tool will make HTTP requests to the target URL.",
+    "allowed_targets": [
+      "*"
+    ],
+    "rate_limit": {
+      "max_per_hour": 100,
+      "max_concurrent": 5
+    }
+  },
+  "learning": {
+    "difficulty": "beginner",
+    "estimated_duration": "30 seconds",
+    "tutorial_url": "https://docs.secuscan.local/plugins/http-inspector"
+  },
+  "dependencies": {
+    "binaries": [
+      "curl"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  },
+  "docker_image": "curlimages/curl"
+}

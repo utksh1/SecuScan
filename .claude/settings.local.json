@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./venv/bin/pip install:*)",
+      "Bash(./venv_new/bin/pip install:*)",
+      "Bash(python3 -m venv venv_tests)",
+      "Bash(./venv_tests/bin/pip install:*)",
+      "Bash(ls -l /opt/homebrew/bin/python3* /opt/homebrew/bin/python*)",
+      "Bash(rm -rf venv_tests)",
+      "Bash(/opt/homebrew/bin/python3.12 -m venv venv_tests)",
+      "Bash(./venv_tests/bin/pytest tests/ -v)",
+      "Bash(npm install:*)",
+      "Bash(npm run:*)",
+      "Bash(npx playwright:*)",
+      "Bash(./start.sh)"
+    ]
+  }
+}
