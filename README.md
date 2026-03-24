@@ -656,7 +656,7 @@ SecuScan runs as a **single-page web application (SPA)** served from a local Pyt
 
 ### 3.2 Visual Layout
 
-The interface follows a dashboard-style layout optimized for both learning and productivity:
+The interface has been modernized with a high-density, **Neo-Brutalist** design aesthetic optimized for both learning and productivity. This includes thick black borders, hard offset shadows, high-contrast tactical color palettes (Charcoal, Silver, Rag-Red/Amber/Blue/Green), monospaced typography, and massive italicized headers to emulate a professional cybersecurity SOC environment.
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
