@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { getAttackSurface, getDashboardSummary, getFindings } from '../api'
+import { getAttackSurface, getDashboardSummary, getFindings, getAssets } from '../api'
+import { motion, Variants } from 'framer-motion'
+import NetworkMap from '../components/NetworkMap'
 
 type Entry = {
   id: string
@@ -9,257 +11,466 @@ type Entry = {
   risk: string
   source: string
   last_seen: string
+  asset_id?: string
+}
+
+type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
+
+type Finding = {
+    id: string
+    title: string
+    severity: Severity
+    target?: string
+    cvss?: number
+}
+
+type DashboardSummary = {
+    attack_surface_by_category: Record<string, number>
+    total_attack_surface: number
+}
+
+type AttackSurfaceResponse = {
+    entries?: Entry[]
+}
+
+type AssetsResponse = {
+    assets?: Array<Record<string, unknown>>
+}
+
+type FindingsResponse = {
+    findings?: Finding[]
+}
+
+const RISK_LEVELS: Severity[] = ['critical', 'high', 'medium', 'low', 'info']
+const RISK_ORDER: Record<Severity, number> = { critical: 5, high: 4, medium: 3, low: 2, info: 1 }
+
+const RISK_STYLES: Record<Severity, string> = {
+    critical: 'text-rag-red border-rag-red/20 bg-rag-red/5',
+    high: 'text-rag-amber border-rag-amber/20 bg-rag-amber/5',
+    medium: 'text-rag-blue border-rag-blue/20 bg-rag-blue/5',
+    low: 'text-rag-green border-rag-green/20 bg-rag-green/5',
+    info: 'text-silver/70 border-accent-silver/20 bg-accent-silver/5',
+}
+
+const containerVariants: Variants = {
+    hidden: { opacity: 0 },
+    visible: {
+        opacity: 1,
+        transition: {
+            staggerChildren: 0.06,
+            delayChildren: 0.1,
+        },
+    },
+}
+
+const itemVariants: Variants = {
+    hidden: { opacity: 0, y: 10 },
+    visible: {
+        opacity: 1,
+        y: 0,
+        transition: {
+          duration: 0.4,
+          ease: [0.19, 1, 0.22, 1] as any
+        },
+    },
 }
 
 export default function AttackSurface() {
   const [entries, setEntries] = useState<Entry[]>([])
-  const [summary, setSummary] = useState<any>({ attack_surface_by_category: {}, total_attack_surface: 0 })
-  const [findings, setFindings] = useState<any[]>([])
+    const [assets, setAssets] = useState<Array<Record<string, unknown>>>([])
+    const [summary, setSummary] = useState<DashboardSummary>({ attack_surface_by_category: {}, total_attack_surface: 0 })
+    const [findings, setFindings] = useState<Finding[]>([])
   const [selectedCategory, setSelectedCategory] = useState('all')
-  const [selectedRisk, setSelectedRisk] = useState('all')
+    const [selectedRisk, setSelectedRisk] = useState<'all' | Severity>('all')
+    const [sortBy, setSortBy] = useState<'last_seen_desc' | 'last_seen_asc' | 'risk_desc' | 'risk_asc' | 'item_asc' | 'item_desc'>('last_seen_desc')
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
+    const [refreshing, setRefreshing] = useState(false)
 
-  useEffect(() => {
+    const loadData = async (isRefresh = false) => {
+        if (isRefresh) {
+            setRefreshing(true)
+        } else {
+            setLoading(true)
+        }
+
+        try {
+            const [surfaceData, summaryData, findingData, assetData] = await Promise.all([
+                getAttackSurface(),
+                getDashboardSummary(),
+                getFindings(),
+                getAssets(),
+            ])
+
+            const parsedSurface = (surfaceData || {}) as AttackSurfaceResponse
+            const parsedSummary = (summaryData || {}) as DashboardSummary
+            const parsedFindings = (findingData || {}) as FindingsResponse
+            const parsedAssets = (assetData || {}) as AssetsResponse
+
+            setEntries(parsedSurface.entries || [])
+            setAssets(parsedAssets.assets || [])
+            setSummary({
+                attack_surface_by_category: parsedSummary.attack_surface_by_category || {},
+                total_attack_surface: parsedSummary.total_attack_surface || 0,
+            })
+            setFindings(parsedFindings.findings || [])
+            setExpandedCategories((prev) => {
+                if (prev.size > 0) return prev
+                return new Set(Object.keys(parsedSummary.attack_surface_by_category || {}).slice(0, 3))
+            })
+        } finally {
+            setLoading(false)
+            setRefreshing(false)
+        }
+    }
+
+    useEffect(() => {
     setLoading(true)
-    Promise.all([getAttackSurface(), getDashboardSummary(), getFindings()]).then(([surfaceData, summaryData, findingData]: any) => {
-      setEntries(surfaceData.entries || [])
-      setSummary(summaryData || { attack_surface_by_category: {}, total_attack_surface: 0 })
-      setFindings(findingData.findings || [])
-      setExpandedCategories(new Set(Object.keys(summaryData.attack_surface_by_category || {}).slice(0, 3)))
-      setLoading(false)
-    }).catch(() => setLoading(false))
+        loadData()
   }, [])
 
   const categories = useMemo(() => [...new Set(entries.map((entry) => entry.category))], [entries])
-  const filteredEntries = entries.filter((entry) => (selectedCategory === 'all' || entry.category === selectedCategory) && (selectedRisk === 'all' || entry.risk === selectedRisk))
-  const groupedEntries = filteredEntries.reduce((acc, entry) => {
+    const filteredEntries = entries.filter((entry) => {
+        const categoryMatch = selectedCategory === 'all' || entry.category === selectedCategory
+        const riskMatch = selectedRisk === 'all' || entry.risk === selectedRisk
+        return categoryMatch && riskMatch
+    })
+
+    const sortedEntries = useMemo(() => {
+        const list = [...filteredEntries]
+        const toTimestamp = (value: string) => {
+            const ts = new Date(value).getTime()
+            return Number.isNaN(ts) ? 0 : ts
+        }
+        const riskRank = (risk: string) => RISK_ORDER[(RISK_LEVELS.includes(risk as Severity) ? risk : 'info') as Severity]
+
+        list.sort((a, b) => {
+            switch (sortBy) {
+                case 'last_seen_asc':
+                    return toTimestamp(a.last_seen) - toTimestamp(b.last_seen)
+                case 'risk_desc':
+                    return riskRank(b.risk) - riskRank(a.risk)
+                case 'risk_asc':
+                    return riskRank(a.risk) - riskRank(b.risk)
+                case 'item_asc':
+                    return a.item.localeCompare(b.item)
+                case 'item_desc':
+                    return b.item.localeCompare(a.item)
+                case 'last_seen_desc':
+                default:
+                    return toTimestamp(b.last_seen) - toTimestamp(a.last_seen)
+            }
+        })
+
+        return list
+    }, [filteredEntries, sortBy])
+
+  const groupedEntries = sortedEntries.reduce((acc, entry) => {
     acc[entry.category] = acc[entry.category] || []
     acc[entry.category].push(entry)
     return acc
   }, {} as Record<string, Entry[]>)
 
-  const formatDateLong = (dateStr: string) =>
-    new Date(dateStr).toLocaleString('en-US', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }) + ' GMT'
+    const formatDateLong = (dateStr: string) => {
+        const date = new Date(dateStr)
+        if (Number.isNaN(date.getTime())) return 'Unknown'
+        return `${date.toLocaleString('en-US', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false,
+        })} UTC`
+    }
 
-  const riskCounts = {
-    critical: entries.filter((a) => a.risk === 'critical').length,
-    high: entries.filter((a) => a.risk === 'high').length,
-    medium: entries.filter((a) => a.risk === 'medium').length,
-    low: entries.filter((a) => a.risk === 'low').length,
-    info: entries.filter((a) => a.risk === 'info').length,
-  }
+    const riskCounts = RISK_LEVELS.reduce(
+        (acc, risk) => {
+            acc[risk] = entries.filter((entry) => entry.risk === risk).length
+            return acc
+        },
+        { critical: 0, high: 0, medium: 0, low: 0, info: 0 } as Record<Severity, number>
+    )
 
-  const totalEntries = Math.max(entries.length, 1)
+    const topCategory = Object.entries(summary.attack_surface_by_category || {}).sort((a, b) => Number(b[1]) - Number(a[1]))[0]
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-charcoal-dark p-8 lg:p-10">
+                <div className="mx-auto max-w-[1700px] space-y-6 animate-pulse">
+                    <div className="h-8 w-72 rounded bg-charcoal-light/80" />
+                    <div className="h-4 w-96 rounded bg-charcoal-light/80" />
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                        <div className="h-28 rounded-sm bg-charcoal border border-accent-silver/10" />
+                        <div className="h-28 rounded-sm bg-charcoal border border-accent-silver/10" />
+                        <div className="h-28 rounded-sm bg-charcoal border border-accent-silver/10" />
+                        <div className="h-28 rounded-sm bg-charcoal border border-accent-silver/10" />
+                    </div>
+                    <div className="h-80 rounded-sm bg-charcoal border border-accent-silver/10" />
+                </div>
+            </div>
+        )
+    }
 
   return (
-    <div className="min-h-screen flex flex-col scale-in-center">
-      <header className="w-full px-12 py-10 flex justify-between items-center border-b border-accent-silver/10 bg-charcoal-dark/50 backdrop-blur-md sticky top-0 z-40">
-        <div className="flex items-center gap-8">
-            <div className="header-decoration hidden xl:block">
-                <span className="material-symbols-outlined text-accent-silver/30 text-4xl animate-pulse">radar</span>
-            </div>
-            <div>
-              <h1 className="text-3xl font-serif font-light text-silver-bright tracking-tight italic uppercase leading-none">Attack Surface Vector Matrix</h1>
-              <p className="text-[10px] font-light text-silver/40 uppercase tracking-[0.4em] mt-3 italic">Autonomous Signal Interception • Boundary Surveillance • Perimeter Intelligence</p>
-            </div>
-        </div>
-        
-        <div className="flex items-center gap-12">
-           <div className="text-right border-l border-accent-silver/10 pl-8">
-                <span className="text-[10px] font-medium text-silver/40 uppercase tracking-widest block mb-1">Monitored Vectors</span>
-                <span className="text-xl font-light text-silver-bright font-mono">{entries.length.toString().padStart(3, '0')}</span>
-            </div>
-            <div className="flex items-center gap-4">
-               <button className="material-symbols-outlined text-silver/20 hover:text-silver-bright transition-colors p-2 border border-accent-silver/10 rounded-full">sync</button>
-            </div>
-        </div>
-      </header>
+        <div className="min-h-screen bg-charcoal-dark">
+            <motion.main
+                variants={containerVariants}
+                initial="hidden"
+                animate="visible"
+                className="mx-auto max-w-[1700px] px-6 py-8 lg:px-10 lg:py-10 space-y-8"
+            >
+                <motion.header variants={itemVariants} className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between pb-8">
+                    <div>
+                        <div className="flex items-center gap-3 mb-4">
+                          <span className="w-10 h-px bg-accent-silver/20"></span>
+                          <p className="text-xs font-bold text-silver/30 uppercase tracking-[0.4em]">Section II: External Exposure Control Plane</p>
+                        </div>
+                        <h1
+                            className="text-4xl lg:text-5xl font-light tracking-tight text-silver-bright italic"
+                            style={{ fontFamily: 'var(--font-display)' }}
+                        >
+                            Attack <span className="font-black not-italic uppercase tracking-tighter">Surface</span>
+                        </h1>
+                        <p className="mt-4 text-sm text-silver/50 uppercase tracking-[0.15em] max-w-2xl leading-relaxed">
+                            Monitor exposed assets, prioritize vectors, and inspect external visibility drift across your infrastructure footprint.
+                        </p>
+                    </div>
 
-      <main className="flex-1 p-12 space-y-12 max-w-[1600px] mx-auto w-full animate-in fade-in duration-1000">
-        
-        {/* Risk Distribution Stripe */}
-        <section className="space-y-6">
-            <div className="flex items-center gap-6">
-                <h3 className="text-[10px] font-bold uppercase tracking-[0.4em] text-silver/30 italic">Threat Vector Distribution</h3>
-                <div className="h-px flex-1 bg-accent-silver/5"></div>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-px bg-accent-silver/10 executive-border overflow-hidden rounded-sm shadow-xl">
-                {[
-                    { label: 'Critical Risks', val: riskCounts.critical, color: 'text-rag-red', bg: 'bg-rag-red' },
-                    { label: 'High Threats', val: riskCounts.high, color: 'text-rag-amber', bg: 'bg-rag-amber' },
-                    { label: 'Medium Exposure', val: riskCounts.medium, color: 'text-rag-blue', bg: 'bg-rag-blue' },
-                    { label: 'Low/Info Signals', val: riskCounts.low + riskCounts.info, color: 'text-silver/40', bg: 'bg-silver/40' },
-                    { label: 'Managed Total', val: entries.length, color: 'text-silver-bright', bg: 'bg-silver-bright' },
-                ].map((stat, i) => (
-                    <div key={i} className="bg-charcoal p-8 space-y-2 group transition-all hover:bg-charcoal-light">
-                        <span className="text-[9px] font-bold text-silver/20 uppercase tracking-widest block group-hover:text-silver/40">{stat.label}</span>
-                        <div className="flex items-center gap-4">
-                            <span className={`text-3xl font-serif font-light ${stat.color}`}>{stat.val}</span>
-                            <div className="flex-1 h-0.5 bg-accent-silver/5 relative overflow-hidden">
-                                <div className={`absolute inset-y-0 left-0 ${stat.bg} opacity-20`} style={{ width: `${(stat.val / totalEntries) * 100}%` }}></div>
-                            </div>
+                    <button
+                        onClick={() => loadData(true)}
+                        disabled={refreshing}
+                        className="inline-flex items-center gap-2 border border-accent-silver/20 bg-charcoal px-5 py-2.5 text-[10px] text-silver-bright uppercase tracking-[0.3em] hover:border-silver/40 hover:bg-charcoal-light disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+                    >
+                        <span className={`material-symbols-outlined text-base ${refreshing ? 'animate-spin' : ''}`}>refresh</span>
+                        {refreshing ? 'Refreshing...' : 'Sync Snapshot'}
+                    </button>
+                </motion.header>
+
+                <motion.section variants={itemVariants} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-px bg-accent-silver/10 border border-accent-silver/5">
+                    <div className="bg-charcoal px-8 py-8 border-l border-rag-blue/20">
+                        <div className="text-xs font-bold text-silver/30 uppercase tracking-[0.2em] mb-4">Visible Entries</div>
+                        <div className="text-5xl font-light text-silver-bright font-mono italic">{entries.length}</div>
+                    </div>
+                    <div className="bg-charcoal px-8 py-8 border-l border-rag-red/20">
+                        <div className="text-xs font-bold text-silver/30 uppercase tracking-[0.2em] mb-4">Critical + High</div>
+                        <div className="text-5xl font-light text-rag-red font-mono italic">{riskCounts.critical + riskCounts.high}</div>
+                    </div>
+                    <div className="bg-charcoal px-8 py-8 border-l border-accent-silver/20">
+                        <div className="text-xs font-bold text-silver/30 uppercase tracking-[0.2em] mb-4">Asset Coverage</div>
+                        <div className="text-5xl font-light text-silver-bright font-mono italic">{assets.length}</div>
+                    </div>
+                    <div className="bg-charcoal px-8 py-8 border-l border-rag-green/20">
+                        <div className="text-xs font-bold text-silver/30 uppercase tracking-[0.2em] mb-4">Top Category</div>
+                        <div className="text-2xl font-semibold text-silver-bright truncate uppercase tracking-wider">{topCategory?.[0] || 'N/A'}</div>
+                        <div className="text-xs text-silver/40 uppercase tracking-widest mt-2 font-mono">
+                           {topCategory ? `${topCategory[1]} NODES` : 'NO TELEMETRY'}
                         </div>
                     </div>
-                ))}
-            </div>
-        </section>
+                </motion.section>
 
-        <div className="flex flex-col lg:flex-row gap-12 items-stretch py-4">
-            {/* Filter & Inventory Sidebar */}
-            <aside className="w-full lg:w-96 space-y-12 flex-shrink-0">
-                <div className="p-10 bg-charcoal-dark border border-accent-silver/10 rounded-sm space-y-10 relative overflow-hidden group shadow-2xl">
-                     <div className="absolute top-0 right-0 w-32 h-32 opacity-[0.02] -mr-16 -mt-16 pointer-events-none">
-                        <span className="material-symbols-outlined text-[200px]">filter_alt</span>
+                <motion.section variants={itemVariants} className="border border-accent-silver/10 bg-charcoal/80 p-4 lg:p-6 relative overflow-hidden">
+                    <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(circle_at_center,_white_1px,_transparent_1px)] [background-size:20px_20px]" />
+                    <div className="mb-4 flex items-center justify-between">
+                        <h2 className="text-[11px] font-bold text-silver/40 uppercase tracking-[0.35em]">Network Topology</h2>
+                        <span className="text-[10px] text-silver/30 uppercase tracking-widest">Updated from latest asset + discovery signals</span>
                     </div>
-                    
-                    <div className="space-y-8 relative z-10">
-                        <h3 className="text-[11px] font-bold text-silver-bright uppercase tracking-[0.5em] italic flex items-center gap-4">
-                            Selection Logic
-                            <div className="flex-1 h-px bg-accent-silver/10"></div>
-                        </h3>
-                        
-                        <div className="space-y-6">
-                            <div className="space-y-2">
-                                <label className="text-[9px] font-bold text-silver/30 uppercase tracking-widest italic font-mono block">Category Vector</label>
-                                <select 
-                                    className="w-full bg-charcoal border border-accent-silver/10 px-4 py-3 text-[10px] text-silver-bright focus:outline-none focus:border-silver/40 rounded-sm italic font-mono uppercase"
-                                    value={selectedCategory} 
-                                    onChange={(e) => setSelectedCategory(e.target.value)}
-                                >
-                                    <option value="all">ALL_CATEGORIES</option>
-                                    {categories.map((cat) => <option key={cat} value={cat}>{cat.toUpperCase()}</option>)}
-                                </select>
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[9px] font-bold text-silver/30 uppercase tracking-widest italic font-mono block">Risk Spectrum</label>
-                                <select 
-                                    className="w-full bg-charcoal border border-accent-silver/10 px-4 py-3 text-[10px] text-silver-bright focus:outline-none focus:border-silver/40 rounded-sm italic font-mono uppercase"
-                                    value={selectedRisk} 
-                                    onChange={(e) => setSelectedRisk(e.target.value)}
-                                >
-                                    <option value="all">ALL_RISK_LEVELS</option>
-                                    {['critical', 'high', 'medium', 'low', 'info'].map((risk) => <option key={risk} value={risk}>{risk.toUpperCase()}_SIGNALS</option>)}
-                                </select>
+                    <NetworkMap assets={assets} entries={entries} />
+                </motion.section>
+
+                <motion.section variants={itemVariants} className="border border-accent-silver/10 bg-charcoal/80 px-4 py-8 lg:px-10">
+                    <div className="flex flex-wrap items-end gap-6 lg:gap-8">
+                        <div>
+                            <label className="mb-3 block text-xs font-bold uppercase tracking-[0.2em] text-silver/30">Category</label>
+                            <select
+                                className="min-w-[220px] border border-accent-silver/20 bg-charcoal-dark px-4 py-3 text-sm text-silver-bright uppercase tracking-wider outline-none focus:border-silver/40 transition-colors"
+                                value={selectedCategory}
+                                onChange={(e) => setSelectedCategory(e.target.value)}
+                            >
+                                <option value="all">All categories</option>
+                                {categories.map((cat) => (
+                                    <option key={cat} value={cat}>{cat}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="mb-3 block text-xs font-bold uppercase tracking-[0.2em] text-silver/30">Risk</label>
+                            <select
+                                className="min-w-[220px] border border-accent-silver/20 bg-charcoal-dark px-4 py-3 text-sm text-silver-bright uppercase tracking-wider outline-none focus:border-silver/40 transition-colors"
+                                value={selectedRisk}
+                                onChange={(e) => setSelectedRisk(e.target.value as 'all' | Severity)}
+                            >
+                                <option value="all">All risk levels</option>
+                                {RISK_LEVELS.map((risk) => (
+                                    <option key={risk} value={risk}>{risk}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="mb-3 block text-xs font-bold uppercase tracking-[0.2em] text-silver/30">Sort</label>
+                            <select
+                                className="min-w-[250px] border border-accent-silver/20 bg-charcoal-dark px-4 py-3 text-sm text-silver-bright uppercase tracking-wider outline-none focus:border-silver/40 transition-colors"
+                                value={sortBy}
+                                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                            >
+                                <option value="last_seen_desc">Last Seen: Newest</option>
+                                <option value="last_seen_asc">Last Seen: Oldest</option>
+                                <option value="risk_desc">Risk: High to Low</option>
+                                <option value="risk_asc">Risk: Low to High</option>
+                                <option value="item_asc">Target: A to Z</option>
+                                <option value="item_desc">Target: Z to A</option>
+                            </select>
+                        </div>
+                        <button
+                            className="border border-accent-silver/20 px-6 py-3 text-xs text-silver/70 uppercase tracking-[0.25em] hover:bg-charcoal-light hover:text-silver-bright transition-all"
+                            onClick={() => {
+                                setSelectedCategory('all')
+                                setSelectedRisk('all')
+                                setSortBy('last_seen_desc')
+                            }}
+                        >
+                            Reset
+                        </button>
+                    </div>
+                </motion.section>
+
+                <motion.section variants={itemVariants} className="space-y-4 min-w-0">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <h2 className="text-[11px] font-bold text-silver/40 uppercase tracking-[0.35em]">Entries ({filteredEntries.length})</h2>
+                            <div className="flex items-center gap-2 flex-wrap">
+                                {RISK_LEVELS.map((risk) => (
+                                    <span key={risk} className={`inline-flex rounded border px-2 py-1 text-[10px] uppercase tracking-wider ${RISK_STYLES[risk]}`}>
+                                        {risk}: {riskCounts[risk]}
+                                    </span>
+                                ))}
                             </div>
                         </div>
-                    </div>
 
-                    <div className="space-y-8 pt-6 border-t border-accent-silver/5">
-                        <h3 className="text-[11px] font-bold text-silver-bright uppercase tracking-[0.5em] italic flex items-center gap-4">
-                            Vector Integrity
-                            <div className="flex-1 h-px bg-accent-silver/10"></div>
-                        </h3>
-                         <div className="space-y-6">
-                            {Object.entries(summary.attack_surface_by_category || {}).map(([category, count], i) => (
-                                <div key={i} className="space-y-2 group transition-all">
-                                    <div className="flex justify-between items-baseline font-mono italic">
-                                        <span className="text-[9px] text-silver/20 uppercase tracking-widest group-hover:text-silver-bright/40 transition-colors">{category}</span>
-                                        <span className="text-[10px] text-silver-bright">{String(count)}</span>
-                                    </div>
-                                    <div className="h-1 bg-accent-silver/5 rounded-full overflow-hidden">
-                                        <div className="h-full bg-silver/20 group-hover:bg-rag-blue/40 transition-all" style={{ width: `${(Number(count) / totalEntries) * 100}%` }}></div>
-                                    </div>
+                        {filteredEntries.length === 0 && (
+                            <div className="border border-dashed border-accent-silver/20 bg-charcoal/40 p-10 text-center">
+                                <p className="text-[10px] text-silver/35 uppercase tracking-[0.3em]">No entries match the selected filters.</p>
+                            </div>
+                        )}
+
+                        <div className="space-y-4">
+                            {Object.entries(groupedEntries).map(([category, group]) => (
+                                <div key={category} className="border border-accent-silver/10 bg-charcoal/80 overflow-hidden">
+                                    <button
+                                        className="w-full flex items-center justify-between gap-6 px-6 py-5 border-b border-accent-silver/10 hover:bg-charcoal-light/60 transition-all"
+                                        onClick={() => {
+                                            const next = new Set(expandedCategories)
+                                            if (next.has(category)) {
+                                                next.delete(category)
+                                            } else {
+                                                next.add(category)
+                                            }
+                                            setExpandedCategories(next)
+                                        }}
+                                    >
+                                        <div className="text-left">
+                                            <p className="text-base font-semibold text-silver-bright uppercase tracking-wider">{category}</p>
+                                            <p className="text-xs text-silver/35 uppercase tracking-[0.2em] mt-1 font-mono">{group.length} NODES</p>
+                                        </div>
+                                        <span className={`material-symbols-outlined text-silver/40 transition-transform ${expandedCategories.has(category) ? 'rotate-180' : ''}`}>
+                                            expand_more
+                                        </span>
+                                    </button>
+
+                                    {expandedCategories.has(category) && (
+                                        <div className="divide-y divide-accent-silver/5">
+                                            {group.map((entry) => (
+                                                <div key={entry.id} className="px-6 py-6 grid gap-6 lg:grid-cols-[140px_1fr_200px_240px] lg:items-start bg-charcoal/70 hover:bg-charcoal-light/20 transition-colors">
+                                                    <div>
+                                                        <span className={`inline-flex rounded-sm border px-3 py-1.5 text-xs font-bold uppercase tracking-wider ${RISK_STYLES[(RISK_LEVELS.includes(entry.risk as Severity) ? entry.risk : 'info') as Severity]}`}>
+                                                            {entry.risk}
+                                                        </span>
+                                                    </div>
+
+                                                    <div className="min-w-0">
+                                                        <p className="text-sm font-bold text-silver-bright break-words font-mono tracking-tight">{entry.item}</p>
+                                                        <p className="mt-2 text-sm text-silver/50 leading-relaxed italic">{entry.details}</p>
+                                                    </div>
+
+                                                    <div>
+                                                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-silver/30 mb-1">Source Vector</p>
+                                                        <p className="text-sm text-silver/80 font-mono">{entry.source}</p>
+                                                    </div>
+
+                                                    <div>
+                                                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-silver/30 mb-1">Last Detection</p>
+                                                        <p className="text-sm text-silver/60 font-mono tracking-tighter">{formatDateLong(entry.last_seen)}</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
-                    </div>
-                </div>
+                </motion.section>
 
-                <div className="p-10 space-y-8 border border-dashed border-accent-silver/10 rounded-sm bg-charcoal/5">
-                    <h3 className="text-[10px] font-bold text-silver-bright uppercase tracking-[0.3em] italic">Vulnerability Correlation</h3>
-                    <div className="space-y-4">
-                        {findings.slice(0, 3).map((finding) => (
-                            <div key={finding.id} className="p-4 bg-charcoal border border-accent-silver/5 hover:border-accent-silver/20 transition-all rounded-sm space-y-2">
-                                <div className="flex justify-between items-center">
-                                    <span className={`text-[8px] font-bold uppercase tracking-widest px-2 py-0.5 border ${
-                                        finding.severity === 'critical' ? 'text-rag-red border-rag-red/20 bg-rag-red/5' : 'text-rag-amber border-rag-amber/20 bg-rag-amber/5'
-                                    }`}>{finding.severity}</span>
-                                    {finding.cvss && <span className="text-[9px] font-mono text-silver/20 italic">CVSS {finding.cvss}</span>}
-                                </div>
-                                <div className="text-[10px] font-bold text-silver-bright uppercase tracking-tight line-clamp-1">{finding.title}</div>
-                                <div className="text-[9px] text-silver/30 italic font-mono truncate">{finding.target}</div>
-                            </div>
-                        ))}
-                    </div>
-                    <button className="w-full py-4 text-[9px] text-silver/40 uppercase tracking-[0.4em] hover:text-white transition-all italic border-t border-accent-silver/10 pt-8">Request Master Correlation Briefing</button>
-                </div>
-            </aside>
-
-            {/* Attack Surface Explorer Matrix */}
-            <div className="flex-1 space-y-8 min-w-0 pb-20">
-                <div className="flex justify-between items-baseline mb-2">
-                    <div className="flex items-center gap-4">
-                        <h2 className="text-[10px] font-bold uppercase tracking-[0.4em] text-silver/30 italic">Target Discovery Ledger ({filteredEntries.length})</h2>
-                        <div className="h-px w-24 bg-accent-silver/10"></div>
-                    </div>
-                    <span className="text-[8px] text-silver/20 uppercase tracking-widest italic font-mono">Status: ACTIVE_SURVEILLANCE</span>
-                </div>
-                
-                <div className="space-y-12">
-                     {Object.entries(groupedEntries).map(([category, group]) => (
-                        <div key={category} className="space-y-6">
-                            <button 
-                                className="w-full flex justify-between items-center py-4 px-8 bg-charcoal border-l-4 border-l-rag-blue border-y border-r border-accent-silver/10 group hover:border-accent-silver/30 transition-all"
-                                onClick={() => {
-                                    const next = new Set(expandedCategories)
-                                    next.has(category) ? next.delete(category) : next.add(category)
-                                    setExpandedCategories(next)
-                                }}
-                            >
-                                <div className="flex items-baseline gap-6">
-                                    <span className="text-xs font-black text-silver-bright uppercase tracking-[0.3em] font-mono italic">{category}</span>
-                                    <span className="text-[10px] text-silver/20 font-mono italic">[{group.length.toString().padStart(2, '0')}_VECTOR_NODES]</span>
-                                </div>
-                                <span className={`material-symbols-outlined text-silver/20 group-hover:text-silver-bright transition-all duration-300 ${expandedCategories.has(category) ? 'rotate-180' : ''}`}>expand_more</span>
-                            </button>
-
-                            {expandedCategories.has(category) && (
-                                <div className="grid grid-cols-1 gap-px bg-accent-silver/10 executive-border overflow-hidden rounded-sm shadow-2xl animate-in slide-in-from-top-4 duration-500">
-                                    {group.map((entry) => (
-                                        <div key={entry.id} className="p-8 bg-charcoal hover:bg-charcoal-light transition-all flex flex-col md:flex-row gap-8 items-start md:items-center relative group">
-                                            <div className="absolute left-0 top-0 bottom-0 w-1 bg-rag-blue/0 group-hover:bg-rag-blue transition-all"></div>
-                                            
-                                            <div className="w-32 flex-shrink-0">
-                                                <span className={`text-[9px] font-bold uppercase tracking-widest px-3 py-1 border block text-center ${
-                                                    entry.risk === 'critical' ? 'text-rag-red border-rag-red/20 bg-rag-red/5' : 
-                                                    entry.risk === 'high' ? 'text-rag-amber border-rag-amber/20 bg-rag-amber/5' : 
-                                                    'text-rag-blue border-rag-blue/20 bg-rag-blue/5'
-                                                }`}>{entry.risk}</span>
-                                            </div>
-
-                                            <div className="flex-1 space-y-2">
-                                                <div className="text-sm font-bold text-silver-bright font-mono italic tracking-tight uppercase group-hover:text-rag-blue transition-colors">{entry.item}</div>
-                                                <div className="text-[10px] text-silver/40 font-mono leading-relaxed italic">{entry.details}</div>
-                                            </div>
-
-                                            <div className="flex gap-12 items-center text-right shrink-0">
-                                                <div className="space-y-1">
-                                                    <span className="text-[8px] text-silver/20 uppercase tracking-widest block font-mono">Vector Source</span>
-                                                    <span className="text-[10px] text-silver-bright uppercase font-bold italic">{entry.source}</span>
-                                                </div>
-                                                <div className="space-y-1 w-40">
-                                                    <span className="text-[8px] text-silver/20 uppercase tracking-widest block font-mono">Last Intercept</span>
-                                                    <span className="text-[10px] text-silver/40 font-mono italic">{formatDateLong(entry.last_seen)}</span>
-                                                </div>
-                                            </div>
+                <motion.section variants={itemVariants} className="grid grid-cols-1 xl:grid-cols-2 gap-px bg-accent-silver/5">
+                    <div className="border border-accent-silver/10 bg-charcoal/40 p-10 space-y-8">
+                        <div className="flex items-center gap-4">
+                            <span className="w-1.5 h-6 bg-rag-blue/50"></span>
+                            <h3 className="text-sm font-bold text-silver/40 uppercase tracking-[0.4em]">Infrastructure Distribution Matrix</h3>
+                        </div>
+                        <div className="space-y-6">
+                            {Object.entries(summary.attack_surface_by_category || {}).sort((a,b) => b[1] - a[1]).map(([category, count]) => {
+                                const percent = Math.round((Number(count) / Math.max(entries.length, 1)) * 100)
+                                return (
+                                    <div key={category} className="group cursor-default">
+                                        <div className="mb-3 flex items-end justify-between text-xs font-bold text-silver/50 uppercase tracking-[0.2em] group-hover:text-silver-bright transition-colors">
+                                            <span>{category}</span>
+                                            <span className="font-mono text-silver-bright/40">{count} NODES / {percent}%</span>
                                         </div>
-                                    ))}
+                                        <div className="h-1 bg-accent-silver/5 border border-white/5 overflow-hidden">
+                                            <motion.div 
+                                                initial={{ width: 0 }}
+                                                animate={{ width: `${percent}%` }}
+                                                transition={{ duration: 1, ease: [0.19, 1, 0.22, 1] }}
+                                                className="h-full bg-rag-blue/60 group-hover:bg-rag-blue transition-colors"
+                                            />
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </div>
+
+                    <div className="border border-accent-silver/10 bg-charcoal/40 p-10 space-y-8">
+                        <div className="flex items-center gap-4">
+                            <span className="w-1.5 h-6 bg-rag-red/50"></span>
+                            <h3 className="text-sm font-bold text-silver/40 uppercase tracking-[0.4em]">High-Priority Surface Findings</h3>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {findings.slice(0, 4).sort((a,b) => (RISK_ORDER[b.severity] || 0) - (RISK_ORDER[a.severity] || 0)).map((finding) => (
+                                <div key={finding.id} className="border border-accent-silver/10 bg-charcoal-dark p-5 group hover:bg-charcoal/60 transition-all">
+                                    <div className="mb-4 flex items-center justify-between gap-4">
+                                        <span className={`inline-flex rounded-sm border px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest ${RISK_STYLES[finding.severity]}`}>
+                                            {finding.severity}
+                                        </span>
+                                        {typeof finding.cvss === 'number' && (
+                                            <span className="text-[10px] font-mono text-silver/20 uppercase tracking-widest">CVSS {finding.cvss.toFixed(1)}</span>
+                                        )}
+                                    </div>
+                                    <p className="text-sm font-bold text-silver-bright line-clamp-2 tracking-tight uppercase mb-3" style={{ fontFamily: 'var(--font-display)' }}>{finding.title}</p>
+                                    <div className="flex items-center gap-2 pt-2 border-t border-white/5">
+                                        <span className="material-symbols-outlined text-xs text-silver/20">target</span>
+                                        <p className="text-[10px] text-silver/40 uppercase tracking-wider truncate font-mono">{finding.target || 'INTERNAL_ENCLAVE'}</p>
+                                    </div>
+                                </div>
+                            ))}
+
+                            {findings.length === 0 && (
+                                <div className="col-span-full py-12 text-center border border-dashed border-accent-silver/10">
+                                    <p className="text-xs text-silver/20 uppercase tracking-[0.4em] font-mono">No active findings detected in surface probe</p>
                                 </div>
                             )}
                         </div>
-                    ))}
-                </div>
-
-                {entries.length === 0 && (
-                    <div className="p-20 bg-charcoal border border-dashed border-accent-silver/10 rounded-sm text-center space-y-6">
-                        <span className="material-symbols-outlined text-silver/5 text-6xl">radar</span>
-                        <div className="text-[10px] text-silver/10 uppercase tracking-[0.5em] italic">No attack surface records stored in secure enclave.</div>
                     </div>
-                )}
-            </div>
+                </motion.section>
+            </motion.main>
         </div>
-      </main>
-    </div>
   )
 }
