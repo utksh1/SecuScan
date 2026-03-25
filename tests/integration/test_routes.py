@@ -1,7 +1,7 @@
 import time
 from unittest.mock import patch
 
-from models import TaskStatus
+from backend.secuscan.models import TaskStatus
 
 
 def test_health_check(test_client):
@@ -21,11 +21,17 @@ def test_list_plugins(test_client):
     assert "plugins" in data
     assert isinstance(data["plugins"], list)
     assert data["total"] >= 0
+    if data["plugins"]:
+        first = data["plugins"][0]
+        assert "requires_consent" in first
+        assert "availability" in first
+        assert "runnable" in first["availability"]
+        assert "missing_binaries" in first["availability"]
 
 
 def test_start_task(test_client):
     """Test starting a task with a mocked executor."""
-    with patch("executor.TaskExecutor._execute_command") as mock_exec:
+    with patch("backend.secuscan.executor.TaskExecutor._execute_command") as mock_exec:
         mock_exec.return_value = ("Mocked successful output", 0)
 
         payload = {

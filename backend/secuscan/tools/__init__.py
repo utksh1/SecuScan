@@ -1,2 +1,0 @@
-# Tool execution modules namespace
-

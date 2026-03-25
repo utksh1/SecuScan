@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { API_BASE } from '../api'
+import { routePath } from '../routes'
 
 interface Task {
     task_id: string
@@ -189,7 +190,7 @@ export default function History() {
                                                 <div className="text-left xl:text-right">
                                                     <p className="text-[8px] font-black uppercase text-silver/20 tracking-[0.3em] mb-1 italic">Historical_Execution</p>
                                                     <p className="text-xs font-mono text-silver-bright/80 uppercase">
-                                                        {new Date(task.created_at).toLocaleDateString()} // {new Date(task.created_at).toLocaleTimeString([], { hour12: false })}
+                                                        {new Date(task.created_at).toLocaleDateString([], { timeZone: 'Asia/Kolkata' })} // {new Date(task.created_at).toLocaleTimeString([], { hour12: false, timeZone: 'Asia/Kolkata' })} IST
                                                     </p>
                                                 </div>
                                                 {task.duration_seconds && (
@@ -227,11 +228,11 @@ export default function History() {
                                                             <div className="grid grid-cols-2 gap-4">
                                                                 <div className="space-y-1">
                                                                     <span className="text-[8px] text-silver/20 uppercase font-black tracking-widest">In_Lock</span>
-                                                                    <span className="text-[10px] font-mono text-silver-bright block">{task.started_at ? new Date(task.started_at).toLocaleTimeString([], { hour12: false }) : 'PENDING'}</span>
+                                                                    <span className="text-[10px] font-mono text-silver-bright block">{task.started_at ? `${new Date(task.started_at).toLocaleTimeString([], { hour12: false, timeZone: 'Asia/Kolkata' })} IST` : 'PENDING'}</span>
                                                                 </div>
                                                                 <div className="space-y-1">
                                                                     <span className="text-[8px] text-silver/20 uppercase font-black tracking-widest">Release</span>
-                                                                    <span className="text-[10px] font-mono text-silver-bright block">{task.completed_at ? new Date(task.completed_at).toLocaleTimeString([], { hour12: false }) : 'N/A'}</span>
+                                                                    <span className="text-[10px] font-mono text-silver-bright block">{task.completed_at ? `${new Date(task.completed_at).toLocaleTimeString([], { hour12: false, timeZone: 'Asia/Kolkata' })} IST` : 'N/A'}</span>
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -241,7 +242,7 @@ export default function History() {
                                                                 className="bg-rag-blue text-black px-8 py-4 text-[10px] font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3 group/btn italic"
                                                                 onClick={(e) => {
                                                                     e.stopPropagation()
-                                                                    navigate(`/task/${task.task_id}`)
+                                                                    navigate(routePath.task(task.task_id))
                                                                 }}
                                                             >
                                                                 Open_Deep_Brief

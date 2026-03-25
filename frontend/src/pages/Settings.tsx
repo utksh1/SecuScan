@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useTheme } from '../components/ThemeContext'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -15,7 +16,7 @@ const itemVariants = {
 }
 
 export default function Settings() {
-    const [theme, setTheme] = useState('dark')
+    const { theme, setTheme } = useTheme()
     const [sessionTimeout, setSessionTimeout] = useState('30')
     const [notifications, setNotifications] = useState({
         scanComplete: true,
@@ -82,8 +83,8 @@ export default function Settings() {
                                     <label className="text-[10px] font-black text-silver-bright uppercase tracking-widest block italic">Visual Spectrum</label>
                                     <p className="text-[10px] text-silver/40 uppercase font-bold italic mb-6">Select primary rendering engine</p>
                                 </div>
-                                <div className="grid grid-cols-3 gap-4">
-                                    {['dark', 'light', 'system'].map(t => (
+                                <div className="grid grid-cols-2 gap-4">
+                                    {(['dark', 'light'] as const).map(t => (
                                         <button 
                                             key={t}
                                             onClick={() => setTheme(t)}

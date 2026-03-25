@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: '127.0.0.1',
-    port: 3000,
+    port: 5173,
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8000',
@@ -18,6 +18,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
     globals: true,
+    pool: 'threads',
+    maxWorkers: 1,
     exclude: ['node_modules', 'dist', 'e2e/**'],
   }
 })

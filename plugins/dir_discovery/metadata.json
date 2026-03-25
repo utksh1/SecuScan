@@ -33,7 +33,7 @@
     "--if:max_depth:then:-recursion-depth",
     "--if:max_depth:then:{max_depth}",
     "-o",
-    "/tmp/output.json",
+    "-",
     "-of",
     "json"
   ],
@@ -158,7 +158,7 @@
   },
   "output": {
     "format": "json",
-    "parser": "builtin_dir_discovery"
+    "parser": "custom"
   },
   "safety": {
     "level": "intrusive",

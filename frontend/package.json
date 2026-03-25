@@ -7,8 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1 --port 8080",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "NODE_OPTIONS=--max-old-space-size=8192 vitest run",
+    "test:watch": "NODE_OPTIONS=--max-old-space-size=8192 vitest",
+    "quality": "node quality-gate.cjs",
+    "quality:full": "npm run quality && npm run test",
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui"
   },

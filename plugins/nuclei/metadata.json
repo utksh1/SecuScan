@@ -11,14 +11,10 @@
   },
   "license": "MIT",
   "icon": "🧬",
-
   "engine": {
     "type": "cli",
     "binary": "nuclei"
   },
-
-  "docker_image": "projectdiscovery/nuclei:latest",
-
   "command_template": [
     "nuclei",
     "-u",
@@ -27,7 +23,8 @@
     "--if:templates:then:{templates}",
     "--if:severity:then:-s",
     "--if:severity:then:{severity}",
-    "-nc"
+    "-nc",
+    "-json"
   ],
 
   "fields": [
@@ -86,8 +83,8 @@
   },
 
   "output": {
-    "format": "text",
-    "parser": "builtin_nuclei"
+    "format": "json",
+    "parser": "custom"
   },
 
   "safety": {

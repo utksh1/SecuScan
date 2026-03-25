@@ -1,0 +1,91 @@
+{
+  "id": "subdomain_discovery",
+  "name": "Subdomain Discovery",
+  "version": "1.0.0",
+  "description": "Enumerate subdomains using passive sources",
+  "long_description": "Subfinder is a subdomain discovery tool that returns valid subdomains for websites by using passive online sources. It has a simple modular architecture and is optimized for speed.",
+  "category": "recon",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83c\udf10",
+  "engine": {
+    "type": "cli",
+    "binary": "subfinder"
+  },
+  "command_template": [
+    "subfinder",
+    "-d",
+    "{target}",
+    "-silent",
+    "--if:all:then:-all",
+    "--if:threads:then:-t:{threads}"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Domain",
+      "type": "string",
+      "required": true,
+      "placeholder": "example.com",
+      "validation": {
+        "pattern": "^[a-zA-Z0-9.-]+$",
+        "message": "Must be a valid domain"
+      },
+      "help": "The root domain to enumerate subdomains for."
+    },
+    {
+      "id": "all",
+      "label": "Use All Sources",
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "help": "Use all sources for enumeration (slower but more comprehensive)"
+    },
+    {
+      "id": "threads",
+      "label": "Threads",
+      "type": "integer",
+      "required": false,
+      "default": 10,
+      "help": "Number of concurrent threads"
+    }
+  ],
+  "presets": {
+    "quick": {
+      "all": false,
+      "threads": 10
+    },
+    "comprehensive": {
+      "all": true,
+      "threads": 20
+    }
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": false,
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "learning": {
+    "difficulty": "beginner",
+    "estimated_duration": "1-3 minutes",
+    "tutorial_url": "https://docs.secuscan.local/plugins/subdomain_discovery"
+  },
+  "dependencies": {
+    "binaries": [
+      "subfinder"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  },
+  "docker_image": "projectdiscovery/subfinder:latest"
+}

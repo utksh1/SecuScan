@@ -11,35 +11,44 @@ import Reports from './pages/Reports'
 import Settings from './pages/Settings'
 import History from './pages/History'
 import TaskDetails from './pages/TaskDetails'
-import CompareTasks from './pages/CompareTasks'
 import Login from './pages/Login'
 import { ThemeProvider } from './components/ThemeContext'
 import { ToastProvider, ToastContainer } from './components/ToastContext'
+import { I18nProvider } from './components/I18nContext'
+import { routes } from './routes'
+
+export function AppRoutes() {
+  return (
+    <Routes>
+      <Route path={routes.dashboard} element={<Dashboard />} />
+      <Route path={routes.login} element={<Login />} />
+      <Route path={routes.assets} element={<Assets />} />
+      <Route path={routes.scans} element={<Scanner />} />
+      <Route path={routes.scanTool} element={<ToolConfig />} />
+      <Route path={routes.findings} element={<Findings />} />
+      <Route path={routes.attackSurface} element={<AttackSurface />} />
+      <Route path={routes.reports} element={<Reports />} />
+      <Route path={routes.settings} element={<Settings />} />
+      <Route path={routes.history} element={<History />} />
+      <Route path={routes.task} element={<TaskDetails />} />
+      <Route path="*" element={<Navigate to={routes.dashboard} replace />} />
+    </Routes>
+  )
+}
 
 export default function App() {
   return (
     <ThemeProvider>
-      <ToastProvider>
-        <Router>
-          <AppShell>
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/assets" element={<Assets />} />
-              <Route path="/scans" element={<Scanner />} />
-              <Route path="/scans/:toolId" element={<ToolConfig />} />
-              <Route path="/findings" element={<Findings />} />
-              <Route path="/attack-surface" element={<AttackSurface />} />
-              <Route path="/reports" element={<Reports />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/history" element={<History />} />
-              <Route path="/task/:taskId" element={<TaskDetails />} />
-              <Route path="/compare" element={<CompareTasks />} />
-            </Routes>
-          </AppShell>
-        </Router>
-        <ToastContainer />
-      </ToastProvider>
+      <I18nProvider>
+        <ToastProvider>
+          <Router>
+            <AppShell>
+              <AppRoutes />
+            </AppShell>
+          </Router>
+          <ToastContainer />
+        </ToastProvider>
+      </I18nProvider>
     </ThemeProvider>
   )
 }

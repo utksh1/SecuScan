@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { getAttackSurface, getDashboardSummary, getFindings, getAssets } from '../api'
 import { motion, AnimatePresence } from 'framer-motion'
-import NetworkMap from '../components/NetworkMap'
 
 type Entry = {
   id: string
@@ -215,19 +214,7 @@ export default function AttackSurface() {
                 ))}
             </section>
 
-            {/* Network Map Framed */}
-            <section className="bg-charcoal border-4 border-black p-8 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-                    <span className="text-[80px] font-black italic select-none uppercase">TOPOLOGY_BRAVO</span>
-                </div>
-                <div className="flex items-center gap-4 mb-8">
-                    <div className="w-1.5 h-6 bg-rag-red shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"></div>
-                    <h2 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Infrastructure_Topology_Matrix</h2>
-                </div>
-                <div className="bg-charcoal-dark/50 border-2 border-dashed border-silver-bright/5 min-h-[500px]">
-                    <NetworkMap assets={assets} entries={entries} />
-                </div>
-            </section>
+
 
             <div className="grid grid-cols-1 xl:grid-cols-4 gap-12">
                 {/* Filtration Sidebar */}
@@ -347,7 +334,7 @@ export default function AttackSurface() {
                                                        <div className="text-right">
                                                           <p className="text-[8px] font-black uppercase text-silver/20 tracking-[0.3em] mb-1 italic">LAST_DETECTED</p>
                                                           <p className="text-[10px] font-mono text-silver-bright uppercase font-black">
-                                                            {new Date(entry.last_seen).toLocaleDateString()} // {new Date(entry.last_seen).toLocaleTimeString([], { hour12: false })}
+                                                            {new Date(entry.last_seen).toLocaleDateString([], { timeZone: 'Asia/Kolkata' })} // {new Date(entry.last_seen).toLocaleTimeString([], { hour12: false, timeZone: 'Asia/Kolkata' })} IST
                                                           </p>
                                                        </div>
                                                        <button className="bg-charcoal-dark border-4 border-black p-2 text-silver/20 group-hover:text-silver-bright group-hover:bg-black transition-all">

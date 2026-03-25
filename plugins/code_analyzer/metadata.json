@@ -1,0 +1,82 @@
+{
+  "id": "code_analyzer",
+  "name": "Code Analyzer (Bandit)",
+  "version": "1.0.0",
+  "description": "Static analysis for Python code",
+  "long_description": "Bandit is a tool designed to find common security issues in Python code. To do this Bandit processes each file, builds an AST from it, and runs appropriate plugins against the AST nodes.",
+  "category": "code",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udcc3",
+  "engine": {
+    "type": "cli",
+    "binary": "bandit"
+  },
+  "command_template": [
+    "bandit",
+    "-r",
+    "{target}",
+    "-f",
+    "json",
+    "-q",
+    "--if:level:then:-{level}"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Source Path",
+      "type": "string",
+      "required": true,
+      "placeholder": "/path/to/python_file_or_dir",
+      "help": "Absolute path to the Python file or directory to scan."
+    },
+    {
+      "id": "level",
+      "label": "Minimum Severity",
+      "type": "select",
+      "required": false,
+      "default": "l",
+      "options": [
+        {"value": "l", "label": "Low"},
+        {"value": "m", "label": "Medium"},
+        {"value": "h", "label": "High"}
+      ],
+      "help": "Report results at or above this severity level."
+    }
+  ],
+  "presets": {
+    "default": {
+      "level": "l"
+    }
+  },
+  "output": {
+    "format": "json",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": false,
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "learning": {
+    "difficulty": "beginner",
+    "estimated_duration": "1-3 minutes",
+    "tutorial_url": "https://docs.secuscan.local/plugins/code_analyzer"
+  },
+  "dependencies": {
+    "binaries": [
+      "bandit"
+    ],
+    "python_packages": [
+      "bandit"
+    ],
+    "system_packages": []
+  },
+  "docker_image": "pyfound/bandit:latest"
+}

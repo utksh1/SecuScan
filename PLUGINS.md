@@ -1,267 +1,207 @@
-# SecuScan MVP Plugins - Complete ✅
+# SecuScan Plugin Directory
 
-## All 5 MVP Plugins Implemented
-
-### 1. 🌐 HTTP Inspector
-**Status:** ✅ Complete  
-**File:** `plugins/http_inspector/metadata.json`
-
-- **Purpose:** Inspect HTTP/HTTPS endpoints for headers, cookies, and TLS configuration
-- **Safety Level:** Safe (read-only)
-- **Presets:** 2 (quick, full)
-- **Fields:** 3 (url, follow_redirects, timeout)
-- **Rate Limit:** 100/hour, max 5 concurrent
-- **Dependencies:** curl
-
-**Use Cases:**
-- Validate URL availability
-- Examine response headers
-- Check security headers (HSTS, CSP, etc.)
-- Inspect TLS configuration
+> **14 Plugins** across 3 safety tiers — Last synced: 2026-03-25
 
 ---
 
-### 2. 🔍 Nmap
-**Status:** ✅ Complete  
-**File:** `plugins/nmap/metadata.json`
+## Network Reconnaissance
 
-- **Purpose:** Network discovery and port scanning
-- **Safety Level:** Safe (with aggressive scan warnings)
-- **Presets:** 5 (quick, top100, top1000, service_fingerprint, comprehensive)
-- **Fields:** 8 (target, preset, ports, scan_type, service_detection, os_detection, timeout, safe_mode)
-- **Rate Limit:** 10/hour, max 2 concurrent
-- **Dependencies:** nmap
+### 1. 🔍 Nmap — Network Discovery & Port Scanning
+**ID:** `nmap` · **Safety:** Safe · **File:** `plugins/nmap/metadata.json`
 
-**Presets:**
-- **Quick:** Top 100 ports, fast scan
-- **Top 100:** Common services, safe mode
-- **Top 1000:** Extended coverage with service detection
-- **Service Fingerprint:** Version detection, no safe mode
-- **Comprehensive:** Full port range + OS detection (Advanced)
+- **Presets:** 5 — Quick, Top-100, Top-1000, Service Fingerprint, Comprehensive
+- **Fields:** 8 — target, preset, ports, scan_type, service_detection, os_detection, timeout, safe_mode
+- **Rate Limit:** 10/hr, max 2 concurrent
+- **Dependency:** `nmap`
 
-**Scan Types:**
-- SYN Scan (stealth)
-- Connect Scan
-- UDP Scan
+| Preset | Ports | Timing | Risk |
+|--------|-------|--------|------|
+| Quick | Top 100 | T3 | Low |
+| Top 100 | Top 100 (safe) | T3 | Low |
+| Top 1000 | Top 1000 + sV | T3 | Low |
+| Service Fingerprint | Top 1000 + sV/sC | T4 | Medium |
+| Comprehensive | Full range + OS | T4 | High ⚠️ |
 
 ---
 
-### 3. 🔐 TLS Inspector
-**Status:** ✅ Complete  
-**File:** `plugins/tls_inspector/metadata.json`
+### 2. 🌍 Subdomain Discovery — Passive Enumeration
+**ID:** `subdomain_discovery` · **Safety:** Safe · **File:** `plugins/subdomain_discovery/metadata.json`
 
-- **Purpose:** Examine TLS/SSL certificates and cipher configurations
-- **Safety Level:** Safe (passive observation)
-- **Presets:** 3 (quick, full, custom_port)
-- **Fields:** 7 (host, port, hostname, show_chain, check_ciphers, check_protocols, timeout)
-- **Rate Limit:** 50/hour, max 3 concurrent
-- **Dependencies:** openssl
+- **Presets:** 2 — Quick, Comprehensive
+- **Fields:** 2 — target, sources
+- **Rate Limit:** 20/hr, max 1 concurrent
+- **Dependency:** `subfinder`
 
-**Features:**
-- Certificate validity checking
-- Certificate chain analysis
-- Cipher suite enumeration
-- Protocol version testing (SSLv2, SSLv3, TLS 1.0-1.3)
-- Expiry date warnings
+**Capabilities:** Identifies subdomains using passive sources (Censys, Shodan, etc.) without direct interaction.
 
 ---
 
-### 4. 📂 Directory Discovery
-**Status:** ✅ Complete  
-**File:** `plugins/dir_discovery/metadata.json`
+### 3. 🛰️ Scapy Recon — Advanced Network Probing
+**ID:** `scapy_recon` · **Safety:** Safe · **File:** `plugins/scapy_recon/metadata.json`
 
-- **Purpose:** Discover hidden directories and files on web servers
-- **Safety Level:** Intrusive (generates significant traffic)
-- **Presets:** 3 (quick, standard, deep)
-- **Fields:** 9 (base_url, wordlist, extensions, threads, delay_ms, match_codes, recursive, max_depth, timeout)
-- **Rate Limit:** 5/hour, max 1 concurrent
-- **Dependencies:** ffuf (or similar)
-
-**Wordlists:**
-- **Small:** 108 entries (included) - 1-2 min
-- **Medium:** ~5,000 entries (external) - 5-10 min
-- **Large:** ~50,000 entries (external) - 30+ min
-
-**Presets:**
-- **Quick:** Small wordlist, polite (100ms delay)
-- **Standard:** Medium wordlist, balanced (50ms delay)
-- **Deep:** Large wordlist + extensions + recursive (10ms delay)
-
-**Safety Features:**
-- Rate limiting between requests
-- Configurable thread count
-- Delay controls to prevent server overload
+- **Presets:** 2 — ARP Ping, ICMP Echo
+- **Fields:** 3 — target, timeout, interface
+- **Rate Limit:** 10/hr, max 1 concurrent
+- **Dependency:** `scapy` (Python)
 
 ---
 
-### 5. 🔎 Nikto
-**Status:** ✅ Complete  
-**File:** `plugins/nikto/metadata.json`
+### 4. 🕵️ WHOIS Lookup — Domain Intelligence
+**ID:** `whois_lookup` · **Safety:** Safe · **File:** `plugins/whois_lookup/metadata.json`
 
-- **Purpose:** Web server vulnerability scanner
-- **Safety Level:** Intrusive (can trigger alerts)
-- **Presets:** 3 (passive, standard, active)
-- **Fields:** 7 (target, preset, check_categories, timeout, safe_mode, ssl_check, follow_redirects)
-- **Rate Limit:** 3/hour, max 1 concurrent
-- **Dependencies:** nikto, perl
+- **Presets:** 1 — Default
+- **Fields:** 1 — target
+- **Rate Limit:** 50/hr, max 2 concurrent
+- **Dependency:** `whois`
 
-**Check Categories:**
-- Security Headers
-- SSL/TLS Configuration
-- HTTP Methods
-- Sensitive Paths
-- Software Versions
-- Injection Tests (active mode only)
+---
 
-**Scan Modes:**
-- **Passive:** Headers, SSL, versions only
-- **Standard:** + Methods and paths checks
-- **Active:** + Injection and exploit tests ⚠️
+### 5. 📦 DNS Enumeration — Record Discovery
+**ID:** `dns_enum` · **Safety:** Safe · **File:** `plugins/dns_enum/metadata.json`
 
-**Warning:** Active mode may trigger IDS/IPS alerts and attempt exploit checks.
+- **Presets:** 2 — Standard, Zone Transfer
+- **Fields:** 2 — target, type
+- **Rate Limit:** 30/hr, max 1 concurrent
+- **Dependency:** `dnsrecon`
+
+---
+
+## Web Reconnaissance
+
+### 6. 🌐 HTTP Inspector — Endpoint Analysis
+**ID:** `http_inspector` · **Safety:** Safe · **File:** `plugins/http_inspector/metadata.json`
+
+- **Presets:** 2 — Quick, Full
+- **Fields:** 3 — url, follow_redirects, timeout
+- **Rate Limit:** 100/hr, max 5 concurrent
+- **Dependency:** `curl`
+
+---
+
+### 7. 🔐 TLS Inspector — Certificate & Cipher Analysis
+**ID:** `tls_inspector` · **Safety:** Safe · **File:** `plugins/tls_inspector/metadata.json`
+
+- **Presets:** 3 — Quick, Full, Custom Port
+- **Fields:** 7 — host, port, hostname, show_chain, check_ciphers, check_protocols, timeout
+- **Rate Limit:** 50/hr, max 3 concurrent
+- **Dependency:** `openssl`
+
+---
+
+### 8. 📂 Dir Discovery — Hidden Path Enumeration
+**ID:** `dir_discovery` · **Safety:** Intrusive · **File:** `plugins/dir_discovery/metadata.json`
+
+- **Presets:** 3 — Quick, Standard, Deep
+- **Fields:** 9 — base_url, wordlist, extensions, threads, delay_ms, match_codes, recursive, max_depth, timeout
+- **Rate Limit:** 5/hr, max 1 concurrent
+- **Dependency:** `ffuf`
+
+---
+
+## Code & System Analysis
+
+### 9. 🔑 Secret Scanner — Credential Leak Detection
+**ID:** `secret_scanner` · **Safety:** Safe · **File:** `plugins/secret_scanner/metadata.json`
+
+- **Presets:** 2 — Local Dir, Repo History
+- **Fields:** 2 — target_path, scan_history
+- **Rate Limit:** 10/hr, max 1 concurrent
+- **Dependency:** `gitleaks`
+
+---
+
+### 10. 🛡️ Code Analyzer (Bandit) — Python Static Analysis
+**ID:** `code_analyzer` · **Safety:** Safe · **File:** `plugins/code_analyzer/metadata.json`
+
+- **Presets:** 2 — Standard, Recursive
+- **Fields:** 3 — target_path, recursive, confidence_level
+- **Rate Limit:** 20/hr, max 2 concurrent
+- **Dependency:** `bandit`
+
+---
+
+### 11. 💻 SSH Runner — Remote Command Execution
+**ID:** `ssh_runner` · **Safety:** Intrusive · **File:** `plugins/ssh_runner/metadata.json`
+
+- **Presets:** 2 — Check Uptime, Check Auth Log
+- **Fields:** 3 — target, username, command
+- **Rate Limit:** 5/hr, max 1 concurrent
+- **Dependency:** `ssh`
+
+---
+
+## Web Vulnerability Assessment
+
+### 12. 🔎 Nikto — Web Server Scanner
+**ID:** `nikto` · **Safety:** Intrusive · **File:** `plugins/nikto/metadata.json`
+
+- **Presets:** 3 — Passive, Standard, Active
+- **Fields:** 7 — target, preset, check_categories, timeout, safe_mode, ssl_check, follow_redirects
+- **Rate Limit:** 3/hr, max 1 concurrent
+- **Dependencies:** `nikto`, `perl`
+
+---
+
+### 13. 🧬 Nuclei — Template-Based Vulnerability Scanner
+**ID:** `nuclei` · **Safety:** Intrusive · **File:** `plugins/nuclei/metadata.json`
+
+- **Presets:** 2 — Known CVEs, Full Template Scan
+- **Fields:** 4 — target, preset, templates, severity
+- **Rate Limit:** 10/hr, max 1 concurrent
+- **Dependency:** `nuclei`
+
+---
+
+### 14. 💉 SQLMap — SQL Injection Testing
+**ID:** `sqlmap` · **Safety:** Exploit ⚠️ · **File:** `plugins/sqlmap/metadata.json`
+
+- **Presets:** 2 — Quick (Level 1/Risk 1), Aggressive (Level 5/Risk 3)
+- **Fields:** 5 — url, preset, level, risk, dbs
+- **Rate Limit:** 5/hr, max 1 concurrent
+- **Dependency:** `sqlmap` (Python)
 
 ---
 
 ## Plugin Statistics
 
-| Metric | Count |
+| Metric | Value |
 |--------|-------|
-| **Total Plugins** | 5 |
-| **Safe Level** | 3 (HTTP, TLS, Nmap) |
-| **Intrusive Level** | 2 (Directory, Nikto) |
-| **Total Presets** | 16 |
-| **Total Fields** | 34 |
-| **Dependencies** | curl, nmap, openssl, ffuf, nikto |
+| **Total Plugins** | 14 |
+| **Safe** | 9 |
+| **Intrusive** | 4 |
+| **Exploit** | 1 |
+| **Total Presets** | ~35 |
+| **Total Fields** | ~60 |
+
+---
 
 ## Safety Classification
 
-### Safe Plugins (3)
-- HTTP Inspector: Read-only requests
-- TLS Inspector: Passive certificate inspection
-- Nmap: Port scanning (with rate limits)
-
-### Intrusive Plugins (2)
-- Directory Discovery: High traffic generation
-- Nikto: Active vulnerability probing
-
-## Usage Examples
-
-### HTTP Inspector - Quick Check
-```json
-{
-  "plugin_id": "http_inspector",
-  "preset": "quick",
-  "inputs": {
-    "url": "https://example.com"
-  },
-  "consent_granted": true
-}
 ```
-
-### Nmap - Service Detection
-```json
-{
-  "plugin_id": "nmap",
-  "preset": "service_fingerprint",
-  "inputs": {
-    "target": "192.168.1.1"
-  },
-  "consent_granted": true
-}
-```
-
-### TLS Inspector - Certificate Check
-```json
-{
-  "plugin_id": "tls_inspector",
-  "preset": "full",
-  "inputs": {
-    "host": "example.com",
-    "port": 443
-  },
-  "consent_granted": true
-}
-```
-
-### Directory Discovery - Quick Scan
-```json
-{
-  "plugin_id": "dir_discovery",
-  "preset": "quick",
-  "inputs": {
-    "base_url": "https://example.com"
-  },
-  "consent_granted": true
-}
-```
-
-### Nikto - Passive Assessment
-```json
-{
-  "plugin_id": "nikto",
-  "preset": "passive",
-  "inputs": {
-    "target": "https://example.com"
-  },
-  "consent_granted": true
-}
+┌────────────────────────────────────────────────────────┐
+│  SAFE (9)         Read-only, passive observation       │
+│  ├─ Nmap             Network Discovery                 │
+│  ├─ HTTP Inspector   Endpoint Analysis                 │
+│  ├─ TLS Inspector    Certificate Analysis              │
+│  ├─ Subdomain Disc.  Passive Enum                      │
+│  ├─ Scapy Recon      Advanced Probing                  │
+│  ├─ WHOIS Lookup     Domain Intel                      │
+│  ├─ DNS Enum         Record Discovery                  │
+│  ├─ Secret Scanner   Leak Detection                    │
+│  └─ Code Analyzer    Bandit (Python)                   │
+├────────────────────────────────────────────────────────┤
+│  INTRUSIVE (4)    Generates significant traffic        │
+│  ├─ Dir Discovery    Hidden Path Enum                  │
+│  ├─ Nikto            Active Probing                    │
+│  ├─ Nuclei           Template Execution                │
+│  └─ SSH Runner       Remote Execution                  │
+├────────────────────────────────────────────────────────┤
+│  EXPLOIT (1)      Can modify target state              │
+│  └─ SQLMap           SQL Injection                     │
+└────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Installation Requirements
-
-Before using these plugins, ensure dependencies are installed:
-
-```bash
-# macOS
-brew install nmap openssl curl perl
-brew install ffuf  # or use dirb/gobuster
-brew install nikto
-
-# Ubuntu/Debian
-sudo apt-get install nmap openssl curl perl
-sudo apt-get install ffuf
-sudo apt-get install nikto
-
-# Verify installations
-nmap --version
-openssl version
-curl --version
-ffuf --version
-nikto -Version
-```
-
----
-
-## Wordlists Setup
-
-The Directory Discovery plugin requires wordlists:
-
-### Included
-- ✅ `wordlists/small.txt` (108 entries)
-
-### Optional (for medium/large scans)
-```bash
-cd wordlists
-git clone https://github.com/danielmiessler/SecLists.git
-ln -s SecLists/Discovery/Web-Content/directory-list-2.3-medium.txt medium.txt
-ln -s SecLists/Discovery/Web-Content/directory-list-2.3-big.txt large.txt
-```
-
----
-
-## Next Steps
-
-All MVP plugins are complete! Next priorities:
-
-1. ✅ **Test each plugin** with the backend API
-2. 📱 **Build Frontend SPA** to provide GUI access
-3. 🧪 **Write Tests** for plugin loading and execution
-4. 📚 **Add Parser Modules** for structured output formatting
-5. 🐳 **Implement Docker Sandboxing** for isolation
-
----
-
-**Last Updated:** 2025-10-29  
-**Status:** All 5 MVP Plugins Complete ✅
+**Last Updated:** 2026-03-25  
+**Status:** 14 Plugins Active (7 MVP + 7 Phase-2 Expanded)

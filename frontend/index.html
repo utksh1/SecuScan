@@ -4,51 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SecuScan | Executive Security Briefing</title>
-    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
     <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@300;400;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-    <script id="tailwind-config">
-        tailwind.config = {
-            darkMode: "class",
-            theme: {
-                extend: {
-                    colors: {
-                        "charcoal-dark": "#0a0a0c",
-                        "charcoal": "#121214",
-                        "charcoal-light": "#1d1d21",
-                        "silver": "#a1a1aa",
-                        "silver-bright": "#f4f4f5",
-                        "rag-red": "#ef4444",
-                        "rag-amber": "#f59e0b",
-                        "rag-green": "#10b981",
-                        "accent-silver": "#3f3f46"
-                    },
-                    fontFamily: {
-                        "serif": ["Crimson Pro", "serif"],
-                        "sans": ["Inter", "sans-serif"]
-                    }
-                }
-            }
-        }
-    </script>
-    <style type="text/tailwindcss">
-        @layer base {
-            body {
-                @apply bg-charcoal-dark text-silver antialiased font-sans;
-            }
-        }
-        @layer components {
-            .executive-border {
-                @apply border border-accent-silver/30;
-            }
-            .status-pill {
-                @apply px-3 py-1 text-[10px] font-semibold tracking-widest uppercase rounded-sm border;
-            }
-            .material-symbols-outlined {
-                font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
-            }
-        }
-    </style>
   </head>
   <body>
     <div id="root"></div>

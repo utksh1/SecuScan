@@ -65,7 +65,7 @@
   },
   "output": {
     "format": "text",
-    "parser": "builtin_http"
+    "parser": "custom"
   },
   "safety": {
     "level": "safe",

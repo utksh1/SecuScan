@@ -97,7 +97,7 @@
 
   "output": {
     "format": "text",
-    "parser": "builtin_sqlmap"
+    "parser": "custom"
   },
 
   "safety": {

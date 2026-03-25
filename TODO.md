@@ -1,62 +1,101 @@
 # SecuScan Project Checklist
 
-Based on the project's documentation and current state, here is the complete checklist of what has been accomplished and what still needs to be done.
-
-## ✅ What Has Been Done (Core MVP)
-
-### 1. Project Setup & Architecture
-- [x] Initial project structure and configuration files (`requirements.txt`, `start.sh`, etc.)
-- [x] Docker Compose configuration for deployment
-- [x] Comprehensive documentation (`README.md`, component summaries, product specification)
-
-### 2. Backend (FastAPI + SQLite)
-- [x] Core FastAPI server with async/await support
-- [x] SQLite database schema (Tasks, Plugins registry, Audit logging, Settings)
-- [x] Input validation and sanitization (Command injection & path traversal protection)
-- [x] Rate limiting and concurrency control
-- [x] Task execution engine (managing queued → running → completed/failed states)
-- [x] All 11 REST API Endpoints built and functional
-
-### 3. Plugin System
-- [x] JSON-based plugin metadata loader and validator
-- [x] Command template parser and preset manager
-- [x] **5 MVP Plugins Fully Implemented:**
-  - [x] HTTP Inspector (Web endpoint analysis)
-  - [x] Nmap (Network port scanning)
-  - [x] TLS Inspector (Certificate validation)
-  - [x] Directory Discovery (Hidden path enumeration)
-  - [x] Nikto (Web vulnerability scanning)
-
-### 4. Frontend (React 18 + Vite SPA)
-- [x] Complete React application with routing and state management
-- [x] Dynamic form generator (automatically builds UI from plugin JSON metadata)
-- [x] Live task monitoring (polling API for status and output)
-- [x] Task history and details dashboard
-- [x] Mandatory safety/consent workflow with intrusive scan warnings
-- [x] Responsive design with terminal-style log viewer
+> Tracked against actual repository state — Last updated: 2026-03-25
 
 ---
 
-## 🚧 What Has To Be Done (Pending & Planned)
+## ✅ Completed
 
-### 1. Testing & Quality Assurance
-- [x] **Backend Tests:** Unit tests for validation functions and integration tests for API endpoints.
-- [x] **Frontend Tests:** Unit tests (Jest/Vitest) and End-to-End tests (Playwright).
+### 1. Project Setup & Architecture
+- [x] Project structure and configuration files (`requirements.txt`, `start.sh`, `run.sh`)
+- [x] Docker Compose for multi-service deployment
+- [x] Comprehensive documentation (README, PLUGINS, STATUS, TODO)
+- [x] Git repository with `.gitignore`
 
-### 2. Core Engine & Security
-- [x] **Docker Sandboxing:** Migrate task execution from local `subprocess` to isolated Docker containers for true safety.
-- [ ] **Plugin Security:** Implement plugin signature verification to ensure community plugins haven't been tampered with.
+### 2. Backend — FastAPI + SQLite
+- [x] Async FastAPI server with lifespan management
+- [x] SQLite database (tasks, plugins, assets, findings, reports, attack surface, audit)
+- [x] Input validation & sanitization (command injection + path traversal protection)
+- [x] Rate limiting (per-plugin hourly + concurrent limits)
+- [x] Task execution engine with state machine (queued → running → completed/failed/cancelled)
+- [x] 18+ REST API endpoints
+- [x] Server-Sent Events (SSE) for live task output streaming
+- [x] Redis-backed response cache layer
+- [x] PDF + CSV report generation
+- [x] Dashboard summary aggregation with running task tracking
+- [x] Task cancellation (abort running scans)
 
-### 3. Advanced Features
-- [x] **Real-time Streaming:** Upgrade task output monitoring from HTTP polling (current 2s/5s refresh) to Server-Sent Events (SSE) or WebSockets.
-- [x] **Report Generation:** Add functionality to export scan results to PDF, CSV, or structured JSON.
-- [ ] **Advanced Result Parsing:** Parse the raw terminal output of tools into structured data objects.
+### 3. Plugin System — 7 Plugins
+- [x] JSON-based plugin metadata loader and validator
+- [x] Command template parser and preset manager
+- [x] **7 plugins implemented:**
+  - [x] 🔍 Nmap — Network port scanning (5 presets)
+  - [x] 🌐 HTTP Inspector — Web endpoint analysis (2 presets)
+  - [x] 🔐 TLS Inspector — Certificate validation (3 presets)
+  - [x] 📂 Dir Discovery — Hidden path enumeration (3 presets)
+  - [x] 🔎 Nikto — Web vulnerability scanning (3 presets)
+  - [x] 🧬 Nuclei — Template-based vuln scanner (2 presets)
+  - [x] 💉 SQLMap — SQL injection testing (2 presets)
 
-### 4. Additional Plugins
-- [x] Add more advanced community plugins (e.g., SQLMap, Nuclei).
+### 4. Frontend — React 18 + Vite SPA
+- [x] Complete React 18 application with TypeScript
+- [x] React Router navigation (12 routes)
+- [x] Neo-Brutalist UI design (high-density SOC aesthetic)
+- [x] Dynamic form generator from plugin JSON metadata
+- [x] SSE live task output monitoring
+- [x] Executive Dashboard with stats bar & activity stream
+- [x] Task history with pagination and filters
+- [x] Task comparison view (diff between scans)
+- [x] Findings page with severity grouping
+- [x] Attack Surface monitoring
+- [x] Asset inventory management
+- [x] Reports page with PDF/CSV download
+- [x] Settings page (network, sandbox, safety)
+- [x] Dark mode toggle
+- [x] Toast notifications (success/error/info)
+- [x] Framer Motion animations
+- [x] Material Symbols iconography
+- [x] Mandatory safety/consent workflow
+- [x] Login page
+- [x] Keyboard shortcuts for quick navigation (g+d, g+s, etc.)
+- [x] Basic i18n support framework implemented
 
-### 5. Frontend Enhancements
-- [x] Dark mode toggle UI.
-- [x] Toast notifications for task completions/errors.
-- [x] Task comparison view (diff results between two scans).
-- [ ] i18n support (internationalization).
+### 5. Code Cleanup & Package Structure
+- [x] Removed legacy `backend/plugins/` directory
+- [x] Standardized frontend to `.tsx`/`.ts` only
+- [x] Consolidated `backend/secuscan/` package structure
+- [x] Verified advanced result parsing implementation across all 7 plugins
+
+### 6. Testing & QA
+- [x] Unit tests — 10 tests (models, plugins, validation)
+- [x] Integration tests — 6 tests (API routes, health check)
+- [x] All 16 tests pass (0.36s execution)
+
+---
+
+## 🚧 In Progress / Partial
+
+### Docker Sandboxing
+- [x] Dockerfile exists for backend container
+- [ ] End-to-end sandboxed execution verification
+- [ ] Container-based plugin isolation in production
+
+---
+
+## 🔲 Planned / Not Started
+
+### Security Hardening
+- [ ] Plugin signature verification (prevent tampered community plugins)
+- [ ] Credential vault encryption at rest
+
+### Advanced Features
+- [ ] Workflow automation (chained scans, scheduled tasks)
+
+### Infrastructure
+- [ ] CI/CD pipeline (GitHub Actions)
+- [ ] Automated E2E tests (Playwright)
+- [ ] Performance benchmarks for concurrent scans
+
+---
+
+**Last Updated:** 2026-03-25

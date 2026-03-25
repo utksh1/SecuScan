@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { routes } from '../routes'
 
 export default function Login() {
     const navigate = useNavigate()
@@ -16,7 +17,7 @@ export default function Login() {
         setTimeout(() => {
             if (username && password) {
                 setStatus('granted')
-                setTimeout(() => navigate('/'), 800)
+                setTimeout(() => navigate(routes.dashboard), 800)
             } else {
                 setStatus('denied')
                 setTimeout(() => setStatus('ready'), 2000)

@@ -24,7 +24,7 @@
     "-Format",
     "json",
     "-output",
-    "/tmp/nikto_output.json",
+    "-",
     "--if:timeout:then:-timeout",
     "--if:timeout:then:{timeout}"
   ],
@@ -171,7 +171,7 @@
   },
   "output": {
     "format": "json",
-    "parser": "builtin_nikto"
+    "parser": "custom"
   },
   "safety": {
     "level": "intrusive",

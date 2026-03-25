@@ -169,8 +169,8 @@
     }
   },
   "output": {
-    "format": "xml",
-    "parser": "builtin_nmap"
+    "format": "text",
+    "parser": "custom"
   },
   "safety": {
     "level": "safe",

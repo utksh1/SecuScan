@@ -1,5 +1,71 @@
 export const API_BASE = (import.meta as any).env.VITE_API_BASE || '/api/v1'
 
+export type PluginFieldType =
+  | 'string'
+  | 'text'
+  | 'integer'
+  | 'boolean'
+  | 'select'
+  | 'multiselect'
+  | 'file'
+  | 'keyvalue'
+
+export interface PluginFieldOption {
+  value: string
+  label: string
+}
+
+export interface PluginFieldSchema {
+  id: string
+  label: string
+  type: PluginFieldType
+  required?: boolean
+  default?: unknown
+  placeholder?: string
+  help?: string
+  options?: PluginFieldOption[]
+  validation?: Record<string, unknown>
+}
+
+export interface PluginAvailability {
+  runnable: boolean
+  missing_binaries: string[]
+}
+
+export interface PluginListItem {
+  id: string
+  name: string
+  description: string
+  category: string
+  safety_level: string
+  enabled: boolean
+  icon: string
+  requires_consent: boolean
+  consent_message?: string | null
+  availability: PluginAvailability
+}
+
+export interface PluginListResponse {
+  plugins: PluginListItem[]
+  total: number
+}
+
+export interface PluginSchemaResponse {
+  id: string
+  name: string
+  description: string
+  fields: PluginFieldSchema[]
+  presets: Record<string, Record<string, unknown>>
+  safety: Record<string, unknown>
+}
+
+export interface TaskStartResponse {
+  task_id: string
+  status: string
+  created_at: string
+  stream_url: string
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController()
   const timeoutId = window.setTimeout(() => controller.abort(), 10000)
@@ -20,11 +86,11 @@ export function getHealth() {
 }
 
 export function listPlugins() {
-  return request('/plugins')
+  return request<PluginListResponse>('/plugins')
 }
 
 export function getPluginSchema(id: string) {
-  return request(`/plugin/${id}/schema`)
+  return request<PluginSchemaResponse>(`/plugin/${id}/schema`)
 }
 
 export function getDashboardSummary() {
@@ -61,7 +127,7 @@ export function getTaskResult(taskId: string) {
 }
 
 export function startTask(plugin_id: string, inputs: Record<string, unknown>, consent_granted: boolean, preset?: string) {
-  return request('/task/start', {
+  return request<TaskStartResponse>('/task/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ plugin_id, inputs, consent_granted, preset }),

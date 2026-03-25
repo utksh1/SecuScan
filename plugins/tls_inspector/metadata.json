@@ -108,7 +108,7 @@
   },
   "output": {
     "format": "text",
-    "parser": "builtin_tls"
+    "parser": "custom"
   },
   "safety": {
     "level": "safe",

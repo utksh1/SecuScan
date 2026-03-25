@@ -1,5 +1,5 @@
 import pytest
-from validation import (
+from backend.secuscan.validation import (
     validate_target, validate_port, validate_url,
     sanitize_input, is_safe_path, match_pattern
 )

@@ -1,0 +1,83 @@
+{
+  "id": "scapy_recon",
+  "name": "Scapy Recon",
+  "version": "1.0.0",
+  "description": "Advanced network probing using Scapy",
+  "long_description": "Scapy is a powerful interactive packet manipulation program. It is able to forge or decode packets of a wide number of protocols, send them on the wire, capture them, match requests and replies, and much more.",
+  "category": "network",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udce1",
+  "engine": {
+    "type": "cli",
+    "binary": "python3"
+  },
+  "command_template": [
+    "python3",
+    "-c",
+    "from scapy.all import *; import sys; conf.verb = 0; type = '{type}'; target = '{target}'; if type == 'arp_ping': ans, unans = srp(Ether(dst='ff:ff:ff:ff:ff:ff')/ARP(pdst=target), timeout=2); [print(f'UP: {rcv.psrc} - {rcv.hwsrc}') for snd, rcv in ans]; elif type == 'icmp_ping': ans, unans = sr(IP(dst=target)/ICMP(), timeout=2); [print(f'UP: {rcv.src}') for snd, rcv in unans if ICMP in rcv and rcv[ICMP].type == 0]"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target IP/Range",
+      "type": "string",
+      "required": true,
+      "placeholder": "192.168.1.0/24",
+      "help": "Target IP address or CIDR range."
+    },
+    {
+      "id": "type",
+      "label": "Probe Type",
+      "type": "select",
+      "required": false,
+      "default": "arp_ping",
+      "options": [
+        {"value": "arp_ping", "label": "ARP Ping (local net)"},
+        {"value": "icmp_ping", "label": "ICMP Ping (standard)"}
+      ],
+      "help": "Method of network discovery."
+    }
+  ],
+  "presets": {
+    "arp": {
+      "type": "arp_ping"
+    },
+    "icmp": {
+      "type": "icmp_ping"
+    }
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": true,
+    "consent_message": "Scapy requires elevated privileges for raw sockets. Ensure you have authorization to scan this network.",
+    "rate_limit": {
+      "max_per_hour": 5,
+      "max_concurrent": 1
+    }
+  },
+  "learning": {
+    "difficulty": "advanced",
+    "estimated_duration": "1-2 minutes",
+    "tutorial_url": "https://docs.secuscan.local/plugins/scapy_recon"
+  },
+  "dependencies": {
+    "binaries": [
+      "python3"
+    ],
+    "python_packages": [
+      "scapy"
+    ],
+    "system_packages": [
+      "libpcap-dev"
+    ]
+  },
+  "docker_image": "secdev/scapy:latest"
+}

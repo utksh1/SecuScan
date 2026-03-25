@@ -1,0 +1,91 @@
+{
+  "id": "ssh_runner",
+  "name": "SSH Runner",
+  "version": "1.0.0",
+  "description": "Remote command execution via SSH",
+  "long_description": "SSH Runner allows scheduled or manual execution of commands on remote systems. It supports password and key-based authentication (simulated in this MVP through parameters). Useful for auditing remote systems or checking for default credentials.",
+  "category": "execution",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udda5\ufe0f",
+  "engine": {
+    "type": "cli",
+    "binary": "ssh"
+  },
+  "command_template": [
+    "ssh",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ConnectTimeout=10",
+    "-o",
+    "StrictHostKeyChecking=no",
+    "{username}@{target}",
+    "{command}"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Remote Host",
+      "type": "string",
+      "required": true,
+      "placeholder": "10.0.0.5",
+      "help": "IP or hostname of the remote server."
+    },
+    {
+      "id": "username",
+      "label": "Username",
+      "type": "string",
+      "required": true,
+      "default": "root",
+      "help": "SSH login username."
+    },
+    {
+      "id": "command",
+      "label": "Command",
+      "type": "string",
+      "required": true,
+      "default": "uptime",
+      "help": "Command to execute on the remote host."
+    }
+  ],
+  "presets": {
+    "check_uptime": {
+      "command": "uptime"
+    },
+    "check_auth_log": {
+      "command": "cat /var/log/auth.log | tail -n 20"
+    }
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "SSH execution can be dangerous. Ensure you are using authorized credentials and non-destructive commands.",
+    "rate_limit": {
+      "max_per_hour": 5,
+      "max_concurrent": 1
+    }
+  },
+  "learning": {
+    "difficulty": "intermediate",
+    "estimated_duration": "1 minute",
+    "tutorial_url": "https://docs.secuscan.local/plugins/ssh_runner"
+  },
+  "dependencies": {
+    "binaries": [
+      "ssh"
+    ],
+    "python_packages": [],
+    "system_packages": [
+      "openssh-client"
+    ]
+  },
+  "docker_image": "alpine:latest"
+}

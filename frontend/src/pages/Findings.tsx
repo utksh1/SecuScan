@@ -65,6 +65,7 @@ export default function Findings() {
           high: findings.filter(f => f.severity === 'high').length,
           medium: findings.filter(f => f.severity === 'medium').length,
           low: findings.filter(f => f.severity === 'low').length,
+          info: findings.filter(f => f.severity === 'info').length,
       }
   }, [findings])
 
@@ -96,14 +97,15 @@ export default function Findings() {
       {/* Severity Counters Grid */}
       <section className="grid grid-cols-2 md:grid-cols-4 gap-6">
         {[
-          { color: 'bg-rag-red', label: 'Critical', count: countsBySeverity.critical },
-          { color: 'bg-rag-amber', label: 'High', count: countsBySeverity.high },
-          { color: 'bg-rag-blue', label: 'Medium', count: countsBySeverity.medium },
-          { color: 'bg-silver-bright', label: 'Low', count: countsBySeverity.low },
+          { color: 'bg-rag-red', text: 'text-black', label: 'Critical', count: countsBySeverity.critical },
+          { color: 'bg-rag-amber', text: 'text-black', label: 'High', count: countsBySeverity.high },
+          { color: 'bg-rag-blue', text: 'text-black', label: 'Medium', count: countsBySeverity.medium },
+          { color: 'bg-accent-silver/30', text: 'text-silver-bright', label: 'Low', count: countsBySeverity.low },
+          { color: 'bg-silver/10', text: 'text-silver-bright', label: 'Info', count: countsBySeverity.info },
         ].map((s) => (
           <div key={s.label} className={`${s.color} border-4 border-black p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-2 group hover:-translate-y-1 transition-transform cursor-default`}>
-            <span className="text-xs font-black text-black uppercase tracking-widest select-none">{s.label}</span>
-            <span className="text-4xl font-black text-black font-mono leading-none">{s.count.toString().padStart(2, '0')}</span>
+            <span className={`text-xs font-black uppercase tracking-widest select-none ${s.text}`}>{s.label}</span>
+            <span className={`text-4xl font-black font-mono leading-none ${s.text}`}>{s.count.toString().padStart(2, '0')}</span>
           </div>
         ))}
       </section>
@@ -129,7 +131,7 @@ export default function Findings() {
             <div className="space-y-4">
               <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic">Severity_Filter</label>
               <div className="grid grid-cols-1 gap-2">
-                {['all', 'critical', 'high', 'medium', 'low'].map(s => (
+                {['all', 'critical', 'high', 'medium', 'low', 'info'].map(s => (
                   <button 
                     key={s}
                     onClick={() => setFilterSeverity(s)}
@@ -187,7 +189,8 @@ export default function Findings() {
                       <div className={`absolute left-0 top-0 bottom-0 w-2 ${
                         f.severity === 'critical' ? 'bg-rag-red' : 
                         f.severity === 'high' ? 'bg-rag-amber' : 
-                        f.severity === 'medium' ? 'bg-rag-blue' : 'bg-silver-bright/20'
+                        f.severity === 'medium' ? 'bg-rag-blue' : 
+                        f.severity === 'low' ? 'bg-accent-silver/50' : 'bg-silver/10'
                       }`}></div>
 
                       <div className="flex flex-col md:flex-row justify-between gap-6">
@@ -213,7 +216,7 @@ export default function Findings() {
                               <span className="material-symbols-outlined text-xs">target</span> {f.target}
                             </p>
                             <p className="text-[10px] font-mono text-silver/40 uppercase tracking-widest flex items-center gap-2">
-                              <span className="material-symbols-outlined text-xs">event</span> {new Date(f.discovered_at).toLocaleDateString()}
+                              <span className="material-symbols-outlined text-xs">event</span> {new Date(f.discovered_at).toLocaleDateString([], { timeZone: 'Asia/Kolkata' })}
                             </p>
                           </div>
                         </div>

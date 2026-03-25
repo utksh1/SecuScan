@@ -1,0 +1,82 @@
+{
+  "id": "dns_enum",
+  "name": "DNS Enumeration",
+  "version": "1.0.0",
+  "description": "Enumerate DNS records and configurations",
+  "long_description": "DNSRecon is a powerful DNS reconnaissance tool. It can perform various types of DNS security assessments, including zone transfers, reverse lookups, and brute forcing.",
+  "category": "recon",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udce6",
+  "engine": {
+    "type": "cli",
+    "binary": "dnsrecon"
+  },
+  "command_template": [
+    "dnsrecon",
+    "-d",
+    "{target}",
+    "--if:type:then:-t:{type}"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Domain",
+      "type": "string",
+      "required": true,
+      "placeholder": "example.com",
+      "help": "Target domain for DNS enumeration."
+    },
+    {
+      "id": "type",
+      "label": "Enum Type",
+      "type": "select",
+      "required": false,
+      "default": "std",
+      "options": [
+        {"value": "std", "label": "Standard (A, MX, NS, SOA)"},
+        {"value": "axfr", "label": "Zone Transfer (AXFR)"},
+        {"value": "brt", "label": "Brute Force Subdomains"}
+      ],
+      "help": "Type of DNS enumeration to perform."
+    }
+  ],
+  "presets": {
+    "standard": {
+      "type": "std"
+    },
+    "zone_transfer": {
+      "type": "axfr"
+    }
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": false,
+    "rate_limit": {
+      "max_per_hour": 30,
+      "max_concurrent": 1
+    }
+  },
+  "learning": {
+    "difficulty": "intermediate",
+    "estimated_duration": "1-3 minutes",
+    "tutorial_url": "https://docs.secuscan.local/plugins/dns_enum"
+  },
+  "dependencies": {
+    "binaries": [
+      "dnsrecon"
+    ],
+    "python_packages": [],
+    "system_packages": [
+      "dnsrecon"
+    ]
+  },
+  "docker_image": "darkoperator/dnsrecon:latest"
+}
