@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0",
+  "plugin": {
+    "id": "metasploit",
+    "name": "Metasploit Framework",
+    "version": "6.0.0",
+    "author": "SecuScan Team",
+    "description": "Exploitation framework for vulnerability testing and verification.",
+    "category": "expert",
+    "tags": ["exploit", "msf", "expert"],
+    "icon": "bolt",
+    "documentation_url": "https://www.metasploit.com/"
+  },
+  "execution": {
+    "engine": "cli",
+    "command_template": [
+      "msfconsole", "-x", "use {{exploit}}; set RHOSTS {{target}}; set PAYLOAD {{payload}}; run; exit"
+    ],
+    "timeout_seconds": 3600,
+    "container": {
+      "required": true,
+      "image": "metasploitframework/metasploit-framework:latest"
+    }
+  },
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target Host",
+      "type": "string",
+      "required": true
+    },
+    {
+      "id": "exploit",
+      "label": "Exploit Path",
+      "type": "string",
+      "required": true,
+      "default": "exploit/multi/handler"
+    },
+    {
+      "id": "payload",
+      "label": "Payload",
+      "type": "string",
+      "required": true,
+      "default": "generic/shell_reverse_tcp"
+    }
+  ],
+  "presets": {
+    "handler": {
+      "parameters": {
+        "exploit": "exploit/multi/handler"
+      },
+      "safety_level": "moderate"
+    }
+  },
+  "safety": {
+    "level": "expert",
+    "description": "PROHIBITED on unauthorized networks. Fully sandboxed."
+  }
+}

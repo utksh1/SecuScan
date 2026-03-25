@@ -51,6 +51,7 @@ describe('Scanner empty-state UX', () => {
       </MemoryRouter>,
     )
 
+    await user.click(await screen.findByRole('button', { name: /Recon Tools/i }))
     await screen.findByText(/WHOIS Lookup/i)
     await user.type(screen.getByPlaceholderText('SEARCH_PROTOCOLS...'), 'nothing-will-match')
     expect(screen.getByText(/No tools match search/i)).toBeInTheDocument()

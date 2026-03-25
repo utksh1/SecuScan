@@ -1,0 +1,73 @@
+{
+  "schema_version": "1.0",
+  "plugin": {
+    "id": "wpscan",
+    "name": "WPScan (WordPress Scanner)",
+    "version": "1.0.0",
+    "author": "SecuScan Team",
+    "description": "WordPress security scanner for identifying themes, plugins, and vulnerabilities.",
+    "category": "cms",
+    "tags": ["wordpress", "vuln-scan"],
+    "icon": "wordpress",
+    "documentation_url": "https://wpscan.com/"
+  },
+  "execution": {
+    "engine": "cli",
+    "command_template": [
+      "wpscan", "--url", "{{target}}", "--enumerate", "{{enumerate}}", "--api-token", "{{api_token}}", "--format", "json"
+    ],
+    "timeout_seconds": 900,
+    "container": {
+      "required": true,
+      "image": "wpscanteam/wpscan:latest"
+    }
+  },
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target URL",
+      "type": "string",
+      "required": true,
+      "validation": {
+        "pattern": "^https?://[a-zA-Z0-9.-]+(/.*)?$"
+      }
+    },
+    {
+      "id": "enumerate",
+      "label": "Enumerate",
+      "type": "enum",
+      "default": "vp,vt,u",
+      "options": [
+        {"value": "vp", "label": "Vulnerable Plugins"},
+        {"value": "vt", "label": "Vulnerable Themes"},
+        {"value": "u", "label": "Users"},
+        {"value": "vp,vt,u", "label": "All (Recommended)"}
+      ]
+    },
+    {
+      "id": "api_token",
+      "label": "WPScan API Token",
+      "type": "string",
+      "required": false,
+      "description": "Optional: API token for vulnerability database access."
+    }
+  ],
+  "presets": {
+    "quick": {
+      "parameters": {
+        "enumerate": "vp"
+      },
+      "safety_level": "safe"
+    },
+    "full": {
+      "parameters": {
+        "enumerate": "vp,vt,u"
+      },
+      "safety_level": "moderate"
+    }
+  },
+  "safety": {
+    "level": "moderate",
+    "consent_required_if": {"field": "enumerate", "equals": "vp,vt,u"}
+  }
+}

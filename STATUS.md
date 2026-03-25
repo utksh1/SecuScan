@@ -76,23 +76,23 @@ Material Symbols icons          PDF/CSV reporting              Preset system
 |-------|-------|--------|
 | Phase 1 (MVP) | 7 | ✅ Verified |
 | Phase 2 (Expanded) | 7 | ✅ Implemented |
-| **Total** | **14** | **✅ 14 Plugins Active** |
+| Phase 3 (Expert) | 8 | ✅ Implemented (22 tools total) |
+| **Total** | **22** | **✅ 22 Plugins Active** |
 
-**Full Inventory:**
-1. `nmap` (Network)
-2. `http_inspector` (Web)
-3. `tls_inspector` (Cert)
-4. `dir_discovery` (Paths)
-5. `nikto` (Vulnerability)
-6. `nuclei` (Templates)
-7. `sqlmap` (Exploit)
-8. `subdomain_discovery` (Recon) [NEW]
-9. `secret_scanner` (Secrets) [NEW]
-10. `code_analyzer` (Bandit) [NEW]
-11. `scapy_recon` (Probing) [NEW]
-12. `ssh_runner` (Execution) [NEW]
-13. `whois_lookup` (Domain) [NEW]
-14. `dns_enum` (DNS) [NEW]
+## 🚀 Phase 3 — Expert Mode & CMS Scanners (Current)
+**Status:** ✅ Implemented (Scaffolding + Parsers)
+**Completion:** 100% (Plugins)
+
+Additional 8 tools added covering specialized CMS scanning (WordPress, Joomla, Drupal), Forensics (YARA, Volatility), and Expert frameworks (Hashcat, Metasploit).
+
+- **Plugins Total:** 22
+- **Inventory:**
+  - 📡 Network: Nmap, Subdomain Discovery, Scapy, WHOIS, DNS Enum
+  - 🌐 Web: HTTP Inspector, TLS Inspector, Dir Discovery, Nikto, Nuclei, SQLi Checker
+  - 📝 CMS: WPScan, JoomScan, DroopeScan
+  - 🔐 Exploit/Expert: SQLMap, Metasploit, Hashcat
+  - 🔬 Forensics: YARA, Volatility
+  - 💻 System/Code: Secret Scanner, Bandit, SSH Runner
 
 ---
 
@@ -102,6 +102,16 @@ Material Symbols icons          PDF/CSV reporting              Preset system
 | Unit tests | 10 | ✅ Pass |
 | Integration tests | 6 | ✅ Pass |
 | **Total** | **16** | **✅ All pass (0.36s)** |
+
+### 3. Expert Mode Tools (Phase 3)
+- [x] **WPScan**: WordPress security auditing.
+- [x] **JoomScan**: Joomla vulnerability scanning.
+- [x] **DroopeScan**: Drupal/Moodle/Silverstripe detection.
+- [x] **YARA**: Pattern-based malware/binary scanning.
+- [x] **Volatility3**: Advanced memory forensics.
+- [x] **Hashcat**: High-speed password recovery.
+- [x] **Metasploit**: Exploitation framework integration.
+- [x] **SQLi Checker**: Lightweight feasibility script (Ghauri).
 
 ---
 

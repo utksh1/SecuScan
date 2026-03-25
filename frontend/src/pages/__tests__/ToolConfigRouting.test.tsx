@@ -5,8 +5,6 @@ import ToolConfig from '../ToolConfig'
 import { routes } from '../../routes'
 import { getPluginSchema, listPlugins } from '../../api'
 
-const mockNavigate = vi.fn()
-
 vi.mock('../../components/ToastContext', () => ({
   useToast: () => ({ addToast: vi.fn() }),
 }))
@@ -17,17 +15,19 @@ vi.mock('../../api', () => ({
   startTask: vi.fn(),
 }))
 
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
-  return {
-    ...actual,
-    useNavigate: () => mockNavigate,
-  }
-})
+function renderWithRoutes(initialEntry: string) {
+  return render(
+    <MemoryRouter initialEntries={[initialEntry]}>
+      <Routes>
+        <Route path={routes.scanTool} element={<ToolConfig />} />
+        <Route path={routes.scans} element={<div data-testid="scans-page">SCANS</div>} />
+      </Routes>
+    </MemoryRouter>,
+  )
+}
 
 describe('ToolConfig route consistency', () => {
   beforeEach(() => {
-    mockNavigate.mockReset()
     vi.mocked(listPlugins).mockResolvedValue({
       total: 1,
       plugins: [
@@ -56,34 +56,22 @@ describe('ToolConfig route consistency', () => {
   })
 
   it('redirects unknown tool ids to /scans', async () => {
-    render(
-      <MemoryRouter initialEntries={['/scans/unknown-tool']}>
-        <Routes>
-          <Route path={routes.scanTool} element={<ToolConfig />} />
-        </Routes>
-      </MemoryRouter>,
-    )
+    renderWithRoutes('/scans/unknown-tool')
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith(routes.scans)
+      expect(screen.getByTestId('scans-page')).toBeInTheDocument()
     })
   })
 
   it('uses /scans for the back button destination', async () => {
     const user = userEvent.setup()
-    render(
-      <MemoryRouter initialEntries={['/scans/whois_lookup']}>
-        <Routes>
-          <Route path={routes.scanTool} element={<ToolConfig />} />
-        </Routes>
-      </MemoryRouter>,
-    )
+    renderWithRoutes('/scans/whois_lookup')
 
-    const backIcon = await screen.findByText('arrow_back')
-    const backButton = backIcon.closest('button')
-    expect(backButton).not.toBeNull()
+    const backButton = await screen.findByRole('button', { name: /arrow_back/i })
+    await user.click(backButton)
 
-    await user.click(backButton as HTMLButtonElement)
-    expect(mockNavigate).toHaveBeenCalledWith(routes.scans)
+    await waitFor(() => {
+      expect(screen.getByTestId('scans-page')).toBeInTheDocument()
+    })
   })
 })

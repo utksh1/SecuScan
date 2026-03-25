@@ -63,12 +63,14 @@ describe('Scanner catalog integration', () => {
       </MemoryRouter>,
     )
 
+    expect(await screen.findByRole('button', { name: /Recon Tools/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Quick Start$/i })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Recon Tools/i }))
     await screen.findByText(/Subdomain Discovery/i)
-    expect(screen.getByRole('button', { name: /Recon/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Execution/i })).toBeInTheDocument()
     expect(screen.getByText(/Missing: subfinder/i)).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /Quick Start/i }))
+    await user.click(screen.getByRole('button', { name: /^Quick Start$/i }))
     expect(await screen.findByText(/Backend plugin pending/i)).toBeInTheDocument()
   })
 })

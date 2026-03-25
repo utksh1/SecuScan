@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0",
+  "plugin": {
+    "id": "sqli_checker",
+    "name": "SQLi Feasibility Checker",
+    "version": "1.0.0",
+    "author": "SecuScan Team",
+    "description": "Lightweight feasibility checker for SQL injection vulnerabilities.",
+    "category": "web",
+    "tags": ["sqli", "feasibility", "web"],
+    "icon": "database",
+    "documentation_url": "https://github.com/pipiscrew/ghauri"
+  },
+  "execution": {
+    "engine": "cli",
+    "command_template": [
+      "ghauri", "-u", "{{target}}", "--dbs", "--level", "3"
+    ],
+    "timeout_seconds": 600,
+    "container": {
+      "required": true,
+      "image": "secuscan/ghauri:latest"
+    }
+  },
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target URL",
+      "type": "string",
+      "required": true
+    }
+  ],
+  "presets": {
+    "default": {
+      "parameters": {},
+      "safety_level": "moderate"
+    }
+  },
+  "safety": {
+    "level": "moderate"
+  }
+}

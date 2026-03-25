@@ -43,6 +43,9 @@ def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
     # Try parsing as IP network (handles single IP and CIDR)
     try:
         net = ipaddress.ip_network(target, strict=False)
+        max_prefix = 32 if net.version == 4 else 128
+        if "/" in target and net.prefixlen != max_prefix:
+            return False, "CIDR ranges are not allowed as direct targets"
 
         # Check blocked networks
         if any(net.overlaps(blocked) for blocked in BLOCKED_NETWORKS):

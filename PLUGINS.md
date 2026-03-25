@@ -1,6 +1,6 @@
 # SecuScan Plugin Directory
 
-> **14 Plugins** across 3 safety tiers — Last synced: 2026-03-25
+> **22 Plugins** across 4 safety tiers — Last synced: 2026-03-25
 
 ---
 
@@ -63,6 +63,36 @@
 - **Fields:** 2 — target, type
 - **Rate Limit:** 30/hr, max 1 concurrent
 - **Dependency:** `dnsrecon`
+
+---
+
+## CMS Security Scanning
+
+### 6. 📝 WPScan — WordPress Security Scanner
+**ID:** `wpscan` · **Safety:** Moderate · **File:** `plugins/wpscan/metadata.json`
+
+- **Presets:** 2 — Quick, Full
+- **Fields:** 3 — target, enumerate, api_token
+- **Rate Limit:** 5/hr, max 1 concurrent
+- **Dependency:** `wpscan` (Docker)
+
+---
+
+### 7. 🏷️ JoomScan — Joomla Vulnerability Scanner
+**ID:** `joomscan` · **Safety:** Safe · **File:** `plugins/joomscan/metadata.json`
+
+- **Presets:** 1 — Default
+- **Fields:** 1 — target
+- **Dependency:** `joomscan` (Docker)
+
+---
+
+### 8. 🛡️ DroopeScan — CMS Fingerprinting & Audit
+**ID:** `droopescan` · **Safety:** Safe · **File:** `plugins/droopescan/metadata.json`
+
+- **Presets:** 1 — Default
+- **Fields:** 1 — target
+- **Dependency:** `droopescan` (Docker)
 
 ---
 
@@ -152,13 +182,50 @@
 
 ---
 
-### 14. 💉 SQLMap — SQL Injection Testing
-**ID:** `sqlmap` · **Safety:** Exploit ⚠️ · **File:** `plugins/sqlmap/metadata.json`
+### 17. 🧪 SQLi Checker — Lightweight Feasibility Test
+**ID:** `sqli_checker` · **Safety:** Moderate · **File:** `plugins/sqli_checker/metadata.json`
 
-- **Presets:** 2 — Quick (Level 1/Risk 1), Aggressive (Level 5/Risk 3)
-- **Fields:** 5 — url, preset, level, risk, dbs
-- **Rate Limit:** 5/hr, max 1 concurrent
-- **Dependency:** `sqlmap` (Python)
+- **Presets:** 1 — Default
+- **Fields:** 1 — target
+- **Dependency:** `ghauri` (Docker)
+
+---
+
+## Forensics & Expert Mode
+
+### 18. 🔬 YARA Malware Scanner — Pattern Matching
+**ID:** `yara_scan` · **Safety:** Moderate · **File:** `plugins/yara_scan/metadata.json`
+
+- **Presets:** 1 — Default
+- **Fields:** 2 — target, rules
+- **Dependency:** `yara` (Docker)
+
+---
+
+### 19. 🧠 Volatility Framework — Memory Forensics
+**ID:** `volatility` · **Safety:** Moderate · **File:** `plugins/volatility/metadata.json`
+
+- **Presets:** 1 — Analysis
+- **Fields:** 2 — target, plugin_name
+- **Dependency:** `volatility3` (Docker)
+
+---
+
+### 20. ⚡ Hashcat — Password Recovery
+**ID:** `hashcat` · **Safety:** Expert ⚠️ · **File:** `plugins/hashcat/metadata.json`
+
+- **Presets:** 1 — MD5 Brute
+- **Fields:** 4 — target, hash_type, attack_mode, wordlist
+- **Dependency:** `hashcat` (Docker)
+
+---
+
+### 21. 🚀 Metasploit Framework — Exploit Connector
+**ID:** `metasploit` · **Safety:** Expert ⚠️ · **File:** `plugins/metasploit/metadata.json`
+
+- **Presets:** 1 — Handler
+- **Fields:** 3 — target, exploit, payload
+- **Dependency:** `msfconsole` (Docker)
 
 ---
 
@@ -166,12 +233,11 @@
 
 | Metric | Value |
 |--------|-------|
-| **Total Plugins** | 14 |
-| **Safe** | 9 |
-| **Intrusive** | 4 |
-| **Exploit** | 1 |
-| **Total Presets** | ~35 |
-| **Total Fields** | ~60 |
+| **Total Plugins** | 22 |
+| **Safe** | 12 |
+| **Moderate** | 6 |
+| **Intrusive** | 2 |
+| **Expert/Exploit** | 2 |
 
 ---
 
