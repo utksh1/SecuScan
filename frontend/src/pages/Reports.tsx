@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { getDashboardSummary, getReports } from '../api'
+import { useNavigate } from 'react-router-dom'
+import { getDashboardSummary, getReports, API_BASE } from '../api'
 
 type Report = {
   id: string
+  task_id: string
   name: string
   type: 'executive' | 'technical' | 'compliance'
   generated_at: string
@@ -27,25 +29,38 @@ const itemVariants = {
       opacity: 1, 
       scale: 1, 
       y: 0,
-      transition: { type: 'spring', stiffness: 200, damping: 20 }
+      transition: { duration: 0.4 }
     }
 }
 
 export default function Reports() {
+  const navigate = useNavigate()
   const [reports, setReports] = useState<Report[]>([])
   const [summary, setSummary] = useState<any>({ total_findings: 0, total_assets: 0, critical_findings: 0, high_findings: 0, total_attack_surface: 0 })
   const [selectedType, setSelectedType] = useState('all')
 
-  useEffect(() => {
+  const fetchReports = () => {
     Promise.all([getReports(), getDashboardSummary()]).then(([reportData, summaryData]: any) => {
       setReports(reportData.reports || [])
       setSummary(summaryData || {})
     })
+  }
+
+  useEffect(() => {
+    fetchReports()
   }, [])
 
   const filteredReports = reports.filter((report) => selectedType === 'all' || report.type === selectedType)
   const formatDateLong = (dateStr: string) => 
-    new Date(dateStr).toLocaleString('en-US', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+    `${new Date(dateStr).toLocaleString('en-US', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: 'Asia/Kolkata',
+    })} IST`
 
   return (
     <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
@@ -64,14 +79,22 @@ export default function Reports() {
           </p>
         </div>
 
-        <div className="flex items-center gap-6">
-           <button className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all">
-              <span className="material-symbols-outlined">sync</span>
-           </button>
-           <button className="bg-silver-bright border-4 border-black p-4 text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all">
-              <span className="material-symbols-outlined">cloud_download</span>
-           </button>
-        </div>
+         <div className="flex items-center gap-6">
+            <button 
+               onClick={fetchReports}
+               className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
+               title="Refresh Archive"
+            >
+               <span className="material-symbols-outlined">sync</span>
+            </button>
+            <button 
+               onClick={() => window.open(`${API_BASE}/task/latest/report/pdf`, '_blank')} // Placeholder for latest report
+               className="bg-silver-bright border-4 border-black p-4 text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
+               title="Download Latest Briefing"
+            >
+               <span className="material-symbols-outlined">cloud_download</span>
+            </button>
+         </div>
       </header>
 
       {/* Metrics Row */}
@@ -198,10 +221,18 @@ export default function Reports() {
                                           <p className="text-[10px] font-mono text-silver-bright uppercase font-black">{formatDateLong(report.generated_at)}</p>
                                       </div>
                                       <div className="flex gap-4">
-                                          <button className="bg-charcoal-dark border-4 border-black p-3 text-silver/20 group-hover:text-silver-bright group-hover:bg-black transition-all">
+                                          <button 
+                                              onClick={() => navigate(`/task/${report.task_id}`)}
+                                              className="bg-charcoal-dark border-4 border-black p-3 text-silver/20 group-hover:text-silver-bright group-hover:bg-black transition-all"
+                                              title="View Briefing"
+                                          >
                                               <span className="material-symbols-outlined text-sm">visibility</span>
                                           </button>
-                                          <button className="bg-charcoal-dark border-4 border-black p-3 text-silver/20 group-hover:text-silver-bright group-hover:bg-black transition-all">
+                                          <button 
+                                              onClick={() => window.open(`${API_BASE}/task/${report.task_id}/report/pdf`, '_blank')}
+                                              className="bg-charcoal-dark border-4 border-black p-3 text-silver/20 group-hover:text-silver-bright group-hover:bg-black transition-all"
+                                              title="Download PDF"
+                                          >
                                               <span className="material-symbols-outlined text-sm">download</span>
                                           </button>
                                       </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { API_BASE } from '../api'
+import { routePath } from '../routes'
 
 interface Task {
     task_id: string
@@ -13,6 +14,8 @@ interface Task {
     started_at?: string
     completed_at?: string
     duration_seconds?: number
+    inputs?: any
+    preset?: string
 }
 
 const statusFilters = [
@@ -29,7 +32,7 @@ const containerVariants = {
     opacity: 1,
     transition: { staggerChildren: 0.1 }
   }
-}
+} as const
 
 const itemVariants = {
   hidden: { opacity: 0, scale: 0.95, y: 20 },
@@ -37,9 +40,9 @@ const itemVariants = {
     opacity: 1, 
     scale: 1, 
     y: 0,
-    transition: { type: 'spring', stiffness: 200, damping: 20 }
+    transition: { type: 'spring', stiffness: 200, damping: 20 } as any
   }
-}
+} as const
 
 export default function History() {
     const navigate = useNavigate()
@@ -67,6 +70,27 @@ export default function History() {
             console.error('Failed to load tasks:', err)
         } finally {
             setLoading(false)
+        }
+    }
+
+    async function handleRescan(task: Task) {
+        try {
+            const res = await fetch(`${API_BASE}/start-task`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    plugin_id: task.plugin_id,
+                    inputs: task.inputs || {},
+                    consent_granted: true,
+                    preset: task.preset
+                })
+            })
+            const data = await res.json()
+            if (data.task_id) {
+                navigate(routePath.task(data.task_id))
+            }
+        } catch (err) {
+            console.error('Rescan failed:', err)
         }
     }
 
@@ -189,12 +213,12 @@ export default function History() {
                                                 <div className="text-left xl:text-right">
                                                     <p className="text-[8px] font-black uppercase text-silver/20 tracking-[0.3em] mb-1 italic">Historical_Execution</p>
                                                     <p className="text-xs font-mono text-silver-bright/80 uppercase">
-                                                        {new Date(task.created_at).toLocaleDateString()} // {new Date(task.created_at).toLocaleTimeString([], { hour12: false })}
+                                                        {new Date(task.created_at).toLocaleDateString([], { timeZone: 'Asia/Kolkata' })} // {new Date(task.created_at).toLocaleTimeString([], { hour12: false, timeZone: 'Asia/Kolkata' })} IST
                                                     </p>
                                                 </div>
                                                 {task.duration_seconds && (
                                                     <div className="bg-charcoal-dark border-2 border-black px-4 py-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-                                                        <p className="text-[10px] font-black font-mono text-rag-blue leading-none">{formatDuration(task.duration_seconds).toUpperCase()}</p>
+                                                        <p className="text-[10px] font-black font-mono text-rag-blue leading-none">{formatDuration(task.duration_seconds)?.toUpperCase()}</p>
                                                     </div>
                                                 )}
                                             </div>
@@ -227,21 +251,33 @@ export default function History() {
                                                             <div className="grid grid-cols-2 gap-4">
                                                                 <div className="space-y-1">
                                                                     <span className="text-[8px] text-silver/20 uppercase font-black tracking-widest">In_Lock</span>
-                                                                    <span className="text-[10px] font-mono text-silver-bright block">{task.started_at ? new Date(task.started_at).toLocaleTimeString([], { hour12: false }) : 'PENDING'}</span>
+                                                                    <span className="text-[10px] font-mono text-silver-bright block">{task.started_at ? `${new Date(task.started_at).toLocaleTimeString([], { hour12: false, timeZone: 'Asia/Kolkata' })} IST` : 'PENDING'}</span>
                                                                 </div>
                                                                 <div className="space-y-1">
                                                                     <span className="text-[8px] text-silver/20 uppercase font-black tracking-widest">Release</span>
-                                                                    <span className="text-[10px] font-mono text-silver-bright block">{task.completed_at ? new Date(task.completed_at).toLocaleTimeString([], { hour12: false }) : 'N/A'}</span>
+                                                                    <span className="text-[10px] font-mono text-silver-bright block">{task.completed_at ? `${new Date(task.completed_at).toLocaleTimeString([], { hour12: false, timeZone: 'Asia/Kolkata' })} IST` : 'N/A'}</span>
                                                                 </div>
                                                             </div>
                                                         </div>
 
-                                                        <div className="flex items-center justify-end">
+                                                         <div className="flex items-center justify-end gap-6">
+                                                            {(task.status === 'completed' || task.status === 'failed') && (
+                                                                <button 
+                                                                    className="bg-rag-blue text-black px-8 py-4 text-[10px] font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3 group/btn italic"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation()
+                                                                        handleRescan(task)
+                                                                    }}
+                                                                >
+                                                                    Rescan_Signal
+                                                                    <span className="material-symbols-outlined text-sm group-hover/btn:translate-x-1 transition-transform">replay</span>
+                                                                </button>
+                                                            )}
                                                             <button 
-                                                                className="bg-rag-blue text-black px-8 py-4 text-[10px] font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3 group/btn italic"
+                                                                className="bg-silver-bright text-black px-8 py-4 text-[10px] font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3 group/btn italic"
                                                                 onClick={(e) => {
                                                                     e.stopPropagation()
-                                                                    navigate(`/task/${task.task_id}`)
+                                                                    navigate(routePath.task(task.task_id))
                                                                 }}
                                                             >
                                                                 Open_Deep_Brief

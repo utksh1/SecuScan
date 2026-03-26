@@ -21,10 +21,10 @@ export const ExecutiveStatsBar: React.FC<ExecutiveStatsBarProps> = ({
   const hasCritical = criticalVulns > 0
 
   return (
-    <div className="w-full bg-[var(--bg-secondary)] border-y border-white/5 py-16 px-12 grid grid-cols-1 md:grid-cols-4 divide-x divide-white/5">
+    <div className="w-full bg-[var(--bg-secondary)] border-y border-white/5 py-16 grid grid-cols-1 md:grid-cols-4 divide-x divide-white/5">
       {/* 1. Risk Profile */}
-      <div className="px-10 first:pl-0">
-        <span className="text-xs font-bold text-white/30 uppercase tracking-[0.3em] block mb-6">Risk Profile</span>
+      <div className="px-6 first:pl-8">
+        <span className="text-xs font-bold text-white/70 uppercase tracking-[0.3em] block mb-6">Status Profile</span>
         <div className="space-y-6">
           <span 
             className="text-7xl font-light text-[var(--rag-amber)] leading-none block" 
@@ -32,31 +32,31 @@ export const ExecutiveStatsBar: React.FC<ExecutiveStatsBarProps> = ({
           >
             {riskLabel || 'Moderate'}
           </span>
-          <p className="text-sm text-white/30 leading-relaxed font-light tracking-wide max-w-[240px]">
+          <p className="text-sm text-white/80 leading-relaxed font-light tracking-wide">
             {riskNote}
           </p>
         </div>
       </div>
 
       {/* 2. Critical Vulns */}
-      <div className="px-10">
-        <span className="text-xs font-bold text-white/30 uppercase tracking-[0.3em] block mb-6">Critical Vulns</span>
-        <div className="space-y-4">
+      <div className="px-6">
+        <span className="text-xs font-bold text-white/70 uppercase tracking-[0.3em] block mb-6">Critical Vulns</span>
+        <div className="space-y-8">
           <span
-            className={`text-8xl font-medium leading-[0.8] block ${hasCritical ? 'text-[var(--rag-red)]' : 'text-white'}`}
+            className={`text-8xl font-normal leading-[0.8] block ${hasCritical ? 'text-[var(--rag-red)]' : 'text-white'}`}
             style={{ fontFamily: 'var(--font-display)' }}
           >
             {criticalVulns}
           </span>
-          <span className={`text-xs font-black uppercase tracking-[0.2em] leading-tight block ${hasCritical ? 'text-[var(--rag-red)]' : 'text-[var(--rag-green)]'}`}>
+          <span className={`text-xs font-bold uppercase tracking-[0.25em] block ${hasCritical ? 'text-[var(--rag-red)]' : 'text-[var(--rag-green)]'}`}>
             {hasCritical ? 'ATTENTION REQUIRED' : 'NO CRITICAL FINDINGS'}
           </span>
         </div>
       </div>
 
       {/* 3. Total Assets */}
-      <div className="px-10">
-        <span className="text-xs font-bold text-white/30 uppercase tracking-[0.3em] block mb-6">Total Assets</span>
+      <div className="px-6">
+        <span className="text-xs font-bold text-white/70 uppercase tracking-[0.3em] block mb-6">Total Assets</span>
         <div className="space-y-8">
           <span className="text-8xl font-normal text-white leading-[0.8]" style={{ fontFamily: 'var(--font-display)' }}>
             {totalAssets.toLocaleString()}
@@ -68,8 +68,8 @@ export const ExecutiveStatsBar: React.FC<ExecutiveStatsBarProps> = ({
       </div>
 
       {/* 4. Live Attack Surface */}
-      <div className="px-10 last:pr-0">
-        <span className="text-xs font-bold text-white/30 uppercase tracking-[0.3em] block mb-6">Attack Surface</span>
+      <div className="px-6 last:pr-8">
+        <span className="text-xs font-bold text-white/70 uppercase tracking-[0.3em] block mb-6">Attack Surface</span>
         <div className="space-y-8">
           <span className="text-8xl font-normal text-white leading-[0.8]" style={{ fontFamily: 'var(--font-display)' }}>
             {attackSurface.toLocaleString()}
