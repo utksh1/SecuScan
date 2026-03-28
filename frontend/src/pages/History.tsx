@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { API_BASE, startTask } from '../api'
+import { API_BASE } from '../api'
 import { routePath } from '../routes'
 
 interface Task {
@@ -75,14 +75,19 @@ export default function History() {
 
     async function handleRescan(task: Task) {
         try {
-            const res = await startTask(
-                task.plugin_id,
-                task.inputs || {},
-                true,
-                task.preset
-            )
-            if (res.task_id) {
-                navigate(routePath.task(res.task_id))
+            const res = await fetch(`${API_BASE}/start-task`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    plugin_id: task.plugin_id,
+                    inputs: task.inputs || {},
+                    consent_granted: true,
+                    preset: task.preset
+                })
+            })
+            const data = await res.json()
+            if (data.task_id) {
+                navigate(routePath.task(data.task_id))
             }
         } catch (err) {
             console.error('Rescan failed:', err)

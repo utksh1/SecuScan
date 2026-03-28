@@ -7,6 +7,7 @@ from typing import Any, Optional, List, Dict, Callable
 import json
 import logging
 import re
+from urllib.parse import urlparse
 
 def parse_json_fields(rows: List[Dict], fields: List[str]) -> List[Dict]:
     """Helper to parse stringified JSON fields from SQLite."""
@@ -32,6 +33,26 @@ def is_filesystem_target(target: str) -> bool:
     if "/" in target and not target.startswith(("http://", "https://")):
         return True
     return False
+
+
+def _slugify_filename_part(value: str, fallback: str) -> str:
+    cleaned = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
+    return cleaned or fallback
+
+
+def build_report_filename(task: Dict[str, Any], extension: str) -> str:
+    tool = _slugify_filename_part(str(task.get("tool_name") or task.get("plugin_id") or "scan"), "scan")
+
+    raw_target = str(task.get("target") or "")
+    parsed = urlparse(raw_target if "://" in raw_target else f"//{raw_target}")
+    target_source = parsed.netloc or parsed.path or raw_target
+    target = _slugify_filename_part(target_source, "target")
+
+    created_at = str(task.get("created_at") or "")
+    date_match = re.search(r"\d{4}-\d{2}-\d{2}", created_at)
+    date_part = date_match.group(0) if date_match else "report"
+
+    return f"secuscan_{tool}_{target}_{date_part}.{extension}"
 
 logger = logging.getLogger(__name__)
 
@@ -267,7 +288,7 @@ async def download_csv_report(task_id: str):
     return Response(
         content=csv_data,
         media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename=secuscan_{task_id}.csv"}
+        headers={"Content-Disposition": f"attachment; filename={build_report_filename(dict(task_row), 'csv')}"}
     )
 
 @router.get("/task/{task_id}/report/pdf")
@@ -286,12 +307,12 @@ async def download_pdf_report(task_id: str):
         raise HTTPException(status_code=400, detail="Task is not finished yet")
 
     structured_data = json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
-    pdf_bytes = reporting.generate_pdf_report(dict(task_row), {"structured": structured_data})
+    pdf_bytes = bytes(reporting.generate_pdf_report(dict(task_row), {"structured": structured_data}))
 
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=secuscan_{task_id}.pdf"}
+        headers={"Content-Disposition": f"attachment; filename={build_report_filename(dict(task_row), 'pdf')}"}
     )
 
 
@@ -327,18 +348,21 @@ async def get_task_result(task_id: str):
         severity_counts[severity] = severity_counts.get(severity, 0) + 1
 
     summary: List[str] = []
-    if severity_counts:
-        ordered = ["critical", "high", "medium", "low", "info"]
-        if parts := [
-            f"{severity_counts[level]} {level}"
-            for level in ordered
-            if severity_counts.get(level)
-        ]:
-            summary.append(f"Findings profile: {', '.join(parts)}.")
-    if structured.get("open_ports"):
-        summary.append(f"Observed {len(structured['open_ports'])} exposed ports.")
-    if structured.get("technologies"):
-        summary.append(f"Identified {len(structured['technologies'])} technologies.")
+    total_findings = len(findings)
+    if total_findings > 0:
+        critical_high = severity_counts.get("critical", 0) + severity_counts.get("high", 0)
+        if critical_high > 0:
+            summary.append(f"Assessment identified {total_findings} security risks, including {critical_high} high-priority items requiring remediation.")
+        else:
+            summary.append(f"Assessment identified {total_findings} minor observations; no critical or high-severity threats were found.")
+    else:
+        summary.append("Security analysis revealed no significant vulnerabilities or exposed risks.")
+
+    if ports := structured.get("open_ports"):
+        summary.append(f"Perimeter analysis confirmed {len(ports)} active network entry points.")
+    
+    if techs := structured.get("technologies"):
+        summary.append(f"Fingerprinting identified {len(techs)} unique technologies powering the target infrastructure.")
 
     # Read raw output (limit to 100k for performance, but usually enough)
     raw_output = None

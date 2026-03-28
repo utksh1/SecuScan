@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { getDashboardSummary, getHealth, cancelTask, startTask } from '../api'
+import { getDashboardSummary, getHealth, cancelTask } from '../api'
 import { ExecutiveStatsBar } from '../components/ExecutiveStatsBar'
 import { routePath, routes } from '../routes'
 
@@ -274,8 +274,6 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [backendConnected, setBackendConnected] = useState<boolean | null>(null)
-  const [targetNode, setTargetNode] = useState('127.0.0.1')
-  const [initiating, setInitiating] = useState(false)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -329,22 +327,6 @@ export default function Dashboard() {
     }
   }
 
-  const handleStartMission = async (pluginId: string) => {
-    if (!targetNode.trim()) return
-    try {
-      setInitiating(true)
-      const res = await startTask(pluginId, { host: targetNode }, true)
-      if (res.task_id) {
-        navigate(routePath.task(res.task_id))
-      }
-    } catch (err) {
-      console.error('Failed to start mission:', err)
-      setError('Mission initiation failed. Check target node accessibility.')
-    } finally {
-      setInitiating(false)
-    }
-  }
-
   const risk = getRiskProfile(summary)
   const criticalHigh = summary.critical_findings + summary.high_findings
   const safeAssetsPercent = summary.total_assets > 0
@@ -371,7 +353,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen flex flex-col bg-charcoal-dark selection:bg-silver-bright selection:text-charcoal-dark">
-      <header className="w-full px-6 md:px-12 pt-12 pb-12 flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between border-b-4 border-silver-bright/10 mb-12 font-black">
+      <header className="w-full px-0 pt-12 pb-12 flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between border-b-4 border-silver-bright/10 mb-12 font-black pl-8 pr-8">
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -424,7 +406,7 @@ export default function Dashboard() {
         </motion.div>
       </header>
 
-      <main className="flex-1 px-6 md:px-12 pb-20 space-y-12 max-w-[1700px] w-full mx-auto">
+      <main className="flex-1 px-0 pb-20 space-y-12 w-full">
         <AnimatePresence mode="wait">
           {loading ? (
             <motion.section
@@ -474,78 +456,8 @@ export default function Dashboard() {
                 />
               </motion.section>
 
-              {/* MISSION CONTROL CENTER */}
-              <motion.section variants={itemVariants} className="bg-charcoal border-4 border-black p-10 shadow-[10px_10px_0px_0px_rgba(31,31,31,1)] relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none select-none">
-                  <span className="text-8xl font-black italic uppercase font-mono tracking-tighter">MISSION_READY</span>
-                </div>
-                
-                <div className="flex flex-col xl:flex-row justify-between gap-16 relative z-10">
-                  <div className="flex-1 space-y-10">
-                    <header className="space-y-4">
-                      <div className="bg-rag-blue text-black px-4 py-1 text-xs font-black uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                        Control_Deck_Initialized
-                      </div>
-                      <h2 className="text-4xl md:text-5xl font-black text-silver-bright uppercase tracking-tighter italic leading-none">
-                        Mission <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '1px var(--accent-silver-bright)' }}>Control</span>
-                      </h2>
-                    </header>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                      <div className="space-y-4">
-                        <label className="text-[10px] font-black text-silver/40 uppercase tracking-[0.3em] block italic">Subject_Enclave_Target</label>
-                        <div className="flex items-center gap-4 bg-charcoal-dark border-4 border-black p-4 focus-within:border-rag-blue transition-colors group/input">
-                          <span className="material-symbols-outlined text-silver/20 group-focus-within/input:text-rag-blue">dns</span>
-                          <input 
-                            type="text" 
-                            value={targetNode}
-                            onChange={(e) => setTargetNode(e.target.value)}
-                            placeholder="IP_OR_DOMAIN_REQD"
-                            className="bg-transparent border-none outline-none text-silver-bright font-mono text-lg flex-1 uppercase tracking-wider placeholder:text-silver/10"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-6 pt-6">
-                        <div className="flex flex-col">
-                          <span className="text-[8px] font-black text-silver/40 uppercase tracking-[0.2em] mb-1">Clearance_Level</span>
-                          <span className="text-xs font-mono text-rag-green font-black uppercase italic">LEVEL_5_OPS</span>
-                        </div>
-                        <div className="h-8 w-px bg-silver/10"></div>
-                        <div className="flex flex-col">
-                          <span className="text-[8px] font-black text-silver/40 uppercase tracking-[0.2em] mb-1">System_Posture</span>
-                          <span className="text-xs font-mono text-rag-blue font-black uppercase italic">INFILTRATOR_A3</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-4 xl:flex xl:flex-row gap-6 shrink-0">
-                    {[
-                      { id: 'nmap-recon', label: 'RECON', sub: 'PORTSCAN', color: 'bg-rag-blue' },
-                      { id: 'zap-scan', label: 'WEB', sub: 'AUDIT', color: 'bg-rag-amber' },
-                      { id: 'sqlmap-scan', label: 'DB', sub: 'INJECT', color: 'bg-rag-red' },
-                      { id: 'browser-scan', label: 'BROWSER', sub: 'EXPLOIT', color: 'bg-silver-bright' }
-                    ].map((tool) => (
-                      <button
-                        key={tool.id}
-                        disabled={initiating}
-                        onClick={() => handleStartMission(tool.id)}
-                        className={`group relative flex flex-col items-center justify-center w-36 h-36 border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 active:scale-95 transition-all bg-charcoal-dark overflow-hidden ${initiating ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        <div className={`absolute top-0 left-0 w-full h-1 ${tool.color}`}></div>
-                        <div className="text-2xl font-black text-silver-bright mb-1 tracking-tighter italic group-hover:scale-110 transition-transform">{tool.label}</div>
-                        <div className="text-[9px] font-black text-silver/40 uppercase tracking-widest">{tool.sub}</div>
-                        <div className={`absolute bottom-0 right-0 p-1 opacity-0 group-hover:opacity-100 transition-opacity ${tool.color} text-black`}>
-                          <span className="material-symbols-outlined text-xs">arrow_forward</span>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </motion.section>
-
               {/* Secondary Layout: Vulnerability & Activity */}
-              <motion.section variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-20">
+              <motion.section variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-12 px-8">
                 <div className="space-y-10">
                   <header>
                     <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-silver-bright flex items-center gap-3">
@@ -745,7 +657,7 @@ export default function Dashboard() {
 
               {/* Detail Plane: Asset Ledger & Composition */}
               <motion.section variants={itemVariants} className="pt-8 relative">
-                <div className="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-20 items-start">
+                <div className="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-12 items-start px-8">
                   <div className="space-y-12">
                     <header className="flex justify-between items-center">
                       <h3

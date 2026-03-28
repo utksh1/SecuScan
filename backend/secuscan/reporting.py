@@ -2,6 +2,7 @@ import csv
 import io
 import json
 import os
+import re
 from io import BytesIO
 from fpdf import FPDF
 from typing import Dict, Any, List
@@ -39,6 +40,18 @@ class SecuScanPDF(FPDF):
 class ReportGenerator:
     """Handles PDF and CSV generation for task results."""
 
+    ANSI_ESCAPE_RE = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
+    CONTROL_CHARS_RE = re.compile(r'[\x00-\x08\x0B-\x1F\x7F]')
+
+    @classmethod
+    def _clean_text(cls, value: Any) -> str:
+        if value is None:
+            return ""
+        text = str(value)
+        text = cls.ANSI_ESCAPE_RE.sub('', text)
+        text = cls.CONTROL_CHARS_RE.sub('', text)
+        return text.strip()
+
     @staticmethod
     def generate_csv_report(task: Dict[str, Any], result: Dict[str, Any]) -> str:
         """
@@ -47,14 +60,19 @@ class ReportGenerator:
         output = io.StringIO()
         writer = csv.writer(output)
 
+        structured_data = result.get('structured', {})
+        findings = structured_data.get('findings', [])
+        status = result.get('status', task.get('status', 'completed'))
+
         # Write header
-        writer.writerow(['Task ID', 'Tool', 'Target', 'Created At', 'Status'])
+        writer.writerow(['Task ID', 'Tool', 'Target', 'Created At', 'Status', 'Findings'])
         writer.writerow([
-            task.get('id', ''), 
-            task.get('tool_name', ''), 
-            task.get('target', ''), 
-            task.get('created_at', ''),
-            result.get('status', 'completed')
+            ReportGenerator._clean_text(task.get('id', '')),
+            ReportGenerator._clean_text(task.get('tool_name', '')),
+            ReportGenerator._clean_text(task.get('target', '')),
+            ReportGenerator._clean_text(task.get('created_at', '')),
+            ReportGenerator._clean_text(status),
+            len(findings),
         ])
         writer.writerow([])
 
@@ -62,14 +80,13 @@ class ReportGenerator:
         writer.writerow(['Severity', 'Title', 'Description', 'Remediation'])
 
         # Write Findings
-        structured_data = result.get('structured', {})
-        if findings := structured_data.get('findings', []):
+        if findings:
             for finding in findings:
                 writer.writerow([
-                    finding.get('severity', 'info').upper(),
-                    finding.get('title', ''),
-                    finding.get('description', ''),
-                    finding.get('remediation', '')
+                    ReportGenerator._clean_text(finding.get('severity', 'info')).upper(),
+                    ReportGenerator._clean_text(finding.get('title', '')),
+                    ReportGenerator._clean_text(finding.get('description', '')),
+                    ReportGenerator._clean_text(finding.get('remediation', ''))
                 ])
         else:
             writer.writerow(['No structured findings found.'])
@@ -95,6 +112,27 @@ class ReportGenerator:
         }
 
         # 1. Executive Summary
+        structured_data = result.get('structured', {})
+        findings = structured_data.get('findings', [])
+        summary = result.get('summary', [])
+        status = result.get('status', task.get('status', 'completed'))
+        severity_counts = result.get('severity_counts', {})
+
+        if not severity_counts and findings:
+            for finding in findings:
+                severity = ReportGenerator._clean_text(finding.get('severity', 'info')).lower()
+                severity_counts[severity] = severity_counts.get(severity, 0) + 1
+
+        if not summary:
+            total_findings = len(findings)
+            dominant = next((sev.upper() for sev in ['critical', 'high', 'medium', 'low', 'info'] if severity_counts.get(sev, 0) > 0), 'INFO')
+            summary = [
+                f"Status: {ReportGenerator._clean_text(status)}",
+                f"Target: {ReportGenerator._clean_text(task.get('target', ''))}",
+                f"Tool: {ReportGenerator._clean_text(task.get('tool_name', task.get('plugin_id', '')))}",
+                f"Findings recorded: {total_findings} with {dominant} as the leading severity",
+            ]
+
         pdf.set_font("helvetica", "B", 16)
         pdf.set_fill_color(240, 240, 240)
         pdf.cell(0, 12, "Executive Summary", new_x="LMARGIN", new_y="NEXT", fill=True)
@@ -111,25 +149,25 @@ class ReportGenerator:
         pdf.ln()
 
         pdf.set_font("helvetica", "", 10)
-        pdf.cell(col_width, 8, str(task.get('id', '')[:8]), border=1)
-        pdf.cell(col_width, 8, str(task.get('tool_name', '')), border=1)
-        pdf.cell(col_width, 8, str(task.get('target', '')), border=1)
-        pdf.cell(col_width, 8, str(result.get('status', 'completed')), border=1)
+        pdf.cell(col_width, 8, ReportGenerator._clean_text(task.get('id', '')[:8]), border=1)
+        pdf.cell(col_width, 8, ReportGenerator._clean_text(task.get('tool_name', '')), border=1)
+        pdf.cell(col_width, 8, ReportGenerator._clean_text(task.get('target', '')), border=1)
+        pdf.cell(col_width, 8, ReportGenerator._clean_text(status), border=1)
         pdf.ln(10)
 
         # Severity Summary Counts
-        severity_counts = result.get('severity_counts', {})
         if severity_counts:
             pdf.set_font("helvetica", "B", 12)
             pdf.cell(0, 10, "Findings by Severity", new_x="LMARGIN", new_y="NEXT")
             pdf.ln(2)
             
-            for sev, count in severity_counts.items():
+            for sev in ['critical', 'high', 'medium', 'low', 'info']:
+                count = severity_counts.get(sev, 0)
                 if count > 0:
                     pdf.set_font("helvetica", "B", 10)
                     color = colors.get(sev.upper(), (200, 200, 200))
                     pdf.set_text_color(*color)
-                    pdf.cell(30, 8, f"{sev.upper()}:")
+                    pdf.cell(30, 8, ReportGenerator._clean_text(f"{sev.upper()}:"))
                     pdf.set_text_color(0, 0, 0)
                     pdf.set_font("helvetica", "", 10)
                     pdf.cell(20, 8, str(count))
@@ -141,7 +179,7 @@ class ReportGenerator:
             pdf.ln(10)
 
         # 2. Key Observations (Summary)
-        if summary := result.get('summary', []):
+        if summary:
             pdf.set_font("helvetica", "B", 14)
             pdf.cell(0, 10, "Key Observations", new_x="LMARGIN", new_y="NEXT")
             pdf.ln(2)
@@ -151,7 +189,7 @@ class ReportGenerator:
                 pdf.set_font("helvetica", "B", 12)
                 pdf.cell(5, 7, chr(149)) # Bullet character
                 pdf.set_font("helvetica", "", 11)
-                pdf.multi_cell(0, 7, item, new_x="LMARGIN", new_y="NEXT")
+                pdf.multi_cell(0, 7, ReportGenerator._clean_text(item), new_x="LMARGIN", new_y="NEXT")
             pdf.ln(10)
 
         # 3. Detailed Findings
@@ -160,13 +198,10 @@ class ReportGenerator:
         pdf.cell(0, 12, "Detailed Findings", new_x="LMARGIN", new_y="NEXT", fill=True)
         pdf.ln(5)
 
-        structured_data = result.get('structured', {})
-        findings = structured_data.get('findings', [])
-        
         if findings:
             for idx, finding in enumerate(findings):
-                severity = finding.get('severity', 'info').upper()
-                title = finding.get('title', 'Unknown Issue')
+                severity = ReportGenerator._clean_text(finding.get('severity', 'info')).upper() or 'INFO'
+                title = ReportGenerator._clean_text(finding.get('title', 'Unknown Issue'))
                 
                 # Check for page break
                 if pdf.get_y() > 250:
@@ -177,15 +212,15 @@ class ReportGenerator:
                 color = colors.get(severity, (0, 0, 0))
                 pdf.set_fill_color(*color)
                 pdf.set_text_color(255, 255, 255)
-                pdf.cell(30, 8, f" {severity} ", new_x="RIGHT", fill=True)
+                pdf.cell(30, 8, ReportGenerator._clean_text(f" {severity} "), new_x="RIGHT", fill=True)
                 
                 pdf.set_text_color(0, 0, 0)
                 pdf.set_fill_color(245, 245, 245)
-                pdf.cell(0, 8, f" Finding #{idx+1}: {title}", new_x="LMARGIN", new_y="NEXT", fill=True)
+                pdf.cell(0, 8, ReportGenerator._clean_text(f" Finding #{idx+1}: {title}"), new_x="LMARGIN", new_y="NEXT", fill=True)
                 pdf.ln(2)
 
                 # Description
-                if description := finding.get('description', ''):
+                if description := ReportGenerator._clean_text(finding.get('description', '')):
                     pdf.set_font("helvetica", "B", 10)
                     pdf.cell(0, 7, "Description:", new_x="LMARGIN", new_y="NEXT")
                     pdf.set_font("helvetica", "", 10)
@@ -193,7 +228,7 @@ class ReportGenerator:
                     pdf.ln(2)
 
                 # Remediation (if available)
-                if remediation := finding.get('remediation', ''):
+                if remediation := ReportGenerator._clean_text(finding.get('remediation', '')):
                     pdf.set_font("helvetica", "B", 10)
                     pdf.cell(0, 7, "Remediation:", new_x="LMARGIN", new_y="NEXT")
                     pdf.set_font("helvetica", "I", 10)
@@ -207,6 +242,6 @@ class ReportGenerator:
             pdf.set_font("helvetica", "I", 12)
             pdf.cell(0, 10, "No structured findings reported for this task.", new_x="LMARGIN", new_y="NEXT")
 
-        return pdf.output()
+        return bytes(pdf.output())
 
 reporting = ReportGenerator()

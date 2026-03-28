@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { API_BASE, startTask } from '../api'
+import { API_BASE, getTaskResult, getTaskStatus, startTask } from '../api'
 import { routes, routePath } from '../routes'
 
 interface Task {
@@ -83,7 +83,13 @@ export default function TaskDetails() {
     const [result, setResult] = useState<TaskResult | null>(null)
     const [rawOutput, setRawOutput] = useState<string>('')
     const [loading, setLoading] = useState(true)
-    const [showRawOutput, setShowRawOutput] = useState(true)
+    const [error, setError] = useState<string | null>(null)
+    const [activeTab, setActiveTab] = useState<'summary' | 'results' | 'parameters' | 'raw'>('summary')
+    const [expandedFindingRows, setExpandedFindingRows] = useState<Record<number, boolean>>({})
+    const [expandedDiscoveryRows, setExpandedDiscoveryRows] = useState<Record<number, boolean>>({})
+    const [rawSearch, setRawSearch] = useState('')
+    const [wrapRawOutput, setWrapRawOutput] = useState(true)
+    const [copiedRawOutput, setCopiedRawOutput] = useState(false)
 
     useEffect(() => {
         loadTask()
@@ -122,20 +128,14 @@ export default function TaskDetails() {
 
     async function loadTask() {
         try {
-            const [statusRes, resultRes] = await Promise.all([
-                fetch(`${API_BASE}/task/${taskId}/status`),
-                fetch(`${API_BASE}/task/${taskId}/result`).catch(() => null)
+            setError(null)
+            const [statusData, resultData] = await Promise.all([
+                getTaskStatus(taskId!) as Promise<Task>,
+                getTaskResult(taskId!).catch(() => null) as Promise<TaskResult | null>
             ])
-
-            if (!statusRes.ok) {
-                throw new Error(`Failed to load task status (${statusRes.status})`)
-            }
-
-            const statusData = await statusRes.json()
             setTask(statusData)
 
-            if (resultRes?.ok) {
-                const resultData = await resultRes.json()
+            if (resultData) {
                 // The backend returns the result fields at the top level
                 setResult(resultData)
                 // Use the full output if available
@@ -147,6 +147,7 @@ export default function TaskDetails() {
             }
         } catch (err) {
             console.error('Failed to load task:', err)
+            setError(err instanceof Error ? err.message : 'Unable to load task details')
         } finally {
             setLoading(false)
         }
@@ -172,6 +173,26 @@ export default function TaskDetails() {
     }
 
     if (loading || !task) {
+        if (error) {
+            return (
+                <div className="min-h-screen bg-charcoal-dark flex items-center justify-center p-12">
+                    <div className="max-w-xl w-full bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-4 text-center">
+                        <p className="text-xs font-black text-rag-red uppercase tracking-[0.4em] italic">Task_Load_Failed</p>
+                        <p className="text-sm text-silver-bright font-mono break-words">{error}</p>
+                        <button
+                            onClick={() => {
+                                setLoading(true)
+                                loadTask()
+                            }}
+                            className="bg-rag-blue px-6 py-3 border-4 border-black text-black text-xs font-black uppercase tracking-widest italic shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none transition-all"
+                        >
+                            Retry_Load
+                        </button>
+                    </div>
+                </div>
+            )
+        }
+
         return (
             <div className="min-h-screen bg-charcoal-dark flex items-center justify-center p-12">
                 <div className="space-y-4 text-center">
@@ -183,6 +204,9 @@ export default function TaskDetails() {
     }
 
     const findings = result?.structured?.findings || []
+    const tableRows = result?.structured?.rows || []
+    const summaryItems = result?.summary || []
+    const resultEntryCount = tableRows.length || findings.length
     const formatDateLong = (dateStr: string) => {
         const parsed = parseDateSafe(dateStr)
         if (!parsed) return 'UNKNOWN_DATE'
@@ -197,235 +221,676 @@ export default function TaskDetails() {
         })} IST`
     }
     const toolLabel = formatToolLabel(task.tool, task.plugin_id)
+    const startedTime = task.started_at
+        ? parseDateSafe(task.started_at)?.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) || '--:--'
+        : '--:--'
+    const completedTime = task.completed_at
+        ? parseDateSafe(task.completed_at)?.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) || '--:--'
+        : '--:--'
+    const durationLabel = task.duration_seconds
+        ? `${Math.floor(task.duration_seconds / 60)}M ${Math.floor(task.duration_seconds % 60)}S`
+        : 'ACTIVE'
+    const severityCounts = findings.reduce((acc: Record<string, number>, finding: any) => {
+        const key = (finding.severity || 'info').toLowerCase()
+        acc[key] = (acc[key] || 0) + 1
+        return acc
+    }, {})
 
-    const SummaryCard = ({ label, value, subValue }: { label: string, value: string, subValue?: string }) => (
-        <div className="bg-charcoal border-4 border-black p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] space-y-2">
-            <span className="text-[10px] font-black text-silver/40 uppercase tracking-[0.3em] italic">{label}</span>
-            <div className="text-3xl font-black text-silver-bright italic tracking-tighter">{value}</div>
-            {subValue && <div className="text-[9px] font-mono text-rag-blue font-black uppercase tracking-widest">{subValue}</div>}
+    const formatKeyLabel = (value: string) =>
+        value
+            .replace(/_/g, ' ')
+            .replace(/\b\w/g, char => char.toUpperCase())
+
+    const formatValue = (value: unknown) => {
+        if (value === true) return 'ON'
+        if (value === false) return 'OFF'
+        if (value === null || value === undefined || value === '') return 'NONE'
+        if (Array.isArray(value)) return value.join(', ')
+        if (typeof value === 'object') return JSON.stringify(value)
+        return String(value)
+    }
+
+    const stripAnsi = (value: unknown) =>
+        String(value ?? '')
+            .replace(/\u001b\[[0-9;]*m/g, '')
+            .replace(/\[[0-9;]*m/g, '')
+            .trim()
+    const rawLines = (rawOutput || result?.raw_output_excerpt || '').split('\n')
+    const filteredRawLines = rawSearch
+        ? rawLines.filter(line => line.toLowerCase().includes(rawSearch.toLowerCase()))
+        : rawLines
+
+    const findInputValue = (...keys: string[]) => {
+        for (const key of keys) {
+            const value = task.inputs?.[key]
+            if (value !== undefined && value !== null && value !== '') {
+                return formatValue(value)
+            }
+        }
+        return null
+    }
+
+    const statusTone = task.status === 'completed'
+        ? 'bg-rag-green/15 text-rag-green border-rag-green/30'
+        : task.status === 'failed'
+            ? 'bg-rag-red/15 text-rag-red border-rag-red/30'
+            : task.status === 'cancelled'
+                ? 'bg-silver/10 text-silver/70 border-silver/15'
+                : 'bg-rag-amber/15 text-rag-amber border-rag-amber/30'
+
+    const severityTone = (severity?: string) => {
+        const normalized = (severity || '').toLowerCase()
+        if (normalized === 'critical') return 'text-rag-red border-rag-red/30 bg-rag-red/10'
+        if (normalized === 'high') return 'text-rag-amber border-rag-amber/30 bg-rag-amber/10'
+        if (normalized === 'medium') return 'text-rag-blue border-rag-blue/30 bg-rag-blue/10'
+        if (normalized === 'low') return 'text-rag-green border-rag-green/30 bg-rag-green/10'
+        return 'text-silver/65 border-white/10 bg-white/[0.02]'
+    }
+    const primaryDetail = findInputValue('source_ip', 'ip', 'host', 'hostname') || task.target
+    const primaryDetailLabel = task.inputs?.source_ip || task.inputs?.ip ? 'Source IP' : 'Target'
+    const secondaryDetail = findInputValue('scan_type', 'preset', 'mode', 'safe_mode', 'passive_detection') || toolLabel
+    const secondaryDetailLabel = task.inputs?.scan_type
+        ? 'Scan Type'
+        : task.inputs?.preset
+            ? 'Preset'
+            : task.inputs?.mode
+                ? 'Mode'
+                : task.inputs?.safe_mode !== undefined
+                    ? 'Safe Mode'
+                    : task.inputs?.passive_detection !== undefined
+                        ? 'Passive Detection'
+                        : 'Tool'
+    const parsedTarget = (() => {
+        try {
+            return new URL(task.target)
+        } catch {
+            return null
+        }
+    })()
+    const parameterEntries = [
+        ['Target', task.target],
+        ['Tool', toolLabel],
+        ['Plugin', task.plugin_id || 'N/A'],
+        ['Status', task.status],
+        ['Start Time', task.started_at ? formatDateLong(task.started_at) : 'PENDING'],
+        ['Finish Time', task.completed_at ? formatDateLong(task.completed_at) : 'ACTIVE'],
+        ['Duration', durationLabel],
+        ['Protocol', parsedTarget?.protocol?.replace(':', '').toUpperCase() || 'N/A'],
+        ['Host', parsedTarget?.hostname || task.target],
+        ['Path', parsedTarget?.pathname || '/'],
+        ['Port', parsedTarget?.port || (parsedTarget?.protocol === 'https:' ? '443' : parsedTarget?.protocol === 'http:' ? '80' : 'N/A')],
+        ['Findings', String(result?.structured?.total_count || findings.length).padStart(2, '0')],
+        ...Object.entries(task.inputs || {}).map(([key, val]) => [formatKeyLabel(key), formatValue(val)] as [string, string]),
+    ]
+    const uniqueParameterEntries = Array.from(
+        new Map(parameterEntries.map(([label, value]) => [label, value])).entries()
+    )
+    const orderedSeverities = ['critical', 'high', 'medium', 'low', 'info'] as const
+    const dominantSeverity = orderedSeverities.find(level => (severityCounts[level] || 0) > 0) || 'info'
+    const executiveBullets = summaryItems.length > 0
+        ? summaryItems.slice(0, 4).map(item => stripAnsi(item))
+        : [
+            `${String(result?.structured?.total_count || findings.length)} security findings indexed for ${task.target}.`,
+            `Risk analysis identifies ${severityCounts[dominantSeverity] || 0} ${dominantSeverity.toUpperCase()} priority items.`,
+            `Current assessment status: ${task.status.toUpperCase()}.`,
+            `Scanning engines performed comprehensive inspection via ${toolLabel}.`,
+        ]
+    const previewFindings = findings.slice(0, 5)
+    const toggleFindingRow = (index: number) => {
+        setExpandedFindingRows(prev => ({ ...prev, [index]: !prev[index] }))
+    }
+
+    const copyRaw = async () => {
+        try {
+            await navigator.clipboard.writeText(rawOutput || result?.raw_output_excerpt || '')
+            setCopiedRawOutput(true)
+            window.setTimeout(() => setCopiedRawOutput(false), 1500)
+        } catch (err) {
+            console.error('Failed to copy raw output:', err)
+        }
+    }
+
+    const DetailCard = ({ label, value, subValue }: { label: string, value: string, subValue?: string }) => (
+        <div className="bg-charcoal border border-white/5 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] min-h-[118px] flex flex-col justify-between">
+            <div className="space-y-3">
+                <span className="text-[10px] font-black text-silver/35 uppercase tracking-[0.28em] italic block">{label}</span>
+                <div className="text-xl md:text-2xl font-black text-silver-bright italic tracking-tight break-words">{value}</div>
+            </div>
+            {subValue && <div className="pt-4 text-[9px] font-mono text-rag-blue/90 font-black uppercase tracking-[0.22em]">{subValue}</div>}
         </div>
     )
 
+    const tabs = [
+        { id: 'summary', label: 'Summary' },
+        { id: 'results', label: 'Results' },
+        { id: 'parameters', label: 'Scan Parameters' },
+        { id: 'raw', label: 'Raw Output' },
+    ] as const
+
     return (
-        <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
-            
-            {/* Neo-Brutalist Header */}
-            <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10 font-black">
-                <div className="flex items-center gap-8">
+        <div className="min-h-screen bg-charcoal-dark text-silver px-3 py-6 md:px-4 xl:px-5 md:py-8 space-y-8">
+            <header className="border-b border-white/8 pb-6">
+                <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+                    <div className="flex items-start gap-5">
                     <button 
                         onClick={() => navigate(routes.history)}
-                        className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
+                            className="bg-charcoal border border-white/10 p-3 text-silver-bright transition-colors hover:bg-white/[0.04]"
                     >
                         <span className="material-symbols-outlined">arrow_back</span>
                     </button>
-                    <div className="space-y-4">
-                      <div className="bg-rag-blue text-black px-4 py-1 text-xs uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-black">
-                        Mission_Dossier_SIG#{taskId?.split('-')[0].toUpperCase()}
-                      </div>
-                      <h1 className="text-5xl md:text-7xl text-silver-bright uppercase tracking-tighter leading-none italic font-black whitespace-nowrap">
-                        Intel <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '2px var(--accent-silver-bright)' }}>Briefing</span>
-                      </h1>
+                        <div className="space-y-3">
+                            <div className="flex flex-wrap items-center gap-3">
+                                <span className="bg-rag-blue text-black px-3 py-1 text-[10px] uppercase tracking-[0.3em] inline-block font-black">
+                                    Mission_Dossier_SIG#{taskId?.split('-')[0].toUpperCase()}
+                                </span>
+                                <span className={`px-3 py-1 text-[10px] uppercase tracking-[0.3em] border ${statusTone}`}>
+                                    {task.status}
+                                </span>
+                                <span className="text-[10px] uppercase tracking-[0.26em] text-silver/50 font-mono">
+                                    Tool::{toolLabel}
+                                </span>
+                            </div>
+                            <h1 className="text-4xl md:text-6xl text-silver-bright uppercase tracking-tight leading-none italic font-black">
+                                Intel <span className="text-transparent" style={{ WebkitTextStroke: '1.5px var(--accent-silver-bright)' }}>Briefing</span>
+                            </h1>
+                            <div className="space-y-1">
+                                <p className="text-lg md:text-3xl font-black italic uppercase tracking-tight text-silver-bright break-all">
+                                    {task.target}
+                                </p>
+                                <div className="flex flex-wrap gap-x-6 gap-y-2 text-[10px] font-mono uppercase tracking-[0.24em] text-silver/45">
+                                    <span>Init::{formatDateLong(task.created_at)}</span>
+                                    <span>Plugin::{task.plugin_id || 'N/A'}</span>
+                                    <span>Task::{task.task_id?.slice(0, 8) || 'UNKNOWN'}</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                </div>
 
-                <div className="flex gap-4">
-                    {(task.status === 'completed' || task.status === 'failed') && (
-                        <button
-                            onClick={handleRescan}
-                            className="bg-rag-blue px-6 py-4 border-4 border-black text-black text-xs font-black uppercase tracking-widest italic shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none transition-all flex items-center gap-3"
-                        >
-                            <span className="material-symbols-outlined text-sm">restart_alt</span>
-                            RESCAN_TARGET
-                        </button>
-                    )}
-                    {task.status === 'completed' && (
-                        <>
+                    <div className="flex flex-wrap gap-3 xl:justify-end">
+                        {(task.status === 'completed' || task.status === 'failed') && (
                             <button
-                                onClick={() => window.open(`${API_BASE}/task/${taskId}/report/csv`)}
-                                className="bg-charcoal px-6 py-4 border-4 border-black text-xs font-black uppercase tracking-widest italic shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none transition-all flex items-center gap-3"
+                                onClick={handleRescan}
+                                className="bg-rag-blue px-5 py-3 text-black text-[10px] font-black uppercase tracking-[0.26em] italic transition-colors hover:brightness-110 flex items-center gap-2"
                             >
-                                <span className="material-symbols-outlined text-sm">download</span>
-                                CSV_EXPORT
+                                <span className="material-symbols-outlined text-sm">restart_alt</span>
+                                Rescan_Target
                             </button>
+                        )}
+                        {task.status === 'completed' && (
+                            <>
+                                <button
+                                    onClick={() => window.open(`${API_BASE}/task/${taskId}/report/csv`)}
+                                    className="bg-charcoal px-5 py-3 border border-white/10 text-[10px] font-black uppercase tracking-[0.26em] italic transition-colors hover:bg-white/[0.04] flex items-center gap-2"
+                                >
+                                    <span className="material-symbols-outlined text-sm">download</span>
+                                    Csv_Export
+                                </button>
                             <button
                                 onClick={() => window.open(`${API_BASE}/task/${taskId}/report/pdf`)}
-                                className="bg-silver-bright px-6 py-4 border-4 border-black text-black text-xs font-black uppercase tracking-widest italic shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none transition-all flex items-center gap-3"
+                                    className="bg-silver-bright px-5 py-3 text-black text-[10px] font-black uppercase tracking-[0.26em] italic transition-colors hover:brightness-95 flex items-center gap-2"
                             >
                                 <span className="material-symbols-outlined text-sm">picture_as_pdf</span>
-                                PDF_REPORT
+                                    Pdf_Report
                             </button>
                         </>
                     )}
                 </div>
+                </div>
             </header>
 
-            {/* Target Detail Block */}
-            <section className="bg-charcoal border-4 border-black p-10 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-                    <span className="text-7xl font-black italic select-none uppercase font-mono">{toolLabel}</span>
+            <section className="relative border border-white/8 bg-charcoal px-6 py-6 md:px-8 md:py-7 overflow-hidden">
+                <div className="absolute right-4 top-4 text-3xl md:text-5xl font-black italic uppercase text-white/[0.05] pointer-events-none">
+                    {toolLabel}
                 </div>
-                <div className="flex flex-col md:flex-row justify-between gap-10 relative z-10">
-                    <div className="space-y-6">
+                <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="space-y-4 max-w-3xl">
+                        <p className="text-[10px] uppercase tracking-[0.35em] text-silver/30 font-black italic">Subject_Enclave_Node</p>
                         <div className="space-y-2">
-                            <p className="text-[10px] font-black uppercase tracking-[0.4em] text-silver/20 italic">SUBJECT_ENCLAVE_NODE</p>
-                            <h2 className="text-4xl md:text-6xl font-black text-silver-bright uppercase tracking-tighter italic font-mono group-hover:text-rag-blue transition-colors">
+                            <p className="text-xl md:text-3xl font-black italic uppercase tracking-tight text-silver-bright break-all">
                                 {task.target}
-                            </h2>
+                            </p>
+                            <div className="flex flex-wrap gap-x-5 gap-y-2 text-[10px] font-mono uppercase tracking-[0.22em] text-silver/45">
+                                <span>Tool::{toolLabel}</span>
+                                <span>Plugin::{task.plugin_id || 'N/A'}</span>
+                                <span>Task::{task.task_id?.slice(0, 8) || 'UNKNOWN'}</span>
+                                <span>Init::{formatDateLong(task.created_at)}</span>
+                            </div>
                         </div>
-                        <div className="flex flex-wrap gap-8 text-[10px] font-black uppercase tracking-[0.2em] font-mono italic text-silver/40">
-                            <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-xs text-rag-blue">terminal</span>
-                                TOOL::{toolLabel}
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-xs text-rag-blue">history</span>
-                                INIT::{formatDateLong(task.created_at)}
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-xs text-rag-blue">fingerprint</span>
-                                PLUGIN::{task.plugin_id || 'N/A'}
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-xs text-rag-blue">badge</span>
-                                TASK::{task.task_id?.slice(0, 8) || 'UNKNOWN'}
-                            </div>
-                            {task.duration_seconds && (
-                                <div className="flex items-center gap-2">
-                                    <span className="material-symbols-outlined text-xs text-rag-blue">timer</span>
-                                    TIME::{Math.round(task.duration_seconds)}S
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                    <div className="shrink-0 flex items-center">
-                        <div className={`px-8 py-4 border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] text-xs font-black uppercase tracking-[0.4em] italic ${
-                            task.status === 'completed' ? 'bg-rag-green text-black' : 
-                            task.status === 'failed' ? 'bg-rag-red text-black' : 'bg-rag-amber text-black animate-pulse'
-                        }`}>
-                            {task.status}
+                        <div className="flex flex-wrap items-center gap-3">
+                            <span className={`px-3 py-1 text-[10px] uppercase tracking-[0.26em] border ${statusTone}`}>
+                                {task.status}
+                            </span>
+                            {Object.entries(severityCounts).slice(0, 3).map(([severity, count]) => (
+                                <span key={severity} className={`px-3 py-1 text-[10px] uppercase tracking-[0.22em] border ${severityTone(severity)}`}>
+                                    {severity}:{count}
+                                </span>
+                            ))}
                         </div>
                     </div>
                 </div>
             </section>
 
-            {/* Metric Overview */}
-            <section className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <SummaryCard 
-                    label="DISCOVERY_COUNT" 
-                    value={(result?.structured?.total_count || findings.length).toString().padStart(2, '0')} 
-                    subValue={`${result?.structured?.type?.toUpperCase() || 'FINDINGS'}_LOCALIZED`}
+            <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                <DetailCard
+                    label={primaryDetailLabel.toUpperCase().replace(/ /g, '_')}
+                    value={primaryDetail}
+                    subValue={task.target !== primaryDetail ? `TARGET::${task.target}` : `PLUGIN::${task.plugin_id || 'N/A'}`}
                 />
-                <SummaryCard 
-                    label="MISSION_START" 
-                    value={task.started_at ? parseDateSafe(task.started_at)?.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) || '00:00' : '--:--'} 
-                    subValue={task.started_at ? formatDateLong(task.started_at).split(' ')[0] : 'PENDING'}
+                <DetailCard
+                    label="MISSION_START"
+                    value={startedTime}
+                    subValue={task.started_at ? formatDateLong(task.started_at) : 'PENDING'}
                 />
-                <SummaryCard 
-                    label="MISSION_FINISH" 
-                    value={task.completed_at ? parseDateSafe(task.completed_at)?.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) || '00:00' : '--:--'} 
-                    subValue={task.completed_at ? formatDateLong(task.completed_at).split(' ')[0] : 'ACTIVE'}
+                <DetailCard
+                    label="SCAN_DURATION"
+                    value={durationLabel}
+                    subValue={task.completed_at ? `FINISH::${completedTime}` : 'IN_PROGRESS'}
                 />
-                <SummaryCard 
-                    label="SCAN_DURATION" 
-                    value={task.duration_seconds ? `${Math.floor(task.duration_seconds / 60)}M ${Math.floor(task.duration_seconds % 60)}S` : '00:00'} 
-                    subValue="TOTAL_ELAPSED_TIME"
+                <DetailCard
+                    label={secondaryDetailLabel.toUpperCase().replace(/ /g, '_')}
+                    value={secondaryDetail}
+                    subValue={`FINDINGS::${String(result?.structured?.total_count || findings.length).padStart(2, '0')}`}
                 />
             </section>
 
-            {/* Results Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-                <main className="lg:col-span-2 space-y-12">
-                    {/* Primary Results Table */}
-                    {result?.structured?.rows && result.structured.rows.length > 0 && (
-                        <section className="space-y-6">
-                            <div className="flex items-center gap-4">
-                                <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Discovery_Results</h3>
-                                <div className="h-0.5 flex-1 bg-black/10"></div>
-                                <span className="text-[10px] font-black text-silver/30 uppercase italic">{result.structured.rows.length} Entries</span>
-                            </div>
-                            
-                            <div className="border-4 border-black bg-black/40 overflow-hidden shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-                                <div className="overflow-x-auto max-h-[600px] overflow-y-auto custom-scrollbar">
-                                    <table className="w-full text-left text-[11px] font-mono border-collapse">
-                                        <thead className="sticky top-0 z-20">
-                                            <tr className="bg-black text-silver/40 uppercase tracking-widest font-black italic">
-                                                {Object.keys(result.structured.rows[0]).map(key => (
-                                                    <th key={key} className="p-4 border-r-2 border-black border-b-4">{key}</th>
-                                                ))}
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y-4 divide-black">
-                                            {result.structured.rows.map((row: any, idx: number) => (
-                                                <tr key={idx} className="hover:bg-white/5 transition-colors group">
-                                                    {Object.values(row).map((val: any, vIdx: number) => (
-                                                        <td key={vIdx} className={`p-4 border-r-2 border-black font-black uppercase tracking-tight ${vIdx === 0 ? 'text-rag-blue' : 'text-silver/70'}`}>
-                                                            {val?.toString() || '-'}
-                                                        </td>
-                                                    ))}
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </section>
-                    )}
+            <div className="border-b border-white/8">
+                <div className="flex flex-wrap gap-2">
+                    {tabs.map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`px-4 py-3 text-[10px] uppercase tracking-[0.28em] font-black transition-colors border-b-2 ${
+                                activeTab === tab.id
+                                    ? 'text-silver-bright border-rag-blue'
+                                    : 'text-silver/40 border-transparent hover:text-silver/75'
+                            }`}
+                        >
+                            {tab.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
 
-                    {/* Findings Details */}
-                    {findings.length > 0 && (
-                        <section className="space-y-8">
-                            <div className="flex items-center gap-4">
-                                <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Tactical_Intelligence</h3>
-                                <div className="h-0.5 flex-1 bg-black/10"></div>
-                            </div>
-                            <div className="space-y-6">
-                                {findings.map((f: any, idx: number) => (
-                                    <div key={idx} className="bg-charcoal border-4 border-black p-8 space-y-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] relative overflow-hidden group hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all">
-                                        <div className="flex justify-between items-start">
-                                            <div className="space-y-2">
-                                                <span className="text-[8px] font-mono text-silver/30 uppercase tracking-[0.3em] italic">Finding_ID::SIG#{idx.toString().padStart(3, '0')}</span>
-                                                <h4 className="text-xl font-black text-silver-bright uppercase tracking-tighter italic group-hover:text-rag-blue transition-colors">{f.title}</h4>
-                                            </div>
-                                            <span className={`px-3 py-1 text-[10px] font-black uppercase italic border-2 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] ${
-                                                f.severity === 'critical' ? 'bg-rag-red text-black' :
-                                                f.severity === 'high' ? 'bg-rag-amber text-black' :
-                                                f.severity === 'medium' ? 'bg-rag-blue text-black' :
-                                                'bg-charcoal text-silver-bright border-silver-bright/20'
-                                            }`}>
-                                                {f.severity}_SEVERITY
-                                            </span>
+            <div className="space-y-8">
+                <main className="space-y-6">
+                    <AnimatePresence mode="wait">
+                        {activeTab === 'summary' && (
+                            <motion.section
+                                key="summary"
+                                variants={containerVariants}
+                                initial="hidden"
+                                animate="visible"
+                                exit="hidden"
+                                className="space-y-6"
+                            >
+                                <motion.div variants={itemVariants} className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.5fr)_420px] gap-6">
+                                    <section className="border border-white/8 bg-charcoal p-6">
+                                        <div className="flex items-center gap-4 mb-5">
+                                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Executive Summary</h3>
+                                            <div className="h-px flex-1 bg-white/8" />
                                         </div>
-                                        <p className="text-xs text-silver/50 leading-loose italic border-t-2 border-black border-dashed pt-4">{f.description}</p>
+                                        <div className="space-y-5">
+                                            <div className="border border-white/6 bg-black/20 px-5 py-5">
+                                                <p className="text-[10px] uppercase tracking-[0.24em] text-silver/35 font-black mb-3">Assessment</p>
+                                                <p className="text-base md:text-lg leading-8 text-silver/85 italic">
+                                                    {`The security assessment for ${task.target} has concluded with ${String(result?.structured?.total_count || findings.length)} significant observations. The risk profile is currently influenced by ${dominantSeverity.toUpperCase()} priority findings.`}
+                                                </p>
+                                            </div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                {executiveBullets.map((item, index) => (
+                                                    <div key={index} className="border border-white/6 bg-black/20 px-4 py-4 flex gap-4">
+                                                        <span className="text-rag-blue font-mono text-[10px] uppercase tracking-[0.24em] pt-1">
+                                                            {String(index + 1).padStart(2, '0')}
+                                                        </span>
+                                                        <p className="text-sm leading-7 text-silver/78">{item}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    <section className="border border-white/8 bg-charcoal p-6">
+                                        <div className="flex items-center gap-4 mb-5">
+                                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Mission Snapshot</h3>
+                                            <div className="h-px flex-1 bg-white/8" />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="border border-white/6 bg-black/20 px-4 py-4">
+                                                <p className="text-[10px] uppercase tracking-[0.22em] text-silver/35 font-black mb-2">Target</p>
+                                                <p className="text-sm text-silver-bright font-black break-all">{task.target}</p>
+                                            </div>
+                                            <div className="border border-white/6 bg-black/20 px-4 py-4">
+                                                <p className="text-[10px] uppercase tracking-[0.22em] text-silver/35 font-black mb-2">Tool</p>
+                                                <p className="text-sm text-silver-bright font-black break-words">{toolLabel}</p>
+                                            </div>
+                                            <div className="border border-white/6 bg-black/20 px-4 py-4">
+                                                <p className="text-[10px] uppercase tracking-[0.22em] text-silver/35 font-black mb-2">Top Severity</p>
+                                                <p className={`text-2xl font-black italic ${severityTone(dominantSeverity).split(' ')[0]}`}>{dominantSeverity.toUpperCase()}</p>
+                                            </div>
+                                            <div className="border border-white/6 bg-black/20 px-4 py-4">
+                                                <p className="text-[10px] uppercase tracking-[0.22em] text-silver/35 font-black mb-2">Findings</p>
+                                                <p className="text-2xl font-black italic text-silver-bright">{String(result?.structured?.total_count || findings.length).padStart(2, '0')}</p>
+                                            </div>
+                                        </div>
+                                    </section>
+                                </motion.div>
+
+                                <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+                                    {orderedSeverities.map(level => (
+                                        <div key={level} className={`border px-4 py-4 ${severityTone(level)}`}>
+                                            <p className="text-[10px] uppercase tracking-[0.26em] font-black mb-2">{level}</p>
+                                            <p className="text-3xl font-black italic">{severityCounts[level] || 0}</p>
+                                        </div>
+                                    ))}
+                                </motion.div>
+
+                                <motion.div variants={itemVariants} className="border border-white/8 bg-charcoal p-6">
+                                    <div className="flex items-center gap-4 mb-5">
+                                        <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Priority Findings</h3>
+                                        <div className="h-px flex-1 bg-white/8" />
+                                        <span className="text-[10px] uppercase tracking-[0.24em] text-silver/40">{previewFindings.length} Previewed</span>
                                     </div>
-                                ))}
-                            </div>
-                        </section>
-                    )}
+                                    {previewFindings.length > 0 ? (
+                                        <div className="overflow-hidden border border-white/6 bg-black/20">
+                                            {previewFindings.map((f: any, idx: number) => (
+                                                <div key={idx} className="grid grid-cols-1 md:grid-cols-[84px_minmax(0,1fr)_120px] gap-4 px-4 py-4 border-b border-white/6 last:border-0 hover:bg-white/[0.03]">
+                                                    <div className="text-[10px] font-mono uppercase tracking-[0.24em] text-rag-blue pt-1">
+                                                        #{idx.toString().padStart(3, '0')}
+                                                    </div>
+                                                    <div className="space-y-2 min-w-0">
+                                                        <h4 className="break-words text-sm md:text-base font-black text-silver-bright uppercase tracking-tight italic">
+                                                            {stripAnsi(f.title)}
+                                                        </h4>
+                                                        <p className="max-w-full overflow-hidden break-words whitespace-pre-wrap text-sm leading-6 text-silver/62">
+                                                            {stripAnsi(f.description) || 'No description provided.'}
+                                                        </p>
+                                                    </div>
+                                                    <div className="md:text-right">
+                                                        <span className={`inline-flex px-3 py-1 text-[10px] font-black uppercase italic border ${severityTone(f.severity)}`}>
+                                                            {f.severity || 'info'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {findings.length > previewFindings.length && (
+                                                <div className="px-4 py-3 border-t border-white/6 text-[10px] uppercase tracking-[0.22em] text-silver/40">
+                                                    Open the `Results` tab to inspect all {findings.length} findings.
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <p className="text-sm text-silver/55 italic">No structured findings were returned for this task.</p>
+                                    )}
+                                </motion.div>
+                            </motion.section>
+                        )}
+
+                        {activeTab === 'results' && (
+                            <motion.section
+                                key="results"
+                                variants={containerVariants}
+                                initial="hidden"
+                                animate="visible"
+                                exit="hidden"
+                                className="space-y-6"
+                            >
+                                <motion.div variants={itemVariants} className="border border-white/8 bg-charcoal p-6">
+                                    <div className="flex items-center gap-4 mb-5">
+                                        <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Discovery Results</h3>
+                                        <div className="h-px flex-1 bg-white/8" />
+                                        <span className="text-[10px] uppercase tracking-[0.24em] text-silver/40">
+                                            {resultEntryCount} {resultEntryCount === 1 ? 'Entry' : 'Entries'}
+                                        </span>
+                                    </div>
+                                    {tableRows.length > 0 ? (
+                                        <div className="relative overflow-x-auto overflow-y-auto max-h-[72vh] border border-white/6 bg-black/20 custom-scrollbar rounded-sm">
+                                            <table className="w-full text-left text-[11px] font-mono border-collapse table-fixed">
+                                                <thead>
+                                                    <tr className="sticky top-0 z-20 border-b border-white/10 text-silver/40 uppercase tracking-[0.22em] bg-[#0c0c0f] shadow-[0_1px_0_0_rgba(255,255,255,0.05)]">
+                                                        {Object.keys(tableRows[0]).map((key, kIdx) => (
+                                                            <th key={key} className={`px-4 py-4 font-black ${kIdx === 0 ? 'w-[120px]' : ''}`}>{formatKeyLabel(key)}</th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {tableRows.map((row: any, idx: number) => {
+                                                        const isExpanded = expandedDiscoveryRows[idx];
+                                                        return (
+                                                            <tr key={idx} className="border-b border-white/5 last:border-0 hover:bg-white/[0.03] transition-colors group">
+                                                                {Object.entries(row).map(([key, val], vIdx) => {
+                                                                    const strVal = stripAnsi(val) || '-';
+                                                                    const isLong = strVal.length > 120;
+                                                                    return (
+                                                                        <td key={vIdx} className={`px-4 py-4 align-top ${vIdx === 0 ? 'text-rag-blue font-bold' : 'text-silver/75'}`}>
+                                                                            <div className="space-y-2">
+                                                                                <div className={`${!isExpanded && isLong ? 'line-clamp-2' : ''} break-words whitespace-pre-wrap`}>
+                                                                                    {strVal}
+                                                                                </div>
+                                                                                {isLong && vIdx > 0 && (
+                                                                                    <button
+                                                                                        onClick={() => setExpandedDiscoveryRows(prev => ({ ...prev, [idx]: !prev[idx] }))}
+                                                                                        className="text-[9px] uppercase tracking-[0.15em] text-rag-blue/70 hover:text-rag-blue font-black transition-colors"
+                                                                                    >
+                                                                                        {isExpanded ? '[ COLLAPSE ]' : '[ EXPAND ]'}
+                                                                                    </button>
+                                                                                )}
+                                                                            </div>
+                                                                        </td>
+                                                                    );
+                                                                })}
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ) : findings.length > 0 ? (
+                                        <div className="relative overflow-x-auto overflow-y-auto max-h-[72vh] border border-white/6 bg-black/20 custom-scrollbar rounded-sm">
+                                            <table className="w-full text-left border-collapse table-fixed">
+                                                <thead>
+                                                    <tr className="sticky top-0 z-20 border-b border-white/10 bg-[#0c0c0f] text-[10px] uppercase tracking-[0.2em] text-silver/35 font-black shadow-[0_1px_0_0_rgba(255,255,255,0.05)]">
+                                                        <th className="px-4 py-4 w-[100px]">Entry</th>
+                                                        <th className="px-4 py-4 w-[280px]">Finding</th>
+                                                        <th className="px-4 py-4 w-[130px]">Severity</th>
+                                                        <th className="px-4 py-4">Description</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {findings.map((f: any, idx: number) => {
+                                                        const isExpanded = expandedFindingRows[idx];
+                                                        const description = stripAnsi(f.description) || 'No description provided.';
+                                                        const isLong = description.length > 200;
+                                                        
+                                                        return (
+                                                            <tr
+                                                                key={idx}
+                                                                className="border-b border-white/5 last:border-0 hover:bg-white/[0.03] transition-colors group"
+                                                            >
+                                                                <td className="px-4 py-6 align-top text-[10px] font-mono uppercase tracking-[0.24em] text-rag-blue/80 font-bold">
+                                                                    #{idx.toString().padStart(3, '0')}
+                                                                </td>
+                                                                <td className="px-4 py-6 align-top">
+                                                                    <div className="text-sm md:text-[15px] font-black text-silver-bright uppercase tracking-tight italic break-words leading-tight">
+                                                                        {stripAnsi(f.title)}
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-4 py-6 align-top">
+                                                                    <span className={`inline-flex px-3 py-1 text-[10px] font-black uppercase italic border shadow-sm ${severityTone(f.severity)}`}>
+                                                                        {f.severity || 'info'}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-4 py-6 align-top text-xs md:text-sm text-silver/70 leading-relaxed">
+                                                                    <div className="space-y-3">
+                                                                        <div className={`${!isExpanded && isLong ? 'line-clamp-3' : ''} break-words whitespace-pre-wrap`}>
+                                                                            {description}
+                                                                        </div>
+                                                                        {isLong && (
+                                                                            <button
+                                                                                onClick={() => toggleFindingRow(idx)}
+                                                                                className="flex items-center gap-1.5 text-[9px] uppercase tracking-[0.2em] text-rag-blue font-black hover:text-silver-bright transition-colors"
+                                                                            >
+                                                                                <span className="material-symbols-outlined text-[14px]">
+                                                                                    {isExpanded ? 'unfold_less' : 'unfold_more'}
+                                                                                </span>
+                                                                                {isExpanded ? 'Collapse_Details' : 'Expand_Details'}
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    ) : (
+                                        <p className="text-sm text-silver/55 italic">No tabular result set is available for this task.</p>
+                                    )}
+                                </motion.div>
+                            </motion.section>
+                        )}
+
+                        {activeTab === 'parameters' && (
+                            <motion.section
+                                key="parameters"
+                                variants={containerVariants}
+                                initial="hidden"
+                                animate="visible"
+                                exit="hidden"
+                                className="space-y-6"
+                            >
+                                <motion.div variants={itemVariants} className="border border-white/8 bg-charcoal p-6">
+                                    <div className="flex items-center gap-4 mb-5">
+                                        <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Scan Parameters</h3>
+                                        <div className="h-px flex-1 bg-white/8" />
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                                        {uniqueParameterEntries.map(([label, value]) => (
+                                            <div key={label} className="border border-white/6 bg-black/20 px-4 py-4 min-h-[110px]">
+                                                <p className="text-[10px] font-black text-silver/30 uppercase tracking-[0.22em] mb-3">
+                                                    {label}
+                                                </p>
+                                                <p className={`text-sm font-black uppercase break-words leading-6 ${
+                                                    value === 'ON' || value === 'TRUE'
+                                                        ? 'text-rag-green'
+                                                        : value === 'OFF' || value === 'FALSE'
+                                                            ? 'text-rag-red'
+                                                            : 'text-silver-bright'
+                                                }`}>
+                                                    {value}
+                                                </p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </motion.div>
+                            </motion.section>
+                        )}
+
+                        {activeTab === 'raw' && (
+                            <motion.section
+                                key="raw"
+                                variants={containerVariants}
+                                initial="hidden"
+                                animate="visible"
+                                exit="hidden"
+                                className="space-y-6"
+                            >
+                                <motion.div variants={itemVariants} className="border border-white/8 bg-charcoal p-6">
+                                    <div className="flex flex-col gap-4 mb-5">
+                                        <div className="flex items-center gap-4">
+                                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Raw Output</h3>
+                                            <div className="h-px flex-1 bg-white/8" />
+                                        </div>
+                                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                            <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                                                <input
+                                                    value={rawSearch}
+                                                    onChange={(e) => setRawSearch(e.target.value)}
+                                                    placeholder="Filter raw output"
+                                                    className="bg-black/30 border border-white/10 px-3 py-2 text-sm text-silver-bright outline-none min-w-[240px]"
+                                                />
+                                                <span className="text-[10px] uppercase tracking-[0.2em] text-silver/40">
+                                                    {filteredRawLines.length} lines
+                                                </span>
+                                            </div>
+                                            <div className="flex gap-3">
+                                                <button
+                                                    onClick={() => setWrapRawOutput(prev => !prev)}
+                                                    className="border border-white/10 px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-silver/75 font-black"
+                                                >
+                                                    {wrapRawOutput ? 'Disable Wrap' : 'Enable Wrap'}
+                                                </button>
+                                                <button
+                                                    onClick={copyRaw}
+                                                    className="border border-white/10 px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-silver/75 font-black"
+                                                >
+                                                    {copiedRawOutput ? 'Copied' : 'Copy Output'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="border border-white/6 bg-black/30 p-4 max-h-[720px] overflow-auto">
+                                        <pre className={`${wrapRawOutput ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'} text-[11px] leading-6 font-mono text-silver/75`}>
+                                            {filteredRawLines.length > 0
+                                                ? filteredRawLines.join('\n')
+                                                : 'No matching raw output lines.'}
+                                        </pre>
+                                    </div>
+                                </motion.div>
+                            </motion.section>
+                        )}
+                    </AnimatePresence>
                 </main>
 
-                <aside className="space-y-12">
-                    {/* Scan Parameters Dashboard */}
-                    <section className="space-y-6">
+                <aside className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                    <section className="border border-white/8 bg-charcoal p-5 space-y-5">
                         <div className="flex items-center gap-4">
-                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic border-b-4 border-black pb-4 w-full">Scan_Parameters</h3>
+                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Scan Manifest</h3>
+                            <div className="h-px flex-1 bg-white/8" />
                         </div>
-                        <div className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
-                            {Object.entries(task.inputs || {}).map(([key, val]: [string, any]) => (
-                                <div key={key} className="flex justify-between items-center gap-4 border-b border-black/20 pb-4 last:border-0 last:pb-0">
-                                    <span className="text-[9px] font-black text-silver/20 uppercase tracking-[0.2em] font-mono">{key}</span>
-                                    <span className={`text-[10px] font-black uppercase text-right ${val === true ? 'text-rag-green' : val === false ? 'text-rag-red' : 'text-silver-bright'}`}>
-                                        {val === true ? 'ON' : val === false ? 'OFF' : val?.toString() || 'NONE'}
+                        <div className="space-y-4">
+                            {[
+                                ['Tool', toolLabel],
+                                ['Plugin', task.plugin_id || 'N/A'],
+                                ['Status', task.status],
+                                ['Created', formatDateLong(task.created_at)],
+                                ['Started', task.started_at ? formatDateLong(task.started_at) : 'PENDING'],
+                                ['Completed', task.completed_at ? formatDateLong(task.completed_at) : 'ACTIVE'],
+                            ].map(([label, value]) => (
+                                <div key={label} className="border-b border-white/6 pb-3 last:border-0 last:pb-0">
+                                    <p className="text-[10px] uppercase tracking-[0.24em] text-silver/30 font-black mb-1">{label}</p>
+                                    <p className="text-sm text-silver-bright font-mono break-words">{value}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+
+                    <section className="border border-white/8 bg-charcoal p-5 space-y-5">
+                        <div className="flex items-center gap-4">
+                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Quick Parameters</h3>
+                            <div className="h-px flex-1 bg-white/8" />
+                        </div>
+                        <div className="space-y-3">
+                            {Object.entries(task.inputs || {}).slice(0, 6).map(([key, val]: [string, any]) => (
+                                <div key={key} className="flex items-start justify-between gap-4 border-b border-white/6 pb-3 last:border-0 last:pb-0">
+                                    <span className="text-[10px] font-black text-silver/30 uppercase tracking-[0.18em]">
+                                        {formatKeyLabel(key)}
+                                    </span>
+                                    <span className="text-[11px] font-black uppercase text-right text-silver-bright break-all">
+                                        {formatValue(val)}
                                     </span>
                                 </div>
                             ))}
                         </div>
                     </section>
 
-                    {/* Operational Command */}
                     {result?.command_used && (
-                        <section className="space-y-6">
-                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic border-b-4 border-black pb-4">Operational_Command</h3>
-                            <div className="bg-charcoal-dark border-4 border-black p-6 font-mono text-[10px] text-rag-blue/60 break-all shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] italic">
+                        <section className="border border-white/8 bg-charcoal p-5 space-y-5">
+                            <div className="flex items-center gap-4">
+                                <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Operational Command</h3>
+                                <div className="h-px flex-1 bg-white/8" />
+                            </div>
+                            <div className="border border-white/6 bg-black/30 p-4 font-mono text-[10px] text-rag-blue/70 break-all italic leading-6">
                                 <span className="text-silver/20 mr-2">$</span>
                                 {result.command_used}
                             </div>
@@ -434,8 +899,7 @@ export default function TaskDetails() {
                 </aside>
             </div>
 
-            {/* Tactical Footer */}
-            <footer className="pt-24 border-t-4 border-black/5 flex flex-col md:flex-row justify-between items-center gap-8 text-[9px] font-black uppercase tracking-[0.5em] italic opacity-20">
+            <footer className="pt-12 border-t border-white/6 flex flex-col md:flex-row justify-between items-center gap-6 text-[9px] font-black uppercase tracking-[0.4em] italic opacity-25">
                 <div className="flex items-center gap-6">
                     <div className="w-12 h-1 bg-silver/20"></div>
                     CLASSIFIED_EXECUTIVE_SUMMARY // CORE_DAEMON_LOG_ID::{taskId?.split('-')[0].toUpperCase()}

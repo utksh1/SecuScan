@@ -134,12 +134,12 @@ export function getTasks(params?: URLSearchParams) {
   return request(`/tasks${suffix}`)
 }
 
-export function getTaskStatus(taskId: string) {
-  return request(`/task/${taskId}/status`)
+export function getTaskStatus(taskId: string): Promise<any> {
+  return request<any>(`/task/${taskId}/status`)
 }
 
-export function getTaskResult(taskId: string) {
-  return request(`/task/${taskId}/result`)
+export function getTaskResult(taskId: string): Promise<any> {
+  return request<any>(`/task/${taskId}/result`)
 }
 
 export function startTask(plugin_id: string, inputs: Record<string, unknown>, consent_granted: boolean, preset?: string) {
