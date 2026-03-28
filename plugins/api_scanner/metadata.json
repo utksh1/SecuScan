@@ -1,0 +1,60 @@
+{
+  "id": "api_scanner",
+  "name": "API Scanner",
+  "version": "1.0.0",
+  "description": "Check for specific API vulnerabilities (REST and GraphQL).",
+  "long_description": "Check for specific API vulnerabilities (REST and GraphQL).",
+  "category": "vulnerability",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udee0\ufe0f",
+  "engine": {
+    "type": "cli",
+    "binary": "nuclei"
+  },
+  "command_template": [
+    "nuclei",
+    "-u",
+    "{target}",
+    "-silent"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "API Base URL",
+      "type": "string",
+      "required": true,
+      "placeholder": "https://api.secuscan.in",
+      "validation": {
+        "pattern": "^https?://",
+        "message": "Must be a valid HTTP(S) URL"
+      }
+    }
+  ],
+  "presets": {
+    "default": {}
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "API vulnerability scanning is active and requires authorization.",
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "nuclei"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

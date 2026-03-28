@@ -1,0 +1,1623 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-8.3.5, pluggy-1.6.0
+rootdir: /Users/Apple/Secuscan
+plugins: cov-6.0.0, anyio-4.13.0
+collected 9 items
+
+tests/integration/test_phase3_plugins.py FFFFFFF--- Logging error ---
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/logging/__init__.py", line 1163, in emit
+    stream.write(msg + self.terminator)
+ValueError: I/O operation on closed file.
+Call stack:
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/threading.py", line 1032, in _bootstrap
+    self._bootstrap_inner()
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/threading.py", line 1075, in _bootstrap_inner
+    self.run()
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/threading.py", line 1012, in run
+    self._target(*self._args, **self._kwargs)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/anyio/from_thread.py", line 532, in run_blocking_portal
+    run_eventloop(
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/anyio/_core/_eventloop.py", line 77, in run
+    return async_backend.run(func, args, {}, backend_options)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 2358, in run
+    return runner.run(wrapper())
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/base_events.py", line 678, in run_until_complete
+    self.run_forever()
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/base_events.py", line 645, in run_forever
+    self._run_once()
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/base_events.py", line 1999, in _run_once
+    handle._run()
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/anyio/from_thread.py", line 259, in _call_func
+    retval = await retval_or_awaitable
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/starlette/testclient.py", line 759, in lifespan
+    await self.app(scope, self.stream_receive.receive, self.stream_send.send)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/fastapi/applications.py", line 1054, in __call__
+    await super().__call__(scope, receive, send)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/starlette/applications.py", line 113, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/starlette/middleware/errors.py", line 152, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/starlette/middleware/cors.py", line 77, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 48, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/starlette/routing.py", line 715, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/starlette/routing.py", line 724, in app
+    await self.lifespan(scope, receive, send)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/starlette/routing.py", line 693, in lifespan
+    async with self.lifespan_context(app) as maybe_state:
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/contextlib.py", line 217, in __aexit__
+    await anext(self.gen)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/fastapi/routing.py", line 133, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/contextlib.py", line 217, in __aexit__
+    await anext(self.gen)
+  File "/Users/Apple/Secuscan/backend/secuscan/main.py", line 60, in lifespan
+    logger.info("🛑 Shutting down SecuScan backend...")
+Message: '🛑 Shutting down SecuScan backend...'
+Arguments: ()
+--- Logging error ---
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/logging/__init__.py", line 1163, in emit
+    stream.write(msg + self.terminator)
+ValueError: I/O operation on closed file.
+Call stack:
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/threading.py", line 1032, in _bootstrap
+    self._bootstrap_inner()
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/threading.py", line 1075, in _bootstrap_inner
+    self.run()
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/threading.py", line 1012, in run
+    self._target(*self._args, **self._kwargs)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/anyio/from_thread.py", line 532, in run_blocking_portal
+    run_eventloop(
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/anyio/_core/_eventloop.py", line 77, in run
+    return async_backend.run(func, args, {}, backend_options)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 2358, in run
+    return runner.run(wrapper())
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/base_events.py", line 678, in run_until_complete
+    self.run_forever()
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/base_events.py", line 645, in run_forever
+    self._run_once()
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/base_events.py", line 1999, in _run_once
+    handle._run()
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/asyncio/events.py", line 88, in _run
+    self._context.run(self._callback, *self._args)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/anyio/from_thread.py", line 259, in _call_func
+    retval = await retval_or_awaitable
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/starlette/testclient.py", line 759, in lifespan
+    await self.app(scope, self.stream_receive.receive, self.stream_send.send)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/fastapi/applications.py", line 1054, in __call__
+    await super().__call__(scope, receive, send)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/starlette/applications.py", line 113, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/starlette/middleware/errors.py", line 152, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/starlette/middleware/cors.py", line 77, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 48, in __call__
+    await self.app(scope, receive, send)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/starlette/routing.py", line 715, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/starlette/routing.py", line 724, in app
+    await self.lifespan(scope, receive, send)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/starlette/routing.py", line 693, in lifespan
+    async with self.lifespan_context(app) as maybe_state:
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/contextlib.py", line 217, in __aexit__
+    await anext(self.gen)
+  File "/Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/fastapi/routing.py", line 133, in merged_lifespan
+    async with original_context(app) as maybe_original_state:
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/contextlib.py", line 217, in __aexit__
+    await anext(self.gen)
+  File "/Users/Apple/Secuscan/backend/secuscan/main.py", line 65, in lifespan
+    logger.info("✓ Shutdown complete")
+Message: '✓ Shutdown complete'
+Arguments: ()
+
+
+=================================== FAILURES ===================================
+_______________________ test_phase3_plugins_discoverable _______________________
+
+test_client = <starlette.testclient.TestClient object at 0x10ac91eb0>
+
+    def test_phase3_plugins_discoverable(test_client):
+        response = test_client.get("/api/v1/plugins")
+        assert response.status_code == 200
+        payload = response.json()
+        plugin_ids = {plugin["id"] for plugin in payload["plugins"]}
+>       assert PHASE3_PLUGIN_IDS.issubset(plugin_ids)
+E       AssertionError: assert False
+E        +  where False = <built-in method issubset of set object at 0x10b7c12a0>({'code_analyzer', 'dir_discovery', 'dns_enum', 'droopescan', 'hashcat', 'http_inspector', ...})
+E        +    where <built-in method issubset of set object at 0x10b7c12a0> = {'droopescan', 'hashcat', 'joomscan', 'metasploit', 'sqli_checker', 'volatility', ...}.issubset
+
+tests/integration/test_phase3_plugins.py:54: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+2026-03-25 12:11:29,427 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nikto v1.0.0
+2026-03-25 12:11:29,428 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Scapy Recon v1.0.0
+2026-03-25 12:11:29,428 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SSH Runner v1.0.0
+2026-03-25 12:11:29,429 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: TLS Inspector v1.0.0
+2026-03-25 12:11:29,430 - backend.secuscan.plugins - WARNING - Binary not found in PATH: yara
+2026-03-25 12:11:29,430 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,430 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: yara_scan
+2026-03-25 12:11:29,430 - backend.secuscan.plugins - WARNING - Binary not found in PATH: droopescan
+2026-03-25 12:11:29,430 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DroopeScan v1.0.0
+2026-03-25 12:11:29,431 - backend.secuscan.plugins - WARNING - Binary not found in PATH: gitleaks
+2026-03-25 12:11:29,431 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Secret Scanner v1.0.0
+2026-03-25 12:11:29,431 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SQLMap v1.0.0
+2026-03-25 12:11:29,431 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Directory Discovery v1.0.0
+2026-03-25 12:11:29,432 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: HTTP Inspector v1.0.0
+2026-03-25 12:11:29,432 - backend.secuscan.plugins - WARNING - Binary not found in PATH: ghauri
+2026-03-25 12:11:29,432 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,432 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: sqli_checker
+2026-03-25 12:11:29,433 - backend.secuscan.plugins - WARNING - Binary not found in PATH: volatility3
+2026-03-25 12:11:29,433 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,433 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: volatility
+2026-03-25 12:11:29,433 - backend.secuscan.plugins - WARNING - Binary not found in PATH: joomscan
+2026-03-25 12:11:29,433 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: JoomScan v1.0.0
+2026-03-25 12:11:29,433 - backend.secuscan.plugins - WARNING - Binary not found in PATH: subfinder
+2026-03-25 12:11:29,433 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Subdomain Discovery v1.0.0
+2026-03-25 12:11:29,434 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: WHOIS Lookup v1.0.0
+2026-03-25 12:11:29,434 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nuclei v1.0.0
+2026-03-25 12:11:29,434 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nmap v1.0.0
+2026-03-25 12:11:29,435 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+2026-03-25 12:11:29,435 - backend.secuscan.plugins - WARNING - Binary not found in PATH: wpscan
+2026-03-25 12:11:29,435 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,435 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: wpscan
+2026-03-25 12:11:29,436 - backend.secuscan.plugins - WARNING - Binary not found in PATH: dnsrecon
+2026-03-25 12:11:29,436 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DNS Enumeration v1.0.0
+2026-03-25 12:11:29,436 - backend.secuscan.plugins - WARNING - Binary not found in PATH: msfconsole
+2026-03-25 12:11:29,436 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Metasploit Framework v1.0.0
+2026-03-25 12:11:29,436 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Hashcat v1.0.0
+2026-03-25 12:11:29,436 - backend.secuscan.plugins - INFO - Loaded 18 plugins
+2026-03-25 12:11:29,438 - backend.secuscan.main - INFO - 🚀 Starting SecuScan backend...
+2026-03-25 12:11:29,438 - backend.secuscan.main - INFO - ✓ Directories initialized
+2026-03-25 12:11:29,439 - backend.secuscan.main - INFO - ✓ SQLite connected
+2026-03-25 12:11:29,439 - backend.secuscan.main - INFO - ✓ In-memory cache initialized
+2026-03-25 12:11:29,439 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nikto v1.0.0
+2026-03-25 12:11:29,439 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Scapy Recon v1.0.0
+2026-03-25 12:11:29,440 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SSH Runner v1.0.0
+2026-03-25 12:11:29,440 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: TLS Inspector v1.0.0
+2026-03-25 12:11:29,440 - backend.secuscan.plugins - WARNING - Binary not found in PATH: yara
+2026-03-25 12:11:29,440 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,440 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: yara_scan
+2026-03-25 12:11:29,441 - backend.secuscan.plugins - WARNING - Binary not found in PATH: droopescan
+2026-03-25 12:11:29,441 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DroopeScan v1.0.0
+2026-03-25 12:11:29,441 - backend.secuscan.plugins - WARNING - Binary not found in PATH: gitleaks
+2026-03-25 12:11:29,441 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Secret Scanner v1.0.0
+2026-03-25 12:11:29,441 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SQLMap v1.0.0
+2026-03-25 12:11:29,441 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Directory Discovery v1.0.0
+2026-03-25 12:11:29,441 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: HTTP Inspector v1.0.0
+2026-03-25 12:11:29,442 - backend.secuscan.plugins - WARNING - Binary not found in PATH: ghauri
+2026-03-25 12:11:29,442 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,442 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: sqli_checker
+2026-03-25 12:11:29,442 - backend.secuscan.plugins - WARNING - Binary not found in PATH: volatility3
+2026-03-25 12:11:29,442 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,442 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: volatility
+2026-03-25 12:11:29,442 - backend.secuscan.plugins - WARNING - Binary not found in PATH: joomscan
+2026-03-25 12:11:29,442 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: JoomScan v1.0.0
+2026-03-25 12:11:29,442 - backend.secuscan.plugins - WARNING - Binary not found in PATH: subfinder
+2026-03-25 12:11:29,442 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Subdomain Discovery v1.0.0
+2026-03-25 12:11:29,443 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: WHOIS Lookup v1.0.0
+2026-03-25 12:11:29,443 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nuclei v1.0.0
+2026-03-25 12:11:29,443 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nmap v1.0.0
+2026-03-25 12:11:29,443 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+2026-03-25 12:11:29,443 - backend.secuscan.plugins - WARNING - Binary not found in PATH: wpscan
+2026-03-25 12:11:29,443 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,443 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: wpscan
+2026-03-25 12:11:29,444 - backend.secuscan.plugins - WARNING - Binary not found in PATH: dnsrecon
+2026-03-25 12:11:29,444 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DNS Enumeration v1.0.0
+2026-03-25 12:11:29,444 - backend.secuscan.plugins - WARNING - Binary not found in PATH: msfconsole
+2026-03-25 12:11:29,444 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Metasploit Framework v1.0.0
+2026-03-25 12:11:29,444 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Hashcat v1.0.0
+2026-03-25 12:11:29,444 - backend.secuscan.plugins - INFO - Loaded 18 plugins
+2026-03-25 12:11:29,444 - backend.secuscan.main - INFO - ✓ Plugins loaded
+2026-03-25 12:11:29,444 - backend.secuscan.main - INFO - ✓ Ready to serve on 127.0.0.1:8000
+------------------------------ Captured log setup ------------------------------
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nikto v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Scapy Recon v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SSH Runner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: TLS Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: yara
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: yara_scan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: droopescan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DroopeScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: gitleaks
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Secret Scanner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SQLMap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Directory Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: HTTP Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: ghauri
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: sqli_checker
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: volatility3
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: volatility
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: joomscan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: JoomScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: subfinder
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Subdomain Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: WHOIS Lookup v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nuclei v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nmap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: wpscan
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: wpscan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: dnsrecon
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DNS Enumeration v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: msfconsole
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Metasploit Framework v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Hashcat v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:63 Loaded 18 plugins
+INFO     backend.secuscan.main:main.py:38 🚀 Starting SecuScan backend...
+INFO     backend.secuscan.main:main.py:42 ✓ Directories initialized
+INFO     backend.secuscan.main:main.py:46 ✓ SQLite connected
+INFO     backend.secuscan.main:main.py:49 ✓ In-memory cache initialized
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nikto v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Scapy Recon v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SSH Runner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: TLS Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: yara
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: yara_scan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: droopescan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DroopeScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: gitleaks
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Secret Scanner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SQLMap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Directory Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: HTTP Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: ghauri
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: sqli_checker
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: volatility3
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: volatility
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: joomscan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: JoomScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: subfinder
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Subdomain Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: WHOIS Lookup v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nuclei v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nmap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: wpscan
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: wpscan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: dnsrecon
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DNS Enumeration v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: msfconsole
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Metasploit Framework v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Hashcat v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:63 Loaded 18 plugins
+INFO     backend.secuscan.main:main.py:53 ✓ Plugins loaded
+INFO     backend.secuscan.main:main.py:55 ✓ Ready to serve on 127.0.0.1:8000
+----------------------------- Captured stdout call -----------------------------
+2026-03-25 12:11:29,447 - httpx - INFO - HTTP Request: GET http://testserver/api/v1/plugins "HTTP/1.1 200 OK"
+------------------------------ Captured log call -------------------------------
+INFO     httpx:_client.py:1025 HTTP Request: GET http://testserver/api/v1/plugins "HTTP/1.1 200 OK"
+--------------------------- Captured stdout teardown ---------------------------
+2026-03-25 12:11:29,481 - backend.secuscan.main - INFO - 🛑 Shutting down SecuScan backend...
+2026-03-25 12:11:29,481 - backend.secuscan.main - INFO - ✓ Shutdown complete
+---------------------------- Captured log teardown -----------------------------
+INFO     backend.secuscan.main:main.py:60 🛑 Shutting down SecuScan backend...
+INFO     backend.secuscan.main:main.py:65 ✓ Shutdown complete
+_________________________________ test_wpscan __________________________________
+
+test_client = <starlette.testclient.TestClient object at 0x10b993470>
+
+    def test_wpscan(test_client):
+        mock_out = "Interesting Finding: /wp-login.php\n[!] XML-RPC is enabled"
+>       result = run_plugin_test(test_client, "wpscan", {"target": "http://wp.lab"}, mock_out)
+
+tests/integration/test_phase3_plugins.py:58: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+test_client = <starlette.testclient.TestClient object at 0x10b993470>
+plugin_id = 'wpscan', inputs = {'target': 'http://wp.lab'}
+mock_output = 'Interesting Finding: /wp-login.php\n[!] XML-RPC is enabled'
+
+    def run_plugin_test(test_client, plugin_id, inputs, mock_output):
+        """Helper to run a plugin test with mocked execution."""
+        with patch("backend.secuscan.executor.TaskExecutor._execute_command") as mock_exec:
+            mock_exec.return_value = (mock_output, 0)
+    
+            payload = {
+                "plugin_id": plugin_id,
+                "inputs": inputs,
+                "consent_granted": True,
+            }
+    
+            # Start task
+            response = test_client.post("/api/v1/task/start", json=payload)
+>           assert response.status_code == 200, f"Failed to start {plugin_id}: {response.text}"
+E           AssertionError: Failed to start wpscan: {"detail":"Plugin not found: wpscan"}
+E           assert 404 == 200
+E            +  where 404 = <Response [404 Not Found]>.status_code
+
+tests/integration/test_phase3_plugins.py:29: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+2026-03-25 12:11:29,490 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nikto v1.0.0
+2026-03-25 12:11:29,491 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Scapy Recon v1.0.0
+2026-03-25 12:11:29,491 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SSH Runner v1.0.0
+2026-03-25 12:11:29,491 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: TLS Inspector v1.0.0
+2026-03-25 12:11:29,491 - backend.secuscan.plugins - WARNING - Binary not found in PATH: yara
+2026-03-25 12:11:29,491 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,492 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: yara_scan
+2026-03-25 12:11:29,492 - backend.secuscan.plugins - WARNING - Binary not found in PATH: droopescan
+2026-03-25 12:11:29,492 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DroopeScan v1.0.0
+2026-03-25 12:11:29,492 - backend.secuscan.plugins - WARNING - Binary not found in PATH: gitleaks
+2026-03-25 12:11:29,492 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Secret Scanner v1.0.0
+2026-03-25 12:11:29,492 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SQLMap v1.0.0
+2026-03-25 12:11:29,492 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Directory Discovery v1.0.0
+2026-03-25 12:11:29,493 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: HTTP Inspector v1.0.0
+2026-03-25 12:11:29,493 - backend.secuscan.plugins - WARNING - Binary not found in PATH: ghauri
+2026-03-25 12:11:29,493 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,493 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: sqli_checker
+2026-03-25 12:11:29,493 - backend.secuscan.plugins - WARNING - Binary not found in PATH: volatility3
+2026-03-25 12:11:29,493 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,493 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: volatility
+2026-03-25 12:11:29,493 - backend.secuscan.plugins - WARNING - Binary not found in PATH: joomscan
+2026-03-25 12:11:29,493 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: JoomScan v1.0.0
+2026-03-25 12:11:29,494 - backend.secuscan.plugins - WARNING - Binary not found in PATH: subfinder
+2026-03-25 12:11:29,494 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Subdomain Discovery v1.0.0
+2026-03-25 12:11:29,494 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: WHOIS Lookup v1.0.0
+2026-03-25 12:11:29,494 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nuclei v1.0.0
+2026-03-25 12:11:29,494 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nmap v1.0.0
+2026-03-25 12:11:29,494 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+2026-03-25 12:11:29,495 - backend.secuscan.plugins - WARNING - Binary not found in PATH: wpscan
+2026-03-25 12:11:29,495 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,495 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: wpscan
+2026-03-25 12:11:29,495 - backend.secuscan.plugins - WARNING - Binary not found in PATH: dnsrecon
+2026-03-25 12:11:29,495 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DNS Enumeration v1.0.0
+2026-03-25 12:11:29,495 - backend.secuscan.plugins - WARNING - Binary not found in PATH: msfconsole
+2026-03-25 12:11:29,495 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Metasploit Framework v1.0.0
+2026-03-25 12:11:29,495 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Hashcat v1.0.0
+2026-03-25 12:11:29,495 - backend.secuscan.plugins - INFO - Loaded 18 plugins
+2026-03-25 12:11:29,496 - backend.secuscan.main - INFO - 🚀 Starting SecuScan backend...
+2026-03-25 12:11:29,497 - backend.secuscan.main - INFO - ✓ Directories initialized
+2026-03-25 12:11:29,497 - backend.secuscan.main - INFO - ✓ SQLite connected
+2026-03-25 12:11:29,497 - backend.secuscan.main - INFO - ✓ In-memory cache initialized
+2026-03-25 12:11:29,498 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nikto v1.0.0
+2026-03-25 12:11:29,498 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Scapy Recon v1.0.0
+2026-03-25 12:11:29,498 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SSH Runner v1.0.0
+2026-03-25 12:11:29,498 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: TLS Inspector v1.0.0
+2026-03-25 12:11:29,498 - backend.secuscan.plugins - WARNING - Binary not found in PATH: yara
+2026-03-25 12:11:29,498 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,498 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: yara_scan
+2026-03-25 12:11:29,499 - backend.secuscan.plugins - WARNING - Binary not found in PATH: droopescan
+2026-03-25 12:11:29,499 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DroopeScan v1.0.0
+2026-03-25 12:11:29,499 - backend.secuscan.plugins - WARNING - Binary not found in PATH: gitleaks
+2026-03-25 12:11:29,499 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Secret Scanner v1.0.0
+2026-03-25 12:11:29,499 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SQLMap v1.0.0
+2026-03-25 12:11:29,499 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Directory Discovery v1.0.0
+2026-03-25 12:11:29,500 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: HTTP Inspector v1.0.0
+2026-03-25 12:11:29,500 - backend.secuscan.plugins - WARNING - Binary not found in PATH: ghauri
+2026-03-25 12:11:29,500 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,500 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: sqli_checker
+2026-03-25 12:11:29,500 - backend.secuscan.plugins - WARNING - Binary not found in PATH: volatility3
+2026-03-25 12:11:29,500 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,500 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: volatility
+2026-03-25 12:11:29,500 - backend.secuscan.plugins - WARNING - Binary not found in PATH: joomscan
+2026-03-25 12:11:29,500 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: JoomScan v1.0.0
+2026-03-25 12:11:29,500 - backend.secuscan.plugins - WARNING - Binary not found in PATH: subfinder
+2026-03-25 12:11:29,501 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Subdomain Discovery v1.0.0
+2026-03-25 12:11:29,501 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: WHOIS Lookup v1.0.0
+2026-03-25 12:11:29,501 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nuclei v1.0.0
+2026-03-25 12:11:29,501 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nmap v1.0.0
+2026-03-25 12:11:29,501 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+2026-03-25 12:11:29,502 - backend.secuscan.plugins - WARNING - Binary not found in PATH: wpscan
+2026-03-25 12:11:29,502 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,502 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: wpscan
+2026-03-25 12:11:29,502 - backend.secuscan.plugins - WARNING - Binary not found in PATH: dnsrecon
+2026-03-25 12:11:29,502 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DNS Enumeration v1.0.0
+2026-03-25 12:11:29,502 - backend.secuscan.plugins - WARNING - Binary not found in PATH: msfconsole
+2026-03-25 12:11:29,502 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Metasploit Framework v1.0.0
+2026-03-25 12:11:29,502 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Hashcat v1.0.0
+2026-03-25 12:11:29,502 - backend.secuscan.plugins - INFO - Loaded 18 plugins
+2026-03-25 12:11:29,502 - backend.secuscan.main - INFO - ✓ Plugins loaded
+2026-03-25 12:11:29,503 - backend.secuscan.main - INFO - ✓ Ready to serve on 127.0.0.1:8000
+------------------------------ Captured log setup ------------------------------
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nikto v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Scapy Recon v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SSH Runner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: TLS Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: yara
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: yara_scan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: droopescan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DroopeScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: gitleaks
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Secret Scanner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SQLMap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Directory Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: HTTP Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: ghauri
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: sqli_checker
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: volatility3
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: volatility
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: joomscan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: JoomScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: subfinder
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Subdomain Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: WHOIS Lookup v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nuclei v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nmap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: wpscan
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: wpscan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: dnsrecon
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DNS Enumeration v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: msfconsole
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Metasploit Framework v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Hashcat v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:63 Loaded 18 plugins
+INFO     backend.secuscan.main:main.py:38 🚀 Starting SecuScan backend...
+INFO     backend.secuscan.main:main.py:42 ✓ Directories initialized
+INFO     backend.secuscan.main:main.py:46 ✓ SQLite connected
+INFO     backend.secuscan.main:main.py:49 ✓ In-memory cache initialized
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nikto v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Scapy Recon v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SSH Runner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: TLS Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: yara
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: yara_scan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: droopescan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DroopeScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: gitleaks
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Secret Scanner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SQLMap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Directory Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: HTTP Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: ghauri
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: sqli_checker
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: volatility3
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: volatility
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: joomscan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: JoomScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: subfinder
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Subdomain Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: WHOIS Lookup v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nuclei v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nmap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: wpscan
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: wpscan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: dnsrecon
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DNS Enumeration v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: msfconsole
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Metasploit Framework v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Hashcat v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:63 Loaded 18 plugins
+INFO     backend.secuscan.main:main.py:53 ✓ Plugins loaded
+INFO     backend.secuscan.main:main.py:55 ✓ Ready to serve on 127.0.0.1:8000
+----------------------------- Captured stdout call -----------------------------
+2026-03-25 12:11:29,505 - backend.secuscan.routes - WARNING - Task start failed: Plugin not found: wpscan
+2026-03-25 12:11:29,506 - httpx - INFO - HTTP Request: POST http://testserver/api/v1/task/start "HTTP/1.1 404 Not Found"
+------------------------------ Captured log call -------------------------------
+WARNING  backend.secuscan.routes:routes.py:128 Task start failed: Plugin not found: wpscan
+INFO     httpx:_client.py:1025 HTTP Request: POST http://testserver/api/v1/task/start "HTTP/1.1 404 Not Found"
+--------------------------- Captured stdout teardown ---------------------------
+2026-03-25 12:11:29,510 - backend.secuscan.main - INFO - 🛑 Shutting down SecuScan backend...
+2026-03-25 12:11:29,510 - backend.secuscan.main - INFO - ✓ Shutdown complete
+---------------------------- Captured log teardown -----------------------------
+INFO     backend.secuscan.main:main.py:60 🛑 Shutting down SecuScan backend...
+INFO     backend.secuscan.main:main.py:65 ✓ Shutdown complete
+________________________________ test_joomscan _________________________________
+
+test_client = <starlette.testclient.TestClient object at 0x10b9ab920>
+
+    def test_joomscan(test_client):
+        mock_out = "[+] Vulnerable to: CVE-2015-8562\n[+] Joomla! version: 3.4.5"
+>       result = run_plugin_test(test_client, "joomscan", {"target": "http://joomla.lab"}, mock_out)
+
+tests/integration/test_phase3_plugins.py:63: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+test_client = <starlette.testclient.TestClient object at 0x10b9ab920>
+plugin_id = 'joomscan', inputs = {'target': 'http://joomla.lab'}
+mock_output = '[+] Vulnerable to: CVE-2015-8562\n[+] Joomla! version: 3.4.5'
+
+    def run_plugin_test(test_client, plugin_id, inputs, mock_output):
+        """Helper to run a plugin test with mocked execution."""
+        with patch("backend.secuscan.executor.TaskExecutor._execute_command") as mock_exec:
+            mock_exec.return_value = (mock_output, 0)
+    
+            payload = {
+                "plugin_id": plugin_id,
+                "inputs": inputs,
+                "consent_granted": True,
+            }
+    
+            # Start task
+            response = test_client.post("/api/v1/task/start", json=payload)
+>           assert response.status_code == 200, f"Failed to start {plugin_id}: {response.text}"
+E           AssertionError: Failed to start joomscan: {"detail":"Invalid hostname format"}
+E           assert 400 == 200
+E            +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/integration/test_phase3_plugins.py:29: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+2026-03-25 12:11:29,519 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nikto v1.0.0
+2026-03-25 12:11:29,519 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Scapy Recon v1.0.0
+2026-03-25 12:11:29,519 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SSH Runner v1.0.0
+2026-03-25 12:11:29,519 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: TLS Inspector v1.0.0
+2026-03-25 12:11:29,519 - backend.secuscan.plugins - WARNING - Binary not found in PATH: yara
+2026-03-25 12:11:29,520 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,520 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: yara_scan
+2026-03-25 12:11:29,520 - backend.secuscan.plugins - WARNING - Binary not found in PATH: droopescan
+2026-03-25 12:11:29,520 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DroopeScan v1.0.0
+2026-03-25 12:11:29,520 - backend.secuscan.plugins - WARNING - Binary not found in PATH: gitleaks
+2026-03-25 12:11:29,520 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Secret Scanner v1.0.0
+2026-03-25 12:11:29,520 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SQLMap v1.0.0
+2026-03-25 12:11:29,520 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Directory Discovery v1.0.0
+2026-03-25 12:11:29,521 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: HTTP Inspector v1.0.0
+2026-03-25 12:11:29,521 - backend.secuscan.plugins - WARNING - Binary not found in PATH: ghauri
+2026-03-25 12:11:29,521 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,521 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: sqli_checker
+2026-03-25 12:11:29,521 - backend.secuscan.plugins - WARNING - Binary not found in PATH: volatility3
+2026-03-25 12:11:29,521 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,521 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: volatility
+2026-03-25 12:11:29,521 - backend.secuscan.plugins - WARNING - Binary not found in PATH: joomscan
+2026-03-25 12:11:29,521 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: JoomScan v1.0.0
+2026-03-25 12:11:29,522 - backend.secuscan.plugins - WARNING - Binary not found in PATH: subfinder
+2026-03-25 12:11:29,522 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Subdomain Discovery v1.0.0
+2026-03-25 12:11:29,522 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: WHOIS Lookup v1.0.0
+2026-03-25 12:11:29,522 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nuclei v1.0.0
+2026-03-25 12:11:29,522 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nmap v1.0.0
+2026-03-25 12:11:29,522 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+2026-03-25 12:11:29,523 - backend.secuscan.plugins - WARNING - Binary not found in PATH: wpscan
+2026-03-25 12:11:29,523 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,523 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: wpscan
+2026-03-25 12:11:29,523 - backend.secuscan.plugins - WARNING - Binary not found in PATH: dnsrecon
+2026-03-25 12:11:29,523 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DNS Enumeration v1.0.0
+2026-03-25 12:11:29,523 - backend.secuscan.plugins - WARNING - Binary not found in PATH: msfconsole
+2026-03-25 12:11:29,523 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Metasploit Framework v1.0.0
+2026-03-25 12:11:29,523 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Hashcat v1.0.0
+2026-03-25 12:11:29,523 - backend.secuscan.plugins - INFO - Loaded 18 plugins
+2026-03-25 12:11:29,525 - backend.secuscan.main - INFO - 🚀 Starting SecuScan backend...
+2026-03-25 12:11:29,525 - backend.secuscan.main - INFO - ✓ Directories initialized
+2026-03-25 12:11:29,526 - backend.secuscan.main - INFO - ✓ SQLite connected
+2026-03-25 12:11:29,526 - backend.secuscan.main - INFO - ✓ In-memory cache initialized
+2026-03-25 12:11:29,526 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nikto v1.0.0
+2026-03-25 12:11:29,526 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Scapy Recon v1.0.0
+2026-03-25 12:11:29,526 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SSH Runner v1.0.0
+2026-03-25 12:11:29,527 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: TLS Inspector v1.0.0
+2026-03-25 12:11:29,527 - backend.secuscan.plugins - WARNING - Binary not found in PATH: yara
+2026-03-25 12:11:29,527 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,527 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: yara_scan
+2026-03-25 12:11:29,527 - backend.secuscan.plugins - WARNING - Binary not found in PATH: droopescan
+2026-03-25 12:11:29,527 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DroopeScan v1.0.0
+2026-03-25 12:11:29,527 - backend.secuscan.plugins - WARNING - Binary not found in PATH: gitleaks
+2026-03-25 12:11:29,527 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Secret Scanner v1.0.0
+2026-03-25 12:11:29,527 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SQLMap v1.0.0
+2026-03-25 12:11:29,528 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Directory Discovery v1.0.0
+2026-03-25 12:11:29,528 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: HTTP Inspector v1.0.0
+2026-03-25 12:11:29,528 - backend.secuscan.plugins - WARNING - Binary not found in PATH: ghauri
+2026-03-25 12:11:29,528 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,528 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: sqli_checker
+2026-03-25 12:11:29,528 - backend.secuscan.plugins - WARNING - Binary not found in PATH: volatility3
+2026-03-25 12:11:29,528 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,528 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: volatility
+2026-03-25 12:11:29,528 - backend.secuscan.plugins - WARNING - Binary not found in PATH: joomscan
+2026-03-25 12:11:29,528 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: JoomScan v1.0.0
+2026-03-25 12:11:29,529 - backend.secuscan.plugins - WARNING - Binary not found in PATH: subfinder
+2026-03-25 12:11:29,529 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Subdomain Discovery v1.0.0
+2026-03-25 12:11:29,529 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: WHOIS Lookup v1.0.0
+2026-03-25 12:11:29,529 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nuclei v1.0.0
+2026-03-25 12:11:29,529 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nmap v1.0.0
+2026-03-25 12:11:29,529 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+2026-03-25 12:11:29,530 - backend.secuscan.plugins - WARNING - Binary not found in PATH: wpscan
+2026-03-25 12:11:29,530 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,530 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: wpscan
+2026-03-25 12:11:29,530 - backend.secuscan.plugins - WARNING - Binary not found in PATH: dnsrecon
+2026-03-25 12:11:29,530 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DNS Enumeration v1.0.0
+2026-03-25 12:11:29,530 - backend.secuscan.plugins - WARNING - Binary not found in PATH: msfconsole
+2026-03-25 12:11:29,530 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Metasploit Framework v1.0.0
+2026-03-25 12:11:29,530 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Hashcat v1.0.0
+2026-03-25 12:11:29,530 - backend.secuscan.plugins - INFO - Loaded 18 plugins
+2026-03-25 12:11:29,530 - backend.secuscan.main - INFO - ✓ Plugins loaded
+2026-03-25 12:11:29,530 - backend.secuscan.main - INFO - ✓ Ready to serve on 127.0.0.1:8000
+------------------------------ Captured log setup ------------------------------
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nikto v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Scapy Recon v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SSH Runner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: TLS Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: yara
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: yara_scan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: droopescan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DroopeScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: gitleaks
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Secret Scanner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SQLMap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Directory Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: HTTP Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: ghauri
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: sqli_checker
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: volatility3
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: volatility
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: joomscan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: JoomScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: subfinder
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Subdomain Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: WHOIS Lookup v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nuclei v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nmap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: wpscan
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: wpscan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: dnsrecon
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DNS Enumeration v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: msfconsole
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Metasploit Framework v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Hashcat v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:63 Loaded 18 plugins
+INFO     backend.secuscan.main:main.py:38 🚀 Starting SecuScan backend...
+INFO     backend.secuscan.main:main.py:42 ✓ Directories initialized
+INFO     backend.secuscan.main:main.py:46 ✓ SQLite connected
+INFO     backend.secuscan.main:main.py:49 ✓ In-memory cache initialized
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nikto v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Scapy Recon v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SSH Runner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: TLS Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: yara
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: yara_scan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: droopescan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DroopeScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: gitleaks
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Secret Scanner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SQLMap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Directory Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: HTTP Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: ghauri
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: sqli_checker
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: volatility3
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: volatility
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: joomscan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: JoomScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: subfinder
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Subdomain Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: WHOIS Lookup v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nuclei v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nmap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: wpscan
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: wpscan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: dnsrecon
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DNS Enumeration v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: msfconsole
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Metasploit Framework v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Hashcat v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:63 Loaded 18 plugins
+INFO     backend.secuscan.main:main.py:53 ✓ Plugins loaded
+INFO     backend.secuscan.main:main.py:55 ✓ Ready to serve on 127.0.0.1:8000
+----------------------------- Captured stdout call -----------------------------
+2026-03-25 12:11:29,532 - backend.secuscan.routes - WARNING - Task start failed: Target validation failed for 'http://joomla.lab': Invalid hostname format
+2026-03-25 12:11:29,532 - httpx - INFO - HTTP Request: POST http://testserver/api/v1/task/start "HTTP/1.1 400 Bad Request"
+------------------------------ Captured log call -------------------------------
+WARNING  backend.secuscan.routes:routes.py:140 Task start failed: Target validation failed for 'http://joomla.lab': Invalid hostname format
+INFO     httpx:_client.py:1025 HTTP Request: POST http://testserver/api/v1/task/start "HTTP/1.1 400 Bad Request"
+--------------------------- Captured stdout teardown ---------------------------
+2026-03-25 12:11:29,535 - backend.secuscan.main - INFO - 🛑 Shutting down SecuScan backend...
+2026-03-25 12:11:29,536 - backend.secuscan.main - INFO - ✓ Shutdown complete
+---------------------------- Captured log teardown -----------------------------
+INFO     backend.secuscan.main:main.py:60 🛑 Shutting down SecuScan backend...
+INFO     backend.secuscan.main:main.py:65 ✓ Shutdown complete
+_______________________________ test_droopescan ________________________________
+
+test_client = <starlette.testclient.TestClient object at 0x10b992090>
+
+    def test_droopescan(test_client):
+        mock_out = "[+] Site is running Drupal 7\n[+] Interesting: /robots.txt"
+>       result = run_plugin_test(test_client, "droopescan", {"target": "http://drupal.lab"}, mock_out)
+
+tests/integration/test_phase3_plugins.py:68: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+test_client = <starlette.testclient.TestClient object at 0x10b992090>
+plugin_id = 'droopescan', inputs = {'target': 'http://drupal.lab'}
+mock_output = '[+] Site is running Drupal 7\n[+] Interesting: /robots.txt'
+
+    def run_plugin_test(test_client, plugin_id, inputs, mock_output):
+        """Helper to run a plugin test with mocked execution."""
+        with patch("backend.secuscan.executor.TaskExecutor._execute_command") as mock_exec:
+            mock_exec.return_value = (mock_output, 0)
+    
+            payload = {
+                "plugin_id": plugin_id,
+                "inputs": inputs,
+                "consent_granted": True,
+            }
+    
+            # Start task
+            response = test_client.post("/api/v1/task/start", json=payload)
+>           assert response.status_code == 200, f"Failed to start {plugin_id}: {response.text}"
+E           AssertionError: Failed to start droopescan: {"detail":"Invalid hostname format"}
+E           assert 400 == 200
+E            +  where 400 = <Response [400 Bad Request]>.status_code
+
+tests/integration/test_phase3_plugins.py:29: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+2026-03-25 12:11:29,544 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nikto v1.0.0
+2026-03-25 12:11:29,544 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Scapy Recon v1.0.0
+2026-03-25 12:11:29,544 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SSH Runner v1.0.0
+2026-03-25 12:11:29,545 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: TLS Inspector v1.0.0
+2026-03-25 12:11:29,545 - backend.secuscan.plugins - WARNING - Binary not found in PATH: yara
+2026-03-25 12:11:29,545 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,545 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: yara_scan
+2026-03-25 12:11:29,545 - backend.secuscan.plugins - WARNING - Binary not found in PATH: droopescan
+2026-03-25 12:11:29,545 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DroopeScan v1.0.0
+2026-03-25 12:11:29,545 - backend.secuscan.plugins - WARNING - Binary not found in PATH: gitleaks
+2026-03-25 12:11:29,545 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Secret Scanner v1.0.0
+2026-03-25 12:11:29,546 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SQLMap v1.0.0
+2026-03-25 12:11:29,546 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Directory Discovery v1.0.0
+2026-03-25 12:11:29,546 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: HTTP Inspector v1.0.0
+2026-03-25 12:11:29,546 - backend.secuscan.plugins - WARNING - Binary not found in PATH: ghauri
+2026-03-25 12:11:29,546 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,546 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: sqli_checker
+2026-03-25 12:11:29,547 - backend.secuscan.plugins - WARNING - Binary not found in PATH: volatility3
+2026-03-25 12:11:29,547 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,547 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: volatility
+2026-03-25 12:11:29,547 - backend.secuscan.plugins - WARNING - Binary not found in PATH: joomscan
+2026-03-25 12:11:29,547 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: JoomScan v1.0.0
+2026-03-25 12:11:29,547 - backend.secuscan.plugins - WARNING - Binary not found in PATH: subfinder
+2026-03-25 12:11:29,547 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Subdomain Discovery v1.0.0
+2026-03-25 12:11:29,547 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: WHOIS Lookup v1.0.0
+2026-03-25 12:11:29,548 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nuclei v1.0.0
+2026-03-25 12:11:29,548 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nmap v1.0.0
+2026-03-25 12:11:29,548 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+2026-03-25 12:11:29,548 - backend.secuscan.plugins - WARNING - Binary not found in PATH: wpscan
+2026-03-25 12:11:29,548 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,548 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: wpscan
+2026-03-25 12:11:29,548 - backend.secuscan.plugins - WARNING - Binary not found in PATH: dnsrecon
+2026-03-25 12:11:29,548 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DNS Enumeration v1.0.0
+2026-03-25 12:11:29,549 - backend.secuscan.plugins - WARNING - Binary not found in PATH: msfconsole
+2026-03-25 12:11:29,549 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Metasploit Framework v1.0.0
+2026-03-25 12:11:29,549 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Hashcat v1.0.0
+2026-03-25 12:11:29,549 - backend.secuscan.plugins - INFO - Loaded 18 plugins
+2026-03-25 12:11:29,550 - backend.secuscan.main - INFO - 🚀 Starting SecuScan backend...
+2026-03-25 12:11:29,550 - backend.secuscan.main - INFO - ✓ Directories initialized
+2026-03-25 12:11:29,551 - backend.secuscan.main - INFO - ✓ SQLite connected
+2026-03-25 12:11:29,551 - backend.secuscan.main - INFO - ✓ In-memory cache initialized
+2026-03-25 12:11:29,551 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nikto v1.0.0
+2026-03-25 12:11:29,551 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Scapy Recon v1.0.0
+2026-03-25 12:11:29,552 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SSH Runner v1.0.0
+2026-03-25 12:11:29,552 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: TLS Inspector v1.0.0
+2026-03-25 12:11:29,552 - backend.secuscan.plugins - WARNING - Binary not found in PATH: yara
+2026-03-25 12:11:29,552 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,552 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: yara_scan
+2026-03-25 12:11:29,552 - backend.secuscan.plugins - WARNING - Binary not found in PATH: droopescan
+2026-03-25 12:11:29,552 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DroopeScan v1.0.0
+2026-03-25 12:11:29,552 - backend.secuscan.plugins - WARNING - Binary not found in PATH: gitleaks
+2026-03-25 12:11:29,552 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Secret Scanner v1.0.0
+2026-03-25 12:11:29,553 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SQLMap v1.0.0
+2026-03-25 12:11:29,553 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Directory Discovery v1.0.0
+2026-03-25 12:11:29,553 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: HTTP Inspector v1.0.0
+2026-03-25 12:11:29,553 - backend.secuscan.plugins - WARNING - Binary not found in PATH: ghauri
+2026-03-25 12:11:29,553 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,553 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: sqli_checker
+2026-03-25 12:11:29,553 - backend.secuscan.plugins - WARNING - Binary not found in PATH: volatility3
+2026-03-25 12:11:29,553 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,553 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: volatility
+2026-03-25 12:11:29,554 - backend.secuscan.plugins - WARNING - Binary not found in PATH: joomscan
+2026-03-25 12:11:29,554 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: JoomScan v1.0.0
+2026-03-25 12:11:29,554 - backend.secuscan.plugins - WARNING - Binary not found in PATH: subfinder
+2026-03-25 12:11:29,554 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Subdomain Discovery v1.0.0
+2026-03-25 12:11:29,554 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: WHOIS Lookup v1.0.0
+2026-03-25 12:11:29,554 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nuclei v1.0.0
+2026-03-25 12:11:29,554 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nmap v1.0.0
+2026-03-25 12:11:29,555 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+2026-03-25 12:11:29,555 - backend.secuscan.plugins - WARNING - Binary not found in PATH: wpscan
+2026-03-25 12:11:29,555 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,555 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: wpscan
+2026-03-25 12:11:29,555 - backend.secuscan.plugins - WARNING - Binary not found in PATH: dnsrecon
+2026-03-25 12:11:29,555 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DNS Enumeration v1.0.0
+2026-03-25 12:11:29,555 - backend.secuscan.plugins - WARNING - Binary not found in PATH: msfconsole
+2026-03-25 12:11:29,555 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Metasploit Framework v1.0.0
+2026-03-25 12:11:29,555 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Hashcat v1.0.0
+2026-03-25 12:11:29,555 - backend.secuscan.plugins - INFO - Loaded 18 plugins
+2026-03-25 12:11:29,555 - backend.secuscan.main - INFO - ✓ Plugins loaded
+2026-03-25 12:11:29,555 - backend.secuscan.main - INFO - ✓ Ready to serve on 127.0.0.1:8000
+------------------------------ Captured log setup ------------------------------
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nikto v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Scapy Recon v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SSH Runner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: TLS Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: yara
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: yara_scan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: droopescan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DroopeScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: gitleaks
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Secret Scanner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SQLMap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Directory Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: HTTP Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: ghauri
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: sqli_checker
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: volatility3
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: volatility
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: joomscan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: JoomScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: subfinder
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Subdomain Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: WHOIS Lookup v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nuclei v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nmap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: wpscan
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: wpscan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: dnsrecon
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DNS Enumeration v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: msfconsole
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Metasploit Framework v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Hashcat v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:63 Loaded 18 plugins
+INFO     backend.secuscan.main:main.py:38 🚀 Starting SecuScan backend...
+INFO     backend.secuscan.main:main.py:42 ✓ Directories initialized
+INFO     backend.secuscan.main:main.py:46 ✓ SQLite connected
+INFO     backend.secuscan.main:main.py:49 ✓ In-memory cache initialized
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nikto v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Scapy Recon v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SSH Runner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: TLS Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: yara
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: yara_scan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: droopescan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DroopeScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: gitleaks
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Secret Scanner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SQLMap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Directory Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: HTTP Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: ghauri
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: sqli_checker
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: volatility3
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: volatility
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: joomscan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: JoomScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: subfinder
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Subdomain Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: WHOIS Lookup v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nuclei v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nmap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: wpscan
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: wpscan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: dnsrecon
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DNS Enumeration v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: msfconsole
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Metasploit Framework v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Hashcat v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:63 Loaded 18 plugins
+INFO     backend.secuscan.main:main.py:53 ✓ Plugins loaded
+INFO     backend.secuscan.main:main.py:55 ✓ Ready to serve on 127.0.0.1:8000
+----------------------------- Captured stdout call -----------------------------
+2026-03-25 12:11:29,557 - backend.secuscan.routes - WARNING - Task start failed: Target validation failed for 'http://drupal.lab': Invalid hostname format
+2026-03-25 12:11:29,557 - httpx - INFO - HTTP Request: POST http://testserver/api/v1/task/start "HTTP/1.1 400 Bad Request"
+------------------------------ Captured log call -------------------------------
+WARNING  backend.secuscan.routes:routes.py:140 Task start failed: Target validation failed for 'http://drupal.lab': Invalid hostname format
+INFO     httpx:_client.py:1025 HTTP Request: POST http://testserver/api/v1/task/start "HTTP/1.1 400 Bad Request"
+--------------------------- Captured stdout teardown ---------------------------
+2026-03-25 12:11:29,560 - backend.secuscan.main - INFO - 🛑 Shutting down SecuScan backend...
+2026-03-25 12:11:29,560 - backend.secuscan.main - INFO - ✓ Shutdown complete
+---------------------------- Captured log teardown -----------------------------
+INFO     backend.secuscan.main:main.py:60 🛑 Shutting down SecuScan backend...
+INFO     backend.secuscan.main:main.py:65 ✓ Shutdown complete
+________________________________ test_yara_scan ________________________________
+
+test_client = <starlette.testclient.TestClient object at 0x10b9a9070>
+
+    def test_yara_scan(test_client):
+        mock_out = "my_rule /path/to/malicious_file\nanother_rule /path/to/another_file"
+>       result = run_plugin_test(test_client, "yara_scan", {"target": "/tmp", "rules": "/tmp/rules.yar"}, mock_out)
+
+tests/integration/test_phase3_plugins.py:73: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+test_client = <starlette.testclient.TestClient object at 0x10b9a9070>
+plugin_id = 'yara_scan', inputs = {'rules': '/tmp/rules.yar', 'target': '/tmp'}
+mock_output = 'my_rule /path/to/malicious_file\nanother_rule /path/to/another_file'
+
+    def run_plugin_test(test_client, plugin_id, inputs, mock_output):
+        """Helper to run a plugin test with mocked execution."""
+        with patch("backend.secuscan.executor.TaskExecutor._execute_command") as mock_exec:
+            mock_exec.return_value = (mock_output, 0)
+    
+            payload = {
+                "plugin_id": plugin_id,
+                "inputs": inputs,
+                "consent_granted": True,
+            }
+    
+            # Start task
+            response = test_client.post("/api/v1/task/start", json=payload)
+>           assert response.status_code == 200, f"Failed to start {plugin_id}: {response.text}"
+E           AssertionError: Failed to start yara_scan: {"detail":"Plugin not found: yara_scan"}
+E           assert 404 == 200
+E            +  where 404 = <Response [404 Not Found]>.status_code
+
+tests/integration/test_phase3_plugins.py:29: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+2026-03-25 12:11:29,569 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nikto v1.0.0
+2026-03-25 12:11:29,569 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Scapy Recon v1.0.0
+2026-03-25 12:11:29,569 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SSH Runner v1.0.0
+2026-03-25 12:11:29,569 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: TLS Inspector v1.0.0
+2026-03-25 12:11:29,569 - backend.secuscan.plugins - WARNING - Binary not found in PATH: yara
+2026-03-25 12:11:29,570 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,570 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: yara_scan
+2026-03-25 12:11:29,570 - backend.secuscan.plugins - WARNING - Binary not found in PATH: droopescan
+2026-03-25 12:11:29,570 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DroopeScan v1.0.0
+2026-03-25 12:11:29,570 - backend.secuscan.plugins - WARNING - Binary not found in PATH: gitleaks
+2026-03-25 12:11:29,570 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Secret Scanner v1.0.0
+2026-03-25 12:11:29,570 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SQLMap v1.0.0
+2026-03-25 12:11:29,570 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Directory Discovery v1.0.0
+2026-03-25 12:11:29,571 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: HTTP Inspector v1.0.0
+2026-03-25 12:11:29,571 - backend.secuscan.plugins - WARNING - Binary not found in PATH: ghauri
+2026-03-25 12:11:29,571 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,571 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: sqli_checker
+2026-03-25 12:11:29,571 - backend.secuscan.plugins - WARNING - Binary not found in PATH: volatility3
+2026-03-25 12:11:29,571 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,571 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: volatility
+2026-03-25 12:11:29,571 - backend.secuscan.plugins - WARNING - Binary not found in PATH: joomscan
+2026-03-25 12:11:29,571 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: JoomScan v1.0.0
+2026-03-25 12:11:29,571 - backend.secuscan.plugins - WARNING - Binary not found in PATH: subfinder
+2026-03-25 12:11:29,572 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Subdomain Discovery v1.0.0
+2026-03-25 12:11:29,572 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: WHOIS Lookup v1.0.0
+2026-03-25 12:11:29,572 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nuclei v1.0.0
+2026-03-25 12:11:29,572 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nmap v1.0.0
+2026-03-25 12:11:29,572 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+2026-03-25 12:11:29,572 - backend.secuscan.plugins - WARNING - Binary not found in PATH: wpscan
+2026-03-25 12:11:29,572 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,573 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: wpscan
+2026-03-25 12:11:29,573 - backend.secuscan.plugins - WARNING - Binary not found in PATH: dnsrecon
+2026-03-25 12:11:29,573 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DNS Enumeration v1.0.0
+2026-03-25 12:11:29,573 - backend.secuscan.plugins - WARNING - Binary not found in PATH: msfconsole
+2026-03-25 12:11:29,573 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Metasploit Framework v1.0.0
+2026-03-25 12:11:29,573 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Hashcat v1.0.0
+2026-03-25 12:11:29,573 - backend.secuscan.plugins - INFO - Loaded 18 plugins
+2026-03-25 12:11:29,574 - backend.secuscan.main - INFO - 🚀 Starting SecuScan backend...
+2026-03-25 12:11:29,574 - backend.secuscan.main - INFO - ✓ Directories initialized
+2026-03-25 12:11:29,575 - backend.secuscan.main - INFO - ✓ SQLite connected
+2026-03-25 12:11:29,575 - backend.secuscan.main - INFO - ✓ In-memory cache initialized
+2026-03-25 12:11:29,575 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nikto v1.0.0
+2026-03-25 12:11:29,575 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Scapy Recon v1.0.0
+2026-03-25 12:11:29,576 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SSH Runner v1.0.0
+2026-03-25 12:11:29,576 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: TLS Inspector v1.0.0
+2026-03-25 12:11:29,576 - backend.secuscan.plugins - WARNING - Binary not found in PATH: yara
+2026-03-25 12:11:29,576 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,576 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: yara_scan
+2026-03-25 12:11:29,576 - backend.secuscan.plugins - WARNING - Binary not found in PATH: droopescan
+2026-03-25 12:11:29,576 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DroopeScan v1.0.0
+2026-03-25 12:11:29,576 - backend.secuscan.plugins - WARNING - Binary not found in PATH: gitleaks
+2026-03-25 12:11:29,576 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Secret Scanner v1.0.0
+2026-03-25 12:11:29,577 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SQLMap v1.0.0
+2026-03-25 12:11:29,577 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Directory Discovery v1.0.0
+2026-03-25 12:11:29,577 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: HTTP Inspector v1.0.0
+2026-03-25 12:11:29,577 - backend.secuscan.plugins - WARNING - Binary not found in PATH: ghauri
+2026-03-25 12:11:29,577 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,577 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: sqli_checker
+2026-03-25 12:11:29,577 - backend.secuscan.plugins - WARNING - Binary not found in PATH: volatility3
+2026-03-25 12:11:29,577 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,577 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: volatility
+2026-03-25 12:11:29,578 - backend.secuscan.plugins - WARNING - Binary not found in PATH: joomscan
+2026-03-25 12:11:29,578 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: JoomScan v1.0.0
+2026-03-25 12:11:29,578 - backend.secuscan.plugins - WARNING - Binary not found in PATH: subfinder
+2026-03-25 12:11:29,578 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Subdomain Discovery v1.0.0
+2026-03-25 12:11:29,578 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: WHOIS Lookup v1.0.0
+2026-03-25 12:11:29,578 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nuclei v1.0.0
+2026-03-25 12:11:29,578 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nmap v1.0.0
+2026-03-25 12:11:29,578 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+2026-03-25 12:11:29,579 - backend.secuscan.plugins - WARNING - Binary not found in PATH: wpscan
+2026-03-25 12:11:29,579 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,579 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: wpscan
+2026-03-25 12:11:29,579 - backend.secuscan.plugins - WARNING - Binary not found in PATH: dnsrecon
+2026-03-25 12:11:29,579 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DNS Enumeration v1.0.0
+2026-03-25 12:11:29,579 - backend.secuscan.plugins - WARNING - Binary not found in PATH: msfconsole
+2026-03-25 12:11:29,579 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Metasploit Framework v1.0.0
+2026-03-25 12:11:29,579 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Hashcat v1.0.0
+2026-03-25 12:11:29,579 - backend.secuscan.plugins - INFO - Loaded 18 plugins
+2026-03-25 12:11:29,579 - backend.secuscan.main - INFO - ✓ Plugins loaded
+2026-03-25 12:11:29,579 - backend.secuscan.main - INFO - ✓ Ready to serve on 127.0.0.1:8000
+------------------------------ Captured log setup ------------------------------
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nikto v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Scapy Recon v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SSH Runner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: TLS Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: yara
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: yara_scan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: droopescan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DroopeScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: gitleaks
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Secret Scanner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SQLMap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Directory Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: HTTP Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: ghauri
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: sqli_checker
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: volatility3
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: volatility
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: joomscan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: JoomScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: subfinder
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Subdomain Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: WHOIS Lookup v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nuclei v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nmap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: wpscan
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: wpscan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: dnsrecon
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DNS Enumeration v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: msfconsole
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Metasploit Framework v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Hashcat v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:63 Loaded 18 plugins
+INFO     backend.secuscan.main:main.py:38 🚀 Starting SecuScan backend...
+INFO     backend.secuscan.main:main.py:42 ✓ Directories initialized
+INFO     backend.secuscan.main:main.py:46 ✓ SQLite connected
+INFO     backend.secuscan.main:main.py:49 ✓ In-memory cache initialized
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nikto v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Scapy Recon v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SSH Runner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: TLS Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: yara
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: yara_scan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: droopescan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DroopeScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: gitleaks
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Secret Scanner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SQLMap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Directory Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: HTTP Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: ghauri
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: sqli_checker
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: volatility3
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: volatility
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: joomscan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: JoomScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: subfinder
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Subdomain Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: WHOIS Lookup v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nuclei v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nmap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: wpscan
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: wpscan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: dnsrecon
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DNS Enumeration v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: msfconsole
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Metasploit Framework v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Hashcat v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:63 Loaded 18 plugins
+INFO     backend.secuscan.main:main.py:53 ✓ Plugins loaded
+INFO     backend.secuscan.main:main.py:55 ✓ Ready to serve on 127.0.0.1:8000
+----------------------------- Captured stdout call -----------------------------
+2026-03-25 12:11:29,580 - backend.secuscan.routes - WARNING - Task start failed: Plugin not found: yara_scan
+2026-03-25 12:11:29,581 - httpx - INFO - HTTP Request: POST http://testserver/api/v1/task/start "HTTP/1.1 404 Not Found"
+------------------------------ Captured log call -------------------------------
+WARNING  backend.secuscan.routes:routes.py:128 Task start failed: Plugin not found: yara_scan
+INFO     httpx:_client.py:1025 HTTP Request: POST http://testserver/api/v1/task/start "HTTP/1.1 404 Not Found"
+--------------------------- Captured stdout teardown ---------------------------
+2026-03-25 12:11:29,584 - backend.secuscan.main - INFO - 🛑 Shutting down SecuScan backend...
+2026-03-25 12:11:29,584 - backend.secuscan.main - INFO - ✓ Shutdown complete
+---------------------------- Captured log teardown -----------------------------
+INFO     backend.secuscan.main:main.py:60 🛑 Shutting down SecuScan backend...
+INFO     backend.secuscan.main:main.py:65 ✓ Shutdown complete
+_______________________________ test_volatility ________________________________
+
+test_client = <starlette.testclient.TestClient object at 0x10b992300>
+
+    def test_volatility(test_client):
+        mock_out = "Header1 Header2\nData1 Data2\nData3 Data4"
+>       result = run_plugin_test(test_client, "volatility", {"target": "mem.dump", "plugin_name": "pslist"}, mock_out)
+
+tests/integration/test_phase3_plugins.py:78: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+test_client = <starlette.testclient.TestClient object at 0x10b992300>
+plugin_id = 'volatility'
+inputs = {'plugin_name': 'pslist', 'target': 'mem.dump'}
+mock_output = 'Header1 Header2\nData1 Data2\nData3 Data4'
+
+    def run_plugin_test(test_client, plugin_id, inputs, mock_output):
+        """Helper to run a plugin test with mocked execution."""
+        with patch("backend.secuscan.executor.TaskExecutor._execute_command") as mock_exec:
+            mock_exec.return_value = (mock_output, 0)
+    
+            payload = {
+                "plugin_id": plugin_id,
+                "inputs": inputs,
+                "consent_granted": True,
+            }
+    
+            # Start task
+            response = test_client.post("/api/v1/task/start", json=payload)
+>           assert response.status_code == 200, f"Failed to start {plugin_id}: {response.text}"
+E           AssertionError: Failed to start volatility: {"detail":"Plugin not found: volatility"}
+E           assert 404 == 200
+E            +  where 404 = <Response [404 Not Found]>.status_code
+
+tests/integration/test_phase3_plugins.py:29: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+2026-03-25 12:11:29,593 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nikto v1.0.0
+2026-03-25 12:11:29,593 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Scapy Recon v1.0.0
+2026-03-25 12:11:29,593 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SSH Runner v1.0.0
+2026-03-25 12:11:29,594 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: TLS Inspector v1.0.0
+2026-03-25 12:11:29,594 - backend.secuscan.plugins - WARNING - Binary not found in PATH: yara
+2026-03-25 12:11:29,594 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,594 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: yara_scan
+2026-03-25 12:11:29,594 - backend.secuscan.plugins - WARNING - Binary not found in PATH: droopescan
+2026-03-25 12:11:29,594 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DroopeScan v1.0.0
+2026-03-25 12:11:29,594 - backend.secuscan.plugins - WARNING - Binary not found in PATH: gitleaks
+2026-03-25 12:11:29,594 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Secret Scanner v1.0.0
+2026-03-25 12:11:29,595 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SQLMap v1.0.0
+2026-03-25 12:11:29,595 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Directory Discovery v1.0.0
+2026-03-25 12:11:29,595 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: HTTP Inspector v1.0.0
+2026-03-25 12:11:29,595 - backend.secuscan.plugins - WARNING - Binary not found in PATH: ghauri
+2026-03-25 12:11:29,595 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,595 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: sqli_checker
+2026-03-25 12:11:29,595 - backend.secuscan.plugins - WARNING - Binary not found in PATH: volatility3
+2026-03-25 12:11:29,595 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,596 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: volatility
+2026-03-25 12:11:29,596 - backend.secuscan.plugins - WARNING - Binary not found in PATH: joomscan
+2026-03-25 12:11:29,596 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: JoomScan v1.0.0
+2026-03-25 12:11:29,596 - backend.secuscan.plugins - WARNING - Binary not found in PATH: subfinder
+2026-03-25 12:11:29,596 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Subdomain Discovery v1.0.0
+2026-03-25 12:11:29,596 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: WHOIS Lookup v1.0.0
+2026-03-25 12:11:29,596 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nuclei v1.0.0
+2026-03-25 12:11:29,597 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nmap v1.0.0
+2026-03-25 12:11:29,597 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+2026-03-25 12:11:29,597 - backend.secuscan.plugins - WARNING - Binary not found in PATH: wpscan
+2026-03-25 12:11:29,597 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,597 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: wpscan
+2026-03-25 12:11:29,597 - backend.secuscan.plugins - WARNING - Binary not found in PATH: dnsrecon
+2026-03-25 12:11:29,597 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DNS Enumeration v1.0.0
+2026-03-25 12:11:29,598 - backend.secuscan.plugins - WARNING - Binary not found in PATH: msfconsole
+2026-03-25 12:11:29,598 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Metasploit Framework v1.0.0
+2026-03-25 12:11:29,598 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Hashcat v1.0.0
+2026-03-25 12:11:29,598 - backend.secuscan.plugins - INFO - Loaded 18 plugins
+2026-03-25 12:11:29,599 - backend.secuscan.main - INFO - 🚀 Starting SecuScan backend...
+2026-03-25 12:11:29,599 - backend.secuscan.main - INFO - ✓ Directories initialized
+2026-03-25 12:11:29,600 - backend.secuscan.main - INFO - ✓ SQLite connected
+2026-03-25 12:11:29,600 - backend.secuscan.main - INFO - ✓ In-memory cache initialized
+2026-03-25 12:11:29,600 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nikto v1.0.0
+2026-03-25 12:11:29,600 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Scapy Recon v1.0.0
+2026-03-25 12:11:29,600 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SSH Runner v1.0.0
+2026-03-25 12:11:29,601 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: TLS Inspector v1.0.0
+2026-03-25 12:11:29,601 - backend.secuscan.plugins - WARNING - Binary not found in PATH: yara
+2026-03-25 12:11:29,601 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,601 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: yara_scan
+2026-03-25 12:11:29,601 - backend.secuscan.plugins - WARNING - Binary not found in PATH: droopescan
+2026-03-25 12:11:29,601 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DroopeScan v1.0.0
+2026-03-25 12:11:29,601 - backend.secuscan.plugins - WARNING - Binary not found in PATH: gitleaks
+2026-03-25 12:11:29,601 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Secret Scanner v1.0.0
+2026-03-25 12:11:29,601 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SQLMap v1.0.0
+2026-03-25 12:11:29,602 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Directory Discovery v1.0.0
+2026-03-25 12:11:29,602 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: HTTP Inspector v1.0.0
+2026-03-25 12:11:29,602 - backend.secuscan.plugins - WARNING - Binary not found in PATH: ghauri
+2026-03-25 12:11:29,602 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,602 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: sqli_checker
+2026-03-25 12:11:29,602 - backend.secuscan.plugins - WARNING - Binary not found in PATH: volatility3
+2026-03-25 12:11:29,602 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,602 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: volatility
+2026-03-25 12:11:29,602 - backend.secuscan.plugins - WARNING - Binary not found in PATH: joomscan
+2026-03-25 12:11:29,602 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: JoomScan v1.0.0
+2026-03-25 12:11:29,603 - backend.secuscan.plugins - WARNING - Binary not found in PATH: subfinder
+2026-03-25 12:11:29,603 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Subdomain Discovery v1.0.0
+2026-03-25 12:11:29,603 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: WHOIS Lookup v1.0.0
+2026-03-25 12:11:29,603 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nuclei v1.0.0
+2026-03-25 12:11:29,603 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nmap v1.0.0
+2026-03-25 12:11:29,603 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+2026-03-25 12:11:29,604 - backend.secuscan.plugins - WARNING - Binary not found in PATH: wpscan
+2026-03-25 12:11:29,604 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,604 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: wpscan
+2026-03-25 12:11:29,604 - backend.secuscan.plugins - WARNING - Binary not found in PATH: dnsrecon
+2026-03-25 12:11:29,604 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DNS Enumeration v1.0.0
+2026-03-25 12:11:29,604 - backend.secuscan.plugins - WARNING - Binary not found in PATH: msfconsole
+2026-03-25 12:11:29,604 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Metasploit Framework v1.0.0
+2026-03-25 12:11:29,604 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Hashcat v1.0.0
+2026-03-25 12:11:29,604 - backend.secuscan.plugins - INFO - Loaded 18 plugins
+2026-03-25 12:11:29,604 - backend.secuscan.main - INFO - ✓ Plugins loaded
+2026-03-25 12:11:29,604 - backend.secuscan.main - INFO - ✓ Ready to serve on 127.0.0.1:8000
+------------------------------ Captured log setup ------------------------------
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nikto v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Scapy Recon v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SSH Runner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: TLS Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: yara
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: yara_scan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: droopescan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DroopeScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: gitleaks
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Secret Scanner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SQLMap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Directory Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: HTTP Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: ghauri
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: sqli_checker
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: volatility3
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: volatility
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: joomscan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: JoomScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: subfinder
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Subdomain Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: WHOIS Lookup v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nuclei v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nmap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: wpscan
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: wpscan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: dnsrecon
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DNS Enumeration v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: msfconsole
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Metasploit Framework v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Hashcat v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:63 Loaded 18 plugins
+INFO     backend.secuscan.main:main.py:38 🚀 Starting SecuScan backend...
+INFO     backend.secuscan.main:main.py:42 ✓ Directories initialized
+INFO     backend.secuscan.main:main.py:46 ✓ SQLite connected
+INFO     backend.secuscan.main:main.py:49 ✓ In-memory cache initialized
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nikto v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Scapy Recon v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SSH Runner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: TLS Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: yara
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: yara_scan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: droopescan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DroopeScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: gitleaks
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Secret Scanner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SQLMap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Directory Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: HTTP Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: ghauri
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: sqli_checker
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: volatility3
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: volatility
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: joomscan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: JoomScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: subfinder
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Subdomain Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: WHOIS Lookup v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nuclei v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nmap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: wpscan
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: wpscan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: dnsrecon
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DNS Enumeration v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: msfconsole
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Metasploit Framework v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Hashcat v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:63 Loaded 18 plugins
+INFO     backend.secuscan.main:main.py:53 ✓ Plugins loaded
+INFO     backend.secuscan.main:main.py:55 ✓ Ready to serve on 127.0.0.1:8000
+----------------------------- Captured stdout call -----------------------------
+2026-03-25 12:11:29,605 - backend.secuscan.routes - WARNING - Task start failed: Plugin not found: volatility
+2026-03-25 12:11:29,606 - httpx - INFO - HTTP Request: POST http://testserver/api/v1/task/start "HTTP/1.1 404 Not Found"
+------------------------------ Captured log call -------------------------------
+WARNING  backend.secuscan.routes:routes.py:128 Task start failed: Plugin not found: volatility
+INFO     httpx:_client.py:1025 HTTP Request: POST http://testserver/api/v1/task/start "HTTP/1.1 404 Not Found"
+--------------------------- Captured stdout teardown ---------------------------
+2026-03-25 12:11:29,609 - backend.secuscan.main - INFO - 🛑 Shutting down SecuScan backend...
+2026-03-25 12:11:29,609 - backend.secuscan.main - INFO - ✓ Shutdown complete
+---------------------------- Captured log teardown -----------------------------
+INFO     backend.secuscan.main:main.py:60 🛑 Shutting down SecuScan backend...
+INFO     backend.secuscan.main:main.py:65 ✓ Shutdown complete
+_________________________________ test_hashcat _________________________________
+
+test_client = <starlette.testclient.TestClient object at 0x10b9cce90>
+
+    def test_hashcat(test_client):
+        mock_out = "5f4dcc3b5aa765d61d8327deb882cf99:password\ne807f1fcf82d132f9bb018ca6738a19f:admin123"
+>       result = run_plugin_test(test_client, "hashcat", {"target": "hashes.txt", "hash_type": 0}, mock_out)
+
+tests/integration/test_phase3_plugins.py:83: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+test_client = <starlette.testclient.TestClient object at 0x10b9cce90>
+plugin_id = 'hashcat', inputs = {'hash_type': 0, 'target': 'hashes.txt'}
+mock_output = '5f4dcc3b5aa765d61d8327deb882cf99:password\ne807f1fcf82d132f9bb018ca6738a19f:admin123'
+
+    def run_plugin_test(test_client, plugin_id, inputs, mock_output):
+        """Helper to run a plugin test with mocked execution."""
+        with patch("backend.secuscan.executor.TaskExecutor._execute_command") as mock_exec:
+            mock_exec.return_value = (mock_output, 0)
+    
+            payload = {
+                "plugin_id": plugin_id,
+                "inputs": inputs,
+                "consent_granted": True,
+            }
+    
+            # Start task
+            response = test_client.post("/api/v1/task/start", json=payload)
+            assert response.status_code == 200, f"Failed to start {plugin_id}: {response.text}"
+            task_id = response.json()["task_id"]
+    
+            # Wait for completion
+            max_retries = 10
+            status = "unknown"
+            for _ in range(max_retries):
+                status_response = test_client.get(f"/api/v1/task/{task_id}/status")
+                status = status_response.json()["status"]
+                if status == TaskStatus.COMPLETED.value:
+                    break
+                time.sleep(0.1)
+    
+>           assert status == TaskStatus.COMPLETED.value, f"Task {task_id} did not complete for {plugin_id}"
+E           AssertionError: Task 9b8112aa-4421-4c4e-9f79-5d922c509941 did not complete for hashcat
+E           assert 'failed' == 'completed'
+E             
+E             - completed
+E             + failed
+
+tests/integration/test_phase3_plugins.py:42: AssertionError
+---------------------------- Captured stdout setup -----------------------------
+2026-03-25 12:11:29,617 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nikto v1.0.0
+2026-03-25 12:11:29,617 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Scapy Recon v1.0.0
+2026-03-25 12:11:29,617 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SSH Runner v1.0.0
+2026-03-25 12:11:29,618 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: TLS Inspector v1.0.0
+2026-03-25 12:11:29,618 - backend.secuscan.plugins - WARNING - Binary not found in PATH: yara
+2026-03-25 12:11:29,618 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,618 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: yara_scan
+2026-03-25 12:11:29,618 - backend.secuscan.plugins - WARNING - Binary not found in PATH: droopescan
+2026-03-25 12:11:29,618 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DroopeScan v1.0.0
+2026-03-25 12:11:29,618 - backend.secuscan.plugins - WARNING - Binary not found in PATH: gitleaks
+2026-03-25 12:11:29,619 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Secret Scanner v1.0.0
+2026-03-25 12:11:29,619 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SQLMap v1.0.0
+2026-03-25 12:11:29,619 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Directory Discovery v1.0.0
+2026-03-25 12:11:29,619 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: HTTP Inspector v1.0.0
+2026-03-25 12:11:29,619 - backend.secuscan.plugins - WARNING - Binary not found in PATH: ghauri
+2026-03-25 12:11:29,619 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,619 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: sqli_checker
+2026-03-25 12:11:29,620 - backend.secuscan.plugins - WARNING - Binary not found in PATH: volatility3
+2026-03-25 12:11:29,620 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,620 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: volatility
+2026-03-25 12:11:29,620 - backend.secuscan.plugins - WARNING - Binary not found in PATH: joomscan
+2026-03-25 12:11:29,620 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: JoomScan v1.0.0
+2026-03-25 12:11:29,620 - backend.secuscan.plugins - WARNING - Binary not found in PATH: subfinder
+2026-03-25 12:11:29,620 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Subdomain Discovery v1.0.0
+2026-03-25 12:11:29,620 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: WHOIS Lookup v1.0.0
+2026-03-25 12:11:29,621 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nuclei v1.0.0
+2026-03-25 12:11:29,621 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nmap v1.0.0
+2026-03-25 12:11:29,621 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+2026-03-25 12:11:29,621 - backend.secuscan.plugins - WARNING - Binary not found in PATH: wpscan
+2026-03-25 12:11:29,621 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,621 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: wpscan
+2026-03-25 12:11:29,621 - backend.secuscan.plugins - WARNING - Binary not found in PATH: dnsrecon
+2026-03-25 12:11:29,621 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DNS Enumeration v1.0.0
+2026-03-25 12:11:29,622 - backend.secuscan.plugins - WARNING - Binary not found in PATH: msfconsole
+2026-03-25 12:11:29,622 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Metasploit Framework v1.0.0
+2026-03-25 12:11:29,622 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Hashcat v1.0.0
+2026-03-25 12:11:29,622 - backend.secuscan.plugins - INFO - Loaded 18 plugins
+2026-03-25 12:11:29,623 - backend.secuscan.main - INFO - 🚀 Starting SecuScan backend...
+2026-03-25 12:11:29,623 - backend.secuscan.main - INFO - ✓ Directories initialized
+2026-03-25 12:11:29,624 - backend.secuscan.main - INFO - ✓ SQLite connected
+2026-03-25 12:11:29,624 - backend.secuscan.main - INFO - ✓ In-memory cache initialized
+2026-03-25 12:11:29,625 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nikto v1.0.0
+2026-03-25 12:11:29,625 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Scapy Recon v1.0.0
+2026-03-25 12:11:29,625 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SSH Runner v1.0.0
+2026-03-25 12:11:29,626 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: TLS Inspector v1.0.0
+2026-03-25 12:11:29,626 - backend.secuscan.plugins - WARNING - Binary not found in PATH: yara
+2026-03-25 12:11:29,626 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,626 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: yara_scan
+2026-03-25 12:11:29,626 - backend.secuscan.plugins - WARNING - Binary not found in PATH: droopescan
+2026-03-25 12:11:29,626 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DroopeScan v1.0.0
+2026-03-25 12:11:29,626 - backend.secuscan.plugins - WARNING - Binary not found in PATH: gitleaks
+2026-03-25 12:11:29,626 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Secret Scanner v1.0.0
+2026-03-25 12:11:29,627 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: SQLMap v1.0.0
+2026-03-25 12:11:29,627 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Directory Discovery v1.0.0
+2026-03-25 12:11:29,627 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: HTTP Inspector v1.0.0
+2026-03-25 12:11:29,627 - backend.secuscan.plugins - WARNING - Binary not found in PATH: ghauri
+2026-03-25 12:11:29,627 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,627 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: sqli_checker
+2026-03-25 12:11:29,627 - backend.secuscan.plugins - WARNING - Binary not found in PATH: volatility3
+2026-03-25 12:11:29,627 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,627 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: volatility
+2026-03-25 12:11:29,628 - backend.secuscan.plugins - WARNING - Binary not found in PATH: joomscan
+2026-03-25 12:11:29,628 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: JoomScan v1.0.0
+2026-03-25 12:11:29,628 - backend.secuscan.plugins - WARNING - Binary not found in PATH: subfinder
+2026-03-25 12:11:29,628 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Subdomain Discovery v1.0.0
+2026-03-25 12:11:29,628 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: WHOIS Lookup v1.0.0
+2026-03-25 12:11:29,628 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nuclei v1.0.0
+2026-03-25 12:11:29,628 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Nmap v1.0.0
+2026-03-25 12:11:29,629 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+2026-03-25 12:11:29,629 - backend.secuscan.plugins - WARNING - Binary not found in PATH: wpscan
+2026-03-25 12:11:29,629 - backend.secuscan.plugins - ERROR - Invalid safety level: moderate
+2026-03-25 12:11:29,629 - backend.secuscan.plugins - ERROR - ✗ Failed to validate plugin: wpscan
+2026-03-25 12:11:29,629 - backend.secuscan.plugins - WARNING - Binary not found in PATH: dnsrecon
+2026-03-25 12:11:29,629 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: DNS Enumeration v1.0.0
+2026-03-25 12:11:29,629 - backend.secuscan.plugins - WARNING - Binary not found in PATH: msfconsole
+2026-03-25 12:11:29,629 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Metasploit Framework v1.0.0
+2026-03-25 12:11:29,629 - backend.secuscan.plugins - INFO - ✓ Loaded plugin: Hashcat v1.0.0
+2026-03-25 12:11:29,629 - backend.secuscan.plugins - INFO - Loaded 18 plugins
+2026-03-25 12:11:29,630 - backend.secuscan.main - INFO - ✓ Plugins loaded
+2026-03-25 12:11:29,630 - backend.secuscan.main - INFO - ✓ Ready to serve on 127.0.0.1:8000
+------------------------------ Captured log setup ------------------------------
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nikto v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Scapy Recon v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SSH Runner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: TLS Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: yara
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: yara_scan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: droopescan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DroopeScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: gitleaks
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Secret Scanner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SQLMap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Directory Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: HTTP Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: ghauri
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: sqli_checker
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: volatility3
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: volatility
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: joomscan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: JoomScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: subfinder
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Subdomain Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: WHOIS Lookup v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nuclei v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nmap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: wpscan
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: wpscan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: dnsrecon
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DNS Enumeration v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: msfconsole
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Metasploit Framework v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Hashcat v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:63 Loaded 18 plugins
+INFO     backend.secuscan.main:main.py:38 🚀 Starting SecuScan backend...
+INFO     backend.secuscan.main:main.py:42 ✓ Directories initialized
+INFO     backend.secuscan.main:main.py:46 ✓ SQLite connected
+INFO     backend.secuscan.main:main.py:49 ✓ In-memory cache initialized
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nikto v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Scapy Recon v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SSH Runner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: TLS Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: yara
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: yara_scan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: droopescan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DroopeScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: gitleaks
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Secret Scanner v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: SQLMap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Directory Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: HTTP Inspector v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: ghauri
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: sqli_checker
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: volatility3
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: volatility
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: joomscan
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: JoomScan v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: subfinder
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Subdomain Discovery v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: WHOIS Lookup v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nuclei v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Nmap v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Code Analyzer (Bandit) v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: wpscan
+ERROR    backend.secuscan.plugins:plugins.py:109 Invalid safety level: moderate
+ERROR    backend.secuscan.plugins:plugins.py:58 ✗ Failed to validate plugin: wpscan
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: dnsrecon
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: DNS Enumeration v1.0.0
+WARNING  backend.secuscan.plugins:plugins.py:98 Binary not found in PATH: msfconsole
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Metasploit Framework v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:56 ✓ Loaded plugin: Hashcat v1.0.0
+INFO     backend.secuscan.plugins:plugins.py:63 Loaded 18 plugins
+INFO     backend.secuscan.main:main.py:53 ✓ Plugins loaded
+INFO     backend.secuscan.main:main.py:55 ✓ Ready to serve on 127.0.0.1:8000
+----------------------------- Captured stdout call -----------------------------
+2026-03-25 12:11:29,633 - backend.secuscan.executor - INFO - Executing task 9b8112aa-4421-4c4e-9f79-5d922c509941: hashcat -m 0 -a hashes.txt
+2026-03-25 12:11:29,635 - backend.secuscan.executor - INFO - Using custom parser for hashcat
+2026-03-25 12:11:29,635 - backend.secuscan.executor - ERROR - Task 9b8112aa-4421-4c4e-9f79-5d922c509941 failed: 'list' object has no attribute 'get'
+2026-03-25 12:11:29,637 - httpx - INFO - HTTP Request: POST http://testserver/api/v1/task/start "HTTP/1.1 200 OK"
+2026-03-25 12:11:29,638 - httpx - INFO - HTTP Request: GET http://testserver/api/v1/task/9b8112aa-4421-4c4e-9f79-5d922c509941/status "HTTP/1.1 200 OK"
+2026-03-25 12:11:29,742 - httpx - INFO - HTTP Request: GET http://testserver/api/v1/task/9b8112aa-4421-4c4e-9f79-5d922c509941/status "HTTP/1.1 200 OK"
+2026-03-25 12:11:29,846 - httpx - INFO - HTTP Request: GET http://testserver/api/v1/task/9b8112aa-4421-4c4e-9f79-5d922c509941/status "HTTP/1.1 200 OK"
+2026-03-25 12:11:29,953 - httpx - INFO - HTTP Request: GET http://testserver/api/v1/task/9b8112aa-4421-4c4e-9f79-5d922c509941/status "HTTP/1.1 200 OK"
+2026-03-25 12:11:30,058 - httpx - INFO - HTTP Request: GET http://testserver/api/v1/task/9b8112aa-4421-4c4e-9f79-5d922c509941/status "HTTP/1.1 200 OK"
+2026-03-25 12:11:30,166 - httpx - INFO - HTTP Request: GET http://testserver/api/v1/task/9b8112aa-4421-4c4e-9f79-5d922c509941/status "HTTP/1.1 200 OK"
+2026-03-25 12:11:30,271 - httpx - INFO - HTTP Request: GET http://testserver/api/v1/task/9b8112aa-4421-4c4e-9f79-5d922c509941/status "HTTP/1.1 200 OK"
+2026-03-25 12:11:30,374 - httpx - INFO - HTTP Request: GET http://testserver/api/v1/task/9b8112aa-4421-4c4e-9f79-5d922c509941/status "HTTP/1.1 200 OK"
+2026-03-25 12:11:30,480 - httpx - INFO - HTTP Request: GET http://testserver/api/v1/task/9b8112aa-4421-4c4e-9f79-5d922c509941/status "HTTP/1.1 200 OK"
+2026-03-25 12:11:30,587 - httpx - INFO - HTTP Request: GET http://testserver/api/v1/task/9b8112aa-4421-4c4e-9f79-5d922c509941/status "HTTP/1.1 200 OK"
+------------------------------ Captured log call -------------------------------
+INFO     backend.secuscan.executor:executor.py:186 Executing task 9b8112aa-4421-4c4e-9f79-5d922c509941: hashcat -m 0 -a hashes.txt
+INFO     backend.secuscan.executor:executor.py:539 Using custom parser for hashcat
+ERROR    backend.secuscan.executor:executor.py:246 Task 9b8112aa-4421-4c4e-9f79-5d922c509941 failed: 'list' object has no attribute 'get'
+INFO     httpx:_client.py:1025 HTTP Request: POST http://testserver/api/v1/task/start "HTTP/1.1 200 OK"
+INFO     httpx:_client.py:1025 HTTP Request: GET http://testserver/api/v1/task/9b8112aa-4421-4c4e-9f79-5d922c509941/status "HTTP/1.1 200 OK"
+INFO     httpx:_client.py:1025 HTTP Request: GET http://testserver/api/v1/task/9b8112aa-4421-4c4e-9f79-5d922c509941/status "HTTP/1.1 200 OK"
+INFO     httpx:_client.py:1025 HTTP Request: GET http://testserver/api/v1/task/9b8112aa-4421-4c4e-9f79-5d922c509941/status "HTTP/1.1 200 OK"
+INFO     httpx:_client.py:1025 HTTP Request: GET http://testserver/api/v1/task/9b8112aa-4421-4c4e-9f79-5d922c509941/status "HTTP/1.1 200 OK"
+INFO     httpx:_client.py:1025 HTTP Request: GET http://testserver/api/v1/task/9b8112aa-4421-4c4e-9f79-5d922c509941/status "HTTP/1.1 200 OK"
+INFO     httpx:_client.py:1025 HTTP Request: GET http://testserver/api/v1/task/9b8112aa-4421-4c4e-9f79-5d922c509941/status "HTTP/1.1 200 OK"
+INFO     httpx:_client.py:1025 HTTP Request: GET http://testserver/api/v1/task/9b8112aa-4421-4c4e-9f79-5d922c509941/status "HTTP/1.1 200 OK"
+INFO     httpx:_client.py:1025 HTTP Request: GET http://testserver/api/v1/task/9b8112aa-4421-4c4e-9f79-5d922c509941/status "HTTP/1.1 200 OK"
+INFO     httpx:_client.py:1025 HTTP Request: GET http://testserver/api/v1/task/9b8112aa-4421-4c4e-9f79-5d922c509941/status "HTTP/1.1 200 OK"
+INFO     httpx:_client.py:1025 HTTP Request: GET http://testserver/api/v1/task/9b8112aa-4421-4c4e-9f79-5d922c509941/status "HTTP/1.1 200 OK"
+--------------------------- Captured stdout teardown ---------------------------
+2026-03-25 12:11:30,700 - backend.secuscan.main - INFO - 🛑 Shutting down SecuScan backend...
+2026-03-25 12:11:30,700 - backend.secuscan.main - INFO - ✓ Shutdown complete
+---------------------------- Captured log teardown -----------------------------
+INFO     backend.secuscan.main:main.py:60 🛑 Shutting down SecuScan backend...
+INFO     backend.secuscan.main:main.py:65 ✓ Shutdown complete
+=============================== warnings summary ===============================
+venv_tests/lib/python3.12/site-packages/pydantic/_internal/_config.py:291
+  /Users/Apple/Secuscan/venv_tests/lib/python3.12/site-packages/pydantic/_internal/_config.py:291: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.8/migration/
+    warnings.warn(DEPRECATION_MESSAGE, DeprecationWarning)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/integration/test_phase3_plugins.py::test_phase3_plugins_discoverable
+FAILED tests/integration/test_phase3_plugins.py::test_wpscan - AssertionError...
+FAILED tests/integration/test_phase3_plugins.py::test_joomscan - AssertionErr...
+FAILED tests/integration/test_phase3_plugins.py::test_droopescan - AssertionE...
+FAILED tests/integration/test_phase3_plugins.py::test_yara_scan - AssertionEr...
+FAILED tests/integration/test_phase3_plugins.py::test_volatility - AssertionE...
+FAILED tests/integration/test_phase3_plugins.py::test_hashcat - AssertionErro...
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! KeyboardInterrupt !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+/Users/Apple/Secuscan/tests/integration/test_phase3_plugins.py:40: KeyboardInterrupt
+(to show a full traceback on KeyboardInterrupt use --full-trace)
+========================= 7 failed, 1 warning in 2.37s =========================
+Exception ignored in: <module 'threading' from '/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/threading.py'>
+Traceback (most recent call last):
+  File "/opt/homebrew/Cellar/python@3.12/3.12.13/Frameworks/Python.framework/Versions/3.12/lib/python3.12/threading.py", line 1624, in _shutdown
+    lock.acquire()
+KeyboardInterrupt: 

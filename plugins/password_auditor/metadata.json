@@ -1,0 +1,56 @@
+{
+  "id": "password_auditor",
+  "name": "Password Auditor",
+  "version": "1.0.0",
+  "description": "Discover weak credentials in network services and web apps.",
+  "long_description": "Discover weak credentials in network services and web apps.",
+  "category": "vulnerability",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udee0\ufe0f",
+  "engine": {
+    "type": "cli",
+    "binary": "python3"
+  },
+  "command_template": [
+    "python3",
+    "-c",
+    "import sys;print('Password auditor baseline');print('target='+sys.argv[1]);print('status=credential_policy_review')",
+    "{target}"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target",
+      "type": "string",
+      "required": true,
+      "placeholder": "secuscan.in"
+    }
+  ],
+  "presets": {
+    "default": {}
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "Credential auditing requires explicit permission.",
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "python3"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

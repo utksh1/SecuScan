@@ -8,16 +8,16 @@ This file reflects the verified state of the repository. It is kept synchronized
 
 ## Overall Status
 
-SecuScan is a functional local-first pentesting platform with a **React 18 + Vite** frontend, a **Python FastAPI** backend, and a **14-plugin** scanning engine. The project has completed its Neo-Brutalist UI modernization, Phase 2 plugin expansion, and implemented a robust dynamic plugin parser system.
+SecuScan is a functional local-first pentesting platform with a **React 18 + Vite** frontend, a **Python FastAPI** backend, and a **22-plugin** scanning engine. The project has completed its Neo-Brutalist UI modernization, Phase 2 and Phase 3 plugin expansions, and implemented a robust dynamic plugin parser system.
 
 ---
 
 ## Architecture Overview
 
 ```
-Frontend (React 18 + Vite)     Backend (FastAPI + SQLite)     Plugins (14)
+Frontend (React 18 + Vite)     Backend (FastAPI + SQLite)     Plugins (22)
 ─────────────────────────      ────────────────────────       ──────────
-12 pages / 7 components        14 backend modules             14 JSON-metadata plugins
+12 pages / 7 components        14 backend modules             22 JSON-metadata plugins
 Neo-Brutalist aesthetic         SSE streaming                  3 safety tiers
 Framer Motion animations        Redis cache layer              CLI command templates
 Material Symbols icons          PDF/CSV reporting              Preset system
@@ -35,7 +35,7 @@ Material Symbols icons          PDF/CSV reporting              Preset system
 | Neo-Brutalist UI | ✅ | High-density SOC aesthetic |
 | Executive Dashboard | ✅ | Stats bar, system health, activity stream |
 | Scanner page | ✅ | Plugin selection + dynamic form |
-| Tool Config | ✅ | Auto-generated from plugin metadata |
+| Tool Config | ✅ | Configuration profiles for scanners |
 | Task Details | ✅ | Full result viewer with raw output |
 | Task History | ✅ | Paginated list with filters |
 | Findings page | ✅ | Severity-grouped vulnerability view |
@@ -71,13 +71,15 @@ Material Symbols icons          PDF/CSV reporting              Preset system
 
 ---
 
-### Plugin System
-| Phase | Count | Status |
-|-------|-------|--------|
-| Phase 1 (MVP) | 7 | ✅ Verified |
-| Phase 2 (Expanded) | 7 | ✅ Implemented |
-| Phase 3 (Expert) | 8 | ✅ Implemented (22 tools total) |
-| **Total** | **22** | **✅ 22 Plugins Active** |
+### Scanning Engine
+| Component | Status | Notes |
+|-----------|--------|-------|
+| Plugin Loader | ✅ | JSON metadata registry for 22 plugins |
+| Command Parser | ✅ | Template-based CLI command generator |
+| Task Executor | ✅ | Async process management + output capture |
+| Result Parsers | ✅ | 22 custom Python logic handlers |
+| Safety Layer| ✅ | Strict safety tier & rate limit enforcement |
+| Target Validator| ✅ | Hostname, IP, and URL protocol checks |
 
 ## 🚀 Phase 3 — Expert Mode & CMS Scanners (Current)
 **Status:** ✅ Implemented (Scaffolding + Parsers)

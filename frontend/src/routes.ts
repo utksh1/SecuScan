@@ -1,6 +1,5 @@
 export const routes = {
   dashboard: '/',
-  login: '/login',
   assets: '/assets',
   scans: '/scans',
   scanTool: '/scans/:toolId',

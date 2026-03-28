@@ -1,6 +1,6 @@
 {
   "id": "dns_enum",
-  "name": "DNS Enumeration",
+  "name": "DNS Reconnaissance",
   "version": "1.0.0",
   "description": "Enumerate DNS records and configurations",
   "long_description": "DNSRecon is a powerful DNS reconnaissance tool. It can perform various types of DNS security assessments, including zone transfers, reverse lookups, and brute forcing.",
@@ -27,7 +27,7 @@
       "label": "Domain",
       "type": "string",
       "required": true,
-      "placeholder": "example.com",
+      "placeholder": "secuscan.in",
       "help": "Target domain for DNS enumeration."
     },
     {
@@ -37,9 +37,18 @@
       "required": false,
       "default": "std",
       "options": [
-        {"value": "std", "label": "Standard (A, MX, NS, SOA)"},
-        {"value": "axfr", "label": "Zone Transfer (AXFR)"},
-        {"value": "brt", "label": "Brute Force Subdomains"}
+        {
+          "value": "std",
+          "label": "Standard (A, MX, NS, SOA)"
+        },
+        {
+          "value": "axfr",
+          "label": "Zone Transfer (AXFR)"
+        },
+        {
+          "value": "brt",
+          "label": "Brute Force Subdomains"
+        }
       ],
       "help": "Type of DNS enumeration to perform."
     }

@@ -1,6 +1,6 @@
 {
   "id": "whois_lookup",
-  "name": "WHOIS Lookup",
+  "name": "Domain Registration Lookup",
   "version": "1.0.0",
   "description": "Domain registration information lookup",
   "long_description": "WHOIS is a query and response protocol that is widely used for querying databases that store the registered users or assignees of an Internet resource, such as a domain name, an IP address block, or an autonomous system.",
@@ -25,7 +25,7 @@
       "label": "Domain/IP",
       "type": "string",
       "required": true,
-      "placeholder": "example.com",
+      "placeholder": "secuscan.in",
       "help": "Target domain name or IP address."
     }
   ],

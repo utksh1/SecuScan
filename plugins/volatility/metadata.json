@@ -1,56 +1,69 @@
 {
-  "schema_version": "1.0",
-  "plugin": {
-    "id": "volatility",
-    "name": "Volatility Framework",
-    "version": "3.0.0",
-    "author": "SecuScan Team",
-    "description": "Advanced memory forensics framework for analyzing memory dumps.",
-    "category": "forensics",
-    "tags": ["forensics", "memory", "volatility"],
-    "icon": "memory",
-    "documentation_url": "https://github.com/volatilityfoundation/volatility3"
+  "id": "volatility",
+  "name": "Volatility",
+  "version": "1.0.0",
+  "description": "Memory forensics workflow using Volatility 3 plugins.",
+  "long_description": "Runs Volatility 3 against memory dumps for process, module, and system artifact triage.",
+  "category": "forensics",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
   },
-  "execution": {
-    "engine": "cli",
-    "command_template": [
-      "volaf", "-f", "{{target}}", "{{plugin_name}}"
-    ],
-    "timeout_seconds": 1800,
-    "container": {
-      "required": true,
-      "image": "secuscan/volatility3:latest"
-    }
+  "license": "MIT",
+  "icon": "🧠",
+  "engine": {
+    "type": "cli",
+    "binary": "volatility3"
   },
+  "command_template": [
+    "volatility3",
+    "-f",
+    "{target}",
+    "{plugin_name}"
+  ],
   "fields": [
     {
       "id": "target",
       "label": "Memory Dump Path",
       "type": "string",
-      "required": true
+      "required": true,
+      "placeholder": "/tmp/memdump.raw"
     },
     {
       "id": "plugin_name",
       "label": "Volatility Plugin",
-      "type": "enum",
-      "default": "windows.pslist",
-      "options": [
-        {"value": "windows.pslist", "label": "Process List"},
-        {"value": "windows.netstat", "label": "Network Stats"},
-        {"value": "windows.malfind", "label": "Malware Finding"},
-        {"value": "linux.pslist", "label": "Linux Process List"}
-      ]
+      "type": "string",
+      "required": false,
+      "default": "windows.pslist.PsList",
+      "help": "Example: windows.info.Info, windows.pslist.PsList"
     }
   ],
   "presets": {
-    "analysis": {
-      "parameters": {
-        "plugin_name": "windows.pslist"
-      },
-      "safety_level": "safe"
+    "process_list": {
+      "plugin_name": "windows.pslist.PsList"
+    },
+    "system_info": {
+      "plugin_name": "windows.info.Info"
     }
   },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
   "safety": {
-    "level": "moderate"
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "Memory forensics can expose sensitive in-memory data. Authorized handling is required.",
+    "rate_limit": {
+      "max_per_hour": 10,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "volatility3"
+    ],
+    "python_packages": [],
+    "system_packages": []
   }
 }

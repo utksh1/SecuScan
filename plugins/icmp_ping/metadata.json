@@ -1,0 +1,64 @@
+{
+  "id": "icmp_ping",
+  "name": "ICMP Ping",
+  "version": "1.0.0",
+  "description": "Check if a server is live and responds to ICMP Echo requests.",
+  "long_description": "Check if a server is live and responds to ICMP Echo requests.",
+  "category": "utils",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udee0\ufe0f",
+  "engine": {
+    "type": "cli",
+    "binary": "ping"
+  },
+  "command_template": [
+    "ping",
+    "-c",
+    "{count:4}",
+    "{target}"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target Host",
+      "type": "string",
+      "required": true,
+      "placeholder": "1.1.1.1"
+    },
+    {
+      "id": "count",
+      "label": "Packet Count",
+      "type": "integer",
+      "required": false,
+      "default": 4
+    }
+  ],
+  "presets": {
+    "default": {
+      "count": 4
+    }
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": false,
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "ping"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

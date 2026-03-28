@@ -1,0 +1,6 @@
+inglu.utksh.bar
+www.utksh.bar
+socs.utksh.bar
+url.utksh.bar
+appdost.utksh.bar
+backend.utksh.bar

@@ -66,7 +66,7 @@ describe('Scanner empty-state UX', () => {
 
     await user.click(screen.getByRole('button', { name: /Go to Quick Start/i }))
     await waitFor(() => {
-      expect(screen.queryByText(/No tools available in this category/i)).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^Quick Start$/i })).toBeInTheDocument()
     })
   })
 })

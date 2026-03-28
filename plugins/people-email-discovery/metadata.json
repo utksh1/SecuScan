@@ -1,0 +1,56 @@
+{
+  "id": "people-email-discovery",
+  "name": "People Hunter",
+  "version": "1.0.0",
+  "description": "Discover email addresses and social media profiles.",
+  "long_description": "Discover email addresses and social media profiles.",
+  "category": "recon",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udd0e",
+  "engine": {
+    "type": "cli",
+    "binary": "theHarvester"
+  },
+  "command_template": [
+    "theHarvester",
+    "-d",
+    "{target}",
+    "-b",
+    "all"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target Domain",
+      "type": "string",
+      "required": true,
+      "placeholder": "secuscan.in"
+    }
+  ],
+  "presets": {
+    "default": {}
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": false,
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "theHarvester"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

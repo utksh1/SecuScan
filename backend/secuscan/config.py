@@ -3,7 +3,8 @@ Configuration management for SecuScan backend
 """
 
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -35,6 +36,19 @@ class Settings(BaseSettings):
     safe_mode_default: bool = True
     require_consent: bool = True
     allowed_networks: List[str] = ["127.0.0.1", "192.168.*.*", "10.*.*.*", "172.16.*.*"]
+    cors_allowed_origins: List[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        "http://localhost:4173",
+        "http://127.0.0.1:4173",
+    ]
+    cors_allowed_methods: List[str] = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+    cors_allowed_headers: List[str] = ["Content-Type", "Authorization", "Accept", "Origin"]
+    cors_allow_credentials: bool = True
     
     # Rate Limiting
     max_concurrent_tasks: int = 3
@@ -54,6 +68,14 @@ class Settings(BaseSettings):
     class Config:
         env_prefix = "SECUSCAN_"
         case_sensitive = False
+
+    @field_validator("cors_allowed_origins", "cors_allowed_methods", "cors_allowed_headers", mode="before")
+    @classmethod
+    def parse_csv_or_list(cls, value: Any) -> Any:
+        """Allow comma-separated env values in addition to JSON arrays."""
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
     
     @property
     def base_url(self) -> str:

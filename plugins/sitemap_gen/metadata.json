@@ -1,0 +1,71 @@
+{
+  "id": "sitemap_gen",
+  "name": "Sitemap Generator",
+  "version": "1.0.0",
+  "description": "Build complete XML sitemaps by autonomously parsing targets.",
+  "long_description": "Build complete XML sitemaps by autonomously parsing targets.",
+  "category": "robots",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udee0\ufe0f",
+  "engine": {
+    "type": "cli",
+    "binary": "katana"
+  },
+  "command_template": [
+    "katana",
+    "-u",
+    "{target}",
+    "-depth",
+    "{depth:4}",
+    "-silent"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target URL",
+      "type": "string",
+      "required": true,
+      "placeholder": "https://secuscan.in",
+      "validation": {
+        "pattern": "^https?://",
+        "message": "Must be a valid HTTP(S) URL"
+      }
+    },
+    {
+      "id": "depth",
+      "label": "Depth",
+      "type": "integer",
+      "required": false,
+      "default": 4
+    }
+  ],
+  "presets": {
+    "default": {
+      "depth": 4
+    }
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "Sitemap generation crawls target resources actively.",
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "katana"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

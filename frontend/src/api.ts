@@ -1,4 +1,20 @@
-export const API_BASE = (import.meta as any).env.VITE_API_BASE || '/api/v1'
+function resolveApiBase(): string {
+  const configured = (import.meta as any).env.VITE_API_BASE
+  if (configured) return configured
+
+  if (typeof window !== 'undefined') {
+    const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    const isViteDevServer = window.location.port === '5173'
+
+    // For localhost preview/static modes (e.g. :8080), call backend directly.
+    if (isLocalHost && !isViteDevServer) return 'http://127.0.0.1:8000/api/v1'
+  }
+
+  // Default for Vite dev server where /api is proxied to backend.
+  return '/api/v1'
+}
+
+export const API_BASE = resolveApiBase()
 
 export type PluginFieldType =
   | 'string'

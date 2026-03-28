@@ -1,6 +1,6 @@
 {
   "id": "scapy_recon",
-  "name": "Scapy Recon",
+  "name": "Advanced Network Recon",
   "version": "1.0.0",
   "description": "Advanced network probing using Scapy",
   "long_description": "Scapy is a powerful interactive packet manipulation program. It is able to forge or decode packets of a wide number of protocols, send them on the wire, capture them, match requests and replies, and much more.",
@@ -36,8 +36,14 @@
       "required": false,
       "default": "arp_ping",
       "options": [
-        {"value": "arp_ping", "label": "ARP Ping (local net)"},
-        {"value": "icmp_ping", "label": "ICMP Ping (standard)"}
+        {
+          "value": "arp_ping",
+          "label": "ARP Ping (local net)"
+        },
+        {
+          "value": "icmp_ping",
+          "label": "ICMP Ping (standard)"
+        }
       ],
       "help": "Method of network discovery."
     }

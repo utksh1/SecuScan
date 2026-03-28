@@ -1,0 +1,56 @@
+{
+  "id": "subdomain_takeover",
+  "name": "Subdomain Takeover",
+  "version": "1.0.0",
+  "description": "Discover dangling DNS entries pointing to external services.",
+  "long_description": "Discover dangling DNS entries pointing to external services.",
+  "category": "exploit",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udee0\ufe0f",
+  "engine": {
+    "type": "cli",
+    "binary": "subfinder"
+  },
+  "command_template": [
+    "subfinder",
+    "-d",
+    "{target}",
+    "-silent"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Root Domain",
+      "type": "string",
+      "required": true,
+      "placeholder": "secuscan.in"
+    }
+  ],
+  "presets": {
+    "default": {}
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "Subdomain takeover checks may touch third-party hosted endpoints.",
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "subfinder"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

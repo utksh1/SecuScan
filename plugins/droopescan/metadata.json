@@ -1,45 +1,63 @@
 {
-  "schema_version": "1.0",
-  "plugin": {
-    "id": "droopescan",
-    "name": "DroopeScan",
-    "version": "1.0.0",
-    "author": "SecuScan Team",
-    "description": "Drupal, SilverStripe, and Moodle vulnerability scanner.",
-    "category": "cms",
-    "tags": ["drupal", "vuln-scan"],
-    "icon": "drupal",
-    "documentation_url": "https://github.com/droope/droopescan"
+  "id": "droopescan",
+  "name": "Drupal Security Scan",
+  "version": "1.0.0",
+  "description": "Drupal-focused CMS scanner for version and surface enumeration.",
+  "long_description": "Executes Droopescan in Drupal mode and parses identified modules, themes, and potential weakness indicators.",
+  "category": "vulnerability",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
   },
-  "execution": {
-    "engine": "cli",
-    "command_template": [
-      "droopescan", "scan", "drupal", "-u", "{{target}}", "-o", "json"
-    ],
-    "timeout_seconds": 600,
-    "container": {
-      "required": true,
-      "image": "secuscan/droopescan:latest"
-    }
+  "license": "MIT",
+  "icon": "\ud83d\udee1\ufe0f",
+  "engine": {
+    "type": "cli",
+    "binary": "droopescan"
   },
+  "command_template": [
+    "droopescan",
+    "scan",
+    "drupal",
+    "-u",
+    "{target}",
+    "--format",
+    "json"
+  ],
   "fields": [
     {
       "id": "target",
       "label": "Target URL",
       "type": "string",
       "required": true,
+      "placeholder": "https://drupal.secuscan.in",
       "validation": {
-        "pattern": "^https?://[a-zA-Z0-9.-]+(/.*)?$"
+        "pattern": "^https?://",
+        "message": "Must be a valid HTTP(S) URL"
       }
     }
   ],
   "presets": {
-    "default": {
-      "parameters": {},
-      "safety_level": "safe"
-    }
+    "default": {}
+  },
+  "output": {
+    "format": "json",
+    "parser": "custom"
   },
   "safety": {
-    "level": "safe"
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "Droopescan performs active CMS probing and should be used with authorization.",
+    "rate_limit": {
+      "max_per_hour": 10,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "droopescan"
+    ],
+    "python_packages": [],
+    "system_packages": []
   }
 }

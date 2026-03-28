@@ -1,0 +1,55 @@
+{
+  "id": "dnsx",
+  "name": "dnsx",
+  "version": "1.0.0",
+  "description": "DNS resolution and wildcard-aware validation at scale.",
+  "long_description": "DNS resolution and wildcard-aware validation at scale.",
+  "category": "recon",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udd0e",
+  "engine": {
+    "type": "cli",
+    "binary": "dnsx"
+  },
+  "command_template": [
+    "dnsx",
+    "-d",
+    "{target}",
+    "-silent"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Domain",
+      "type": "string",
+      "required": true,
+      "placeholder": "secuscan.in"
+    }
+  ],
+  "presets": {
+    "default": {}
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": false,
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "dnsx"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

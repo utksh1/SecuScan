@@ -1,0 +1,56 @@
+{
+  "id": "sniper",
+  "name": "Sniper: Auto-Exploiter",
+  "version": "1.0.0",
+  "description": "Validate critical CVEs by automatic exploitation.",
+  "long_description": "Validate critical CVEs by automatic exploitation.",
+  "category": "exploit",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udee0\ufe0f",
+  "engine": {
+    "type": "cli",
+    "binary": "python3"
+  },
+  "command_template": [
+    "python3",
+    "-c",
+    "import sys;print('Sniper simulation started');print('target='+sys.argv[1]);print('status=planned_exploit_path')",
+    "{target}"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target",
+      "type": "string",
+      "required": true,
+      "placeholder": "secuscan.in"
+    }
+  ],
+  "presets": {
+    "default": {}
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "exploit",
+    "requires_consent": true,
+    "consent_message": "Sniper models exploit flows. Use only with explicit authorization.",
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "python3"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

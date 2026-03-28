@@ -66,8 +66,16 @@ def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
         # Not an IP address or network, treat as hostname
         pass
 
+    # Strip protocol if present for hostname validation
+    hostname_to_validate = target
+    if target.startswith(("http://", "https://")):
+        # Remove protocol but keep the rest for hostname validation
+        # Actually, if it's a URL, we should probably allow more characters (like / for paths)
+        # But for 'target', we usually just want the base address.
+        hostname_to_validate = target.split("://", 1)[1].split("/", 1)[0]
+
     # Validate hostname format
-    if not re.match(r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$', target):
+    if not re.match(r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$', hostname_to_validate):
         return False, "Invalid hostname format"
 
     # Check blocked TLDs in safe mode

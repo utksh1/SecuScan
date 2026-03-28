@@ -1,42 +1,127 @@
 {
-  "schema_version": "1.0",
-  "plugin": {
-    "id": "sqli_checker",
-    "name": "SQLi Feasibility Checker",
-    "version": "1.0.0",
-    "author": "SecuScan Team",
-    "description": "Lightweight feasibility checker for SQL injection vulnerabilities.",
-    "category": "web",
-    "tags": ["sqli", "feasibility", "web"],
-    "icon": "database",
-    "documentation_url": "https://github.com/pipiscrew/ghauri"
+  "id": "sqli_checker",
+  "name": "SQL Injection Feasibility",
+  "version": "1.0.0",
+  "description": "SQL injection feasibility scanner powered by Ghauri.",
+  "long_description": "Runs a controlled SQLi feasibility check against a URL parameter and reports injectable indicators.",
+  "category": "expert",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
   },
-  "execution": {
-    "engine": "cli",
-    "command_template": [
-      "ghauri", "-u", "{{target}}", "--dbs", "--level", "3"
-    ],
-    "timeout_seconds": 600,
-    "container": {
-      "required": true,
-      "image": "secuscan/ghauri:latest"
-    }
+  "license": "MIT",
+  "icon": "\ud83e\uddea",
+  "engine": {
+    "type": "cli",
+    "binary": "ghauri"
   },
+  "command_template": [
+    "ghauri",
+    "-u",
+    "{target}",
+    "--batch",
+    "--level",
+    "{level}",
+    "--risk",
+    "{risk}",
+    "--technique",
+    "{technique}",
+    "--dbs"
+  ],
   "fields": [
     {
       "id": "target",
       "label": "Target URL",
       "type": "string",
-      "required": true
+      "required": true,
+      "placeholder": "https://target.local/item?id=1",
+      "validation": {
+        "pattern": "^https?://",
+        "message": "Must be a valid HTTP(S) URL"
+      }
+    },
+    {
+      "id": "level",
+      "label": "Testing Level",
+      "type": "integer",
+      "required": false,
+      "default": 1
+    },
+    {
+      "id": "risk",
+      "label": "Risk Level",
+      "type": "integer",
+      "required": false,
+      "default": 1
+    },
+    {
+      "id": "technique",
+      "label": "SQLi Technique",
+      "type": "select",
+      "required": false,
+      "default": "BEUSTQ",
+      "options": [
+        {
+          "value": "B",
+          "label": "Boolean-based"
+        },
+        {
+          "value": "E",
+          "label": "Error-based"
+        },
+        {
+          "value": "U",
+          "label": "UNION query"
+        },
+        {
+          "value": "S",
+          "label": "Stacked queries"
+        },
+        {
+          "value": "T",
+          "label": "Time-based"
+        },
+        {
+          "value": "Q",
+          "label": "Inline query"
+        },
+        {
+          "value": "BEUSTQ",
+          "label": "All techniques"
+        }
+      ]
     }
   ],
   "presets": {
-    "default": {
-      "parameters": {},
-      "safety_level": "moderate"
+    "quick": {
+      "level": 1,
+      "risk": 1,
+      "technique": "BEUSTQ"
+    },
+    "aggressive": {
+      "level": 3,
+      "risk": 3,
+      "technique": "BEUSTQ"
     }
   },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
   "safety": {
-    "level": "moderate"
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "SQLi checks actively probe injection vectors. Use only with authorization.",
+    "rate_limit": {
+      "max_per_hour": 8,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "ghauri"
+    ],
+    "python_packages": [],
+    "system_packages": []
   }
 }

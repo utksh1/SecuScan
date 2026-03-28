@@ -1,35 +1,33 @@
-import re
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
-def parse(raw_output: str) -> List[Dict[str, Any]]:
-    """
-    Parses YARA output into structured findings.
-    Format usually: rule_name [tags] file_path
-    """
-    findings = []
-    lines = raw_output.strip().split("\n")
-    
-    for line in lines:
-        if not line:
+
+def parse(output: str) -> Dict[str, Any]:
+    findings: List[Dict[str, Any]] = []
+    matches: List[Dict[str, str]] = []
+
+    for line in output.splitlines():
+        text = line.strip()
+        if not text:
             continue
-            
-        # Example: mal_rule [malware,evil] /tmp/malware.bin
-        parts = line.split(" ", 1)
-        if len(parts) >= 2:
-            rule_name = parts[0]
-            rest = parts[1]
-            path = rest.split(" ")[-1]
-            
-            findings.append({
-                "type": "malware_match",
-                "title": f"YARA Match: {rule_name}",
-                "description": f"Rule '{rule_name}' matched on file: {path}",
-                "severity": "critical",
-                "metadata": {
-                    "rule": rule_name,
-                    "file": path,
-                    "raw": line
-                }
-            })
-            
-    return findings if findings else [{"type": "info", "title": "No YARA Matches", "description": "No rules were triggered on the target.", "severity": "info"}]
+
+        parts = text.split()
+        rule = parts[0] if parts else "unknown_rule"
+        file_path = parts[-1] if len(parts) > 1 else "unknown_target"
+        matches.append({"rule": rule, "path": file_path})
+
+        findings.append(
+            {
+                "title": f"YARA Match: {rule}",
+                "category": "Binary Forensics",
+                "severity": "high",
+                "description": f"YARA rule '{rule}' matched target artifact '{file_path}'.",
+                "remediation": "Quarantine and investigate matched artifacts before restoring to production environments.",
+                "metadata": {"rule": rule, "path": file_path, "raw": text},
+            }
+        )
+
+    return {
+        "findings": findings,
+        "count": len(findings),
+        "matches": matches,
+    }

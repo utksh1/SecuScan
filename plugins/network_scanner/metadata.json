@@ -1,0 +1,68 @@
+{
+  "id": "network_scanner",
+  "name": "Network Scanner",
+  "version": "1.0.0",
+  "description": "Check for 10,000+ CVEs and server misconfigurations.",
+  "long_description": "Check for 10,000+ CVEs and server misconfigurations.",
+  "category": "vulnerability",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udee0\ufe0f",
+  "engine": {
+    "type": "cli",
+    "binary": "nmap"
+  },
+  "command_template": [
+    "nmap",
+    "--top-ports",
+    "{top_ports:1000}",
+    "{target}"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target Host/IP",
+      "type": "string",
+      "required": true,
+      "placeholder": "10.0.0.1"
+    },
+    {
+      "id": "top_ports",
+      "label": "Top Ports",
+      "type": "integer",
+      "required": false,
+      "default": 1000
+    }
+  ],
+  "presets": {
+    "quick": {
+      "top_ports": 100
+    },
+    "default": {
+      "top_ports": 1000
+    }
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "Network scanning is active probing and must be authorized.",
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "nmap"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

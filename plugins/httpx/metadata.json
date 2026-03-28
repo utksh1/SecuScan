@@ -1,0 +1,58 @@
+{
+  "id": "httpx",
+  "name": "httpx",
+  "version": "1.0.0",
+  "description": "Live host probing with status, title, and technology fingerprinting.",
+  "long_description": "Live host probing with status, title, and technology fingerprinting.",
+  "category": "recon",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udd0e",
+  "engine": {
+    "type": "cli",
+    "binary": "httpx"
+  },
+  "command_template": [
+    "httpx",
+    "-u",
+    "{target}",
+    "-title",
+    "-status-code",
+    "-tech-detect",
+    "-silent"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target URL",
+      "type": "string",
+      "required": true,
+      "placeholder": "https://secuscan.in"
+    }
+  ],
+  "presets": {
+    "default": {}
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": false,
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "httpx"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

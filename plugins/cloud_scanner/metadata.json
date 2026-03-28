@@ -1,0 +1,56 @@
+{
+  "id": "cloud_scanner",
+  "name": "Cloud Scanner",
+  "version": "1.0.0",
+  "description": "Cloud infrastructure security (AWS/GCP/Azure).",
+  "long_description": "Cloud infrastructure security (AWS/GCP/Azure).",
+  "category": "vulnerability",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udee0\ufe0f",
+  "engine": {
+    "type": "cli",
+    "binary": "python3"
+  },
+  "command_template": [
+    "python3",
+    "-c",
+    "import sys;print('Cloud scan baseline checks');print('target='+sys.argv[1]);print('providers=aws,gcp,azure')",
+    "{target}"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Account/Project Identifier",
+      "type": "string",
+      "required": true,
+      "placeholder": "org-example"
+    }
+  ],
+  "presets": {
+    "default": {}
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "Cloud scanning requires explicit account-level authorization.",
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "python3"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

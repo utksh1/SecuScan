@@ -1,0 +1,63 @@
+{
+  "id": "http_request_logger",
+  "name": "HTTP Request Logger",
+  "version": "1.0.0",
+  "description": "Handle incoming HTTP requests and record data.",
+  "long_description": "Handle incoming HTTP requests and record data.",
+  "category": "exploit",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udee0\ufe0f",
+  "engine": {
+    "type": "cli",
+    "binary": "httpx"
+  },
+  "command_template": [
+    "httpx",
+    "-u",
+    "{target}",
+    "-status-code",
+    "-title",
+    "-web-server",
+    "-silent"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target URL",
+      "type": "string",
+      "required": true,
+      "placeholder": "https://secuscan.in",
+      "validation": {
+        "pattern": "^https?://",
+        "message": "Must be a valid HTTP(S) URL"
+      }
+    }
+  ],
+  "presets": {
+    "default": {}
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "Active request logging should only be run in authorized scope.",
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "httpx"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

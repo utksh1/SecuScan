@@ -1,22 +1,36 @@
-from typing import List, Dict, Any
+from typing import Dict, List
 
-def parse(raw_output: str) -> List[Dict[str, Any]]:
-    """
-    Parses Hashcat output.
-    Looks for the cracked hash list.
-    """
-    findings = []
-    lines = raw_output.strip().split("\n")
-    
-    for line in lines:
-        if ":" in line and not line.startswith("["): # Simple heuristic for cracked hashes
-            parts = line.split(":")
-            findings.append({
-                "type": "cracked_password",
-                "title": "Password Cracked",
-                "description": f"Hash cracked: {parts[0]} -> {parts[-1]}",
-                "severity": "critical",
-                "metadata": {"hash": parts[0], "password": parts[-1]}
-            })
-            
-    return findings if findings else [{"type": "info", "title": "No Passwords Cracked", "description": "Hashcat finished without finding any matches.", "severity": "info"}]
+
+def parse(output: str) -> Dict[str, object]:
+    findings: List[Dict[str, object]] = []
+    recovered: List[Dict[str, str]] = []
+
+    for line in output.splitlines():
+        text = line.strip()
+        if not text or text.startswith("[") or ":" not in text:
+            continue
+
+        hash_value, password = text.split(":", 1)
+        hash_value = hash_value.strip()
+        password = password.strip()
+
+        if not hash_value or not password:
+            continue
+
+        recovered.append({"hash": hash_value, "password": password})
+        findings.append(
+            {
+                "title": "Hash Recovered",
+                "category": "Password Recovery",
+                "severity": "high",
+                "description": f"Recovered credential for hash {hash_value}.",
+                "remediation": "Force password rotation and enforce stronger password policy.",
+                "metadata": {"hash": hash_value, "password": password},
+            }
+        )
+
+    return {
+        "findings": findings,
+        "count": len(findings),
+        "recovered": recovered,
+    }

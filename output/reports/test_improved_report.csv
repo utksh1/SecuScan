@@ -1,0 +1,7 @@
+Task ID,Tool,Target,Created At,Status
+test-task-1234567890,Nmap,127.0.0.1,2026-03-28T19:20:18.747464,completed
+
+Severity,Title,Description,Remediation
+CRITICAL,Remote Code Execution (RCE),A critical vulnerability allowing remote code execution was found on port 8080.,Update the service to the latest version and restrict access via firewall.
+HIGH,Weak SSH Key Exchange,The SSH service supports weak key exchange algorithms.,Disable weak KEX algorithms in sshd_config.
+MEDIUM,X-Frame-Options Header Missing,"The web server does not set the X-Frame-Options header, making it vulnerable to clickjacking.",Configure the web server to send X-Frame-Options: SAMEORIGIN.

@@ -1,0 +1,60 @@
+{
+  "id": "zap_scanner",
+  "name": "DAST Web Proxy (ZAP)",
+  "version": "1.0.0",
+  "description": "Dynamic proxy spidering and payload injection.",
+  "long_description": "Dynamic proxy spidering and payload injection.",
+  "category": "vulnerability",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udee0\ufe0f",
+  "engine": {
+    "type": "cli",
+    "binary": "python3"
+  },
+  "command_template": [
+    "python3",
+    "-c",
+    "import sys;print('ZAP connector placeholder scan');print('target='+sys.argv[1]);print('mode=dast')",
+    "{target}"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target URL",
+      "type": "string",
+      "required": true,
+      "placeholder": "https://secuscan.in",
+      "validation": {
+        "pattern": "^https?://",
+        "message": "Must be a valid HTTP(S) URL"
+      }
+    }
+  ],
+  "presets": {
+    "default": {}
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "exploit",
+    "requires_consent": true,
+    "consent_message": "DAST payload injection should only run in authorized environments.",
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "python3"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

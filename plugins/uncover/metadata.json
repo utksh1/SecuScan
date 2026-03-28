@@ -1,0 +1,66 @@
+{
+  "id": "uncover",
+  "name": "Uncover",
+  "version": "1.0.0",
+  "description": "Discover internet-exposed assets from external search sources.",
+  "long_description": "Discover internet-exposed assets from external search sources.",
+  "category": "recon",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udd0e",
+  "engine": {
+    "type": "cli",
+    "binary": "uncover"
+  },
+  "command_template": [
+    "uncover",
+    "-q",
+    "{query}",
+    "-limit",
+    "{limit}",
+    "-silent"
+  ],
+  "fields": [
+    {
+      "id": "query",
+      "label": "Search Query",
+      "type": "string",
+      "required": true,
+      "placeholder": "org:secuscan.in"
+    },
+    {
+      "id": "limit",
+      "label": "Result Limit",
+      "type": "integer",
+      "required": false,
+      "default": 100
+    }
+  ],
+  "presets": {
+    "default": {
+      "limit": 100
+    }
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": false,
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "uncover"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

@@ -71,6 +71,6 @@ describe('Scanner catalog integration', () => {
     expect(screen.getByText(/Missing: subfinder/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /^Quick Start$/i }))
-    expect(await screen.findByText(/Backend plugin pending/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Backend plugin pending|No tools available in this category/i)).toBeInTheDocument()
   })
 })

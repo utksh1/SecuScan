@@ -1,4 +1,6 @@
 import time
+import re
+from pathlib import Path
 from unittest.mock import patch
 from backend.secuscan.models import TaskStatus
 
@@ -11,6 +13,15 @@ PHASE2_PLUGIN_IDS = {
     "whois_lookup",
     "dns_enum",
 }
+SCANTOOLS_FILE = Path(__file__).resolve().parents[2] / "frontend" / "src" / "data" / "scanTools.ts"
+
+
+def parse_scantool_ids() -> set[str]:
+    content = SCANTOOLS_FILE.read_text(encoding="utf-8")
+    start = content.index("export const scanTools")
+    end = content.index("export function getToolsByCategory")
+    section = content[start:end]
+    return set(re.findall(r"id:\\s*'([a-z0-9_-]+)'", section))
 
 
 def run_plugin_test(test_client, plugin_id, inputs, mock_output):
@@ -64,6 +75,16 @@ def test_phase2_plugins_discoverable_and_schema_accessible(test_client):
     for plugin_id in PHASE2_PLUGIN_IDS:
         schema = test_client.get(f"/api/v1/plugin/{plugin_id}/schema")
         assert schema.status_code == 200
+
+
+def test_all_scantools_have_backend_plugins(test_client):
+    response = test_client.get("/api/v1/plugins")
+    assert response.status_code == 200
+    backend_plugin_ids = {plugin["id"] for plugin in response.json()["plugins"]}
+    scan_tool_ids = parse_scantool_ids()
+    assert scan_tool_ids.issubset(backend_plugin_ids), (
+        f"Missing backend plugins for scanTools: {sorted(scan_tool_ids - backend_plugin_ids)}"
+    )
 
 def test_subdomain_discovery(test_client):
     mock_out = "admin.example.com\ndev.example.com\napi.example.com"

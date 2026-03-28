@@ -1,0 +1,57 @@
+{
+  "id": "iac_scanner",
+  "name": "IaC Scanner (Checkov)",
+  "version": "1.0.0",
+  "description": "Analyze Terraform and CloudFormation code for flaws.",
+  "long_description": "Analyze Terraform and CloudFormation code for flaws.",
+  "category": "vulnerability",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udee0\ufe0f",
+  "engine": {
+    "type": "cli",
+    "binary": "python3"
+  },
+  "command_template": [
+    "python3",
+    "-c",
+    "import sys,pathlib;root=pathlib.Path(sys.argv[1]);print('iac_scan_root='+str(root));cnt=sum(1 for p in root.rglob('*') if p.suffix in ('.tf','.yaml','.yml','.json'));print('candidate_iac_files='+str(cnt))",
+    "{target}"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "IaC Directory",
+      "type": "string",
+      "required": true,
+      "placeholder": "."
+    }
+  ],
+  "presets": {
+    "default": {
+      "target": "."
+    }
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": false,
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "python3"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "id": "waf-detection",
+  "name": "WAF Detector",
+  "version": "1.0.0",
+  "description": "Fingerprint the Web Application Firewall behind target app.",
+  "long_description": "Fingerprint the Web Application Firewall behind target app.",
+  "category": "recon",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udd0e",
+  "engine": {
+    "type": "cli",
+    "binary": "wafw00f"
+  },
+  "command_template": [
+    "wafw00f",
+    "{target}"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target URL",
+      "type": "string",
+      "required": true,
+      "placeholder": "https://secuscan.in",
+      "validation": {
+        "pattern": "^https?://",
+        "message": "Must be a valid HTTP(S) URL"
+      }
+    }
+  ],
+  "presets": {
+    "default": {}
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": false,
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "wafw00f"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

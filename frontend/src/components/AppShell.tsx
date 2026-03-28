@@ -11,7 +11,6 @@ interface AppShellProps {
 
 export default function AppShell({ children }: AppShellProps) {
     const { pathname } = useLocation()
-    const isLogin = pathname === routes.login
 
     useShortcuts()
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -58,14 +57,6 @@ export default function AppShell({ children }: AppShellProps) {
         { to: routes.settings, label: 'Settings' },
     ]
 
-    if (isLogin) {
-        return (
-            <>
-                <Background state="idle" />
-                {children}
-            </>
-        )
-    }
 
     return (
         <>

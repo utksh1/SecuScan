@@ -43,12 +43,12 @@
       "label": "Target URL",
       "type": "string",
       "required": true,
-      "placeholder": "https://example.com",
+      "placeholder": "https://secuscan.in",
       "validation": {
         "pattern": "^https?://",
         "message": "Must be a valid URL"
       },
-      "help": "Base URL to scan (e.g., https://example.com)"
+      "help": "Base URL to scan (e.g., https://secuscan.in)"
     },
     {
       "id": "wordlist",

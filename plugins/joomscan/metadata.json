@@ -1,45 +1,59 @@
 {
-  "schema_version": "1.0",
-  "plugin": {
-    "id": "joomscan",
-    "name": "JoomScan (Joomla Scanner)",
-    "version": "1.0.0",
-    "author": "SecuScan Team",
-    "description": "Joomla vulnerability scanner for detection and fingerprinting.",
-    "category": "cms",
-    "tags": ["joomla", "vuln-scan"],
-    "icon": "joomla",
-    "documentation_url": "https://github.com/OWASP/joomscan"
+  "id": "joomscan",
+  "name": "Joomla Security Scan",
+  "version": "1.0.0",
+  "description": "Joomla security scanner for version and common weakness discovery.",
+  "long_description": "Runs JoomScan against a Joomla target and extracts vulnerable patterns and interesting disclosures.",
+  "category": "vulnerability",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
   },
-  "execution": {
-    "engine": "cli",
-    "command_template": [
-      "joomscan", "--url", "{{target}}", "--enumerate"
-    ],
-    "timeout_seconds": 600,
-    "container": {
-      "required": true,
-      "image": "secuscan/joomscan:latest"
-    }
+  "license": "MIT",
+  "icon": "\ud83c\udff7\ufe0f",
+  "engine": {
+    "type": "cli",
+    "binary": "joomscan"
   },
+  "command_template": [
+    "joomscan",
+    "-u",
+    "{target}"
+  ],
   "fields": [
     {
       "id": "target",
       "label": "Target URL",
       "type": "string",
       "required": true,
+      "placeholder": "https://joomla.secuscan.in",
       "validation": {
-        "pattern": "^https?://[a-zA-Z0-9.-]+(/.*)?$"
+        "pattern": "^https?://",
+        "message": "Must be a valid HTTP(S) URL"
       }
     }
   ],
   "presets": {
-    "default": {
-      "parameters": {},
-      "safety_level": "safe"
-    }
+    "default": {}
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
   },
   "safety": {
-    "level": "safe"
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "JoomScan runs active checks and should only be used on authorized targets.",
+    "rate_limit": {
+      "max_per_hour": 10,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "joomscan"
+    ],
+    "python_packages": [],
+    "system_packages": []
   }
 }

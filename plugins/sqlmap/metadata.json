@@ -1,6 +1,6 @@
 {
   "id": "sqlmap",
-  "name": "SQLMap",
+  "name": "SQL Injection Testing",
   "version": "1.0.0",
   "description": "Automatic SQL injection and database takeover tool",
   "long_description": "SQLMap is an open source penetration testing tool that automates the process of detecting and exploiting SQL injection flaws and taking over of database servers.",
@@ -10,17 +10,14 @@
     "email": "dev@secuscan.local"
   },
   "license": "GPLv2",
-  "icon": "💉",
-
+  "icon": "\ud83d\udc89",
   "engine": {
     "type": "cli",
-    "binary": "python"
+    "binary": "sqlmap"
   },
-
   "docker_image": "sqlmap/sqlmap",
-
   "command_template": [
-    "sqlmap.py",
+    "sqlmap",
     "-u",
     "{url}",
     "--batch",
@@ -30,14 +27,13 @@
     "--if:risk:then:{risk}",
     "--if:dbs:then:--dbs"
   ],
-
   "fields": [
     {
       "id": "url",
       "label": "Target URL",
       "type": "string",
       "required": true,
-      "placeholder": "http://example.com/vuln.php?id=1",
+      "placeholder": "http://secuscan.in/vuln.php?id=1",
       "validation": {
         "pattern": "^https?://",
         "message": "Must be a valid HTTP/HTTPS URL"
@@ -51,8 +47,14 @@
       "required": false,
       "default": "quick",
       "options": [
-        {"value": "quick", "label": "Quick (Level 1, Risk 1)"},
-        {"value": "aggressive", "label": "Aggressive (Level 5, Risk 3)"}
+        {
+          "value": "quick",
+          "label": "Quick (Level 1, Risk 1)"
+        },
+        {
+          "value": "aggressive",
+          "label": "Aggressive (Level 5, Risk 3)"
+        }
       ],
       "help": "Predefined scan configuration profiles"
     },
@@ -81,7 +83,6 @@
       "help": "Attempt to enumerate the DBMS databases"
     }
   ],
-
   "presets": {
     "quick": {
       "level": 1,
@@ -94,29 +95,30 @@
       "dbs": true
     }
   },
-
   "output": {
     "format": "text",
     "parser": "custom"
   },
-
   "safety": {
     "level": "exploit",
     "requires_consent": true,
     "consent_message": "SQL injection attacks are highly intrusive and modify database states. ONLY run this against systems you own.",
-    "allowed_targets": ["127.0.0.1", "192.168.*.*", "10.*.*.*", "172.16.*.*"],
+    "allowed_targets": [
+      "127.0.0.1",
+      "192.168.*.*",
+      "10.*.*.*",
+      "172.16.*.*"
+    ],
     "rate_limit": {
       "max_per_hour": 5,
       "max_concurrent": 1
     }
   },
-
   "learning": {
     "difficulty": "advanced",
     "estimated_duration": "5-30 minutes",
     "tutorial_url": "https://docs.secuscan.local/plugins/sqlmap"
   },
-
   "dependencies": {
     "binaries": [],
     "python_packages": [],

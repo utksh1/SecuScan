@@ -1,38 +1,41 @@
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
-def parse(raw_output: str) -> List[Dict[str, Any]]:
-    """
-    Parses Volatility3 output. 
-    Usually returns a text table.
-    """
-    findings = []
-    lines = raw_output.strip().split("\n")
-    
-    if len(lines) < 2:
-        return [{"type": "info", "title": "Empty Output", "description": "Volatility returned no results.", "severity": "info"}]
-        
-    # Simple summary of the first 20 lines as findings
+
+def parse(output: str) -> Dict[str, Any]:
+    findings: List[Dict[str, Any]] = []
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+
+    if not lines:
+        return {"findings": [], "count": 0}
+
     header = lines[0]
-    count = 0
-    for line in lines[1:]: 
-        if count >= 20:
-            break
-        if line.strip():
-            findings.append({
-                "type": "forensics_artifact",
+    rows = lines[1:]
+
+    for row in rows[:25]:
+        findings.append(
+            {
                 "title": "Volatility Artifact",
-                "description": line.strip(),
+                "category": "Memory Forensics",
                 "severity": "medium",
-                "metadata": {"header": header, "data": line}
-            })
-            count += 1
-            
-    if len(lines) > 21:
-        findings.append({
-            "type": "info",
-            "title": "More Artifacts Available",
-            "description": f"Truncated {len(lines) - 21} additional lines. Refer to raw logs.",
-            "severity": "info"
-        })
-        
-    return findings
+                "description": row,
+                "remediation": "Validate suspicious process/module artifacts against trusted baselines.",
+                "metadata": {"header": header, "row": row},
+            }
+        )
+
+    if len(rows) > 25:
+        findings.append(
+            {
+                "title": "Volatility Output Truncated",
+                "category": "Memory Forensics",
+                "severity": "info",
+                "description": f"Showing first 25 rows out of {len(rows)}.",
+                "remediation": "Review raw output for complete artifact list.",
+                "metadata": {"total_rows": len(rows)},
+            }
+        )
+
+    return {
+        "findings": findings,
+        "count": len(findings),
+    }

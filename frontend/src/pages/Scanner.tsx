@@ -19,10 +19,15 @@ interface CatalogTool {
   disabled: boolean
   disabledReason?: string
   isPlugin: boolean
+  isQuickStart?: boolean
   availability?: PluginListItem['availability']
 }
 
+type UITab = 'quick-start' | 'recon' | 'vulnerability' | 'exploit' | 'utils' | 'robots'
+
 const LEGACY_TAB_ORDER = ['quick-start', 'recon', 'vulnerability', 'exploit', 'utils', 'robots'] as const
+const RECENT_TOOLS_STORAGE_KEY = 'secuscan_recent_tools'
+const RECENT_TOOLS_LIMIT = 6
 
 const LEGACY_TAB_LABELS: Record<string, string> = {
   'quick-start': 'Quick Start',
@@ -47,7 +52,7 @@ const itemVariants = {
     opacity: 1,
     scale: 1,
     y: 0,
-    transition: { type: 'spring', stiffness: 200, damping: 20 },
+    transition: { type: 'spring', stiffness: 200, damping: 20 } as any,
   },
 }
 
@@ -69,16 +74,30 @@ function formatCategoryLabel(category: string): string {
     .join(' ')
 }
 
-function mapPluginCategoryToLegacyTab(category: string): string {
+function mapPluginCategoryToLegacyTab(category: string, pluginId?: string): UITab {
+  const pinnedTool = scanTools.find(t => t.id === pluginId);
+  
+  // If we found a tool in scanTools.ts, use its defined category
+  if (pinnedTool) {
+    return pinnedTool.category as UITab;
+  }
+
+  // Fallback mapping for dynamic plugins
   switch (category) {
+    case 'cms':
+    case 'web':
     case 'vulnerability':
     case 'code':
       return 'vulnerability'
     case 'execution':
     case 'exploit':
+    case 'forensics':
+    case 'expert':
       return 'exploit'
     case 'utils':
       return 'utils'
+    case 'robots':
+      return 'robots'
     default:
       return 'recon'
   }
@@ -86,16 +105,19 @@ function mapPluginCategoryToLegacyTab(category: string): string {
 
 function mapPluginToCatalogTool(plugin: PluginListItem): CatalogTool {
   const normalizedCategory = normalizeCategoryId(plugin.category)
+  const pinnedTool = scanTools.find(t => t.id === plugin.id);
+  
   return {
     id: plugin.id,
-    name: plugin.name,
-    purpose: plugin.description,
-    riskLevel: mapSafetyToRiskLevel(plugin.safety_level),
-    presetCompatibility: 'both',
+    name: pinnedTool ? pinnedTool.name : plugin.name,
+    purpose: pinnedTool ? pinnedTool.purpose : plugin.description,
+    riskLevel: pinnedTool ? pinnedTool.riskLevel : mapSafetyToRiskLevel(plugin.safety_level),
+    presetCompatibility: pinnedTool ? pinnedTool.presetCompatibility : 'both',
     requiresConsent: plugin.requires_consent,
-    category: mapPluginCategoryToLegacyTab(normalizedCategory),
+    category: mapPluginCategoryToLegacyTab(normalizedCategory, plugin.id),
     disabled: false,
     isPlugin: true,
+    isQuickStart: pinnedTool?.isQuickStart,
     availability: plugin.availability,
   }
 }
@@ -114,17 +136,35 @@ function mapLegacyToolsToCatalogTools(existingPluginIds: Set<string>): CatalogTo
       disabled: true,
       disabledReason: tool.disabledReason || 'Backend plugin pending',
       isPlugin: false,
+      isQuickStart: tool.isQuickStart,
     }))
+}
+
+function readRecentToolIds(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_TOOLS_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((item): item is string => typeof item === 'string')
+  } catch {
+    return []
+  }
 }
 
 export default function Scanner() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState('')
+  const [activeTab, setActiveTab] = useState<UITab>('quick-start')
   const [searchQuery, setSearchQuery] = useState('')
   const [tools, setTools] = useState<CatalogTool[]>([])
-  const [tabOrder, setTabOrder] = useState<string[]>([])
+  const [recentToolIds, setRecentToolIds] = useState<string[]>([])
+  const [tabOrder, setTabOrder] = useState<UITab[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+
+  useEffect(() => {
+    setRecentToolIds(readRecentToolIds())
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -138,8 +178,8 @@ export default function Scanner() {
         const pluginIds = new Set(pluginTools.map((tool) => tool.id))
         const legacyTools = mapLegacyToolsToCatalogTools(pluginIds)
         const mergedTools = [...pluginTools, ...legacyTools]
-        const mergedCategories = [...LEGACY_TAB_ORDER]
-        for (const category of legacyTools.map((tool) => tool.category)) {
+        const mergedCategories: UITab[] = [...LEGACY_TAB_ORDER]
+        for (const category of legacyTools.map((tool) => tool.category as UITab)) {
           if (!mergedCategories.includes(category)) mergedCategories.push(category)
         }
 
@@ -168,21 +208,46 @@ export default function Scanner() {
   }, [tabOrder, activeTab])
 
   const categoryToolsCount = useMemo(
-    () => tools.filter((tool) => tool.category === activeTab).length,
+    () => tools.filter((tool) => {
+      if (activeTab === 'quick-start') return tool.isQuickStart
+      return tool.category === activeTab
+    }).length,
     [tools, activeTab],
   )
 
   const filteredTools = useMemo(() => {
     const query = searchQuery.toLowerCase().trim()
     return tools.filter((tool) => {
-      if (tool.category !== activeTab) return false
+      const matchesCategory = activeTab === 'quick-start' ? tool.isQuickStart : tool.category === activeTab
+      if (!matchesCategory) return false
       if (!query) return true
       return tool.name.toLowerCase().includes(query) || tool.purpose.toLowerCase().includes(query)
     })
   }, [tools, activeTab, searchQuery])
 
+  const quickAccessTools = useMemo(() => {
+    const byId = new Map(tools.map((tool) => [tool.id, tool]))
+    return recentToolIds
+      .map((id) => byId.get(id))
+      .filter((tool): tool is CatalogTool => Boolean(tool))
+      .slice(0, RECENT_TOOLS_LIMIT)
+  }, [tools, recentToolIds])
+
+  const trackRecentTool = (toolId: string) => {
+    setRecentToolIds((prev) => {
+      const next = [toolId, ...prev.filter((id) => id !== toolId)].slice(0, RECENT_TOOLS_LIMIT)
+      try {
+        localStorage.setItem(RECENT_TOOLS_STORAGE_KEY, JSON.stringify(next))
+      } catch {
+        // Ignore localStorage write errors and continue.
+      }
+      return next
+    })
+  }
+
   const handleToolSelect = (tool: CatalogTool) => {
     if (tool.disabled) return
+    trackRecentTool(tool.id)
     navigate(routePath.scanTool(tool.id))
   }
 
@@ -194,14 +259,14 @@ export default function Scanner() {
             Strike_Toolkit v12
           </div>
           <h1 className="text-6xl md:text-8xl text-silver-bright uppercase tracking-tighter leading-none italic whitespace-nowrap">
-            Combat <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '2px var(--accent-silver-bright)' }}>Scanner</span>
+            Tactical <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '2px var(--accent-silver-bright)' }}>Catalog</span>
           </h1>
           <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic leading-relaxed">
             SELECT_TOOL_PROTOCOL // DEPLOY_PAYLOAD // MONITOR_FEED
           </p>
         </div>
 
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-6 flex-wrap">
           <div className="relative group">
             <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-silver/20 group-focus-within:text-rag-red transition-colors text-sm">search</span>
             <input
@@ -238,6 +303,8 @@ export default function Scanner() {
           </button>
         ))}
       </nav>
+
+      {/* Quick Access section removed per user request */}
 
       <main>
         <AnimatePresence mode="wait">

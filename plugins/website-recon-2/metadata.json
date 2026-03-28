@@ -1,0 +1,63 @@
+{
+  "id": "website-recon-2",
+  "name": "Website Recon",
+  "version": "1.0.0",
+  "description": "Fingerprint web technologies of target website.",
+  "long_description": "Fingerprint web technologies of target website.",
+  "category": "recon",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udd0e",
+  "engine": {
+    "type": "cli",
+    "binary": "httpx"
+  },
+  "command_template": [
+    "httpx",
+    "-u",
+    "{target}",
+    "-title",
+    "-status-code",
+    "-tech-detect",
+    "-silent"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target URL",
+      "type": "string",
+      "required": true,
+      "placeholder": "https://secuscan.in",
+      "validation": {
+        "pattern": "^https?://",
+        "message": "Must be a valid HTTP(S) URL"
+      },
+      "help": "URL to fingerprint."
+    }
+  ],
+  "presets": {
+    "default": {}
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": false,
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "httpx"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

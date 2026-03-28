@@ -1,0 +1,56 @@
+{
+  "id": "fuzzer",
+  "name": "Payload Fuzzer",
+  "version": "1.0.0",
+  "description": "Autonomously fuzz target fields with massive dictionaries.",
+  "long_description": "Autonomously fuzz target fields with massive dictionaries.",
+  "category": "robots",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udee0\ufe0f",
+  "engine": {
+    "type": "cli",
+    "binary": "python3"
+  },
+  "command_template": [
+    "python3",
+    "-c",
+    "import sys;print('Fuzzer simulation');print('target='+sys.argv[1]);print('payload_count=1000')",
+    "{target}"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target URL",
+      "type": "string",
+      "required": true,
+      "placeholder": "https://secuscan.in"
+    }
+  ],
+  "presets": {
+    "default": {}
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "exploit",
+    "requires_consent": true,
+    "consent_message": "Payload fuzzing is aggressive and must be authorized.",
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "python3"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

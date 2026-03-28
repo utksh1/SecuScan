@@ -76,3 +76,4 @@ tmp/
 temp/
 *.tmp
 node_modules/
+.vercel

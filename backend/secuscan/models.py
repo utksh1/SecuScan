@@ -95,6 +95,8 @@ class TaskResponse(BaseModel):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     duration_seconds: Optional[float] = None
+    inputs: Optional[Dict[str, Any]] = None
+    preset: Optional[str] = None
 
 
 class TaskResult(BaseModel):

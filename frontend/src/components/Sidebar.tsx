@@ -146,7 +146,7 @@ export default function Sidebar() {
                                 className="flex flex-col leading-none"
                             >
                                 <span className="text-[16px] font-black tracking-tighter text-primary italic">SECUSCAN</span>
-                                <span className="text-[8px] font-bold tracking-[0.3em] text-rag-red mt-1">EXECUTIVE SUITE</span>
+                                <span className="text-[8px] font-bold tracking-[0.3em] text-rag-red mt-1">LOCAL WORKSPACE</span>
                             </motion.div>
                         )}
                     </AnimatePresence>

@@ -1,73 +1,88 @@
 {
-  "schema_version": "1.0",
-  "plugin": {
-    "id": "wpscan",
-    "name": "WPScan (WordPress Scanner)",
-    "version": "1.0.0",
-    "author": "SecuScan Team",
-    "description": "WordPress security scanner for identifying themes, plugins, and vulnerabilities.",
-    "category": "cms",
-    "tags": ["wordpress", "vuln-scan"],
-    "icon": "wordpress",
-    "documentation_url": "https://wpscan.com/"
+  "id": "wpscan",
+  "name": "WordPress Security Scan",
+  "version": "1.0.0",
+  "description": "WordPress security scanner for plugin, theme, and core risk visibility.",
+  "long_description": "Runs WPScan against a target WordPress instance and extracts interesting findings and known vulnerable components.",
+  "category": "vulnerability",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
   },
-  "execution": {
-    "engine": "cli",
-    "command_template": [
-      "wpscan", "--url", "{{target}}", "--enumerate", "{{enumerate}}", "--api-token", "{{api_token}}", "--format", "json"
-    ],
-    "timeout_seconds": 900,
-    "container": {
-      "required": true,
-      "image": "wpscanteam/wpscan:latest"
-    }
+  "license": "MIT",
+  "icon": "\ud83d\udcdd",
+  "engine": {
+    "type": "cli",
+    "binary": "wpscan"
   },
+  "command_template": [
+    "wpscan",
+    "--url",
+    "{target}",
+    "--enumerate",
+    "{enumerate}",
+    "--random-user-agent",
+    "--format",
+    "json",
+    "--no-update",
+    "--if:api_token:then:--api-token",
+    "--if:api_token:then:{api_token}"
+  ],
   "fields": [
     {
       "id": "target",
       "label": "Target URL",
       "type": "string",
       "required": true,
+      "placeholder": "https://secuscan.in",
       "validation": {
-        "pattern": "^https?://[a-zA-Z0-9.-]+(/.*)?$"
-      }
+        "pattern": "^https?://",
+        "message": "Must be a valid HTTP(S) URL"
+      },
+      "help": "WordPress site URL to assess."
     },
     {
       "id": "enumerate",
-      "label": "Enumerate",
-      "type": "enum",
+      "label": "Enumeration Scope",
+      "type": "string",
+      "required": false,
       "default": "vp,vt,u",
-      "options": [
-        {"value": "vp", "label": "Vulnerable Plugins"},
-        {"value": "vt", "label": "Vulnerable Themes"},
-        {"value": "u", "label": "Users"},
-        {"value": "vp,vt,u", "label": "All (Recommended)"}
-      ]
+      "help": "Comma-separated WPScan enum flags (e.g., vp,vt,u)."
     },
     {
       "id": "api_token",
       "label": "WPScan API Token",
       "type": "string",
       "required": false,
-      "description": "Optional: API token for vulnerability database access."
+      "help": "Optional token to improve vulnerability enrichment."
     }
   ],
   "presets": {
     "quick": {
-      "parameters": {
-        "enumerate": "vp"
-      },
-      "safety_level": "safe"
+      "enumerate": "vp"
     },
     "full": {
-      "parameters": {
-        "enumerate": "vp,vt,u"
-      },
-      "safety_level": "moderate"
+      "enumerate": "vp,vt,u"
     }
   },
+  "output": {
+    "format": "json",
+    "parser": "custom"
+  },
   "safety": {
-    "level": "moderate",
-    "consent_required_if": {"field": "enumerate", "equals": "vp,vt,u"}
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "WPScan performs active probing of the target WordPress instance.",
+    "rate_limit": {
+      "max_per_hour": 10,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "wpscan"
+    ],
+    "python_packages": [],
+    "system_packages": []
   }
 }

@@ -304,7 +304,7 @@ async def get_task_result(task_id: str):
         """
         SELECT id, plugin_id, tool_name, target, status,
                created_at, duration_seconds, structured_json,
-               raw_output_path, error_message
+               raw_output_path, command_used, error_message
         FROM tasks WHERE id = ?
         """,
         (task_id,)
@@ -340,12 +340,12 @@ async def get_task_result(task_id: str):
     if structured.get("technologies"):
         summary.append(f"Identified {len(structured['technologies'])} technologies.")
 
-    # Read raw output excerpt
-    raw_excerpt = None
+    # Read raw output (limit to 100k for performance, but usually enough)
+    raw_output = None
     if task_row["raw_output_path"]:
         try:
             with open(task_row["raw_output_path"], 'r') as f:
-                raw_excerpt = f.read(1000)  # First 1000 chars
+                raw_output = f.read(100000)
         except Exception:
             pass
 
@@ -361,7 +361,8 @@ async def get_task_result(task_id: str):
         "severity_counts": severity_counts,
         "structured": structured,
         "raw_output_path": task_row["raw_output_path"],
-        "raw_output_excerpt": raw_excerpt,
+        "raw_output": raw_output,
+        "command_used": task_row["command_used"],
         "errors": [{"message": task_row["error_message"]}] if task_row["error_message"] else [],
         "metadata": {}
     }
@@ -533,7 +534,7 @@ async def list_tasks(
     db = await get_db()
 
     # Build query
-    query = "SELECT id, plugin_id, tool_name, target, status, created_at, duration_seconds FROM tasks"
+    query = "SELECT id, plugin_id, tool_name, target, status, created_at, duration_seconds, inputs_json, preset FROM tasks"
     params = []
 
     where_clauses = []
@@ -561,10 +562,11 @@ async def list_tasks(
     total: int = int(count_result["total"]) if count_result and count_result.get("total") is not None else 0
 
     # Parse JSON fields and format for frontend
-    tasks_list = parse_json_fields(tasks, ["structured_json", "config_json", "metadata_json"])
+    tasks_list = parse_json_fields(tasks, ["structured_json", "config_json", "metadata_json", "inputs_json"])
     for t in tasks_list:
         if "id" in t:
             t["task_id"] = t.pop("id")
+        t["inputs"] = t.pop("inputs_json", {})
 
     total_pages = (total + per_page - 1) // per_page if per_page > 0 else 0
     return {

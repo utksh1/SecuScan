@@ -161,6 +161,9 @@ class TaskExecutor:
             # Build command
             plugin_manager = get_plugin_manager()
             plugin = plugin_manager.get_plugin(plugin_id)
+            if not plugin:
+                raise ValueError(f"Plugin not found: {plugin_id}")
+            
             command = plugin_manager.build_command(plugin_id, inputs)
 
             if not command:
@@ -205,7 +208,8 @@ class TaskExecutor:
                     completed_at = ?,
                     duration_seconds = ?,
                     exit_code = ?,
-                    raw_output_path = ?
+                    raw_output_path = ?,
+                    command_used = ?
                 WHERE id = ?
                 """,
                 (
@@ -214,6 +218,7 @@ class TaskExecutor:
                     duration,
                     exit_code,
                     str(raw_path),
+                    " ".join(command),
                     task_id
                 )
             )
@@ -375,7 +380,8 @@ class TaskExecutor:
         task_row = await db.fetchone(
             """
             SELECT id, plugin_id, tool_name, target, status,
-                   created_at, started_at, completed_at, duration_seconds
+                   created_at, started_at, completed_at, duration_seconds,
+                   inputs_json, preset
             FROM tasks WHERE id = ?
             """,
             (task_id,)
@@ -393,7 +399,9 @@ class TaskExecutor:
             "created_at": task_row["created_at"],
             "started_at": task_row["started_at"],
             "completed_at": task_row["completed_at"],
-            "duration_seconds": task_row["duration_seconds"]
+            "duration_seconds": task_row["duration_seconds"],
+            "inputs": json.loads(task_row["inputs_json"]) if task_row["inputs_json"] else {},
+            "preset": task_row["preset"]
         }
 
     async def _upsert_asset_and_report(self, db, task_id: str, plugin, plugin_id: str, target: str, status: str, output: str = ""):
@@ -537,7 +545,8 @@ class TaskExecutor:
                         loader.exec_module(module)
                         if hasattr(module, "parse"):
                             logger.info(f"Using custom parser for {plugin.id}")
-                            return module.parse(parser_input)
+                            parsed = module.parse(parser_input)
+                            return self._normalize_parsed_result(plugin, parser_input, parsed)
                         else:
                             logger.warning(f"Custom parser {parser_path} missing 'parse' function")
             except Exception as e:
@@ -545,11 +554,11 @@ class TaskExecutor:
 
         # 2. Fallback to legacy built-in parsers
         if parser_type == "builtin_nmap":
-            return self._parse_nmap_output(parser_input)
+            return self._normalize_parsed_result(plugin, parser_input, self._parse_nmap_output(parser_input))
         elif parser_type == "builtin_http":
-            return self._parse_http_output(parser_input)
+            return self._normalize_parsed_result(plugin, parser_input, self._parse_http_output(parser_input))
         
-        return {"findings": [], "raw": parser_input}
+        return self._normalize_parsed_result(plugin, parser_input, {"findings": [], "raw": parser_input})
 
     def _resolve_parser_input(self, plugin, output: str) -> str:
         """Prefer report-file content when configured, fallback to command output."""
@@ -564,6 +573,143 @@ class TaskExecutor:
                     logger.warning("Failed to read parser report file %s: %s", path, exc)
 
         return output
+
+    def _normalize_parsed_result(self, plugin, parser_input: str, parsed: Any) -> Dict[str, Any]:
+        """
+        Normalize parser output shape so downstream report/asset logic always receives:
+        { findings: List[Finding], ... }.
+        """
+        normalized: Dict[str, Any]
+        raw_findings: Any
+
+        if isinstance(parsed, dict):
+            normalized = dict(parsed)
+            raw_findings = normalized.get("findings", [])
+        elif isinstance(parsed, list):
+            normalized = {}
+            raw_findings = parsed
+        else:
+            normalized = {}
+            raw_findings = []
+
+        if isinstance(raw_findings, dict):
+            raw_findings = [raw_findings]
+        if not isinstance(raw_findings, list):
+            raw_findings = []
+
+        findings = [
+            self._normalize_finding(plugin, item)
+            for item in raw_findings
+            if isinstance(item, dict)
+        ]
+
+        # Fallback for JSON/JSONL plugin outputs where parser returns empty or unexpected data.
+        if not findings and str(plugin.output.get("format", "")).lower() in {"json", "jsonl"}:
+            findings = self._parse_json_fallback_findings(plugin, parser_input)
+
+        normalized["findings"] = findings
+        if "count" not in normalized:
+            normalized["count"] = len(findings)
+        if "raw" not in normalized and not findings:
+            normalized["raw"] = parser_input
+        return normalized
+
+    def _normalize_finding(self, plugin, finding: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure finding has all required keys and normalized severity."""
+        severity = str(finding.get("severity", "info")).lower()
+        severity_map = {
+            "critical": "critical",
+            "high": "high",
+            "medium": "medium",
+            "moderate": "medium",
+            "warning": "medium",
+            "warn": "medium",
+            "low": "low",
+            "info": "info",
+            "informational": "info",
+            "error": "high",
+        }
+        normalized_severity = severity_map.get(severity, "info")
+
+        category = finding.get("category") or finding.get("type") or str(plugin.category).title()
+        title = finding.get("title") or finding.get("name") or "Security Finding"
+        description = finding.get("description") or finding.get("message") or str(title)
+
+        metadata = finding.get("metadata", {})
+        if not isinstance(metadata, dict):
+            metadata = {"value": metadata}
+
+        return {
+            "title": str(title),
+            "category": str(category),
+            "severity": normalized_severity,
+            "description": str(description),
+            "remediation": str(finding.get("remediation", "")),
+            "metadata": metadata,
+        }
+
+    def _parse_json_fallback_findings(self, plugin, parser_input: str) -> List[Dict[str, Any]]:
+        """Best-effort conversion of JSON payloads into finding entries."""
+        try:
+            data = json.loads(parser_input)
+        except Exception:
+            return []
+
+        findings: List[Dict[str, Any]] = []
+
+        if isinstance(data, list):
+            for idx, item in enumerate(data, start=1):
+                if isinstance(item, dict):
+                    findings.append(self._json_item_to_finding(plugin, item, f"Item {idx}"))
+                else:
+                    findings.append(
+                        self._normalize_finding(
+                            plugin,
+                            {
+                                "title": f"{plugin.name} Result #{idx}",
+                                "category": plugin.category,
+                                "severity": "info",
+                                "description": str(item),
+                            },
+                        )
+                    )
+            return findings
+
+        if isinstance(data, dict):
+            # Common scanner shape: { "results": [...] }
+            for list_key in ("results", "findings", "issues", "vulnerabilities"):
+                if isinstance(data.get(list_key), list):
+                    for idx, item in enumerate(data[list_key], start=1):
+                        if isinstance(item, dict):
+                            findings.append(self._json_item_to_finding(plugin, item, f"{list_key} #{idx}"))
+                    if findings:
+                        return findings
+
+            findings.append(self._json_item_to_finding(plugin, data, plugin.name))
+
+        return findings
+
+    def _json_item_to_finding(self, plugin, item: Dict[str, Any], default_title: str) -> Dict[str, Any]:
+        title = (
+            item.get("title")
+            or item.get("name")
+            or item.get("issue")
+            or item.get("message")
+            or default_title
+        )
+        description = item.get("description") or item.get("detail") or item.get("message") or str(item)
+        severity = item.get("severity", "info")
+        category = item.get("category", str(plugin.category).title())
+        return self._normalize_finding(
+            plugin,
+            {
+                "title": title,
+                "category": category,
+                "severity": severity,
+                "description": description,
+                "metadata": item,
+            },
+        )
 
     def _parse_nmap_output(self, output: str) -> Dict[str, Any]:
         """Simple regex-based nmap output parser."""

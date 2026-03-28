@@ -11,7 +11,6 @@ import Reports from './pages/Reports'
 import Settings from './pages/Settings'
 import History from './pages/History'
 import TaskDetails from './pages/TaskDetails'
-import Login from './pages/Login'
 import { ThemeProvider } from './components/ThemeContext'
 import { ToastProvider, ToastContainer } from './components/ToastContext'
 import { I18nProvider } from './components/I18nContext'
@@ -21,7 +20,6 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path={routes.dashboard} element={<Dashboard />} />
-      <Route path={routes.login} element={<Login />} />
       <Route path={routes.assets} element={<Assets />} />
       <Route path={routes.scans} element={<Scanner />} />
       <Route path={routes.scanTool} element={<ToolConfig />} />

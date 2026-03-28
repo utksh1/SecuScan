@@ -1,6 +1,6 @@
 {
   "id": "subdomain_discovery",
-  "name": "Subdomain Discovery",
+  "name": "Subdomain Scanner",
   "version": "1.0.0",
   "description": "Enumerate subdomains using passive sources",
   "long_description": "Subfinder is a subdomain discovery tool that returns valid subdomains for websites by using passive online sources. It has a simple modular architecture and is optimized for speed.",
@@ -29,7 +29,7 @@
       "label": "Domain",
       "type": "string",
       "required": true,
-      "placeholder": "example.com",
+      "placeholder": "secuscan.in",
       "validation": {
         "pattern": "^[a-zA-Z0-9.-]+$",
         "message": "Must be a valid domain"
