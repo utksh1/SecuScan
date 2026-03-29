@@ -338,15 +338,15 @@ export default function Dashboard() {
                <div className="flex items-baseline gap-6">
                 <div className="flex items-baseline gap-3">
                   <span className="text-2xl font-mono text-silver-bright font-black tracking-tighter italic leading-none">
-                    {(formatBriefingDate(lastSync).split(',')[0]?.toUpperCase().trim()) || 'STANDBY'}
+                    {(formatBriefingDate(lastSync).split(',')[0]?.trim().toUpperCase()) || 'INITIALIZING'}
                   </span>
                   <span className="text-base font-mono text-rag-blue/90 font-black italic leading-none">
-                    {(formatBriefingDate(lastSync).split(',')[1]?.toUpperCase().trim()) || '---'}
+                    {(formatBriefingDate(lastSync).split(',')[1]?.trim().toUpperCase()) || '---'}
                   </span>
                 </div>
                 <div className="h-5 w-px bg-silver/20 self-center mx-1"></div>
                 <span className="text-lg font-mono text-rag-blue font-black italic leading-none">
-                  {(formatBriefingDate(lastSync).split(',')[2]?.toUpperCase().trim()) || '00:00'}
+                  {(formatBriefingDate(lastSync).split(',')[2]?.trim().toUpperCase()) || '00:00'}
                 </span>
               </div>
             </div>
@@ -709,7 +709,7 @@ export default function Dashboard() {
                       </div>
 
                       <div className="pt-10 border-t border-accent-silver/5">
-                        <div className="text-xs text-silver/80 uppercase tracking-[0.2em] font-bold mb-8">Surface Composition</div>
+                        <div className="text-xs text-silver/80 uppercase tracking-[0.2em] font-bold mb-8">Surface Ledger Composition</div>
                         {attackSurfaceBreakdown.length === 0 && (
                           <div className="text-xs text-silver/80 uppercase tracking-[0.15em] italic">Telemetry unavailable</div>
                         )}

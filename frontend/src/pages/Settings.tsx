@@ -13,14 +13,15 @@ const itemVariants = {
 }
 
 const DEFAULT_CONFIG = {
-    concurrentScans: 5,
+    concurrentScans: 8,
     scanTimeout: 3600,
-    userAgent: 'SecuScan/1.0 (Security Audit Tool)',
+    scanIntensity: 'standard', // 'low', 'standard', 'aggressive'
+    dataRetention: 30, // days
     shodanKey: '',
     virustotalKey: '',
     ipWhitelist: '127.0.0.1\n10.0.0.0/8',
     autoPurgeFailed: false,
-    requireMfaDestructive: true,
+    autoRescanCritical: true,
     timezone: 'auto',
     theme: 'dark',
     notifications: {
@@ -58,8 +59,7 @@ export default function Settings() {
 
     const handleSave = () => {
         localStorage.setItem('secuscan-config', JSON.stringify(config))
-        addToast("Configuration synchronized with local storage", "success")
-        // Trigger a reload if theme or timezone changed to ensure consistency
+        addToast("Operational parameters synchronized", "success")
         if (config.theme !== theme) {
             setTheme(config.theme)
         }
@@ -88,7 +88,7 @@ export default function Settings() {
         <div className="bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] transition-all group">
             <div className="space-y-2 mb-6">
                 <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] block italic group-hover:text-rag-blue transition-colors">{label}</label>
-                <p className="text-[9px] text-silver/40 uppercase font-mono font-bold tracking-widest">{description}</p>
+                <p className="text-[9px] text-silver/40 uppercase font-mono font-bold tracking-widest leading-relaxed">{description}</p>
             </div>
             <input 
                 type={type}
@@ -104,7 +104,7 @@ export default function Settings() {
         <div className="bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] transition-all group">
             <div className="space-y-2 mb-6">
                 <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] block italic group-hover:text-rag-blue transition-colors">{label}</label>
-                <p className="text-[9px] text-silver/40 uppercase font-mono font-bold tracking-widest">{description}</p>
+                <p className="text-[9px] text-silver/40 uppercase font-mono font-bold tracking-widest leading-relaxed">{description}</p>
             </div>
             <select 
                 value={value}
@@ -121,13 +121,13 @@ export default function Settings() {
     const Toggle = ({ checked, onChange, label, description }: any) => (
         <button 
             onClick={() => onChange(!checked)}
-            className={`flex items-center justify-between p-8 bg-charcoal border-4 border-black transition-all group hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 ${
+            className={`flex items-center justify-between p-8 bg-charcoal border-4 border-black transition-all group hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 ${
                 checked ? 'shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' : 'shadow-none'
             }`}
         >
             <div className="space-y-2 text-left mr-8">
                 <label className="text-[10px] font-black text-silver-bright uppercase tracking-widest block group-hover:text-rag-green transition-colors">{label}</label>
-                <span className="text-[9px] text-silver/30 uppercase tracking-tighter italic font-mono font-bold">{description}</span>
+                <span className="text-[9px] text-silver/30 uppercase tracking-tighter italic font-mono font-bold leading-relaxed">{description}</span>
             </div>
             <div className={`w-14 h-7 border-4 border-black relative shrink-0 transition-all ${checked ? 'bg-rag-green' : 'bg-charcoal-dark'}`}>
                 <div className={`absolute top-0 w-5 h-full bg-black transition-all ${checked ? 'left-7' : 'left-0'}`}></div>
@@ -138,24 +138,23 @@ export default function Settings() {
     return (
         <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
             
-            {/* Neo-Brutalist Header */}
             <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10 font-black">
                 <div className="space-y-4">
                   <div className="bg-rag-blue text-black px-4 py-1 text-xs uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-black">
-                    Operational_Parameters_v4.5
+                    Engine_Nexus_v4.5.3
                   </div>
                   <h1 className="text-6xl md:text-8xl text-silver-bright uppercase tracking-tighter leading-none italic font-black">
-                    System <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '2px var(--accent-silver-bright)' }}>Control</span>
+                    Core <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '2px var(--accent-silver-bright)' }}>Array</span>
                   </h1>
                   <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic leading-relaxed">
-                    HARDWARE_ISOLATION // CORE_STABILITY // ENGINE_TUNING
+                    HARDWARE_TUNING // AUDIT_STRATEGY // SECTOR_ISOLATION
                   </p>
                 </div>
 
-                <div className="flex items-center gap-6">
+                <div className="flex flex-col items-end gap-4">
                    <div className="bg-charcoal border-4 border-black px-8 py-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-                        <span className="text-[10px] font-black text-silver/20 uppercase tracking-[0.4em] block mb-1 italic">WORKSPACE_STATE</span>
-                        <span className="text-xs font-black font-mono text-rag-green tracking-widest">DEPLOYED_SECURE_L7</span>
+                        <span className="text-[10px] font-black text-silver/20 uppercase tracking-[0.4em] block mb-1 italic">SYSTEM_TIMEZONE_SYNC</span>
+                        <span className="text-xs font-black font-mono text-rag-blue tracking-widest italic">{systemTimezone.toUpperCase()}</span>
                     </div>
                 </div>
             </header>
@@ -163,13 +162,35 @@ export default function Settings() {
             <div className="grid grid-cols-1 xl:grid-cols-4 gap-12 pt-4">
                 <main className="xl:col-span-3 space-y-20">
                     
-                    {/* Scanner Engine Configuration */}
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
                             <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Engine_Parameters</h3>
                             <div className="h-0.5 flex-1 bg-black/10"></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <SelectField 
+                                label="Scanner_Intensity" 
+                                description="PACKET_DENSITY_PER_SECOND_THRESHOLD"
+                                value={config.scanIntensity}
+                                onChange={(val: string) => setConfig({...config, scanIntensity: val})}
+                                options={[
+                                    { label: 'Low (Stealth/Passive)', value: 'low' },
+                                    { label: 'Standard (Balanced)', value: 'standard' },
+                                    { label: 'Aggressive (Intrusive)', value: 'aggressive' },
+                                ]}
+                            />
+                            <SelectField 
+                                label="Retention_Cycle" 
+                                description="AUTOMATED_LOG_PURGE_STRATEGY"
+                                value={config.dataRetention}
+                                onChange={(val: number) => setConfig({...config, dataRetention: val})}
+                                options={[
+                                    { label: '7 Days', value: 7 },
+                                    { label: '30 Days', value: 30 },
+                                    { label: '90 Days', value: 90 },
+                                    { label: 'Indefinite', value: 0 },
+                                ]}
+                            />
                             <InputField 
                                 label="Concurrent_Operations" 
                                 description="MAX_PARALLEL_TASK_EXECUTION"
@@ -179,47 +200,34 @@ export default function Settings() {
                             />
                             <InputField 
                                 label="Execution_Timeout" 
-                                description="THRESHOLD_IN_SECONDS"
+                                description="THRESHOLD_IN_SECONDS_PER_NODE"
                                 type="number"
                                 value={config.scanTimeout}
                                 onChange={(val: number) => setConfig({...config, scanTimeout: val})}
                             />
-                            <div className="md:col-span-2">
-                                <InputField 
-                                    label="Agent_Signature" 
-                                    description="CUSTOM_HTTP_USER_AGENT_STRING"
-                                    value={config.userAgent}
-                                    onChange={(val: string) => setConfig({...config, userAgent: val})}
-                                />
-                            </div>
                         </div>
                     </section>
 
-                    {/* Regional Settings */}
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
-                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Regional_Logic</h3>
+                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Security_Interface</h3>
                             <div className="h-0.5 flex-1 bg-black/10"></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <SelectField 
-                                label="Temporal_Strategy" 
-                                description="SYSTEM_CHRONOS_ALIGNMENT"
+                                label="Temporal_Logic" 
+                                description="UI_CHRONOS_ALIGNMENT"
                                 value={config.timezone}
                                 onChange={(val: string) => setConfig({...config, timezone: val})}
                                 options={[
-                                    { label: `Auto (Detected: ${systemTimezone})`, value: 'auto' },
-                                    { label: 'UTC (Universal Coordinated Time)', value: 'UTC' },
-                                    { label: 'IST (India Standard Time)', value: 'Asia/Kolkata' },
-                                    { label: 'EST (Eastern Standard Time)', value: 'America/New_York' },
-                                    { label: 'PST (Pacific Standard Time)', value: 'America/Los_Angeles' },
-                                    { label: 'GMT (Greenwich Mean Time)', value: 'Europe/London' },
-                                    { label: 'JST (Japan Standard Time)', value: 'Asia/Tokyo' },
+                                    { label: `Follow System (${systemTimezone})`, value: 'auto' },
+                                    { label: 'UTC (Universal Coordinated)', value: 'UTC' },
+                                    { label: 'Fixed (ZULU)', value: 'GMT' },
                                 ]}
                             />
                             <SelectField 
                                 label="Visual_Spectrum" 
-                                description="UI_AESTHETIC_MODE"
+                                description="OPERATIONAL_AESTHETIC_MODE"
                                 value={config.theme}
                                 onChange={(val: string) => setConfig({...config, theme: val})}
                                 options={[
@@ -230,25 +238,24 @@ export default function Settings() {
                         </div>
                     </section>
 
-                    {/* Intelligence API Framework */}
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
-                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Intelligence_API_Framework</h3>
+                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Intelligence_API_Link</h3>
                             <div className="h-0.5 flex-1 bg-black/10"></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <InputField 
-                                label="Shodan_API_Key" 
-                                description="RECON_INTELLIGENCE_STREAM"
-                                placeholder="SHODAN_SECRET_TOKEN"
+                                label="Shodan_Enclave" 
+                                description="RECON_TELEMETRY_STREAM_TOKEN"
+                                placeholder="SHODAN_SECRET"
                                 type="password"
                                 value={config.shodanKey}
                                 onChange={(val: string) => setConfig({...config, shodanKey: val})}
                             />
                             <InputField 
-                                label="VirusTotal_Key" 
-                                description="MALWARE_REPUTATION_DATABASE"
-                                placeholder="VT_ACCESS_HASH"
+                                label="VirusTotal_Enclave" 
+                                description="MALWARE_INTEL_ACCESS_HASH"
+                                placeholder="VT_SECRET_HASH"
                                 type="password"
                                 value={config.virustotalKey}
                                 onChange={(val: string) => setConfig({...config, virustotalKey: val})}
@@ -256,16 +263,15 @@ export default function Settings() {
                         </div>
                     </section>
 
-                    {/* Network Access & Ingress */}
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
-                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Access_Control_Isolation</h3>
+                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Access_Perimeters</h3>
                             <div className="h-0.5 flex-1 bg-black/10"></div>
                         </div>
                         <div className="bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-silver-bright uppercase tracking-widest block italic">Authorized_Ingress_Vectors</label>
-                                <p className="text-[10px] text-silver/40 uppercase font-bold italic mb-6">Line-delimited IP/CIDR whitelist for system access</p>
+                                <p className="text-[10px] text-silver/40 uppercase font-bold italic mb-6 leading-relaxed">Line-delimited IP/CIDR whitelist for high-privilege access</p>
                             </div>
                             <textarea 
                                 value={config.ipWhitelist}
@@ -276,62 +282,59 @@ export default function Settings() {
                         </div>
                     </section>
 
-                    {/* Signal Toggles */}
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
-                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Alert_State_Matrix</h3>
+                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Audit_Logic_Toggles</h3>
                             <div className="h-0.5 flex-1 bg-black/10"></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <Toggle 
                                 label="System_Signals" 
-                                description="CORE_RX_TELEMETRY"
+                                description="CRITICAL_RX_TELEMETRY"
                                 checked={config.notifications.systemAlerts}
                                 onChange={(val: boolean) => setConfig({...config, notifications: {...config.notifications, systemAlerts: val}})}
                             />
                             <Toggle 
-                                label="Critical_Rx" 
-                                description="URGENT_OVERRIDE_TX"
-                                checked={config.notifications.criticalFindings}
-                                onChange={(val: boolean) => setConfig({...config, notifications: {...config.notifications, criticalFindings: val}})}
+                                label="Auto_Rescan" 
+                                description="TRIGGER_NEW_SCAN_ON_CRITICAL"
+                                checked={config.autoRescanCritical}
+                                onChange={(val: boolean) => setConfig({...config, autoRescanCritical: val})}
                             />
                              <Toggle 
-                                label="Auto_Purge" 
-                                description="ERASE_FAILED_SESSIONS"
+                                label="Garbage_Collection" 
+                                description="AUTO_PURGE_FAILED_SESSIONS"
                                 checked={config.autoPurgeFailed}
                                 onChange={(val: boolean) => setConfig({...config, autoPurgeFailed: val})}
                             />
                         </div>
                     </section>
 
-                    {/* Final Action */}
                     <section className="pt-12">
                         <button 
                             onClick={handleSave}
-                            className="bg-rag-blue text-black px-12 py-6 text-xs font-black uppercase tracking-[0.3em] shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-2 hover:translate-y-2 transition-all flex items-center gap-4 italic group"
+                            className="bg-rag-blue text-black px-12 py-6 text-xs font-black uppercase tracking-[0.3em] shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-4 italic group"
                         >
-                            Commit_Changes_To_Engine
-                            <span className="material-symbols-outlined font-black group-hover:rotate-12 transition-transform">save</span>
+                            COMMIT_ENGINE_CHANGES
+                            <span className="material-symbols-outlined font-black group-hover:rotate-12 transition-transform">sync</span>
                         </button>
                     </section>
                 </main>
 
-                {/* Sidebar Utilities */}
                 <aside className="xl:col-span-1 space-y-12">
                     <section className="bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
-                        <h3 className="text-[11px] font-black text-silver-bright uppercase tracking-[0.5em] italic mb-8">Danger_Zone</h3>
+                        <h3 className="text-[11px] font-black text-silver-bright uppercase tracking-[0.5em] italic mb-8">Management_Tools</h3>
                         <div className="space-y-4">
                             <button 
                                 onClick={handleExport}
                                 className="w-full py-4 bg-charcoal-dark border-4 border-black text-[10px] font-black text-silver/40 uppercase tracking-[0.3em] hover:bg-black hover:text-white transition-all italic"
                             >
-                                ENCRYPTED_DB_EXPORT
+                                TELEMETRY_EXPORT
                             </button>
                             <button 
                                 onClick={handleReset}
                                 className="w-full py-4 bg-rag-amber border-4 border-black text-[10px] font-black text-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all italic"
                             >
-                                RESET_ENGINE_DEFAULTS
+                                ENGINE_RESET
                             </button>
                             <button 
                                 className="w-full py-4 bg-rag-red border-4 border-black text-[10px] font-black text-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all italic"
@@ -352,16 +355,16 @@ export default function Settings() {
                             <h3 className="text-[11px] font-black text-silver-bright uppercase tracking-[0.5em] italic border-b-4 border-black pb-4">Engine_Status</h3>
                             <div className="space-y-4 font-mono">
                                 <div className="flex justify-between text-[10px]">
-                                    <span className="text-silver/30">VERSION</span>
-                                    <span className="text-rag-blue">v4.5.2-RELEASE</span>
+                                    <span className="text-silver/30 uppercase tracking-tighter">Engine Version</span>
+                                    <span className="text-rag-blue font-bold">4.5.3-BETA</span>
                                 </div>
                                 <div className="flex justify-between text-[10px]">
-                                    <span className="text-silver/30">CLIENT_STATUS</span>
-                                    <span className="text-rag-green">NOMINAL</span>
+                                    <span className="text-silver/30 uppercase tracking-tighter">Stack Health</span>
+                                    <span className="text-rag-green font-bold">NOMINAL</span>
                                 </div>
                                 <div className="flex justify-between text-[10px]">
-                                    <span className="text-silver/30">TIMEZONE</span>
-                                    <span className="text-silver-bright">{config.timezone === 'auto' ? systemTimezone : config.timezone}</span>
+                                    <span className="text-silver/30 uppercase tracking-tighter">Core Sync</span>
+                                    <span className="text-silver-bright font-bold">STABLE</span>
                                 </div>
                             </div>
                         </div>
@@ -369,11 +372,10 @@ export default function Settings() {
                 </aside>
             </div>
 
-            {/* Tactical Footer */}
             <footer className="pt-24 border-t-4 border-black/5 flex flex-col md:flex-row justify-between items-center gap-8 text-[9px] font-black uppercase tracking-[0.5em] italic opacity-20">
                 <div className="flex items-center gap-6">
                     <div className="w-12 h-1 bg-silver/20"></div>
-                    RESTRICTED_ACCESS_VIEW // PROTOCOL_LEVEL_SEVEN // ENCLAVE_REVISION_ALPHA
+                    RESTRICTED_ACCESS_ENCLAVE // SECUSCAN_CORE_REV_4 // CLASSIFIED_VIEW
                 </div>
                 <div className="flex gap-4">
                     {[1,2,3,4,5,6,7,8].map(i => <div key={i} className="w-2 h-2 bg-silver/20 rounded-full"></div>)}

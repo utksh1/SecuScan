@@ -178,7 +178,7 @@ export default function AttackSurface() {
                     Visibility_Control_Plane v1.2
                   </div>
                   <h1 className="text-6xl md:text-8xl text-silver-bright uppercase tracking-tighter leading-none italic">
-                    Attack <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '2px var(--accent-silver-bright)' }}>Surface</span>
+                    Surface <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '2px var(--accent-silver-bright)' }}>Ledger</span>
                   </h1>
                   <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic leading-relaxed max-w-2xl">
                     EXTERNAL EXPOSURE ANALYSIS // INFRASTRUCTURE FOOTPRINT: {summary.total_attack_surface} NODES

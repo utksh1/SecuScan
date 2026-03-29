@@ -69,7 +69,7 @@ export const ExecutiveStatsBar: React.FC<ExecutiveStatsBarProps> = ({
 
       {/* 4. Live Attack Surface */}
       <div className="px-6 last:pr-8">
-        <span className="text-xs font-bold text-white/70 uppercase tracking-[0.3em] block mb-6">Attack Surface</span>
+        <span className="text-xs font-bold text-white/70 uppercase tracking-[0.3em] block mb-6">Surface Ledger</span>
         <div className="space-y-8">
           <span className="text-8xl font-normal text-white leading-[0.8]" style={{ fontFamily: 'var(--font-display)' }}>
             {attackSurface.toLocaleString()}

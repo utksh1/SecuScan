@@ -112,7 +112,7 @@ export default function Scans() {
                     Operational_Registry_v10.1
                   </div>
                   <h1 className="text-6xl md:text-8xl font-black text-silver-bright uppercase tracking-tighter leading-none italic">
-                    Historical <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '1px var(--accent-silver-bright)' }}>Scans</span>
+                    Operational <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '1px var(--accent-silver-bright)' }}>Registry</span>
                   </h1>
                   <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic flex items-center gap-4">
                     Total_Registry_Keys: {tasks.length} // SYSTEM_STATUS: {loading ? 'SYNCING...' : 'SYNCED'}
