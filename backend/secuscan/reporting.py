@@ -5,7 +5,7 @@ import os
 import re
 from io import BytesIO
 from fpdf import FPDF
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 class SecuScanPDF(FPDF):
@@ -14,234 +14,246 @@ class SecuScanPDF(FPDF):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "assets", "logo.png")
+        self.brand_color = (43, 108, 176) # Professional Blue
 
     def header(self):
+        # Draw background header bar on first page
+        if self.page_no() == 1:
+            self.set_fill_color(248, 250, 252)
+            self.rect(0, 0, 210, 40, "F")
+            
         # Logo
         if os.path.exists(self.logo_path):
-            self.image(self.logo_path, 10, 8, 33)
+            self.image(self.logo_path, 10, 10, 30)
         
         # Title
-        self.set_font("helvetica", "B", 15)
+        self.set_font("helvetica", "B", 16)
+        self.set_text_color(*self.brand_color)
         self.cell(80)
-        self.cell(30, 10, "SecuScan Security Report", border=0, align="C")
-        self.ln(20)
+        self.cell(30, 20, "SECUSCAN SECURITY AUDIT", border=0, align="C")
+        self.ln(25)
 
     def footer(self):
-        # Position at 1.5 cm from bottom
         self.set_y(-15)
-        # helvetica italic 8
         self.set_font("helvetica", "I", 8)
-        # Page number
-        self.cell(0, 10, f"Page {self.page_no()}/{{nb}}", align="C")
-        # Date on the right
-        self.set_x(-40)
-        self.cell(30, 10, datetime.now().strftime("%Y-%m-%d"), align="R")
+        self.set_text_color(100, 116, 139)
+        self.cell(0, 10, f"SecuScan Vulnerability Report - Page {self.page_no()}/{{nb}}", align="C")
+        self.set_x(-45)
+        self.cell(35, 10, datetime.now().strftime("%Y-%m-%d %H:%M"), align="R")
 
 class ReportGenerator:
-    """Handles PDF and CSV generation for task results."""
+    """Handles professional PDF, HTML, and CSV generation for security audits."""
 
     ANSI_ESCAPE_RE = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
     CONTROL_CHARS_RE = re.compile(r'[\x00-\x08\x0B-\x1F\x7F]')
+    
+    SEVERITY_COLORS = {
+        'CRITICAL': (153, 27, 27), # Dark Red
+        'HIGH': (220, 38, 38),     # Red
+        'MEDIUM': (217, 119, 6),   # Amber
+        'LOW': (37, 99, 235),      # Blue
+        'INFO': (100, 116, 139)    # Slate
+    }
 
     @classmethod
     def _clean_text(cls, value: Any) -> str:
-        if value is None:
-            return ""
+        if value is None: return ""
         text = str(value)
         text = cls.ANSI_ESCAPE_RE.sub('', text)
         text = cls.CONTROL_CHARS_RE.sub('', text)
         return text.strip()
 
     @staticmethod
-    def generate_csv_report(task: Dict[str, Any], result: Dict[str, Any]) -> str:
-        """
-        Generate a CSV string from task findings.
-        """
-        output = io.StringIO()
-        writer = csv.writer(output)
-
-        structured_data = result.get('structured', {})
-        findings = structured_data.get('findings', [])
-        status = result.get('status', task.get('status', 'completed'))
-
-        # Write header
-        writer.writerow(['Task ID', 'Tool', 'Target', 'Created At', 'Status', 'Findings'])
-        writer.writerow([
-            ReportGenerator._clean_text(task.get('id', '')),
-            ReportGenerator._clean_text(task.get('tool_name', '')),
-            ReportGenerator._clean_text(task.get('target', '')),
-            ReportGenerator._clean_text(task.get('created_at', '')),
-            ReportGenerator._clean_text(status),
-            len(findings),
-        ])
-        writer.writerow([])
-
-        # Write Findings header
-        writer.writerow(['Severity', 'Title', 'Description', 'Remediation'])
-
-        # Write Findings
-        if findings:
-            for finding in findings:
-                writer.writerow([
-                    ReportGenerator._clean_text(finding.get('severity', 'info')).upper(),
-                    ReportGenerator._clean_text(finding.get('title', '')),
-                    ReportGenerator._clean_text(finding.get('description', '')),
-                    ReportGenerator._clean_text(finding.get('remediation', ''))
-                ])
-        else:
-            writer.writerow(['No structured findings found.'])
-
-        return output.getvalue()
-
-    @staticmethod
     def generate_pdf_report(task: Dict[str, Any], result: Dict[str, Any]) -> bytes:
-        """
-        Generate a professional PDF report from task results.
-        """
+        """Generates a high-fidelity PDF report."""
         pdf = SecuScanPDF()
         pdf.alias_nb_pages()
         pdf.add_page()
-
-        # Severity Colors Mapping
-        colors = {
-            'CRITICAL': (255, 0, 0),
-            'HIGH': (255, 69, 0),
-            'MEDIUM': (255, 165, 0),
-            'LOW': (255, 215, 0),
-            'INFO': (135, 206, 235)
-        }
-
-        # 1. Executive Summary
-        structured_data = result.get('structured', {})
-        findings = structured_data.get('findings', [])
+        
+        findings = result.get('findings', [])
         summary = result.get('summary', [])
-        status = result.get('status', task.get('status', 'completed'))
-        severity_counts = result.get('severity_counts', {})
-
-        if not severity_counts and findings:
-            for finding in findings:
-                severity = ReportGenerator._clean_text(finding.get('severity', 'info')).lower()
-                severity_counts[severity] = severity_counts.get(severity, 0) + 1
-
-        if not summary:
-            total_findings = len(findings)
-            dominant = next((sev.upper() for sev in ['critical', 'high', 'medium', 'low', 'info'] if severity_counts.get(sev, 0) > 0), 'INFO')
-            summary = [
-                f"Status: {ReportGenerator._clean_text(status)}",
-                f"Target: {ReportGenerator._clean_text(task.get('target', ''))}",
-                f"Tool: {ReportGenerator._clean_text(task.get('tool_name', task.get('plugin_id', '')))}",
-                f"Findings recorded: {total_findings} with {dominant} as the leading severity",
-            ]
-
-        pdf.set_font("helvetica", "B", 16)
-        pdf.set_fill_color(240, 240, 240)
-        pdf.cell(0, 12, "Executive Summary", new_x="LMARGIN", new_y="NEXT", fill=True)
-        pdf.ln(4)
-
-        # Overview Table
-        pdf.set_font("helvetica", "B", 10)
-        pdf.set_fill_color(200, 200, 200)
-        col_width = pdf.epw / 4
-        pdf.cell(col_width, 8, "Task ID", border=1, fill=True)
-        pdf.cell(col_width, 8, "Tool", border=1, fill=True)
-        pdf.cell(col_width, 8, "Target", border=1, fill=True)
-        pdf.cell(col_width, 8, "Status", border=1, fill=True)
-        pdf.ln()
-
+        target = task.get('target', 'Unknown')
+        
+        # 1. Executive Summary
+        pdf.set_font("helvetica", "B", 14)
+        pdf.set_text_color(30, 41, 59)
+        pdf.cell(0, 10, "1. Executive Summary", ln=True)
+        pdf.ln(2)
+        
         pdf.set_font("helvetica", "", 10)
-        pdf.cell(col_width, 8, ReportGenerator._clean_text(task.get('id', '')[:8]), border=1)
-        pdf.cell(col_width, 8, ReportGenerator._clean_text(task.get('tool_name', '')), border=1)
-        pdf.cell(col_width, 8, ReportGenerator._clean_text(task.get('target', '')), border=1)
-        pdf.cell(col_width, 8, ReportGenerator._clean_text(status), border=1)
-        pdf.ln(10)
-
-        # Severity Summary Counts
-        if severity_counts:
-            pdf.set_font("helvetica", "B", 12)
-            pdf.cell(0, 10, "Findings by Severity", new_x="LMARGIN", new_y="NEXT")
-            pdf.ln(2)
-            
-            for sev in ['critical', 'high', 'medium', 'low', 'info']:
-                count = severity_counts.get(sev, 0)
-                if count > 0:
-                    pdf.set_font("helvetica", "B", 10)
-                    color = colors.get(sev.upper(), (200, 200, 200))
-                    pdf.set_text_color(*color)
-                    pdf.cell(30, 8, ReportGenerator._clean_text(f"{sev.upper()}:"))
-                    pdf.set_text_color(0, 0, 0)
-                    pdf.set_font("helvetica", "", 10)
-                    pdf.cell(20, 8, str(count))
-                    
-                    # Small bar
-                    pdf.set_fill_color(*color)
-                    pdf.rect(pdf.get_x(), pdf.get_y() + 2, count * 5, 4, 'F')
-                    pdf.ln(8)
-            pdf.ln(10)
-
-        # 2. Key Observations (Summary)
-        if summary:
-            pdf.set_font("helvetica", "B", 14)
-            pdf.cell(0, 10, "Key Observations", new_x="LMARGIN", new_y="NEXT")
-            pdf.ln(2)
-            pdf.set_font("helvetica", "", 11)
-            for item in summary:
-                # Bullet point simulation
-                pdf.set_font("helvetica", "B", 12)
-                pdf.cell(5, 7, chr(149)) # Bullet character
-                pdf.set_font("helvetica", "", 11)
-                pdf.multi_cell(0, 7, ReportGenerator._clean_text(item), new_x="LMARGIN", new_y="NEXT")
-            pdf.ln(10)
-
-        # 3. Detailed Findings
-        pdf.set_font("helvetica", "B", 16)
-        pdf.set_fill_color(240, 240, 240)
-        pdf.cell(0, 12, "Detailed Findings", new_x="LMARGIN", new_y="NEXT", fill=True)
+        pdf.multi_cell(0, 6, f"This security audit was performed on {target} using {task.get('tool_name')}. "
+                             f"The assessment identified {len(findings)} findings.")
         pdf.ln(5)
 
-        if findings:
-            for idx, finding in enumerate(findings):
-                severity = ReportGenerator._clean_text(finding.get('severity', 'info')).upper() or 'INFO'
-                title = ReportGenerator._clean_text(finding.get('title', 'Unknown Issue'))
-                
-                # Check for page break
-                if pdf.get_y() > 250:
-                    pdf.add_page()
+        # 2. Risk Distribution
+        severity_counts = {}
+        for f in findings:
+            sev = f.get('severity', 'info').upper()
+            severity_counts[sev] = severity_counts.get(sev, 0) + 1
 
-                # Finding Header
-                pdf.set_font("helvetica", "B", 12)
-                color = colors.get(severity, (0, 0, 0))
-                pdf.set_fill_color(*color)
-                pdf.set_text_color(255, 255, 255)
-                pdf.cell(30, 8, ReportGenerator._clean_text(f" {severity} "), new_x="RIGHT", fill=True)
-                
+        if severity_counts:
+            pdf.set_font("helvetica", "B", 12)
+            pdf.cell(0, 10, "Risk Profile", ln=True)
+            for sev in ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']:
+                count = severity_counts.get(sev, 0)
+                if count > 0:
+                    color = ReportGenerator.SEVERITY_COLORS.get(sev, (100, 100, 100))
+                    pdf.set_fill_color(*color)
+                    pdf.rect(10, pdf.get_y()+2, count * 5, 4, 'F')
+                    pdf.set_x(count * 5 + 15)
+                    pdf.set_font("helvetica", "B", 9)
+                    pdf.set_text_color(*color)
+                    pdf.cell(0, 8, f"{sev}: {count}")
+                    pdf.ln(6)
+            pdf.ln(10)
+
+        # 3. Detailed Technical Findings
+        pdf.add_page()
+        pdf.set_font("helvetica", "B", 14)
+        pdf.set_text_color(30, 41, 59)
+        pdf.cell(0, 10, "2. Technical Findings", ln=True)
+        pdf.ln(5)
+
+        for idx, finding in enumerate(findings):
+            # Page break if near bottom
+            if pdf.get_y() > 240: pdf.add_page()
+            
+            sev = finding.get('severity', 'info').upper()
+            color = ReportGenerator.SEVERITY_COLORS.get(sev, (100, 100, 100))
+            
+            # Finding Header
+            pdf.set_fill_color(*color)
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font("helvetica", "B", 10)
+            pdf.cell(25, 8, f" {sev} ", fill=True)
+            pdf.set_fill_color(248, 250, 252)
+            pdf.set_text_color(15, 23, 42)
+            pdf.cell(0, 8, f"  Finding #{idx+1}: {finding.get('title')}", fill=True, ln=True)
+            
+            # Details
+            pdf.ln(2)
+            pdf.set_font("helvetica", "B", 9)
+            pdf.cell(30, 6, "Category:")
+            pdf.set_font("helvetica", "", 9)
+            pdf.cell(0, 6, finding.get('category', 'General'), ln=True)
+            
+            pdf.set_font("helvetica", "B", 9)
+            pdf.cell(0, 6, "Description:", ln=True)
+            pdf.set_font("helvetica", "", 9)
+            pdf.multi_cell(0, 5, ReportGenerator._clean_text(finding.get('description')))
+            
+            if remediation := finding.get('remediation'):
+                pdf.ln(1)
+                pdf.set_font("helvetica", "B", 9)
+                pdf.set_text_color(22, 101, 52) # Dark Green
+                pdf.cell(0, 6, "Remediation Recommendation:", ln=True)
+                pdf.set_font("helvetica", "I", 9)
+                pdf.multi_cell(0, 5, ReportGenerator._clean_text(remediation))
                 pdf.set_text_color(0, 0, 0)
-                pdf.set_fill_color(245, 245, 245)
-                pdf.cell(0, 8, ReportGenerator._clean_text(f" Finding #{idx+1}: {title}"), new_x="LMARGIN", new_y="NEXT", fill=True)
-                pdf.ln(2)
 
-                # Description
-                if description := ReportGenerator._clean_text(finding.get('description', '')):
-                    pdf.set_font("helvetica", "B", 10)
-                    pdf.cell(0, 7, "Description:", new_x="LMARGIN", new_y="NEXT")
-                    pdf.set_font("helvetica", "", 10)
-                    pdf.multi_cell(0, 6, description, new_x="LMARGIN", new_y="NEXT")
-                    pdf.ln(2)
-
-                # Remediation (if available)
-                if remediation := ReportGenerator._clean_text(finding.get('remediation', '')):
-                    pdf.set_font("helvetica", "B", 10)
-                    pdf.cell(0, 7, "Remediation:", new_x="LMARGIN", new_y="NEXT")
-                    pdf.set_font("helvetica", "I", 10)
-                    pdf.multi_cell(0, 6, remediation, new_x="LMARGIN", new_y="NEXT")
-                    pdf.ln(2)
-
-                pdf.ln(4)
-                pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + pdf.epw, pdf.get_y())
-                pdf.ln(6)
-        else:
-            pdf.set_font("helvetica", "I", 12)
-            pdf.cell(0, 10, "No structured findings reported for this task.", new_x="LMARGIN", new_y="NEXT")
+            pdf.ln(5)
+            pdf.set_draw_color(226, 232, 240)
+            pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+            pdf.ln(5)
 
         return bytes(pdf.output())
+
+    @staticmethod
+    def generate_html_report(task: Dict[str, Any], result: Dict[str, Any]) -> str:
+        """Generates a modern, responsive HTML report."""
+        findings = result.get('findings', [])
+        target = task.get('target', 'Unknown')
+        
+        # Generate summary stats
+        stats = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
+        for f in findings:
+            sev = f.get('severity', 'info').upper()
+            stats[sev] = stats.get(sev, 0) + 1
+
+        html = f"""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecuScan Audit Report - {target}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {{
+            --primary: #2563eb; --critical: #dc2626; --high: #ea580c; --medium: #f59e0b; --low: #3b82f6; --info: #64748b;
+            --bg: #f8fafc; --card: #ffffff; --text: #0f172a; --text-muted: #64748b;
+        }}
+        body {{ font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); line-height: 1.5; margin: 0; padding: 40px 20px; }}
+        .container {{ max-width: 900px; margin: 0 auto; }}
+        header {{ margin-bottom: 40px; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; }}
+        .stats-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; margin-bottom: 40px; }}
+        .stat-card {{ background: var(--card); padding: 16px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); text-align: center; border-bottom: 4px solid var(--info); }}
+        .stat-card.CRITICAL {{ border-color: var(--critical); }}
+        .stat-card.HIGH {{ border-color: var(--high); }}
+        .stat-card.MEDIUM {{ border-color: var(--medium); }}
+        .stat-card.LOW {{ border-color: var(--low); }}
+        .finding-card {{ background: var(--card); border-radius: 12px; margin-bottom: 24px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }}
+        .finding-header {{ padding: 16px 20px; display: flex; align-items: center; gap: 12px; background: #f1f5f9; }}
+        .badge {{ padding: 4px 12px; border-radius: 9999px; font-weight: 700; font-size: 12px; color: white; }}
+        .badge.CRITICAL {{ background: var(--critical); }}
+        .badge.HIGH {{ background: var(--high); }}
+        .badge.MEDIUM {{ background: var(--medium); }}
+        .badge.LOW {{ background: var(--low); }}
+        .badge.INFO {{ background: var(--info); }}
+        .content {{ padding: 20px; }}
+        .remediation {{ background: #f0fdf4; border-left: 4px solid #16a34a; padding: 16px; margin-top: 16px; border-radius: 4px; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Security Audit Report</h1>
+            <p style="color: var(--text-muted)">Target: <strong>{target}</strong> | Generated: {datetime.now().strftime("%B %d, %Y")}</p>
+        </header>
+
+        <div class="stats-grid">
+            <div class="stat-card CRITICAL"><h3>{stats['CRITICAL']}</h3><p>Critical</p></div>
+            <div class="stat-card HIGH"><h3>{stats['HIGH']}</h3><p>High</p></div>
+            <div class="stat-card MEDIUM"><h3>{stats['MEDIUM']}</h3><p>Medium</p></div>
+            <div class="stat-card LOW"><h3>{stats['LOW']}</h3><p>Low</p></div>
+            <div class="stat-card INFO"><h3>{stats['INFO']}</h3><p>Info</p></div>
+        </div>
+
+        <h2>Vulnerability Details</h2>
+        {"".join([f'''
+        <div class="finding-card">
+            <div class="finding-header">
+                <span class="badge {f['severity'].upper()}">{f['severity'].upper()}</span>
+                <strong>{f.get('title')}</strong>
+            </div>
+            <div class="content">
+                <p><strong>Category:</strong> {f.get('category', 'General')}</p>
+                <p>{f.get('description')}</p>
+                {f'<div class="remediation"><strong>Recommendation:</strong><br>{f.get("remediation")}</div>' if f.get("remediation") else ""}
+            </div>
+        </div>
+        ''' for f in findings])}
+    </div>
+</body>
+</html>
+        """
+        return html
+
+    @staticmethod
+    def generate_csv_report(task: Dict[str, Any], result: Dict[str, Any]) -> str:
+        """Generates a standard CSV report."""
+        output = io.StringIO()
+        writer = csv.writer(output)
+        findings = result.get('findings', [])
+        writer.writerow(['Severity', 'Title', 'Category', 'Description', 'Remediation'])
+        for f in findings:
+            writer.writerow([
+                f.get('severity', 'info').upper(),
+                f.get('title', ''),
+                f.get('category', 'General'),
+                f.get('description', ''),
+                f.get('remediation', '')
+            ])
+        return output.getvalue()
 
 reporting = ReportGenerator()

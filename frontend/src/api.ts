@@ -150,6 +150,26 @@ export function startTask(plugin_id: string, inputs: Record<string, unknown>, co
   })
 }
 
+export function deleteTask(taskId: string) {
+  return request<{ task_id: string; deleted: boolean }>(`/task/${taskId}`, {
+    method: 'DELETE',
+  })
+}
+
+export function bulkDeleteTasks(taskIds: string[]) {
+  return request<{ deleted_count: number; success: boolean }>('/tasks/bulk', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(taskIds),
+  })
+}
+
+export function clearAllTasks() {
+  return request<{ cleared: boolean; message: string }>('/tasks/clear', {
+    method: 'DELETE',
+  })
+}
+
 export function cancelTask(taskId: string) {
   return request(`/task/${taskId}/cancel`, {
     method: 'POST',

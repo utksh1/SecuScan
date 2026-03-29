@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { API_BASE } from '../api'
+import { API_BASE, deleteTask, clearAllTasks, bulkDeleteTasks } from '../api'
 import { routePath } from '../routes'
 import { parseDateSafe, formatLocaleDate, formatLocaleTime } from '../utils/date'
 
@@ -51,6 +51,7 @@ export default function Scans() {
     const [loading, setLoading] = useState(true)
     const [filter, setFilter] = useState('all')
     const [expandedId, setExpandedId] = useState<string | null>(null)
+    const [selectedIds, setSelectedIds] = useState<string[]>([])
 
     useEffect(() => {
         loadTasks()
@@ -76,7 +77,7 @@ export default function Scans() {
 
     async function handleRescan(task: Task) {
         try {
-            const res = await fetch(`${API_BASE}/start-task`, {
+            const res = await fetch(`${API_BASE}/task/start`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -92,6 +93,70 @@ export default function Scans() {
             }
         } catch (err) {
             console.error('Rescan failed:', err)
+        }
+    }
+
+    async function handleTaskDelete(taskId: string) {
+        if (!window.confirm('Are you sure you want to delete this scan record? This will also remove associated findings and reports.')) {
+            return
+        }
+
+        try {
+            await deleteTask(taskId)
+            setTasks(prev => prev.filter(t => t.task_id !== taskId))
+            if (expandedId === taskId) setExpandedId(null)
+        } catch (err) {
+            console.error('Failed to delete task:', err)
+            alert('Failed to delete task. It might still be running.')
+        }
+    }
+
+    async function handleClearAll() {
+        if (!window.confirm('CRITICAL: Are you sure you want to PURGE ALL RECORDS? This will wipe all scan history, findings, assets, and reports. This action is irreversible.')) {
+            return
+        }
+
+        try {
+            await clearAllTasks()
+            setTasks([])
+            setSelectedIds([])
+            setExpandedId(null)
+        } catch (err) {
+            console.error('Failed to clear history:', err)
+            alert('Failed to clear history. Ensure no tasks are currently running.')
+        }
+    }
+
+    async function handleBulkDelete() {
+        if (selectedIds.length === 0) return
+        if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} selected scan records?`)) {
+            return
+        }
+
+        try {
+            await bulkDeleteTasks(selectedIds)
+            setTasks(prev => prev.filter(t => !selectedIds.includes(t.task_id)))
+            setSelectedIds([])
+        } catch (err) {
+            console.error('Bulk delete failed:', err)
+            alert('Failed to delete some tasks. Ensure they are not currently running.')
+        }
+    }
+
+    function toggleSelection(taskId: string, e: React.MouseEvent) {
+        e.stopPropagation()
+        setSelectedIds(prev => 
+            prev.includes(taskId) 
+            ? prev.filter(id => id !== taskId) 
+            : [...prev, taskId]
+        )
+    }
+
+    function toggleSelectAll() {
+        if (selectedIds.length === tasks.length) {
+            setSelectedIds([])
+        } else {
+            setSelectedIds(tasks.map(t => t.task_id))
         }
     }
 
@@ -131,6 +196,20 @@ export default function Scans() {
             {/* Filtration Block */}
             <section className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col xl:flex-row justify-between items-center gap-12">
                 <div className="flex flex-wrap items-center gap-4">
+                    <button
+                        onClick={toggleSelectAll}
+                        className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-3 ${
+                            selectedIds.length === tasks.length && tasks.length > 0
+                            ? 'bg-rag-blue text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' 
+                            : 'bg-charcoal-dark text-silver/30 border-silver-bright/5 hover:border-silver-bright/20'
+                        }`}
+                    >
+                        <span className="material-symbols-outlined text-sm">
+                            {selectedIds.length === tasks.length && tasks.length > 0 ? 'check_box' : 'check_box_outline_blank'}
+                        </span>
+                        Select_All
+                    </button>
+                    <div className="w-1 h-8 bg-black/40 mx-2 hidden md:block"></div>
                     {statusFilters.map(f => (
                         <button
                             key={f.value}
@@ -146,8 +225,19 @@ export default function Scans() {
                         </button>
                     ))}
                 </div>
-                <div className="flex items-center gap-4 text-[10px] font-mono text-silver/20 uppercase italic tracking-widest">
-                   Isolation_Protocol_Active // <span className="text-rag-blue">v4_stable</span>
+                <div className="flex items-center gap-6">
+                    {tasks.length > 0 && (
+                        <button
+                            onClick={handleClearAll}
+                            className="px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 bg-rag-red/10 text-rag-red border-rag-red/20 hover:bg-rag-red hover:text-black hover:border-black flex items-center gap-2 italic"
+                        >
+                            Purge_All_Records
+                            <span className="material-symbols-outlined text-sm">delete_forever</span>
+                        </button>
+                    )}
+                    <div className="flex items-center gap-4 text-[10px] font-mono text-silver/20 uppercase italic tracking-widest hidden sm:flex">
+                    Isolation_Protocol_Active // <span className="text-rag-blue">v4_stable</span>
+                    </div>
                 </div>
             </section>
 
@@ -192,6 +282,18 @@ export default function Scans() {
                                             <div className="flex flex-col xl:flex-row justify-between gap-8">
                                                 <div className="flex-1 space-y-6">
                                                     <div className="flex flex-wrap items-center gap-4">
+                                                        <div 
+                                                            onClick={(e) => toggleSelection(task.task_id, e)}
+                                                            className={`w-10 h-10 border-4 border-black flex items-center justify-center transition-all ${
+                                                                selectedIds.includes(task.task_id) 
+                                                                ? 'bg-rag-blue text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-x-1 -translate-y-1' 
+                                                                : 'bg-charcoal-dark text-silver/10 hover:border-rag-blue/40'
+                                                            }`}
+                                                        >
+                                                            <span className="material-symbols-outlined text-base font-black">
+                                                                {selectedIds.includes(task.task_id) ? 'check' : 'add'}
+                                                            </span>
+                                                        </div>
                                                         <span className={`px-2 py-0.5 text-[9px] font-black uppercase italic border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
                                                             task.status === 'completed' ? 'bg-rag-green text-black' :
                                                             task.status === 'failed' ? 'bg-rag-red text-black' :
@@ -266,7 +368,19 @@ export default function Scans() {
                                                                 </div>
                                                             </div>
 
-                                                             <div className="flex items-center justify-end gap-6">
+                                                              <div className="flex items-center justify-end gap-6">
+                                                                {(task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') && (
+                                                                    <button 
+                                                                        className="bg-rag-red/20 text-rag-red border-2 border-rag-red/20 hover:bg-rag-red hover:text-black hover:border-black px-6 py-4 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 italic"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation()
+                                                                            handleTaskDelete(task.task_id)
+                                                                        }}
+                                                                    >
+                                                                        Delete_Record
+                                                                        <span className="material-symbols-outlined text-sm">delete</span>
+                                                                    </button>
+                                                                )}
                                                                 {(task.status === 'completed' || task.status === 'failed') && (
                                                                     <button 
                                                                         className="bg-rag-blue text-black px-8 py-4 text-[10px] font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3 group/btn italic"
@@ -310,6 +424,43 @@ export default function Scans() {
                     )}
                 </AnimatePresence>
             </section>
+
+            {/* Floating Bulk Action Bar */}
+            <AnimatePresence>
+                {selectedIds.length > 0 && (
+                    <motion.div 
+                        initial={{ y: 100, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: 100, opacity: 0 }}
+                        className="fixed bottom-12 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-6"
+                    >
+                        <div className="bg-black border-4 border-rag-blue p-6 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] flex items-center justify-between gap-8">
+                            <div className="flex items-center gap-6">
+                                <div className="bg-rag-blue text-black px-4 py-2 text-xl font-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">{selectedIds.length}</div>
+                                <div className="space-y-1">
+                                    <p className="text-[10px] font-black text-rag-blue uppercase tracking-widest italic">Records_Selected_For_Pruning</p>
+                                    <p className="text-[8px] font-mono text-silver/30 uppercase tracking-[0.2em]">Bulk_Action_Protocol_v4_Active</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <button 
+                                    onClick={() => setSelectedIds([])}
+                                    className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-silver/40 hover:text-silver transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    onClick={handleBulkDelete}
+                                    className="bg-rag-red text-black px-8 py-3 text-[10px] font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3 italic"
+                                >
+                                    Prune_Selected_Records
+                                    <span className="material-symbols-outlined text-sm">delete_sweep</span>
+                                </button>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Restricted Footer */}
             <footer className="pt-24 opacity-20 pointer-events-none select-none flex flex-col md:flex-row justify-between items-center gap-8 text-[9px] font-black uppercase tracking-[0.5em] italic">

@@ -19,6 +19,17 @@ from .database import get_db
 from .plugins import get_plugin_manager
 from .models import TaskStatus
 
+# Modular Scanners
+from .scanners.port_scanner import PortScanner
+from .scanners.web_scanner import WebScanner
+from .scanners.recon_scanner import ReconScanner
+
+MODULAR_SCANNERS = {
+    "port_scanner": PortScanner,
+    "web_scanner": WebScanner,
+    "recon_scanner": ReconScanner
+}
+
 logger = logging.getLogger(__name__)
 
 
@@ -136,6 +147,7 @@ class TaskExecutor:
             task_id: Task identifier
         """
         db = await get_db()
+        self.running_tasks[task_id] = asyncio.current_task()
 
         try:
             # Update status to running
@@ -158,89 +170,137 @@ class TaskExecutor:
             safe_mode = bool(task_row["safe_mode"])
             target = extract_target(inputs)
 
-            # Build command
-            plugin_manager = get_plugin_manager()
-            plugin = plugin_manager.get_plugin(plugin_id)
-            if not plugin:
-                raise ValueError(f"Plugin not found: {plugin_id}")
-
-            # Create pending records for visibility
-            await self._create_pending_records(db, task_id, plugin, target)
-            
-            command = plugin_manager.build_command(plugin_id, inputs)
-
-            if not command:
-                raise ValueError("Failed to build command")
-
-            # Apply Docker Sandboxing if enabled
-            if settings.docker_enabled:
-                docker_image = plugin.docker_image or "alpine:latest"
-                docker_cmd = [
-                    "docker",
-                    "run",
-                    "--rm",
-                    "--name",
-                    f"secuscan_task_{task_id}",
-                    "--memory",
-                    f"{settings.sandbox_memory_mb}m",
-                    "--cpus",
-                    str(settings.sandbox_cpu_quota),
-                    docker_image,
-                ]
-                command = docker_cmd + command
-
-            logger.info(f"Executing task {task_id}: {' '.join(command)}")
-            await self._broadcast(task_id, "status", TaskStatus.RUNNING.value)
-
-            # Execute command
-            start_time = time.time()
-            output, exit_code = await self._execute_command(command, task_id)
-            duration = time.time() - start_time
-
-            # Save raw output
-            raw_path = Path(settings.raw_output_dir) / f"{task_id}.txt"
-            with open(raw_path, 'w') as f:
-                f.write(output)
-
-            # Update task with results
-            final_status = TaskStatus.COMPLETED.value if exit_code == 0 else TaskStatus.FAILED.value
-            error_message = None
-            if exit_code != 0:
-                error_message = f"Tool returned non-zero exit code {exit_code}. Check raw output for details."
-
-            await db.execute(
-                """
-                UPDATE tasks SET
-                    status = ?,
-                    completed_at = ?,
-                    duration_seconds = ?,
-                    exit_code = ?,
-                    raw_output_path = ?,
-                    command_used = ?,
-                    error_message = ?
-                WHERE id = ?
-                """,
-                (
-                    final_status,
-                    datetime.now().isoformat(),
-                    duration,
-                    exit_code,
-                    str(raw_path),
-                    " ".join(command),
-                    error_message,
-                    task_id
+            # Check if this is a modular scanner or a standard plugin
+            if plugin_id in MODULAR_SCANNERS:
+                scanner_class = MODULAR_SCANNERS[plugin_id]
+                scanner = scanner_class(task_id, db)
+                
+                logger.info(f"Executing modular scanner {plugin_id} for task {task_id}")
+                await self._broadcast(task_id, "status", TaskStatus.RUNNING.value)
+                
+                start_time = time.time()
+                # Run the scanner
+                result = await scanner.run(target, inputs)
+                duration = time.time() - start_time
+                
+                # Update task with results
+                final_status = TaskStatus.COMPLETED.value if result.get("status") != "failed" else TaskStatus.FAILED.value
+                
+                await db.execute(
+                    """
+                    UPDATE tasks SET
+                        status = ?,
+                        completed_at = ?,
+                        duration_seconds = ?,
+                        structured_json = ?,
+                        error_message = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        final_status,
+                        datetime.now().isoformat(),
+                        duration,
+                        json.dumps(result),
+                        result.get("error_message"),
+                        task_id
+                    )
                 )
-            )
 
-            await self._upsert_asset_and_report(
-                db=db,
-                task_id=task_id,
-                plugin=plugin,
-                plugin_id=plugin_id,
-                target=target,
-                status=final_status,
-                output=output
-            )
+                # Upsert asset and report using the scanner's result
+                await self._upsert_asset_and_report_from_scanner(
+                    db=db,
+                    task_id=task_id,
+                    scanner=scanner,
+                    plugin_id=plugin_id,
+                    target=target,
+                    status=final_status,
+                    result=result
+                )
+
+            else:
+                # Standard Plugin Execution
+                plugin_manager = get_plugin_manager()
+                plugin = plugin_manager.get_plugin(plugin_id)
+                if not plugin:
+                    raise ValueError(f"Plugin not found: {plugin_id}")
+
+                # Create pending records for visibility
+                await self._create_pending_records(db, task_id, plugin, target)
+                
+                command = plugin_manager.build_command(plugin_id, inputs)
+
+                if not command:
+                    raise ValueError("Failed to build command")
+
+                # Apply Docker Sandboxing if enabled
+                if settings.docker_enabled:
+                    docker_image = plugin.docker_image or "alpine:latest"
+                    docker_cmd = [
+                        "docker",
+                        "run",
+                        "--rm",
+                        "--name",
+                        f"secuscan_task_{task_id}",
+                        "--memory",
+                        f"{settings.sandbox_memory_mb}m",
+                        "--cpus",
+                        str(settings.sandbox_cpu_quota),
+                        docker_image,
+                    ]
+                    command = docker_cmd + command
+
+                logger.info(f"Executing task {task_id}: {' '.join(command)}")
+                await self._broadcast(task_id, "status", TaskStatus.RUNNING.value)
+
+                # Execute command
+                start_time = time.time()
+                output, exit_code = await self._execute_command(command, task_id)
+                duration = time.time() - start_time
+
+                # Save raw output
+                raw_path = Path(settings.raw_output_dir) / f"{task_id}.txt"
+                with open(raw_path, 'w') as f:
+                    f.write(output)
+
+                # Update task with results
+                final_status = TaskStatus.COMPLETED.value if exit_code == 0 else TaskStatus.FAILED.value
+                error_message = None
+                if exit_code != 0:
+                    error_message = f"Tool returned non-zero exit code {exit_code}. Check raw output for details."
+
+                await db.execute(
+                    """
+                    UPDATE tasks SET
+                        status = ?,
+                        completed_at = ?,
+                        duration_seconds = ?,
+                        exit_code = ?,
+                        raw_output_path = ?,
+                        command_used = ?,
+                        error_message = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        final_status,
+                        datetime.now().isoformat(),
+                        duration,
+                        exit_code,
+                        str(raw_path),
+                        " ".join(command),
+                        error_message,
+                        task_id
+                    )
+                )
+
+                await self._upsert_asset_and_report(
+                    db=db,
+                    task_id=task_id,
+                    plugin=plugin,
+                    plugin_id=plugin_id,
+                    target=target,
+                    status=final_status,
+                    output=output
+                )
 
             await self._broadcast(task_id, "status", final_status)
             await self._invalidate_cached_views()
@@ -249,7 +309,7 @@ class TaskExecutor:
             await db.log_audit(
                 "task_completed",
                 f"Task completed in {duration:.2f}s",
-                context={"task_id": task_id, "exit_code": exit_code},
+                context={"task_id": task_id, "exit_code": locals().get('exit_code', 0)},
                 task_id=task_id,
                 plugin_id=plugin_id
             )
@@ -257,7 +317,7 @@ class TaskExecutor:
             logger.info(f"Task {task_id} completed in {duration:.2f}s")
 
         except Exception as e:
-            logger.error(f"Task {task_id} failed: {e}")
+            logger.error(f"Task {task_id} failed: {e}", exc_info=True)
 
             # Update task as failed
             duration = (time.time() - start_time) if 'start_time' in locals() else 0
@@ -289,6 +349,16 @@ class TaskExecutor:
                 context={"task_id": task_id, "error": str(e)},
                 task_id=task_id
             )
+        finally:
+            # Cleanup: remove from running tasks and update DB if cancelled
+            self.running_tasks.pop(task_id, None)
+            
+            # Check if task was cancelled
+            if asyncio.current_task().cancelled():
+                await db.execute(
+                    "UPDATE tasks SET status = ?, completed_at = ? WHERE id = ? AND status = ?",
+                    (TaskStatus.CANCELLED.value, datetime.now().isoformat(), task_id, TaskStatus.RUNNING.value)
+                )
     
     async def _execute_command(
         self,
@@ -337,6 +407,16 @@ class TaskExecutor:
                 process.kill()
                 await process.wait()
                 return "".join(output_lines) + "\nTask timed out", -1
+
+            except asyncio.CancelledError:
+                # Handle task cancellation by killing the subprocess
+                logger.warning(f"Task {task_id} cancelled. Killing process {process.pid}")
+                try:
+                    process.kill()
+                    await process.wait()
+                except Exception as e:
+                    logger.error(f"Error killing process for cancelled task {task_id}: {e}")
+                raise
 
         except Exception as e:
             logger.error(f"Failed to execute command: {e}")
@@ -550,6 +630,109 @@ class TaskExecutor:
                 len(findings_data),
                 1 if target else 0,
                 1,
+            ),
+        )
+
+    async def _upsert_asset_and_report_from_scanner(self, db, task_id: str, scanner: Any, plugin_id: str, target: str, status: str, result: Dict[str, Any]):
+        """Persist modular scanner results into assets, findings, and reports."""
+        findings_data = result.get("findings", [])
+        
+        if target:
+            asset_id = f"asset:{target}"
+            asset_type = "domain" if "." in target and ":" not in target else "service"
+            
+            # Determine risk level based on max severity of findings
+            severity_priority = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
+            max_sev = "info"
+            for f in findings_data:
+                if severity_priority.get(f["severity"], 0) > severity_priority.get(max_sev, 0):
+                    max_sev = f["severity"]
+            
+            risk_level = "low"
+            if max_sev in ["critical", "high"]: risk_level = "high"
+            elif max_sev == "medium": risk_level = "medium"
+
+            await db.execute(
+                """
+                INSERT INTO assets (
+                    id, target, type, description, risk_level, status, last_scanned, 
+                    scan_count, updated_at, open_ports, technologies, services
+                ) VALUES (?, ?, ?, ?, ?, ?, (datetime('now')), 1, (datetime('now')), ?, ?, ?)
+                ON CONFLICT (target) DO UPDATE SET
+                    type = EXCLUDED.type,
+                    description = EXCLUDED.description,
+                    risk_level = EXCLUDED.risk_level,
+                    status = EXCLUDED.status,
+                    last_scanned = (datetime('now')),
+                    scan_count = assets.scan_count + 1,
+                    updated_at = (datetime('now')),
+                    open_ports = EXCLUDED.open_ports,
+                    technologies = EXCLUDED.technologies,
+                    services = EXCLUDED.services
+                """,
+                (
+                    asset_id,
+                    target,
+                    asset_type,
+                    f"Last scanned by {scanner.name}",
+                    risk_level,
+                    "active",
+                    json.dumps(result.get("open_ports", [])),
+                    json.dumps(result.get("technologies", [])),
+                    json.dumps(result.get("services", [])),
+                ),
+            )
+
+            # Insert findings
+            for finding in findings_data:
+                u_id = str(uuid.uuid4()).replace("-", "")
+                finding_id = f"finding:{task_id}:{u_id[:8]}"
+                await db.execute(
+                    """
+                    INSERT INTO findings (
+                        id, task_id, plugin_id, title, category, severity,
+                        target, description, remediation, proof, cvss, cve,
+                        metadata_json, discovered_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (datetime('now')))
+                    """,
+                    (
+                        finding_id,
+                        task_id,
+                        plugin_id,
+                        finding["title"],
+                        finding["category"],
+                        finding["severity"],
+                        target,
+                        finding["description"],
+                        finding.get("remediation", ""),
+                        finding.get("proof"),
+                        finding.get("cvss"),
+                        finding.get("cve"),
+                        json.dumps(finding.get("metadata", {})),
+                    )
+                )
+
+        # Create/Update report
+        await db.execute(
+            """
+            INSERT INTO reports (
+                id, task_id, name, type, generated_at, status, findings, assets, pages
+            ) VALUES (?, ?, ?, ?, (datetime('now')), ?, ?, ?, ?)
+            ON CONFLICT (id) DO UPDATE SET
+                status = EXCLUDED.status,
+                findings = EXCLUDED.findings,
+                assets = EXCLUDED.assets,
+                pages = EXCLUDED.pages
+            """,
+            (
+                f"report:{task_id}",
+                task_id,
+                f"{scanner.name} Report",
+                "professional" if status == TaskStatus.COMPLETED.value else "failed",
+                "ready" if status == TaskStatus.COMPLETED.value else "failed",
+                len(findings_data),
+                1 if target else 0,
+                2, # Professional reports are typically multi-page
             ),
         )
 

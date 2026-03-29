@@ -20,6 +20,7 @@ interface CatalogTool {
   disabledReason?: string
   isPlugin: boolean
   isQuickStart?: boolean
+  isProfessional?: boolean
   availability?: PluginListItem['availability']
 }
 
@@ -118,6 +119,7 @@ function mapPluginToCatalogTool(plugin: PluginListItem): CatalogTool {
     disabled: false,
     isPlugin: true,
     isQuickStart: pinnedTool?.isQuickStart,
+    isProfessional: ['port_scanner', 'web_scanner', 'recon_scanner'].includes(plugin.id),
     availability: plugin.availability,
   }
 }
@@ -342,6 +344,11 @@ export default function Scanner() {
                       >
                         {tool.riskLevel}_STRIKE
                       </div>
+                      {tool.isProfessional && (
+                        <div className="px-2 py-0.5 text-[8px] font-black uppercase tracking-widest italic border-2 border-rag-blue text-black bg-rag-blue shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                          PROFESSIONAL
+                        </div>
+                      )}
                       <span className="material-symbols-outlined text-silver/10 group-hover:text-silver-bright transition-colors duration-500">
                         {tool.presetCompatibility === 'quick-recon' ? 'bolt' : 'psychology'}
                       </span>

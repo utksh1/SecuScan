@@ -29,7 +29,7 @@ BLOCKED_TLDS = [".mil", ".gov"]
 
 def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
     """
-    Validate scan target address (IP, Hostname, or CIDR).
+    Validate scan target address (IP, Hostname, URL, or CIDR).
     
     Args:
         target: IP address, hostname, or network range to validate
@@ -39,17 +39,20 @@ def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
         Tuple of (is_valid, error_message)
     """
     target = target.strip()
+    if not target:
+        return False, "Target cannot be empty"
 
     # Try parsing as IP network (handles single IP and CIDR)
     try:
         net = ipaddress.ip_network(target, strict=False)
-        max_prefix = 32 if net.version == 4 else 128
-        if "/" in target and net.prefixlen != max_prefix:
-            return False, "CIDR ranges are not allowed as direct targets"
-
-        # Check blocked networks
+        
+        # Check blocked networks (Broadcast, Link-local, Multicast)
         if any(net.overlaps(blocked) for blocked in BLOCKED_NETWORKS):
             return False, "Target overlaps with blocked network range"
+
+        # Check for loopback even in non-safe mode if desired (usually allowed for local debugging)
+        if net.is_loopback and not settings.allow_loopback_scans:
+            return False, "Loopback scans are disabled in global settings"
 
         # Safe mode: only allow private IPs
         if safe_mode:
@@ -58,30 +61,28 @@ def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
                 for allowed in ALLOWED_PRIVATE
             )
             if not is_private:
-                return False, "Public IPs/networks not allowed in safe mode"
+                return False, "Public IPs/networks not allowed in safe mode (SecuScan Guardrail)"
 
         return True, ""
 
     except ValueError:
-        # Not an IP address or network, treat as hostname
+        # Not an IP address or network, treat as hostname/URL
         pass
 
-    # Strip protocol if present for hostname validation
+    # Handle URLs
     hostname_to_validate = target
     if target.startswith(("http://", "https://")):
-        # Remove protocol but keep the rest for hostname validation
-        # Actually, if it's a URL, we should probably allow more characters (like / for paths)
-        # But for 'target', we usually just want the base address.
-        hostname_to_validate = target.split("://", 1)[1].split("/", 1)[0]
+        # Extract host:port or host
+        hostname_to_validate = target.split("://", 1)[1].split("/", 1)[0].split(":", 1)[0]
 
-    # Validate hostname format
+    # Validate hostname format (RFC 1123)
     if not re.match(r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$', hostname_to_validate):
         return False, "Invalid hostname format"
 
     # Check blocked TLDs in safe mode
     if safe_mode:
         for tld in BLOCKED_TLDS:
-            if target.lower().endswith(tld):
+            if hostname_to_validate.lower().endswith(tld):
                 return False, f"Domains ending in {tld} are blocked in safe mode"
 
     return True, ""
