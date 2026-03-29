@@ -163,6 +163,9 @@ class TaskExecutor:
             plugin = plugin_manager.get_plugin(plugin_id)
             if not plugin:
                 raise ValueError(f"Plugin not found: {plugin_id}")
+
+            # Create pending records for visibility
+            await self._create_pending_records(db, task_id, plugin, target)
             
             command = plugin_manager.build_command(plugin_id, inputs)
 
@@ -201,6 +204,10 @@ class TaskExecutor:
 
             # Update task with results
             final_status = TaskStatus.COMPLETED.value if exit_code == 0 else TaskStatus.FAILED.value
+            error_message = None
+            if exit_code != 0:
+                error_message = f"Tool returned non-zero exit code {exit_code}. Check raw output for details."
+
             await db.execute(
                 """
                 UPDATE tasks SET
@@ -209,7 +216,8 @@ class TaskExecutor:
                     duration_seconds = ?,
                     exit_code = ?,
                     raw_output_path = ?,
-                    command_used = ?
+                    command_used = ?,
+                    error_message = ?
                 WHERE id = ?
                 """,
                 (
@@ -219,6 +227,7 @@ class TaskExecutor:
                     exit_code,
                     str(raw_path),
                     " ".join(command),
+                    error_message,
                     task_id
                 )
             )
@@ -251,17 +260,20 @@ class TaskExecutor:
             logger.error(f"Task {task_id} failed: {e}")
 
             # Update task as failed
+            duration = (time.time() - start_time) if 'start_time' in locals() else 0
             await db.execute(
                 """
                 UPDATE tasks SET
                     status = ?,
                     completed_at = ?,
+                    duration_seconds = ?,
                     error_message = ?
                 WHERE id = ?
                 """,
                 (
                     TaskStatus.FAILED.value,
                     datetime.now().isoformat(),
+                    duration,
                     str(e),
                     task_id
                 )
@@ -379,17 +391,15 @@ class TaskExecutor:
         db = await get_db()
         task_row = await db.fetchone(
             """
-            SELECT id, plugin_id, tool_name, target, status,
-                   created_at, started_at, completed_at, duration_seconds,
-                   inputs_json, preset
+            SELECT id, plugin_id, tool_name, target, status, created_at, started_at, completed_at, 
+                   duration_seconds, exit_code, error_message, preset
             FROM tasks WHERE id = ?
             """,
             (task_id,)
         )
-        
         if not task_row:
             return None
-        
+            
         return {
             "task_id": task_row["id"],
             "plugin_id": task_row["plugin_id"],
@@ -400,9 +410,42 @@ class TaskExecutor:
             "started_at": task_row["started_at"],
             "completed_at": task_row["completed_at"],
             "duration_seconds": task_row["duration_seconds"],
-            "inputs": json.loads(task_row["inputs_json"]) if task_row["inputs_json"] else {},
+            "exit_code": task_row["exit_code"],
+            "error_message": task_row["error_message"],
             "preset": task_row["preset"]
         }
+
+    async def _create_pending_records(self, db, task_id: str, plugin, target: str):
+        """Create placeholder records in assets and attack surface for real-time visibility."""
+        if not target:
+            return
+
+        asset_id = f"asset:{target}"
+        
+        # Upsert asset with 'scanning' status
+        await db.execute(
+            """
+            INSERT INTO assets (
+                id, target, type, description, risk_level, status, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, (datetime('now')))
+            ON CONFLICT (target) DO UPDATE SET
+                status = 'scanning',
+                updated_at = (datetime('now'))
+            """,
+            (
+                asset_id,
+                target,
+                "domain" if "." in target and ":" not in target else "service",
+                f"Scanning in progress by {plugin.name}...",
+                "low",
+                "scanning"
+            )
+        )
+
+        # Removed 'Active Scans' entry to prevent UI duplication as it's already shown in Task Activity.
+        pass
+        
+        await self._invalidate_cached_views()
 
     async def _upsert_asset_and_report(self, db, task_id: str, plugin, plugin_id: str, target: str, status: str, output: str = ""):
         """Persist derived asset, attack surface, and report records into SQLite."""
@@ -479,27 +522,9 @@ class TaskExecutor:
                     )
                 )
 
-            await db.execute(
-                """
-                INSERT INTO attack_surface_entries (
-                    id, asset_id, category, item, details, risk, source, last_seen
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, (datetime('now')))
-                ON CONFLICT (id) DO UPDATE SET
-                    details = EXCLUDED.details,
-                    risk = EXCLUDED.risk,
-                    source = EXCLUDED.source,
-                    last_seen = (datetime('now'))
-                """,
-                (
-                    f"surface:{task_id}",
-                    asset_id,
-                    "Scanned Targets",
-                    target,
-                    f"{plugin.name} executed with status {status}. Found {len(findings_data)} findings.",
-                    "medium" if any(f["severity"] in ["critical", "high"] for f in findings_data) else "info",
-                    plugin.name,
-                ),
-            )
+            # Removed 'Scanned Targets' entry to prevent UI duplication.
+            # Information is available in Task history and Asset ledger.
+            pass
 
         await db.execute(
             """

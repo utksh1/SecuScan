@@ -155,19 +155,17 @@ export default function Sidebar() {
 
             {/* Navigation Body */}
             <div className="flex-1 flex flex-col overflow-y-auto no-scrollbar py-4">
-                <NavItem to={routes.scans} icon="add_circle" label="New Scan" isExpanded={isExpanded} highlight />
+                <NavItem to={routes.toolkit} icon="add_circle" label="Toolkit" isExpanded={isExpanded} highlight />
 
                 <NavSection label="Monitor" isExpanded={isExpanded} />
                 <NavItem to={routes.dashboard} icon="monitoring" label="Dashboard" isExpanded={isExpanded} />
-                <NavItem to={routes.attackSurface} icon="radar" label="Surface" isExpanded={isExpanded} />
+                <NavItem to={routes.scans} icon="history" label="Scans" isExpanded={isExpanded} />
                 <NavItem to={routes.assets} icon="database" label="Assets" isExpanded={isExpanded} />
 
                 <NavSection label="Analyze" isExpanded={isExpanded} />
                 <NavItem to={routes.findings} icon="emergency_home" label="Findings" isExpanded={isExpanded} />
                 <NavItem to={routes.reports} icon="summarize" label="Reports" isExpanded={isExpanded} />
 
-                <NavSection label="Track" isExpanded={isExpanded} />
-                <NavItem to={routes.history} icon="history" label="Activity" isExpanded={isExpanded} />
             </div>
 
             {/* Bottom Actions */}

@@ -9,7 +9,8 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "noEmit": true
+    "noEmit": true,
+    "types": ["vitest/globals", "node"]
   }
 }
 

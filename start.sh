@@ -56,10 +56,10 @@ BACKEND_PID=$!
 # ── Frontend ───────────────────────────────────
 echo "🚀 Starting frontend on http://127.0.0.1:5173"
 cd "$ROOT_DIR/frontend"
-# Install dependencies if node_modules missing
-if [ ! -d "node_modules" ]; then
-  echo "   Installing frontend dependencies..."
-  npm install --silent
+# Install dependencies if node_modules missing or broken
+if [ ! -d "node_modules" ] || [ ! -f "node_modules/.bin/vite" ]; then
+  echo "   Installing/repairing frontend dependencies (npm install)..."
+  npm install
 fi
 npm run dev -- --host 127.0.0.1 --port 5173 &
 FRONTEND_PID=$!

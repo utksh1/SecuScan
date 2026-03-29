@@ -41,7 +41,7 @@ export function useShortcuts() {
                 switch (key) {
                     case 'd': navigate(routes.dashboard); break
                     case 's': navigate(routes.scans); break
-                    case 'h': navigate(routes.history); break
+                    case 'h': navigate(routes.scans); break
                     case 'f': navigate(routes.findings); break
                     case 'a': navigate(routes.assets); break
                     case 'r': navigate(routes.reports); break

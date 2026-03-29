@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getFindings } from '../api'
+import { formatLocaleDate } from '../utils/date'
 
 type Finding = {
   id: string
@@ -222,9 +223,9 @@ export default function Findings() {
                             <p className="text-[10px] font-mono text-silver/40 uppercase tracking-widest flex items-center gap-2">
                               <span className="material-symbols-outlined text-xs">target</span> {f.target}
                             </p>
-                            <p className="text-[10px] font-mono text-silver/40 uppercase tracking-widest flex items-center gap-2">
-                              <span className="material-symbols-outlined text-xs">event</span> {new Date(f.discovered_at).toLocaleDateString([], { timeZone: 'Asia/Kolkata' })}
-                            </p>
+                             <p className="text-[10px] font-mono text-silver/40 uppercase tracking-widest flex items-center gap-2">
+                               <span className="material-symbols-outlined text-xs">event</span> {formatLocaleDate(f.discovered_at)}
+                             </p>
                           </div>
                         </div>
 

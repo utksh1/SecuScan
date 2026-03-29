@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { API_BASE, getTaskResult, getTaskStatus, startTask } from '../api'
 import { routes, routePath } from '../routes'
+import { parseDateSafe, formatDateLong, formatLocaleTime } from '../utils/date'
 
 interface Task {
     task_id: string
@@ -15,6 +16,7 @@ interface Task {
     completed_at?: string
     duration_seconds?: number
     exit_code?: number
+    error_message?: string
     inputs?: Record<string, any>
     preset?: string
 }
@@ -37,22 +39,6 @@ interface TaskResult {
     errors?: Array<{ message: string }>
 }
 
-function parseDateSafe(rawValue?: string): Date | null {
-    if (!rawValue) return null
-    const raw = rawValue.trim()
-    if (!raw) return null
-    if (raw.toLowerCase() === 'now') return new Date()
-
-    const sqliteAsIso = raw.includes('T') ? raw : raw.replace(' ', 'T')
-    const hasTimezone = /(?:Z|[+-]\d{2}:\d{2})$/.test(sqliteAsIso)
-    const candidates = hasTimezone ? [sqliteAsIso, raw] : [`${sqliteAsIso}Z`, sqliteAsIso, raw]
-
-    for (const candidate of candidates) {
-        const d = new Date(candidate)
-        if (!Number.isNaN(d.getTime())) return d
-    }
-    return null
-}
 
 function formatToolLabel(tool?: string, pluginId?: string) {
     const normalized = (tool || '').trim()
@@ -207,28 +193,18 @@ export default function TaskDetails() {
     const tableRows = result?.structured?.rows || []
     const summaryItems = result?.summary || []
     const resultEntryCount = tableRows.length || findings.length
-    const formatDateLong = (dateStr: string) => {
-        const parsed = parseDateSafe(dateStr)
-        if (!parsed) return 'UNKNOWN_DATE'
-        return `${parsed.toLocaleString('en-US', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false,
-            timeZone: 'Asia/Kolkata',
-        })} IST`
-    }
     const toolLabel = formatToolLabel(task.tool, task.plugin_id)
     const startedTime = task.started_at
-        ? parseDateSafe(task.started_at)?.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) || '--:--'
+        ? formatLocaleTime(task.started_at, { hour: '2-digit', minute: '2-digit' })
         : '--:--'
     const completedTime = task.completed_at
-        ? parseDateSafe(task.completed_at)?.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' }) || '--:--'
+        ? formatLocaleTime(task.completed_at, { hour: '2-digit', minute: '2-digit' })
         : '--:--'
-    const durationLabel = task.duration_seconds
-        ? `${Math.floor(task.duration_seconds / 60)}M ${Math.floor(task.duration_seconds % 60)}S`
+    const isTerminal = ['completed', 'failed', 'cancelled'].includes(task.status)
+    const durationLabel = isTerminal
+        ? (task.duration_seconds 
+            ? `${Math.floor(task.duration_seconds / 60)}M ${Math.floor(task.duration_seconds % 60)}S`
+            : (task.status === 'completed' ? '0M 0S' : 'TERMINATED'))
         : 'ACTIVE'
     const severityCounts = findings.reduce((acc: Record<string, number>, finding: any) => {
         const key = (finding.severity || 'info').toLowerCase()
@@ -373,7 +349,7 @@ export default function TaskDetails() {
                 <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
                     <div className="flex items-start gap-5">
                     <button 
-                        onClick={() => navigate(routes.history)}
+                        onClick={() => navigate(routes.scans)}
                             className="bg-charcoal border border-white/10 p-3 text-silver-bright transition-colors hover:bg-white/[0.04]"
                     >
                         <span className="material-symbols-outlined">arrow_back</span>
@@ -386,9 +362,6 @@ export default function TaskDetails() {
                                 <span className={`px-3 py-1 text-[10px] uppercase tracking-[0.3em] border ${statusTone}`}>
                                     {task.status}
                                 </span>
-                                <span className="text-[10px] uppercase tracking-[0.26em] text-silver/50 font-mono">
-                                    Tool::{toolLabel}
-                                </span>
                             </div>
                             <h1 className="text-4xl md:text-6xl text-silver-bright uppercase tracking-tight leading-none italic font-black">
                                 Intel <span className="text-transparent" style={{ WebkitTextStroke: '1.5px var(--accent-silver-bright)' }}>Briefing</span>
@@ -397,11 +370,6 @@ export default function TaskDetails() {
                                 <p className="text-lg md:text-3xl font-black italic uppercase tracking-tight text-silver-bright break-all">
                                     {task.target}
                                 </p>
-                                <div className="flex flex-wrap gap-x-6 gap-y-2 text-[10px] font-mono uppercase tracking-[0.24em] text-silver/45">
-                                    <span>Init::{formatDateLong(task.created_at)}</span>
-                                    <span>Plugin::{task.plugin_id || 'N/A'}</span>
-                                    <span>Task::{task.task_id?.slice(0, 8) || 'UNKNOWN'}</span>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -438,43 +406,13 @@ export default function TaskDetails() {
                 </div>
             </header>
 
-            <section className="relative border border-white/8 bg-charcoal px-6 py-6 md:px-8 md:py-7 overflow-hidden">
-                <div className="absolute right-4 top-4 text-3xl md:text-5xl font-black italic uppercase text-white/[0.05] pointer-events-none">
-                    {toolLabel}
-                </div>
-                <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="space-y-4 max-w-3xl">
-                        <p className="text-[10px] uppercase tracking-[0.35em] text-silver/30 font-black italic">Subject_Enclave_Node</p>
-                        <div className="space-y-2">
-                            <p className="text-xl md:text-3xl font-black italic uppercase tracking-tight text-silver-bright break-all">
-                                {task.target}
-                            </p>
-                            <div className="flex flex-wrap gap-x-5 gap-y-2 text-[10px] font-mono uppercase tracking-[0.22em] text-silver/45">
-                                <span>Tool::{toolLabel}</span>
-                                <span>Plugin::{task.plugin_id || 'N/A'}</span>
-                                <span>Task::{task.task_id?.slice(0, 8) || 'UNKNOWN'}</span>
-                                <span>Init::{formatDateLong(task.created_at)}</span>
-                            </div>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-3">
-                            <span className={`px-3 py-1 text-[10px] uppercase tracking-[0.26em] border ${statusTone}`}>
-                                {task.status}
-                            </span>
-                            {Object.entries(severityCounts).slice(0, 3).map(([severity, count]) => (
-                                <span key={severity} className={`px-3 py-1 text-[10px] uppercase tracking-[0.22em] border ${severityTone(severity)}`}>
-                                    {severity}:{count}
-                                </span>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            </section>
+
 
             <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                 <DetailCard
-                    label={primaryDetailLabel.toUpperCase().replace(/ /g, '_')}
-                    value={primaryDetail}
-                    subValue={task.target !== primaryDetail ? `TARGET::${task.target}` : `PLUGIN::${task.plugin_id || 'N/A'}`}
+                    label="THREAT_LEVEL"
+                    value={dominantSeverity.toUpperCase()}
+                    subValue={`RISK_PROFILE::${dominantSeverity === 'critical' || dominantSeverity === 'high' ? 'ELEVATED' : 'MODERATE'}`}
                 />
                 <DetailCard
                     label="MISSION_START"
@@ -484,14 +422,35 @@ export default function TaskDetails() {
                 <DetailCard
                     label="SCAN_DURATION"
                     value={durationLabel}
-                    subValue={task.completed_at ? `FINISH::${completedTime}` : 'IN_PROGRESS'}
+                    subValue={task.completed_at ? `FINISH::${completedTime}` : (task.status === 'failed' ? 'ERROR_TERMINATED' : task.status === 'cancelled' ? 'USER_CANCELLED' : 'IN_PROGRESS')}
                 />
                 <DetailCard
-                    label={secondaryDetailLabel.toUpperCase().replace(/ /g, '_')}
-                    value={secondaryDetail}
-                    subValue={`FINDINGS::${String(result?.structured?.total_count || findings.length).padStart(2, '0')}`}
+                    label="TOTAL_FINDINGS"
+                    value={String(result?.structured?.total_count || findings.length).padStart(2, '0')}
+                    subValue={`ENGINE::${toolLabel}`}
                 />
             </section>
+
+            <AnimatePresence>
+                {task.status === 'failed' && task.error_message && (
+                    <motion.div 
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        className="bg-rag-red/10 border-l-4 border-rag-red p-6 space-y-3"
+                    >
+                        <div className="flex items-center gap-3 text-rag-red">
+                            <span className="material-symbols-outlined font-black">warning</span>
+                            <h3 className="text-xs font-black uppercase tracking-[0.3em] italic">Critical_Execution_Fault</h3>
+                        </div>
+                        <p className="text-sm font-mono text-silver/80 leading-relaxed max-w-4xl">
+                            {task.error_message}
+                        </p>
+                        <div className="pt-2">
+                             <span className="text-[9px] font-black text-silver/30 uppercase tracking-[0.2em] italic">Diagnostic_Code::EXEC_FAIL_{task.exit_code || 'ERR'}</span>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             <div className="border-b border-white/8">
                 <div className="flex flex-wrap gap-2">

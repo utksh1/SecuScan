@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import Scanner from '../Scanner'
+import Scanner from '../Toolkit'
 import { listPlugins } from '../../api'
 
 vi.mock('../../api', () => ({

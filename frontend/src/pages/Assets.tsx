@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, Variants } from 'framer-motion'
 import { getAssets, getFindings } from '../api'
 import { routes } from '../routes'
+import { formatLocaleDate } from '../utils/date'
 
 type Asset = {
   id: string
@@ -20,7 +21,7 @@ type Asset = {
 
 type Finding = { id: string; target: string; title: string; severity: string; discovered_at: string }
 
-const containerVariants = {
+const containerVariants: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -30,7 +31,7 @@ const containerVariants = {
   }
 }
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { opacity: 0, scale: 0.98, y: 10 },
   visible: { 
     opacity: 1, 
@@ -237,6 +238,12 @@ export default function Assets() {
                       <div className="w-2 h-2 bg-rag-green rounded-full animate-ping"></div>
                     </div>
                   )}
+                  {asset.status === 'scanning' && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] font-black text-rag-amber uppercase tracking-[0.2em] italic">Scanning...</span>
+                      <div className="w-2 h-2 bg-rag-amber rounded-full animate-pulse"></div>
+                    </div>
+                  )}
                 </div>
 
                 <h3 className="text-2xl font-black text-silver-bright uppercase tracking-tight mb-2 group-hover:text-rag-blue transition-colors">
@@ -340,7 +347,7 @@ export default function Assets() {
                         <div key={f.id} className="bg-charcoal p-6 border-2 border-silver-bright/5 hover:border-rag-red/30 transition-all group">
                           <div className="flex justify-between items-center mb-1">
                             <span className="text-[9px] font-mono text-rag-red">{f.severity.toUpperCase()} EXPOSURE</span>
-                            <span className="text-[8px] font-mono text-silver/20">{new Date(f.discovered_at).toLocaleDateString([], { timeZone: 'Asia/Kolkata' })}</span>
+                            <span className="text-[8px] font-mono text-silver/20">{formatLocaleDate(f.discovered_at)}</span>
                           </div>
                           <p className="text-sm font-black text-silver-bright uppercase tracking-tight group-hover:text-rag-red transition-colors italic">{f.title}</p>
                         </div>

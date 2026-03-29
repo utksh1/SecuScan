@@ -325,7 +325,7 @@ async def get_task_result(task_id: str):
         """
         SELECT id, plugin_id, tool_name, target, status,
                created_at, duration_seconds, structured_json,
-               raw_output_path, command_used, error_message
+               raw_output_path, command_used, error_message, exit_code
         FROM tasks WHERE id = ?
         """,
         (task_id,)
@@ -388,6 +388,8 @@ async def get_task_result(task_id: str):
         "raw_output": raw_output,
         "command_used": task_row["command_used"],
         "errors": [{"message": task_row["error_message"]}] if task_row["error_message"] else [],
+        "error_message": task_row["error_message"],
+        "exit_code": task_row["exit_code"],
         "metadata": {}
     }
 
@@ -448,10 +450,13 @@ async def get_dashboard_summary():
                              for item in findings)
 
         recent_findings: List[Dict] = findings[:5]
-        high_risk_assets = [item for item in assets if item.get("risk_level") in {"critical", "high"}]
+        # Filter out assets with 'scanning' status to avoid duplicate UI entries with Task Activity
+        active_assets_list = [item for item in assets if item.get("status") != "scanning"]
+        
+        high_risk_assets = [item for item in active_assets_list if item.get("risk_level") in {"critical", "high"}]
         has_real_risk = len(high_risk_assets) > 0
         if not has_real_risk:
-            high_risk_assets = assets[:5]
+            high_risk_assets = active_assets_list[:5]
 
         return {
             "total_assets": len(assets),
@@ -503,7 +508,7 @@ async def get_assets():
 
     async def build():
         db = await get_db()
-        rows = await db.fetchall("SELECT * FROM assets ORDER BY updated_at DESC")
+        rows = await db.fetchall("SELECT * FROM assets WHERE status != 'scanning' ORDER BY updated_at DESC")
         return {"assets": parse_json_fields(rows, ["open_ports", "technologies", "services", "metadata_json"])}
 
     return await get_or_set_cached("assets:list", build)
@@ -558,7 +563,7 @@ async def list_tasks(
     db = await get_db()
 
     # Build query
-    query = "SELECT id, plugin_id, tool_name, target, status, created_at, duration_seconds, inputs_json, preset FROM tasks"
+    query = "SELECT id, plugin_id, tool_name, target, status, created_at, duration_seconds, inputs_json, preset, error_message, exit_code FROM tasks"
     params = []
 
     where_clauses = []

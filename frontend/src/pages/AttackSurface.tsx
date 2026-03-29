@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { getAttackSurface, getDashboardSummary, getFindings, getAssets } from '../api'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, Variants } from 'framer-motion'
+import { formatLocaleDate, formatLocaleTime, getTimeZoneAbbreviation } from '../utils/date'
 
 type Entry = {
   id: string
@@ -43,7 +44,7 @@ type FindingsResponse = {
 const RISK_LEVELS: Severity[] = ['critical', 'high', 'medium', 'low', 'info']
 const RISK_ORDER: Record<Severity, number> = { critical: 5, high: 4, medium: 3, low: 2, info: 1 }
 
-const containerVariants = {
+const containerVariants: Variants = {
     hidden: { opacity: 0 },
     visible: {
         opacity: 1,
@@ -53,12 +54,12 @@ const containerVariants = {
     },
 }
 
-const itemVariants = {
+const itemVariants: Variants = {
     hidden: { opacity: 0, y: 20 },
     visible: {
         opacity: 1,
         y: 0,
-        transition: { type: 'spring', stiffness: 200, damping: 25 }
+        transition: { type: 'spring' as const, stiffness: 200, damping: 25 }
     },
 }
 
@@ -316,9 +317,10 @@ export default function AttackSurface() {
                                                             <span className={`px-2 py-0.5 text-[9px] font-black uppercase italic border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
                                                                 entry.risk === 'critical' ? 'bg-rag-red text-black' :
                                                                 entry.risk === 'high' ? 'bg-rag-amber text-black' :
+                                                                entry.category === 'Scanning...' ? 'bg-rag-amber/20 text-rag-amber border-rag-amber/40 animate-pulse' :
                                                                 'bg-charcoal-dark text-silver-bright/40'
                                                             }`}>
-                                                                {entry.risk}
+                                                                {entry.category === 'Scanning...' ? 'SCANNING' : entry.risk}
                                                             </span>
                                                             <span className="text-[10px] font-mono text-silver/20 uppercase font-black italic">SOURCE::{entry.source}</span>
                                                         </div>
@@ -334,7 +336,7 @@ export default function AttackSurface() {
                                                        <div className="text-right">
                                                           <p className="text-[8px] font-black uppercase text-silver/20 tracking-[0.3em] mb-1 italic">LAST_DETECTED</p>
                                                           <p className="text-[10px] font-mono text-silver-bright uppercase font-black">
-                                                            {new Date(entry.last_seen).toLocaleDateString([], { timeZone: 'Asia/Kolkata' })} // {new Date(entry.last_seen).toLocaleTimeString([], { hour12: false, timeZone: 'Asia/Kolkata' })} IST
+                                                            {formatLocaleDate(entry.last_seen)} // {formatLocaleTime(entry.last_seen, { hour12: false })} {getTimeZoneAbbreviation()}
                                                           </p>
                                                        </div>
                                                        <button className="bg-charcoal-dark border-4 border-black p-2 text-silver/20 group-hover:text-silver-bright group-hover:bg-black transition-all">

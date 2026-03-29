@@ -1,18 +1,17 @@
 export const routes = {
   dashboard: '/',
   assets: '/assets',
-  scans: '/scans',
-  scanTool: '/scans/:toolId',
+  toolkit: '/toolkit',
+  scanTool: '/toolkit/:toolId',
   findings: '/findings',
-  attackSurface: '/attack-surface',
+  scans: '/scans',
   reports: '/reports',
   settings: '/settings',
-  history: '/history',
   task: '/task/:taskId',
 } as const
 
 export const routePath = {
-  scanTool: (toolId: string) => `${routes.scans}/${encodeURIComponent(toolId)}`,
+  scanTool: (toolId: string) => `${routes.toolkit}/${encodeURIComponent(toolId)}`,
   task: (taskId: string) => `/task/${encodeURIComponent(taskId)}`,
 } as const
 

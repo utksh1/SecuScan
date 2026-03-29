@@ -97,6 +97,8 @@ class TaskResponse(BaseModel):
     duration_seconds: Optional[float] = None
     inputs: Optional[Dict[str, Any]] = None
     preset: Optional[str] = None
+    error_message: Optional[str] = None
+    exit_code: Optional[int] = None
 
 
 class TaskResult(BaseModel):
@@ -116,6 +118,8 @@ class TaskResult(BaseModel):
     raw_output_excerpt: Optional[str] = None
     
     errors: List[Dict[str, Any]] = []
+    error_message: Optional[str] = None
+    exit_code: Optional[int] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
