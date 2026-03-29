@@ -27,16 +27,27 @@ def parse(output: str) -> Dict[str, Any]:
     # Nikto JSON structure: {"vulnerabilities": [...]}
     vulns = data.get("vulnerabilities", [])
     for vuln in vulns:
+        title = vuln.get("msg", "Nikto Finding")
+        url = vuln.get("url")
+        method = vuln.get("method")
+        
+        proof = None
+        if url and method:
+            proof = f"{method} {url}"
+        elif url:
+            proof = f"URL: {url}"
+            
         findings.append({
-            "title": vuln.get("msg", "Nikto Finding"),
+            "title": title,
             "category": "Web Vulnerability",
-            "severity": "medium", # Nikto doesn't always provide severity, defaulting to medium
+            "severity": "medium", # Nikto doesn't provide explicit severity in JSON
             "description": f"OSVDB ID: {vuln.get('osvdb', 'N/A')}. {vuln.get('msg')}",
-            "remediation": "Update the affected software or configuration.",
+            "remediation": "Review the identified security misconfiguration and apply recommended hardening.",
+            "proof": proof,
             "metadata": {
                 "osvdb": vuln.get("osvdb"),
-                "url": vuln.get("url"),
-                "method": vuln.get("method")
+                "url": url,
+                "method": method
             }
         })
             

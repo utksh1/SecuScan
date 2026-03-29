@@ -4,6 +4,18 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { API_BASE, getTaskResult, getTaskStatus, startTask } from '../api'
 import { routes, routePath } from '../routes'
 import { parseDateSafe, formatDateLong, formatLocaleTime } from '../utils/date'
+import {
+    PieChart,
+    Pie,
+    Cell,
+    ResponsiveContainer,
+    Tooltip as RechartsTooltip,
+    BarChart,
+    Bar,
+    XAxis,
+    YAxis,
+    CartesianGrid
+} from 'recharts'
 
 interface Task {
     task_id: string
@@ -21,19 +33,37 @@ interface Task {
     preset?: string
 }
 
+interface Finding {
+    id?: string
+    title: string
+    category: string
+    severity: string
+    target: string
+    description: string
+    remediation?: string
+    cvss?: number
+    cve?: string
+    proof?: string
+    discovered_at?: string
+    metadata?: Record<string, any>
+}
+
 interface TaskResult {
+    task_id: string
+    plugin_id: string
+    tool: string
+    target: string
+    timestamp: string
+    duration_seconds?: number
+    status: string
     summary?: string[]
     severity_counts?: Record<string, number>
+    findings?: Finding[]
     structured?: {
-        findings?: Array<{
-            severity: string
-            title: string
-            description?: string
-            [key: string]: any
-        }>
+        rows?: Array<Record<string, any>>
         [key: string]: any
     }
-    raw_output_excerpt?: string
+    raw_output_path?: string
     raw_output?: string
     command_used?: string
     errors?: Array<{ message: string }>
@@ -73,9 +103,106 @@ export default function TaskDetails() {
     const [activeTab, setActiveTab] = useState<'summary' | 'results' | 'parameters' | 'raw'>('summary')
     const [expandedFindingRows, setExpandedFindingRows] = useState<Record<number, boolean>>({})
     const [expandedDiscoveryRows, setExpandedDiscoveryRows] = useState<Record<number, boolean>>({})
+    const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null)
     const [rawSearch, setRawSearch] = useState('')
     const [wrapRawOutput, setWrapRawOutput] = useState(true)
     const [copiedRawOutput, setCopiedRawOutput] = useState(false)
+
+    const FindingDrawer = ({ finding, onClose }: { finding: Finding, onClose: () => void }) => {
+        if (!finding) return null
+        const severityColor = severityTone(finding.severity).split(' ')[0]
+        
+        return (
+            <motion.div
+                initial={{ x: '100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '100%' }}
+                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                className="fixed top-0 right-0 h-full w-[100%] md:w-[600px] bg-charcoal-dark border-l border-white/10 shadow-[-10px_0px_30px_rgba(0,0,0,0.5)] z-[100] overflow-y-auto"
+            >
+                <div className="sticky top-0 bg-charcoal-dark/95 backdrop-blur border-b border-white/10 px-8 py-6 flex items-center justify-between z-10">
+                    <div className="space-y-1">
+                        <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-2 py-0.5 border ${severityTone(finding.severity)}`}>
+                            {finding.severity}
+                        </span>
+                        <h2 className="text-xl font-black text-silver-bright italic uppercase tracking-tight">{finding.title}</h2>
+                    </div>
+                    <button 
+                        onClick={onClose}
+                        className="p-2 hover:bg-white/5 transition-colors text-silver/40 hover:text-silver-bright"
+                    >
+                        <span className="material-symbols-outlined">close</span>
+                    </button>
+                </div>
+
+                <div className="p-8 space-y-10">
+                    <div className="space-y-4">
+                        <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Description</h3>
+                        <p className="text-sm leading-8 text-silver/85 whitespace-pre-wrap">{finding.description}</p>
+                    </div>
+
+                    {finding.proof && (
+                        <div className="space-y-4">
+                            <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Evidence / Proof</h3>
+                            <pre className="bg-black/40 border border-white/5 p-5 text-[11px] font-mono text-rag-blue/90 whitespace-pre-wrap break-words leading-6">
+                                {finding.proof}
+                            </pre>
+                        </div>
+                    )}
+
+                    {finding.remediation && (
+                        <div className="space-y-4">
+                            <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Remediation Guidance</h3>
+                            <div className="bg-rag-green/5 border border-rag-green/20 p-5">
+                                <p className="text-sm leading-8 text-rag-green/90">{finding.remediation}</p>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-4">
+                            <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Category</h3>
+                            <p className="text-sm font-black text-silver-bright uppercase italic">{finding.category}</p>
+                        </div>
+                        {finding.cvss && (
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">CVSS Score</h3>
+                                <p className={`text-sm font-black italic ${finding.cvss >= 7 ? 'text-rag-red' : finding.cvss >= 4 ? 'text-rag-amber' : 'text-rag-blue'}`}>
+                                    {finding.cvss.toFixed(1)}
+                                </p>
+                            </div>
+                        )}
+                        {finding.cve && (
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">CVE Identifiers</h3>
+                                <p className="text-sm font-mono text-rag-blue/80 underline cursor-pointer">{finding.cve}</p>
+                            </div>
+                        )}
+                        <div className="space-y-4">
+                            <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.36em] pb-2 border-b border-white/5">Detected At</h3>
+                            <p className="text-xs text-silver/60 font-mono italic">
+                                {finding.discovered_at ? formatDateLong(finding.discovered_at) : formatDateLong(task?.completed_at || '')}
+                            </p>
+                        </div>
+                    </div>
+
+                    {Object.keys(finding.metadata || {}).length > 0 && (
+                        <div className="space-y-4">
+                            <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Technical Attributes</h3>
+                            <div className="grid grid-cols-1 gap-3">
+                                {Object.entries(finding.metadata || {}).map(([key, val]) => (
+                                    <div key={key} className="flex justify-between items-start text-[11px] border-b border-white/[0.03] pb-2">
+                                        <span className="text-silver/40 uppercase tracking-wider">{formatKeyLabel(key)}</span>
+                                        <span className="text-silver/70 font-mono break-all text-right max-w-[240px]">{formatValue(val)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </motion.div>
+        )
+    }
 
     useEffect(() => {
         loadTask()
@@ -85,7 +212,7 @@ export default function TaskDetails() {
         es.addEventListener('status', (e) => {
             try {
                 const data = JSON.parse(e.data)
-                setTask(prev => prev ? { ...prev, status: data.status } : null)
+                setTask((prev: Task | null) => prev ? { ...prev, status: data.status } : null)
                 if (['completed', 'failed', 'cancelled'].includes(data.status)) {
                     es.close()
                     loadTask()
@@ -127,8 +254,6 @@ export default function TaskDetails() {
                 // Use the full output if available
                 if (resultData.raw_output) {
                     setRawOutput(resultData.raw_output)
-                } else if (resultData.raw_output_excerpt) {
-                    setRawOutput(resultData.raw_output_excerpt)
                 }
             }
         } catch (err) {
@@ -231,9 +356,9 @@ export default function TaskDetails() {
             .replace(/\u001b\[[0-9;]*m/g, '')
             .replace(/\[[0-9;]*m/g, '')
             .trim()
-    const rawLines = (rawOutput || result?.raw_output_excerpt || '').split('\n')
+    const rawLines = (rawOutput || result?.raw_output || '').split('\n')
     const filteredRawLines = rawSearch
-        ? rawLines.filter(line => line.toLowerCase().includes(rawSearch.toLowerCase()))
+        ? rawLines.filter((line: string) => line.toLowerCase().includes(rawSearch.toLowerCase()))
         : rawLines
 
     const findInputValue = (...keys: string[]) => {
@@ -318,7 +443,7 @@ export default function TaskDetails() {
 
     const copyRaw = async () => {
         try {
-            await navigator.clipboard.writeText(rawOutput || result?.raw_output_excerpt || '')
+            await navigator.clipboard.writeText(rawOutput || result?.raw_output || '')
             setCopiedRawOutput(true)
             window.setTimeout(() => setCopiedRawOutput(false), 1500)
         } catch (err) {
@@ -485,100 +610,107 @@ export default function TaskDetails() {
                                 <motion.div variants={itemVariants} className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.5fr)_420px] gap-6">
                                     <section className="border border-white/8 bg-charcoal p-6">
                                         <div className="flex items-center gap-4 mb-5">
-                                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Executive Summary</h3>
+                                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Risk Distribution</h3>
                                             <div className="h-px flex-1 bg-white/8" />
                                         </div>
-                                        <div className="space-y-5">
-                                            <div className="border border-white/6 bg-black/20 px-5 py-5">
-                                                <p className="text-[10px] uppercase tracking-[0.24em] text-silver/35 font-black mb-3">Assessment</p>
-                                                <p className="text-base md:text-lg leading-8 text-silver/85 italic">
-                                                    {`The security assessment for ${task.target} has concluded with ${String(result?.structured?.total_count || findings.length)} significant observations. The risk profile is currently influenced by ${dominantSeverity.toUpperCase()} priority findings.`}
-                                                </p>
-                                            </div>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                {executiveBullets.map((item, index) => (
-                                                    <div key={index} className="border border-white/6 bg-black/20 px-4 py-4 flex gap-4">
-                                                        <span className="text-rag-blue font-mono text-[10px] uppercase tracking-[0.24em] pt-1">
-                                                            {String(index + 1).padStart(2, '0')}
-                                                        </span>
-                                                        <p className="text-sm leading-7 text-silver/78">{item}</p>
-                                                    </div>
-                                                ))}
-                                            </div>
+                                        <div className="h-[300px] w-full mt-4">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <BarChart 
+                                                    data={orderedSeverities.map(s => ({ 
+                                                        name: s.toUpperCase(), 
+                                                        count: severityCounts[s] || 0,
+                                                        color: s === 'critical' ? '#ff3e3e' : s === 'high' ? '#ff9500' : s === 'medium' ? '#0070f3' : s === 'low' ? '#00d1b2' : '#888888'
+                                                    }))}
+                                                    margin={{ top: 20, right: 30, left: 0, bottom: 0 }}
+                                                >
+                                                    <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
+                                                    <XAxis 
+                                                        dataKey="name" 
+                                                        axisLine={false} 
+                                                        tickLine={false} 
+                                                        tick={{ fill: '#ffffff40', fontSize: 10, fontWeight: 900 }} 
+                                                        dy={10}
+                                                    />
+                                                    <YAxis hide />
+                                                    <RechartsTooltip 
+                                                        cursor={{ fill: 'white', opacity: 0.05 }}
+                                                        contentStyle={{ backgroundColor: '#111', border: '1px solid #333', borderRadius: 0 }}
+                                                    />
+                                                    <Bar dataKey="count" radius={[2, 2, 0, 0]}>
+                                                        {orderedSeverities.map((s, index) => (
+                                                            <Cell 
+                                                                key={`cell-${index}`} 
+                                                                fill={s === 'critical' ? '#ff3e3e' : s === 'high' ? '#ff9500' : s === 'medium' ? '#0070f3' : s === 'low' ? '#00d1b2' : '#888888'} 
+                                                                fillOpacity={0.8}
+                                                            />
+                                                        ))}
+                                                    </Bar>
+                                                </BarChart>
+                                            </ResponsiveContainer>
                                         </div>
                                     </section>
 
                                     <section className="border border-white/8 bg-charcoal p-6">
                                         <div className="flex items-center gap-4 mb-5">
-                                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Mission Snapshot</h3>
+                                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Severity Ratio</h3>
                                             <div className="h-px flex-1 bg-white/8" />
                                         </div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="border border-white/6 bg-black/20 px-4 py-4">
-                                                <p className="text-[10px] uppercase tracking-[0.22em] text-silver/35 font-black mb-2">Target</p>
-                                                <p className="text-sm text-silver-bright font-black break-all">{task.target}</p>
-                                            </div>
-                                            <div className="border border-white/6 bg-black/20 px-4 py-4">
-                                                <p className="text-[10px] uppercase tracking-[0.22em] text-silver/35 font-black mb-2">Tool</p>
-                                                <p className="text-sm text-silver-bright font-black break-words">{toolLabel}</p>
-                                            </div>
-                                            <div className="border border-white/6 bg-black/20 px-4 py-4">
-                                                <p className="text-[10px] uppercase tracking-[0.22em] text-silver/35 font-black mb-2">Top Severity</p>
-                                                <p className={`text-2xl font-black italic ${severityTone(dominantSeverity).split(' ')[0]}`}>{dominantSeverity.toUpperCase()}</p>
-                                            </div>
-                                            <div className="border border-white/6 bg-black/20 px-4 py-4">
-                                                <p className="text-[10px] uppercase tracking-[0.22em] text-silver/35 font-black mb-2">Findings</p>
-                                                <p className="text-2xl font-black italic text-silver-bright">{String(result?.structured?.total_count || findings.length).padStart(2, '0')}</p>
-                                            </div>
+                                        <div className="h-[300px] w-full flex items-center justify-center">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <PieChart>
+                                                    <Pie
+                                                        data={orderedSeverities
+                                                            .map(s => ({ name: s, value: severityCounts[s] || 0 }))
+                                                            .filter(d => d.value > 0)}
+                                                        innerRadius={60}
+                                                        outerRadius={80}
+                                                        paddingAngle={5}
+                                                        dataKey="value"
+                                                    >
+                                                        {orderedSeverities.map((s, index) => (
+                                                            <Cell 
+                                                                key={`cell-${index}`} 
+                                                                fill={s === 'critical' ? '#ff3e3e' : s === 'high' ? '#ff9500' : s === 'medium' ? '#0070f3' : s === 'low' ? '#00d1b2' : '#888888'} 
+                                                            />
+                                                        ))}
+                                                    </Pie>
+                                                    <RechartsTooltip/>
+                                                </PieChart>
+                                            </ResponsiveContainer>
                                         </div>
                                     </section>
-                                </motion.div>
-
-                                <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
-                                    {orderedSeverities.map(level => (
-                                        <div key={level} className={`border px-4 py-4 ${severityTone(level)}`}>
-                                            <p className="text-[10px] uppercase tracking-[0.26em] font-black mb-2">{level}</p>
-                                            <p className="text-3xl font-black italic">{severityCounts[level] || 0}</p>
-                                        </div>
-                                    ))}
                                 </motion.div>
 
                                 <motion.div variants={itemVariants} className="border border-white/8 bg-charcoal p-6">
                                     <div className="flex items-center gap-4 mb-5">
                                         <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Priority Findings</h3>
                                         <div className="h-px flex-1 bg-white/8" />
-                                        <span className="text-[10px] uppercase tracking-[0.24em] text-silver/40">{previewFindings.length} Previewed</span>
+                                        <span className="text-[10px] uppercase tracking-[0.24em] text-silver/40">{previewFindings.length} Top Hits</span>
                                     </div>
                                     {previewFindings.length > 0 ? (
-                                        <div className="overflow-hidden border border-white/6 bg-black/20">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             {previewFindings.map((f: any, idx: number) => (
-                                                <div key={idx} className="grid grid-cols-1 md:grid-cols-[84px_minmax(0,1fr)_120px] gap-4 px-4 py-4 border-b border-white/6 last:border-0 hover:bg-white/[0.03]">
-                                                    <div className="text-[10px] font-mono uppercase tracking-[0.24em] text-rag-blue pt-1">
-                                                        #{idx.toString().padStart(3, '0')}
-                                                    </div>
-                                                    <div className="space-y-2 min-w-0">
-                                                        <h4 className="break-words text-sm md:text-base font-black text-silver-bright uppercase tracking-tight italic">
-                                                            {stripAnsi(f.title)}
-                                                        </h4>
-                                                        <p className="max-w-full overflow-hidden break-words whitespace-pre-wrap text-sm leading-6 text-silver/62">
-                                                            {stripAnsi(f.description) || 'No description provided.'}
-                                                        </p>
-                                                    </div>
-                                                    <div className="md:text-right">
-                                                        <span className={`inline-flex px-3 py-1 text-[10px] font-black uppercase italic border ${severityTone(f.severity)}`}>
-                                                            {f.severity || 'info'}
+                                                <div 
+                                                    key={idx} 
+                                                    onClick={() => setSelectedFinding(f)}
+                                                    className="border border-white/6 bg-black/20 p-5 hover:bg-white/[0.04] cursor-pointer transition-all group relative overflow-hidden"
+                                                >
+                                                    <div className={`absolute top-0 left-0 w-1 h-full ${
+                                                        f.severity === 'critical' ? 'bg-rag-red' : f.severity === 'high' ? 'bg-rag-amber' : 'bg-rag-blue'
+                                                    }`} />
+                                                    <div className="flex justify-between items-start mb-3">
+                                                        <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border ${severityTone(f.severity)}`}>
+                                                            {f.severity}
                                                         </span>
+                                                        <span className="text-[10px] font-mono text-silver/20 group-hover:text-rag-blue transition-colors">#{idx.toString().padStart(3, '0')}</span>
                                                     </div>
+                                                    <h4 className="text-sm font-black text-silver-bright uppercase italic mb-2 line-clamp-1">{stripAnsi(f.title)}</h4>
+                                                    <p className="text-xs text-silver/50 line-clamp-2 leading-relaxed">{stripAnsi(f.description)}</p>
                                                 </div>
                                             ))}
-                                            {findings.length > previewFindings.length && (
-                                                <div className="px-4 py-3 border-t border-white/6 text-[10px] uppercase tracking-[0.22em] text-silver/40">
-                                                    Open the `Results` tab to inspect all {findings.length} findings.
-                                                </div>
-                                            )}
                                         </div>
                                     ) : (
-                                        <p className="text-sm text-silver/55 italic">No structured findings were returned for this task.</p>
+                                        <p className="text-sm text-silver/55 italic">No findings identified for this target profile.</p>
                                     )}
                                 </motion.div>
                             </motion.section>
@@ -655,15 +787,14 @@ export default function TaskDetails() {
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {findings.map((f: any, idx: number) => {
-                                                        const isExpanded = expandedFindingRows[idx];
+                                                    {findings.map((f: Finding, idx: number) => {
                                                         const description = stripAnsi(f.description) || 'No description provided.';
-                                                        const isLong = description.length > 200;
                                                         
                                                         return (
                                                             <tr
                                                                 key={idx}
-                                                                className="border-b border-white/5 last:border-0 hover:bg-white/[0.03] transition-colors group"
+                                                                onClick={() => setSelectedFinding(f)}
+                                                                className="border-b border-white/5 last:border-0 hover:bg-white/[0.03] transition-colors group cursor-pointer"
                                                             >
                                                                 <td className="px-4 py-6 align-top text-[10px] font-mono uppercase tracking-[0.24em] text-rag-blue/80 font-bold">
                                                                     #{idx.toString().padStart(3, '0')}
@@ -679,21 +810,8 @@ export default function TaskDetails() {
                                                                     </span>
                                                                 </td>
                                                                 <td className="px-4 py-6 align-top text-xs md:text-sm text-silver/70 leading-relaxed">
-                                                                    <div className="space-y-3">
-                                                                        <div className={`${!isExpanded && isLong ? 'line-clamp-3' : ''} break-words whitespace-pre-wrap`}>
-                                                                            {description}
-                                                                        </div>
-                                                                        {isLong && (
-                                                                            <button
-                                                                                onClick={() => toggleFindingRow(idx)}
-                                                                                className="flex items-center gap-1.5 text-[9px] uppercase tracking-[0.2em] text-rag-blue font-black hover:text-silver-bright transition-colors"
-                                                                            >
-                                                                                <span className="material-symbols-outlined text-[14px]">
-                                                                                    {isExpanded ? 'unfold_less' : 'unfold_more'}
-                                                                                </span>
-                                                                                {isExpanded ? 'Collapse_Details' : 'Expand_Details'}
-                                                                            </button>
-                                                                        )}
+                                                                    <div className="line-clamp-2 break-words whitespace-pre-wrap">
+                                                                        {description}
                                                                     </div>
                                                                 </td>
                                                             </tr>
@@ -867,6 +985,21 @@ export default function TaskDetails() {
                     {[1,2,3,4].map(i => <div key={i} className="w-20 h-1 bg-silver/20"></div>)}
                 </div>
             </footer>
+
+            <AnimatePresence>
+                {selectedFinding && (
+                    <>
+                        <motion.div 
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setSelectedFinding(null)}
+                            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[90]"
+                        />
+                        <FindingDrawer finding={selectedFinding as Finding} onClose={() => setSelectedFinding(null)} />
+                    </>
+                )}
+            </AnimatePresence>
         </div>
     )
 }

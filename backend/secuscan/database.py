@@ -118,6 +118,7 @@ class Database:
                 target TEXT NOT NULL,
                 description TEXT NOT NULL,
                 remediation TEXT NOT NULL DEFAULT '',
+                proof TEXT,
                 cvss REAL,
                 cve TEXT,
                 discovered_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
@@ -213,6 +214,16 @@ class Database:
                     print(f"Added missing column {col_name} to tasks table.")
                 except Exception as e:
                     print(f"Failed to add column {col_name}: {e}")
+
+        # Findings table migration
+        findings_columns = await self.fetchall("PRAGMA table_info(findings)")
+        existing_finding_cols = {col["name"] for col in findings_columns}
+        if "proof" not in existing_finding_cols:
+            try:
+                await self.execute("ALTER TABLE findings ADD COLUMN proof TEXT")
+                print("Added missing column 'proof' to findings table.")
+            except Exception as e:
+                print(f"Failed to add 'proof' to findings: {e}")
 
     async def execute(self, query: str, params: tuple = ()):
         """Execute a write query."""

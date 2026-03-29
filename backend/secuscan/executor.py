@@ -505,8 +505,9 @@ class TaskExecutor:
                     """
                     INSERT INTO findings (
                         id, task_id, plugin_id, title, category, severity,
-                        target, description, remediation, metadata_json, discovered_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (datetime('now')))
+                        target, description, remediation, proof, cvss, cve,
+                        metadata_json, discovered_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (datetime('now')))
                     """,
                     (
                         finding_id,
@@ -518,6 +519,9 @@ class TaskExecutor:
                         target,
                         finding["description"],
                         finding.get("remediation", ""),
+                        finding.get("proof"),
+                        finding.get("cvss"),
+                        finding.get("cve"),
                         json.dumps(finding.get("metadata", {})),
                     )
                 )

@@ -383,6 +383,7 @@ async def get_task_result(task_id: str):
         "status": task_row["status"],
         "summary": summary,
         "severity_counts": severity_counts,
+        "findings": findings,
         "structured": structured,
         "raw_output_path": task_row["raw_output_path"],
         "raw_output": raw_output,
@@ -645,4 +646,48 @@ async def get_settings():
             "safe_mode_default": settings.safe_mode_default,
             "allowed_networks": settings.allowed_networks
         }
+    }
+
+
+@router.get("/finding/{finding_id}")
+async def get_finding_details(finding_id: str):
+    """Get detailed information for a specific finding"""
+    db = await get_db()
+    
+    finding_row = await db.fetchone(
+        """
+        SELECT f.*, t.tool_name, t.target as task_target
+        FROM findings f
+        JOIN tasks t ON f.task_id = t.id
+        WHERE f.id = ?
+        """,
+        (finding_id,)
+    )
+    
+    if not finding_row:
+        raise HTTPException(status_code=404, detail="Finding not found")
+        
+    metadata = {}
+    if finding_row["metadata_json"]:
+        try:
+            metadata = json.loads(finding_row["metadata_json"])
+        except json.JSONDecodeError:
+            metadata = {}
+            
+    return {
+        "id": finding_row["id"],
+        "task_id": finding_row["task_id"],
+        "plugin_id": finding_row["plugin_id"],
+        "tool": finding_row["tool_name"],
+        "title": finding_row["title"],
+        "category": finding_row["category"],
+        "severity": finding_row["severity"],
+        "target": finding_row["target"],
+        "description": finding_row["description"],
+        "remediation": finding_row["remediation"],
+        "proof": finding_row["proof"],
+        "cvss": finding_row["cvss"],
+        "cve": finding_row["cve"],
+        "discovered_at": finding_row["discovered_at"],
+        "metadata": metadata
     }
