@@ -161,6 +161,12 @@ class TaskExecutor:
             # Build command
             plugin_manager = get_plugin_manager()
             plugin = plugin_manager.get_plugin(plugin_id)
+            if not plugin:
+                raise ValueError(f"Plugin not found: {plugin_id}")
+
+            # Create pending records for visibility
+            await self._create_pending_records(db, task_id, plugin, target)
+            
             command = plugin_manager.build_command(plugin_id, inputs)
 
             if not command:
@@ -198,6 +204,10 @@ class TaskExecutor:
 
             # Update task with results
             final_status = TaskStatus.COMPLETED.value if exit_code == 0 else TaskStatus.FAILED.value
+            error_message = None
+            if exit_code != 0:
+                error_message = f"Tool returned non-zero exit code {exit_code}. Check raw output for details."
+
             await db.execute(
                 """
                 UPDATE tasks SET
@@ -205,7 +215,9 @@ class TaskExecutor:
                     completed_at = ?,
                     duration_seconds = ?,
                     exit_code = ?,
-                    raw_output_path = ?
+                    raw_output_path = ?,
+                    command_used = ?,
+                    error_message = ?
                 WHERE id = ?
                 """,
                 (
@@ -214,6 +226,8 @@ class TaskExecutor:
                     duration,
                     exit_code,
                     str(raw_path),
+                    " ".join(command),
+                    error_message,
                     task_id
                 )
             )
@@ -246,17 +260,20 @@ class TaskExecutor:
             logger.error(f"Task {task_id} failed: {e}")
 
             # Update task as failed
+            duration = (time.time() - start_time) if 'start_time' in locals() else 0
             await db.execute(
                 """
                 UPDATE tasks SET
                     status = ?,
                     completed_at = ?,
+                    duration_seconds = ?,
                     error_message = ?
                 WHERE id = ?
                 """,
                 (
                     TaskStatus.FAILED.value,
                     datetime.now().isoformat(),
+                    duration,
                     str(e),
                     task_id
                 )
@@ -374,16 +391,15 @@ class TaskExecutor:
         db = await get_db()
         task_row = await db.fetchone(
             """
-            SELECT id, plugin_id, tool_name, target, status,
-                   created_at, started_at, completed_at, duration_seconds
+            SELECT id, plugin_id, tool_name, target, status, created_at, started_at, completed_at, 
+                   duration_seconds, exit_code, error_message, preset
             FROM tasks WHERE id = ?
             """,
             (task_id,)
         )
-        
         if not task_row:
             return None
-        
+            
         return {
             "task_id": task_row["id"],
             "plugin_id": task_row["plugin_id"],
@@ -393,8 +409,43 @@ class TaskExecutor:
             "created_at": task_row["created_at"],
             "started_at": task_row["started_at"],
             "completed_at": task_row["completed_at"],
-            "duration_seconds": task_row["duration_seconds"]
+            "duration_seconds": task_row["duration_seconds"],
+            "exit_code": task_row["exit_code"],
+            "error_message": task_row["error_message"],
+            "preset": task_row["preset"]
         }
+
+    async def _create_pending_records(self, db, task_id: str, plugin, target: str):
+        """Create placeholder records in assets and attack surface for real-time visibility."""
+        if not target:
+            return
+
+        asset_id = f"asset:{target}"
+        
+        # Upsert asset with 'scanning' status
+        await db.execute(
+            """
+            INSERT INTO assets (
+                id, target, type, description, risk_level, status, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, (datetime('now')))
+            ON CONFLICT (target) DO UPDATE SET
+                status = 'scanning',
+                updated_at = (datetime('now'))
+            """,
+            (
+                asset_id,
+                target,
+                "domain" if "." in target and ":" not in target else "service",
+                f"Scanning in progress by {plugin.name}...",
+                "low",
+                "scanning"
+            )
+        )
+
+        # Removed 'Active Scans' entry to prevent UI duplication as it's already shown in Task Activity.
+        pass
+        
+        await self._invalidate_cached_views()
 
     async def _upsert_asset_and_report(self, db, task_id: str, plugin, plugin_id: str, target: str, status: str, output: str = ""):
         """Persist derived asset, attack surface, and report records into SQLite."""
@@ -454,8 +505,9 @@ class TaskExecutor:
                     """
                     INSERT INTO findings (
                         id, task_id, plugin_id, title, category, severity,
-                        target, description, remediation, metadata_json, discovered_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (datetime('now')))
+                        target, description, remediation, proof, cvss, cve,
+                        metadata_json, discovered_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (datetime('now')))
                     """,
                     (
                         finding_id,
@@ -467,31 +519,16 @@ class TaskExecutor:
                         target,
                         finding["description"],
                         finding.get("remediation", ""),
+                        finding.get("proof"),
+                        finding.get("cvss"),
+                        finding.get("cve"),
                         json.dumps(finding.get("metadata", {})),
                     )
                 )
 
-            await db.execute(
-                """
-                INSERT INTO attack_surface_entries (
-                    id, asset_id, category, item, details, risk, source, last_seen
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, (datetime('now')))
-                ON CONFLICT (id) DO UPDATE SET
-                    details = EXCLUDED.details,
-                    risk = EXCLUDED.risk,
-                    source = EXCLUDED.source,
-                    last_seen = (datetime('now'))
-                """,
-                (
-                    f"surface:{task_id}",
-                    asset_id,
-                    "Scanned Targets",
-                    target,
-                    f"{plugin.name} executed with status {status}. Found {len(findings_data)} findings.",
-                    "medium" if any(f["severity"] in ["critical", "high"] for f in findings_data) else "info",
-                    plugin.name,
-                ),
-            )
+            # Removed 'Scanned Targets' entry to prevent UI duplication.
+            # Information is available in Task history and Asset ledger.
+            pass
 
         await db.execute(
             """
@@ -537,7 +574,8 @@ class TaskExecutor:
                         loader.exec_module(module)
                         if hasattr(module, "parse"):
                             logger.info(f"Using custom parser for {plugin.id}")
-                            return module.parse(parser_input)
+                            parsed = module.parse(parser_input)
+                            return self._normalize_parsed_result(plugin, parser_input, parsed)
                         else:
                             logger.warning(f"Custom parser {parser_path} missing 'parse' function")
             except Exception as e:
@@ -545,11 +583,11 @@ class TaskExecutor:
 
         # 2. Fallback to legacy built-in parsers
         if parser_type == "builtin_nmap":
-            return self._parse_nmap_output(parser_input)
+            return self._normalize_parsed_result(plugin, parser_input, self._parse_nmap_output(parser_input))
         elif parser_type == "builtin_http":
-            return self._parse_http_output(parser_input)
+            return self._normalize_parsed_result(plugin, parser_input, self._parse_http_output(parser_input))
         
-        return {"findings": [], "raw": parser_input}
+        return self._normalize_parsed_result(plugin, parser_input, {"findings": [], "raw": parser_input})
 
     def _resolve_parser_input(self, plugin, output: str) -> str:
         """Prefer report-file content when configured, fallback to command output."""
@@ -564,6 +602,143 @@ class TaskExecutor:
                     logger.warning("Failed to read parser report file %s: %s", path, exc)
 
         return output
+
+    def _normalize_parsed_result(self, plugin, parser_input: str, parsed: Any) -> Dict[str, Any]:
+        """
+        Normalize parser output shape so downstream report/asset logic always receives:
+        { findings: List[Finding], ... }.
+        """
+        normalized: Dict[str, Any]
+        raw_findings: Any
+
+        if isinstance(parsed, dict):
+            normalized = dict(parsed)
+            raw_findings = normalized.get("findings", [])
+        elif isinstance(parsed, list):
+            normalized = {}
+            raw_findings = parsed
+        else:
+            normalized = {}
+            raw_findings = []
+
+        if isinstance(raw_findings, dict):
+            raw_findings = [raw_findings]
+        if not isinstance(raw_findings, list):
+            raw_findings = []
+
+        findings = [
+            self._normalize_finding(plugin, item)
+            for item in raw_findings
+            if isinstance(item, dict)
+        ]
+
+        # Fallback for JSON/JSONL plugin outputs where parser returns empty or unexpected data.
+        if not findings and str(plugin.output.get("format", "")).lower() in {"json", "jsonl"}:
+            findings = self._parse_json_fallback_findings(plugin, parser_input)
+
+        normalized["findings"] = findings
+        if "count" not in normalized:
+            normalized["count"] = len(findings)
+        if "raw" not in normalized and not findings:
+            normalized["raw"] = parser_input
+        return normalized
+
+    def _normalize_finding(self, plugin, finding: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure finding has all required keys and normalized severity."""
+        severity = str(finding.get("severity", "info")).lower()
+        severity_map = {
+            "critical": "critical",
+            "high": "high",
+            "medium": "medium",
+            "moderate": "medium",
+            "warning": "medium",
+            "warn": "medium",
+            "low": "low",
+            "info": "info",
+            "informational": "info",
+            "error": "high",
+        }
+        normalized_severity = severity_map.get(severity, "info")
+
+        category = finding.get("category") or finding.get("type") or str(plugin.category).title()
+        title = finding.get("title") or finding.get("name") or "Security Finding"
+        description = finding.get("description") or finding.get("message") or str(title)
+
+        metadata = finding.get("metadata", {})
+        if not isinstance(metadata, dict):
+            metadata = {"value": metadata}
+
+        return {
+            "title": str(title),
+            "category": str(category),
+            "severity": normalized_severity,
+            "description": str(description),
+            "remediation": str(finding.get("remediation", "")),
+            "metadata": metadata,
+        }
+
+    def _parse_json_fallback_findings(self, plugin, parser_input: str) -> List[Dict[str, Any]]:
+        """Best-effort conversion of JSON payloads into finding entries."""
+        try:
+            data = json.loads(parser_input)
+        except Exception:
+            return []
+
+        findings: List[Dict[str, Any]] = []
+
+        if isinstance(data, list):
+            for idx, item in enumerate(data, start=1):
+                if isinstance(item, dict):
+                    findings.append(self._json_item_to_finding(plugin, item, f"Item {idx}"))
+                else:
+                    findings.append(
+                        self._normalize_finding(
+                            plugin,
+                            {
+                                "title": f"{plugin.name} Result #{idx}",
+                                "category": plugin.category,
+                                "severity": "info",
+                                "description": str(item),
+                            },
+                        )
+                    )
+            return findings
+
+        if isinstance(data, dict):
+            # Common scanner shape: { "results": [...] }
+            for list_key in ("results", "findings", "issues", "vulnerabilities"):
+                if isinstance(data.get(list_key), list):
+                    for idx, item in enumerate(data[list_key], start=1):
+                        if isinstance(item, dict):
+                            findings.append(self._json_item_to_finding(plugin, item, f"{list_key} #{idx}"))
+                    if findings:
+                        return findings
+
+            findings.append(self._json_item_to_finding(plugin, data, plugin.name))
+
+        return findings
+
+    def _json_item_to_finding(self, plugin, item: Dict[str, Any], default_title: str) -> Dict[str, Any]:
+        title = (
+            item.get("title")
+            or item.get("name")
+            or item.get("issue")
+            or item.get("message")
+            or default_title
+        )
+        description = item.get("description") or item.get("detail") or item.get("message") or str(item)
+        severity = item.get("severity", "info")
+        category = item.get("category", str(plugin.category).title())
+        return self._normalize_finding(
+            plugin,
+            {
+                "title": title,
+                "category": category,
+                "severity": severity,
+                "description": description,
+                "metadata": item,
+            },
+        )
 
     def _parse_nmap_output(self, output: str) -> Dict[str, Any]:
         """Simple regex-based nmap output parser."""

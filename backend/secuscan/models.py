@@ -95,6 +95,26 @@ class TaskResponse(BaseModel):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     duration_seconds: Optional[float] = None
+    inputs: Optional[Dict[str, Any]] = None
+    preset: Optional[str] = None
+    error_message: Optional[str] = None
+    exit_code: Optional[int] = None
+
+
+class Finding(BaseModel):
+    """Structured security finding"""
+    id: Optional[str] = None
+    title: str
+    category: str
+    severity: str
+    target: str
+    description: str
+    remediation: Optional[str] = ""
+    cvss: Optional[float] = None
+    cve: Optional[str] = None
+    proof: Optional[str] = None
+    discovered_at: Optional[datetime] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class TaskResult(BaseModel):
@@ -109,11 +129,14 @@ class TaskResult(BaseModel):
     
     summary: List[str] = []
     severity_counts: Dict[str, int] = Field(default_factory=dict)
+    findings: List[Finding] = Field(default_factory=list)
     structured: Dict[str, Any] = Field(default_factory=dict)
     raw_output_path: Optional[str] = None
     raw_output_excerpt: Optional[str] = None
     
     errors: List[Dict[str, Any]] = []
+    error_message: Optional[str] = None
+    exit_code: Optional[int] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
 

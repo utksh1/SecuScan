@@ -47,7 +47,7 @@ class Database:
             self._connection = None
 
     async def _create_schema(self):
-        """Create the application schema using SQLite dialect."""
+        """Create the application schema using SQLite dialect and handle migrations."""
         await self.connection.executescript(
             """
             CREATE TABLE IF NOT EXISTS tasks (
@@ -67,16 +67,12 @@ class Database:
                 exit_code INTEGER,
                 structured_json TEXT,
                 raw_output_path TEXT,
+                command_used TEXT,
                 error_message TEXT,
                 container_id TEXT,
                 cpu_seconds REAL,
                 memory_peak_mb REAL
             );
-
-            CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at);
-            CREATE INDEX IF NOT EXISTS idx_tasks_target ON tasks(target);
-            CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-            CREATE INDEX IF NOT EXISTS idx_tasks_plugin ON tasks(plugin_id);
 
             CREATE TABLE IF NOT EXISTS plugins (
                 id TEXT PRIMARY KEY,
@@ -122,6 +118,7 @@ class Database:
                 target TEXT NOT NULL,
                 description TEXT NOT NULL,
                 remediation TEXT NOT NULL DEFAULT '',
+                proof TEXT,
                 cvss REAL,
                 cve TEXT,
                 discovered_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
@@ -184,8 +181,49 @@ class Database:
                 use_count INTEGER NOT NULL DEFAULT 0,
                 UNIQUE(plugin_id, name)
             );
+
+            CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at);
+            CREATE INDEX IF NOT EXISTS idx_tasks_target ON tasks(target);
+            CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+            CREATE INDEX IF NOT EXISTS idx_tasks_plugin ON tasks(plugin_id);
             """
         )
+
+        # Migration logic: ensure latest columns exist in 'tasks' table
+        tasks_columns = await self.fetchall("PRAGMA table_info(tasks)")
+        existing_cols = {col["name"] for col in tasks_columns}
+        
+        needed_cols = {
+            "exit_code": "INTEGER",
+            "structured_json": "TEXT",
+            "raw_output_path": "TEXT",
+            "command_used": "TEXT",
+            "error_message": "TEXT",
+            "container_id": "TEXT",
+            "cpu_seconds": "REAL",
+            "memory_peak_mb": "REAL",
+            "inputs_json": "TEXT NOT NULL DEFAULT '{}'",
+            "preset": "TEXT",
+            "safe_mode": "BOOLEAN NOT NULL DEFAULT 1"
+        }
+
+        for col_name, col_type in needed_cols.items():
+            if col_name not in existing_cols:
+                try:
+                    await self.execute(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_type}")
+                    print(f"Added missing column {col_name} to tasks table.")
+                except Exception as e:
+                    print(f"Failed to add column {col_name}: {e}")
+
+        # Findings table migration
+        findings_columns = await self.fetchall("PRAGMA table_info(findings)")
+        existing_finding_cols = {col["name"] for col in findings_columns}
+        if "proof" not in existing_finding_cols:
+            try:
+                await self.execute("ALTER TABLE findings ADD COLUMN proof TEXT")
+                print("Added missing column 'proof' to findings table.")
+            except Exception as e:
+                print(f"Failed to add 'proof' to findings: {e}")
 
     async def execute(self, query: str, params: tuple = ()):
         """Execute a write query."""

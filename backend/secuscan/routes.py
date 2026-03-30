@@ -325,7 +325,7 @@ async def get_task_result(task_id: str):
         """
         SELECT id, plugin_id, tool_name, target, status,
                created_at, duration_seconds, structured_json,
-               raw_output_path, command_used, error_message
+               raw_output_path, command_used, error_message, exit_code
         FROM tasks WHERE id = ?
         """,
         (task_id,)
@@ -383,11 +383,14 @@ async def get_task_result(task_id: str):
         "status": task_row["status"],
         "summary": summary,
         "severity_counts": severity_counts,
+        "findings": findings,
         "structured": structured,
         "raw_output_path": task_row["raw_output_path"],
         "raw_output": raw_output,
         "command_used": task_row["command_used"],
         "errors": [{"message": task_row["error_message"]}] if task_row["error_message"] else [],
+        "error_message": task_row["error_message"],
+        "exit_code": task_row["exit_code"],
         "metadata": {}
     }
 
@@ -448,10 +451,13 @@ async def get_dashboard_summary():
                              for item in findings)
 
         recent_findings: List[Dict] = findings[:5]
-        high_risk_assets = [item for item in assets if item.get("risk_level") in {"critical", "high"}]
+        # Filter out assets with 'scanning' status to avoid duplicate UI entries with Task Activity
+        active_assets_list = [item for item in assets if item.get("status") != "scanning"]
+        
+        high_risk_assets = [item for item in active_assets_list if item.get("risk_level") in {"critical", "high"}]
         has_real_risk = len(high_risk_assets) > 0
         if not has_real_risk:
-            high_risk_assets = assets[:5]
+            high_risk_assets = active_assets_list[:5]
 
         return {
             "total_assets": len(assets),
@@ -503,7 +509,7 @@ async def get_assets():
 
     async def build():
         db = await get_db()
-        rows = await db.fetchall("SELECT * FROM assets ORDER BY updated_at DESC")
+        rows = await db.fetchall("SELECT * FROM assets WHERE status != 'scanning' ORDER BY updated_at DESC")
         return {"assets": parse_json_fields(rows, ["open_ports", "technologies", "services", "metadata_json"])}
 
     return await get_or_set_cached("assets:list", build)
@@ -558,7 +564,7 @@ async def list_tasks(
     db = await get_db()
 
     # Build query
-    query = "SELECT id, plugin_id, tool_name, target, status, created_at, duration_seconds, inputs_json, preset FROM tasks"
+    query = "SELECT id, plugin_id, tool_name, target, status, created_at, duration_seconds, inputs_json, preset, error_message, exit_code FROM tasks"
     params = []
 
     where_clauses = []
@@ -640,4 +646,48 @@ async def get_settings():
             "safe_mode_default": settings.safe_mode_default,
             "allowed_networks": settings.allowed_networks
         }
+    }
+
+
+@router.get("/finding/{finding_id}")
+async def get_finding_details(finding_id: str):
+    """Get detailed information for a specific finding"""
+    db = await get_db()
+    
+    finding_row = await db.fetchone(
+        """
+        SELECT f.*, t.tool_name, t.target as task_target
+        FROM findings f
+        JOIN tasks t ON f.task_id = t.id
+        WHERE f.id = ?
+        """,
+        (finding_id,)
+    )
+    
+    if not finding_row:
+        raise HTTPException(status_code=404, detail="Finding not found")
+        
+    metadata = {}
+    if finding_row["metadata_json"]:
+        try:
+            metadata = json.loads(finding_row["metadata_json"])
+        except json.JSONDecodeError:
+            metadata = {}
+            
+    return {
+        "id": finding_row["id"],
+        "task_id": finding_row["task_id"],
+        "plugin_id": finding_row["plugin_id"],
+        "tool": finding_row["tool_name"],
+        "title": finding_row["title"],
+        "category": finding_row["category"],
+        "severity": finding_row["severity"],
+        "target": finding_row["target"],
+        "description": finding_row["description"],
+        "remediation": finding_row["remediation"],
+        "proof": finding_row["proof"],
+        "cvss": finding_row["cvss"],
+        "cve": finding_row["cve"],
+        "discovered_at": finding_row["discovered_at"],
+        "metadata": metadata
     }

@@ -13,21 +13,23 @@ def parse(output: str) -> Dict[str, Any]:
             continue
         try:
             data = json.loads(line)
+            info = data.get("info", {})
             findings.append({
-                "title": data.get("info", {}).get("name", "Nuclei Finding"),
+                "title": info.get("name", "Nuclei Finding"),
                 "category": data.get("type", "vulnerability"),
-                "severity": data.get("info", {}).get("severity", "info"),
-                "description": data.get("info", {}).get("description", ""),
-                "remediation": data.get("info", {}).get("remediation", ""),
+                "severity": info.get("severity", "info"),
+                "description": info.get("description", ""),
+                "remediation": info.get("remediation", ""),
+                "proof": data.get("curl-command"),
+                "cvss": info.get("classification", {}).get("cvss-score"),
+                "cve": ", ".join(info.get("classification", {}).get("cve-id", [])) if info.get("classification", {}).get("cve-id") else None,
                 "metadata": {
                     "template_id": data.get("template-id"),
                     "matched_at": data.get("matched-at"),
                     "extracted_results": data.get("extracted-results", []),
-                    "curl_command": data.get("curl-command")
                 }
             })
         except json.JSONDecodeError:
-            # Not JSON, skip (might be info/error logs)
             continue
             
     return {"findings": findings}
