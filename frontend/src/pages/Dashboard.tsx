@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { getDashboardSummary, getHealth, cancelTask } from '../api'
 import { ExecutiveStatsBar } from '../components/ExecutiveStatsBar'
 import { routePath, routes } from '../routes'
+import { parseDateSafe, formatBriefingDate, formatTaskInit, formatLocaleDate } from '../utils/date'
 
 type Finding = {
   id: string
@@ -29,6 +30,7 @@ type Asset = {
   description: string
   risk_level: string
   last_scanned: string
+  status: string
 }
 
 type Summary = {
@@ -64,26 +66,6 @@ function asOptionalNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
-function parseDateSafe(rawValue: string | null | undefined): Date | null {
-  if (!rawValue) return null
-  const raw = rawValue.trim()
-  if (!raw) return null
-  if (raw.toLowerCase() === 'now') return new Date()
-
-  // Handle SQLite DATETIME ("YYYY-MM-DD HH:MM:SS"), ISO strings, and timezone-less values.
-  const sqliteAsIso = raw.includes('T') ? raw : raw.replace(' ', 'T')
-  const hasTimezone = /(?:Z|[+-]\d{2}:\d{2})$/.test(sqliteAsIso)
-  const candidates = hasTimezone
-    ? [sqliteAsIso, raw]
-    : [`${sqliteAsIso}Z`, sqliteAsIso, raw]
-
-  for (const value of candidates) {
-    const parsed = new Date(value)
-    if (!Number.isNaN(parsed.getTime())) return parsed
-  }
-
-  return null
-}
 
 function normalizeSummary(data: Partial<Summary> | null | undefined): Summary {
   const summary = data && typeof data === 'object' ? data : {}
@@ -141,6 +123,7 @@ function normalizeSummary(data: Partial<Summary> | null | undefined): Summary {
         description: asString(asset?.description),
         risk_level: asString(asset?.risk_level, 'low'),
         last_scanned: asString(asset?.last_scanned, new Date().toISOString()),
+        status: asString(asset?.status, 'active'),
       }))
       : [],
     has_high_risk_assets: Boolean(summary.has_high_risk_assets),
@@ -179,39 +162,6 @@ const emptySummary: Summary = {
   scan_activity: { total: 0, completed: 0, running: 0 },
 }
 
-function formatBriefingDate(dateStr: string | null) {
-  const d = parseDateSafe(dateStr)
-  if (!d) return '00 JAN, 26, 00:00 IST'
-  const formatted = d.toLocaleString('en-US', {
-    day: '2-digit',
-    month: 'short',
-    year: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-    timeZone: 'Asia/Kolkata',
-  }).toUpperCase()
-  return `${formatted} IST`
-}
-
-function formatTaskInit(dateStr: string) {
-  const parsed = parseDateSafe(dateStr)
-  if (!parsed) return { date: 'UNKNOWN DATE', time: 'UNKNOWN TIME' }
-  const date = parsed.toLocaleDateString([], {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-    timeZone: 'Asia/Kolkata',
-  }).toUpperCase()
-  const time = parsed.toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-    timeZone: 'Asia/Kolkata',
-  })
-  return { date, time }
-}
 
 function formatDuration(seconds?: number | null) {
   if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return 'N/A'
@@ -274,6 +224,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [backendConnected, setBackendConnected] = useState<boolean | null>(null)
+  const [lastSync, setLastSync] = useState<string | null>(() => new Date().toISOString())
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -296,6 +247,7 @@ export default function Dashboard() {
         .then((data) => {
           if (cancelled) return
           setSummary(normalizeSummary(data as Partial<Summary>))
+          setLastSync(new Date().toISOString())
           setError(null)
         })
         .catch((err) => {
@@ -383,18 +335,18 @@ export default function Dashboard() {
               <span className="text-[11px] font-black text-silver-bright/90 uppercase tracking-[0.4em] italic mb-1">
                 SYSTEM_STATUS_SYNC
               </span>
-              <div className="flex items-baseline gap-6">
+               <div className="flex items-baseline gap-6">
                 <div className="flex items-baseline gap-3">
                   <span className="text-2xl font-mono text-silver-bright font-black tracking-tighter italic leading-none">
-                    {formatBriefingDate(summary.last_scan_time).split(',')[0].toUpperCase() || 'NODATA'}
+                    {(formatBriefingDate(lastSync).split(',')[0]?.trim().toUpperCase()) || 'INITIALIZING'}
                   </span>
                   <span className="text-base font-mono text-rag-blue/90 font-black italic leading-none">
-                    {formatBriefingDate(summary.last_scan_time).split(',')[1]?.trim() || '26'}
+                    {(formatBriefingDate(lastSync).split(',')[1]?.trim().toUpperCase()) || '---'}
                   </span>
                 </div>
                 <div className="h-5 w-px bg-silver/20 self-center mx-1"></div>
                 <span className="text-lg font-mono text-rag-blue font-black italic leading-none">
-                  {formatBriefingDate(summary.last_scan_time).split(',')[2]?.trim() || '00:00'}
+                  {(formatBriefingDate(lastSync).split(',')[2]?.trim().toUpperCase()) || '00:00'}
                 </span>
               </div>
             </div>
@@ -446,7 +398,7 @@ export default function Dashboard() {
                   riskLabel={risk.label}
                   criticalVulns={summary.critical_findings}
                   totalAssets={summary.total_assets}
-                  attackSurface={summary.scan_activity.running}
+                  attackSurface={summary.total_attack_surface}
                   compliancePercent={safeAssetsPercent}
                   riskNote={summary.critical_findings > 0
                     ? `Status escalated. ${summary.critical_findings} major vulnerabilities detected on production nodes.`
@@ -523,7 +475,7 @@ export default function Dashboard() {
                       )}
                     </div>
                     <div className="flex gap-6">
-                      <Link className="text-[10px] font-bold text-silver/70 hover:text-silver-bright uppercase tracking-widest transition-all" to={routes.history}>
+                      <Link className="text-[10px] font-bold text-silver/70 hover:text-silver-bright uppercase tracking-widest transition-all" to={routes.scans}>
                         Full Schedule
                       </Link>
                       <Link className="text-[10px] font-bold text-silver/70 hover:text-silver-bright uppercase tracking-widest transition-all" to={routes.findings}>
@@ -596,7 +548,7 @@ export default function Dashboard() {
                                   {isActive ? 'Live Processing' : 'Cycle Log'}
                                 </span>
                                 <span className="text-[9px] font-mono text-silver/80 uppercase block">
-                                  INIT:: {taskInit.date} @ {taskInit.time} IST
+                                  INIT:: {taskInit.date} @ {taskInit.time} {taskInit.tz}
                                 </span>
                                 <span className="text-[9px] font-mono text-silver/70 uppercase block mt-0.5">
                                   DURATION:: {formatDuration(task.duration_seconds)}
@@ -690,9 +642,10 @@ export default function Dashboard() {
                               <span className={`text-[9px] font-bold px-2 py-0.5 uppercase tracking-tighter ${
                                 asset.risk_level === 'critical' ? 'bg-rag-red text-white' :
                                 asset.risk_level === 'high' ? 'bg-rag-amber text-black' :
+                                asset.status === 'scanning' ? 'bg-rag-amber/20 text-rag-amber border border-rag-amber animate-pulse' :
                                 'bg-accent-silver/20 text-silver/60'
                               }`}>
-                                {asset.risk_level.toUpperCase()}
+                                {asset.status === 'scanning' ? 'SCANNING' : asset.risk_level.toUpperCase()}
                               </span>
                               <span className="text-[10px] font-mono text-silver/60 group-hover:text-silver/80 transition-colors">
                                 #{String(idx + 1).padStart(2, '0')}
@@ -716,7 +669,7 @@ export default function Dashboard() {
                               <div className="flex flex-col items-end">
                                 <span className="text-[8px] uppercase text-silver/80 tracking-[0.2em] font-bold">Last Pulse</span>
                                 <span className="text-[10px] text-rag-green font-mono uppercase tracking-tighter">
-                                  {new Date(asset.last_scanned).toLocaleDateString([], { timeZone: 'Asia/Kolkata' })}
+                                  {formatLocaleDate(asset.last_scanned)}
                                 </span>
                               </div>
                             </div>
@@ -756,7 +709,7 @@ export default function Dashboard() {
                       </div>
 
                       <div className="pt-10 border-t border-accent-silver/5">
-                        <div className="text-xs text-silver/80 uppercase tracking-[0.2em] font-bold mb-8">Surface Composition</div>
+                        <div className="text-xs text-silver/80 uppercase tracking-[0.2em] font-bold mb-8">Surface Ledger Composition</div>
                         {attackSurfaceBreakdown.length === 0 && (
                           <div className="text-xs text-silver/80 uppercase tracking-[0.15em] italic">Telemetry unavailable</div>
                         )}
