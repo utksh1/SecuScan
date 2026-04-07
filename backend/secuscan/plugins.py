@@ -217,20 +217,25 @@ class PluginManager:
                 parts = token.split(":")
                 if len(parts) >= 4 and parts[2] == "then":
                     condition_var = parts[1]
-                    then_value = parts[3]
-                    else_value = ""
-                    if len(parts) >= 6 and parts[4] == "else":
-                        else_value = parts[5]
+                    
+                    # Correctly identify then/else segments
+                    try:
+                        else_idx = parts.index("else")
+                        then_parts = parts[3:else_idx]
+                        else_parts = parts[else_idx+1:]
+                    except ValueError:
+                        then_parts = parts[3:]
+                        else_parts = []
 
                     condition = inputs.get(condition_var, False)
                     # For booleans or non-empty existence
                     if isinstance(condition, str) and condition.lower() == "false":
                         condition = False
 
-                    raw_value = then_value if condition else else_value
+                    active_parts = then_parts if condition else else_parts
 
-                    if raw_value:
-                        if interpolated := self._interpolate(raw_value, inputs):
+                    for part in active_parts:
+                        if interpolated := self._interpolate(part, inputs):
                             command.append(interpolated)
                 continue
 

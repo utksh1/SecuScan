@@ -7,6 +7,9 @@ from typing import Any, Optional, List, Dict, Callable
 import json
 import logging
 import re
+import os
+import shutil
+from pathlib import Path
 from urllib.parse import urlparse
 
 def parse_json_fields(rows: List[Dict], fields: List[str]) -> List[Dict]:
@@ -289,6 +292,30 @@ async def download_csv_report(task_id: str):
         content=csv_data,
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename={build_report_filename(dict(task_row), 'csv')}"}
+    )
+
+@router.get("/task/{task_id}/report/html")
+async def download_html_report(task_id: str):
+    """Download task results as an HTML report."""
+    db = await get_db()
+    task_row = await db.fetchone(
+        "SELECT id, plugin_id, tool_name, target, status, created_at, structured_json FROM tasks WHERE id = ?",
+        (task_id,)
+    )
+
+    if not task_row:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if task_row["status"] not in ["completed", "failed"]:
+        raise HTTPException(status_code=400, detail="Task is not finished yet")
+
+    structured_data = json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
+    html_content = reporting.generate_html_report(dict(task_row), {"structured": structured_data})
+
+    return Response(
+        content=html_content,
+        media_type="text/html",
+        headers={"Content-Disposition": f"attachment; filename={build_report_filename(dict(task_row), 'html')}"}
     )
 
 @router.get("/task/{task_id}/report/pdf")
@@ -610,17 +637,107 @@ async def list_tasks(
     }
 
 
-@router.delete("/task/{task_id}")
-async def delete_task(task_id: str):
-    """Delete a task"""
+async def delete_task_records(task_ids: List[str]):
+    """Helper to delete database records and files for multiple tasks."""
     db = await get_db()
     
-    await db.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+    # Get raw output paths for file cleanup
+    placeholders = ",".join(["?"] * len(task_ids))
+    task_rows = await db.fetchall(f"SELECT raw_output_path FROM tasks WHERE id IN ({placeholders})", tuple(task_ids))
+    
+    # Delete associated data
+    await db.execute(f"DELETE FROM findings WHERE task_id IN ({placeholders})", tuple(task_ids))
+    await db.execute(f"DELETE FROM reports WHERE task_id IN ({placeholders})", tuple(task_ids))
+    await db.execute(f"DELETE FROM audit_log WHERE task_id IN ({placeholders})", tuple(task_ids))
+    await db.execute(f"DELETE FROM tasks WHERE id IN ({placeholders})", tuple(task_ids))
+    
+    # Cleanup files on disk
+    for row in task_rows:
+        if row and row["raw_output_path"]:
+            try:
+                path = Path(row["raw_output_path"])
+                if path.exists():
+                    path.unlink()
+            except Exception as e:
+                logger.error(f"Failed to delete raw output file {row['raw_output_path']}: {e}")
+
+@router.delete("/task/{task_id}")
+async def delete_task(task_id: str):
+    """Delete a task and its associated data (findings, reports, audit logs, and files)"""
+    db = await get_db()
+    
+    # Check if task is running
+    status = await executor.get_task_status(task_id)
+    if status and status.get("status") == "running":
+        raise HTTPException(status_code=400, detail="Cannot delete a running task. Abort it first.")
+
+    await delete_task_records([task_id])
     await invalidate_view_cache()
     
     return {
         "task_id": task_id,
         "deleted": True
+    }
+
+
+@router.delete("/tasks/bulk")
+async def bulk_delete_tasks(task_ids: List[str]):
+    """Delete multiple tasks at once"""
+    db = await get_db()
+    
+    # Check if any tasks are running
+    placeholders = ",".join(["?"] * len(task_ids))
+    running_tasks = await db.fetchone(f"SELECT id FROM tasks WHERE id IN ({placeholders}) AND status = 'running' LIMIT 1", tuple(task_ids))
+    if running_tasks:
+        raise HTTPException(status_code=400, detail="Cannot delete running tasks. Abort them first.")
+
+    await delete_task_records(task_ids)
+    await invalidate_view_cache()
+    
+    return {
+        "deleted_count": len(task_ids),
+        "success": True
+    }
+
+
+@router.delete("/tasks/clear")
+async def clear_all_tasks():
+    """Wipe all scan history and associated data (findings, reports, assets, attack surface)"""
+    db = await get_db()
+    
+    # Prevent clearing if any tasks are running
+    running_tasks = await db.fetchone("SELECT id FROM tasks WHERE status = 'running' LIMIT 1")
+    if running_tasks:
+        raise HTTPException(status_code=400, detail="Cannot clear history while tasks are running.")
+
+    # Get all task IDs to cleanup files
+    all_tasks = await db.fetchall("SELECT id FROM tasks")
+    task_ids = [t["id"] for t in all_tasks]
+    if task_ids:
+        await delete_task_records(task_ids)
+
+    # Purge other tables
+    await db.execute("DELETE FROM assets")
+    await db.execute("DELETE FROM attack_surface_entries")
+    
+    # Fallback cleanup for any orphaned files in data directories
+    for subdir in ["raw", "reports"]:
+        dir_path = Path(settings.data_dir) / subdir
+        if dir_path.exists():
+            for item in dir_path.iterdir():
+                try:
+                    if item.is_file():
+                        item.unlink()
+                    elif item.is_dir():
+                        shutil.rmtree(item)
+                except Exception as e:
+                    logger.error(f"Failed to cleanup {item}: {e}")
+
+    await invalidate_view_cache()
+    
+    return {
+        "cleared": True,
+        "message": "All scan history and associated data has been purged."
     }
 
 

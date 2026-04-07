@@ -92,13 +92,20 @@ async def redirect_api_openapi():
     return RedirectResponse(url="/openapi.json")
 
 
-# CORS middleware (restrict to localhost in production)
+# CORS middleware
+cors_allow_all = "*" in settings.cors_allowed_origins
+if cors_allow_all and settings.cors_allow_credentials:
+    logger.warning(
+        "CORS configured with '*' origin and credentials enabled. "
+        "Disabling credentials to keep browser behavior valid."
+    )
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.cors_allowed_origins,
+    allow_credentials=settings.cors_allow_credentials and not cors_allow_all,
+    allow_methods=settings.cors_allowed_methods,
+    allow_headers=settings.cors_allowed_headers,
 )
 
 # Include API routes
