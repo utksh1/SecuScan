@@ -11,7 +11,6 @@ interface AppShellProps {
 
 export default function AppShell({ children }: AppShellProps) {
     const { pathname } = useLocation()
-    const isLogin = pathname === routes.login
 
     useShortcuts()
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -42,30 +41,21 @@ export default function AppShell({ children }: AppShellProps) {
     const desktopSidebarWidth = sidebarExpanded ? 220 : 64
     const mobilePrimaryNav = [
         { to: routes.dashboard, icon: 'monitoring', label: 'Dashboard' },
-        { to: routes.scans, icon: 'add_circle', label: 'Scans' },
+        { to: routes.scans, icon: 'history', label: 'Scans' },
         { to: routes.findings, icon: 'emergency_home', label: 'Findings' },
         { to: routes.reports, icon: 'summarize', label: 'Reports' },
-        { to: routes.history, icon: 'history', label: 'History' },
+        { to: routes.toolkit, icon: 'add_circle', label: 'Toolkit' },
     ]
     const mobileDrawerNav = [
         { to: routes.dashboard, label: 'Dashboard' },
-        { to: routes.scans, label: 'New Scan' },
+        { to: routes.scans, label: 'Scans' },
         { to: routes.findings, label: 'Findings' },
         { to: routes.reports, label: 'Reports' },
-        { to: routes.history, label: 'Activity' },
         { to: routes.assets, label: 'Assets' },
-        { to: routes.attackSurface, label: 'Attack Surface' },
+        { to: routes.toolkit, label: 'Toolkit' },
         { to: routes.settings, label: 'Settings' },
     ]
 
-    if (isLogin) {
-        return (
-            <>
-                <Background state="idle" />
-                {children}
-            </>
-        )
-    }
 
     return (
         <>
