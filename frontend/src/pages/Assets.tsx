@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, Variants } from 'framer-motion'
 import { getAssets, getFindings } from '../api'
+import { routes } from '../routes'
+import { formatLocaleDate } from '../utils/date'
 
 type Asset = {
   id: string
@@ -19,7 +21,7 @@ type Asset = {
 
 type Finding = { id: string; target: string; title: string; severity: string; discovered_at: string }
 
-const containerVariants = {
+const containerVariants: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -29,7 +31,7 @@ const containerVariants = {
   }
 }
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { opacity: 0, scale: 0.98, y: 10 },
   visible: { 
     opacity: 1, 
@@ -111,7 +113,7 @@ export default function Assets() {
       <main className="grid grid-cols-1 xl:grid-cols-4 gap-12">
         
         {/* Left Sidebar: Controls & Stats */}
-        <aside className="xl:col-span-1 space-y-12">
+        <aside className="xl:col-span-1 space-y-6">
           
           {/* Quick Metrics */}
           <section className="grid grid-cols-2 gap-4">
@@ -126,8 +128,8 @@ export default function Assets() {
           </section>
 
           {/* Search & Filters */}
-          <section className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-8">
-            <div className="space-y-4">
+          <section className="bg-charcoal border-4 border-black p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-5">
+            <div className="space-y-3">
               <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] flex items-center gap-2">
                 <span className="w-2 h-2 bg-rag-blue"></span> Search_Target
               </label>
@@ -142,7 +144,7 @@ export default function Assets() {
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3">
               <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] flex items-center gap-2">
                 <span className="w-2 h-2 bg-rag-amber"></span> Risk_Level
               </label>
@@ -163,7 +165,7 @@ export default function Assets() {
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3">
               <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] flex items-center gap-2">
                 <span className="w-2 h-2 bg-rag-green"></span> Resource_Tier
               </label>
@@ -234,6 +236,12 @@ export default function Assets() {
                     <div className="flex items-center gap-2">
                       <span className="text-[9px] font-black text-rag-green uppercase tracking-[0.2em] italic">Active_Pulse</span>
                       <div className="w-2 h-2 bg-rag-green rounded-full animate-ping"></div>
+                    </div>
+                  )}
+                  {asset.status === 'scanning' && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] font-black text-rag-amber uppercase tracking-[0.2em] italic">Scanning...</span>
+                      <div className="w-2 h-2 bg-rag-amber rounded-full animate-pulse"></div>
                     </div>
                   )}
                 </div>
@@ -339,7 +347,7 @@ export default function Assets() {
                         <div key={f.id} className="bg-charcoal p-6 border-2 border-silver-bright/5 hover:border-rag-red/30 transition-all group">
                           <div className="flex justify-between items-center mb-1">
                             <span className="text-[9px] font-mono text-rag-red">{f.severity.toUpperCase()} EXPOSURE</span>
-                            <span className="text-[8px] font-mono text-silver/20">{new Date(f.discovered_at).toLocaleDateString()}</span>
+                            <span className="text-[8px] font-mono text-silver/20">{formatLocaleDate(f.discovered_at)}</span>
                           </div>
                           <p className="text-sm font-black text-silver-bright uppercase tracking-tight group-hover:text-rag-red transition-colors italic">{f.title}</p>
                         </div>
@@ -385,7 +393,7 @@ export default function Assets() {
               {/* Modal Footer */}
               <div className="p-8 bg-charcoal border-t-8 border-black flex justify-between items-center">
                  <Link 
-                  to="/findings" 
+                  to={routes.findings} 
                   className="bg-black px-6 py-3 text-[10px] font-black uppercase tracking-widest text-silver-bright hover:bg-rag-blue hover:text-charcoal-dark transition-all shadow-[4px_4px_0px_0px_rgba(255,255,255,0.1)] active:shadow-none active:translate-x-1 active:translate-y-1"
                 >
                   View_Intelligence_Matrix

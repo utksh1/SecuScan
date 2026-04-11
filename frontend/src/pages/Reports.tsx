@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { getDashboardSummary, getReports, API_BASE } from '../api'
+import { formatDateLong } from '../utils/date'
 
 type Report = {
   id: string
@@ -51,16 +52,6 @@ export default function Reports() {
   }, [])
 
   const filteredReports = reports.filter((report) => selectedType === 'all' || report.type === selectedType)
-  const formatDateLong = (dateStr: string) => 
-    `${new Date(dateStr).toLocaleString('en-US', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-      timeZone: 'Asia/Kolkata',
-    })} IST`
 
   return (
     <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">

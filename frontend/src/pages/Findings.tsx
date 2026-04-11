@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getFindings } from '../api'
+import { formatLocaleDate } from '../utils/date'
 
 type Finding = {
   id: string
@@ -28,7 +29,7 @@ const itemVariants = {
   visible: { 
     opacity: 1, 
     x: 0,
-    transition: { type: 'spring', stiffness: 300, damping: 25 }
+    transition: { type: 'spring', stiffness: 300, damping: 25 } as any
   }
 }
 
@@ -65,6 +66,7 @@ export default function Findings() {
           high: findings.filter(f => f.severity === 'high').length,
           medium: findings.filter(f => f.severity === 'medium').length,
           low: findings.filter(f => f.severity === 'low').length,
+          info: findings.filter(f => f.severity === 'info').length,
       }
   }, [findings])
 
@@ -94,18 +96,26 @@ export default function Findings() {
       </header>
 
       {/* Severity Counters Grid */}
-      <section className="grid grid-cols-2 md:grid-cols-4 gap-6">
-        {[
-          { color: 'bg-rag-red', label: 'Critical', count: countsBySeverity.critical },
-          { color: 'bg-rag-amber', label: 'High', count: countsBySeverity.high },
-          { color: 'bg-rag-blue', label: 'Medium', count: countsBySeverity.medium },
-          { color: 'bg-silver-bright', label: 'Low', count: countsBySeverity.low },
-        ].map((s) => (
-          <div key={s.label} className={`${s.color} border-4 border-black p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col gap-2 group hover:-translate-y-1 transition-transform cursor-default`}>
-            <span className="text-xs font-black text-black uppercase tracking-widest select-none">{s.label}</span>
-            <span className="text-4xl font-black text-black font-mono leading-none">{s.count.toString().padStart(2, '0')}</span>
-          </div>
-        ))}
+      <section className="w-full">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
+          {[
+            { label: 'CRITICAL', count: countsBySeverity.critical, color: 'bg-rag-red text-black' },
+            { label: 'HIGH', count: countsBySeverity.high, color: 'bg-rag-amber text-black' },
+            { label: 'MEDIUM', count: countsBySeverity.medium, color: 'bg-rag-blue text-black' },
+            { label: 'LOW', count: countsBySeverity.low, color: 'bg-charcoal text-silver-bright' },
+            { label: 'INFO', count: countsBySeverity.info, color: 'bg-charcoal text-silver-bright' },
+          ].map((m) => (
+            <div 
+              key={m.label} 
+              className={`${m.color} border-4 border-black p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between h-28 group hover:-translate-y-1 transition-transform cursor-default`}
+            >
+              <span className="text-[10px] font-black uppercase tracking-widest">{m.label}</span>
+              <span className="text-4xl font-mono font-black tracking-tighter italic">
+                {String(m.count).padStart(2, '0')}
+              </span>
+            </div>
+          ))}
+        </div>
       </section>
 
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-12 pt-8">
@@ -129,7 +139,7 @@ export default function Findings() {
             <div className="space-y-4">
               <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic">Severity_Filter</label>
               <div className="grid grid-cols-1 gap-2">
-                {['all', 'critical', 'high', 'medium', 'low'].map(s => (
+                {['all', 'critical', 'high', 'medium', 'low', 'info'].map(s => (
                   <button 
                     key={s}
                     onClick={() => setFilterSeverity(s)}
@@ -187,7 +197,8 @@ export default function Findings() {
                       <div className={`absolute left-0 top-0 bottom-0 w-2 ${
                         f.severity === 'critical' ? 'bg-rag-red' : 
                         f.severity === 'high' ? 'bg-rag-amber' : 
-                        f.severity === 'medium' ? 'bg-rag-blue' : 'bg-silver-bright/20'
+                        f.severity === 'medium' ? 'bg-rag-blue' : 
+                        f.severity === 'low' ? 'bg-accent-silver/50' : 'bg-silver/10'
                       }`}></div>
 
                       <div className="flex flex-col md:flex-row justify-between gap-6">
@@ -212,9 +223,9 @@ export default function Findings() {
                             <p className="text-[10px] font-mono text-silver/40 uppercase tracking-widest flex items-center gap-2">
                               <span className="material-symbols-outlined text-xs">target</span> {f.target}
                             </p>
-                            <p className="text-[10px] font-mono text-silver/40 uppercase tracking-widest flex items-center gap-2">
-                              <span className="material-symbols-outlined text-xs">event</span> {new Date(f.discovered_at).toLocaleDateString()}
-                            </p>
+                             <p className="text-[10px] font-mono text-silver/40 uppercase tracking-widest flex items-center gap-2">
+                               <span className="material-symbols-outlined text-xs">event</span> {formatLocaleDate(f.discovered_at)}
+                             </p>
                           </div>
                         </div>
 

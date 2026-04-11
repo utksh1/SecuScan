@@ -512,6 +512,13 @@ export default function TaskDetails() {
                         {task.status === 'completed' && (
                             <>
                                 <button
+                                    onClick={() => window.open(`${API_BASE}/task/${taskId}/report/html`)}
+                                    className="bg-charcoal px-5 py-3 border border-white/10 text-[10px] font-black uppercase tracking-[0.26em] italic transition-colors hover:bg-white/[0.04] flex items-center gap-2"
+                                >
+                                    <span className="material-symbols-outlined text-sm">html</span>
+                                    Html_Export
+                                </button>
+                                <button
                                     onClick={() => window.open(`${API_BASE}/task/${taskId}/report/csv`)}
                                     className="bg-charcoal px-5 py-3 border border-white/10 text-[10px] font-black uppercase tracking-[0.26em] italic transition-colors hover:bg-white/[0.04] flex items-center gap-2"
                                 >
