@@ -1,0 +1,55 @@
+{
+  "id": "subfinder",
+  "name": "Subfinder",
+  "version": "1.0.0",
+  "description": "Fast passive subdomain enumeration.",
+  "long_description": "Fast passive subdomain enumeration.",
+  "category": "recon",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udd0e",
+  "engine": {
+    "type": "cli",
+    "binary": "subfinder"
+  },
+  "command_template": [
+    "subfinder",
+    "-d",
+    "{target}",
+    "-silent"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Root Domain",
+      "type": "string",
+      "required": true,
+      "placeholder": "secuscan.in"
+    }
+  ],
+  "presets": {
+    "default": {}
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": false,
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "subfinder"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

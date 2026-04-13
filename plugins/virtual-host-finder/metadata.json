@@ -1,0 +1,69 @@
+{
+  "id": "virtual-host-finder",
+  "name": "Virtual Hosts Finder",
+  "version": "1.0.0",
+  "description": "Find multiple websites hosted on the same server.",
+  "long_description": "Find multiple websites hosted on the same server.",
+  "category": "recon",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udd0e",
+  "engine": {
+    "type": "cli",
+    "binary": "ffuf"
+  },
+  "command_template": [
+    "ffuf",
+    "-u",
+    "http://{target}",
+    "-H",
+    "Host: FUZZ.{target}",
+    "-w",
+    "{wordlist}",
+    "-mc",
+    "200,301,302,403",
+    "-s"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target Host/IP",
+      "type": "string",
+      "required": true,
+      "placeholder": "secuscan.in"
+    },
+    {
+      "id": "wordlist",
+      "label": "Subdomain Wordlist",
+      "type": "string",
+      "required": false,
+      "default": "/usr/share/seclists/Discovery/DNS/subdomains-top1million-110000.txt"
+    }
+  ],
+  "presets": {
+    "default": {}
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "Virtual host probing is active scanning. Ensure authorization.",
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "ffuf"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

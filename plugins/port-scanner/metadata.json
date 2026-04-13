@@ -1,0 +1,68 @@
+{
+  "id": "port-scanner",
+  "name": "Port Scanner",
+  "version": "1.0.0",
+  "description": "Detect open ports and fingerprint services.",
+  "long_description": "Detect open ports and fingerprint services.",
+  "category": "recon",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udd0e",
+  "engine": {
+    "type": "cli",
+    "binary": "nmap"
+  },
+  "command_template": [
+    "nmap",
+    "--top-ports",
+    "{top_ports}",
+    "{target}"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target Host/IP",
+      "type": "string",
+      "required": true,
+      "placeholder": "secuscan.in"
+    },
+    {
+      "id": "top_ports",
+      "label": "Top Ports",
+      "type": "integer",
+      "required": false,
+      "default": 1000
+    }
+  ],
+  "presets": {
+    "quick": {
+      "top_ports": 100
+    },
+    "default": {
+      "top_ports": 1000
+    }
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "Port scanning is active probing. Ensure authorization.",
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "nmap"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

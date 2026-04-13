@@ -1,0 +1,56 @@
+{
+  "id": "katana",
+  "name": "Katana",
+  "version": "1.0.0",
+  "description": "Web crawling for endpoint and route discovery.",
+  "long_description": "Web crawling for endpoint and route discovery.",
+  "category": "recon",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udd0e",
+  "engine": {
+    "type": "cli",
+    "binary": "katana"
+  },
+  "command_template": [
+    "katana",
+    "-u",
+    "{target}",
+    "-silent"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target URL",
+      "type": "string",
+      "required": true,
+      "placeholder": "https://secuscan.in"
+    }
+  ],
+  "presets": {
+    "default": {}
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "Crawler generates active traffic. Ensure authorization.",
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "katana"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

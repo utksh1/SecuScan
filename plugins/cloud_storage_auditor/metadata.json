@@ -1,0 +1,67 @@
+{
+  "id": "cloud_storage_auditor",
+  "name": "S3 / Blob Auditor",
+  "version": "1.0.0",
+  "description": "Find misconfigured S3 buckets and exposed cloud storage.",
+  "long_description": "Find misconfigured S3 buckets and exposed cloud storage.",
+  "category": "vulnerability",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udee0\ufe0f",
+  "engine": {
+    "type": "cli",
+    "binary": "uncover"
+  },
+  "command_template": [
+    "uncover",
+    "-q",
+    "{query}",
+    "-limit",
+    "{limit:100}",
+    "-silent"
+  ],
+  "fields": [
+    {
+      "id": "query",
+      "label": "Search Query",
+      "type": "string",
+      "required": true,
+      "placeholder": "s3.amazonaws.com org:example"
+    },
+    {
+      "id": "limit",
+      "label": "Result Limit",
+      "type": "integer",
+      "required": false,
+      "default": 100
+    }
+  ],
+  "presets": {
+    "default": {
+      "limit": 100
+    }
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": true,
+    "consent_message": "Cloud storage auditing should be scoped to authorized assets.",
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "uncover"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

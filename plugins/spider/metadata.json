@@ -1,0 +1,72 @@
+{
+  "id": "spider",
+  "name": "Spider",
+  "version": "1.0.0",
+  "description": "Advanced web spider with JS execution support.",
+  "long_description": "Advanced web spider with JS execution support.",
+  "category": "robots",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udee0\ufe0f",
+  "engine": {
+    "type": "cli",
+    "binary": "katana"
+  },
+  "command_template": [
+    "katana",
+    "-u",
+    "{target}",
+    "-jc",
+    "-depth",
+    "{depth:3}",
+    "-silent"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target URL",
+      "type": "string",
+      "required": true,
+      "placeholder": "https://secuscan.in",
+      "validation": {
+        "pattern": "^https?://",
+        "message": "Must be a valid HTTP(S) URL"
+      }
+    },
+    {
+      "id": "depth",
+      "label": "Depth",
+      "type": "integer",
+      "required": false,
+      "default": 3
+    }
+  ],
+  "presets": {
+    "default": {
+      "depth": 3
+    }
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "Spidering with JS support is active reconnaissance.",
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "katana"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "id": "google-dorking",
+  "name": "Google Hacking",
+  "version": "1.0.0",
+  "description": "Find publicly indexed information about target.",
+  "long_description": "Find publicly indexed information about target.",
+  "category": "recon",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udd0e",
+  "engine": {
+    "type": "cli",
+    "binary": "python3"
+  },
+  "command_template": [
+    "python3",
+    "-c",
+    "target='{target}';print('site:'+target);print('inurl:admin site:'+target);print('filetype:sql site:'+target);print('intitle:index.of '+target)"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target Domain",
+      "type": "string",
+      "required": true,
+      "placeholder": "secuscan.in",
+      "help": "Domain to build Google dork queries for."
+    }
+  ],
+  "presets": {
+    "default": {}
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": false,
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "python3"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "id": "container_scanner",
+  "name": "Container Scan (Trivy)",
+  "version": "1.0.0",
+  "description": "Scan Docker images and registries for known vulnerabilities",
+  "long_description": "Trivy is a comprehensive code and container vulnerability scanner. It detects vulnerabilities in OS packages and language-specific dependencies.",
+  "category": "network",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "Apache-2.0",
+  "icon": "📦",
+  "engine": {
+    "type": "cli",
+    "binary": "trivy"
+  },
+  "command_template": [
+    "trivy",
+    "image",
+    "-f",
+    "json",
+    "--no-progress",
+    "{target}"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Docker Image or Archive",
+      "type": "string",
+      "required": true,
+      "placeholder": "ubuntu:latest or alpine:3.15",
+      "validation": {
+        "pattern": "^[a-zA-Z0-9_./:-]+$",
+        "message": "Must be valid Docker image name"
+      },
+      "help": "Docker image name or path to a tar archive."
+    }
+  ],
+  "presets": {},
+  "output": {
+    "format": "json",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": false,
+    "consent_message": "Scanning public container images is safe and passive.",
+    "allowed_targets": [
+      "*"
+    ],
+    "rate_limit": {
+      "max_per_hour": 50,
+      "max_concurrent": 5
+    }
+  },
+  "learning": {
+    "difficulty": "beginner",
+    "estimated_duration": "1-3 minutes",
+    "tutorial_url": "https://docs.secuscan.local/plugins/trivy"
+  },
+  "dependencies": {
+    "binaries": [
+      "trivy"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  },
+  "docker_image": "aquasec/trivy"
+}
