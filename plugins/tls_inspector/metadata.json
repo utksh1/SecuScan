@@ -1,6 +1,6 @@
 {
   "id": "tls_inspector",
-  "name": "TLS Inspector",
+  "name": "TLS Security Analysis",
   "version": "1.0.0",
   "description": "Examine TLS/SSL certificates and cipher configurations",
   "long_description": "Inspects TLS/SSL configurations, certificate validity, cipher suites, and protocol versions. Identifies weak cryptographic implementations, expired certificates, and misconfigured trust chains.",
@@ -26,7 +26,7 @@
       "label": "Target Host",
       "type": "string",
       "required": true,
-      "placeholder": "example.com",
+      "placeholder": "secuscan.in",
       "validation": {
         "pattern": "^[a-zA-Z0-9.-]+$",
         "message": "Must be valid hostname or IP"
@@ -47,7 +47,7 @@
       "label": "SNI Hostname",
       "type": "string",
       "required": false,
-      "placeholder": "example.com",
+      "placeholder": "secuscan.in",
       "help": "Server Name Indication for virtual hosting (usually same as host)"
     },
     {

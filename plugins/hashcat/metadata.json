@@ -1,66 +1,99 @@
 {
-  "schema_version": "1.0",
-  "plugin": {
-    "id": "hashcat",
-    "name": "Hashcat (Expert Mode)",
-    "version": "6.2.6",
-    "author": "SecuScan Team",
-    "description": "World's fastest and most advanced password recovery utility.",
-    "category": "expert",
-    "tags": ["password", "cracking", "expert"],
-    "icon": "password",
-    "documentation_url": "https://hashcat.net/"
+  "id": "hashcat",
+  "name": "Password Recovery Audit",
+  "version": "1.0.0",
+  "description": "Password recovery and hash audit workflow.",
+  "long_description": "Runs Hashcat in controlled audit mode to evaluate password strength against authorized hash sets.",
+  "category": "expert",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
   },
-  "execution": {
-    "engine": "cli",
-    "command_template": [
-      "hashcat", "-m", "{{hash_type}}", "-a", "{{attack_mode}}", "{{target}}", "{{wordlist}}"
-    ],
-    "timeout_seconds": 3600,
-    "container": {
-      "required": true,
-      "image": "secuscan/hashcat:latest"
-    }
+  "license": "MIT",
+  "icon": "\u26a1",
+  "engine": {
+    "type": "cli",
+    "binary": "hashcat"
   },
+  "command_template": [
+    "hashcat",
+    "-m",
+    "{hash_type}",
+    "-a",
+    "{attack_mode}",
+    "{target}",
+    "--if:wordlist:then:{wordlist}",
+    "--if:session_name:then:--session",
+    "--if:session_name:then:{session_name}",
+    "--quiet"
+  ],
   "fields": [
     {
       "id": "target",
       "label": "Hash File Path",
       "type": "string",
-      "required": true
+      "required": true,
+      "placeholder": "/tmp/hashes.txt"
     },
     {
       "id": "hash_type",
       "label": "Hash Type (Mode)",
       "type": "integer",
+      "required": false,
       "default": 0,
-      "description": "MD5=0, SHA1=100, etc."
+      "help": "Example: 0=MD5, 1000=NTLM"
     },
     {
       "id": "attack_mode",
       "label": "Attack Mode",
       "type": "integer",
-      "default": 3,
-      "description": "3 = Brute-force, 0 = Dictionary"
+      "required": false,
+      "default": 0,
+      "help": "0=dictionary, 3=mask"
     },
     {
       "id": "wordlist",
       "label": "Wordlist Path",
       "type": "string",
-      "required": false
+      "required": false,
+      "placeholder": "/usr/share/wordlists/rockyou.txt"
+    },
+    {
+      "id": "session_name",
+      "label": "Session Name",
+      "type": "string",
+      "required": false,
+      "default": ""
     }
   ],
   "presets": {
-    "md5_brute": {
-      "parameters": {
-        "hash_type": 0,
-        "attack_mode": 3
-      },
-      "safety_level": "high"
+    "md5_dictionary": {
+      "hash_type": 0,
+      "attack_mode": 0
+    },
+    "ntlm_dictionary": {
+      "hash_type": 1000,
+      "attack_mode": 0
     }
   },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
   "safety": {
-    "level": "expert",
-    "description": "Use for authorized audits only. Resource intensive."
+    "level": "exploit",
+    "requires_consent": true,
+    "consent_message": "Hashcat performs offensive-style password recovery. Use only for authorized assessments.",
+    "rate_limit": {
+      "max_per_hour": 5,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "hashcat"
+    ],
+    "python_packages": [],
+    "system_packages": []
   }
 }

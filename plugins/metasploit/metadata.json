@@ -1,37 +1,37 @@
 {
-  "schema_version": "1.0",
-  "plugin": {
-    "id": "metasploit",
-    "name": "Metasploit Framework",
-    "version": "6.0.0",
-    "author": "SecuScan Team",
-    "description": "Exploitation framework for vulnerability testing and verification.",
-    "category": "expert",
-    "tags": ["exploit", "msf", "expert"],
-    "icon": "bolt",
-    "documentation_url": "https://www.metasploit.com/"
+  "id": "metasploit",
+  "name": "Exploitation Connector",
+  "version": "1.0.0",
+  "description": "Metasploit connector for controlled exploit-module execution.",
+  "long_description": "Runs a selected Metasploit module in scripted mode for authorized exploitation validation workflows.",
+  "category": "expert",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
   },
-  "execution": {
-    "engine": "cli",
-    "command_template": [
-      "msfconsole", "-x", "use {{exploit}}; set RHOSTS {{target}}; set PAYLOAD {{payload}}; run; exit"
-    ],
-    "timeout_seconds": 3600,
-    "container": {
-      "required": true,
-      "image": "metasploitframework/metasploit-framework:latest"
-    }
+  "license": "MIT",
+  "icon": "\ud83d\ude80",
+  "engine": {
+    "type": "cli",
+    "binary": "msfconsole"
   },
+  "command_template": [
+    "msfconsole",
+    "-q",
+    "-x",
+    "use {module}; set RHOSTS {target}; set PAYLOAD {payload}; run; exit"
+  ],
   "fields": [
     {
       "id": "target",
-      "label": "Target Host",
+      "label": "Remote Host",
       "type": "string",
-      "required": true
+      "required": true,
+      "placeholder": "10.10.10.10"
     },
     {
-      "id": "exploit",
-      "label": "Exploit Path",
+      "id": "module",
+      "label": "Metasploit Module",
       "type": "string",
       "required": true,
       "default": "exploit/multi/handler"
@@ -40,20 +40,34 @@
       "id": "payload",
       "label": "Payload",
       "type": "string",
-      "required": true,
+      "required": false,
       "default": "generic/shell_reverse_tcp"
     }
   ],
   "presets": {
     "handler": {
-      "parameters": {
-        "exploit": "exploit/multi/handler"
-      },
-      "safety_level": "moderate"
+      "module": "exploit/multi/handler",
+      "payload": "generic/shell_reverse_tcp"
     }
   },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
   "safety": {
-    "level": "expert",
-    "description": "PROHIBITED on unauthorized networks. Fully sandboxed."
+    "level": "exploit",
+    "requires_consent": true,
+    "consent_message": "Metasploit can launch exploit payloads. Explicit authorization is mandatory.",
+    "rate_limit": {
+      "max_per_hour": 3,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "msfconsole"
+    ],
+    "python_packages": [],
+    "system_packages": []
   }
 }

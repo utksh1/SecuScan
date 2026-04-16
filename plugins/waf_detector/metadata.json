@@ -1,23 +1,22 @@
 {
-  "id": "joomscan",
-  "name": "Joomla Security Scan",
+  "id": "waf_detector",
+  "name": "WAF Detector",
   "version": "1.0.0",
-  "description": "Joomla security scanner for version and common weakness discovery.",
-  "long_description": "Runs JoomScan against a Joomla target and extracts vulnerable patterns and interesting disclosures.",
-  "category": "vulnerability",
+  "description": "Automatically identify Web Application Firewalls protecting targets.",
+  "long_description": "Automatically identify Web Application Firewalls protecting targets.",
+  "category": "robots",
   "author": {
     "name": "SecuScan Contributors",
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83c\udff7\ufe0f",
+  "icon": "\ud83d\udee0\ufe0f",
   "engine": {
     "type": "cli",
-    "binary": "joomscan"
+    "binary": "wafw00f"
   },
   "command_template": [
-    "joomscan",
-    "-u",
+    "wafw00f",
     "{target}"
   ],
   "fields": [
@@ -26,7 +25,7 @@
       "label": "Target URL",
       "type": "string",
       "required": true,
-      "placeholder": "https://joomla.secuscan.in",
+      "placeholder": "https://secuscan.in",
       "validation": {
         "pattern": "^https?://",
         "message": "Must be a valid HTTP(S) URL"
@@ -41,17 +40,16 @@
     "parser": "custom"
   },
   "safety": {
-    "level": "intrusive",
-    "requires_consent": true,
-    "consent_message": "JoomScan runs active checks and should only be used on authorized targets.",
+    "level": "safe",
+    "requires_consent": false,
     "rate_limit": {
-      "max_per_hour": 10,
+      "max_per_hour": 20,
       "max_concurrent": 1
     }
   },
   "dependencies": {
     "binaries": [
-      "joomscan"
+      "wafw00f"
     ],
     "python_packages": [],
     "system_packages": []

@@ -1,51 +1,74 @@
 {
-  "schema_version": "1.0",
-  "plugin": {
-    "id": "yara_scan",
-    "name": "YARA Malware Scanner",
-    "version": "1.0.0",
-    "author": "SecuScan Team",
-    "description": "Pattern matching tool for malware detection and binary analysis.",
-    "category": "forensics",
-    "tags": ["malware", "forensics", "yara"],
-    "icon": "bug",
-    "documentation_url": "https://virustotal.github.io/yara/"
+  "id": "yara_scan",
+  "name": "Binary Signature Scan",
+  "version": "1.0.0",
+  "description": "Binary and file-system signature matching with YARA rules.",
+  "long_description": "Runs recursive YARA scans against binaries, folders, or artifacts and reports matched signatures.",
+  "category": "forensics",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
   },
-  "execution": {
-    "engine": "cli",
-    "command_template": [
-      "yara", "-r", "{{rules}}", "{{target}}"
-    ],
-    "timeout_seconds": 300,
-    "container": {
-      "required": true,
-      "image": "secuscan/yara:latest"
-    }
+  "license": "MIT",
+  "icon": "\ud83d\udd2c",
+  "engine": {
+    "type": "cli",
+    "binary": "yara"
   },
+  "command_template": [
+    "yara",
+    "-r",
+    "{rules}",
+    "{target}",
+    "--if:print_strings:then:-s"
+  ],
   "fields": [
     {
       "id": "target",
-      "label": "Target Path",
+      "label": "Target File/Directory",
       "type": "string",
       "required": true,
-      "description": "Local path to file or directory to scan."
+      "placeholder": "/tmp/suspicious.bin",
+      "help": "Path to file or directory to scan."
     },
     {
       "id": "rules",
       "label": "YARA Rules Path",
       "type": "string",
       "required": true,
-      "description": "Path to .yar rule file."
+      "placeholder": "/opt/rules/malware.yar"
+    },
+    {
+      "id": "print_strings",
+      "label": "Print Matching Strings",
+      "type": "boolean",
+      "required": false,
+      "default": false
     }
   ],
   "presets": {
     "default": {
-      "parameters": {},
-      "safety_level": "safe"
+      "print_strings": false
     }
   },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
   "safety": {
-    "level": "moderate",
-    "description": "Requires access to local files. Use only on trusted files."
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "YARA can process sensitive binaries/artifacts. Ensure approved forensic scope.",
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "yara"
+    ],
+    "python_packages": [],
+    "system_packages": []
   }
 }

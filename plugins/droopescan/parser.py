@@ -1,39 +1,59 @@
 import json
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
-def parse(raw_output: str) -> List[Dict[str, Any]]:
-    """
-    Parses DroopeScan JSON output into structured findings.
-    """
+
+def _make_finding(title: str, category: str, severity: str, description: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "title": title,
+        "category": category,
+        "severity": severity,
+        "description": description,
+        "remediation": "Review Drupal exposure and update vulnerable modules/themes.",
+        "metadata": metadata,
+    }
+
+
+def parse(output: str) -> Dict[str, Any]:
+    findings: List[Dict[str, Any]] = []
+
     try:
-        data = json.loads(raw_output)
-        findings = []
-        
-        for category, items in data.items():
-            if not items:
+        data = json.loads(output)
+    except Exception:
+        for line in output.splitlines():
+            text = line.strip()
+            if not text:
                 continue
-                
-            for item in items:
-                title = item.get("description", f"Discovered {category}")
-                findings.append({
-                    "type": "discovery",
-                    "title": f"DroopeScan: {category.capitalize()}",
-                    "description": title,
-                    "severity": "low" if category != "vulnerabilities" else "high",
-                    "metadata": item
-                })
-                
-        return findings
-    except Exception as e:
-        # Fallback for text output if JSON fails
-        lines = raw_output.strip().split("\n")
-        findings = []
-        for line in lines:
-            if "[+]" in line:
-                findings.append({
-                    "type": "discovery",
-                    "title": "DroopeScan Finding",
-                    "description": line.replace("[+]", "").strip(),
-                    "severity": "low"
-                })
-        return findings if findings else [{"type": "info", "title": "No Findings", "description": "DroopeScan completed with no structured findings.", "severity": "info"}]
+            findings.append(
+                _make_finding(
+                    title="DroopeScan Finding",
+                    category="CMS Security",
+                    severity="low",
+                    description=text,
+                    metadata={"line": text},
+                )
+            )
+        return {"findings": findings, "count": len(findings)}
+
+    if isinstance(data, dict):
+        for key, values in data.items():
+            if not isinstance(values, list):
+                continue
+            for item in values:
+                if not isinstance(item, dict):
+                    continue
+                description = str(item.get("description") or item.get("url") or item)
+                severity = "high" if "vuln" in key.lower() else "low"
+                findings.append(
+                    _make_finding(
+                        title=f"DroopeScan {key}",
+                        category="CMS Vulnerability" if severity == "high" else "CMS Discovery",
+                        severity=severity,
+                        description=description,
+                        metadata=item,
+                    )
+                )
+
+    return {
+        "findings": findings,
+        "count": len(findings),
+    }

@@ -1,24 +1,28 @@
 {
-  "id": "joomscan",
-  "name": "Joomla Security Scan",
+  "id": "website-recon-2",
+  "name": "Website Recon",
   "version": "1.0.0",
-  "description": "Joomla security scanner for version and common weakness discovery.",
-  "long_description": "Runs JoomScan against a Joomla target and extracts vulnerable patterns and interesting disclosures.",
-  "category": "vulnerability",
+  "description": "Fingerprint web technologies of target website.",
+  "long_description": "Fingerprint web technologies of target website.",
+  "category": "recon",
   "author": {
     "name": "SecuScan Contributors",
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83c\udff7\ufe0f",
+  "icon": "\ud83d\udd0e",
   "engine": {
     "type": "cli",
-    "binary": "joomscan"
+    "binary": "httpx"
   },
   "command_template": [
-    "joomscan",
+    "httpx",
     "-u",
-    "{target}"
+    "{target}",
+    "-title",
+    "-status-code",
+    "-tech-detect",
+    "-silent"
   ],
   "fields": [
     {
@@ -26,11 +30,12 @@
       "label": "Target URL",
       "type": "string",
       "required": true,
-      "placeholder": "https://joomla.secuscan.in",
+      "placeholder": "https://secuscan.in",
       "validation": {
         "pattern": "^https?://",
         "message": "Must be a valid HTTP(S) URL"
-      }
+      },
+      "help": "URL to fingerprint."
     }
   ],
   "presets": {
@@ -41,17 +46,16 @@
     "parser": "custom"
   },
   "safety": {
-    "level": "intrusive",
-    "requires_consent": true,
-    "consent_message": "JoomScan runs active checks and should only be used on authorized targets.",
+    "level": "safe",
+    "requires_consent": false,
     "rate_limit": {
-      "max_per_hour": 10,
+      "max_per_hour": 20,
       "max_concurrent": 1
     }
   },
   "dependencies": {
     "binaries": [
-      "joomscan"
+      "httpx"
     ],
     "python_packages": [],
     "system_packages": []

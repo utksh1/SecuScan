@@ -29,7 +29,7 @@
       "label": "Target URL",
       "type": "string",
       "required": true,
-      "placeholder": "https://example.com",
+      "placeholder": "https://secuscan.in",
       "validation": {
         "pattern": "^https?://",
         "message": "Must be a valid HTTP(S) URL"

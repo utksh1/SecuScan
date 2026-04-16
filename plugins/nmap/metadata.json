@@ -1,6 +1,6 @@
 {
   "id": "nmap",
-  "name": "Nmap",
+  "name": "Network Scanning",
   "version": "1.0.0",
   "description": "Network discovery and port scanning tool",
   "long_description": "Nmap performs host discovery, port enumeration, service version detection, and OS fingerprinting. It's the industry standard for network reconnaissance.",
@@ -31,7 +31,7 @@
       "label": "Target",
       "type": "string",
       "required": true,
-      "placeholder": "192.168.1.1 or example.com",
+      "placeholder": "192.168.1.1 or secuscan.in",
       "validation": {
         "pattern": "^[a-zA-Z0-9.-]+$",
         "message": "Must be valid IP or hostname"

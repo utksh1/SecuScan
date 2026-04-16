@@ -1,44 +1,65 @@
 import re
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
-def parse(raw_output: str) -> List[Dict[str, Any]]:
-    """
-    Parses SQLi Checker (Ghauri) output.
-    """
-    findings = []
-    
-    # Look for injectable parameters
-    param_matches = re.findall(r"Payload: (.*)", raw_output)
-    db_matches = re.findall(r"available databases \[.*\]:\n(.*?)(?=\n\n|\Z)", raw_output, re.S)
-    
-    if param_matches:
-        count = 0
-        for payload in param_matches:
-            if count >= 3:
-                break
-            findings.append({
-                "type": "vulnerability",
+
+PAYLOAD_RE = re.compile(r"(?i)payload:\s*(.+)")
+DB_HEADER_RE = re.compile(r"(?i)available databases")
+
+
+def parse(output: str) -> Dict[str, Any]:
+    findings: List[Dict[str, Any]] = []
+    payloads = [match.group(1).strip() for match in PAYLOAD_RE.finditer(output)]
+
+    for payload in payloads[:5]:
+        findings.append(
+            {
                 "title": "SQL Injection Found",
-                "description": f"Target is injectable! Sample payload: {payload}",
-                "severity": "critical"
-            })
-            count += 1
-            
-    if db_matches:
-        dbs = db_matches[0].strip().split("\n")
-        findings.append({
-            "type": "info",
-            "title": "Databases Enumerated",
-            "description": f"Found {len(dbs)} databases: {', '.join([d.strip() for d in dbs])}",
-            "severity": "medium"
-        })
-        
-    if not findings and ("is not injectable" in raw_output or "does not seem to be injectable" in raw_output):
-        findings.append({
-            "type": "info",
-            "title": "Not Injectable",
-            "description": "The target does not appear to be vulnerable to common SQLi patterns.",
-            "severity": "info"
-        })
-        
-    return findings if findings else [{"type": "info", "title": "Scan Complete", "description": "Ghauri finished execution.", "severity": "info"}]
+                "category": "Injection",
+                "severity": "critical",
+                "description": f"Potential injectable vector detected. Example payload: {payload}",
+                "remediation": "Use parameterized queries, strict input validation, and least-privilege DB users.",
+                "metadata": {"payload": payload},
+            }
+        )
+
+    lines = output.splitlines()
+    db_values: List[str] = []
+    for idx, line in enumerate(lines):
+        if DB_HEADER_RE.search(line):
+            for candidate in lines[idx + 1 :]:
+                c = candidate.strip()
+                if not c:
+                    break
+                if c.startswith("["):
+                    continue
+                db_values.append(c)
+            break
+
+    if db_values:
+        findings.append(
+            {
+                "title": "Databases Enumerated",
+                "category": "Injection",
+                "severity": "high",
+                "description": f"Discovered databases: {', '.join(db_values)}",
+                "remediation": "Restrict database metadata exposure and patch injectable endpoints.",
+                "metadata": {"databases": db_values},
+            }
+        )
+
+    if not findings and "not injectable" in output.lower():
+        findings.append(
+            {
+                "title": "No SQLi Detected",
+                "category": "Injection",
+                "severity": "info",
+                "description": "The target did not appear injectable in this run.",
+                "remediation": "Continue validating with authenticated and context-specific test cases.",
+                "metadata": {},
+            }
+        )
+
+    return {
+        "findings": findings,
+        "count": len(findings),
+    }

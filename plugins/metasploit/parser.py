@@ -1,47 +1,53 @@
 import re
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
-def parse(raw_output: str) -> List[Dict[str, Any]]:
-    """
-    Parses Metasploit console output.
-    Looks for session openings.
-    """
-    findings = []
-    
-    # Check for session openings
-    session_match = re.search(r"Command shell session (\d+) opened", raw_output)
-    meterpreter_match = re.search(r"Meterpreter session (\d+) opened", raw_output)
-    
-    if session_match:
-        findings.append({
-            "type": "exploitation_success",
-            "title": "Exploit Successful: Session Opened",
-            "description": f"Metasploit session {session_match.group(1)} was successfully opened.",
-            "severity": "critical"
-        })
-        
-    if meterpreter_match:
-        findings.append({
-            "type": "exploitation_success",
-            "title": "Exploit Successful: Meterpreter Opened",
-            "description": f"Meterpreter session {meterpreter_match.group(1)} was successfully opened.",
-            "severity": "critical"
-        })
-        
-    if not findings and "Exploit failed" in raw_output:
-        findings.append({
-            "type": "exploitation_failure",
-            "title": "Exploit Failed",
-            "description": "The exploit attempt did not result in a session.",
-            "severity": "info"
-        })
-        
-    if not findings:
-        findings.append({
-            "type": "info",
-            "title": "Metasploit Finished",
-            "description": "Execution completed. Check raw logs for console output.",
-            "severity": "info"
-        })
-        
-    return findings
+
+SESSION_RE = re.compile(r"(?i)(command shell|meterpreter) session\s+(\d+)\s+opened")
+VULN_RE = re.compile(r"(?i)found vulnerability\s*:?\s*(.+)")
+
+
+def parse(output: str) -> Dict[str, Any]:
+    findings: List[Dict[str, Any]] = []
+
+    for match in SESSION_RE.finditer(output):
+        session_type = match.group(1)
+        session_id = match.group(2)
+        findings.append(
+            {
+                "title": "Metasploit Session Opened",
+                "category": "Exploitation",
+                "severity": "critical",
+                "description": f"{session_type.title()} session {session_id} opened.",
+                "remediation": "Treat target as compromised and perform containment and forensic review.",
+                "metadata": {"session_type": session_type, "session_id": session_id},
+            }
+        )
+
+    for match in VULN_RE.finditer(output):
+        findings.append(
+            {
+                "title": "Metasploit Vulnerability Match",
+                "category": "Exploitation",
+                "severity": "high",
+                "description": match.group(1).strip(),
+                "remediation": "Patch vulnerable services and verify exploit path is closed.",
+                "metadata": {"line": match.group(0)},
+            }
+        )
+
+    if not findings and "exploit failed" in output.lower():
+        findings.append(
+            {
+                "title": "Metasploit Attempt Failed",
+                "category": "Exploitation",
+                "severity": "medium",
+                "description": "Exploit execution did not open a session.",
+                "remediation": "Review module configuration and target reachability.",
+                "metadata": {},
+            }
+        )
+
+    return {
+        "findings": findings,
+        "count": len(findings),
+    }
