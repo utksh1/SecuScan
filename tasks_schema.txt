@@ -1,0 +1,26 @@
+CREATE TABLE tasks (
+                id TEXT PRIMARY KEY,
+                plugin_id TEXT NOT NULL,
+                tool_name TEXT NOT NULL,
+                target TEXT NOT NULL,
+                inputs_json TEXT NOT NULL DEFAULT '{}',
+                preset TEXT,
+                status TEXT NOT NULL DEFAULT 'queued',
+                consent_granted BOOLEAN NOT NULL DEFAULT 0,
+                safe_mode BOOLEAN NOT NULL DEFAULT 1,
+                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                started_at TIMESTAMP,
+                completed_at TIMESTAMP,
+                duration_seconds REAL,
+                exit_code INTEGER,
+                structured_json TEXT,
+                raw_output_path TEXT,
+                error_message TEXT,
+                container_id TEXT,
+                cpu_seconds REAL,
+                memory_peak_mb REAL
+            , command_used TEXT);
+CREATE INDEX idx_tasks_created ON tasks(created_at);
+CREATE INDEX idx_tasks_target ON tasks(target);
+CREATE INDEX idx_tasks_status ON tasks(status);
+CREATE INDEX idx_tasks_plugin ON tasks(plugin_id);

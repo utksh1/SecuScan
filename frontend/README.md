@@ -434,12 +434,12 @@ function MyComponent() {
 **Error:** `Network error` or `Failed to fetch`
 
 **Solution:**
-1. Verify backend is running: `curl http://127.0.0.1:8080/api/v1/health`
+1. Verify backend is running: `curl http://127.0.0.1:8000/api/v1/health`
 2. Check Vite proxy in `vite.config.js`:
 ```js
 server: {
   proxy: {
-    '/api': 'http://127.0.0.1:8080'
+    '/api': 'http://127.0.0.1:8000'
   }
 }
 ```
@@ -501,7 +501,7 @@ Option 2: **Separate Web Server**
 
 1. **API Proxy:** Vite dev server proxies `/api` to backend
 2. **No Secrets:** Frontend code is public - no API keys
-3. **CORS:** Backend must allow `localhost:3000` in dev
+3. **CORS:** Backend must allow your frontend origin in dev (default includes `localhost:5173` and `localhost:3000`)
 4. **Localhost Only:** Both frontend and backend run locally
 
 ---

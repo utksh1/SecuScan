@@ -1,0 +1,17 @@
+Starting Nmap 7.98 ( https://nmap.org ) at 2026-03-28 18:17 +0530
+Nmap scan report for secuscan.in (206.189.138.106)
+Host is up (0.022s latency).
+Not shown: 90 filtered tcp ports (no-response)
+PORT     STATE  SERVICE
+21/tcp   open   ftp
+25/tcp   open   smtp
+80/tcp   open   http
+110/tcp  open   pop3
+113/tcp  closed ident
+143/tcp  open   imap
+443/tcp  open   https
+2000/tcp open   cisco-sccp
+5060/tcp open   sip
+5900/tcp closed vnc
+
+Nmap done: 1 IP address (1 host up) scanned in 12.11 seconds

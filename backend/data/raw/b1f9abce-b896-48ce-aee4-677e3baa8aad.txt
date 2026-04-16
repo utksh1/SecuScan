@@ -1,0 +1,2 @@
+Can't locate object method "new" via package "JSON" at /opt/homebrew/Cellar/nikto/2.5.0/share/nikto/plugins/nikto_report_json.plugin line 102.
+{"host":"Utksh.in","ip":"216.198.79.1","port":"80","banner":"Vercel","vulnerabilities":[

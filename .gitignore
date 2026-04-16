@@ -26,6 +26,7 @@ venv/
 env/
 ENV/
 .venv
+venv_tests/
 
 # IDE
 .vscode/
@@ -74,3 +75,5 @@ credentials/
 tmp/
 temp/
 *.tmp
+node_modules/
+.vercel

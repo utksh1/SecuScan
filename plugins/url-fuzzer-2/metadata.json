@@ -1,0 +1,77 @@
+{
+  "id": "url-fuzzer-2",
+  "name": "URL Fuzzer",
+  "version": "1.0.0",
+  "description": "Discover hidden files and directories.",
+  "long_description": "Discover hidden files and directories.",
+  "category": "recon",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udd0e",
+  "engine": {
+    "type": "cli",
+    "binary": "ffuf"
+  },
+  "command_template": [
+    "ffuf",
+    "-u",
+    "{target}/FUZZ",
+    "-w",
+    "{wordlist}",
+    "-mc",
+    "200,204,301,302,307,401,403",
+    "-s"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target URL",
+      "type": "string",
+      "required": true,
+      "placeholder": "https://secuscan.in",
+      "validation": {
+        "pattern": "^https?://",
+        "message": "Must be a valid HTTP(S) URL"
+      }
+    },
+    {
+      "id": "wordlist",
+      "label": "Wordlist Path",
+      "type": "string",
+      "required": false,
+      "default": "/usr/share/wordlists/dirb/common.txt",
+      "help": "Wordlist for fuzzing paths."
+    }
+  ],
+  "presets": {
+    "quick": {
+      "wordlist": "/usr/share/wordlists/dirb/common.txt"
+    },
+    "deep": {
+      "wordlist": "/usr/share/seclists/Discovery/Web-Content/common.txt"
+    }
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "URL fuzzing sends many active requests. Ensure authorization.",
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "ffuf"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  }
+}
