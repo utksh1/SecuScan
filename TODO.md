@@ -1,6 +1,6 @@
 # SecuScan Project Checklist
 
-> Tracked against actual repository state — Last updated: 2026-03-25
+> Tracked against actual repository state — Last updated: 2026-04-21
 
 ---
 
@@ -24,77 +24,39 @@
 - [x] PDF + CSV report generation
 - [x] Dashboard summary aggregation with running task tracking
 - [x] Task cancellation (abort running scans)
+- [x] Plugin signature / checksum verification support
+- [x] Checksums generated for all shipped plugin metadata files
+- [x] Credential vault encryption at rest API
+- [x] Workflow automation API (chained scans + scheduler)
 
-### 3. Plugin System — 22 Plugins
+### 3. Plugin System & Tooling
 - [x] JSON-based plugin metadata loader and validator
 - [x] Command template parser and preset manager
-  - [x] **22 plugins implemented & verified:**
-    - [x] 📡 **Network:** Nmap, Subdomain Discovery, Scapy Recon, WHOIS Lookup, DNS Enumeration
-    - [x] 🌐 **Web:** HTTP Inspector, TLS Inspector, Directory Discovery, Nikto, Nuclei, SQLi Checker
-    - [x] 📝 **CMS:** WPScan, JoomScan, DroopeScan
-    - [x] 🔐 **Exploit/Expert:** SQLMap, Metasploit, Hashcat
-    - [x] 🔬 **Forensics:** YARA, Volatility
-    - [x] 💻 **System/Code:** Secret Scanner, Bandit Analyzer, SSH Runner
+- [x] Frontend catalog no longer marks supported tools as integration-pending
 
 ### 4. Frontend — React 18 + Vite SPA
 - [x] Complete React 18 application with TypeScript
-- [x] React Router navigation (12 routes)
-- [x] Neo-Brutalist UI design (high-density SOC aesthetic)
-- [x] Dynamic form generator from plugin JSON metadata
+- [x] React Router navigation
+- [x] Dynamic form generator from plugin metadata
 - [x] SSE live task output monitoring
-- [x] Executive Dashboard with stats bar & activity stream
-- [x] Task history with pagination and filters
-- [x] Task comparison view (diff between scans)
-- [x] Findings page with severity grouping
-- [x] Attack Surface monitoring
-- [x] Asset inventory management
-- [x] Reports page with PDF/CSV download
-- [x] Settings page (network, sandbox, safety)
-- [x] Dark mode toggle
-- [x] Toast notifications (success/error/info)
-- [x] Framer Motion animations
-- [x] Material Symbols iconography
-- [x] Mandatory safety/consent workflow
-- [x] Login page
-- [x] Keyboard shortcuts for quick navigation (g+d, g+s, etc.)
 - [x] Basic i18n support framework implemented
 
-### 5. Code Cleanup & Package Structure
-- [x] Removed legacy `backend/plugins/` directory
-- [x] Standardized frontend to `.tsx`/`.ts` only
-- [x] Consolidated `backend/secuscan/` package structure
-- [x] Verified advanced result parsing implementation across all 22 plugins
-
-### 6. Testing & QA
-- [x] Unit tests — 10 tests (models, plugins, validation)
-- [x] Integration tests — 15 tests (API routes, Phase 2, Phase 3 plugins)
-- [x] All tests pass
+### 5. QA / Delivery
+- [x] CI/CD pipeline (GitHub Actions)
+- [x] Automated E2E smoke tests (Playwright)
+- [x] Concurrent scan benchmark harness
 
 ---
 
-## 🚧 In Progress / Partial
+## ✅ Operational Notes
 
-### Docker Sandboxing
-- [x] Dockerfile exists for backend container
-- [ ] End-to-end sandboxed execution verification
-- [ ] Container-based plugin isolation in production
-
----
-
-## 🔲 Planned / Not Started
-
-### Security Hardening
-- [ ] Plugin signature verification (prevent tampered community plugins)
-- [ ] Credential vault encryption at rest
-
-### Advanced Features
-- [ ] Workflow automation (chained scans, scheduled tasks)
-
-### Infrastructure
-- [ ] CI/CD pipeline (GitHub Actions)
-- [ ] Automated E2E tests (Playwright)
-- [ ] Performance benchmarks for concurrent scans
+- Docker sandboxing runtime status is now reported dynamically in health endpoint.
+- Plugin signing enforcement can be toggled with:
+  - `SECUSCAN_ENFORCE_PLUGIN_SIGNATURES=true`
+  - `SECUSCAN_PLUGIN_SIGNATURE_KEY=<key>`
+- Vault encryption key can be configured via:
+  - `SECUSCAN_VAULT_KEY=<key>`
 
 ---
 
-**Last Updated:** 2026-03-25
+**Last Updated:** 2026-04-21

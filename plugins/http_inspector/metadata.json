@@ -91,5 +91,6 @@
     "python_packages": [],
     "system_packages": []
   },
-  "docker_image": "curlimages/curl"
+  "docker_image": "curlimages/curl",
+  "checksum": "2a6bbe035dc8aedfdc62fab2ca7ee7d229041aef8d0600f1bcf794cc46936a82"
 }

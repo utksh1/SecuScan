@@ -182,10 +182,29 @@ class Database:
                 UNIQUE(plugin_id, name)
             );
 
+            CREATE TABLE IF NOT EXISTS credential_vault (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                encrypted_value TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS workflows (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                schedule_seconds INTEGER,
+                enabled BOOLEAN NOT NULL DEFAULT 1,
+                steps_json TEXT NOT NULL DEFAULT '[]',
+                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                last_run_at TIMESTAMP
+            );
+
             CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at);
             CREATE INDEX IF NOT EXISTS idx_tasks_target ON tasks(target);
             CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
             CREATE INDEX IF NOT EXISTS idx_tasks_plugin ON tasks(plugin_id);
+            CREATE INDEX IF NOT EXISTS idx_workflows_enabled ON workflows(enabled);
             """
         )
 

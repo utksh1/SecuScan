@@ -199,5 +199,6 @@
       "perl"
     ]
   },
-  "docker_image": "sullo/nikto"
+  "docker_image": "sullo/nikto",
+  "checksum": "2385e81f8b57890a6be10735bd37bb95363b15c71ae8e05939636a050737ca79"
 }

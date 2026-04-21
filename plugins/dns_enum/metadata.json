@@ -87,5 +87,6 @@
       "dnsrecon"
     ]
   },
-  "docker_image": "darkoperator/dnsrecon:latest"
+  "docker_image": "darkoperator/dnsrecon:latest",
+  "checksum": "bee6dad0b06890b0a9df92a679abcc9bf7032e3651b504f4f96b13ec9114331f"
 }
