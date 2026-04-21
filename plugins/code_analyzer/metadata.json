@@ -40,9 +40,18 @@
       "required": false,
       "default": "l",
       "options": [
-        {"value": "l", "label": "Low"},
-        {"value": "m", "label": "Medium"},
-        {"value": "h", "label": "High"}
+        {
+          "value": "l",
+          "label": "Low"
+        },
+        {
+          "value": "m",
+          "label": "Medium"
+        },
+        {
+          "value": "h",
+          "label": "High"
+        }
       ],
       "help": "Report results at or above this severity level."
     }
@@ -78,5 +87,6 @@
     ],
     "system_packages": []
   },
-  "docker_image": "pyfound/bandit:latest"
+  "docker_image": "pyfound/bandit:latest",
+  "checksum": "7daaed25ba96309668e1792c653abeec3f6d407324878b08e1d7a607a5f728db"
 }

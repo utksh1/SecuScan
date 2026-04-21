@@ -9,6 +9,8 @@ import logging
 import re
 import os
 import shutil
+import uuid
+import asyncio
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -71,6 +73,8 @@ from .executor import executor
 from .ratelimit import rate_limiter, concurrent_limiter
 from .validation import validate_target
 from .reporting import reporting
+from .vault import VaultCrypto
+from .workflows import scheduler
 
 from sse_starlette.sse import EventSourceResponse
 
@@ -764,6 +768,159 @@ async def get_settings():
             "allowed_networks": settings.allowed_networks
         }
     }
+
+
+@router.get("/vault")
+async def list_vault_secrets():
+    db = await get_db()
+    rows = await db.fetchall(
+        "SELECT id, name, created_at, updated_at FROM credential_vault ORDER BY name ASC"
+    )
+    return {"items": rows, "total": len(rows)}
+
+
+@router.put("/vault/{name}")
+async def upsert_vault_secret(name: str, payload: Dict[str, str]):
+    value = str(payload.get("value", ""))
+    if not value:
+        raise HTTPException(status_code=400, detail="Secret value is required")
+
+    db = await get_db()
+    crypto = VaultCrypto(settings.resolved_vault_key)
+    encrypted = crypto.encrypt(value)
+    secret_id = str(uuid.uuid4())
+
+    existing = await db.fetchone("SELECT id FROM credential_vault WHERE name = ?", (name,))
+    if existing:
+        await db.execute(
+            "UPDATE credential_vault SET encrypted_value = ?, updated_at = datetime('now') WHERE name = ?",
+            (encrypted, name),
+        )
+    else:
+        await db.execute(
+            "INSERT INTO credential_vault (id, name, encrypted_value) VALUES (?, ?, ?)",
+            (secret_id, name, encrypted),
+        )
+    return {"name": name, "stored": True}
+
+
+@router.get("/vault/{name}")
+async def get_vault_secret(name: str):
+    db = await get_db()
+    row = await db.fetchone("SELECT encrypted_value FROM credential_vault WHERE name = ?", (name,))
+    if not row:
+        raise HTTPException(status_code=404, detail="Secret not found")
+    crypto = VaultCrypto(settings.resolved_vault_key)
+    return {"name": name, "value": crypto.decrypt(row["encrypted_value"])}
+
+
+@router.delete("/vault/{name}")
+async def delete_vault_secret(name: str):
+    db = await get_db()
+    await db.execute("DELETE FROM credential_vault WHERE name = ?", (name,))
+    return {"name": name, "deleted": True}
+
+
+@router.get("/workflows")
+async def list_workflows():
+    db = await get_db()
+    rows = await db.fetchall("SELECT * FROM workflows ORDER BY created_at DESC")
+    return {"workflows": parse_json_fields(rows, ["steps_json"]), "total": len(rows)}
+
+
+@router.post("/workflows")
+async def create_workflow(payload: Dict[str, Any]):
+    name = str(payload.get("name", "")).strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Workflow name is required")
+
+    steps = payload.get("steps", [])
+    if not isinstance(steps, list) or not steps:
+        raise HTTPException(status_code=400, detail="Workflow requires at least one step")
+
+    workflow_id = str(uuid.uuid4())
+    schedule_seconds = payload.get("schedule_seconds")
+    enabled = bool(payload.get("enabled", True))
+    db = await get_db()
+    await db.execute(
+        """
+        INSERT INTO workflows (id, name, schedule_seconds, enabled, steps_json)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (
+            workflow_id,
+            name,
+            int(schedule_seconds) if schedule_seconds else None,
+            1 if enabled else 0,
+            json.dumps(steps),
+        ),
+    )
+    return {"id": workflow_id, "created": True}
+
+
+@router.post("/workflows/{workflow_id}/run")
+async def run_workflow_once(workflow_id: str):
+    db = await get_db()
+    row = await db.fetchone("SELECT steps_json FROM workflows WHERE id = ?", (workflow_id,))
+    if not row:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    steps = json.loads(row["steps_json"] or "[]")
+    created_task_ids: List[str] = []
+    for step in steps:
+        task_id = await executor.create_task(
+            step.get("plugin_id"),
+            step.get("inputs", {}),
+            step.get("preset"),
+            consent_granted=True,
+        )
+        asyncio.create_task(executor.execute_task(task_id))
+        created_task_ids.append(task_id)
+    await db.execute("UPDATE workflows SET last_run_at = datetime('now') WHERE id = ?", (workflow_id,))
+    return {"workflow_id": workflow_id, "queued_tasks": created_task_ids}
+
+
+@router.patch("/workflows/{workflow_id}")
+async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
+    db = await get_db()
+    row = await db.fetchone("SELECT id FROM workflows WHERE id = ?", (workflow_id,))
+    if not row:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+
+    updates = []
+    params: List[Any] = []
+    if "name" in payload:
+        updates.append("name = ?")
+        params.append(str(payload["name"]).strip())
+    if "steps" in payload:
+        updates.append("steps_json = ?")
+        params.append(json.dumps(payload["steps"]))
+    if "schedule_seconds" in payload:
+        val = payload["schedule_seconds"]
+        updates.append("schedule_seconds = ?")
+        params.append(int(val) if val else None)
+    if "enabled" in payload:
+        updates.append("enabled = ?")
+        params.append(1 if payload["enabled"] else 0)
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="No update fields provided")
+
+    params.append(workflow_id)
+    await db.execute(f"UPDATE workflows SET {', '.join(updates)} WHERE id = ?", tuple(params))
+    return {"workflow_id": workflow_id, "updated": True}
+
+
+@router.delete("/workflows/{workflow_id}")
+async def delete_workflow(workflow_id: str):
+    db = await get_db()
+    await db.execute("DELETE FROM workflows WHERE id = ?", (workflow_id,))
+    return {"workflow_id": workflow_id, "deleted": True}
+
+
+@router.post("/workflows/scheduler/tick")
+async def trigger_workflow_tick():
+    await scheduler.tick()
+    return {"tick": "ok"}
 
 
 @router.get("/finding/{finding_id}")

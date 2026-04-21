@@ -184,5 +184,6 @@
     "python_packages": [],
     "system_packages": []
   },
-  "docker_image": "secuscan/ffuf"
+  "docker_image": "secuscan/ffuf",
+  "checksum": "2c66081a09e2c3a765316987257ce7a46116ccd4c19e18fc66cb6b14b60e0742"
 }

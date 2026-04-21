@@ -85,5 +85,6 @@
       "libpcap-dev"
     ]
   },
-  "docker_image": "secdev/scapy:latest"
+  "docker_image": "secdev/scapy:latest",
+  "checksum": "688f16afba16bcf122728cd46a060717622ffeb96dad29b964593b9025b79682"
 }

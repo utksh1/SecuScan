@@ -4,6 +4,7 @@ SecuScan Backend - Main application entry point
 
 import logging
 import sys
+import shutil
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -16,6 +17,7 @@ from .cache import init_cache, cache as global_cache
 from .database import init_db, db as global_db
 from .plugins import init_plugins
 from .routes import router
+from .workflows import scheduler
 
 
 # Configure logging
@@ -51,6 +53,9 @@ async def lifespan(app: FastAPI):
     # Load plugins
     await init_plugins(settings.plugins_dir)
     logger.info("✓ Plugins loaded")
+
+    await scheduler.start()
+    logger.info("✓ Workflow scheduler started")
     
     logger.info("✓ Ready to serve on %s:%d", settings.bind_address, settings.bind_port)
     
@@ -62,6 +67,7 @@ async def lifespan(app: FastAPI):
         await global_db.disconnect()
     if global_cache:
         await global_cache.disconnect()
+    await scheduler.stop()
     logger.info("✓ Shutdown complete")
 
 
@@ -125,7 +131,7 @@ async def health_check():
         "system": {
             "platform": platform.system(),
             "python_version": sys.version.split()[0],
-            "docker_available": True,  # TODO: Check Docker availability
+            "docker_available": shutil.which("docker") is not None,
         }
     }
 

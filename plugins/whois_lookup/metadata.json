@@ -58,5 +58,6 @@
       "whois"
     ]
   },
-  "docker_image": "alpine:latest"
+  "docker_image": "alpine:latest",
+  "checksum": "6df3bdd7ba4824965b67d30d8a4fd688d8242b508ab37188cb5b7c4eed702311"
 }

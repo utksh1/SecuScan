@@ -6,6 +6,8 @@ from pathlib import Path
 from typing import Any, List, Optional
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
+import base64
+import hashlib
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -49,6 +51,9 @@ class Settings(BaseSettings):
     cors_allowed_methods: List[str] = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
     cors_allowed_headers: List[str] = ["Content-Type", "Authorization", "Accept", "Origin"]
     cors_allow_credentials: bool = True
+    plugin_signature_key: Optional[str] = None
+    enforce_plugin_signatures: bool = False
+    vault_key: Optional[str] = None
     
     # Rate Limiting
     max_concurrent_tasks: int = 3
@@ -81,6 +86,13 @@ class Settings(BaseSettings):
     def base_url(self) -> str:
         """Full base URL for the API"""
         return f"http://{self.bind_address}:{self.bind_port}"
+
+    @property
+    def resolved_vault_key(self) -> bytes:
+        """Return a deterministic 32-byte key for credential vault encryption."""
+        seed = self.vault_key or self.plugin_signature_key or "secuscan-dev-key"
+        digest = hashlib.sha256(seed.encode("utf-8")).digest()
+        return base64.urlsafe_b64encode(digest)
     
     def ensure_directories(self) -> None:
         """Create necessary directories if they don't exist"""

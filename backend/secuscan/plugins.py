@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Dict, Optional, List
 import logging
 import shutil
+import hashlib
+import hmac
 
 from .models import PluginMetadata
 from .config import settings
@@ -109,7 +111,60 @@ class PluginManager:
             logger.error(f"Invalid safety level: {safety_level}")
             return False
 
+        if not self._verify_plugin_integrity(plugin, plugin_dir):
+            return False
+
         return True
+
+    def _verify_plugin_integrity(self, plugin: PluginMetadata, plugin_dir: Path) -> bool:
+        """Verify plugin checksum/signature when available."""
+        metadata_file = plugin_dir / "metadata.json"
+        parser_file = plugin_dir / "parser.py"
+        has_checksum = bool(plugin.checksum)
+        has_signature = bool(plugin.signature)
+
+        if not has_checksum and not has_signature and settings.enforce_plugin_signatures:
+            logger.error("Plugin %s missing checksum/signature while enforcement is enabled", plugin.id)
+            return False
+
+        try:
+            combined_digest = self.compute_plugin_digest(metadata_file, parser_file)
+        except Exception as exc:
+            logger.error("Failed to hash plugin files for %s: %s", plugin.id, exc)
+            return False
+
+        if has_checksum and plugin.checksum != combined_digest:
+            logger.error("Checksum mismatch for plugin %s", plugin.id)
+            return False
+
+        if has_signature:
+            if not settings.plugin_signature_key:
+                if settings.enforce_plugin_signatures:
+                    logger.error("SECUSCAN_PLUGIN_SIGNATURE_KEY required for verifying %s", plugin.id)
+                    return False
+                logger.warning("Skipping signature verification for %s: key not configured", plugin.id)
+            else:
+                expected_sig = hmac.new(
+                    settings.plugin_signature_key.encode("utf-8"),
+                    combined_digest.encode("utf-8"),
+                    hashlib.sha256,
+                ).hexdigest()
+                if not hmac.compare_digest(expected_sig, plugin.signature):
+                    logger.error("Signature mismatch for plugin %s", plugin.id)
+                    return False
+
+        return True
+
+    @staticmethod
+    def compute_plugin_digest(metadata_file: Path, parser_file: Path) -> str:
+        """Compute deterministic plugin digest ignoring mutable checksum/signature fields."""
+        metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
+        metadata.pop("checksum", None)
+        metadata.pop("signature", None)
+        metadata_canonical = json.dumps(metadata, sort_keys=True, separators=(",", ":"))
+        metadata_digest = hashlib.sha256(metadata_canonical.encode("utf-8")).hexdigest()
+        parser_digest = hashlib.sha256(parser_file.read_bytes()).hexdigest() if parser_file.exists() else ""
+        return hashlib.sha256(f"{metadata_digest}:{parser_digest}".encode("utf-8")).hexdigest()
     
     def get_plugin(self, plugin_id: str) -> Optional[PluginMetadata]:
         """Get plugin by ID"""
