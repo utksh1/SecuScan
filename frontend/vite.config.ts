@@ -23,8 +23,15 @@ export default defineConfig(({ mode }) => {
       setupFiles: ['./vitest.setup.ts'],
       globals: true,
       pool: 'threads',
+      minWorkers: 1,
       maxWorkers: 1,
-      exclude: ['node_modules', 'dist', 'e2e/**'],
+      include: [
+        'testing/unit/**/*.test.ts',
+        'testing/unit/**/*.test.tsx',
+        'testing/unit/**/*.spec.ts',
+        'testing/unit/**/*.spec.tsx',
+      ],
+      exclude: ['node_modules', 'dist', 'e2e/**', 'tests/e2e/**', 'testing/e2e/**'],
     },
   }
 })

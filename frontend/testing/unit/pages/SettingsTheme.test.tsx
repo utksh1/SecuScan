@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import Settings from '../Settings'
-import { ThemeProvider } from '../../components/ThemeContext'
+import Settings from '../../../src/pages/Settings'
+import { ThemeProvider } from '../../../src/components/ThemeContext'
+import { ToastProvider } from '../../../src/components/ToastContext'
 
 describe('Settings theme wiring', () => {
   beforeEach(() => {
@@ -14,15 +15,22 @@ describe('Settings theme wiring', () => {
 
     render(
       <ThemeProvider>
-        <Settings />
+        <ToastProvider>
+          <Settings />
+        </ToastProvider>
       </ThemeProvider>,
     )
 
-    await user.click(screen.getByRole('button', { name: /light/i }))
+    const themeSelect = screen.getAllByRole('combobox')[3]
+    await user.selectOptions(themeSelect, 'light')
+    await user.click(screen.getByRole('button', { name: /COMMIT_ENGINE_CHANGES/i }))
+
     expect(document.documentElement.classList.contains('theme-light')).toBe(true)
     expect(window.localStorage.getItem('secuscan-theme')).toBe('light')
 
-    await user.click(screen.getByRole('button', { name: /dark/i }))
+    await user.selectOptions(screen.getAllByRole('combobox')[3], 'dark')
+    await user.click(screen.getByRole('button', { name: /COMMIT_ENGINE_CHANGES/i }))
+
     expect(document.documentElement.classList.contains('theme-light')).toBe(false)
     expect(window.localStorage.getItem('secuscan-theme')).toBe('dark')
   })

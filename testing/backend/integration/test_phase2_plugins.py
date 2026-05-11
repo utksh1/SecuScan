@@ -13,7 +13,7 @@ PHASE2_PLUGIN_IDS = {
     "whois_lookup",
     "dns_enum",
 }
-SCANTOOLS_FILE = Path(__file__).resolve().parents[2] / "frontend" / "src" / "data" / "scanTools.ts"
+SCANTOOLS_FILE = Path(__file__).resolve().parents[3] / "frontend" / "src" / "data" / "scanTools.ts"
 
 
 def parse_scantool_ids() -> set[str]:

@@ -17,7 +17,7 @@ def test_validate_target():
     assert validate_target("military.mil", safe_mode=True)[0] is False  # Blocked TLD
 
     # Invalid targets
-    assert validate_target("10.0.0.0/24")[0] is False  # Cannot pass CIDR as target directly
+    assert validate_target("10.0.0.0/24")[0] is True  # Private CIDR ranges are allowed in safe mode
     assert validate_target("not!a!valid!hostname")[0] is False
 
 

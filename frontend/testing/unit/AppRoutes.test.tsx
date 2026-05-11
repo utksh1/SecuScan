@@ -1,8 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
-import { AppRoutes } from './App'
+import { AppRoutes } from '../../src/App'
 
-vi.mock('./api', () => ({
+vi.mock('../../src/api', () => ({
   getHealth: vi.fn().mockResolvedValue({ status: 'operational' }),
   getDashboardSummary: vi.fn().mockResolvedValue({
     total_findings: 0,

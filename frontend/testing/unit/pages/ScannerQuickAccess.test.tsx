@@ -1,14 +1,14 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import Scanner from '../Toolkit'
-import { listPlugins } from '../../api'
+import Scanner from '../../../src/pages/Toolkit'
+import { listPlugins } from '../../../src/api'
 
-vi.mock('../../api', () => ({
+vi.mock('../../../src/api', () => ({
   listPlugins: vi.fn(),
 }))
 
-vi.mock('../../data/scanTools', () => ({
+vi.mock('../../../src/data/scanTools', () => ({
   scanTools: [],
 }))
 
@@ -112,7 +112,7 @@ describe('Scanner quick access', () => {
     mockPlugins()
   })
 
-  it('shows latest 6 used tools in quick access', async () => {
+  it('keeps rendering without the removed quick access section', async () => {
     localStorage.setItem(
       RECENT_TOOLS_STORAGE_KEY,
       JSON.stringify(['tool_7', 'tool_6', 'tool_5', 'tool_4', 'tool_3', 'tool_2', 'tool_1']),
@@ -124,10 +124,9 @@ describe('Scanner quick access', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText(/Quick Access/i)).toBeInTheDocument()
-    expect(screen.getByText(/Tool Seven/i)).toBeInTheDocument()
-    expect(screen.getByText(/Tool Two/i)).toBeInTheDocument()
-    expect(screen.queryByText(/Tool One/i)).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /^Quick Start$/i })).toBeInTheDocument()
+    expect(screen.queryByText(/Quick Access/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/No tools available in this category/i)).toBeInTheDocument()
   })
 
   it('updates recent tools when launching a tool', async () => {

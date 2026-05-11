@@ -11,6 +11,7 @@
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
     "types": ["vitest/globals", "node"]
-  }
+  },
+  "include": ["src", "testing/unit", "vite.config.ts", "vitest.setup.ts"],
+  "exclude": ["node_modules", "dist", "e2e", "tests/e2e", "testing/e2e"]
 }
-

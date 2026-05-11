@@ -30,6 +30,42 @@ log_header() {
     echo -e "\n${BOLD}${CYAN}=== $1 ===${NC}"
 }
 
+find_compatible_python() {
+    local candidates=()
+    local candidate=""
+    local path=""
+
+    if [ -n "${PYTHON:-}" ]; then
+        candidates+=("${PYTHON}")
+    fi
+
+    candidates+=(
+        "python3"
+        "/opt/homebrew/bin/python3"
+        "/usr/local/bin/python3"
+        "python3.13"
+        "python3.12"
+        "python3.11"
+    )
+
+    for candidate in "${candidates[@]}"; do
+        if command -v "$candidate" >/dev/null 2>&1; then
+            path="$(command -v "$candidate")"
+        elif [ -x "$candidate" ]; then
+            path="$candidate"
+        else
+            continue
+        fi
+
+        if "$path" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' >/dev/null 2>&1; then
+            printf '%s\n' "$path"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 # --- Initialization ---
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
@@ -41,12 +77,14 @@ echo "Starting installation at $(date)"
 log_header "Prerequisites Check"
 
 # Check Python 3
-if ! command -v python3 &> /dev/null; then
-    log_error "Python 3 is not installed. Please install Python 3.8+ and try again."
+PYTHON_BIN="$(find_compatible_python || true)"
+if [ -z "$PYTHON_BIN" ]; then
+    log_error "Python 3.11+ is required. Install a compatible version and make sure it is available on PATH, or run with PYTHON=/path/to/python3.11 ./setup.sh."
     exit 1
 fi
-PYTHON_VER=$(python3 --version | cut -d' ' -f2)
+PYTHON_VER="$("$PYTHON_BIN" --version | cut -d' ' -f2)"
 log_info "Python version: $PYTHON_VER"
+log_info "Using Python interpreter: $PYTHON_BIN"
 
 # Check Node.js
 if ! command -v node &> /dev/null; then
@@ -90,7 +128,7 @@ done
 log_header "Backend Setup"
 if [ ! -d "venv" ]; then
     log_info "Creating virtual environment in 'venv'..."
-    python3 -m venv venv
+    "$PYTHON_BIN" -m venv venv
     log_success "Virtual environment created."
 else
     log_info "Existing virtual environment found."

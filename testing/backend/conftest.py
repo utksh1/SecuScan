@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 # Add repo root to sys.path so package imports work (backend.*)
-repo_root = Path(__file__).parent.parent
+repo_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(repo_root))
 
 from backend.secuscan.config import settings
@@ -25,7 +25,7 @@ def setup_test_environment(monkeypatch):
     monkeypatch.setattr(settings, "data_dir", temp_path)
     monkeypatch.setattr(settings, "raw_output_dir", f"{temp_path}/raw")
     monkeypatch.setattr(settings, "reports_dir", f"{temp_path}/reports")
-    monkeypatch.setattr(settings, "plugins_dir", str(Path(__file__).parent.parent / "plugins"))
+    monkeypatch.setattr(settings, "plugins_dir", str(repo_root / "plugins"))
     monkeypatch.setattr(settings, "database_path", f"{temp_path}/test_secuscan.db")
 
     settings.ensure_directories()

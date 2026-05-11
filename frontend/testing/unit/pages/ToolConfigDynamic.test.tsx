@@ -1,17 +1,17 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import ToolConfig from '../ToolConfig'
-import { getPluginSchema, listPlugins, startTask } from '../../api'
-import { routes } from '../../routes'
+import ToolConfig from '../../../src/pages/ToolConfig'
+import { getPluginSchema, listPlugins, startTask } from '../../../src/api'
+import { routes } from '../../../src/routes'
 
 const addToast = vi.fn()
 
-vi.mock('../../components/ToastContext', () => ({
+vi.mock('../../../src/components/ToastContext', () => ({
   useToast: () => ({ addToast }),
 }))
 
-vi.mock('../../api', () => ({
+vi.mock('../../../src/api', () => ({
   listPlugins: vi.fn(),
   getPluginSchema: vi.fn(),
   startTask: vi.fn(),
@@ -73,7 +73,7 @@ describe('ToolConfig dynamic schema flow', () => {
   it('renders dynamic fields and submits startTask with consent', async () => {
     const user = userEvent.setup()
     render(
-      <MemoryRouter initialEntries={['/scans/subdomain_discovery']}>
+      <MemoryRouter initialEntries={['/toolkit/subdomain_discovery']}>
         <Routes>
           <Route path={routes.scanTool} element={<ToolConfig />} />
         </Routes>

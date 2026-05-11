@@ -2,7 +2,7 @@
 
 # SecuScan Backend Test Suite
 # Tests all API endpoints and functionality
-# For unit/integration pytest workflow, run: ./test_python.sh
+# For unit/integration pytest workflow, run: ./testing/test_python.sh
 
 set -e
 

@@ -1,15 +1,15 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import ToolConfig from '../ToolConfig'
-import { routes } from '../../routes'
-import { getPluginSchema, listPlugins } from '../../api'
+import ToolConfig from '../../../src/pages/ToolConfig'
+import { routes } from '../../../src/routes'
+import { getPluginSchema, listPlugins } from '../../../src/api'
 
-vi.mock('../../components/ToastContext', () => ({
+vi.mock('../../../src/components/ToastContext', () => ({
   useToast: () => ({ addToast: vi.fn() }),
 }))
 
-vi.mock('../../api', () => ({
+vi.mock('../../../src/api', () => ({
   listPlugins: vi.fn(),
   getPluginSchema: vi.fn(),
   startTask: vi.fn(),
@@ -56,7 +56,7 @@ describe('ToolConfig route consistency', () => {
   })
 
   it('redirects unknown tool ids to /scans', async () => {
-    renderWithRoutes('/scans/unknown-tool')
+    renderWithRoutes('/toolkit/unknown-tool')
 
     await waitFor(() => {
       expect(screen.getByTestId('scans-page')).toBeInTheDocument()
@@ -65,7 +65,7 @@ describe('ToolConfig route consistency', () => {
 
   it('uses /scans for the back button destination', async () => {
     const user = userEvent.setup()
-    renderWithRoutes('/scans/whois_lookup')
+    renderWithRoutes('/toolkit/whois_lookup')
 
     const backButton = await screen.findByRole('button', { name: /arrow_back/i })
     await user.click(backButton)

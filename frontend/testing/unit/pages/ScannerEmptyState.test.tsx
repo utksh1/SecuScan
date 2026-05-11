@@ -1,14 +1,14 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import Scanner from '../Toolkit'
-import { listPlugins } from '../../api'
+import Scanner from '../../../src/pages/Toolkit'
+import { listPlugins } from '../../../src/api'
 
-vi.mock('../../api', () => ({
+vi.mock('../../../src/api', () => ({
   listPlugins: vi.fn(),
 }))
 
-vi.mock('../../data/scanTools', () => ({
+vi.mock('../../../src/data/scanTools', () => ({
   scanTools: [
     {
       id: 'legacy-quick-start',
