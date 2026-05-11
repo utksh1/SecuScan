@@ -27,7 +27,7 @@
       "label": "Domain",
       "type": "string",
       "required": true,
-      "placeholder": "secuscan.in",
+      "placeholder": "example.com",
       "help": "Target domain for DNS enumeration."
     },
     {
@@ -88,5 +88,5 @@
     ]
   },
   "docker_image": "darkoperator/dnsrecon:latest",
-  "checksum": "bee6dad0b06890b0a9df92a679abcc9bf7032e3651b504f4f96b13ec9114331f"
+  "checksum": "1bb635fe9948ff4e3c2d8582c9060a4b0cd50a8f3a46083a2a7b4417f73cf71e"
 }

@@ -26,7 +26,7 @@
       "label": "Domain/IP",
       "type": "string",
       "required": true,
-      "placeholder": "secuscan.in",
+      "placeholder": "example.com",
       "help": "Target domain name or IP address."
     }
   ],
@@ -58,5 +58,5 @@
     "system_packages": []
   },
   "docker_image": "alpine:latest",
-  "checksum": "b4df81e9bd8d3aa423a73d5f412a6845d8076a57fc37b97c584d9c523dd371dc"
+  "checksum": "173fdb4a9f941fbbf0bda3d2511a31036a614aabc901990bc2f16bc7e7b8b0fc"
 }

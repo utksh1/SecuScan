@@ -29,7 +29,7 @@
       "label": "Target URL",
       "type": "string",
       "required": true,
-      "placeholder": "https://secuscan.in",
+      "placeholder": "https://example.com",
       "validation": {
         "pattern": "^https?://",
         "message": "Must be a valid HTTP(S) URL"
@@ -92,5 +92,5 @@
     "system_packages": []
   },
   "docker_image": "curlimages/curl",
-  "checksum": "2a6bbe035dc8aedfdc62fab2ca7ee7d229041aef8d0600f1bcf794cc46936a82"
+  "checksum": "fa4ca833b6ee0106d47c450415fb103f1e0dde661d2e434ca4b2356a1acfc8d6"
 }
