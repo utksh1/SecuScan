@@ -58,5 +58,5 @@
     "system_packages": []
   },
   "docker_image": "alpine:latest",
-  "checksum": "173fdb4a9f941fbbf0bda3d2511a31036a614aabc901990bc2f16bc7e7b8b0fc"
+  "checksum": "ecda30e7a979e1a0200d6f58c6c01fe6bae7dbe985cc0f47c5047165c46f3a53"
 }

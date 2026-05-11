@@ -88,5 +88,5 @@
     ]
   },
   "docker_image": "darkoperator/dnsrecon:latest",
-  "checksum": "1bb635fe9948ff4e3c2d8582c9060a4b0cd50a8f3a46083a2a7b4417f73cf71e"
+  "checksum": "50b01be30942c2896ad4a26b45ad3676d523f3ef46e02891a9d66b2aeb593666"
 }
