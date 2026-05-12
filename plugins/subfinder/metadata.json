@@ -27,7 +27,7 @@
       "label": "Root Domain",
       "type": "string",
       "required": true,
-      "placeholder": "secuscan.in"
+      "placeholder": "example.com"
     }
   ],
   "presets": {
@@ -52,5 +52,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "5a6dbd714db89c65ef888a93580e19db4798ca1013435eba2e1a781b8f276f6c"
+  "checksum": "a1cb24265eea66c6059544857e22a5a5cd6c4fc0c1049b329f1b1f970d516312"
 }

@@ -26,7 +26,7 @@
       "label": "Target Host",
       "type": "string",
       "required": true,
-      "placeholder": "secuscan.in",
+      "placeholder": "example.com",
       "validation": {
         "pattern": "^[a-zA-Z0-9.-]+$",
         "message": "Must be valid hostname or IP"
@@ -47,7 +47,7 @@
       "label": "SNI Hostname",
       "type": "string",
       "required": false,
-      "placeholder": "secuscan.in",
+      "placeholder": "example.com",
       "help": "Server Name Indication for virtual hosting (usually same as host)"
     },
     {
@@ -137,5 +137,5 @@
     "system_packages": []
   },
   "docker_image": "alpine:latest",
-  "checksum": "8b2991841f02a5fb5f8531336d6f02ab4a0a712f2e114a5b0ce6b403b7123aa6"
+  "checksum": "fac3b48892e86d2727495b46df5cf0b6ff6bcc72f1c40f1d218ef9afc79e1615"
 }
