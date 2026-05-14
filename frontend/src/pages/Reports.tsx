@@ -160,12 +160,27 @@ export default function Reports() {
                       animate="visible"
                       className="grid grid-cols-1 md:grid-cols-2 gap-8"
                   >
-                      {filteredReports.map((report) => (
+                      {filteredReports.length === 0 && reports.length > 0 ? (
+                            <div className="col-span-2 py-40 border-4 border-dashed border-black/5 text-center flex flex-col items-center gap-8 bg-charcoal/30">
+                                <span className="material-symbols-outlined text-silver/5 text-9xl">filter_alt_off</span>
+                                <div className="space-y-2">
+                                    <p className="text-xl font-black text-silver/20 uppercase tracking-[0.4em] italic">
+                                        No Matching Reports
+                                    </p>
+                                    <p className="text-xs font-mono text-silver/10 uppercase tracking-widest leading-relaxed">
+                                        No reports match the current filter. Adjust classification to view additional dossiers.
+                                    </p>
+                                </div>
+                            </div>
+                        ) : (
+                            filteredReports.map((report) => (
+                                
                           <motion.div 
                               key={report.id}
                               variants={itemVariants}
                               className="group bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[14px_14px_0px_0px_rgba(0,0,0,1)] transition-all relative overflow-hidden"
                           >
+                          
                               {/* Status Top Bar */}
                               <div className={`absolute top-0 left-0 h-2 transition-all duration-500 ${
                                   report.status === 'ready' ? 'bg-rag-green w-full' : 
@@ -236,8 +251,9 @@ export default function Reports() {
                                       {report.type === 'executive' ? 'leaderboard' : report.type === 'compliance' ? 'verified_user' : 'terminal'}
                                   </span>
                                </div>
-                          </motion.div>
-                      ))}
+                               </motion.div>
+                            ))
+                        )}
 
                       {reports.length === 0 && (
                           <div className="col-span-2 py-40 border-4 border-dashed border-black/5 text-center flex flex-col items-center gap-8 bg-charcoal/30">
