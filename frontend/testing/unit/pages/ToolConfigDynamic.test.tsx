@@ -111,4 +111,40 @@ describe('ToolConfig dynamic schema flow', () => {
       )
     })
   })
+  it('falls back gracefully when guidance is absent', async () => {
+    vi.mocked(listPlugins).mockResolvedValue({
+      total: 1,
+      plugins: [
+        {
+          id: 'subdomain_discovery',
+          name: 'Subdomain Discovery',
+          description: 'Enumerate subdomains',
+          category: 'recon',
+          safety_level: 'safe',
+          enabled: true,
+          icon: '🌐',
+          requires_consent: false,
+          consent_message: null,
+          availability: {
+            runnable: false,
+            missing_binaries: ['subfinder'],
+          },
+        },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/toolkit/subdomain_discovery']}>
+        <Routes>
+          <Route path={routes.scanTool} element={<ToolConfig />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByText(/Subdomain Discovery/i)
+
+    expect(
+      screen.getByText(/subfinder|Install required tools locally|Unavailable:/i)
+    ).toBeInTheDocument()
+  })
 })
