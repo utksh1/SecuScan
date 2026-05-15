@@ -33,7 +33,13 @@ describe('ToolConfig dynamic schema flow', () => {
           icon: '🌐',
           requires_consent: true,
           consent_message: 'Explicit authorization required',
-          availability: { runnable: false, missing_binaries: ['subfinder'] },
+          availability: {
+            runnable: false,
+            missing_binaries: ['subfinder'],
+            status: 'unavailable',
+            guidance:
+              'Unavailable: Requires external binaries (subfinder). Install required tools locally to enable this scanner.',
+          },
         },
       ],
     })
@@ -81,7 +87,9 @@ describe('ToolConfig dynamic schema flow', () => {
     )
 
     await screen.findByText(/Subdomain Discovery/i)
-    expect(screen.getByText(/Missing local binaries: subfinder/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Install required tools locally/i)
+    ).toBeInTheDocument()
     expect(screen.getByPlaceholderText('example.com')).toBeInTheDocument()
     expect(screen.getByDisplayValue('10')).toBeInTheDocument()
     await user.type(screen.getByPlaceholderText('example.com'), 'example.com')
@@ -102,5 +110,41 @@ describe('ToolConfig dynamic schema flow', () => {
         'quick',
       )
     })
+  })
+  it('falls back gracefully when guidance is absent', async () => {
+    vi.mocked(listPlugins).mockResolvedValue({
+      total: 1,
+      plugins: [
+        {
+          id: 'subdomain_discovery',
+          name: 'Subdomain Discovery',
+          description: 'Enumerate subdomains',
+          category: 'recon',
+          safety_level: 'safe',
+          enabled: true,
+          icon: '🌐',
+          requires_consent: false,
+          consent_message: null,
+          availability: {
+            runnable: false,
+            missing_binaries: ['subfinder'],
+          },
+        },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/toolkit/subdomain_discovery']}>
+        <Routes>
+          <Route path={routes.scanTool} element={<ToolConfig />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByText(/Subdomain Discovery/i)
+
+    expect(
+      screen.getByText(/subfinder|Install required tools locally|Unavailable:/i)
+    ).toBeInTheDocument()
   })
 })
