@@ -78,6 +78,9 @@ export default function Reports() {
   }, [])
 
   const filteredReports = reports.filter((report) => selectedType === 'all' || report.type === selectedType)
+  
+  // Check if any report with status 'ready' exists
+  const hasReadyReport = reports.some(report => report.status === 'ready')
 
   return (
     <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
@@ -105,9 +108,18 @@ export default function Reports() {
                <ReportIcon icon={Refresh01Icon} className="block" />
             </button>
             <button 
-               onClick={() => window.open(`${API_BASE}/task/latest/report/pdf`, '_blank')} // Placeholder for latest report
-               className="bg-silver-bright border-4 border-black p-4 text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
-               title="Download Latest Briefing"
+               onClick={() => {
+                  if (hasReadyReport) {
+                     window.open(`${API_BASE}/task/latest/report/pdf`, '_blank')
+                  }
+               }}
+               disabled={!hasReadyReport}
+               className={`bg-silver-bright border-4 border-black p-4 text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all ${
+                  hasReadyReport 
+                     ? 'hover:shadow-none hover:translate-x-1 hover:translate-y-1' 
+                     : 'opacity-50 cursor-not-allowed'
+               }`}
+               title={hasReadyReport ? "Download Latest Briefing" : "No ready report available"}
             >
                <ReportIcon icon={Pdf02Icon} className="block" />
             </button>
@@ -186,7 +198,8 @@ export default function Reports() {
                       animate="visible"
                       className="grid grid-cols-1 md:grid-cols-2 gap-8"
                   >
-                      {filteredReports.map((report) => (
+                      {filteredReports.length > 0 ? (
+                        filteredReports.map((report) => (
                           <motion.div 
                               key={report.id}
                               variants={itemVariants}
@@ -266,16 +279,15 @@ export default function Reports() {
                                   </div>
                                </div>
                           </motion.div>
-                      ))}
-
-                      {reports.length === 0 && (
-                          <div className="col-span-2 py-40 border-4 border-dashed border-black/5 text-center flex flex-col items-center gap-8 bg-charcoal/30">
-                              <ReportIcon icon={Archive02Icon} size={120} className="text-silver/5" />
-                              <div className="space-y-2">
-                                  <p className="text-xl font-black text-silver/20 uppercase tracking-[0.4em] italic">Archive Isolated</p>
-                                  <p className="text-xs font-mono text-silver/10 uppercase tracking-widest leading-relaxed">System buffer awaiting briefing generation protocols</p>
-                              </div>
-                          </div>
+                        ))
+                      ) : (
+                        <div className="col-span-2 py-40 border-4 border-dashed border-black/5 text-center flex flex-col items-center gap-8 bg-charcoal/30">
+                            <ReportIcon icon={Archive02Icon} size={120} className="text-silver/5" />
+                            <div className="space-y-2">
+                                <p className="text-xl font-black text-silver/20 uppercase tracking-[0.4em] italic">Archive Isolated</p>
+                                <p className="text-xs font-mono text-silver/10 uppercase tracking-widest leading-relaxed">System buffer awaiting briefing generation protocols</p>
+                            </div>
+                        </div>
                       )}
                   </motion.div>
               </AnimatePresence>
