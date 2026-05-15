@@ -72,7 +72,7 @@ function renderReports() {
 // ── Loading state ─────────────────────────────────────────────────────────────
 
 describe('Reports — loading state', () => {
-  
+
   it('shows loading spinner while fetching', () => {
     // Never resolves so the loading state stays visible
     vi.mocked(getReports).mockReturnValue(new Promise(() => {}))
