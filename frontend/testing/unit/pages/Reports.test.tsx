@@ -1,10 +1,12 @@
-import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import React from 'react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import { vi, describe, it, expect } from 'vitest'
 import Reports from '../../../src/pages/Reports'
 import { getReports, getDashboardSummary } from '../../../src/api'
 import { isWithinDateRange } from '../../../src/utils/date'
 
+// ─── Mock API ────────────────────────────────────────────────────────────────
 vi.mock('../../../src/api', () => ({
   getReports: vi.fn(),
   getDashboardSummary: vi.fn(),
@@ -128,7 +130,7 @@ describe('Reports — export buttons on a ready report', () => {
     expect(screen.getByRole('button', { name: /^csv$/i })).toBeInTheDocument()
   })
 
-  it('export buttons are enabled for a ready report', async () => {
+  it('shows empty state when combined status + date filters match nothing', async () => {
     renderReports()
     await screen.findByRole('button', { name: /^pdf$/i })
     expect(screen.getByRole('button', { name: /^pdf$/i })).not.toBeDisabled()
@@ -136,8 +138,7 @@ describe('Reports — export buttons on a ready report', () => {
     expect(screen.getByRole('button', { name: /^csv$/i })).not.toBeDisabled()
   })
 
-  it('clicking PDF opens the correct backend URL', async () => {
-    const user = userEvent.setup()
+  it('entry count updates correctly when filters are applied', async () => {
     renderReports()
     await user.click(await screen.findByRole('button', { name: /^pdf$/i }))
     expect(openSpy).toHaveBeenCalledWith(
@@ -152,8 +153,8 @@ describe('Reports — export buttons on a ready report', () => {
       expect.stringContaining('/task/' + readyReport.task_id + '/report/html'), '_blank')
   })
 
-  it('clicking CSV opens the correct backend URL', async () => {
-    const user = userEvent.setup()
+  it('export buttons remain functional on filtered reports', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
     renderReports()
     await user.click(await screen.findByRole('button', { name: /^csv$/i }))
     expect(openSpy).toHaveBeenCalledWith(

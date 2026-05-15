@@ -259,6 +259,114 @@ export default function Reports() {
                   </div>
                 </div>
 
+                {/* Status Filter */}
+                <div className="space-y-4">
+                  <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic">Status_Filter</label>
+                  <div className="grid grid-cols-1 gap-2">
+                    {([
+                      { value: 'all',        label: 'All Statuses' },
+                      { value: 'ready',      label: 'Ready' },
+                      { value: 'generating', label: 'Generating' },
+                      { value: 'failed',     label: 'Failed' },
+                    ] as const).map(({ value, label }) => (
+                      <button
+                        key={value}
+                        onClick={() => setSelectedStatus(value)}
+                        aria-label={`status ${label}`}
+                        className={`px-6 py-4 text-left text-[10px] font-black uppercase tracking-widest border-4 transition-all flex justify-between items-center ${
+                          selectedStatus === value
+                            ? 'bg-rag-amber border-black text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+                            : 'bg-charcoal-dark border-black text-silver/40 hover:border-silver-bright/20'
+                        }`}
+                      >
+                        {label}
+                        {selectedStatus === value && <ReportIcon icon={Radar02Icon} size={16} className="text-black" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Date Range Filter */}
+                <div className="space-y-4">
+                  <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic">Date_Range</label>
+                  <div className="grid grid-cols-1 gap-2">
+                    {([
+                      { value: 'all', label: 'All Time' },
+                      { value: '24h', label: 'Last 24 Hours' },
+                      { value: '7d',  label: 'Last 7 Days' },
+                      { value: '30d', label: 'Last 30 Days' },
+                    ] as const).map(({ value, label }) => (
+                      <button
+                        key={value}
+                        onClick={() => setSelectedDateRange(value)}
+                        aria-label={`date ${label}`}
+                        className={`px-6 py-4 text-left text-[10px] font-black uppercase tracking-widest border-4 transition-all flex justify-between items-center ${
+                          selectedDateRange === value
+                            ? 'bg-rag-blue border-black text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+                            : 'bg-charcoal-dark border-black text-silver/40 hover:border-silver-bright/20'
+                        }`}
+                      >
+                        {label}
+                        {selectedDateRange === value && <ReportIcon icon={Radar02Icon} size={16} className="text-black" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Status Filter */}
+                <div className="space-y-4">
+                  <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic">Status_Filter</label>
+                  <div className="grid grid-cols-1 gap-2">
+                    {([
+                      { value: 'all',        label: 'All Statuses' },
+                      { value: 'ready',      label: 'Ready' },
+                      { value: 'generating', label: 'Generating' },
+                      { value: 'failed',     label: 'Failed' },
+                    ] as const).map(({ value, label }) => (
+                      <button
+                        key={value}
+                        onClick={() => setSelectedStatus(value)}
+                        aria-label={`status ${label}`}
+                        className={`px-6 py-4 text-left text-[10px] font-black uppercase tracking-widest border-4 transition-all flex justify-between items-center ${
+                          selectedStatus === value
+                            ? 'bg-rag-amber border-black text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+                            : 'bg-charcoal-dark border-black text-silver/40 hover:border-silver-bright/20'
+                        }`}
+                      >
+                        {label}
+                        {selectedStatus === value && <ReportIcon icon={Radar02Icon} size={16} className="text-black" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Date Range Filter */}
+                <div className="space-y-4">
+                  <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic">Date_Range</label>
+                  <div className="grid grid-cols-1 gap-2">
+                    {([
+                      { value: 'all', label: 'All Time' },
+                      { value: '24h', label: 'Last 24 Hours' },
+                      { value: '7d',  label: 'Last 7 Days' },
+                      { value: '30d', label: 'Last 30 Days' },
+                    ] as const).map(({ value, label }) => (
+                      <button
+                        key={value}
+                        onClick={() => setSelectedDateRange(value)}
+                        aria-label={`date ${label}`}
+                        className={`px-6 py-4 text-left text-[10px] font-black uppercase tracking-widest border-4 transition-all flex justify-between items-center ${
+                          selectedDateRange === value
+                            ? 'bg-rag-blue border-black text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+                            : 'bg-charcoal-dark border-black text-silver/40 hover:border-silver-bright/20'
+                        }`}
+                      >
+                        {label}
+                        {selectedDateRange === value && <ReportIcon icon={Radar02Icon} size={16} className="text-black" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className="p-8 border-4 border-black border-dashed space-y-4 bg-charcoal-dark/50">
                   <div className="flex items-center gap-3">
                     <ReportIcon icon={KnightShieldIcon} className="text-rag-green" aria-hidden="true" />
