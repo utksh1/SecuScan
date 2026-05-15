@@ -24,7 +24,7 @@
     "--if:severity:then:-s",
     "--if:severity:then:{severity}",
     "-nc",
-    "-json"
+    "-jsonl"
   ],
   "fields": [
     {
@@ -126,5 +126,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "892aa6df642b64575308caf7e49182af2e2945e3536bf8d9a8341c92d7e04fca"
+  "checksum": "578be8bcfa012507bc0b66df093aeae3d3f7a13113b937c2b0fe9e5b2789c79e"
 }

@@ -6,6 +6,6 @@ psycopg[binary]>=3.3.0
 redis>=5.2.1
 sse-starlette>=2.1.0
 python-multipart>=0.0.9
-fpdf2>=2.7.0
+xhtml2pdf>=0.2.17
 aiosqlite>=0.20.0
 python-whois>=0.9.4

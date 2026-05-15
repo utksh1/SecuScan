@@ -54,6 +54,12 @@ data/reports/*
 !data/raw/.gitkeep
 !data/reports/.gitkeep
 
+# Scanner assets downloaded by scripts/bootstrap_scanner_assets.sh
+wordlists/common.txt
+wordlists/large.txt
+wordlists/medium.txt
+wordlists/subdomains-top1million-110000.txt
+
 # Logs
 logs/
 *.log

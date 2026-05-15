@@ -289,7 +289,7 @@ async def download_csv_report(task_id: str):
     """Download task results as a CSV report."""
     db = await get_db()
     task_row = await db.fetchone(
-        "SELECT id, plugin_id, tool_name, target, status, created_at, structured_json FROM tasks WHERE id = ?",
+        "SELECT id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
         (task_id,)
     )
 
@@ -313,7 +313,7 @@ async def download_html_report(task_id: str):
     """Download task results as an HTML report."""
     db = await get_db()
     task_row = await db.fetchone(
-        "SELECT id, plugin_id, tool_name, target, status, created_at, structured_json FROM tasks WHERE id = ?",
+        "SELECT id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
         (task_id,)
     )
 
@@ -337,7 +337,7 @@ async def download_pdf_report(task_id: str):
     """Download task results as a PDF report."""
     db = await get_db()
     task_row = await db.fetchone(
-        "SELECT id, plugin_id, tool_name, target, status, created_at, structured_json FROM tasks WHERE id = ?",
+        "SELECT id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
         (task_id,)
     )
 
@@ -365,7 +365,7 @@ async def get_task_result(task_id: str):
     task_row = await db.fetchone(
         """
         SELECT id, plugin_id, tool_name, target, status,
-               created_at, duration_seconds, structured_json,
+               created_at, duration_seconds, structured_json, preset, inputs_json,
                raw_output_path, command_used, error_message, exit_code
         FROM tasks WHERE id = ?
         """,
@@ -422,6 +422,8 @@ async def get_task_result(task_id: str):
         "timestamp": task_row["created_at"],
         "duration_seconds": task_row["duration_seconds"],
         "status": task_row["status"],
+        "preset": task_row["preset"],
+        "inputs": json.loads(task_row["inputs_json"] or "{}"),
         "summary": summary,
         "severity_counts": severity_counts,
         "findings": findings,

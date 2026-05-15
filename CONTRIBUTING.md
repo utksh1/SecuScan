@@ -48,6 +48,8 @@ This starts:
 
 Backend:
 
+> **Python version:** `python3` below must resolve to 3.11 or newer. Run `python3 --version` to check. If your system default is older, substitute the full path (e.g. `python3.11`) or use `PYTHON=/path/to/python3.11 ./setup.sh` instead of the manual steps.
+
 ```bash
 python3 -m venv venv
 source venv/bin/activate
@@ -107,6 +109,80 @@ Your PR should include:
 - Notes about documentation, migrations, environment variables, or breaking behavior when relevant
 
 Try to keep one pull request focused on one problem. If a change touches unrelated areas, split it into separate PRs when possible.
+
+## Contribution Scoring
+
+Every merged pull request can be scored for GSSoC using labels applied by the project admin or mentor. The scoring engine reads these labels after the PR is merged, so contributors should focus on clear scope, good implementation, and complete review notes rather than self-assigning score labels.
+
+### Labels the Admin Applies
+
+Each merged PR should have one difficulty label:
+
+- `level:beginner`
+- `level:intermediate`
+- `level:advanced`
+- `level:critical`
+
+Optional quality labels can increase the contributor score:
+
+- `quality:clean`
+- `quality:exceptional`
+
+Optional type bonus labels can describe the work category:
+
+- `type:docs`
+- `type:testing`
+- `type:accessibility`
+- `type:performance`
+- `type:security`
+- `type:design`
+- `type:refactor`
+- `type:devops`
+- `type:bug`
+- `type:feature`
+
+Validation labels are decided by the admin:
+
+- `gssoc:approved`
+- `gssoc:invalid`
+- `gssoc:spam`
+- `gssoc:ai-slop`
+
+Use `mentor:username` to credit the reviewing mentor with points for that PR.
+
+### Contributor Points per PR
+
+| Label | Points |
+| --- | ---: |
+| `level:beginner` | 20 pts |
+| `level:intermediate` | 35 pts |
+| `level:advanced` | 55 pts |
+| `level:critical` | 80 pts |
+| `quality:clean` | x 1.2 multiplier |
+| `quality:exceptional` | x 1.5 multiplier |
+
+Contributor score formula:
+
+```text
+((difficulty x quality) + type bonus)
+```
+
+### Mentor Points per Reviewed PR
+
+| Label | Points |
+| --- | ---: |
+| `level:beginner` | 10 pts |
+| `level:intermediate` | 20 pts |
+| `level:advanced` | 30 pts |
+| `level:critical` | 50 pts |
+| `quality:clean` | +5 pts bonus |
+| `quality:exceptional` | +10 pts bonus |
+
+Mentor score formula:
+
+```text
+(base points + quality bonus)
+```
 
 ## Commit Message Conventions
 

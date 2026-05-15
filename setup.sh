@@ -126,12 +126,25 @@ done
 
 # --- Backend Setup ---
 log_header "Backend Setup"
+
+# If a venv already exists, verify it was created with a compatible Python.
+# A stale venv built from Python 3.9 would otherwise bypass the version check above and silently re-use the wrong interpreter during pip install.
+if [ -d "venv" ]; then
+    VENV_PYTHON="venv/bin/python3"
+    if [ ! -x "$VENV_PYTHON" ] || \
+       ! "$VENV_PYTHON" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' >/dev/null 2>&1; then
+        VENV_OLD_VER="$("$VENV_PYTHON" --version 2>/dev/null | cut -d' ' -f2 || echo 'unknown')"
+        log_warning "Existing venv uses Python $VENV_OLD_VER (< 3.11). Removing and recreating with $PYTHON_BIN..."
+        rm -rf venv
+    else
+        log_info "Existing virtual environment found (Python $("$VENV_PYTHON" --version | cut -d' ' -f2))."
+    fi
+fi
+
 if [ ! -d "venv" ]; then
     log_info "Creating virtual environment in 'venv'..."
     "$PYTHON_BIN" -m venv venv
     log_success "Virtual environment created."
-else
-    log_info "Existing virtual environment found."
 fi
 
 # Activate venv for installation
@@ -141,6 +154,8 @@ pip install --upgrade pip -q
 
 log_info "Installing backend dependencies from backend/requirements.txt..."
 pip install -r backend/requirements.txt -q
+log_info "Installing HTTPX CLI extras required by scanner plugins..."
+pip install "httpx[cli]>=0.28.1" -q
 if [ -f "backend/requirements-dev.txt" ]; then
     log_info "Installing backend development dependencies..."
     pip install -r backend/requirements-dev.txt -q

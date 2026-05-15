@@ -42,8 +42,6 @@ def extract_target(inputs: Dict[str, Any]) -> str:
         or inputs.get("domain")
         or ""
     )
-
-
 class TaskExecutor:
     """Executes security scanning tasks in isolated environments"""
 
@@ -442,6 +440,14 @@ class TaskExecutor:
 
     def _classify_command_result(self, plugin, output: str, exit_code: int) -> tuple[str, Optional[str]]:
         """Map raw process exit codes into task status with plugin-specific tolerances."""
+        normalized_output = output.lower()
+
+        if "unknown option:" in normalized_output or "flag provided but not defined:" in normalized_output:
+            return (
+                TaskStatus.FAILED.value,
+                "Tool rejected one or more generated CLI options. Check the final command and raw output for details.",
+            )
+
         if exit_code == 0:
             return TaskStatus.COMPLETED.value, None
 
@@ -454,7 +460,6 @@ class TaskExecutor:
         except (TypeError, ValueError):
             tolerated = set()
 
-        normalized_output = output.lower()
         matched_success_pattern = any(
             isinstance(pattern, str) and pattern.lower() in normalized_output
             for pattern in success_patterns
@@ -472,7 +477,7 @@ class TaskExecutor:
             TaskStatus.FAILED.value,
             f"Tool returned non-zero exit code {exit_code}. Check raw output for details.",
         )
-    
+
     async def cancel_task(self, task_id: str) -> bool:
         """
         Cancel a running task.
@@ -523,7 +528,7 @@ class TaskExecutor:
         task_row = await db.fetchone(
             """
             SELECT id, plugin_id, tool_name, target, status, created_at, started_at, completed_at, 
-                   duration_seconds, exit_code, error_message, preset
+                   duration_seconds, exit_code, error_message, preset, inputs_json
             FROM tasks WHERE id = ?
             """,
             (task_id,)
@@ -543,7 +548,8 @@ class TaskExecutor:
             "duration_seconds": task_row["duration_seconds"],
             "exit_code": task_row["exit_code"],
             "error_message": task_row["error_message"],
-            "preset": task_row["preset"]
+            "preset": task_row["preset"],
+            "inputs": json.loads(task_row["inputs_json"] or "{}")
         }
 
     async def _upsert_findings_and_report(self, db, task_id: str, plugin, plugin_id: str, target: str, status: str, output: str = ""):

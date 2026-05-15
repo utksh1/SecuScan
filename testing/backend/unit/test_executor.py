@@ -118,3 +118,35 @@ def test_classify_command_result_keeps_real_ping_execution_errors_failed(setup_t
 
     assert status == "failed"
     assert error is not None
+
+
+def test_classify_command_result_fails_on_unknown_option_even_with_zero_exit(setup_test_environment):
+    manager = _ensure_plugins_loaded()
+    plugin = manager.get_plugin("nikto")
+    assert plugin is not None
+
+    executor = TaskExecutor()
+    status, error = executor._classify_command_result(
+        plugin=plugin,
+        output="Unknown option: no404\n",
+        exit_code=0,
+    )
+
+    assert status == "failed"
+    assert error is not None
+
+
+def test_classify_command_result_fails_on_undefined_flag_even_with_zero_exit(setup_test_environment):
+    manager = _ensure_plugins_loaded()
+    plugin = manager.get_plugin("nuclei")
+    assert plugin is not None
+
+    executor = TaskExecutor()
+    status, error = executor._classify_command_result(
+        plugin=plugin,
+        output="flag provided but not defined: -json\n",
+        exit_code=0,
+    )
+
+    assert status == "failed"
+    assert error is not None

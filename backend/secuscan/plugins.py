@@ -3,9 +3,10 @@ Plugin loader and management system
 """
 
 import json
+import os
 import re
 from pathlib import Path
-from typing import Dict, Optional, List
+from typing import Any, Dict, Optional, List
 import logging
 import shutil
 import hashlib
@@ -247,6 +248,60 @@ class PluginManager:
             
         return rendered
 
+    def _with_field_defaults(self, plugin: PluginMetadata, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Fill omitted inputs from plugin field defaults."""
+        normalized = dict(inputs)
+        for field in plugin.fields:
+            if field.id not in normalized or normalized[field.id] in (None, ""):
+                if field.default not in (None, ""):
+                    normalized[field.id] = field.default
+        return normalized
+
+    def _resolve_wordlist_path(self, value: str) -> str:
+        """Resolve plugin wordlist aliases and Linux-centric defaults to local project assets."""
+        candidate = Path(os.path.expanduser(value))
+        if candidate.exists():
+            return str(candidate)
+
+        wordlists_dir = Path(settings.wordlists_dir)
+        alias_map = {
+            "small": wordlists_dir / "small.txt",
+            "medium": wordlists_dir / "medium.txt",
+            "large": wordlists_dir / "large.txt",
+        }
+
+        lowered = value.lower()
+        if lowered in alias_map and alias_map[lowered].exists():
+            return str(alias_map[lowered])
+
+        fallback_candidates = [
+            wordlists_dir / value,
+            wordlists_dir / candidate.name,
+            wordlists_dir / "SecLists" / "Discovery" / "Web-Content" / candidate.name,
+            wordlists_dir / "SecLists" / "Discovery" / "DNS" / candidate.name,
+        ]
+
+        if "dirb/common.txt" in lowered:
+            fallback_candidates.insert(0, wordlists_dir / "common.txt")
+        elif "discovery/web-content/common.txt" in lowered:
+            fallback_candidates.insert(0, wordlists_dir / "common.txt")
+        elif "discovery/dns/subdomains-top1million-110000.txt" in lowered:
+            fallback_candidates.insert(0, wordlists_dir / "subdomains-top1million-110000.txt")
+
+        for fallback in fallback_candidates:
+            if fallback.exists():
+                return str(fallback)
+
+        return value
+
+    def _normalize_inputs(self, plugin: PluginMetadata, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Normalize plugin inputs before command rendering."""
+        normalized = self._with_field_defaults(plugin, inputs)
+        wordlist_value = normalized.get("wordlist")
+        if isinstance(wordlist_value, str) and wordlist_value.strip():
+            normalized["wordlist"] = self._resolve_wordlist_path(wordlist_value.strip())
+        return normalized
+
     def build_command(self, plugin_id: str, inputs: Dict) -> Optional[List[str]]:
         """
         Build command from plugin template and user inputs.
@@ -262,6 +317,7 @@ class PluginManager:
         if not plugin:
             return None
 
+        inputs = self._normalize_inputs(plugin, inputs)
         command = []
 
         for token in plugin.command_template:
