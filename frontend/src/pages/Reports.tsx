@@ -15,7 +15,7 @@ import {
   UserShield02Icon,
 } from '@hugeicons/core-free-icons'
 import { getDashboardSummary, getReports, API_BASE } from '../api'
-import { formatDateLong } from '../utils/date'
+import { formatDateLong, isWithinDateRange, type DateRange } from '../utils/date'
 
 type Report = {
   id: string
@@ -28,6 +28,8 @@ type Report = {
   assets: number
   pages: number
 }
+
+type ReportStatus = 'all' | 'ready' | 'generating' | 'failed'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -66,6 +68,8 @@ export default function Reports() {
   const [reports, setReports] = useState<Report[]>([])
   const [summary, setSummary] = useState<any>({ total_findings: 0, total_assets: 0, critical_findings: 0, high_findings: 0, total_attack_surface: 0 })
   const [selectedType, setSelectedType] = useState('all')
+  const [selectedStatus, setSelectedStatus] = useState<ReportStatus>('all')
+  const [selectedDateRange, setSelectedDateRange] = useState<DateRange>('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -89,7 +93,11 @@ export default function Reports() {
     fetchReports()
   }, [])
 
-  const filteredReports = reports.filter((report) => selectedType === 'all' || report.type === selectedType)
+  const filteredReports = reports.filter((report) =>
+    (selectedType === 'all' || report.type === selectedType) &&
+    (selectedStatus === 'all' || report.status === selectedStatus) &&
+    isWithinDateRange(report.generated_at, selectedDateRange)
+  )
 
   return (
     <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
@@ -173,6 +181,8 @@ export default function Reports() {
             {/* Filtration Sidebar */}
             <aside className="xl:col-span-1 space-y-12">
               <section className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-8">
+
+                {/* Type Filter */}
                 <div className="space-y-4">
                   <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic">Classification_Isolation</label>
                   <div className="grid grid-cols-1 gap-2">
@@ -188,6 +198,60 @@ export default function Reports() {
                       >
                         {t} BRIEFINGS
                         {selectedType === t && <ReportIcon icon={Radar02Icon} size={16} className="text-black" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Status Filter */}
+                <div className="space-y-4">
+                  <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic">Status_Filter</label>
+                  <div className="grid grid-cols-1 gap-2">
+                    {([
+                      { value: 'all',        label: 'All Statuses' },
+                      { value: 'ready',      label: 'Ready' },
+                      { value: 'generating', label: 'Generating' },
+                      { value: 'failed',     label: 'Failed' },
+                    ] as const).map(({ value, label }) => (
+                      <button
+                        key={value}
+                        onClick={() => setSelectedStatus(value)}
+                        aria-label={`status ${label}`}
+                        className={`px-6 py-4 text-left text-[10px] font-black uppercase tracking-widest border-4 transition-all flex justify-between items-center ${
+                          selectedStatus === value
+                            ? 'bg-rag-amber border-black text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+                            : 'bg-charcoal-dark border-black text-silver/40 hover:border-silver-bright/20'
+                        }`}
+                      >
+                        {label}
+                        {selectedStatus === value && <ReportIcon icon={Radar02Icon} size={16} className="text-black" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Date Range Filter */}
+                <div className="space-y-4">
+                  <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic">Date_Range</label>
+                  <div className="grid grid-cols-1 gap-2">
+                    {([
+                      { value: 'all', label: 'All Time' },
+                      { value: '24h', label: 'Last 24 Hours' },
+                      { value: '7d',  label: 'Last 7 Days' },
+                      { value: '30d', label: 'Last 30 Days' },
+                    ] as const).map(({ value, label }) => (
+                      <button
+                        key={value}
+                        onClick={() => setSelectedDateRange(value)}
+                        aria-label={`date ${label}`}
+                        className={`px-6 py-4 text-left text-[10px] font-black uppercase tracking-widest border-4 transition-all flex justify-between items-center ${
+                          selectedDateRange === value
+                            ? 'bg-rag-blue border-black text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+                            : 'bg-charcoal-dark border-black text-silver/40 hover:border-silver-bright/20'
+                        }`}
+                      >
+                        {label}
+                        {selectedDateRange === value && <ReportIcon icon={Radar02Icon} size={16} className="text-black" />}
                       </button>
                     ))}
                   </div>
@@ -315,7 +379,7 @@ export default function Reports() {
                       <ReportIcon icon={Archive02Icon} size={120} className="text-silver/5" />
                       <div className="space-y-2">
                         <p className="text-xl font-black text-silver/20 uppercase tracking-[0.4em] italic">Archive Isolated</p>
-                        <p className="text-xs font-mono text-silver/10 uppercase tracking-widest leading-relaxed">System buffer awaiting briefing generation protocols</p>
+                        <p className="text-xs font-mono text-silver/10 uppercase tracking-widest leading-relaxed">No entries match the selected filters</p>
                       </div>
                     </div>
                   )}
