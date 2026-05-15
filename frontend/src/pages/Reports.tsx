@@ -254,12 +254,12 @@ export default function Reports() {
                               <button
                                 key={format}
                                 onClick={() => {
-                                  if (report.status === 'ready') {
+                                  if (report.status !== 'generating') {
                                     window.open(`${API_BASE}/task/${report.task_id}/report/${format}`, '_blank')
                                   }
                                 }}
-                                disabled={report.status !== 'ready'}
-                                title={report.status === 'ready' ? `Download ${format.toUpperCase()}` : `Export unavailable — report is ${report.status}`}
+                                disabled={report.status === 'generating'}
+                                title={report.status === 'generating' ? `Export unavailable — report is still generating` : `Download ${format.toUpperCase()}`}
                                 className="bg-charcoal-dark border-4 border-black px-3 py-2 text-[9px] font-black uppercase tracking-widest text-silver/20 group-hover:text-silver-bright group-hover:bg-black transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:group-hover:text-silver/20 disabled:group-hover:bg-charcoal-dark"
                               >
                                 {format}

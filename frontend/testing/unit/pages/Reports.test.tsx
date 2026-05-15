@@ -268,14 +268,14 @@ describe('Reports — export buttons on a failed report', () => {
     openSpy.mockClear()
   })
 
-  it('export buttons are disabled when report has failed', async () => {
+  it('export buttons are enabled for a failed report since backend supports it', async () => {
     renderReports()
 
     await screen.findByRole('button', { name: /^pdf$/i })
 
-    expect(screen.getByRole('button', { name: /^pdf$/i })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /^html$/i })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /^csv$/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^pdf$/i })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /^html$/i })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /^csv$/i })).not.toBeDisabled()
   })
 })
 
