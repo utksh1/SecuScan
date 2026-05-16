@@ -4,6 +4,7 @@ import html
 import io
 import json
 import re
+from .redaction import redact, redact_dict
 from datetime import datetime
 from functools import lru_cache
 from typing import Any, Dict, List
@@ -111,13 +112,13 @@ class ReportGenerator:
             "category": cls._clean_text(finding.get("category")) or "General",
             "severity": cls._clean_text(finding.get("severity") or "info").upper(),
             "target": cls._clean_text(finding.get("target")),
-            "description": cls._clean_text(finding.get("description")) or "No description was provided.",
-            "remediation": cls._clean_text(finding.get("remediation")),
-            "proof": cls._clean_text(finding.get("proof")),
+            "description": redact(cls._clean_text(finding.get("description")) or "No description was provided."),
+            "remediation": redact(cls._clean_text(finding.get("remediation"))),
+            "proof": redact(cls._clean_text(finding.get("proof"))),
             "cve": cls._clean_text(finding.get("cve")),
             "cvss": finding.get("cvss"),
             "discovered_at": cls._clean_text(finding.get("discovered_at")),
-            "metadata": {cls._clean_text(key): cls._clean_text(val) for key, val in metadata.items()},
+            "metadata": redact_dict({cls._clean_text(key): cls._clean_text(val) for key, val in metadata.items()}),
         }
         if normalized["severity"] not in cls.SEVERITY_COLORS:
             normalized["severity"] = "INFO"

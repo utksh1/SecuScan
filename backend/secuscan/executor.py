@@ -13,6 +13,7 @@ from typing import Optional, Dict, Any, List
 import logging
 import re
 
+from .redaction import redact
 from .cache import get_cache
 from .config import settings
 from .database import get_db
@@ -260,6 +261,7 @@ class TaskExecutor:
 
                 # Save raw output
                 raw_path = Path(settings.raw_output_dir) / f"{task_id}.txt"
+                output = redact(output)
                 with open(raw_path, 'w') as f:
                     f.write(output)
 
