@@ -1,4 +1,5 @@
-import React from 'react'
+import React, { useState } from 'react'
+import { LiveRegion } from "./components/LiveRegion";
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import AppShell from './components/AppShell'
 import Dashboard from './pages/Dashboard'
@@ -33,10 +34,12 @@ export function AppRoutes() {
 }
 
 export default function App() {
+  const [toastMessage, setToastMessage] = useState("");
   return (
     <ThemeProvider>
       <I18nProvider>
         <ToastProvider>
+          <LiveRegion message={toastMessage} />
           <Router>
             <AppShell>
               <AppRoutes />
