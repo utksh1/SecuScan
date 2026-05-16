@@ -124,7 +124,7 @@ describe('Scanner quick access', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('button', { name: /^Quick Start$/i })).toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: /Quick Start/i })).toBeInTheDocument()
     expect(screen.queryByText(/Quick Access/i)).not.toBeInTheDocument()
     expect(screen.getByText(/No tools available in this category/i)).toBeInTheDocument()
   })
@@ -138,7 +138,7 @@ describe('Scanner quick access', () => {
       </MemoryRouter>,
     )
 
-    await user.click(await screen.findByRole('button', { name: /Recon Tools/i }))
+    await user.click(await screen.findByRole('tab', { name: /Recon Tools/i }))
     await user.click(await screen.findByText(/Tool One/i))
 
     await waitFor(() => {

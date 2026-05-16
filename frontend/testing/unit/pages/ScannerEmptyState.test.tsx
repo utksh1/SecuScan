@@ -51,22 +51,22 @@ describe('Scanner empty-state UX', () => {
       </MemoryRouter>,
     )
 
-    await user.click(await screen.findByRole('button', { name: /Recon Tools/i }))
+    await user.click(await screen.findByRole('tab', { name: /Recon Tools/i }))
     await screen.findByText(/WHOIS Lookup/i)
     await user.type(screen.getByPlaceholderText('SEARCH_PROTOCOLS...'), 'nothing-will-match')
     expect(screen.getByText(/No tools match search/i)).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /Clear Search/i }))
+    await user.click(screen.getByRole('button', { name: /Clear search/i }))
     expect(screen.queryByText(/No tools match search/i)).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /Robots/i }))
+    await user.click(screen.getByRole('tab', { name: /Robots/i }))
     await waitFor(() => {
       expect(screen.getByText(/No tools available in this category/i)).toBeInTheDocument()
     })
 
     await user.click(screen.getByRole('button', { name: /Go to Quick Start/i }))
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^Quick Start$/i })).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: /Quick Start/i })).toBeInTheDocument()
     })
   })
 })
