@@ -1,5 +1,5 @@
 export const routes = {
-  dashboard: "/",
+  dashboard: "/dashboard",
   toolkit: "/toolkit",
   scanTool: "/toolkit/:toolId",
   findings: "/findings",
