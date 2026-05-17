@@ -268,13 +268,18 @@ export default function ToolConfig() {
 
       {plugin.availability.missing_binaries.length > 0 && (
         <section className="bg-charcoal border-4 border-rag-amber p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-          <p className="text-[10px] uppercase font-black tracking-[0.3em] text-rag-amber">Dependency warning</p>
-          <p className="text-[10px] text-silver/70 uppercase tracking-widest mt-2">
-            Missing local binaries: {plugin.availability.missing_binaries.join(', ')}. Task launch is still allowed but may fail at runtime.
+          <p className="text-[10px] uppercase font-black tracking-[0.3em] text-rag-amber">
+            Plugin unavailable
+          </p>
+          <p className="text-[10px] text-silver/70 uppercase tracking-widest mt-2 leading-relaxed">
+            {plugin.availability.guidance ||
+              `Unavailable: Requires external binaries (${plugin.availability.missing_binaries.join(', ')}). Install required tools locally to enable this scanner.`}
+          </p>
+          <p className="text-[9px] text-silver/40 uppercase tracking-widest mt-3">
+            Task launch remains available, but execution may fail until dependencies are installed.
           </p>
         </section>
-      )}
-
+     )}
       <main className="grid grid-cols-1 xl:grid-cols-4 gap-12 pt-4">
         <div className="xl:col-span-3 space-y-10">
           {presetNames.length > 0 && (

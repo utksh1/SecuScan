@@ -366,10 +366,11 @@ export default function Scanner() {
                     </p>
 
                     {tool.isPlugin && tool.availability && tool.availability.missing_binaries.length > 0 && (
-                      <div className="text-[9px] uppercase tracking-widest text-rag-amber font-black">
-                        Missing: {tool.availability.missing_binaries.join(', ')}
-                      </div>
-                    )}
+                    <div className="text-[9px] uppercase tracking-widest text-rag-amber font-black leading-relaxed">
+                      {tool.availability.guidance ||
+                        `Unavailable: Requires external binaries (${tool.availability.missing_binaries.join(', ')})`}
+                    </div>
+                  )}
                   </div>
 
                   <div className="pt-6 border-t-2 border-black border-dashed flex justify-between items-end">

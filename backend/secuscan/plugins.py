@@ -190,6 +190,15 @@ class PluginManager:
                     "availability": {
                         "runnable": len(missing_binaries) == 0,
                         "missing_binaries": missing_binaries,
+                        "status": "available" if len(missing_binaries) == 0 else "unavailable",
+                        "guidance": (
+                            None
+                            if len(missing_binaries) == 0
+                            else (
+                                f"Unavailable: Requires external binaries ({', '.join(missing_binaries)}). "
+                                "Install required tools locally to enable this scanner."
+                            )
+                        ),
                     },
                 }
             )

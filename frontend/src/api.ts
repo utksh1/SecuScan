@@ -42,10 +42,11 @@ export interface PluginFieldSchema {
   options?: PluginFieldOption[]
   validation?: Record<string, unknown>
 }
-
 export interface PluginAvailability {
   runnable: boolean
   missing_binaries: string[]
+  status?: string
+  guidance?: string | null
 }
 
 export interface PluginListItem {

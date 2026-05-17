@@ -37,7 +37,13 @@ describe('Scanner catalog integration', () => {
           icon: '🌐',
           requires_consent: false,
           consent_message: null,
-          availability: { runnable: false, missing_binaries: ['subfinder'] },
+          availability: {
+            runnable: false,
+            missing_binaries: ['subfinder'],
+            status: 'unavailable',
+            guidance:
+              'Unavailable: Requires external binaries (subfinder). Install required tools locally to enable this scanner.',
+          },
         },
         {
           id: 'ssh_runner',
@@ -68,7 +74,7 @@ describe('Scanner catalog integration', () => {
 
     await user.click(screen.getByRole('button', { name: /Recon Tools/i }))
     await screen.findByText(/Subdomain Discovery/i)
-    expect(screen.getByText(/Missing: subfinder/i)).toBeInTheDocument()
+    expect(screen.getByText(/Unavailable:/i)).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /^Quick Start$/i }))
     expect(await screen.findByText(/Backend plugin pending|No tools available in this category/i)).toBeInTheDocument()
