@@ -326,7 +326,10 @@ export default function ToolConfig() {
                         value={String(value ?? '')}
                         onChange={(event) => handleFieldChange(field, event.target.value)}
                         placeholder={field.placeholder || ''}
-                        className="w-full min-h-[120px] bg-charcoal-dark border-4 border-black p-4 text-sm text-silver-bright focus:outline-none focus:border-rag-blue"
+                        aria-invalid={!!validationError}
+                        className={`w-full min-h-[120px] bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none transition-all ${
+                          validationError ? 'border-rag-red' : 'border-black focus:border-rag-blue'
+                        }`}
                       />
                     ) : field.type === 'integer' ? (
                       <input
@@ -334,7 +337,10 @@ export default function ToolConfig() {
                         value={value === '' ? '' : String(value ?? '')}
                         onChange={(event) => handleFieldChange(field, coerceInteger(event.target.value))}
                         placeholder={field.placeholder || ''}
-                        className="w-full bg-charcoal-dark border-4 border-black p-4 text-sm text-silver-bright focus:outline-none focus:border-rag-blue"
+                        aria-invalid={!!validationError}
+                        className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none transition-all ${
+                          validationError ? 'border-rag-red' : 'border-black focus:border-rag-blue'
+                        }`}
                       />
                     ) : field.type === 'boolean' ? (
                       <button
@@ -350,7 +356,10 @@ export default function ToolConfig() {
                       <select
                         value={String(value ?? '')}
                         onChange={(event) => handleFieldChange(field, event.target.value)}
-                        className="w-full bg-charcoal-dark border-4 border-black p-4 text-sm text-silver-bright focus:outline-none focus:border-rag-blue"
+                        aria-invalid={!!validationError}
+                        className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none transition-all ${
+                          validationError ? 'border-rag-red' : 'border-black focus:border-rag-blue'
+                        }`}
                       >
                         <option value="">Select option</option>
                         {(field.options || []).map((option) => (
@@ -388,7 +397,10 @@ export default function ToolConfig() {
                         value={String(value ?? '')}
                         onChange={(event) => handleFieldChange(field, event.target.value)}
                         placeholder={field.placeholder || ''}
-                        className="w-full bg-charcoal-dark border-4 border-black p-4 text-sm text-silver-bright focus:outline-none focus:border-rag-blue"
+                        aria-invalid={!!validationError}
+                        className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none transition-all ${
+                          validationError ? 'border-rag-red' : 'border-black focus:border-rag-blue'
+                        }`}
                       />
                     )}
 
@@ -423,10 +435,10 @@ export default function ToolConfig() {
             )}
             <button
               onClick={handleStartScan}
-              disabled={submitting}
+              disabled={submitting || invalidFieldCount > 0}
               className="w-full py-4 bg-rag-red border-4 border-black text-black text-[10px] font-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {submitting ? 'QUEUEING...' : 'INITIATE_SCAN'}
+              {submitting ? 'QUEUEING...' : invalidFieldCount > 0 ? 'FIX_PARAMETERS' : 'INITIATE_SCAN'}
             </button>
             <p className="text-[10px] text-silver/30 uppercase tracking-widest">
               Parameter issues: {invalidFieldCount}
