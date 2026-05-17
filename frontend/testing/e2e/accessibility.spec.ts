@@ -1,11 +1,119 @@
 import { test, expect } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 
+// Mock API responses so tests are deterministic and backend-independent
+async function mockScanAPIs(page: any) {
+  await page.route('**/api/v1/tasks**', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        tasks: [
+          {
+            task_id: 'test-task-001',
+            plugin_id: 'nmap',
+            tool: 'Nmap Port Scanner',
+            target: 'example.com',
+            status: 'completed',
+            created_at: new Date().toISOString(),
+            started_at: new Date().toISOString(),
+            completed_at: new Date().toISOString(),
+            duration_seconds: 45,
+          },
+          {
+            task_id: 'test-task-002',
+            plugin_id: 'nikto',
+            tool: 'Nikto Web Scanner',
+            target: 'test.example.com',
+            status: 'failed',
+            created_at: new Date().toISOString(),
+          }
+        ]
+      })
+    })
+  )
+}
+
+async function mockFindingsAPIs(page: any) {
+  await page.route('**/api/v1/findings**', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        findings: [
+          {
+            id: 'finding-001',
+            severity: 'critical',
+            category: 'XSS',
+            title: 'Reflected XSS in search parameter',
+            target: 'example.com',
+            description: 'User input is reflected without sanitization.',
+            remediation: 'Encode all user-supplied output.',
+            discovered_at: new Date().toISOString(),
+            cvss: 9.1,
+            cve: 'CVE-2024-1234',
+          },
+          {
+            id: 'finding-002',
+            severity: 'high',
+            category: 'SQLi',
+            title: 'SQL Injection in login form',
+            target: 'example.com',
+            description: 'Login form is vulnerable to SQL injection.',
+            remediation: 'Use parameterized queries.',
+            discovered_at: new Date().toISOString(),
+            cvss: 8.2,
+          }
+        ]
+      })
+    })
+  )
+}
+
+async function mockPluginsAPIs(page: any) {
+  await page.route('**/api/v1/plugins**', route =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        total: 2,
+        plugins: [
+          {
+            id: 'nmap',
+            name: 'Nmap',
+            description: 'Network port scanner',
+            category: 'recon',
+            safety_level: 'safe',
+            enabled: true,
+            icon: '🔍',
+            requires_consent: false,
+            consent_message: null,
+            availability: { runnable: true, missing_binaries: [] },
+          },
+          {
+            id: 'nikto',
+            name: 'Nikto',
+            description: 'Web vulnerability scanner',
+            category: 'vulnerability',
+            safety_level: 'intrusive',
+            enabled: true,
+            icon: '🕷️',
+            requires_consent: true,
+            consent_message: 'This scan may generate significant traffic.',
+            availability: { runnable: true, missing_binaries: [] },
+          }
+        ]
+      })
+    })
+  )
+}
+
 // ── Scans Page ─────────────────────────────────────────────────────────────
 
 test.describe('Accessibility — Scans Page', () => {
 
   test('should have no ARIA/structural a11y violations', async ({ page }) => {
+    await mockScanAPIs(page)
     await page.goto('/scans')
     await page.waitForLoadState('networkidle')
 
@@ -19,6 +127,7 @@ test.describe('Accessibility — Scans Page', () => {
   })
 
   test('status filter buttons have aria-pressed', async ({ page }) => {
+    await mockScanAPIs(page)
     await page.goto('/scans')
     await page.waitForLoadState('networkidle')
 
@@ -28,6 +137,7 @@ test.describe('Accessibility — Scans Page', () => {
   })
 
   test('filter buttons are keyboard reachable and activatable', async ({ page }) => {
+    await mockScanAPIs(page)
     await page.goto('/scans')
     await page.waitForLoadState('networkidle')
 
@@ -43,6 +153,7 @@ test.describe('Accessibility — Scans Page', () => {
   })
 
   test('task cards have role=button and aria-label', async ({ page }) => {
+    await mockScanAPIs(page)
     await page.goto('/scans')
     await page.waitForLoadState('networkidle')
 
@@ -61,18 +172,15 @@ test.describe('Accessibility — Scans Page', () => {
   })
 
   test('selection checkboxes have role=checkbox and aria-checked', async ({ page }) => {
+    await mockScanAPIs(page)
     await page.goto('/scans')
     await page.waitForLoadState('networkidle')
 
+    // With mocked data we always have tasks — assert deterministically
     const checkboxes = page.locator('[role="checkbox"]')
-    const count = await checkboxes.count()
-
-    if (count > 0) {
-      const checked = await checkboxes.first().getAttribute('aria-checked')
-      expect(['true', 'false']).toContain(checked)
-    } else {
-      await expect(page.locator('body')).toBeVisible()
-    }
+    await expect(checkboxes.first()).toBeVisible()
+    const checked = await checkboxes.first().getAttribute('aria-checked')
+    expect(['true', 'false']).toContain(checked)
   })
 
 })
@@ -82,6 +190,7 @@ test.describe('Accessibility — Scans Page', () => {
 test.describe('Accessibility — Findings Page', () => {
 
   test('should have no ARIA/structural a11y violations', async ({ page }) => {
+    await mockFindingsAPIs(page)
     await page.goto('/findings')
     await page.waitForLoadState('networkidle')
 
@@ -94,6 +203,7 @@ test.describe('Accessibility — Findings Page', () => {
   })
 
   test('search input has id and aria-label', async ({ page }) => {
+    await mockFindingsAPIs(page)
     await page.goto('/findings')
     await page.waitForLoadState('networkidle')
 
@@ -105,6 +215,7 @@ test.describe('Accessibility — Findings Page', () => {
   })
 
   test('search input is keyboard reachable and typeable', async ({ page }) => {
+    await mockFindingsAPIs(page)
     await page.goto('/findings')
     await page.waitForLoadState('networkidle')
 
@@ -116,6 +227,7 @@ test.describe('Accessibility — Findings Page', () => {
   })
 
   test('severity filter buttons have aria-pressed', async ({ page }) => {
+    await mockFindingsAPIs(page)
     await page.goto('/findings')
     await page.waitForLoadState('networkidle')
 
@@ -127,6 +239,7 @@ test.describe('Accessibility — Findings Page', () => {
   })
 
   test('severity filter groups have role=group', async ({ page }) => {
+    await mockFindingsAPIs(page)
     await page.goto('/findings')
     await page.waitForLoadState('networkidle')
 
@@ -136,6 +249,7 @@ test.describe('Accessibility — Findings Page', () => {
   })
 
   test('detail panel has aria-label and aria-live', async ({ page }) => {
+    await mockFindingsAPIs(page)
     await page.goto('/findings')
     await page.waitForLoadState('networkidle')
 
@@ -147,18 +261,15 @@ test.describe('Accessibility — Findings Page', () => {
   })
 
   test('finding list buttons have aria-pressed and aria-label', async ({ page }) => {
+    await mockFindingsAPIs(page)
     await page.goto('/findings')
     await page.waitForLoadState('networkidle')
 
+    // With mocked data we always have findings — assert deterministically
     const buttons = page.locator('button[aria-pressed]')
-    const count = await buttons.count()
-
-    if (count > 0) {
-      const label = await buttons.first().getAttribute('aria-label')
-      expect(label).toBeTruthy()
-    } else {
-      await expect(page.locator('body')).toBeVisible()
-    }
+    await expect(buttons.first()).toBeVisible()
+    const label = await buttons.first().getAttribute('aria-label')
+    expect(label).toBeTruthy()
   })
 
 })
@@ -168,6 +279,7 @@ test.describe('Accessibility — Findings Page', () => {
 test.describe('Accessibility — Toolkit Page', () => {
 
   test('should have no ARIA/structural a11y violations', async ({ page }) => {
+    await mockPluginsAPIs(page)
     await page.goto('/toolkit')
     await page.waitForLoadState('networkidle')
 
@@ -180,6 +292,7 @@ test.describe('Accessibility — Toolkit Page', () => {
   })
 
   test('search input has id and aria-label', async ({ page }) => {
+    await mockPluginsAPIs(page)
     await page.goto('/toolkit')
     await page.waitForLoadState('networkidle')
 
@@ -191,6 +304,7 @@ test.describe('Accessibility — Toolkit Page', () => {
   })
 
   test('nav has role=tablist and tabs have role=tab', async ({ page }) => {
+    await mockPluginsAPIs(page)
     await page.goto('/toolkit')
     await page.waitForLoadState('networkidle')
 
@@ -209,23 +323,22 @@ test.describe('Accessibility — Toolkit Page', () => {
   })
 
   test('active tab has aria-selected=true', async ({ page }) => {
+    await mockPluginsAPIs(page)
     await page.goto('/toolkit')
     await page.waitForLoadState('networkidle')
 
     const tabs = page.locator('[role="tab"]')
     const count = await tabs.count()
 
-    // Only assert if tabs rendered (requires backend)
-    if (count > 0) {
-      const selectedTabs = page.locator('[role="tab"][aria-selected="true"]')
-      const selectedCount = await selectedTabs.count()
-      expect(selectedCount).toBe(1)
-    } else {
-      await expect(page.locator('body')).toBeVisible()
-    }
+    // With mocked data tabs are always present — assert deterministically
+    const selectedTabs = page.locator('[role="tab"][aria-selected="true"]')
+    await expect(selectedTabs.first()).toBeVisible()
+    const selectedCount = await selectedTabs.count()
+    expect(selectedCount).toBe(1)
   })
 
   test('tab panel has role=tabpanel', async ({ page }) => {
+    await mockPluginsAPIs(page)
     await page.goto('/toolkit')
     await page.waitForLoadState('networkidle')
 
@@ -234,41 +347,33 @@ test.describe('Accessibility — Toolkit Page', () => {
   })
 
   test('tool cards have aria-label and aria-disabled when loaded', async ({ page }) => {
+    await mockPluginsAPIs(page)
     await page.goto('/toolkit')
     await page.waitForLoadState('networkidle')
 
     const cards = page.locator('button[aria-label][aria-disabled]')
     const count = await cards.count()
 
-    // Only assert if backend returned tools
-    if (count > 0) {
-      const label = await cards.first().getAttribute('aria-label')
-      expect(label).toBeTruthy()
-    } else {
-      // Backend down — verify page itself is accessible
-      await expect(page.locator('#toolkit-search')).toBeVisible()
-    }
+    // With mocked data tools are always present — assert deterministically
+    await expect(cards.first()).toBeVisible()
+    const label = await cards.first().getAttribute('aria-label')
+    expect(label).toBeTruthy()
   })
 
   test('tab switching is keyboard operable when tabs are present', async ({ page }) => {
+    await mockPluginsAPIs(page)
     await page.goto('/toolkit')
     await page.waitForLoadState('networkidle')
 
     const tabs = page.locator('[role="tab"]')
     const count = await tabs.count()
 
-    // Only test keyboard if tabs rendered
-    if (count > 0) {
-      const firstTab = tabs.first()
-      await firstTab.focus()
-      await page.keyboard.press('Enter')
-
-      const selected = await firstTab.getAttribute('aria-selected')
-      expect(selected).toBe('true')
-    } else {
-      // Gracefully pass — toolkit requires backend to render tabs
-      await expect(page.locator('#toolkit-search')).toBeVisible()
-    }
+    // With mocked data tabs are always present — assert deterministically
+    await expect(tabs.first()).toBeVisible()
+    await tabs.first().focus()
+    await page.keyboard.press('Enter')
+    const selected = await tabs.first().getAttribute('aria-selected')
+    expect(selected).toBe('true')
   })
 
 })

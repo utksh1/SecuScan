@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { LiveRegion } from "./components/LiveRegion";
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import AppShell from './components/AppShell'
@@ -12,7 +12,7 @@ import Scans from './pages/Scans'
 import TaskDetails from './pages/TaskDetails'
 
 import { ThemeProvider } from './components/ThemeContext'
-import { ToastProvider, ToastContainer } from './components/ToastContext'
+import { ToastProvider, ToastContainer, useToast } from './components/ToastContext'
 import { I18nProvider } from './components/I18nContext'
 import { routes } from './routes'
 
@@ -33,18 +33,28 @@ export function AppRoutes() {
   )
 }
 
+// Inner component has access to ToastContext
+function AppInner() {
+  const { toasts } = useToast()
+  const latestMessage = toasts.length > 0 ? toasts[toasts.length - 1].message : ""
+  return (
+    <>
+      <LiveRegion message={latestMessage} />
+      <Router>
+        <AppShell>
+          <AppRoutes />
+        </AppShell>
+      </Router>
+    </>
+  )
+}
+
 export default function App() {
-  const [toastMessage, setToastMessage] = useState("");
   return (
     <ThemeProvider>
       <I18nProvider>
         <ToastProvider>
-          <LiveRegion message={toastMessage} />
-          <Router>
-            <AppShell>
-              <AppRoutes />
-            </AppShell>
-          </Router>
+          <AppInner />
         </ToastProvider>
       </I18nProvider>
     </ThemeProvider>

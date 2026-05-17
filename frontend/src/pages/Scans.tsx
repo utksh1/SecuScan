@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { API_BASE, deleteTask, clearAllTasks, bulkDeleteTasks } from '../api'
 import { routePath } from '../routes'
 import { parseDateSafe, formatLocaleDate, formatLocaleTime } from '../utils/date'
-import { useFocusTrap } from '../hooks/useFocusTrap'
 
 interface Task {
     task_id: string
@@ -280,21 +279,18 @@ export default function Scans() {
                                         }`}></div>
 
                                         <div 
-                                            className={`bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer relative overflow-hidden group/card ${
+                                            className={`bg-charcoal border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] transition-all relative overflow-hidden group/card ${
                                                 expandedId === task.task_id ? 'border-rag-blue/40 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]' : ''
                                             }`}
-                                            role="button"
-                                            tabIndex={0}
-                                            aria-expanded={expandedId === task.task_id}
-                                            aria-label={`Scan record: ${task.tool} targeting ${task.target}, status ${task.status}. Press Enter to expand.`}
-                                            onClick={() => setExpandedId(expandedId === task.task_id ? null : task.task_id)}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter' || e.key === ' ') {
-                                                    e.preventDefault()
-                                                    setExpandedId(expandedId === task.task_id ? null : task.task_id)
-                                                }
-                                            }}
                                         >
+                                            {/* Expand/collapse button — separate from inner controls */}
+                                            <button
+                                                className="absolute inset-0 w-full h-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-rag-blue focus-visible:ring-inset z-0"
+                                                aria-expanded={expandedId === task.task_id}
+                                                aria-label={`Scan record: ${task.tool} targeting ${task.target}, status ${task.status}. Press Enter to expand.`}
+                                                onClick={() => setExpandedId(expandedId === task.task_id ? null : task.task_id)}
+                                            />
+                                            <div className="p-8 relative z-10">
                                             <div className="flex flex-col xl:flex-row justify-between gap-8">
                                                 <div className="flex-1 space-y-6">
                                                     <div className="flex flex-wrap items-center gap-4">
@@ -440,6 +436,7 @@ export default function Scans() {
                                                     </motion.div>
                                                 )}
                                             </AnimatePresence>
+                                            </div>{/* end z-10 content wrapper */}
                                         </div>
                                     </motion.div>
                                 );
