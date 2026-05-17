@@ -2,7 +2,7 @@
 API routes for SecuScan backend
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Response
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Query
 from typing import Any, Optional, List, Dict, Callable
 import json
 import logging
@@ -644,24 +644,29 @@ async def delete_task(task_id: str):
 
 
 @router.delete("/tasks/bulk")
-async def bulk_delete_tasks(task_ids: List[str]):
+async def bulk_delete_tasks(task_ids: List[str] = Query(default=[])):
     """Delete multiple tasks at once"""
+    if not task_ids:
+        return {"deleted_count": 0, "success": True}
+
     db = await get_db()
-    
+
     # Check if any tasks are running
     placeholders = ",".join(["?"] * len(task_ids))
-    running_tasks = await db.fetchone(f"SELECT id FROM tasks WHERE id IN ({placeholders}) AND status = 'running' LIMIT 1", tuple(task_ids))
+    running_tasks = await db.fetchone(
+        f"SELECT id FROM tasks WHERE id IN ({placeholders}) AND status = 'running' LIMIT 1",
+        tuple(task_ids),
+    )
     if running_tasks:
         raise HTTPException(status_code=400, detail="Cannot delete running tasks. Abort them first.")
 
     await delete_task_records(task_ids)
     await invalidate_view_cache()
-    
+
     return {
         "deleted_count": len(task_ids),
         "success": True
     }
-
 
 @router.delete("/tasks/clear")
 async def clear_all_tasks():
