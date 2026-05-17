@@ -52,6 +52,11 @@ export default function Scans() {
     const [filter, setFilter] = useState('all')
     const [expandedId, setExpandedId] = useState<string | null>(null)
     const [selectedIds, setSelectedIds] = useState<string[]>([])
+     const [showDeleteModal, setShowDeleteModal] = useState(false)
+     const [taskToDelete, setTaskToDelete] = useState<string | null>(null)
+
+     const [showClearModal, setShowClearModal] = useState(false)
+     const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false)
 
     useEffect(() => {
         loadTasks()
@@ -97,10 +102,7 @@ export default function Scans() {
     }
 
     async function handleTaskDelete(taskId: string) {
-        if (!window.confirm('Are you sure you want to delete this scan record? This will also remove associated findings and reports.')) {
-            return
-        }
-
+        
         try {
             await deleteTask(taskId)
             setTasks(prev => prev.filter(t => t.task_id !== taskId))
@@ -112,10 +114,7 @@ export default function Scans() {
     }
 
     async function handleClearAll() {
-        if (!window.confirm('CRITICAL: Are you sure you want to PURGE ALL RECORDS? This will wipe all scan history, findings, assets, and reports. This action is irreversible.')) {
-            return
-        }
-
+        
         try {
             await clearAllTasks()
             setTasks([])
@@ -129,10 +128,7 @@ export default function Scans() {
 
     async function handleBulkDelete() {
         if (selectedIds.length === 0) return
-        if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} selected scan records?`)) {
-            return
-        }
-
+       
         try {
             await bulkDeleteTasks(selectedIds)
             setTasks(prev => prev.filter(t => !selectedIds.includes(t.task_id)))
@@ -166,7 +162,7 @@ export default function Scans() {
         if (seconds < 3600) return `${Math.round(seconds / 60)}m`
         return `${Math.round(seconds / 3600)}h`
     }
-
+       const taskData = tasks.find(t => t.task_id === taskToDelete)
     return (
         <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
             
@@ -228,7 +224,7 @@ export default function Scans() {
                 <div className="flex items-center gap-6">
                     {tasks.length > 0 && (
                         <button
-                            onClick={handleClearAll}
+                            onClick={() => setShowClearModal(true)}
                             className="px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 bg-rag-red/10 text-rag-red border-rag-red/20 hover:bg-rag-red hover:text-black hover:border-black flex items-center gap-2 italic"
                         >
                             Purge_All_Records
@@ -277,7 +273,8 @@ export default function Scans() {
                                             className={`bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer relative overflow-hidden group/card ${
                                                 expandedId === task.task_id ? 'border-rag-blue/40 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]' : ''
                                             }`}
-                                            onClick={() => setExpandedId(expandedId === task.task_id ? null : task.task_id)}
+                                         onClick={() => setExpandedId(expandedId === task.task_id ? null : task.task_id)}
+                                        
                                         >
                                             <div className="flex flex-col xl:flex-row justify-between gap-8">
                                                 <div className="flex-1 space-y-6">
@@ -374,7 +371,8 @@ export default function Scans() {
                                                                         className="bg-rag-red/20 text-rag-red border-2 border-rag-red/20 hover:bg-rag-red hover:text-black hover:border-black px-6 py-4 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 italic"
                                                                         onClick={(e) => {
                                                                             e.stopPropagation()
-                                                                            handleTaskDelete(task.task_id)
+                                                                            setTaskToDelete(task.task_id)
+                                                                            setShowDeleteModal(true)
                                                                         }}
                                                                     >
                                                                         Delete_Record
@@ -450,7 +448,7 @@ export default function Scans() {
                                     Cancel
                                 </button>
                                 <button 
-                                    onClick={handleBulkDelete}
+                                    onClick={() => setShowBulkDeleteModal(true)}
                                     className="bg-rag-red text-black px-8 py-3 text-[10px] font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3 italic"
                                 >
                                     Prune_Selected_Records
@@ -461,7 +459,87 @@ export default function Scans() {
                     </motion.div>
                 )}
             </AnimatePresence>
+                 {/* Delete Confirmation Modal */}
+{showDeleteModal && (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+        <div className="bg-charcoal border-4 border-rag-red p-8 max-w-md w-full space-y-6">
+            
+            <div className="space-y-2">
+                <h2 className="text-2xl font-black text-rag-red uppercase">
+                    Delete Scan Record?
+                </h2>
+                <p className="text-rag-blue font-mono text-sm uppercase">
+              {taskData?.tool} // {taskData?.target}
+                </p>
 
+                <p className="text-silver/70 text-sm">
+                    This will permanently remove the scan record and associated findings and reports.
+                </p>
+            </div>
+
+            <div className="flex justify-end gap-4">
+                
+                <button
+                    onClick={() => setShowDeleteModal(false)}
+                    className="px-4 py-2 border-2 border-silver/20 text-silver"
+                >
+                    Cancel
+                </button>
+
+                <button
+                    onClick={async () => {
+                        if (taskToDelete) {
+                            await handleTaskDelete(taskToDelete)
+                        }
+
+                        setShowDeleteModal(false)
+                        setTaskToDelete(null)
+                    }}
+                    className="bg-rag-red text-black px-4 py-2 font-black"
+                >
+                    Delete
+                </button>
+
+            </div>
+        </div>
+    </div>
+)}
+
+{/* Clear All Confirmation Modal */}
+{showClearModal && (
+  <div role="dialog" aria-modal="true" className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+    <div className="bg-charcoal border-4 border-rag-red p-8 max-w-md w-full space-y-6">
+
+      <h2 className="text-2xl font-black text-rag-red uppercase">
+        Purge All Records?
+      </h2>
+
+      <p className="text-silver/70 text-sm">
+        This will permanently delete ALL scan records. This action cannot be undone.
+      </p>
+
+      <div className="flex justify-end gap-4">
+        <button
+          onClick={() => setShowClearModal(false)}
+          className="px-4 py-2 border-2 border-silver/20 text-silver"
+        >
+          Cancel
+        </button>
+
+        <button
+          onClick={async () => {
+            await handleClearAll()
+            setShowClearModal(false)
+          }}
+          className="bg-rag-red text-black px-4 py-2 font-black"
+        >
+          Confirm
+        </button>
+      </div>
+
+    </div>
+  </div>
+)}
             {/* Restricted Footer */}
             <footer className="pt-24 opacity-20 pointer-events-none select-none flex flex-col md:flex-row justify-between items-center gap-8 text-[9px] font-black uppercase tracking-[0.5em] italic">
                 <div className="flex items-center gap-4">

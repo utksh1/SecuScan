@@ -47,7 +47,9 @@ export default function Settings() {
         return DEFAULT_CONFIG
     })
 
-    const [systemTimezone, setSystemTimezone] = useState('Detecting...')
+      const [systemTimezone, setSystemTimezone] = useState('Detecting...')
+      const [showResetModal, setShowResetModal] = useState(false)
+      const [showPurgeModal, setShowPurgeModal] = useState(false)
 
     useEffect(() => {
         try {
@@ -64,14 +66,10 @@ export default function Settings() {
             setTheme(config.theme)
         }
     }
-
-    const handleReset = () => {
-        if (window.confirm("Restore engine to factory specifications? All API keys and custom rules will be cleared.")) {
-            setConfig(DEFAULT_CONFIG)
-            localStorage.setItem('secuscan-config', JSON.stringify(DEFAULT_CONFIG))
-            addToast("Engine parameters reset to factory defaults", "info")
-        }
-    }
+const handleReset = () => {
+    setShowResetModal(true)
+}
+    
 
     const handleExport = () => {
         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(config, null, 2));
@@ -338,12 +336,7 @@ export default function Settings() {
                             </button>
                             <button 
                                 className="w-full py-4 bg-rag-red border-4 border-black text-[10px] font-black text-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all italic"
-                                onClick={() => {
-                                    if (window.confirm("CRITICAL: THIS WILL PURGE ALL HISTORY AND ASSETS. PROCEED?")) {
-                                        localStorage.clear();
-                                        window.location.reload();
-                                    }
-                                }}
+                                onClick={() => setShowPurgeModal(true)}
                             >
                                 NUCLEAR_PURGE
                             </button>
@@ -381,6 +374,81 @@ export default function Settings() {
                     {[1,2,3,4,5,6,7,8].map(i => <div key={i} className="w-2 h-2 bg-silver/20 rounded-full"></div>)}
                 </div>
             </footer>
+            {showResetModal && (
+  <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+    
+    <div className="bg-charcoal border-4 border-rag-amber p-8 max-w-md w-full space-y-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+      
+      <h2 className="text-xl font-black text-rag-amber uppercase">
+        Reset Engine?
+      </h2>
+
+      <p className="text-silver/70 text-sm">
+        This will restore factory settings and remove all custom configurations.
+      </p>
+
+      <div className="flex justify-end gap-4">
+        
+        <button 
+          onClick={() => setShowResetModal(false)}
+          className="px-4 py-2 border-2 border-silver/30 text-silver hover:bg-silver/10"
+        >
+          Cancel
+        </button>
+
+        <button
+          onClick={() => {
+            setConfig(DEFAULT_CONFIG)
+            localStorage.setItem('secuscan-config', JSON.stringify(DEFAULT_CONFIG))
+            setShowResetModal(false)
+          }}
+          className="bg-rag-amber text-black px-4 py-2 font-bold"
+        >
+          Confirm
+        </button>
+
+      </div>
+    </div>
+
+  </div>
+)}
+{showPurgeModal && (
+  <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+    
+    <div className="bg-charcoal border-4 border-rag-red p-8 max-w-md w-full space-y-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+      
+      <h2 className="text-xl font-black text-rag-red uppercase">
+        Nuclear Purge?
+      </h2>
+
+      <p className="text-silver/70 text-sm">
+        This will permanently delete ALL history and assets. This action cannot be undone.
+      </p>
+
+      <div className="flex justify-end gap-4">
+        
+        <button 
+          onClick={() => setShowPurgeModal(false)}
+          className="px-4 py-2 border-2 border-silver/30 text-silver hover:bg-silver/10"
+        >
+          Cancel
+        </button>
+
+        <button
+          onClick={() => {
+            localStorage.clear()
+            window.location.reload()
+          }}
+          className="bg-rag-red text-black px-4 py-2 font-bold"
+        >
+          Confirm
+        </button>
+
+      </div>
+    </div>
+
+  </div>
+)}
         </div>
     )
 }
