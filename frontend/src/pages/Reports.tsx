@@ -1,22 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
-<<<<<<< HEAD
-=======
-import { HugeiconsIcon } from '@hugeicons/react'
-import {
-  Analytics02Icon,
-  Archive02Icon,
-  Download01Icon,
-  File01Icon,
-  KnightShieldIcon,
-  Radar02Icon,
-  Refresh01Icon,
-  ScanEyeIcon,
-  ShieldUserIcon,
-  UserShield02Icon,
-} from '@hugeicons/core-free-icons'
->>>>>>> 3889b7e6a86c96b8fc002424dc10f8d3c21ee005
 import { getDashboardSummary, getReports, API_BASE } from '../api'
 import { formatDateLong } from '../utils/date'
 
@@ -41,7 +25,6 @@ const containerVariants = {
 }
 
 const itemVariants = {
-<<<<<<< HEAD
     hidden: { opacity: 0, scale: 0.95, y: 20 },
     visible: {
       opacity: 1,
@@ -51,37 +34,11 @@ const itemVariants = {
     }
 }
 
-=======
-  hidden: { opacity: 0, scale: 0.95, y: 20 },
-  visible: {
-    opacity: 1,
-    scale: 1,
-    y: 0,
-    transition: { duration: 0.4 },
-  },
-}
-
-const exportFormats = ['pdf', 'html', 'csv'] as const
-
-function ReportIcon({
-  icon,
-  size = 20,
-  className = '',
-}: {
-  icon: any
-  size?: number
-  className?: string
-}) {
-  return <HugeiconsIcon icon={icon} size={size} strokeWidth={1.9} className={className} />
-}
-
->>>>>>> 3889b7e6a86c96b8fc002424dc10f8d3c21ee005
 export default function Reports() {
   const navigate = useNavigate()
   const [reports, setReports] = useState<Report[]>([])
   const [summary, setSummary] = useState<any>({ total_findings: 0, total_assets: 0, critical_findings: 0, high_findings: 0, total_attack_surface: 0 })
   const [selectedType, setSelectedType] = useState('all')
-<<<<<<< HEAD
   const [loading, setLoading] = useState(true)        // I added these state variables to manage loading and error states
   const [error, setError] = useState<string | null>(null) // This function now handles loading and error states
 
@@ -96,25 +53,6 @@ export default function Reports() {
     }).finally(() => {
       setLoading(false)
     })
-=======
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  const fetchReports = () => {
-    setLoading(true)
-    setError(null)
-    Promise.all([getReports(), getDashboardSummary()])
-      .then(([reportData, summaryData]: any) => {
-        setReports(reportData.reports || [])
-        setSummary(summaryData || {})
-      })
-      .catch(() => {
-        setError('Failed to fetch reports')
-      })
-      .finally(() => {
-        setLoading(false)
-      })
->>>>>>> 3889b7e6a86c96b8fc002424dc10f8d3c21ee005
   }
 
   useEffect(() => {
@@ -125,10 +63,6 @@ export default function Reports() {
 
   return (
     <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
-<<<<<<< HEAD
-
-=======
->>>>>>> 3889b7e6a86c96b8fc002424dc10f8d3c21ee005
       {/* Neo-Brutalist Header */}
       <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10 font-black">
         <div className="space-y-4">
@@ -149,11 +83,7 @@ export default function Reports() {
             className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
             title="Refresh Archive"
           >
-<<<<<<< HEAD
             <span className="material-symbols-outlined">sync</span>
-=======
-            <ReportIcon icon={Refresh01Icon} className="block" />
->>>>>>> 3889b7e6a86c96b8fc002424dc10f8d3c21ee005
           </button>
         </div>
       </header>
@@ -161,13 +91,7 @@ export default function Reports() {
       {/* Loading State */}
       {loading && (
         <div className="flex items-center justify-center py-40 gap-6">
-<<<<<<< HEAD
           <span className="material-symbols-outlined text-silver/20 text-5xl animate-spin">progress_activity</span>
-=======
-          <div className="animate-spin">
-            <ReportIcon icon={Refresh01Icon} size={48} className="text-silver/20" />
-          </div>
->>>>>>> 3889b7e6a86c96b8fc002424dc10f8d3c21ee005
           <p className="text-[10px] font-black text-silver/20 uppercase tracking-[0.4em] italic animate-pulse">
             Retrieving Archive Data...
           </p>
@@ -177,10 +101,7 @@ export default function Reports() {
       {/* Error State */}
       {!loading && error && (
         <div className="border-4 border-rag-red bg-rag-red/10 p-8 flex items-center gap-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-<<<<<<< HEAD
           <span className="material-symbols-outlined text-rag-red text-3xl">error</span>
-=======
->>>>>>> 3889b7e6a86c96b8fc002424dc10f8d3c21ee005
           <div className="space-y-1">
             <p className="text-xs font-black text-rag-red uppercase tracking-widest">Archive_Retrieval_Failed</p>
             <p className="text-[10px] font-mono text-silver/40 uppercase tracking-widest">{error}</p>
@@ -194,10 +115,7 @@ export default function Reports() {
         </div>
       )}
 
-<<<<<<< HEAD
       {/* Main content — only shown when not loading and no error */}
-=======
->>>>>>> 3889b7e6a86c96b8fc002424dc10f8d3c21ee005
       {!loading && !error && (
         <>
           {/* Metrics Row */}
@@ -211,11 +129,7 @@ export default function Reports() {
               <div key={i} className={`${m.color} border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between h-40 group hover:-translate-y-1 transition-transform`}>
                 <div className="flex justify-between items-start">
                   <span className="text-[10px] font-black text-black uppercase tracking-[0.2em] italic">{m.label}</span>
-<<<<<<< HEAD
                   <span className="material-symbols-outlined text-black/20 group-hover:text-black transition-colors">folder_zip</span>
-=======
-                  <ReportIcon icon={Archive02Icon} className="text-black/20 group-hover:text-black transition-colors" />
->>>>>>> 3889b7e6a86c96b8fc002424dc10f8d3c21ee005
                 </div>
                 <div className="flex items-baseline gap-2">
                   <span className="text-5xl font-black text-black font-mono leading-none tracking-tighter">{m.val}</span>
@@ -238,21 +152,12 @@ export default function Reports() {
                         onClick={() => setSelectedType(t)}
                         className={`px-6 py-4 text-left text-[10px] font-black uppercase tracking-widest border-4 transition-all flex justify-between items-center ${
                           selectedType === t
-<<<<<<< HEAD
                           ? 'bg-rag-red border-black text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
                           : 'bg-charcoal-dark border-black text-silver/40 hover:border-silver-bright/20'
                         }`}
                       >
                         {t} BRIEFINGS
                         {selectedType === t && <span className="material-symbols-outlined text-xs">radar</span>}
-=======
-                            ? 'bg-rag-red border-black text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
-                            : 'bg-charcoal-dark border-black text-silver/40 hover:border-silver-bright/20'
-                        }`}
-                      >
-                        {t} BRIEFINGS
-                        {selectedType === t && <ReportIcon icon={Radar02Icon} size={16} className="text-black" />}
->>>>>>> 3889b7e6a86c96b8fc002424dc10f8d3c21ee005
                       </button>
                     ))}
                   </div>
@@ -260,11 +165,7 @@ export default function Reports() {
 
                 <div className="p-8 border-4 border-black border-dashed space-y-4 bg-charcoal-dark/50">
                   <div className="flex items-center gap-3">
-<<<<<<< HEAD
                     <span className="material-symbols-outlined text-rag-green text-lg">verified</span>
-=======
-                    <ReportIcon icon={KnightShieldIcon} className="text-rag-green" />
->>>>>>> 3889b7e6a86c96b8fc002424dc10f8d3c21ee005
                     <h4 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic leading-none">Integrity_Secure</h4>
                   </div>
                   <p className="text-[10px] text-silver/40 font-black uppercase tracking-widest leading-loose italic">
@@ -298,32 +199,19 @@ export default function Reports() {
                       {/* Status Top Bar */}
                       <div className={`absolute top-0 left-0 h-2 transition-all duration-500 ${
                         report.status === 'ready' ? 'bg-rag-green w-full' :
-<<<<<<< HEAD
                         report.status === 'failed' ? 'bg-rag-red w-full' : 'bg-rag-amber w-1/2 animate-pulse'
-=======
-                          report.status === 'failed' ? 'bg-rag-red w-full' : 'bg-rag-amber w-1/2 animate-pulse'
->>>>>>> 3889b7e6a86c96b8fc002424dc10f8d3c21ee005
                       }`}></div>
 
                       <div className="space-y-8 relative z-10">
                         <div className="flex justify-between items-start">
                           <span className={`px-2 py-0.5 text-[9px] font-black uppercase italic border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
                             report.type === 'executive' ? 'bg-silver-bright text-black' :
-<<<<<<< HEAD
                             report.type === 'compliance' ? 'bg-rag-green text-black' :
                             'bg-rag-blue text-black'
                           }`}>
                             {report.type}_TYPE
                           </span>
                           <span className="material-symbols-outlined text-silver/10 group-hover:text-silver-bright transition-colors text-2xl">description</span>
-=======
-                              report.type === 'compliance' ? 'bg-rag-green text-black' :
-                                'bg-rag-blue text-black'
-                          }`}>
-                            {report.type}_TYPE
-                          </span>
-                          <ReportIcon icon={File01Icon} size={24} className="text-silver/10 group-hover:text-silver-bright transition-colors" />
->>>>>>> 3889b7e6a86c96b8fc002424dc10f8d3c21ee005
                         </div>
 
                         <div>
@@ -359,15 +247,9 @@ export default function Reports() {
                               className="bg-charcoal-dark border-4 border-black p-3 text-silver/20 group-hover:text-silver-bright group-hover:bg-black transition-all"
                               title="View Briefing"
                             >
-<<<<<<< HEAD
                               <span className="material-symbols-outlined text-sm">visibility</span>
                             </button>
                             {(['pdf', 'html', 'csv'] as const).map((format) => (
-=======
-                              <ReportIcon icon={ScanEyeIcon} size={18} />
-                            </button>
-                            {exportFormats.map((format) => (
->>>>>>> 3889b7e6a86c96b8fc002424dc10f8d3c21ee005
                               <button
                                 key={format}
                                 onClick={() => {
@@ -376,13 +258,8 @@ export default function Reports() {
                                   }
                                 }}
                                 disabled={report.status === 'generating'}
-<<<<<<< HEAD
                                 title={report.status === 'generating' ? `Export unavailable — report is still generating` : `Download ${format.toUpperCase()}`}
                                 className="bg-charcoal-dark border-4 border-black px-3 py-2 text-[9px] font-black uppercase tracking-widest text-silver/20 group-hover:text-silver-bright group-hover:bg-black transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:group-hover:text-silver/20 disabled:group-hover:bg-charcoal-dark"
-=======
-                                className="bg-charcoal-dark border-4 border-black px-3 py-2 text-[9px] font-black uppercase tracking-widest text-silver/20 group-hover:text-silver-bright group-hover:bg-black transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:group-hover:text-silver/20 disabled:group-hover:bg-charcoal-dark"
-                                title={report.status === 'generating' ? 'Export unavailable while report is generating' : `Download ${format.toUpperCase()}`}
->>>>>>> 3889b7e6a86c96b8fc002424dc10f8d3c21ee005
                               >
                                 {format}
                               </button>
@@ -393,29 +270,16 @@ export default function Reports() {
 
                       {/* Background Hover Icon */}
                       <div className="absolute -right-12 -bottom-12 opacity-0 group-hover:opacity-[0.03] transition-all duration-1000 transform scale-150 rotate-12 pointer-events-none">
-<<<<<<< HEAD
                         <span className="material-symbols-outlined text-[200px] text-silver-bright">
                           {report.type === 'executive' ? 'leaderboard' : report.type === 'compliance' ? 'verified_user' : 'terminal'}
                         </span>
-=======
-                        <div className="text-silver-bright">
-                          <ReportIcon
-                            icon={report.type === 'executive' ? Analytics02Icon : report.type === 'compliance' ? UserShield02Icon : ShieldUserIcon}
-                            size={200}
-                          />
-                        </div>
->>>>>>> 3889b7e6a86c96b8fc002424dc10f8d3c21ee005
                       </div>
                     </motion.div>
                   ))}
 
                   {filteredReports.length === 0 && (
                     <div className="col-span-2 py-40 border-4 border-dashed border-black/5 text-center flex flex-col items-center gap-8 bg-charcoal/30">
-<<<<<<< HEAD
                       <span className="material-symbols-outlined text-silver/5 text-9xl">folder_off</span>
-=======
-                      <ReportIcon icon={Archive02Icon} size={120} className="text-silver/5" />
->>>>>>> 3889b7e6a86c96b8fc002424dc10f8d3c21ee005
                       <div className="space-y-2">
                         <p className="text-xl font-black text-silver/20 uppercase tracking-[0.4em] italic">Archive Isolated</p>
                         <p className="text-xs font-mono text-silver/10 uppercase tracking-widest leading-relaxed">System buffer awaiting briefing generation protocols</p>
@@ -436,11 +300,7 @@ export default function Reports() {
           RESTRICTED_ACCESS_ENCLAVE // SYSTEM_ARCHIVE_DAEMON // {new Date().getFullYear()}
         </div>
         <div className="flex gap-4">
-<<<<<<< HEAD
           {[1,2,3,4,5,6,7,8].map(i => <div key={i} className="w-2 h-2 bg-silver/20 rounded-full"></div>)}
-=======
-          {[1, 2, 3, 4, 5, 6, 7, 8].map(i => <div key={i} className="w-2 h-2 bg-silver/20 rounded-full"></div>)}
->>>>>>> 3889b7e6a86c96b8fc002424dc10f8d3c21ee005
         </div>
       </footer>
     </div>
