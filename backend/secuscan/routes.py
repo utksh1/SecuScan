@@ -188,10 +188,12 @@ async def start_task(
         raise HTTPException(status_code=429, detail=error_msg)
 
     # Check concurrent task limit
-    can_acquire, error_msg = await concurrent_limiter.acquire("temp")
-    if not can_acquire:
-        raise HTTPException(status_code=503, detail=error_msg)
-    await concurrent_limiter.release("temp")
+    available_slots = await concurrent_limiter.get_available_slots()
+    if available_slots <= 0:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Maximum concurrent tasks ({concurrent_limiter.max_concurrent}) reached. Try again later."
+        )
 
     # Create task
     try:
@@ -201,6 +203,9 @@ async def start_task(
             request.preset,
             request.consent_granted
         )
+
+        # Acquire a real slot now that we have the actual task_id
+        await concurrent_limiter.acquire(task_id)
 
         # Execute task in background
         background_tasks.add_task(executor.execute_task, task_id)

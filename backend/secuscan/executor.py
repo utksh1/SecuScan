@@ -18,6 +18,7 @@ from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager
 from .models import TaskStatus
+from .ratelimit import concurrent_limiter
 
 # Modular Scanners
 from .scanners.port_scanner import PortScanner
@@ -354,15 +355,9 @@ class TaskExecutor:
                 task_id=task_id
             )
         finally:
-            # Cleanup: remove from running tasks and update DB if cancelled
+            # Cleanup: remove from running tasks registry and release concurrency slot
             self.running_tasks.pop(task_id, None)
-            
-            # Check if task was cancelled
-            if asyncio.current_task().cancelled():
-                await db.execute(
-                    "UPDATE tasks SET status = ?, completed_at = ? WHERE id = ? AND status = ?",
-                    (TaskStatus.CANCELLED.value, datetime.now().isoformat(), task_id, TaskStatus.RUNNING.value)
-                )
+            await concurrent_limiter.release(task_id)
     
     async def _execute_command(
         self,
