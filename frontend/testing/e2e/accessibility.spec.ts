@@ -131,9 +131,15 @@ test.describe('Accessibility — Scans Page', () => {
     await page.goto('/scans')
     await page.waitForLoadState('networkidle')
 
-    const buttons = page.locator('button[aria-pressed]')
-    const count = await buttons.count()
-    expect(count).toBeGreaterThan(0)
+    // Find filter buttons by their known labels — fails if aria-pressed is absent
+    const allOpsBtn = page.locator('button[aria-label="Filter by ALL_OPERATIONS"]')
+    await expect(allOpsBtn).toBeVisible()
+    const pressed = await allOpsBtn.getAttribute('aria-pressed')
+    expect(pressed).not.toBeNull() // fails if aria-pressed attribute is missing entirely
+    expect(['true', 'false']).toContain(pressed)
+
+    // Active filter must be aria-pressed=true
+    expect(pressed).toBe('true') // ALL_OPERATIONS is active by default
   })
 
   test('filter buttons are keyboard reachable and activatable', async ({ page }) => {
@@ -176,11 +182,19 @@ test.describe('Accessibility — Scans Page', () => {
     await page.goto('/scans')
     await page.waitForLoadState('networkidle')
 
-    // With mocked data we always have tasks — assert deterministically
+    // Fails if role=checkbox is missing
     const checkboxes = page.locator('[role="checkbox"]')
     await expect(checkboxes.first()).toBeVisible()
+
+    // Fails if aria-checked attribute is missing entirely
     const checked = await checkboxes.first().getAttribute('aria-checked')
-    expect(['true', 'false']).toContain(checked)
+    expect(checked).not.toBeNull()
+    expect(checked).toBe('false') // unchecked by default
+
+    // Click the checkbox — aria-checked must flip to true
+    await checkboxes.first().click()
+    const checkedAfter = await checkboxes.first().getAttribute('aria-checked')
+    expect(checkedAfter).toBe('true')
   })
 
 })
@@ -234,8 +248,18 @@ test.describe('Accessibility — Findings Page', () => {
     const allBtn = page.locator('button[aria-label="Show all severity levels"]')
     await expect(allBtn).toBeVisible()
 
+    // Fails if aria-pressed attribute is missing entirely
     const pressed = await allBtn.getAttribute('aria-pressed')
-    expect(['true', 'false']).toContain(pressed)
+    expect(pressed).not.toBeNull()
+    expect(pressed).toBe('true') // All Levels active by default
+
+    // Click a severity filter — it must become aria-pressed=true, All Levels must become false
+    const criticalBtn = page.locator('button[aria-label*="Critical"]').first()
+    await criticalBtn.click()
+    const criticalPressed = await criticalBtn.getAttribute('aria-pressed')
+    expect(criticalPressed).toBe('true')
+    const allPressedAfter = await allBtn.getAttribute('aria-pressed')
+    expect(allPressedAfter).toBe('false')
   })
 
   test('severity filter groups have role=group', async ({ page }) => {
@@ -265,11 +289,19 @@ test.describe('Accessibility — Findings Page', () => {
     await page.goto('/findings')
     await page.waitForLoadState('networkidle')
 
-    // With mocked data we always have findings — assert deterministically
-    const buttons = page.locator('button[aria-pressed]')
-    await expect(buttons.first()).toBeVisible()
-    const label = await buttons.first().getAttribute('aria-label')
-    expect(label).toBeTruthy()
+    // Target the finding list item button specifically — it has aria-pressed
+    // Use the exact full label pattern from our mocked data
+    const findingBtn = page.locator('button[aria-pressed][aria-label*="Reflected XSS"]')
+    await expect(findingBtn).toBeVisible()
+
+    // Fails if aria-pressed is missing (selector above would return 0 elements)
+    const pressed = await findingBtn.getAttribute('aria-pressed')
+    expect(pressed).not.toBeNull()
+
+    // Click it — aria-pressed must become true
+    await findingBtn.click()
+    const pressedAfter = await findingBtn.getAttribute('aria-pressed')
+    expect(pressedAfter).toBe('true')
   })
 
 })
@@ -330,11 +362,22 @@ test.describe('Accessibility — Toolkit Page', () => {
     const tabs = page.locator('[role="tab"]')
     const count = await tabs.count()
 
-    // With mocked data tabs are always present — assert deterministically
-    const selectedTabs = page.locator('[role="tab"][aria-selected="true"]')
-    await expect(selectedTabs.first()).toBeVisible()
-    const selectedCount = await selectedTabs.count()
-    expect(selectedCount).toBe(1)
+    // Find tabs by name — not by the attribute we are testing
+    const quickStartTab = page.locator('[role="tab"][aria-label*="Quick Start"]')
+    await expect(quickStartTab).toBeVisible()
+
+    // Fails if aria-selected is missing
+    const selected = await quickStartTab.getAttribute('aria-selected')
+    expect(selected).not.toBeNull()
+    expect(selected).toBe('true') // Quick Start active by default
+
+    // Click another tab — it must become aria-selected=true, Quick Start false
+    const reconTab = page.locator('[role="tab"][aria-label*="Recon"]')
+    await reconTab.click()
+    const reconSelected = await reconTab.getAttribute('aria-selected')
+    expect(reconSelected).toBe('true')
+    const quickStartAfter = await quickStartTab.getAttribute('aria-selected')
+    expect(quickStartAfter).toBe('false')
   })
 
   test('tab panel has role=tabpanel', async ({ page }) => {
@@ -354,10 +397,19 @@ test.describe('Accessibility — Toolkit Page', () => {
     const cards = page.locator('button[aria-label][aria-disabled]')
     const count = await cards.count()
 
-    // With mocked data tools are always present — assert deterministically
-    await expect(cards.first()).toBeVisible()
-    const label = await cards.first().getAttribute('aria-label')
-    expect(label).toBeTruthy()
+    // Find tool cards by their known mocked name — not by the attribute we are testing
+    const nmapCard = page.locator('button[aria-label*="Nmap"]')
+    await expect(nmapCard).toBeVisible()
+
+    // Fails if aria-disabled is missing entirely
+    const disabled = await nmapCard.getAttribute('aria-disabled')
+    expect(disabled).not.toBeNull()
+    expect(disabled).toBe('false') // Nmap is runnable in mock
+
+    // Fails if aria-label is missing
+    const label = await nmapCard.getAttribute('aria-label')
+    expect(label).not.toBeNull()
+    expect(label).toMatch(/Nmap/i)
   })
 
   test('tab switching is keyboard operable when tabs are present', async ({ page }) => {
