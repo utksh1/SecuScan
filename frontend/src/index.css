@@ -1,5 +1,5 @@
 /* Google Fonts */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
 
 /* ============================================
    SecuScan Design System
@@ -35,10 +35,10 @@
   --rag-blue: #00d1ff;
 
   /* Typography */
-  --font-serif: 'Playfair Display', serif;
+  --font-serif: "Playfair Display", serif;
   /* For headers */
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
 
   /* Text Color Tokens */
   --text-primary: #f4f4f5;
@@ -188,7 +188,9 @@ textarea {
   border-radius: var(--radius-md);
   padding: var(--space-2) var(--space-3);
   width: 100%;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 input::placeholder,
@@ -454,7 +456,6 @@ button,
    Keeps low-opacity silver text readable on dark UI surfaces.
    ============================================ */
 @layer utilities {
-
   /* Slight global typography bump for tiny text utilities */
   .text-\[8px\] {
     font-size: 9px !important;
@@ -485,7 +486,7 @@ button,
   }
 
   .text-silver\/20 {
-    color: rgb(161 161 170 / 0.60) !important;
+    color: rgb(161 161 170 / 0.6) !important;
   }
 
   .text-silver\/25 {
@@ -591,7 +592,6 @@ button,
    Animations
    ============================================ */
 @keyframes pulse {
-
   0%,
   100% {
     opacity: 1;
@@ -740,7 +740,7 @@ button,
 }
 
 .nav-item--active::before {
-  content: '';
+  content: "";
   position: absolute;
   left: 0;
   top: 50%;
@@ -922,9 +922,11 @@ button,
   height: 800px;
   margin: -400px 0 0 -400px;
   border-radius: 50%;
-  background: radial-gradient(circle,
-      var(--accent-primary) 0%,
-      transparent 60%);
+  background: radial-gradient(
+    circle,
+    var(--accent-primary) 0%,
+    transparent 60%
+  );
   opacity: 0.08;
   animation: scanPulse 8s ease-in-out infinite;
   will-change: transform, opacity;
@@ -936,9 +938,7 @@ button,
 }
 
 .background--error .background-scan {
-  background: radial-gradient(circle,
-      var(--status-danger) 0%,
-      transparent 60%);
+  background: radial-gradient(circle, var(--status-danger) 0%, transparent 60%);
   opacity: 0.1;
 }
 
@@ -950,14 +950,16 @@ button,
 
 .background-lines::before,
 .background-lines::after {
-  content: '';
+  content: "";
   position: absolute;
   width: 1px;
   height: 100%;
-  background: linear-gradient(to bottom,
-      transparent 0%,
-      var(--accent-primary) 50%,
-      transparent 100%);
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    var(--accent-primary) 50%,
+    transparent 100%
+  );
   opacity: 0.06;
   animation: lineFloat 12s ease-in-out infinite;
   will-change: transform;
@@ -981,27 +983,29 @@ button,
 
 .background--error .background-lines::before,
 .background--error .background-lines::after {
-  background: linear-gradient(to bottom,
-      transparent 0%,
-      var(--status-danger) 50%,
-      transparent 100%);
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    var(--status-danger) 50%,
+    transparent 100%
+  );
 }
 
 /* Animations */
 @keyframes gridFloat {
-
   0%,
   100% {
-    transform: perspective(800px) rotateX(60deg) translateZ(-200px) translateY(0);
+    transform: perspective(800px) rotateX(60deg) translateZ(-200px)
+      translateY(0);
   }
 
   50% {
-    transform: perspective(800px) rotateX(60deg) translateZ(-200px) translateY(-20px);
+    transform: perspective(800px) rotateX(60deg) translateZ(-200px)
+      translateY(-20px);
   }
 }
 
 @keyframes scanPulse {
-
   0%,
   100% {
     transform: scale(0.8);
@@ -1015,7 +1019,6 @@ button,
 }
 
 @keyframes lineFloat {
-
   0%,
   100% {
     transform: translateY(0) translateX(0);
@@ -1032,7 +1035,6 @@ button,
 
 /* Reduced Motion Support */
 @media (prefers-reduced-motion: reduce) {
-
   .background-grid,
   .background-scan,
   .background-lines::before,
@@ -1083,7 +1085,7 @@ button,
 }
 
 .filter-tab--active::after {
-  content: '';
+  content: "";
   position: absolute;
   bottom: -1px;
   left: 0;
@@ -1107,7 +1109,7 @@ button,
 }
 
 .timeline-item::before {
-  content: '';
+  content: "";
   position: absolute;
   left: 5px;
   top: 24px;
@@ -1227,10 +1229,12 @@ button,
 .login-scanline {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to bottom,
-      transparent 0%,
-      rgba(0, 212, 255, 0.03) 50%,
-      transparent 100%);
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0, 212, 255, 0.03) 50%,
+    transparent 100%
+  );
   animation: scanline 8s linear infinite;
   pointer-events: none;
 }
@@ -1270,7 +1274,6 @@ button,
   box-shadow: 0 0 40px rgba(239, 68, 68, 0.3);
 }
 
-
 .login-header {
   text-align: center;
   margin-bottom: var(--space-6);
@@ -1294,10 +1297,12 @@ button,
 
 .login-divider {
   height: 1px;
-  background: linear-gradient(to right,
-      transparent,
-      var(--accent-primary),
-      transparent);
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--accent-primary),
+    transparent
+  );
   margin-bottom: var(--space-6);
   opacity: 0.3;
 }
@@ -1362,7 +1367,6 @@ button,
 }
 
 @keyframes cursorBlink {
-
   0%,
   50% {
     opacity: 1;
@@ -1956,7 +1960,7 @@ button,
 }
 
 .scanner-tab--active::after {
-  content: '';
+  content: "";
   position: absolute;
   bottom: -2px;
   left: 0;
@@ -2263,7 +2267,7 @@ button,
 }
 
 .config-section-title::after {
-  content: '';
+  content: "";
   flex: 1;
   height: 1px;
   background: var(--border-default);
@@ -2315,7 +2319,7 @@ button,
 }
 
 .mode-option--active .mode-radio::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 50%;
   left: 50%;
@@ -2544,7 +2548,6 @@ button,
 .tech-tags--wrap {
   flex-wrap: wrap;
 }
-
 
 .panel-header {
   display: flex;
@@ -3230,8 +3233,6 @@ button,
   font-size: var(--text-xs);
 }
 
-
-
 /* ============================================
    Findings Page
    ============================================ */
@@ -3486,7 +3487,7 @@ button,
 }
 
 .tab-btn--active::after {
-  content: '';
+  content: "";
   position: absolute;
   bottom: -1px;
   left: 0;
@@ -3709,7 +3710,7 @@ button,
 }
 
 .toggle-slider::before {
-  content: '';
+  content: "";
   position: absolute;
   height: 18px;
   width: 18px;
@@ -3720,11 +3721,11 @@ button,
   transition: var(--transition-fast);
 }
 
-.toggle input:checked+.toggle-slider {
+.toggle input:checked + .toggle-slider {
   background: var(--accent-primary);
 }
 
-.toggle input:checked+.toggle-slider::before {
+.toggle input:checked + .toggle-slider::before {
   transform: translateX(20px);
   background: white;
 }

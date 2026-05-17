@@ -1,43 +1,56 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
-import { listPlugins, PluginListItem } from '../api'
-import { scanTools } from '../data/scanTools'
-import { routePath } from '../routes'
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { listPlugins, PluginListItem } from "../api";
+import { scanTools } from "../data/scanTools";
+import { routePath } from "../routes";
 
-type RiskLevel = 'passive' | 'active' | 'aggressive'
-type PresetCompatibility = 'quick-recon' | 'deep-scan' | 'both' | 'none'
+type RiskLevel = "passive" | "active" | "aggressive";
+type PresetCompatibility = "quick-recon" | "deep-scan" | "both" | "none";
 
 interface CatalogTool {
-  id: string
-  name: string
-  purpose: string
-  riskLevel: RiskLevel
-  presetCompatibility: PresetCompatibility
-  requiresConsent: boolean
-  category: string
-  disabled: boolean
-  disabledReason?: string
-  isPlugin: boolean
-  isQuickStart?: boolean
-  isProfessional?: boolean
-  availability?: PluginListItem['availability']
+  id: string;
+  name: string;
+  purpose: string;
+  riskLevel: RiskLevel;
+  presetCompatibility: PresetCompatibility;
+  requiresConsent: boolean;
+  category: string;
+  disabled: boolean;
+  disabledReason?: string;
+  isPlugin: boolean;
+  isQuickStart?: boolean;
+  isProfessional?: boolean;
+  availability?: PluginListItem["availability"];
 }
 
-type UITab = 'quick-start' | 'recon' | 'vulnerability' | 'exploit' | 'utils' | 'robots'
+type UITab =
+  | "quick-start"
+  | "recon"
+  | "vulnerability"
+  | "exploit"
+  | "utils"
+  | "robots";
 
-const LEGACY_TAB_ORDER = ['quick-start', 'recon', 'vulnerability', 'exploit', 'utils', 'robots'] as const
-const RECENT_TOOLS_STORAGE_KEY = 'secuscan_recent_tools'
-const RECENT_TOOLS_LIMIT = 6
+const LEGACY_TAB_ORDER = [
+  "quick-start",
+  "recon",
+  "vulnerability",
+  "exploit",
+  "utils",
+  "robots",
+] as const;
+const RECENT_TOOLS_STORAGE_KEY = "secuscan_recent_tools";
+const RECENT_TOOLS_LIMIT = 6;
 
 const LEGACY_TAB_LABELS: Record<string, string> = {
-  'quick-start': 'Quick Start',
-  recon: 'Recon Tools',
-  vulnerability: 'Vulnerability Scanners',
-  exploit: 'Exploit Detection',
-  utils: 'Utils',
-  robots: 'Robots',
-}
+  "quick-start": "Quick Start",
+  recon: "Recon Tools",
+  vulnerability: "Vulnerability Scanners",
+  exploit: "Exploit Detection",
+  utils: "Utils",
+  robots: "Robots",
+};
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -45,7 +58,7 @@ const containerVariants = {
     opacity: 1,
     transition: { staggerChildren: 0.05 },
   },
-}
+};
 
 const itemVariants = {
   hidden: { opacity: 0, scale: 0.95, y: 20 },
@@ -53,31 +66,34 @@ const itemVariants = {
     opacity: 1,
     scale: 1,
     y: 0,
-    transition: { type: 'spring', stiffness: 200, damping: 20 } as any,
+    transition: { type: "spring", stiffness: 200, damping: 20 } as any,
   },
-}
+};
 
 function mapSafetyToRiskLevel(safetyLevel: string): RiskLevel {
-  if (safetyLevel === 'exploit') return 'aggressive'
-  if (safetyLevel === 'intrusive') return 'active'
-  return 'passive'
+  if (safetyLevel === "exploit") return "aggressive";
+  if (safetyLevel === "intrusive") return "active";
+  return "passive";
 }
 
 function normalizeCategoryId(raw: string): string {
-  return raw.trim().toLowerCase().replace(/\s+/g, '-')
+  return raw.trim().toLowerCase().replace(/\s+/g, "-");
 }
 
 function formatCategoryLabel(category: string): string {
-  if (LEGACY_TAB_LABELS[category]) return LEGACY_TAB_LABELS[category]
+  if (LEGACY_TAB_LABELS[category]) return LEGACY_TAB_LABELS[category];
   return category
-    .split('-')
+    .split("-")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ')
+    .join(" ");
 }
 
-function mapPluginCategoryToLegacyTab(category: string, pluginId?: string): UITab {
-  const pinnedTool = scanTools.find(t => t.id === pluginId);
-  
+function mapPluginCategoryToLegacyTab(
+  category: string,
+  pluginId?: string,
+): UITab {
+  const pinnedTool = scanTools.find((t) => t.id === pluginId);
+
   // If we found a tool in scanTools.ts, use its defined category
   if (pinnedTool) {
     return pinnedTool.category as UITab;
@@ -85,46 +101,52 @@ function mapPluginCategoryToLegacyTab(category: string, pluginId?: string): UITa
 
   // Fallback mapping for dynamic plugins
   switch (category) {
-    case 'cms':
-    case 'web':
-    case 'vulnerability':
-    case 'code':
-      return 'vulnerability'
-    case 'execution':
-    case 'exploit':
-    case 'forensics':
-    case 'expert':
-      return 'exploit'
-    case 'utils':
-      return 'utils'
-    case 'robots':
-      return 'robots'
+    case "cms":
+    case "web":
+    case "vulnerability":
+    case "code":
+      return "vulnerability";
+    case "execution":
+    case "exploit":
+    case "forensics":
+    case "expert":
+      return "exploit";
+    case "utils":
+      return "utils";
+    case "robots":
+      return "robots";
     default:
-      return 'recon'
+      return "recon";
   }
 }
 
 function mapPluginToCatalogTool(plugin: PluginListItem): CatalogTool {
-  const normalizedCategory = normalizeCategoryId(plugin.category)
-  const pinnedTool = scanTools.find(t => t.id === plugin.id);
-  
+  const normalizedCategory = normalizeCategoryId(plugin.category);
+  const pinnedTool = scanTools.find((t) => t.id === plugin.id);
+
   return {
     id: plugin.id,
     name: pinnedTool ? pinnedTool.name : plugin.name,
     purpose: pinnedTool ? pinnedTool.purpose : plugin.description,
-    riskLevel: pinnedTool ? pinnedTool.riskLevel : mapSafetyToRiskLevel(plugin.safety_level),
-    presetCompatibility: pinnedTool ? pinnedTool.presetCompatibility : 'both',
+    riskLevel: pinnedTool
+      ? pinnedTool.riskLevel
+      : mapSafetyToRiskLevel(plugin.safety_level),
+    presetCompatibility: pinnedTool ? pinnedTool.presetCompatibility : "both",
     requiresConsent: plugin.requires_consent,
     category: mapPluginCategoryToLegacyTab(normalizedCategory, plugin.id),
     disabled: false,
     isPlugin: true,
     isQuickStart: pinnedTool?.isQuickStart,
-    isProfessional: ['port_scanner', 'web_scanner', 'recon_scanner'].includes(plugin.id),
+    isProfessional: ["port_scanner", "web_scanner", "recon_scanner"].includes(
+      plugin.id,
+    ),
     availability: plugin.availability,
-  }
+  };
 }
 
-function mapLegacyToolsToCatalogTools(existingPluginIds: Set<string>): CatalogTool[] {
+function mapLegacyToolsToCatalogTools(
+  existingPluginIds: Set<string>,
+): CatalogTool[] {
   return scanTools
     .filter((tool) => !existingPluginIds.has(tool.id))
     .map((tool) => ({
@@ -136,122 +158,139 @@ function mapLegacyToolsToCatalogTools(existingPluginIds: Set<string>): CatalogTo
       requiresConsent: tool.requiresConsent,
       category: normalizeCategoryId(tool.category),
       disabled: true,
-      disabledReason: tool.disabledReason || 'Backend plugin pending',
+      disabledReason: tool.disabledReason || "Backend plugin pending",
       isPlugin: false,
       isQuickStart: tool.isQuickStart,
-    }))
+    }));
 }
 
 function readRecentToolIds(): string[] {
   try {
-    const raw = localStorage.getItem(RECENT_TOOLS_STORAGE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter((item): item is string => typeof item === 'string')
+    const raw = localStorage.getItem(RECENT_TOOLS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is string => typeof item === "string");
   } catch {
-    return []
+    return [];
   }
 }
 
 export default function Scanner() {
-  const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<UITab>('quick-start')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [tools, setTools] = useState<CatalogTool[]>([])
-  const [recentToolIds, setRecentToolIds] = useState<string[]>([])
-  const [tabOrder, setTabOrder] = useState<UITab[]>([])
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState<string | null>(null)
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState<UITab>("quick-start");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [tools, setTools] = useState<CatalogTool[]>([]);
+  const [recentToolIds, setRecentToolIds] = useState<string[]>([]);
+  const [tabOrder, setTabOrder] = useState<UITab[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    setRecentToolIds(readRecentToolIds())
-  }, [])
+    setRecentToolIds(readRecentToolIds());
+  }, []);
 
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
 
     async function loadCatalog() {
       try {
-        const response = await listPlugins()
-        if (cancelled) return
+        const response = await listPlugins();
+        if (cancelled) return;
 
-        const pluginTools = response.plugins.map(mapPluginToCatalogTool)
-        const pluginIds = new Set(pluginTools.map((tool) => tool.id))
-        const legacyTools = mapLegacyToolsToCatalogTools(pluginIds)
-        const mergedTools = [...pluginTools, ...legacyTools]
-        const mergedCategories: UITab[] = [...LEGACY_TAB_ORDER]
-        for (const category of legacyTools.map((tool) => tool.category as UITab)) {
-          if (!mergedCategories.includes(category)) mergedCategories.push(category)
+        const pluginTools = response.plugins.map(mapPluginToCatalogTool);
+        const pluginIds = new Set(pluginTools.map((tool) => tool.id));
+        const legacyTools = mapLegacyToolsToCatalogTools(pluginIds);
+        const mergedTools = [...pluginTools, ...legacyTools];
+        const mergedCategories: UITab[] = [...LEGACY_TAB_ORDER];
+        for (const category of legacyTools.map(
+          (tool) => tool.category as UITab,
+        )) {
+          if (!mergedCategories.includes(category))
+            mergedCategories.push(category);
         }
 
-        setTools(mergedTools)
-        setTabOrder(mergedCategories)
-        setLoadError(null)
+        setTools(mergedTools);
+        setTabOrder(mergedCategories);
+        setLoadError(null);
       } catch (error) {
         if (!cancelled) {
-          setLoadError(error instanceof Error ? error.message : 'Failed to load plugin catalog')
+          setLoadError(
+            error instanceof Error
+              ? error.message
+              : "Failed to load plugin catalog",
+          );
         }
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) setLoading(false);
       }
     }
 
-    loadCatalog()
+    loadCatalog();
     return () => {
-      cancelled = true
-    }
-  }, [])
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (tabOrder.length > 0 && !tabOrder.includes(activeTab)) {
-      setActiveTab(tabOrder[0])
+      setActiveTab(tabOrder[0]);
     }
-  }, [tabOrder, activeTab])
+  }, [tabOrder, activeTab]);
 
   const categoryToolsCount = useMemo(
-    () => tools.filter((tool) => {
-      if (activeTab === 'quick-start') return tool.isQuickStart
-      return tool.category === activeTab
-    }).length,
+    () =>
+      tools.filter((tool) => {
+        if (activeTab === "quick-start") return tool.isQuickStart;
+        return tool.category === activeTab;
+      }).length,
     [tools, activeTab],
-  )
+  );
 
   const filteredTools = useMemo(() => {
-    const query = searchQuery.toLowerCase().trim()
+    const query = searchQuery.toLowerCase().trim();
     return tools.filter((tool) => {
-      const matchesCategory = activeTab === 'quick-start' ? tool.isQuickStart : tool.category === activeTab
-      if (!matchesCategory) return false
-      if (!query) return true
-      return tool.name.toLowerCase().includes(query) || tool.purpose.toLowerCase().includes(query)
-    })
-  }, [tools, activeTab, searchQuery])
+      const matchesCategory =
+        activeTab === "quick-start"
+          ? tool.isQuickStart
+          : tool.category === activeTab;
+      if (!matchesCategory) return false;
+      if (!query) return true;
+      return (
+        tool.name.toLowerCase().includes(query) ||
+        tool.purpose.toLowerCase().includes(query)
+      );
+    });
+  }, [tools, activeTab, searchQuery]);
 
   const quickAccessTools = useMemo(() => {
-    const byId = new Map(tools.map((tool) => [tool.id, tool]))
+    const byId = new Map(tools.map((tool) => [tool.id, tool]));
     return recentToolIds
       .map((id) => byId.get(id))
       .filter((tool): tool is CatalogTool => Boolean(tool))
-      .slice(0, RECENT_TOOLS_LIMIT)
-  }, [tools, recentToolIds])
+      .slice(0, RECENT_TOOLS_LIMIT);
+  }, [tools, recentToolIds]);
 
   const trackRecentTool = (toolId: string) => {
     setRecentToolIds((prev) => {
-      const next = [toolId, ...prev.filter((id) => id !== toolId)].slice(0, RECENT_TOOLS_LIMIT)
+      const next = [toolId, ...prev.filter((id) => id !== toolId)].slice(
+        0,
+        RECENT_TOOLS_LIMIT,
+      );
       try {
-        localStorage.setItem(RECENT_TOOLS_STORAGE_KEY, JSON.stringify(next))
+        localStorage.setItem(RECENT_TOOLS_STORAGE_KEY, JSON.stringify(next));
       } catch {
         // Ignore localStorage write errors and continue.
       }
-      return next
-    })
-  }
+      return next;
+    });
+  };
 
   const handleToolSelect = (tool: CatalogTool) => {
-    if (tool.disabled) return
-    trackRecentTool(tool.id)
-    navigate(routePath.scanTool(tool.id))
-  }
+    if (tool.disabled) return;
+    trackRecentTool(tool.id);
+    navigate(routePath.scanTool(tool.id));
+  };
 
   return (
     <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
@@ -261,7 +300,13 @@ export default function Scanner() {
             Strike_Toolkit v12
           </div>
           <h1 className="text-6xl md:text-8xl text-silver-bright uppercase tracking-tighter leading-none italic whitespace-nowrap">
-            Tactical <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '2px var(--accent-silver-bright)' }}>Catalog</span>
+            Tactical{" "}
+            <span
+              className="text-transparent stroke-white"
+              style={{ WebkitTextStroke: "2px var(--accent-silver-bright)" }}
+            >
+              Catalog
+            </span>
           </h1>
           <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic leading-relaxed">
             SELECT_TOOL_PROTOCOL // DEPLOY_PAYLOAD // MONITOR_FEED
@@ -270,7 +315,9 @@ export default function Scanner() {
 
         <div className="flex items-center gap-6 flex-wrap">
           <div className="relative group">
-            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-silver/20 group-focus-within:text-rag-red transition-colors text-sm">search</span>
+            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-silver/20 group-focus-within:text-rag-red transition-colors text-sm">
+              search
+            </span>
             <input
               type="text"
               placeholder="SEARCH_PROTOCOLS..."
@@ -284,8 +331,12 @@ export default function Scanner() {
 
       {loadError && (
         <section className="bg-charcoal border-4 border-rag-red p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-red">Catalog load failed</p>
-          <p className="text-[10px] text-silver/60 uppercase tracking-widest mt-3">{loadError}</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-red">
+            Catalog load failed
+          </p>
+          <p className="text-[10px] text-silver/60 uppercase tracking-widest mt-3">
+            {loadError}
+          </p>
         </section>
       )}
 
@@ -296,8 +347,8 @@ export default function Scanner() {
             onClick={() => setActiveTab(category)}
             className={`px-8 py-4 text-[10px] font-black uppercase tracking-[0.3em] transition-all border-4 flex items-center gap-3 ${
               activeTab === category
-                ? 'bg-rag-red text-black border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] -translate-x-1 -translate-y-1'
-                : 'bg-charcoal text-silver/40 border-black hover:border-silver-bright/20'
+                ? "bg-rag-red text-black border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] -translate-x-1 -translate-y-1"
+                : "bg-charcoal text-silver/40 border-black hover:border-silver-bright/20"
             }`}
           >
             {formatCategoryLabel(category)}
@@ -311,7 +362,7 @@ export default function Scanner() {
       <main>
         <AnimatePresence mode="wait">
           <motion.div
-            key={activeTab || 'loading'}
+            key={activeTab || "loading"}
             variants={containerVariants}
             initial="hidden"
             animate="visible"
@@ -327,19 +378,19 @@ export default function Scanner() {
                   onClick={() => handleToolSelect(tool)}
                   className={`group relative p-8 bg-charcoal border-4 border-black text-left flex flex-col justify-between h-80 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all overflow-hidden ${
                     tool.disabled
-                      ? 'opacity-30 cursor-not-allowed grayscale'
-                      : 'hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] hover:-translate-x-1 hover:-translate-y-1'
+                      ? "opacity-30 cursor-not-allowed grayscale"
+                      : "hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] hover:-translate-x-1 hover:-translate-y-1"
                   }`}
                 >
                   <div className="space-y-6 relative z-10">
                     <div className="flex justify-between items-start">
                       <div
                         className={`px-2 py-0.5 text-[8px] font-black uppercase tracking-widest italic border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
-                          tool.riskLevel === 'aggressive'
-                            ? 'bg-rag-red text-black'
-                            : tool.riskLevel === 'active'
-                              ? 'bg-rag-amber text-black'
-                              : 'bg-rag-green text-black'
+                          tool.riskLevel === "aggressive"
+                            ? "bg-rag-red text-black"
+                            : tool.riskLevel === "active"
+                              ? "bg-rag-amber text-black"
+                              : "bg-rag-green text-black"
                         }`}
                       >
                         {tool.riskLevel}_STRIKE
@@ -350,7 +401,9 @@ export default function Scanner() {
                         </div>
                       )}
                       <span className="material-symbols-outlined text-silver/10 group-hover:text-silver-bright transition-colors duration-500">
-                        {tool.presetCompatibility === 'quick-recon' ? 'bolt' : 'psychology'}
+                        {tool.presetCompatibility === "quick-recon"
+                          ? "bolt"
+                          : "psychology"}
                       </span>
                     </div>
 
@@ -365,12 +418,14 @@ export default function Scanner() {
                       {tool.purpose}
                     </p>
 
-                    {tool.isPlugin && tool.availability && tool.availability.missing_binaries.length > 0 && (
-                    <div className="text-[9px] uppercase tracking-widest text-rag-amber font-black leading-relaxed">
-                      {tool.availability.guidance ||
-                        `Unavailable: Requires external binaries (${tool.availability.missing_binaries.join(', ')})`}
-                    </div>
-                  )}
+                    {tool.isPlugin &&
+                      tool.availability &&
+                      tool.availability.missing_binaries.length > 0 && (
+                        <div className="text-[9px] uppercase tracking-widest text-rag-amber font-black leading-relaxed">
+                          {tool.availability.guidance ||
+                            `Unavailable: Requires external binaries (${tool.availability.missing_binaries.join(", ")})`}
+                        </div>
+                      )}
                   </div>
 
                   <div className="pt-6 border-t-2 border-black border-dashed flex justify-between items-end">
@@ -384,8 +439,12 @@ export default function Scanner() {
 
                   {tool.disabled && tool.disabledReason && (
                     <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center p-8 text-center z-20">
-                      <span className="material-symbols-outlined text-rag-red text-3xl mb-4">lock_reset</span>
-                      <span className="text-[10px] text-rag-red font-black uppercase tracking-widest italic">{tool.disabledReason}</span>
+                      <span className="material-symbols-outlined text-rag-red text-3xl mb-4">
+                        lock_reset
+                      </span>
+                      <span className="text-[10px] text-rag-red font-black uppercase tracking-widest italic">
+                        {tool.disabledReason}
+                      </span>
                     </div>
                   )}
                 </motion.button>
@@ -399,12 +458,14 @@ export default function Scanner() {
                 <div className="space-y-6">
                   {searchQuery.trim().length > 0 ? (
                     <>
-                      <div className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-amber">No tools match search</div>
+                      <div className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-amber">
+                        No tools match search
+                      </div>
                       <p className="text-[10px] text-silver/60 uppercase tracking-widest leading-relaxed">
                         No tools in this category match the current query.
                       </p>
                       <button
-                        onClick={() => setSearchQuery('')}
+                        onClick={() => setSearchQuery("")}
                         className="px-6 py-3 text-[10px] font-black uppercase tracking-[0.3em] bg-rag-blue text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
                       >
                         Clear Search
@@ -412,13 +473,16 @@ export default function Scanner() {
                     </>
                   ) : categoryToolsCount === 0 ? (
                     <>
-                      <div className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-amber">No tools available in this category</div>
+                      <div className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-amber">
+                        No tools available in this category
+                      </div>
                       <p className="text-[10px] text-silver/60 uppercase tracking-widest leading-relaxed">
-                        This category currently has no active tools. Use the first available category to continue.
+                        This category currently has no active tools. Use the
+                        first available category to continue.
                       </p>
                       <button
                         onClick={() => {
-                          if (tabOrder.length > 0) setActiveTab(tabOrder[0])
+                          if (tabOrder.length > 0) setActiveTab(tabOrder[0]);
                         }}
                         className="px-6 py-3 text-[10px] font-black uppercase tracking-[0.3em] bg-silver-bright text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
                       >
@@ -432,9 +496,16 @@ export default function Scanner() {
 
             {!loading &&
               filteredTools.length > 0 &&
-              Array.from({ length: Math.max(0, 4 - (filteredTools.length % 4 || 4)) }).map((_, index) => (
-                <div key={index} className="bg-charcoal/30 border-4 border-black/5 border-dashed flex items-center justify-center opacity-10 p-10">
-                  <span className="material-symbols-outlined text-4xl">add_box</span>
+              Array.from({
+                length: Math.max(0, 4 - (filteredTools.length % 4 || 4)),
+              }).map((_, index) => (
+                <div
+                  key={index}
+                  className="bg-charcoal/30 border-4 border-black/5 border-dashed flex items-center justify-center opacity-10 p-10"
+                >
+                  <span className="material-symbols-outlined text-4xl">
+                    add_box
+                  </span>
                 </div>
               ))}
           </motion.div>
@@ -443,17 +514,22 @@ export default function Scanner() {
 
       <footer className="pt-24 opacity-20 hover:opacity-100 transition-opacity duration-700 pointer-events-none md:pointer-events-auto">
         <div className="p-12 border-4 border-black border-dashed flex flex-col md:flex-row items-center gap-10 bg-charcoal/50">
-          <span className="material-symbols-outlined text-rag-red text-6xl">gavel</span>
+          <span className="material-symbols-outlined text-rag-red text-6xl">
+            gavel
+          </span>
           <div className="space-y-4">
             <p className="text-xs font-black text-rag-amber uppercase tracking-[0.4em] italic leading-relaxed">
               UNAUTHORIZED_DEPLOYMENT_IS_MONITORED
             </p>
             <p className="text-[10px] text-silver/40 uppercase tracking-widest font-bold leading-loose max-w-4xl">
-              Operation engagement rules strictly apply. By initializing any protocol, you acknowledge the jurisdiction of the Secure Enclave and provide full consent for activity recording and auditing. Escalate only under valid mission authorization.
+              Operation engagement rules strictly apply. By initializing any
+              protocol, you acknowledge the jurisdiction of the Secure Enclave
+              and provide full consent for activity recording and auditing.
+              Escalate only under valid mission authorization.
             </p>
           </div>
         </div>
       </footer>
     </div>
-  )
+  );
 }

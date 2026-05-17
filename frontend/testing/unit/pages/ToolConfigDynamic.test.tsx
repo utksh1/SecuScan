@@ -1,165 +1,181 @@
-import { render, screen, waitFor } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import ToolConfig from '../../../src/pages/ToolConfig'
-import { getPluginSchema, listPlugins, startTask } from '../../../src/api'
-import { routes } from '../../../src/routes'
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import ToolConfig from "../../../src/pages/ToolConfig";
+import { getPluginSchema, listPlugins, startTask } from "../../../src/api";
+import { routes } from "../../../src/routes";
 
-const addToast = vi.fn()
+const addToast = vi.fn();
 
-vi.mock('../../../src/components/ToastContext', () => ({
+vi.mock("../../../src/components/ToastContext", () => ({
   useToast: () => ({ addToast }),
-}))
+}));
 
-vi.mock('../../../src/api', () => ({
+vi.mock("../../../src/api", () => ({
   listPlugins: vi.fn(),
   getPluginSchema: vi.fn(),
   startTask: vi.fn(),
-}))
+}));
 
-describe('ToolConfig dynamic schema flow', () => {
+describe("ToolConfig dynamic schema flow", () => {
   beforeEach(() => {
-    addToast.mockReset()
+    addToast.mockReset();
     vi.mocked(listPlugins).mockResolvedValue({
       total: 1,
       plugins: [
         {
-          id: 'subdomain_discovery',
-          name: 'Subdomain Discovery',
-          description: 'Enumerate subdomains',
-          category: 'recon',
-          safety_level: 'safe',
+          id: "subdomain_discovery",
+          name: "Subdomain Discovery",
+          description: "Enumerate subdomains",
+          category: "recon",
+          safety_level: "safe",
           enabled: true,
-          icon: '🌐',
+          icon: "🌐",
           requires_consent: true,
-          consent_message: 'Explicit authorization required',
+          consent_message: "Explicit authorization required",
           availability: {
             runnable: false,
-            missing_binaries: ['subfinder'],
-            status: 'unavailable',
+            missing_binaries: ["subfinder"],
+            status: "unavailable",
             guidance:
-              'Unavailable: Requires external binaries (subfinder). Install required tools locally to enable this scanner.',
+              "Unavailable: Requires external binaries (subfinder). Install required tools locally to enable this scanner.",
           },
         },
       ],
-    })
+    });
     vi.mocked(getPluginSchema).mockResolvedValue({
-      id: 'subdomain_discovery',
-      name: 'Subdomain Discovery',
-      description: 'Enumerate subdomains',
+      id: "subdomain_discovery",
+      name: "Subdomain Discovery",
+      description: "Enumerate subdomains",
       fields: [
-        { id: 'target', label: 'Domain', type: 'string', required: true, placeholder: 'example.com' },
-        { id: 'threads', label: 'Threads', type: 'integer', required: false, default: 10 },
         {
-          id: 'scan_type',
-          label: 'Scan Type',
-          type: 'select',
+          id: "target",
+          label: "Domain",
+          type: "string",
+          required: true,
+          placeholder: "example.com",
+        },
+        {
+          id: "threads",
+          label: "Threads",
+          type: "integer",
           required: false,
-          default: 'passive',
+          default: 10,
+        },
+        {
+          id: "scan_type",
+          label: "Scan Type",
+          type: "select",
+          required: false,
+          default: "passive",
           options: [
-            { value: 'passive', label: 'Passive' },
-            { value: 'active', label: 'Active' },
+            { value: "passive", label: "Passive" },
+            { value: "active", label: "Active" },
           ],
         },
       ],
       presets: {
-        quick: { threads: 10, scan_type: 'passive' },
-        comprehensive: { threads: 20, scan_type: 'active' },
+        quick: { threads: 10, scan_type: "passive" },
+        comprehensive: { threads: 20, scan_type: "active" },
       },
-      safety: { level: 'safe', requires_consent: true },
-    })
+      safety: { level: "safe", requires_consent: true },
+    });
     vi.mocked(startTask).mockResolvedValue({
-      task_id: 'task-123',
-      status: 'queued',
-      created_at: 'now',
-      stream_url: '/api/v1/task/task-123/stream',
-    })
-  })
+      task_id: "task-123",
+      status: "queued",
+      created_at: "now",
+      stream_url: "/api/v1/task/task-123/stream",
+    });
+  });
 
-  it('renders dynamic fields and submits startTask with consent', async () => {
-    const user = userEvent.setup()
+  it("renders dynamic fields and submits startTask with consent", async () => {
+    const user = userEvent.setup();
     render(
-      <MemoryRouter initialEntries={['/toolkit/subdomain_discovery']}>
+      <MemoryRouter initialEntries={["/toolkit/subdomain_discovery"]}>
         <Routes>
           <Route path={routes.scanTool} element={<ToolConfig />} />
         </Routes>
       </MemoryRouter>,
-    )
+    );
 
-    await screen.findByText(/Subdomain Discovery/i)
+    await screen.findByText(/Subdomain Discovery/i);
     expect(
-      screen.getByText(/Install required tools locally/i)
-    ).toBeInTheDocument()
-    expect(screen.getByPlaceholderText('example.com')).toBeInTheDocument()
-    expect(screen.getByDisplayValue('10')).toBeInTheDocument()
-    await user.type(screen.getByPlaceholderText('example.com'), 'example.com')
+      screen.getByText(/Install required tools locally/i),
+    ).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("example.com")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("10")).toBeInTheDocument();
+    await user.type(screen.getByPlaceholderText("example.com"), "example.com");
 
-    await user.click(screen.getByRole('button', { name: /INITIATE_SCAN/i }))
-    expect(startTask).not.toHaveBeenCalled()
+    await user.click(screen.getByRole("button", { name: /INITIATE_SCAN/i }));
+    expect(startTask).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole('checkbox', { name: /I have explicit authorization/i }))
-    await user.click(screen.getByRole('button', { name: /INITIATE_SCAN/i }))
+    await user.click(
+      screen.getByRole("checkbox", { name: /I have explicit authorization/i }),
+    );
+    await user.click(screen.getByRole("button", { name: /INITIATE_SCAN/i }));
 
     await waitFor(() => {
       expect(startTask).toHaveBeenCalledWith(
-        'subdomain_discovery',
+        "subdomain_discovery",
         expect.objectContaining({
-          target: 'example.com',
+          target: "example.com",
         }),
         true,
-        'quick',
-      )
-    })
-  })
-  it('falls back gracefully when guidance is absent', async () => {
+        "quick",
+      );
+    });
+  });
+  it("falls back gracefully when guidance is absent", async () => {
     vi.mocked(listPlugins).mockResolvedValue({
       total: 1,
       plugins: [
         {
-          id: 'subdomain_discovery',
-          name: 'Subdomain Discovery',
-          description: 'Enumerate subdomains',
-          category: 'recon',
-          safety_level: 'safe',
+          id: "subdomain_discovery",
+          name: "Subdomain Discovery",
+          description: "Enumerate subdomains",
+          category: "recon",
+          safety_level: "safe",
           enabled: true,
-          icon: '🌐',
+          icon: "🌐",
           requires_consent: false,
           consent_message: null,
           availability: {
             runnable: false,
-            missing_binaries: ['subfinder'],
+            missing_binaries: ["subfinder"],
           },
         },
       ],
-    })
+    });
 
     render(
-      <MemoryRouter initialEntries={['/toolkit/subdomain_discovery']}>
+      <MemoryRouter initialEntries={["/toolkit/subdomain_discovery"]}>
         <Routes>
           <Route path={routes.scanTool} element={<ToolConfig />} />
         </Routes>
       </MemoryRouter>,
-    )
+    );
 
-    await screen.findByText(/Subdomain Discovery/i)
+    await screen.findByText(/Subdomain Discovery/i);
 
     expect(
-      screen.getByText(/subfinder|Install required tools locally|Unavailable:/i)
-    ).toBeInTheDocument()
-  })
+      screen.getByText(
+        /subfinder|Install required tools locally|Unavailable:/i,
+      ),
+    ).toBeInTheDocument();
+  });
 
-  it('validates dynamic fields in real-time and disables scan button', async () => {
+  it("validates dynamic fields in real-time and disables scan button", async () => {
     vi.mocked(listPlugins).mockResolvedValue({
       total: 1,
       plugins: [
         {
-          id: 'nuclei_mock',
-          name: 'Nuclei Mock',
-          description: 'Mock scanner',
-          category: 'web',
-          safety_level: 'intrusive',
+          id: "nuclei_mock",
+          name: "Nuclei Mock",
+          description: "Mock scanner",
+          category: "web",
+          safety_level: "intrusive",
           enabled: true,
-          icon: '🔧',
+          icon: "🔧",
           requires_consent: false,
           availability: {
             runnable: true,
@@ -167,56 +183,62 @@ describe('ToolConfig dynamic schema flow', () => {
           },
         },
       ],
-    })
+    });
 
     vi.mocked(getPluginSchema).mockResolvedValue({
-      id: 'nuclei_mock',
-      name: 'Nuclei Mock',
-      description: 'Mock scanner',
+      id: "nuclei_mock",
+      name: "Nuclei Mock",
+      description: "Mock scanner",
       fields: [
         {
-          id: 'target',
-          label: 'Target',
-          type: 'string',
+          id: "target",
+          label: "Target",
+          type: "string",
           required: true,
-          placeholder: 'https://secuscan.in',
+          placeholder: "https://secuscan.in",
           validation: {
-            pattern: '^https?://',
-            message: 'Must be a valid URL',
+            pattern: "^https?://",
+            message: "Must be a valid URL",
           },
         },
       ],
       presets: {},
-      safety: { level: 'intrusive', requires_consent: false },
-    })
+      safety: { level: "intrusive", requires_consent: false },
+    });
 
-    const user = userEvent.setup()
+    const user = userEvent.setup();
     render(
-      <MemoryRouter initialEntries={['/toolkit/nuclei_mock']}>
+      <MemoryRouter initialEntries={["/toolkit/nuclei_mock"]}>
         <Routes>
           <Route path={routes.scanTool} element={<ToolConfig />} />
         </Routes>
       </MemoryRouter>,
-    )
+    );
 
-    await screen.findByText(/Nuclei Mock/i)
-    const targetInput = screen.getByPlaceholderText('https://secuscan.in')
+    await screen.findByText(/Nuclei Mock/i);
+    const targetInput = screen.getByPlaceholderText("https://secuscan.in");
 
     // Initially FIX_PARAMETERS because target is required and empty
-    expect(screen.getByText(/FIX_PARAMETERS/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /FIX_PARAMETERS/i })).toBeDisabled()
+    expect(screen.getByText(/FIX_PARAMETERS/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /FIX_PARAMETERS/i }),
+    ).toBeDisabled();
 
     // Type invalid data
-    await user.type(targetInput, 'not-a-url')
-    expect(screen.getByText(/Must be a valid URL/i)).toBeInTheDocument()
-    expect(targetInput).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByRole('button', { name: /FIX_PARAMETERS/i })).toBeDisabled()
+    await user.type(targetInput, "not-a-url");
+    expect(screen.getByText(/Must be a valid URL/i)).toBeInTheDocument();
+    expect(targetInput).toHaveAttribute("aria-invalid", "true");
+    expect(
+      screen.getByRole("button", { name: /FIX_PARAMETERS/i }),
+    ).toBeDisabled();
 
     // Clear and type valid data
-    await user.clear(targetInput)
-    await user.type(targetInput, 'https://example.com')
-    expect(screen.queryByText(/Must be a valid URL/i)).not.toBeInTheDocument()
-    expect(targetInput).toHaveAttribute('aria-invalid', 'false')
-    expect(screen.getByRole('button', { name: /INITIATE_SCAN/i })).not.toBeDisabled()
-  })
-})
+    await user.clear(targetInput);
+    await user.type(targetInput, "https://example.com");
+    expect(screen.queryByText(/Must be a valid URL/i)).not.toBeInTheDocument();
+    expect(targetInput).toHaveAttribute("aria-invalid", "false");
+    expect(
+      screen.getByRole("button", { name: /INITIATE_SCAN/i }),
+    ).not.toBeDisabled();
+  });
+});

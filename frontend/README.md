@@ -83,21 +83,25 @@ frontend/
 ### Design Patterns
 
 #### 1. **Component-Based Architecture**
+
 - Small, reusable components
 - Props for configuration
 - Separation of concerns
 
 #### 2. **Context for Global State**
+
 - `AppContext` provides plugins and settings
 - Avoids prop drilling
 - Centralized data fetching
 
 #### 3. **Service Layer**
+
 - `api.js` abstracts backend communication
 - Consistent error handling
 - Type-safe responses (via Pydantic backend)
 
 #### 4. **Dynamic Form Generation**
+
 - Forms generated from plugin metadata
 - Supports conditional fields (`show_if`)
 - Preset-based defaults
@@ -107,15 +111,21 @@ frontend/
 ## 🔧 Key Features
 
 ### 1. **Plugin Selection**
+
 Sidebar lists all available plugins fetched from backend:
+
 ```jsx
-<Layout>  {/* Sidebar with plugin list */}
-  <Scanner />  {/* Dynamic form for selected plugin */}
+<Layout>
+  {" "}
+  {/* Sidebar with plugin list */}
+  <Scanner /> {/* Dynamic form for selected plugin */}
 </Layout>
 ```
 
 ### 2. **Dynamic Forms**
+
 Forms are generated from plugin schema metadata:
+
 ```json
 {
   "fields": [
@@ -131,12 +141,15 @@ Forms are generated from plugin schema metadata:
 ```
 
 Rendered as:
+
 ```jsx
 <DynamicForm schema={schema} onSubmit={handleSubmit} />
 ```
 
 ### 3. **Consent Modal**
+
 Before starting intrusive scans, users must confirm:
+
 ```jsx
 <ConsentModal
   plugin={plugin}
@@ -146,24 +159,28 @@ Before starting intrusive scans, users must confirm:
 ```
 
 ### 4. **Live Task Monitoring**
+
 Task details page auto-refreshes every 2 seconds while task is running:
+
 ```jsx
 useEffect(() => {
   const interval = setInterval(() => {
-    if (task?.status === 'running') loadTask()
-  }, 2000)
-  return () => clearInterval(interval)
-}, [task?.status])
+    if (task?.status === "running") loadTask();
+  }, 2000);
+  return () => clearInterval(interval);
+}, [task?.status]);
 ```
 
 ### 5. **Task History**
+
 Displays all tasks with filtering and auto-refresh:
+
 ```jsx
 // Auto-refresh every 5 seconds
 useEffect(() => {
-  const interval = setInterval(loadTasks, 5000)
-  return () => clearInterval(interval)
-}, [])
+  const interval = setInterval(loadTasks, 5000);
+  return () => clearInterval(interval);
+}, []);
 ```
 
 ---
@@ -173,19 +190,22 @@ useEffect(() => {
 ### Adding a New Page
 
 1. Create component in `src/pages/`:
+
 ```jsx
 // src/pages/MyPage.jsx
 export default function MyPage() {
-  return <div>My Page Content</div>
+  return <div>My Page Content</div>;
 }
 ```
 
 2. Add route in `App.jsx`:
+
 ```jsx
 <Route path="/mypage" element={<MyPage />} />
 ```
 
 3. Add navigation link in `Layout.jsx`:
+
 ```jsx
 <NavLink to="/mypage">My Page</NavLink>
 ```
@@ -193,44 +213,53 @@ export default function MyPage() {
 ### Adding a New Component
 
 1. Create component in `src/components/`:
+
 ```jsx
 // src/components/MyComponent.jsx
 export default function MyComponent({ prop1, prop2 }) {
-  return <div>{prop1} - {prop2}</div>
+  return (
+    <div>
+      {prop1} - {prop2}
+    </div>
+  );
 }
 ```
 
 2. Import and use:
-```jsx
-import MyComponent from '../components/MyComponent'
 
-<MyComponent prop1="value" prop2={123} />
+```jsx
+import MyComponent from "../components/MyComponent";
+
+<MyComponent prop1="value" prop2={123} />;
 ```
 
 ### API Integration
 
 Add new endpoints in `src/services/api.js`:
+
 ```javascript
 export const api = {
   // ... existing methods
-  
-  myNewEndpoint: (param) => request(`/my-endpoint/${param}`, {
-    method: 'POST',
-    body: JSON.stringify({ data: 'value' })
-  })
-}
+
+  myNewEndpoint: (param) =>
+    request(`/my-endpoint/${param}`, {
+      method: "POST",
+      body: JSON.stringify({ data: "value" }),
+    }),
+};
 ```
 
 Use in components:
+
 ```jsx
-import { api } from '../services/api'
+import { api } from "../services/api";
 
 async function handleAction() {
   try {
-    const result = await api.myNewEndpoint('param')
-    console.log(result)
+    const result = await api.myNewEndpoint("param");
+    console.log(result);
   } catch (error) {
-    console.error(error.message)
+    console.error(error.message);
   }
 }
 ```
@@ -240,12 +269,15 @@ async function handleAction() {
 ## 🎯 Component Reference
 
 ### `<Layout>`
+
 Main app layout with sidebar navigation.
 
-**Props:** 
+**Props:**
+
 - `children` - Page content
 
 **Usage:**
+
 ```jsx
 <Layout>
   <Scanner />
@@ -255,15 +287,18 @@ Main app layout with sidebar navigation.
 ---
 
 ### `<DynamicForm>`
+
 Generates forms from plugin schema metadata.
 
 **Props:**
+
 - `schema` - Plugin schema object
 - `preset` - Default preset ID (optional)
 - `onSubmit` - Submit handler `(data) => void`
 - `loading` - Disable form during submission
 
 **Usage:**
+
 ```jsx
 <DynamicForm
   schema={pluginSchema}
@@ -273,6 +308,7 @@ Generates forms from plugin schema metadata.
 ```
 
 **Output Format:**
+
 ```javascript
 {
   preset: "quick",
@@ -287,14 +323,17 @@ Generates forms from plugin schema metadata.
 ---
 
 ### `<ConsentModal>`
+
 Confirmation dialog for scan consent.
 
 **Props:**
+
 - `plugin` - Plugin object
 - `onConfirm` - Confirm handler
 - `onCancel` - Cancel handler
 
 **Usage:**
+
 ```jsx
 <ConsentModal
   plugin={selectedPlugin}
@@ -306,17 +345,21 @@ Confirmation dialog for scan consent.
 ---
 
 ### `<TaskCard>`
+
 Display task information in a card.
 
 **Props:**
+
 - `task` - Task object
 
 **Usage:**
+
 ```jsx
 <TaskCard task={taskData} />
 ```
 
 **Task Object:**
+
 ```javascript
 {
   task_id: "abc123",
@@ -337,6 +380,7 @@ Display task information in a card.
 Global state provider for plugins and settings.
 
 **Values:**
+
 ```javascript
 {
   plugins: [],        // Array of plugin objects
@@ -348,15 +392,16 @@ Global state provider for plugins and settings.
 ```
 
 **Usage:**
+
 ```jsx
-import { useApp } from '../context/AppContext'
+import { useApp } from "../context/AppContext";
 
 function MyComponent() {
-  const { plugins, settings, loading } = useApp()
-  
-  if (loading) return <div>Loading...</div>
-  
-  return <div>{plugins.length} plugins</div>
+  const { plugins, settings, loading } = useApp();
+
+  if (loading) return <div>Loading...</div>;
+
+  return <div>{plugins.length} plugins</div>;
 }
 ```
 
@@ -367,21 +412,25 @@ function MyComponent() {
 ### CSS Classes
 
 **Layout:**
+
 - `.app` - Main app container (grid)
 - `.sidebar` - Sidebar navigation
 - `.main` - Main content area
 
 **Components:**
+
 - `.card` - Content card with border
 - `.btn` - Primary button
 - `.list` - Unstyled list
 - `.log` - Terminal-style output
 
 **Forms:**
+
 - `label` - Form label
 - `input, select` - Form inputs
 
 **Utilities:**
+
 - `.text-sm` - Small text (14px)
 - `.text-xs` - Extra small (12px)
 - `.text-muted` - Muted color
@@ -393,11 +442,21 @@ function MyComponent() {
 ### Status Colors
 
 ```css
-.status-pending   { background: #fef3c7; }
-.status-running   { background: #dbeafe; }
-.status-completed { background: #d1fae5; }
-.status-failed    { background: #fee2e2; }
-.status-cancelled { background: #e5e7eb; }
+.status-pending {
+  background: #fef3c7;
+}
+.status-running {
+  background: #dbeafe;
+}
+.status-completed {
+  background: #d1fae5;
+}
+.status-failed {
+  background: #fee2e2;
+}
+.status-cancelled {
+  background: #e5e7eb;
+}
 ```
 
 ---
@@ -434,8 +493,10 @@ function MyComponent() {
 **Error:** `Network error` or `Failed to fetch`
 
 **Solution:**
+
 1. Verify backend is running: `curl http://127.0.0.1:8000/api/v1/health`
 2. Check Vite proxy in `vite.config.js`:
+
 ```js
 server: {
   proxy: {
@@ -449,6 +510,7 @@ server: {
 **Error:** `Cannot read property 'plugins' of null`
 
 **Solution:**
+
 - Check AppContext initialization
 - Verify `/api/v1/plugins` endpoint returns data
 - Check browser console for API errors
@@ -458,6 +520,7 @@ server: {
 **Error:** Task not starting
 
 **Solution:**
+
 1. Check all required fields are filled
 2. Verify preset is selected
 3. Check browser console for validation errors
@@ -482,6 +545,7 @@ Output in `dist/` directory.
 ### Serve with Backend
 
 Option 1: **Static File Serving**
+
 ```python
 # In backend/main.py
 from fastapi.staticfiles import StaticFiles
@@ -490,6 +554,7 @@ app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="frontend
 ```
 
 Option 2: **Separate Web Server**
+
 ```bash
 # Serve frontend with nginx/caddy/apache
 # Point backend API calls to backend server
@@ -529,6 +594,7 @@ MIT License - Same as SecuScan project
 ## 🙋 Support
 
 For issues or questions:
+
 1. Check backend is running correctly
 2. Review browser console for errors
 3. Verify API responses with curl/Postman

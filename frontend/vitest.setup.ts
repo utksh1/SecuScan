@@ -1,4 +1,4 @@
-import '@testing-library/jest-dom';
+import "@testing-library/jest-dom";
 
 function createStorageMock() {
   const store = new Map<string, string>();
@@ -20,13 +20,13 @@ function createStorageMock() {
   };
 }
 
-if (!window.localStorage || typeof window.localStorage.getItem !== 'function') {
+if (!window.localStorage || typeof window.localStorage.getItem !== "function") {
   const storage = createStorageMock();
-  Object.defineProperty(window, 'localStorage', {
+  Object.defineProperty(window, "localStorage", {
     value: storage,
     configurable: true,
   });
-  Object.defineProperty(globalThis, 'localStorage', {
+  Object.defineProperty(globalThis, "localStorage", {
     value: storage,
     configurable: true,
   });

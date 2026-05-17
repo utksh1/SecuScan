@@ -1,61 +1,66 @@
-import React, { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
-import { getDashboardSummary, getHealth, cancelTask } from '../api'
-import { ExecutiveStatsBar } from '../components/ExecutiveStatsBar'
-import { routePath, routes } from '../routes'
-import { parseDateSafe, formatBriefingDate, formatTaskInit, formatLocaleDate } from '../utils/date'
+import React, { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { getDashboardSummary, getHealth, cancelTask } from "../api";
+import { ExecutiveStatsBar } from "../components/ExecutiveStatsBar";
+import { routePath, routes } from "../routes";
+import {
+  parseDateSafe,
+  formatBriefingDate,
+  formatTaskInit,
+  formatLocaleDate,
+} from "../utils/date";
 
 type Finding = {
-  id: string
-  severity: string
-  title: string
-  target: string
-  discovered_at: string
-}
+  id: string;
+  severity: string;
+  title: string;
+  target: string;
+  discovered_at: string;
+};
 
 type Task = {
-  id: string
-  plugin_id: string
-  tool_name: string
-  target: string
-  status: string
-  created_at: string
-  duration_seconds?: number | null
-}
+  id: string;
+  plugin_id: string;
+  tool_name: string;
+  target: string;
+  status: string;
+  created_at: string;
+  duration_seconds?: number | null;
+};
 
 type Summary = {
-  total_findings: number
-  critical_findings: number
-  high_findings: number
-  medium_findings: number
-  low_findings: number
-  info_findings: number
-  last_scan_time: string | null
-  recent_findings: Finding[]
-  running_tasks: Task[]
-  recent_tasks: Task[]
-  scan_activity: { total: number; completed: number; running: number }
-}
+  total_findings: number;
+  critical_findings: number;
+  high_findings: number;
+  medium_findings: number;
+  low_findings: number;
+  info_findings: number;
+  last_scan_time: string | null;
+  recent_findings: Finding[];
+  running_tasks: Task[];
+  recent_tasks: Task[];
+  scan_activity: { total: number; completed: number; running: number };
+};
 
-function asString(value: unknown, fallback = '') {
-  return typeof value === 'string' ? value : fallback
+function asString(value: unknown, fallback = "") {
+  return typeof value === "string" ? value : fallback;
 }
 
 function asNumber(value: unknown, fallback = 0) {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
 function asOptionalNumber(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-
 function normalizeSummary(data: Partial<Summary> | null | undefined): Summary {
-  const summary = data && typeof data === 'object' ? data : {}
-  const rawScanActivity = summary.scan_activity && typeof summary.scan_activity === 'object'
-    ? summary.scan_activity
-    : emptySummary.scan_activity
+  const summary = data && typeof data === "object" ? data : {};
+  const rawScanActivity =
+    summary.scan_activity && typeof summary.scan_activity === "object"
+      ? summary.scan_activity
+      : emptySummary.scan_activity;
 
   return {
     total_findings: asNumber(summary.total_findings),
@@ -64,44 +69,47 @@ function normalizeSummary(data: Partial<Summary> | null | undefined): Summary {
     medium_findings: asNumber(summary.medium_findings),
     low_findings: asNumber(summary.low_findings),
     info_findings: asNumber(summary.info_findings),
-    last_scan_time: typeof summary.last_scan_time === 'string' ? summary.last_scan_time : null,
+    last_scan_time:
+      typeof summary.last_scan_time === "string"
+        ? summary.last_scan_time
+        : null,
     recent_findings: Array.isArray(summary.recent_findings)
       ? summary.recent_findings.map((finding) => ({
-        id: asString(finding?.id),
-        severity: asString(finding?.severity, 'low'),
-        title: asString(finding?.title, 'Untitled finding'),
-        target: asString(finding?.target, 'Unknown target'),
-        discovered_at: asString(finding?.discovered_at),
-      }))
+          id: asString(finding?.id),
+          severity: asString(finding?.severity, "low"),
+          title: asString(finding?.title, "Untitled finding"),
+          target: asString(finding?.target, "Unknown target"),
+          discovered_at: asString(finding?.discovered_at),
+        }))
       : [],
     running_tasks: Array.isArray(summary.running_tasks)
       ? summary.running_tasks.map((task) => ({
-        id: asString(task?.id),
-        plugin_id: asString(task?.plugin_id),
-        tool_name: asString(task?.tool_name, 'Unknown tool'),
-        target: asString(task?.target, 'Unknown target'),
-        status: asString(task?.status, 'unknown'),
-        created_at: asString(task?.created_at),
-        duration_seconds: asOptionalNumber(task?.duration_seconds),
-      }))
+          id: asString(task?.id),
+          plugin_id: asString(task?.plugin_id),
+          tool_name: asString(task?.tool_name, "Unknown tool"),
+          target: asString(task?.target, "Unknown target"),
+          status: asString(task?.status, "unknown"),
+          created_at: asString(task?.created_at),
+          duration_seconds: asOptionalNumber(task?.duration_seconds),
+        }))
       : [],
     recent_tasks: Array.isArray(summary.recent_tasks)
       ? summary.recent_tasks.map((task) => ({
-        id: asString(task?.id),
-        plugin_id: asString(task?.plugin_id),
-        tool_name: asString(task?.tool_name, 'Unknown tool'),
-        target: asString(task?.target, 'Unknown target'),
-        status: asString(task?.status, 'unknown'),
-        created_at: asString(task?.created_at),
-        duration_seconds: asOptionalNumber(task?.duration_seconds),
-      }))
+          id: asString(task?.id),
+          plugin_id: asString(task?.plugin_id),
+          tool_name: asString(task?.tool_name, "Unknown tool"),
+          target: asString(task?.target, "Unknown target"),
+          status: asString(task?.status, "unknown"),
+          created_at: asString(task?.created_at),
+          duration_seconds: asOptionalNumber(task?.duration_seconds),
+        }))
       : [],
     scan_activity: {
       total: asNumber(rawScanActivity.total),
       completed: asNumber(rawScanActivity.completed),
       running: asNumber(rawScanActivity.running),
     },
-  }
+  };
 }
 
 const emptySummary: Summary = {
@@ -116,41 +124,47 @@ const emptySummary: Summary = {
   running_tasks: [],
   recent_tasks: [],
   scan_activity: { total: 0, completed: 0, running: 0 },
-}
-
+};
 
 function formatDuration(seconds?: number | null) {
-  if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return 'N/A'
-  if (seconds < 60) return `${Math.round(seconds)}s`
-  const mins = Math.floor(seconds / 60)
-  const secs = Math.round(seconds % 60)
-  return `${mins}m ${secs.toString().padStart(2, '0')}s`
+  if (seconds == null || !Number.isFinite(seconds) || seconds <= 0)
+    return "N/A";
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.round(seconds % 60);
+  return `${mins}m ${secs.toString().padStart(2, "0")}s`;
 }
 
 function displayToolName(task: Task) {
-  const name = task.tool_name?.trim()
-  if (!name || name.toLowerCase() === 'history') {
-    return (task.plugin_id || 'scan').replace(/[-_]/g, ' ').toUpperCase()
+  const name = task.tool_name?.trim();
+  if (!name || name.toLowerCase() === "history") {
+    return (task.plugin_id || "scan").replace(/[-_]/g, " ").toUpperCase();
   }
-  return name.toUpperCase()
+  return name.toUpperCase();
 }
 
 function getRiskProfile(summary: Summary) {
-  if (summary.critical_findings > 0) return { label: 'Severe', color: 'text-rag-red', accent: 'bg-rag-red' }
-  if (summary.high_findings > 0 || summary.total_findings > 20) return { label: 'Moderate', color: 'text-rag-amber', accent: 'bg-rag-amber' }
-  return { label: 'Stable', color: 'text-rag-green', accent: 'bg-rag-green' }
+  if (summary.critical_findings > 0)
+    return { label: "Severe", color: "text-rag-red", accent: "bg-rag-red" };
+  if (summary.high_findings > 0 || summary.total_findings > 20)
+    return {
+      label: "Moderate",
+      color: "text-rag-amber",
+      accent: "bg-rag-amber",
+    };
+  return { label: "Stable", color: "text-rag-green", accent: "bg-rag-green" };
 }
 
 function severityTone(severity: string) {
   switch (severity) {
-    case 'critical':
-      return 'text-rag-red border-rag-red/20'
-    case 'high':
-      return 'text-rag-amber border-rag-amber/20'
-    case 'medium':
-      return 'text-silver-bright border-accent-silver/20'
+    case "critical":
+      return "text-rag-red border-rag-red/20";
+    case "high":
+      return "text-rag-amber border-rag-amber/20";
+    case "medium":
+      return "text-silver-bright border-accent-silver/20";
     default:
-      return 'text-rag-green border-rag-green/20'
+      return "text-rag-green border-rag-green/20";
   }
 }
 
@@ -164,7 +178,7 @@ const containerVariants = {
       delayChildren: 0.2,
     },
   },
-}
+};
 
 const itemVariants = {
   hidden: { opacity: 0, y: 15 },
@@ -173,85 +187,99 @@ const itemVariants = {
     y: 0,
     transition: { duration: 0.5, ease: [0.19, 1, 0.22, 1] as const },
   },
-}
+};
 
 export default function Dashboard() {
-  const [summary, setSummary] = useState<Summary>(emptySummary)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [backendConnected, setBackendConnected] = useState<boolean | null>(null)
-  const [lastSync, setLastSync] = useState<string | null>(() => new Date().toISOString())
-  const navigate = useNavigate()
+  const [summary, setSummary] = useState<Summary>(emptySummary);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [backendConnected, setBackendConnected] = useState<boolean | null>(
+    null,
+  );
+  const [lastSync, setLastSync] = useState<string | null>(() =>
+    new Date().toISOString(),
+  );
+  const navigate = useNavigate();
 
   useEffect(() => {
-    let cancelled = false
+    let cancelled = false;
 
     const load = async () => {
       try {
-        await getHealth()
-        if (!cancelled) setBackendConnected(true)
+        await getHealth();
+        if (!cancelled) setBackendConnected(true);
       } catch {
         if (!cancelled) {
-          setBackendConnected(false)
-          setError('Unable to reach the SecuScan backend')
-          setLoading(false)
+          setBackendConnected(false);
+          setError("Unable to reach the SecuScan backend");
+          setLoading(false);
         }
-        return
+        return;
       }
 
       getDashboardSummary()
         .then((data) => {
-          if (cancelled) return
-          setSummary(normalizeSummary(data as Partial<Summary>))
-          setLastSync(new Date().toISOString())
-          setError(null)
+          if (cancelled) return;
+          setSummary(normalizeSummary(data as Partial<Summary>));
+          setLastSync(new Date().toISOString());
+          setError(null);
         })
         .catch((err) => {
-          if (cancelled) return
-          setError(err.message)
+          if (cancelled) return;
+          setError(err.message);
         })
         .finally(() => {
-          if (!cancelled) setLoading(false)
-        })
-    }
+          if (!cancelled) setLoading(false);
+        });
+    };
 
-    load()
-    const interval = setInterval(load, 10000)
+    load();
+    const interval = setInterval(load, 10000);
 
     return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
-  }, [])
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   const handleAbort = async (taskId: string) => {
     try {
-      await cancelTask(taskId)
+      await cancelTask(taskId);
       // Refresh summary immediately
-      const data = await getDashboardSummary() as Summary
-      setSummary(normalizeSummary(data))
+      const data = (await getDashboardSummary()) as Summary;
+      setSummary(normalizeSummary(data));
     } catch (err) {
-      console.error('Failed to abort task:', err)
+      console.error("Failed to abort task:", err);
     }
-  }
+  };
 
-  const risk = getRiskProfile(summary)
-  const criticalHigh = summary.critical_findings + summary.high_findings
-  
-  const progressWidth = summary.scan_activity.total > 0
-    ? Math.max(8, Math.min(100, (summary.scan_activity.completed / summary.scan_activity.total) * 100))
-    : 0
-  
-  const statusBadgeClasses = backendConnected === null
-    ? 'border-accent-silver/10 bg-silver/5 text-silver-bright'
-    : backendConnected
-      ? 'border-rag-green/30 bg-rag-green/10 text-rag-green'
-      : 'border-rag-red/30 bg-rag-red/10 text-rag-red'
-  const statusLabel = backendConnected === null
-    ? 'Checking Backend'
-    : backendConnected
-      ? 'Backend Connected'
-      : 'Backend Offline'
+  const risk = getRiskProfile(summary);
+  const criticalHigh = summary.critical_findings + summary.high_findings;
+
+  const progressWidth =
+    summary.scan_activity.total > 0
+      ? Math.max(
+          8,
+          Math.min(
+            100,
+            (summary.scan_activity.completed / summary.scan_activity.total) *
+              100,
+          ),
+        )
+      : 0;
+
+  const statusBadgeClasses =
+    backendConnected === null
+      ? "border-accent-silver/10 bg-silver/5 text-silver-bright"
+      : backendConnected
+        ? "border-rag-green/30 bg-rag-green/10 text-rag-green"
+        : "border-rag-red/30 bg-rag-red/10 text-rag-red";
+  const statusLabel =
+    backendConnected === null
+      ? "Checking Backend"
+      : backendConnected
+        ? "Backend Connected"
+        : "Backend Offline";
 
   return (
     <div className="min-h-screen flex flex-col bg-charcoal-dark selection:bg-silver-bright selection:text-charcoal-dark">
@@ -265,12 +293,19 @@ export default function Dashboard() {
           <div className="bg-rag-amber text-black px-4 py-1 text-xs uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
             SECUSCAN_WORKSPACE v2.4
           </div>
-         <h1 className="text-4xl md:text-5xl lg:text-6xl text-silver-bright tracking-tight leading-none whitespace-nowrap font-bold">
-  SecuScan <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '1px var(--accent-silver-bright)' }}>Workspace</span>
-</h1>
-<p className="text-sm font-mono text-silver/60 tracking-wider leading-relaxed mt-2">
-  Central Intelligence Overview // Vulnerabilities: {summary.total_findings} // Threat Level: {risk.label}
-</p>
+          <h1 className="text-4xl md:text-5xl lg:text-6xl text-silver-bright tracking-tight leading-none whitespace-nowrap font-bold">
+            SecuScan{" "}
+            <span
+              className="text-transparent stroke-white"
+              style={{ WebkitTextStroke: "1px var(--accent-silver-bright)" }}
+            >
+              Workspace
+            </span>
+          </h1>
+          <p className="text-sm font-mono text-silver/60 tracking-wider leading-relaxed mt-2">
+            Central Intelligence Overview // Vulnerabilities:{" "}
+            {summary.total_findings} // Threat Level: {risk.label}
+          </p>
         </motion.div>
 
         <motion.div
@@ -285,26 +320,36 @@ export default function Dashboard() {
               <span className="text-[11px] font-black text-silver-bright/90 uppercase tracking-[0.4em] italic mb-1">
                 SYSTEM_STATUS_SYNC
               </span>
-               <div className="flex items-baseline gap-6">
+              <div className="flex items-baseline gap-6">
                 <div className="flex items-baseline gap-3">
                   <span className="text-2xl font-mono text-silver-bright font-black tracking-tighter italic leading-none">
-                    {(formatBriefingDate(lastSync).split(',')[0]?.trim().toUpperCase()) || 'INITIALIZING'}
+                    {formatBriefingDate(lastSync)
+                      .split(",")[0]
+                      ?.trim()
+                      .toUpperCase() || "INITIALIZING"}
                   </span>
                   <span className="text-base font-mono text-rag-blue/90 font-black italic leading-none">
-                    {(formatBriefingDate(lastSync).split(',')[1]?.trim().toUpperCase()) || '---'}
+                    {formatBriefingDate(lastSync)
+                      .split(",")[1]
+                      ?.trim()
+                      .toUpperCase() || "---"}
                   </span>
                 </div>
                 <div className="h-5 w-px bg-silver/20 self-center mx-1"></div>
                 <span className="text-lg font-mono text-rag-blue font-black italic leading-none">
-                  {(formatBriefingDate(lastSync).split(',')[2]?.trim().toUpperCase()) || '00:00'}
+                  {formatBriefingDate(lastSync)
+                    .split(",")[2]
+                    ?.trim()
+                    .toUpperCase() || "00:00"}
                 </span>
               </div>
             </div>
             <div className="w-14 h-14 bg-charcoal-dark border-4 border-black flex items-center justify-center text-rag-blue shadow-inner group-hover:bg-rag-blue group-hover:text-black transition-all">
-              <span className="material-symbols-outlined text-2xl font-black">terminal</span>
+              <span className="material-symbols-outlined text-2xl font-black">
+                terminal
+              </span>
             </div>
           </div>
-
         </motion.div>
       </header>
 
@@ -325,14 +370,17 @@ export default function Dashboard() {
               />
               Syncing operational data...
             </motion.section>
-      ) : error ? (
+          ) : error ? (
             <motion.section
               key="error"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="mt-12 py-16 flex flex-col items-center justify-center bg-charcoal border border-rag-red/30 rounded-md max-w-3xl mx-auto shadow-lg">
+              className="mt-12 py-16 flex flex-col items-center justify-center bg-charcoal border border-rag-red/30 rounded-md max-w-3xl mx-auto shadow-lg"
+            >
               <div className="w-12 h-12 rounded-full bg-rag-red/10 flex items-center justify-center mb-4">
-                <span className="material-symbols-outlined text-rag-red text-2xl">warning</span>
+                <span className="material-symbols-outlined text-rag-red text-2xl">
+                  warning
+                </span>
               </div>
               <h3 className="text-rag-red text-lg font-bold tracking-widest uppercase mb-2">
                 System Offline
@@ -363,16 +411,21 @@ export default function Dashboard() {
                   totalFindings={summary.total_findings}
                   scanActivity={summary.scan_activity.total}
                   compliancePercent={100}
-                  riskNote={summary.critical_findings > 0
-                    ? `Status escalated. ${summary.critical_findings} major vulnerabilities detected on monitored targets.`
-                    : summary.high_findings > 4
-                      ? `Risk exposure has increased following recent scans.`
-                      : "Security posture remains stable. Monitoring systems active across all sectors."}
+                  riskNote={
+                    summary.critical_findings > 0
+                      ? `Status escalated. ${summary.critical_findings} major vulnerabilities detected on monitored targets.`
+                      : summary.high_findings > 4
+                        ? `Risk exposure has increased following recent scans.`
+                        : "Security posture remains stable. Monitoring systems active across all sectors."
+                  }
                 />
               </motion.section>
 
               {/* Secondary Layout: Vulnerability & Activity */}
-              <motion.section variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-12 px-8">
+              <motion.section
+                variants={itemVariants}
+                className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-12 px-8"
+              >
                 <div className="space-y-10">
                   <header>
                     <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-silver-bright flex items-center gap-3">
@@ -383,26 +436,60 @@ export default function Dashboard() {
 
                   <div className="divide-y divide-accent-silver/5 bg-charcoal/30 p-10 border border-accent-silver/5">
                     {[
-                      ['Critical Risk', summary.critical_findings, 'text-rag-red', summary.critical_findings > 0 ? 'DECREASING' : 'STABLE'],
-                      ['High Severity', summary.high_findings, 'text-rag-amber', 'ACTION REQ'],
-                      ['Medium Alert', summary.medium_findings, 'text-silver-bright', null],
-                      ['Low Exposure', summary.low_findings, 'text-rag-amber/70', null],
-                      ['Informational', summary.info_findings, 'text-silver/70', null],
+                      [
+                        "Critical Risk",
+                        summary.critical_findings,
+                        "text-rag-red",
+                        summary.critical_findings > 0 ? "DECREASING" : "STABLE",
+                      ],
+                      [
+                        "High Severity",
+                        summary.high_findings,
+                        "text-rag-amber",
+                        "ACTION REQ",
+                      ],
+                      [
+                        "Medium Alert",
+                        summary.medium_findings,
+                        "text-silver-bright",
+                        null,
+                      ],
+                      [
+                        "Low Exposure",
+                        summary.low_findings,
+                        "text-rag-amber/70",
+                        null,
+                      ],
+                      [
+                        "Informational",
+                        summary.info_findings,
+                        "text-silver/70",
+                        null,
+                      ],
                     ].map(([label, count, color, note]) => {
                       const total = summary.total_findings || 1;
-                      const percentage = (count as number / total) * 100;
+                      const percentage = ((count as number) / total) * 100;
                       return (
-                        <div key={String(label)} className="py-6 flex flex-col gap-4 group first:pt-0 last:pb-0">
+                        <div
+                          key={String(label)}
+                          className="py-6 flex flex-col gap-4 group first:pt-0 last:pb-0"
+                        >
                           <div className="flex justify-between items-center">
                             <div className="flex items-center gap-4">
-                              <span className={`text-xs font-bold uppercase tracking-[0.15em] ${color}`}>{label}</span>
+                              <span
+                                className={`text-xs font-bold uppercase tracking-[0.15em] ${color}`}
+                              >
+                                {label}
+                              </span>
                             </div>
                             <div className="flex items-baseline gap-3">
                               <span className="text-2xl font-light text-silver-bright font-mono">
                                 {count as number}
                               </span>
                               {note ? (
-                                <span className={`min-w-[120px] text-right text-[11px] font-bold uppercase tracking-widest ${note === 'STABLE' ? 'text-rag-green' : 'text-silver/80'}`}>
+                                <span
+                                  className={`min-w-[120px] text-right text-[11px] font-bold uppercase tracking-widest ${note === "STABLE" ? "text-rag-green" : "text-silver/80"}`}
+                                >
                                   {note}
                                 </span>
                               ) : null}
@@ -412,15 +499,13 @@ export default function Dashboard() {
                             <motion.div
                               initial={{ width: 0 }}
                               animate={{ width: `${percentage}%` }}
-                              className={`absolute h-full ${String(color).replace('text-', 'bg-')} opacity-30`}
+                              className={`absolute h-full ${String(color).replace("text-", "bg-")} opacity-30`}
                             />
                           </div>
                         </div>
-                      )
+                      );
                     })}
                   </div>
-
-
                 </div>
 
                 <div className="space-y-10">
@@ -433,15 +518,23 @@ export default function Dashboard() {
                       {summary.scan_activity.running > 0 && (
                         <div className="flex items-center gap-2 bg-rag-green/10 px-3 py-1 rounded-full border border-rag-green/20">
                           <span className="w-1.5 h-1.5 rounded-full bg-rag-green animate-pulse shadow-[0_0_4px_rgba(46,213,115,0.6)]" />
-                          <span className="text-[10px] font-bold text-rag-green uppercase tracking-widest">Live</span>
+                          <span className="text-[10px] font-bold text-rag-green uppercase tracking-widest">
+                            Live
+                          </span>
                         </div>
                       )}
                     </div>
                     <div className="flex gap-6">
-                      <Link className="text-[10px] font-bold text-silver/70 hover:text-silver-bright uppercase tracking-widest transition-all" to={routes.scans}>
+                      <Link
+                        className="text-[10px] font-bold text-silver/70 hover:text-silver-bright uppercase tracking-widest transition-all"
+                        to={routes.scans}
+                      >
                         Full Schedule
                       </Link>
-                      <Link className="text-[10px] font-bold text-silver/70 hover:text-silver-bright uppercase tracking-widest transition-all" to={routes.findings}>
+                      <Link
+                        className="text-[10px] font-bold text-silver/70 hover:text-silver-bright uppercase tracking-widest transition-all"
+                        to={routes.findings}
+                      >
                         Audit Ledger
                       </Link>
                     </div>
@@ -460,46 +553,69 @@ export default function Dashboard() {
                     {/* Unified Tasks Feed */}
                     <div className="grid grid-cols-1 gap-2">
                       {summary.recent_tasks.map((task) => {
-                        const isActive = task.status === 'running' || task.status === 'queued';
-                        const isFailed = task.status === 'failed';
-                        const isCancelled = task.status === 'cancelled';
+                        const isActive =
+                          task.status === "running" || task.status === "queued";
+                        const isFailed = task.status === "failed";
+                        const isCancelled = task.status === "cancelled";
                         const taskInit = formatTaskInit(task.created_at);
 
                         return (
                           <motion.div
                             key={task.id}
-                            whileHover={{ backgroundColor: "rgba(255, 255, 255, 0.04)", x: 4 }}
-                            className={`bg-charcoal px-6 py-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between group border border-accent-silver/5 transition-all duration-300 relative overflow-hidden ${!isActive ? 'opacity-80 hover:opacity-100' : ''}`}
+                            whileHover={{
+                              backgroundColor: "rgba(255, 255, 255, 0.04)",
+                              x: 4,
+                            }}
+                            className={`bg-charcoal px-6 py-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between group border border-accent-silver/5 transition-all duration-300 relative overflow-hidden ${!isActive ? "opacity-80 hover:opacity-100" : ""}`}
                           >
-                            <div className={`absolute top-0 left-0 w-1 h-full ${isActive ? 'bg-rag-green/60 shadow-[0_0_8px_var(--rag-green)]' :
-                                isFailed ? 'bg-rag-red/40' :
-                                  isCancelled ? 'bg-silver/20' :
-                                    'bg-rag-green/20'
-                              }`} />
+                            <div
+                              className={`absolute top-0 left-0 w-1 h-full ${
+                                isActive
+                                  ? "bg-rag-green/60 shadow-[0_0_8px_var(--rag-green)]"
+                                  : isFailed
+                                    ? "bg-rag-red/40"
+                                    : isCancelled
+                                      ? "bg-silver/20"
+                                      : "bg-rag-green/20"
+                              }`}
+                            />
 
                             <div className="flex items-center gap-5">
-                              <div className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-rag-green animate-pulse shadow-[0_0_8px_rgba(46,213,115,0.4)]' :
-                                  isFailed ? 'bg-rag-red' :
-                                    isCancelled ? 'bg-silver/40' :
-                                      'bg-rag-green'
-                                }`} />
+                              <div
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  isActive
+                                    ? "bg-rag-green animate-pulse shadow-[0_0_8px_rgba(46,213,115,0.4)]"
+                                    : isFailed
+                                      ? "bg-rag-red"
+                                      : isCancelled
+                                        ? "bg-silver/40"
+                                        : "bg-rag-green"
+                                }`}
+                              />
                               <div>
                                 <div className="flex items-center gap-3">
                                   <p className="text-[13px] font-semibold text-silver-bright tracking-wide group-hover:text-white transition-colors">
                                     {displayToolName(task)}
                                   </p>
-                                  <span className={`text-[8px] font-mono px-1.5 py-0.5 border rounded-sm ${isActive ? 'text-rag-green border-rag-green/20 bg-rag-green/5' :
-                                      isFailed ? 'text-rag-red border-rag-red/20 bg-rag-red/5' :
-                                        'text-silver/70 border-silver/20'
-                                    }`}>
+                                  <span
+                                    className={`text-[8px] font-mono px-1.5 py-0.5 border rounded-sm ${
+                                      isActive
+                                        ? "text-rag-green border-rag-green/20 bg-rag-green/5"
+                                        : isFailed
+                                          ? "text-rag-red border-rag-red/20 bg-rag-red/5"
+                                          : "text-silver/70 border-silver/20"
+                                    }`}
+                                  >
                                     {task.status.toUpperCase()}
                                   </span>
                                 </div>
                                 <p className="text-[10px] text-silver/85 uppercase tracking-widest mt-1 flex items-center gap-2 font-mono italic">
-                                  TARGET:: {task.target || 'N/A'}
+                                  TARGET:: {task.target || "N/A"}
                                 </p>
                                 <p className="text-[10px] text-silver/80 uppercase tracking-widest mt-1 flex items-center gap-3 font-mono">
-                                  <span>PLUGIN:: {task.plugin_id || 'N/A'}</span>
+                                  <span>
+                                    PLUGIN:: {task.plugin_id || "N/A"}
+                                  </span>
                                   <span>TASK:: {task.id.slice(0, 8)}</span>
                                 </p>
                               </div>
@@ -507,14 +623,18 @@ export default function Dashboard() {
 
                             <div className="flex items-center gap-6">
                               <div className="text-right hidden sm:block">
-                                <span className={`text-[9px] font-bold uppercase tracking-[0.2em] block mb-0.5 ${isActive ? 'text-rag-green' : 'text-silver/80'}`}>
-                                  {isActive ? 'Live Processing' : 'Cycle Log'}
+                                <span
+                                  className={`text-[9px] font-bold uppercase tracking-[0.2em] block mb-0.5 ${isActive ? "text-rag-green" : "text-silver/80"}`}
+                                >
+                                  {isActive ? "Live Processing" : "Cycle Log"}
                                 </span>
                                 <span className="text-[9px] font-mono text-silver/80 uppercase block">
-                                  INIT:: {taskInit.date} @ {taskInit.time} {taskInit.tz}
+                                  INIT:: {taskInit.date} @ {taskInit.time}{" "}
+                                  {taskInit.tz}
                                 </span>
                                 <span className="text-[9px] font-mono text-silver/70 uppercase block mt-0.5">
-                                  DURATION:: {formatDuration(task.duration_seconds)}
+                                  DURATION::{" "}
+                                  {formatDuration(task.duration_seconds)}
                                 </span>
                               </div>
 
@@ -525,7 +645,9 @@ export default function Dashboard() {
                                     onClick={() => handleAbort(task.id)}
                                     className="text-[10px] font-bold text-silver/40 hover:text-rag-red uppercase tracking-widest transition-colors flex items-center gap-2"
                                   >
-                                    <span className="material-symbols-outlined text-[14px]">cancel</span>
+                                    <span className="material-symbols-outlined text-[14px]">
+                                      cancel
+                                    </span>
                                     Abort
                                   </button>
                                 </>
@@ -542,20 +664,26 @@ export default function Dashboard() {
                         );
                       })}
                     </div>
-
-
                   </div>
 
                   {/* Operational Stats: Minimized and Integrated */}
                   <div className="pt-6 grid grid-cols-1 md:grid-cols-3 gap-px bg-accent-silver/10 border border-accent-silver/5">
                     <div className="bg-charcoal px-6 py-5">
-                      <span className="text-xs font-bold text-silver/70 uppercase tracking-[0.2em] block mb-2">Total Cycles</span>
-                      <span className="text-2xl font-light text-silver-bright font-mono italic">{summary.scan_activity.total}</span>
+                      <span className="text-xs font-bold text-silver/70 uppercase tracking-[0.2em] block mb-2">
+                        Total Cycles
+                      </span>
+                      <span className="text-2xl font-light text-silver-bright font-mono italic">
+                        {summary.scan_activity.total}
+                      </span>
                     </div>
                     <div className="bg-charcoal px-8 py-8 md:col-span-2">
                       <div className="flex justify-between items-baseline mb-3">
-                        <span className="text-[10px] font-bold text-silver/80 uppercase tracking-widest">Efficiency Posture</span>
-                        <span className="text-[10px] text-rag-green font-mono uppercase">{progressWidth.toFixed(0)}% SYNCHRONIZED</span>
+                        <span className="text-[10px] font-bold text-silver/80 uppercase tracking-widest">
+                          Efficiency Posture
+                        </span>
+                        <span className="text-[10px] text-rag-green font-mono uppercase">
+                          {progressWidth.toFixed(0)}% SYNCHRONIZED
+                        </span>
                       </div>
                       <div className="h-1 w-full bg-accent-silver/10 relative overflow-hidden">
                         <motion.div
@@ -572,35 +700,47 @@ export default function Dashboard() {
 
               {/* Section: Recent Findings Ledger */}
               <motion.section variants={itemVariants} className="px-8">
-                  <header className="mb-10">
-                    <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-silver-bright flex items-center gap-3">
-                      <span className="w-2 h-2 border border-accent-silver/40 rotate-45"></span>
-                      Recent Audit Findings
-                    </h3>
-                  </header>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                      {summary.recent_findings.length === 0 ? (
-                          <div className="col-span-full bg-charcoal/30 p-12 text-center border border-accent-silver/5">
-                              <p className="text-[10px] text-silver/70 uppercase tracking-[0.3em] italic">No findings detected in recent audits.</p>
-                          </div>
-                      ) : (
-                          summary.recent_findings.map((finding) => (
-                              <div key={finding.id} className="bg-charcoal p-6 border border-accent-silver/5 hover:border-accent-silver/20 transition-all group">
-                                  <div className="flex justify-between items-start mb-4">
-                                      <span className={`text-[9px] font-black px-2 py-0.5 uppercase tracking-widest border ${severityTone(finding.severity)}`}>
-                                          {finding.severity}
-                                      </span>
-                                      <span className="text-[9px] font-mono text-silver/40 uppercase">{formatLocaleDate(finding.discovered_at)}</span>
-                                  </div>
-                                  <h4 className="text-sm font-bold text-silver-bright mb-2 group-hover:text-white transition-colors">{finding.title}</h4>
-                                  <p className="text-[10px] text-silver/60 uppercase tracking-widest font-mono italic truncate">Target: {finding.target}</p>
-                              </div>
-                          ))
-                      )}
-                  </div>
-              </motion.section>
+                <header className="mb-10">
+                  <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-silver-bright flex items-center gap-3">
+                    <span className="w-2 h-2 border border-accent-silver/40 rotate-45"></span>
+                    Recent Audit Findings
+                  </h3>
+                </header>
 
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {summary.recent_findings.length === 0 ? (
+                    <div className="col-span-full bg-charcoal/30 p-12 text-center border border-accent-silver/5">
+                      <p className="text-[10px] text-silver/70 uppercase tracking-[0.3em] italic">
+                        No findings detected in recent audits.
+                      </p>
+                    </div>
+                  ) : (
+                    summary.recent_findings.map((finding) => (
+                      <div
+                        key={finding.id}
+                        className="bg-charcoal p-6 border border-accent-silver/5 hover:border-accent-silver/20 transition-all group"
+                      >
+                        <div className="flex justify-between items-start mb-4">
+                          <span
+                            className={`text-[9px] font-black px-2 py-0.5 uppercase tracking-widest border ${severityTone(finding.severity)}`}
+                          >
+                            {finding.severity}
+                          </span>
+                          <span className="text-[9px] font-mono text-silver/40 uppercase">
+                            {formatLocaleDate(finding.discovered_at)}
+                          </span>
+                        </div>
+                        <h4 className="text-sm font-bold text-silver-bright mb-2 group-hover:text-white transition-colors">
+                          {finding.title}
+                        </h4>
+                        <p className="text-[10px] text-silver/60 uppercase tracking-widest font-mono italic truncate">
+                          Target: {finding.target}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </motion.section>
             </motion.div>
           )}
         </AnimatePresence>
@@ -612,5 +752,5 @@ export default function Dashboard() {
         </p>
       </footer>
     </div>
-  )
+  );
 }

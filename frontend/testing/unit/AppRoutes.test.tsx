@@ -1,9 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, useLocation } from 'react-router-dom'
-import { AppRoutes } from '../../src/App'
+import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, useLocation } from "react-router-dom";
+import { AppRoutes } from "../../src/App";
 
-vi.mock('../../src/api', () => ({
-  getHealth: vi.fn().mockResolvedValue({ status: 'operational' }),
+vi.mock("../../src/api", () => ({
+  getHealth: vi.fn().mockResolvedValue({ status: "operational" }),
   getDashboardSummary: vi.fn().mockResolvedValue({
     total_findings: 0,
     critical_findings: 0,
@@ -20,58 +20,61 @@ vi.mock('../../src/api', () => ({
   getFindings: vi.fn().mockResolvedValue({
     findings: [
       {
-        id: 'finding-1',
-        severity: 'high',
-        category: 'Web',
-        title: 'Open Admin Surface',
-        target: 'app.example.test',
-        description: 'Administrative endpoint is reachable from the public network.',
-        remediation: 'Restrict access using authentication and IP controls.',
-        discovered_at: '2026-05-07T06:00:00Z',
+        id: "finding-1",
+        severity: "high",
+        category: "Web",
+        title: "Open Admin Surface",
+        target: "app.example.test",
+        description:
+          "Administrative endpoint is reachable from the public network.",
+        remediation: "Restrict access using authentication and IP controls.",
+        discovered_at: "2026-05-07T06:00:00Z",
         cve: null,
       },
     ],
   }),
   cancelTask: vi.fn(),
-}))
+}));
 
 function PathProbe() {
-  const { pathname } = useLocation()
-  return <div data-testid="path-probe">{pathname}</div>
+  const { pathname } = useLocation();
+  return <div data-testid="path-probe">{pathname}</div>;
 }
 
-describe('App route fallback', () => {
-  it('redirects unknown routes to dashboard', async () => {
+describe("App route fallback", () => {
+  it("redirects unknown routes to dashboard", async () => {
     render(
-      <MemoryRouter initialEntries={['/not-a-real-route']}>
+      <MemoryRouter initialEntries={["/not-a-real-route"]}>
         <AppRoutes />
         <PathProbe />
       </MemoryRouter>,
-    )
+    );
 
     await waitFor(() => {
-      expect(screen.getByTestId('path-probe')).toHaveTextContent('/')
-    })
-  })
+      expect(screen.getByTestId("path-probe")).toHaveTextContent("/");
+    });
+  });
 
-  it('renders the loaded dashboard summary', async () => {
+  it("renders the loaded dashboard summary", async () => {
     render(
-      <MemoryRouter initialEntries={['/']}>
+      <MemoryRouter initialEntries={["/"]}>
         <AppRoutes />
       </MemoryRouter>,
-    )
+    );
 
-    expect(await screen.findByText(/Total Findings/i)).toBeInTheDocument()
-    expect(screen.getByText(/Scan Cycles/i)).toBeInTheDocument()
-  })
+    expect(await screen.findByText(/Total Findings/i)).toBeInTheDocument();
+    expect(screen.getByText(/Scan Cycles/i)).toBeInTheDocument();
+  });
 
-  it('renders the findings workspace', async () => {
+  it("renders the findings workspace", async () => {
     render(
-      <MemoryRouter initialEntries={['/findings']}>
+      <MemoryRouter initialEntries={["/findings"]}>
         <AppRoutes />
       </MemoryRouter>,
-    )
+    );
 
-    expect(await screen.findByRole('heading', { name: /Findings/i })).toBeInTheDocument()
-  })
-})
+    expect(
+      await screen.findByRole("heading", { name: /Findings/i }),
+    ).toBeInTheDocument();
+  });
+});

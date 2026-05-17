@@ -1,6 +1,12 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
 
-type Theme = 'dark' | 'light';
+type Theme = "dark" | "light";
 
 interface ThemeContextType {
   theme: Theme;
@@ -13,29 +19,32 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {
     // Check local storage first
-    const saved = localStorage.getItem('secuscan-theme');
-    if (saved === 'light' || saved === 'dark') {
+    const saved = localStorage.getItem("secuscan-theme");
+    if (saved === "light" || saved === "dark") {
       return saved;
     }
     // Check system preference
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
-      return 'light';
+    if (
+      window.matchMedia &&
+      window.matchMedia("(prefers-color-scheme: light)").matches
+    ) {
+      return "light";
     }
-    return 'dark'; // Default
+    return "dark"; // Default
   });
 
   useEffect(() => {
     const root = document.documentElement;
-    if (theme === 'light') {
-      root.classList.add('theme-light');
+    if (theme === "light") {
+      root.classList.add("theme-light");
     } else {
-      root.classList.remove('theme-light');
+      root.classList.remove("theme-light");
     }
-    localStorage.setItem('secuscan-theme', theme);
+    localStorage.setItem("secuscan-theme", theme);
   }, [theme]);
 
   const toggleTheme = () => {
-    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
   };
 
   return (
@@ -48,7 +57,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 export function useTheme() {
   const context = useContext(ThemeContext);
   if (context === undefined) {
-    throw new Error('useTheme must be used within a ThemeProvider');
+    throw new Error("useTheme must be used within a ThemeProvider");
   }
   return context;
 }
