@@ -98,8 +98,6 @@ class TaskExecutor:
             # Merge preset with user inputs (user inputs take precedence)
             inputs = {**preset_values, **inputs}
         
-        inputs = sanitize_inputs(inputs)
-        
         # Store task in database
         db = await get_db()
         await db.execute(

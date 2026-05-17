@@ -59,7 +59,7 @@ def sanitize_input(value: str) -> str:
     Returns:
         Sanitized value
     """
-    dangerous_chars = [';', '|', '&', '$', '`', '(', ')', '<', '>', '\n', '\r']
+    dangerous_chars = [';', '`', '$', '\n', '\r']
 
     for char in dangerous_chars:
         value = value.replace(char, '')
