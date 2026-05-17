@@ -3770,3 +3770,21 @@ button,
 .sidebar-card .btn:first-of-type {
   margin-top: 0;
 }
+
+/* ── Accessibility utilities ── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+:focus-visible {
+  outline: 2px solid #e63946;
+  outline-offset: 2px;
+}

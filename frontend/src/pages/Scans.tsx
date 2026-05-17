@@ -198,6 +198,8 @@ export default function Scans() {
                 <div className="flex flex-wrap items-center gap-4">
                     <button
                         onClick={toggleSelectAll}
+                        aria-label={selectedIds.length === tasks.length && tasks.length > 0 ? 'Deselect all scans' : 'Select all scans'}
+                        aria-pressed={selectedIds.length === tasks.length && tasks.length > 0}
                         className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-3 ${
                             selectedIds.length === tasks.length && tasks.length > 0
                             ? 'bg-rag-blue text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' 
@@ -214,6 +216,8 @@ export default function Scans() {
                         <button
                             key={f.value}
                             onClick={() => setFilter(f.value)}
+                            aria-pressed={filter === f.value}
+                            aria-label={`Filter by ${f.label}`}
                             className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-2 ${
                                 filter === f.value 
                                 ? 'bg-silver-bright text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-x-0.5 -translate-y-0.5' 
@@ -229,6 +233,7 @@ export default function Scans() {
                     {tasks.length > 0 && (
                         <button
                             onClick={handleClearAll}
+                            aria-label="Purge all scan records — this action is irreversible"
                             className="px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 bg-rag-red/10 text-rag-red border-rag-red/20 hover:bg-rag-red hover:text-black hover:border-black flex items-center gap-2 italic"
                         >
                             Purge_All_Records
@@ -274,16 +279,33 @@ export default function Scans() {
                                         }`}></div>
 
                                         <div 
-                                            className={`bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer relative overflow-hidden group/card ${
+                                            className={`bg-charcoal border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] transition-all relative overflow-hidden group/card ${
                                                 expandedId === task.task_id ? 'border-rag-blue/40 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]' : ''
                                             }`}
-                                            onClick={() => setExpandedId(expandedId === task.task_id ? null : task.task_id)}
                                         >
+                                            {/* Expand/collapse button — separate from inner controls */}
+                                            <button
+                                                className="absolute inset-0 w-full h-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-rag-blue focus-visible:ring-inset z-0"
+                                                aria-expanded={expandedId === task.task_id}
+                                                aria-label={`Scan record: ${task.tool} targeting ${task.target}, status ${task.status}. Press Enter to expand.`}
+                                                onClick={() => setExpandedId(expandedId === task.task_id ? null : task.task_id)}
+                                            />
+                                            <div className="p-8 relative z-10">
                                             <div className="flex flex-col xl:flex-row justify-between gap-8">
                                                 <div className="flex-1 space-y-6">
                                                     <div className="flex flex-wrap items-center gap-4">
                                                         <div 
+                                                            role="checkbox"
+                                                            tabIndex={0}
+                                                            aria-checked={selectedIds.includes(task.task_id)}
+                                                            aria-label={`Select scan ${task.tool}`}
                                                             onClick={(e) => toggleSelection(task.task_id, e)}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                                    e.preventDefault()
+                                                                    toggleSelection(task.task_id, e as any)
+                                                                }
+                                                            }}
                                                             className={`w-10 h-10 border-4 border-black flex items-center justify-center transition-all ${
                                                                 selectedIds.includes(task.task_id) 
                                                                 ? 'bg-rag-blue text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-x-1 -translate-y-1' 
@@ -298,7 +320,10 @@ export default function Scans() {
                                                             task.status === 'completed' ? 'bg-rag-green text-black' :
                                                             task.status === 'failed' ? 'bg-rag-red text-black' :
                                                             'bg-charcoal-dark text-silver-bright/50'
-                                                        }`}>
+                                                        }`}
+                                                            role="status"
+                                                            aria-label={`Scan status: ${task.status}`}
+                                                        >
                                                             {task.status}
                                                         </span>
                                                         <span className="text-[10px] font-mono text-silver/20 uppercase tracking-widest italic">
@@ -372,6 +397,7 @@ export default function Scans() {
                                                                 {(task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') && (
                                                                     <button 
                                                                         className="bg-rag-red/20 text-rag-red border-2 border-rag-red/20 hover:bg-rag-red hover:text-black hover:border-black px-6 py-4 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 italic"
+                                                                        aria-label={`Delete scan record for ${task.tool} targeting ${task.target}`}
                                                                         onClick={(e) => {
                                                                             e.stopPropagation()
                                                                             handleTaskDelete(task.task_id)
@@ -384,6 +410,7 @@ export default function Scans() {
                                                                 {(task.status === 'completed' || task.status === 'failed') && (
                                                                     <button 
                                                                         className="bg-rag-blue text-black px-8 py-4 text-[10px] font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3 group/btn italic"
+                                                                        aria-label={`Rescan ${task.tool} targeting ${task.target}`}
                                                                         onClick={(e) => {
                                                                             e.stopPropagation()
                                                                             handleRescan(task)
@@ -395,6 +422,7 @@ export default function Scans() {
                                                                 )}
                                                                 <button 
                                                                     className="bg-silver-bright text-black px-8 py-4 text-[10px] font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3 group/btn italic"
+                                                                    aria-label={`Open full details for ${task.tool} targeting ${task.target}`}
                                                                     onClick={(e) => {
                                                                         e.stopPropagation()
                                                                         navigate(routePath.task(task.task_id))
@@ -408,6 +436,7 @@ export default function Scans() {
                                                     </motion.div>
                                                 )}
                                             </AnimatePresence>
+                                            </div>{/* end z-10 content wrapper */}
                                         </div>
                                     </motion.div>
                                 );

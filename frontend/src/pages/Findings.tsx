@@ -259,22 +259,26 @@ export default function Findings() {
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div className="grid flex-1 gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1.8fr)]">
               <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-silver-bright">Search</label>
+                <label htmlFor="findings-search" className="text-[10px] font-black uppercase tracking-[0.2em] text-silver-bright">Search</label>
                 <input
+                  id="findings-search"
                   type="text"
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
                   placeholder="Title, target, CVE, remediation..."
+                  aria-label="Search findings by title, target, CVE or remediation"
                   className="w-full border-2 border-silver-bright/10 bg-charcoal-dark px-4 py-3 text-xs font-mono text-silver-bright placeholder:text-silver/20 focus:border-rag-red focus:outline-none"
                 />
               </div>
 
               <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-silver-bright">Severity</label>
-                <div className="flex flex-wrap gap-2">
+                <label id="severity-filter-label" className="text-[10px] font-black uppercase tracking-[0.2em] text-silver-bright">Severity</label>
+                <div className="flex flex-wrap gap-2" role="group" aria-labelledby="severity-filter-label">
                   <button
                     type="button"
                     onClick={() => setFilterSeverity('all')}
+                    aria-pressed={filterSeverity === 'all'}
+                    aria-label="Show all severity levels"
                     className={`border px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] transition-all ${filterPillClasses(filterSeverity === 'all')}`}
                   >
                     All Levels
@@ -284,6 +288,8 @@ export default function Findings() {
                       key={severity}
                       type="button"
                       onClick={() => setFilterSeverity(severity)}
+                      aria-pressed={filterSeverity === severity}
+                      aria-label={`Filter by ${severityConfig[severity].label} severity, ${countsBySeverity[severity] || 0} findings`}
                       className={`border px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] transition-all ${filterPillClasses(filterSeverity === severity)}`}
                     >
                       {severityConfig[severity].label} {countsBySeverity[severity] || 0}
@@ -293,12 +299,14 @@ export default function Findings() {
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Quick severity filters">
               {severityOrder.map((severity) => (
                 <button
                   key={severity}
                   type="button"
                   onClick={() => setFilterSeverity((current) => (current === severity ? 'all' : severity))}
+                  aria-pressed={filterSeverity === severity}
+                  aria-label={`Toggle ${severityConfig[severity].label} filter, ${countsBySeverity[severity] || 0} findings`}
                   className={`border px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] transition-all ${
                     filterSeverity === severity
                       ? `${severityConfig[severity].chip} border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]`
@@ -330,7 +338,7 @@ export default function Findings() {
                 const config = severityConfig[severity]
 
                 return (
-                  <div key={severity} className="border-2 border-black bg-charcoal shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+                  <div key={severity} className="border-2 border-black bg-charcoal shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]" role="region" aria-label={`${config.label} severity findings`}>
                     <div className="flex w-full items-center justify-between border-b border-silver-bright/8 px-5 py-4 text-left">
                       <div className="flex items-center gap-4">
                         <span className={`h-3 w-3 rotate-45 ${config.rail}`} />
@@ -351,6 +359,8 @@ export default function Findings() {
                             key={finding.id}
                             type="button"
                             onClick={() => setSelectedFindingId(finding.id)}
+                            aria-pressed={isSelected}
+                            aria-label={`${finding.title}, ${config.label} severity, target ${finding.target || 'unknown'}, status ${finding.status}`}
                             className={`relative block w-full px-5 py-5 text-left transition-all ${
                               isSelected ? 'bg-silver-bright/6' : 'hover:bg-silver-bright/3'
                             }`}
@@ -412,7 +422,7 @@ export default function Findings() {
             )}
           </motion.section>
 
-          <motion.aside variants={sectionVariants} initial="hidden" animate="visible" className="xl:sticky xl:top-32 xl:self-start">
+          <motion.aside variants={sectionVariants} initial="hidden" animate="visible" aria-label="Finding detail panel" aria-live="polite" className="xl:sticky xl:top-32 xl:self-start">
             <div className="border-4 border-black bg-charcoal shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]">
               {selectedFinding ? (
                 <div className="space-y-6 p-6">
@@ -484,6 +494,7 @@ export default function Findings() {
                       <button
                         type="button"
                         onClick={() => updateFindingStatus(selectedFinding.id, 'reviewed')}
+                        aria-label={`Mark ${selectedFinding.title} as reviewed`}
                         className="bg-silver-bright px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
                       >
                         Mark Reviewed
@@ -491,6 +502,7 @@ export default function Findings() {
                       <button
                         type="button"
                         onClick={() => updateFindingStatus(selectedFinding.id, 'new')}
+                        aria-label={`Reopen ${selectedFinding.title} as unresolved`}
                         className="border border-rag-amber/25 bg-rag-amber/10 px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-rag-amber"
                       >
                         Reopen
@@ -498,6 +510,7 @@ export default function Findings() {
                       <button
                         type="button"
                         onClick={() => updateFindingStatus(selectedFinding.id, 'suppressed')}
+                        aria-label={`Suppress finding ${selectedFinding.title}`}
                         className="border border-silver/20 bg-silver/5 px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-silver"
                       >
                         Suppress
@@ -505,6 +518,8 @@ export default function Findings() {
                       <button
                         type="button"
                         onClick={() => copyFindingSummary(selectedFinding)}
+                        aria-label={`Copy summary for ${selectedFinding.title} to clipboard`}
+                        aria-live="polite"
                         className="border border-rag-blue/25 bg-rag-blue/10 px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-rag-blue"
                       >
                         {copiedFindingId === selectedFinding.id ? 'Copied' : 'Copy Brief'}

@@ -149,7 +149,7 @@ describe('Reports — empty state', () => {
     await screen.findByText(/Security Scan — example.com/i)
 
     // Filter to executive — no executive reports exist
-    await user.click(screen.getByRole('button', { name: /executive briefings/i }))
+    await user.click(screen.getByRole('button', { name: /executive/i }))
 
     expect(await screen.findByText(/Archive Isolated/i)).toBeInTheDocument()
   })
@@ -303,7 +303,7 @@ describe('Reports — type filter', () => {
     await screen.findByText(/Security Scan — example.com/i)
 
     // Filter to executive — only generatingReport is executive
-    await user.click(screen.getByRole('button', { name: /executive briefings/i }))
+    await user.click(screen.getByRole('button', { name: /executive/i }))
 
     await waitFor(() => {
       expect(screen.queryByText(/Security Scan — example.com/i)).not.toBeInTheDocument()

@@ -270,10 +270,13 @@ export default function Scanner() {
 
         <div className="flex items-center gap-6 flex-wrap">
           <div className="relative group">
+            <label htmlFor="toolkit-search" className="sr-only">Search tools</label>
             <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-silver/20 group-focus-within:text-rag-red transition-colors text-sm">search</span>
             <input
+              id="toolkit-search"
               type="text"
               placeholder="SEARCH_PROTOCOLS..."
+              aria-label="Search tools by name or purpose"
               className="bg-charcoal border-4 border-black pl-12 pr-4 py-4 text-xs font-black uppercase tracking-widest text-silver-bright focus:outline-none focus:border-rag-red transition-all w-80 placeholder:text-silver/10 italic shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
@@ -289,11 +292,15 @@ export default function Scanner() {
         </section>
       )}
 
-      <nav className="flex flex-wrap gap-4">
+      <nav className="flex flex-wrap gap-4" role="tablist" aria-label="Tool categories">
         {tabOrder.map((category) => (
           <button
             key={category}
+            role="tab"
             onClick={() => setActiveTab(category)}
+            aria-selected={activeTab === category}
+            aria-controls="toolkit-panel"
+            aria-label={`${formatCategoryLabel(category)} tools`}
             className={`px-8 py-4 text-[10px] font-black uppercase tracking-[0.3em] transition-all border-4 flex items-center gap-3 ${
               activeTab === category
                 ? 'bg-rag-red text-black border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] -translate-x-1 -translate-y-1'
@@ -301,14 +308,14 @@ export default function Scanner() {
             }`}
           >
             {formatCategoryLabel(category)}
-            {activeTab === category && <span className="w-2 h-2 bg-black" />}
+            {activeTab === category && <span className="w-2 h-2 bg-black" aria-hidden="true" />}
           </button>
         ))}
       </nav>
 
       {/* Quick Access section removed per user request */}
 
-      <main>
+      <main id="toolkit-panel" role="tabpanel" aria-label={`${formatCategoryLabel(activeTab)} tools`} aria-live="polite">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab || 'loading'}
@@ -325,6 +332,8 @@ export default function Scanner() {
                   variants={itemVariants}
                   disabled={tool.disabled}
                   onClick={() => handleToolSelect(tool)}
+                  aria-label={`${tool.name}${tool.disabled ? `, unavailable: ${tool.disabledReason || 'pending'}` : `, ${tool.riskLevel} risk, ${tool.purpose}`}`}
+                  aria-disabled={tool.disabled}
                   className={`group relative p-8 bg-charcoal border-4 border-black text-left flex flex-col justify-between h-80 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all overflow-hidden ${
                     tool.disabled
                       ? 'opacity-30 cursor-not-allowed grayscale'
@@ -334,6 +343,7 @@ export default function Scanner() {
                   <div className="space-y-6 relative z-10">
                     <div className="flex justify-between items-start">
                       <div
+                        aria-label={`Risk level: ${tool.riskLevel}`}
                         className={`px-2 py-0.5 text-[8px] font-black uppercase tracking-widest italic border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
                           tool.riskLevel === 'aggressive'
                             ? 'bg-rag-red text-black'
@@ -345,7 +355,10 @@ export default function Scanner() {
                         {tool.riskLevel}_STRIKE
                       </div>
                       {tool.isProfessional && (
-                        <div className="px-2 py-0.5 text-[8px] font-black uppercase tracking-widest italic border-2 border-rag-blue text-black bg-rag-blue shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
+                        <div
+                          aria-label="Professional tier tool"
+                          className="px-2 py-0.5 text-[8px] font-black uppercase tracking-widest italic border-2 border-rag-blue text-black bg-rag-blue shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                        >
                           PROFESSIONAL
                         </div>
                       )}
@@ -405,6 +418,7 @@ export default function Scanner() {
                       </p>
                       <button
                         onClick={() => setSearchQuery('')}
+                        aria-label={`Clear search query: ${searchQuery}`}
                         className="px-6 py-3 text-[10px] font-black uppercase tracking-[0.3em] bg-rag-blue text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
                       >
                         Clear Search
@@ -420,6 +434,7 @@ export default function Scanner() {
                         onClick={() => {
                           if (tabOrder.length > 0) setActiveTab(tabOrder[0])
                         }}
+                        aria-label="Go to Quick Start category"
                         className="px-6 py-3 text-[10px] font-black uppercase tracking-[0.3em] bg-silver-bright text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
                       >
                         Go to Quick Start
@@ -433,7 +448,7 @@ export default function Scanner() {
             {!loading &&
               filteredTools.length > 0 &&
               Array.from({ length: Math.max(0, 4 - (filteredTools.length % 4 || 4)) }).map((_, index) => (
-                <div key={index} className="bg-charcoal/30 border-4 border-black/5 border-dashed flex items-center justify-center opacity-10 p-10">
+                <div key={index} aria-hidden="true" className="bg-charcoal/30 border-4 border-black/5 border-dashed flex items-center justify-center opacity-10 p-10">
                   <span className="material-symbols-outlined text-4xl">add_box</span>
                 </div>
               ))}
