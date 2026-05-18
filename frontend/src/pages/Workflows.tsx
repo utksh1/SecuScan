@@ -221,7 +221,7 @@ function WorkflowCard({ workflow, onToggle, onRun, onDelete, running, toggling }
         <div className="grid grid-cols-2 gap-4 py-4 border-y-2 border-black border-dashed text-[10px] font-black uppercase tracking-widest">
           <div className="space-y-1">
             <span className="text-silver/30 block">Steps</span>
-            <span className="text-silver-bright">{workflow.steps.length}</span>
+            <span className="text-silver-bright">{workflow.steps?.length ?? 0}</span>
           </div>
           <div className="space-y-1">
             <span className="text-silver/30 block">Last Run</span>
