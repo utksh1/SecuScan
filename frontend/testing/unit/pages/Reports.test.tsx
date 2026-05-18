@@ -27,6 +27,18 @@ const readyReport = {
   pages: 12,
 }
 
+const newerReadyReport = {
+  id: 'report-4',
+  task_id: 'task-jkl-012',
+  name: 'Security Scan — newer.example.com',
+  type: 'executive',
+  generated_at: '2026-05-15T09:00:00Z', // newer than readyReport
+  status: 'ready',
+  findings: 2,
+  assets: 1,
+  pages: 8,
+}
+
 const generatingReport = {
   id: 'report-2',
   task_id: 'task-def-456',
@@ -152,6 +164,127 @@ describe('Reports — empty state', () => {
     await user.click(screen.getByRole('button', { name: /executive briefings/i }))
 
     expect(await screen.findByText(/Archive Isolated/i)).toBeInTheDocument()
+  })
+})
+
+// ── Header export button — latest ready report ────────────────────────────────
+
+describe('Reports — header export latest briefing button', () => {
+  beforeEach(() => {
+    openSpy.mockClear()
+  })
+
+  it('renders the Export Latest Briefing button', async () => {
+    vi.mocked(getReports).mockResolvedValue({ reports: [readyReport] })
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+
+    renderReports()
+
+    expect(await screen.findByRole('button', { name: /export latest briefing pdf/i })).toBeInTheDocument()
+  })
+
+  it('is enabled when at least one ready report exists', async () => {
+    vi.mocked(getReports).mockResolvedValue({ reports: [readyReport] })
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+
+    renderReports()
+
+    const btn = await screen.findByRole('button', { name: /export latest briefing pdf/i })
+    expect(btn).not.toBeDisabled()
+  })
+
+  it('opens the correct PDF URL for the latest ready report', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getReports).mockResolvedValue({ reports: [readyReport] })
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+
+    renderReports()
+
+    await user.click(await screen.findByRole('button', { name: /export latest briefing pdf/i }))
+
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`/task/${readyReport.task_id}/report/pdf`),
+      '_blank',
+    )
+  })
+
+  it('opens the NEWEST ready report when multiple ready reports exist', async () => {
+    // newerReadyReport has a later generated_at than readyReport
+    const user = userEvent.setup()
+    vi.mocked(getReports).mockResolvedValue({ reports: [readyReport, newerReadyReport] })
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+
+    renderReports()
+
+    await user.click(await screen.findByRole('button', { name: /export latest briefing pdf/i }))
+
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`/task/${newerReadyReport.task_id}/report/pdf`),
+      '_blank',
+    )
+    expect(openSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining(`/task/${readyReport.task_id}/report/pdf`),
+      '_blank',
+    )
+  })
+
+  it('never calls the old /task/latest/report/pdf placeholder route', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getReports).mockResolvedValue({ reports: [readyReport] })
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+
+    renderReports()
+
+    await user.click(await screen.findByRole('button', { name: /export latest briefing pdf/i }))
+
+    expect(openSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining('latest'),
+      expect.anything(),
+    )
+  })
+
+  it('is disabled when no ready reports exist', async () => {
+    vi.mocked(getReports).mockResolvedValue({ reports: [generatingReport] })
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+
+    renderReports()
+
+    const btn = await screen.findByRole('button', { name: /export latest briefing pdf/i })
+    expect(btn).toBeDisabled()
+  })
+
+  it('is disabled when the report list is empty', async () => {
+    vi.mocked(getReports).mockResolvedValue({ reports: [] })
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+
+    renderReports()
+
+    const btn = await screen.findByRole('button', { name: /export latest briefing pdf/i })
+    expect(btn).toBeDisabled()
+  })
+
+  it('does not open a URL when the button is disabled', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getReports).mockResolvedValue({ reports: [generatingReport] })
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+
+    renderReports()
+
+    await screen.findByRole('button', { name: /export latest briefing pdf/i })
+    await user.click(screen.getByRole('button', { name: /export latest briefing pdf/i }))
+
+    expect(openSpy).not.toHaveBeenCalled()
+  })
+
+  it('ignores failed reports when determining the latest ready report', async () => {
+    // Only failed report — button should be disabled
+    vi.mocked(getReports).mockResolvedValue({ reports: [failedReport] })
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+
+    renderReports()
+
+    const btn = await screen.findByRole('button', { name: /export latest briefing pdf/i })
+    expect(btn).toBeDisabled()
   })
 })
 
