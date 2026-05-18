@@ -85,6 +85,10 @@ function filterPillClasses(isActive: boolean) {
     : 'border-silver-bright/10 bg-charcoal-dark text-silver/65 hover:border-silver-bright/30 hover:text-silver-bright'
 }
 
+const filterLabelClass = 'text-[10px] font-black uppercase tracking-[0.2em] text-silver-bright'
+const filterControlClass =
+  'h-11 w-full border-2 border-silver-bright/10 bg-charcoal-dark px-3 text-xs font-mono text-silver-bright focus:border-rag-red focus:outline-none'
+
 type SortMode = 'severity' | 'newest' | 'oldest' | 'target'
 
 export default function Findings() {
@@ -390,26 +394,25 @@ export default function Findings() {
           </div>
         </header>
 
-        <section className="sticky top-4 z-20 border-2 border-black bg-charcoal/95 p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] backdrop-blur">
-          <div className="flex flex-col gap-4">
-            {/* Row 1: search + severity quick-toggles */}
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-              <div className="space-y-2 xl:flex-1">
-                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-silver-bright">Search</label>
+        <section className="border-2 border-black bg-charcoal/95 p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] backdrop-blur lg:sticky lg:top-4 lg:z-20">
+          <div className="grid gap-4">
+            <div className="grid gap-4 2xl:grid-cols-[minmax(320px,1fr)_auto] 2xl:items-end">
+              <div className="space-y-2">
+                <label className={filterLabelClass}>Search</label>
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
                   placeholder="Title, target, CVE, remediation..."
-                  className="w-full border-2 border-silver-bright/10 bg-charcoal-dark px-4 py-3 text-xs font-mono text-silver-bright placeholder:text-silver/20 focus:border-rag-red focus:outline-none"
+                  className={`${filterControlClass} px-4 placeholder:text-silver/20`}
                 />
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 pb-2 sm:pb-0 2xl:max-w-[760px] 2xl:justify-end">
                 <button
                   type="button"
                   onClick={() => setFilterSeverity('all')}
-                  className={`border px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] transition-all ${filterPillClasses(filterSeverity === 'all')}`}
+                  className={`min-h-10 border px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] transition-all ${filterPillClasses(filterSeverity === 'all')}`}
                 >
                   All
                 </button>
@@ -418,7 +421,7 @@ export default function Findings() {
                     key={severity}
                     type="button"
                     onClick={() => setFilterSeverity((current) => (current === severity ? 'all' : severity))}
-                    className={`border px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] transition-all ${
+                    className={`min-h-10 border px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] transition-all ${
                       filterSeverity === severity
                         ? `${severityConfig[severity].chip} border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]`
                         : 'border-silver-bright/10 bg-charcoal-dark text-silver/65 hover:border-silver-bright/30'
@@ -430,15 +433,14 @@ export default function Findings() {
               </div>
             </div>
 
-            {/* Row 2: target, scanner, sort, date range, reset */}
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-end">
-              <div className="grid flex-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-silver-bright">Target</label>
+                  <label className={filterLabelClass}>Target</label>
                   <select
                     value={filterTarget}
                     onChange={(e) => setFilterTarget(e.target.value)}
-                    className="w-full border-2 border-silver-bright/10 bg-charcoal-dark px-3 py-2.5 text-xs font-mono text-silver-bright focus:border-rag-red focus:outline-none"
+                    className={filterControlClass}
                   >
                     <option value="all">All Targets</option>
                     {uniqueTargets.map((t) => (
@@ -448,11 +450,11 @@ export default function Findings() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-silver-bright">Scanner / Tool</label>
+                  <label className={filterLabelClass}>Scanner / Tool</label>
                   <select
                     value={filterScanner}
                     onChange={(e) => setFilterScanner(e.target.value)}
-                    className="w-full border-2 border-silver-bright/10 bg-charcoal-dark px-3 py-2.5 text-xs font-mono text-silver-bright focus:border-rag-red focus:outline-none"
+                    className={filterControlClass}
                   >
                     <option value="all">All Scanners</option>
                     {uniqueScanners.map((s) => (
@@ -462,11 +464,11 @@ export default function Findings() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-silver-bright">Sort By</label>
+                  <label className={filterLabelClass}>Sort By</label>
                   <select
                     value={sortMode}
                     onChange={(e) => setSortMode(e.target.value as SortMode)}
-                    className="w-full border-2 border-silver-bright/10 bg-charcoal-dark px-3 py-2.5 text-xs font-mono text-silver-bright focus:border-rag-red focus:outline-none"
+                    className={filterControlClass}
                   >
                     <option value="severity">Severity (High → Low)</option>
                     <option value="newest">Newest First</option>
@@ -476,22 +478,22 @@ export default function Findings() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-silver-bright">From Date</label>
+                  <label className={filterLabelClass}>From Date</label>
                   <input
                     type="date"
                     value={dateFrom}
                     onChange={(e) => setDateFrom(e.target.value)}
-                    className="w-full border-2 border-silver-bright/10 bg-charcoal-dark px-3 py-2 text-xs font-mono text-silver-bright [color-scheme:dark] focus:border-rag-red focus:outline-none"
+                    className={`${filterControlClass} [color-scheme:dark]`}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-silver-bright">To Date</label>
+                  <label className={filterLabelClass}>To Date</label>
                   <input
                     type="date"
                     value={dateTo}
                     onChange={(e) => setDateTo(e.target.value)}
-                    className="w-full border-2 border-silver-bright/10 bg-charcoal-dark px-3 py-2 text-xs font-mono text-silver-bright [color-scheme:dark] focus:border-rag-red focus:outline-none"
+                    className={`${filterControlClass} [color-scheme:dark]`}
                   />
                 </div>
               </div>
@@ -507,7 +509,7 @@ export default function Findings() {
                   setDateTo('')
                   setSearchQuery('')
                 }}
-                className="shrink-0 border border-silver-bright/20 bg-charcoal-dark px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.18em] text-silver/65 transition-all hover:border-rag-red hover:text-silver-bright"
+                className="h-11 w-full border border-silver-bright/20 bg-charcoal-dark px-4 text-[10px] font-black uppercase tracking-[0.18em] text-silver/65 transition-all hover:border-rag-red hover:text-silver-bright xl:w-auto xl:min-w-[180px]"
               >
                 Reset Filters
               </button>
