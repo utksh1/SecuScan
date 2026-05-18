@@ -89,6 +89,11 @@ export default function Reports() {
     fetchReports()
   }, [])
 
+  // Find the newest report with status 'ready', sorted by generated_at descending
+  const latestReadyReport = reports
+    .filter((r) => r.status === 'ready')
+    .sort((a, b) => new Date(b.generated_at).getTime() - new Date(a.generated_at).getTime())[0] ?? null
+
   const filteredReports = reports.filter((report) => selectedType === 'all' || report.type === selectedType)
 
   return (
@@ -108,6 +113,29 @@ export default function Reports() {
         </div>
 
         <div className="flex items-center gap-6">
+          {/* Latest Report Export Button */}
+          {latestReadyReport ? (
+            <button
+              onClick={() => window.open(`${API_BASE}/task/${latestReadyReport.task_id}/report/pdf`, '_blank')}
+              className="bg-rag-green border-4 border-black px-6 py-4 text-[10px] font-black uppercase tracking-widest text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3"
+              title={`Export latest briefing: ${latestReadyReport.name}`}
+              aria-label="Export latest briefing PDF"
+            >
+              <ReportIcon icon={Download01Icon} size={18} className="text-black" />
+              Export Latest Briefing
+            </button>
+          ) : (
+            <button
+              disabled
+              className="bg-charcoal border-4 border-black px-6 py-4 text-[10px] font-black uppercase tracking-widest text-silver/20 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex items-center gap-3 opacity-40 cursor-not-allowed"
+              title="No ready reports available"
+              aria-label="Export latest briefing PDF"
+            >
+              <ReportIcon icon={Download01Icon} size={18} />
+              Export Latest Briefing
+            </button>
+          )}
+
           <button
             onClick={fetchReports}
             className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
