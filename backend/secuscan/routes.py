@@ -2,8 +2,6 @@
 API routes for SecuScan backend
 """
 
-from urllib import request
-
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Response
 from typing import Any, Optional, List, Dict, Callable
 import json
@@ -74,7 +72,6 @@ from .plugins import get_plugin_manager, init_plugins
 from .executor import executor
 from .ratelimit import rate_limiter, concurrent_limiter
 from .validation import (
-    validate_target,
     validate_task_inputs,
     sanitize_inputs,
     extract_target_from_inputs,
@@ -159,10 +156,7 @@ async def start_task(
     """
     # Validate consent
     if settings.require_consent and not request.consent_granted:
-        logger.warning(
-            f"Task start failed: Consent not granted. Request: {request}"
-        )
-
+        logger.warning(f"Task start failed: Consent not granted. Request: {request}")
         raise HTTPException(
             status_code=400,
             detail="Consent required. You must acknowledge the legal notice."
@@ -173,20 +167,11 @@ async def start_task(
     plugin = plugin_manager.get_plugin(request.plugin_id)
 
     if not plugin:
-        logger.warning(
-            f"Task start failed: Plugin not found: {request.plugin_id}"
-        )
-
-        raise HTTPException(
-            status_code=404,
-            detail=f"Plugin not found: {request.plugin_id}"
-        )
+        logger.warning(f"Task start failed: Plugin not found: {request.plugin_id}")
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {request.plugin_id}")
 
     # Centralized validation + sanitization
-    safe_mode = request.inputs.get(
-        "safe_mode",
-        settings.safe_mode_default
-    )
+    safe_mode = request.inputs.get("safe_mode", settings.safe_mode_default)
 
     sanitized_inputs = sanitize_inputs(request.inputs)
 
@@ -208,44 +193,28 @@ async def start_task(
 
             if not is_valid:
                 logger.warning(
-                    f"Task start failed: "
-                    f"Target validation failed for '{target}': "
-                    f"{error_msg}"
+                    f"Task start failed: Target validation failed for '{target}': {error_msg}"
                 )
 
-                raise HTTPException(
-                    status_code=400,
-                    detail=error_msg
-                )
-
-    request.inputs = sanitized_inputs
+                raise HTTPException(status_code=400, detail=error_msg)
 
     # Check rate limits
     can_execute, error_msg = await rate_limiter.can_execute(
         request.plugin_id,
-        plugin.safety.get(
-            "rate_limit",
-            {}
-        ).get(
+        plugin.safety.get("rate_limit", {}).get(
             "max_per_hour",
             settings.max_tasks_per_hour
         )
     )
 
     if not can_execute:
-        raise HTTPException(
-            status_code=429,
-            detail=error_msg
-        )
+        raise HTTPException(status_code=429, detail=error_msg)
 
     # Check concurrent task limit
     can_acquire, error_msg = await concurrent_limiter.acquire("temp")
 
     if not can_acquire:
-        raise HTTPException(
-            status_code=503,
-            detail=error_msg
-        )
+        raise HTTPException(status_code=503, detail=error_msg)
 
     await concurrent_limiter.release("temp")
 
@@ -253,16 +222,13 @@ async def start_task(
     try:
         task_id = await executor.create_task(
             request.plugin_id,
-            request.inputs,
+            sanitized_inputs,
             request.preset,
             request.consent_granted
         )
 
         # Execute task in background
-        background_tasks.add_task(
-            executor.execute_task,
-            task_id
-        )
+        background_tasks.add_task(executor.execute_task, task_id)
 
         await invalidate_view_cache()
 
@@ -274,10 +240,7 @@ async def start_task(
         }
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=400,
-            detail=str(e)
-        ) from e
+        raise HTTPException(status_code=400, detail=str(e)) from e
     
 @router.get("/task/{task_id}/status")
 async def get_task_status(task_id: str):
