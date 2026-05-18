@@ -26,6 +26,7 @@ import {
     YAxis,
     CartesianGrid
 } from 'recharts'
+import { useToast } from '../components/ToastContext'
 
 interface Task {
     task_id: string
@@ -125,6 +126,7 @@ function DetailIcon({
 export default function TaskDetails() {
     const { taskId } = useParams()
     const navigate = useNavigate()
+    const { addToast } = useToast()
 
     const [task, setTask] = useState<Task | null>(null)
     const [result, setResult] = useState<TaskResult | null>(null)
@@ -157,7 +159,7 @@ export default function TaskDetails() {
         if (!finding) return null
         const severityColor = severityTone(finding.severity).split(' ')[0]
         const drawerTitleId = `finding-drawer-title-${finding.id ?? finding.title.replace(/\s+/g, '-').toLowerCase()}`
-        
+
         return (
             <motion.div
                 ref={drawerRef}
@@ -178,7 +180,7 @@ export default function TaskDetails() {
                         </span>
                         <h2 id={drawerTitleId} className="text-xl font-black text-silver-bright italic uppercase tracking-tight">{finding.title}</h2>
                     </div>
-                    <button 
+                    <button
                         type="button"
                         onClick={onClose}
                         aria-label="Close finding details"
@@ -318,6 +320,15 @@ export default function TaskDetails() {
         }
     }
 
+    const copyTaskId = async () => {
+        try {
+            await navigator.clipboard.writeText(taskId || '')
+            addToast('Task ID copied to clipboard', 'success')
+        } catch (err) {
+            console.error('Failed to copy task ID:', err)
+            addToast('Failed to copy Task ID', 'error')
+        }
+    }
     const handleRescan = async () => {
         if (!task) return
         try {
@@ -381,7 +392,7 @@ export default function TaskDetails() {
         : '--:--'
     const isTerminal = ['completed', 'failed', 'cancelled'].includes(task.status)
     const durationLabel = isTerminal
-        ? (task.duration_seconds 
+        ? (task.duration_seconds
             ? `${Math.floor(task.duration_seconds / 60)}M ${Math.floor(task.duration_seconds % 60)}S`
             : (task.status === 'completed' ? '0M 0S' : 'TERMINATED'))
         : 'ACTIVE'
@@ -548,6 +559,7 @@ export default function TaskDetails() {
         }
     }
 
+
     const DetailCard = ({ label, value, subValue }: { label: string, value: string, subValue?: string }) => (
         <div className="bg-charcoal border border-white/5 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] min-h-[118px] flex flex-col justify-between">
             <div className="space-y-3">
@@ -570,17 +582,23 @@ export default function TaskDetails() {
             <header className="border-b border-white/8 pb-6">
                 <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
                     <div className="flex items-start gap-5">
-                    <button 
-                        onClick={() => navigate(routes.scans)}
+                        <button
+                            onClick={() => navigate(routes.scans)}
                             className="bg-charcoal border border-white/10 p-3 text-silver-bright transition-colors hover:bg-white/[0.04]"
-                    >
-                        <DetailIcon icon={ArrowLeft01Icon} />
-                    </button>
+                        >
+                            <DetailIcon icon={ArrowLeft01Icon} />
+                        </button>
                         <div className="space-y-3">
                             <div className="flex flex-wrap items-center gap-3">
                                 <span className="bg-rag-blue text-black px-3 py-1 text-[10px] uppercase tracking-[0.3em] inline-block font-black">
                                     Mission_Dossier_SIG#{taskId?.split('-')[0].toUpperCase()}
                                 </span>
+                                <button
+                                    onClick={copyTaskId}
+                                    className="border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-black text-silver-bright hover:bg-white/[0.04] transition-colors"
+                                >
+                                    Copy ID
+                                </button>
                                 <span className={`px-3 py-1 text-[10px] uppercase tracking-[0.3em] border ${statusTone}`}>
                                     {task.status}
                                 </span>
@@ -622,16 +640,16 @@ export default function TaskDetails() {
                                     <DetailIcon icon={Download01Icon} size={16} />
                                     Csv_Export
                                 </button>
-                            <button
-                                onClick={() => window.open(`${API_BASE}/task/${taskId}/report/pdf`)}
+                                <button
+                                    onClick={() => window.open(`${API_BASE}/task/${taskId}/report/pdf`)}
                                     className="bg-silver-bright px-5 py-3 text-black text-[10px] font-black uppercase tracking-[0.26em] italic transition-colors hover:brightness-95 flex items-center gap-2"
-                            >
-                                <DetailIcon icon={Pdf02Icon} size={16} />
+                                >
+                                    <DetailIcon icon={Pdf02Icon} size={16} />
                                     Pdf_Report
-                            </button>
-                        </>
-                    )}
-                </div>
+                                </button>
+                            </>
+                        )}
+                    </div>
                 </div>
             </header>
 
@@ -662,7 +680,7 @@ export default function TaskDetails() {
 
             <AnimatePresence>
                 {task.status === 'failed' && task.error_message && (
-                    <motion.div 
+                    <motion.div
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
                         className="bg-rag-red/10 border-l-4 border-rag-red p-6 space-y-3"
@@ -675,7 +693,7 @@ export default function TaskDetails() {
                             {task.error_message}
                         </p>
                         <div className="pt-2">
-                             <span className="text-[9px] font-black text-silver/30 uppercase tracking-[0.2em] italic">Diagnostic_Code::EXEC_FAIL_{task.exit_code || 'ERR'}</span>
+                            <span className="text-[9px] font-black text-silver/30 uppercase tracking-[0.2em] italic">Diagnostic_Code::EXEC_FAIL_{task.exit_code || 'ERR'}</span>
                         </div>
                     </motion.div>
                 )}
@@ -687,11 +705,10 @@ export default function TaskDetails() {
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
-                            className={`px-4 py-3 text-[10px] uppercase tracking-[0.28em] font-black transition-colors border-b-2 ${
-                                activeTab === tab.id
-                                    ? 'text-silver-bright border-rag-blue'
-                                    : 'text-silver/40 border-transparent hover:text-silver/75'
-                            }`}
+                            className={`px-4 py-3 text-[10px] uppercase tracking-[0.28em] font-black transition-colors border-b-2 ${activeTab === tab.id
+                                ? 'text-silver-bright border-rag-blue'
+                                : 'text-silver/40 border-transparent hover:text-silver/75'
+                                }`}
                         >
                             {tab.label}
                         </button>
@@ -719,32 +736,32 @@ export default function TaskDetails() {
                                         </div>
                                         <div className="h-[300px] w-full mt-4">
                                             <ResponsiveContainer width="100%" height="100%">
-                                                <BarChart 
-                                                    data={orderedSeverities.map(s => ({ 
-                                                        name: s.toUpperCase(), 
+                                                <BarChart
+                                                    data={orderedSeverities.map(s => ({
+                                                        name: s.toUpperCase(),
                                                         count: severityCounts[s] || 0,
                                                         color: s === 'critical' ? '#ff3e3e' : s === 'high' ? '#ff9500' : s === 'medium' ? '#0070f3' : s === 'low' ? '#00d1b2' : '#888888'
                                                     }))}
                                                     margin={{ top: 20, right: 30, left: 0, bottom: 0 }}
                                                 >
                                                     <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
-                                                    <XAxis 
-                                                        dataKey="name" 
-                                                        axisLine={false} 
-                                                        tickLine={false} 
-                                                        tick={{ fill: '#ffffff40', fontSize: 10, fontWeight: 900 }} 
+                                                    <XAxis
+                                                        dataKey="name"
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        tick={{ fill: '#ffffff40', fontSize: 10, fontWeight: 900 }}
                                                         dy={10}
                                                     />
                                                     <YAxis hide />
-                                                    <RechartsTooltip 
+                                                    <RechartsTooltip
                                                         cursor={{ fill: 'white', opacity: 0.05 }}
                                                         contentStyle={{ backgroundColor: '#111', border: '1px solid #333', borderRadius: 0 }}
                                                     />
                                                     <Bar dataKey="count" radius={[2, 2, 0, 0]}>
                                                         {orderedSeverities.map((s, index) => (
-                                                            <Cell 
-                                                                key={`cell-${index}`} 
-                                                                fill={s === 'critical' ? '#ff3e3e' : s === 'high' ? '#ff9500' : s === 'medium' ? '#0070f3' : s === 'low' ? '#00d1b2' : '#888888'} 
+                                                            <Cell
+                                                                key={`cell-${index}`}
+                                                                fill={s === 'critical' ? '#ff3e3e' : s === 'high' ? '#ff9500' : s === 'medium' ? '#0070f3' : s === 'low' ? '#00d1b2' : '#888888'}
                                                                 fillOpacity={0.8}
                                                             />
                                                         ))}
@@ -772,13 +789,13 @@ export default function TaskDetails() {
                                                         dataKey="value"
                                                     >
                                                         {orderedSeverities.map((s, index) => (
-                                                            <Cell 
-                                                                key={`cell-${index}`} 
-                                                                fill={s === 'critical' ? '#ff3e3e' : s === 'high' ? '#ff9500' : s === 'medium' ? '#0070f3' : s === 'low' ? '#00d1b2' : '#888888'} 
+                                                            <Cell
+                                                                key={`cell-${index}`}
+                                                                fill={s === 'critical' ? '#ff3e3e' : s === 'high' ? '#ff9500' : s === 'medium' ? '#0070f3' : s === 'low' ? '#00d1b2' : '#888888'}
                                                             />
                                                         ))}
                                                     </Pie>
-                                                    <RechartsTooltip/>
+                                                    <RechartsTooltip />
                                                 </PieChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -794,14 +811,13 @@ export default function TaskDetails() {
                                     {previewFindings.length > 0 ? (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             {previewFindings.map((f: any, idx: number) => (
-                                                <div 
-                                                    key={idx} 
+                                                <div
+                                                    key={idx}
                                                     onClick={() => setSelectedFinding(f)}
                                                     className="border border-white/6 bg-black/20 p-5 hover:bg-white/[0.04] cursor-pointer transition-all group relative overflow-hidden"
                                                 >
-                                                    <div className={`absolute top-0 left-0 w-1 h-full ${
-                                                        f.severity === 'critical' ? 'bg-rag-red' : f.severity === 'high' ? 'bg-rag-amber' : 'bg-rag-blue'
-                                                    }`} />
+                                                    <div className={`absolute top-0 left-0 w-1 h-full ${f.severity === 'critical' ? 'bg-rag-red' : f.severity === 'high' ? 'bg-rag-amber' : 'bg-rag-blue'
+                                                        }`} />
                                                     <div className="flex justify-between items-start mb-3">
                                                         <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border ${severityTone(f.severity)}`}>
                                                             {f.severity}
@@ -893,7 +909,7 @@ export default function TaskDetails() {
                                                 <tbody>
                                                     {findings.map((f: Finding, idx: number) => {
                                                         const description = stripAnsi(f.description) || 'No description provided.';
-                                                        
+
                                                         return (
                                                             <tr
                                                                 key={idx}
@@ -967,23 +983,21 @@ export default function TaskDetails() {
                                                     <p className="text-[10px] font-black text-silver/30 uppercase tracking-[0.22em]">
                                                         {entry.label}
                                                     </p>
-                                                    <span className={`text-[9px] font-black uppercase tracking-[0.18em] ${
-                                                        entry.source === 'INPUT'
-                                                            ? 'text-rag-green'
-                                                            : entry.source === 'PRESET'
-                                                                ? 'text-rag-blue'
-                                                                : 'text-rag-amber'
-                                                    }`}>
+                                                    <span className={`text-[9px] font-black uppercase tracking-[0.18em] ${entry.source === 'INPUT'
+                                                        ? 'text-rag-green'
+                                                        : entry.source === 'PRESET'
+                                                            ? 'text-rag-blue'
+                                                            : 'text-rag-amber'
+                                                        }`}>
                                                         {entry.source}
                                                     </span>
                                                 </div>
-                                                <p className={`text-sm font-black uppercase break-words leading-6 ${
-                                                    entry.value === 'ON' || entry.value === 'TRUE'
-                                                        ? 'text-rag-green'
-                                                        : entry.value === 'OFF' || entry.value === 'FALSE'
-                                                            ? 'text-rag-red'
-                                                            : 'text-silver-bright'
-                                                }`}>
+                                                <p className={`text-sm font-black uppercase break-words leading-6 ${entry.value === 'ON' || entry.value === 'TRUE'
+                                                    ? 'text-rag-green'
+                                                    : entry.value === 'OFF' || entry.value === 'FALSE'
+                                                        ? 'text-rag-red'
+                                                        : 'text-silver-bright'
+                                                    }`}>
                                                     {entry.value}
                                                 </p>
                                                 {entry.help && (
@@ -1117,14 +1131,14 @@ export default function TaskDetails() {
                     CLASSIFIED_EXECUTIVE_SUMMARY // CORE_DAEMON_LOG_ID::{taskId?.split('-')[0].toUpperCase()}
                 </div>
                 <div className="flex gap-4">
-                    {[1,2,3,4].map(i => <div key={i} className="w-20 h-1 bg-silver/20"></div>)}
+                    {[1, 2, 3, 4].map(i => <div key={i} className="w-20 h-1 bg-silver/20"></div>)}
                 </div>
             </footer>
 
             <AnimatePresence>
                 {selectedFinding && (
                     <>
-                        <motion.div 
+                        <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
