@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
@@ -89,6 +89,18 @@ export default function Reports() {
     fetchReports()
   }, [])
 
+  // Derive the latest ready report without mutating the reports array.
+  // reduce() scans once, keeping whichever candidate has the later generated_at.
+  const latestReadyReport = useMemo(
+    () =>
+      reports.reduce<Report | null>((best, r) => {
+        if (r.status !== 'ready') return best
+        if (!best) return r
+        return new Date(r.generated_at) > new Date(best.generated_at) ? r : best
+      }, null),
+    [reports],
+  )
+
   const filteredReports = reports.filter((report) => selectedType === 'all' || report.type === selectedType)
 
   return (
@@ -108,6 +120,20 @@ export default function Reports() {
         </div>
 
         <div className="flex items-center gap-6">
+          {/* Latest Report Export Button — compact icon-button, matches Refresh */}
+          <button
+            onClick={() =>
+              latestReadyReport &&
+              window.open(`${API_BASE}/task/${latestReadyReport.task_id}/report/pdf`, '_blank')
+            }
+            disabled={!latestReadyReport}
+            className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] disabled:hover:translate-x-0 disabled:hover:translate-y-0"
+            title={latestReadyReport ? `Export latest briefing: ${latestReadyReport.name}` : 'No ready reports available'}
+            aria-label="Export latest briefing PDF"
+          >
+            <ReportIcon icon={Download01Icon} className="block" />
+          </button>
+
           <button
             onClick={fetchReports}
             className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
