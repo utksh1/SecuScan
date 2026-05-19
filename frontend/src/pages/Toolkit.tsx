@@ -288,7 +288,8 @@ export default function Scanner() {
 
         <div className="flex items-center gap-6 flex-wrap">
           <div className="relative group">
-            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-silver/20 group-focus-within:text-rag-red transition-colors text-sm">search</span>
+            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-silver/20 group-focus-within:text-rag-red transition-colors text-sm"
+            aria-hidden="true">search</span>
             <input
               type="text"
               aria-label="Search scanner catalog"
@@ -472,7 +473,7 @@ export default function Scanner() {
               filteredTools.length > 0 &&
               Array.from({ length: Math.max(0, 4 - (filteredTools.length % 4 || 4)) }).map((_, index) => (
                 <div key={index} className="bg-charcoal/30 border-4 border-black/5 border-dashed flex items-center justify-center opacity-10 p-10">
-                  <span className="material-symbols-outlined text-4xl">add_box</span>
+                  <span className="material-symbols-outlined text-4xl" aria-hidden="true">add_box</span>
                 </div>
               ))}
           </motion.div>
@@ -481,7 +482,7 @@ export default function Scanner() {
 
       <footer className="pt-24 opacity-20 hover:opacity-100 transition-opacity duration-700 pointer-events-none md:pointer-events-auto">
         <div className="p-12 border-4 border-black border-dashed flex flex-col md:flex-row items-center gap-10 bg-charcoal/50">
-          <span className="material-symbols-outlined text-rag-red text-6xl">gavel</span>
+          <span className="material-symbols-outlined text-rag-red text-6xl" aria-hidden="true">gavel</span>
           <div className="space-y-4">
             <p className="text-xs font-black text-rag-amber uppercase tracking-[0.4em] italic leading-relaxed">
               UNAUTHORIZED_DEPLOYMENT_IS_MONITORED

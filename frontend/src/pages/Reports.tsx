@@ -113,7 +113,7 @@ export default function Reports() {
             className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
             title="Refresh Archive"
           >
-            <ReportIcon icon={Refresh01Icon} className="block" />
+            <ReportIcon icon={Refresh01Icon} className="block" aria-hidden="true" />
           </button>
         </div>
       </header>
@@ -122,7 +122,7 @@ export default function Reports() {
       {loading && (
         <div className="flex items-center justify-center py-40 gap-6">
           <div className="animate-spin">
-            <ReportIcon icon={Refresh01Icon} size={48} className="text-silver/20" />
+            <ReportIcon icon={Refresh01Icon} size={48} className="text-silver/20" aria-hidden="true" />
           </div>
           <p className="text-[10px] font-black text-silver/20 uppercase tracking-[0.4em] italic animate-pulse">
             Retrieving Archive Data...
@@ -159,7 +159,7 @@ export default function Reports() {
               <div key={i} className={`${m.color} border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between h-40 group hover:-translate-y-1 transition-transform`}>
                 <div className="flex justify-between items-start">
                   <span className="text-[10px] font-black text-black uppercase tracking-[0.2em] italic">{m.label}</span>
-                  <ReportIcon icon={Archive02Icon} className="text-black/20 group-hover:text-black transition-colors" />
+                  <ReportIcon icon={Archive02Icon} className="text-black/20 group-hover:text-black transition-colors" aria-hidden="true" />
                 </div>
                 <div className="flex items-baseline gap-2">
                   <span className="text-5xl font-black text-black font-mono leading-none tracking-tighter">{m.val}</span>
@@ -187,7 +187,7 @@ export default function Reports() {
                         }`}
                       >
                         {t} BRIEFINGS
-                        {selectedType === t && <ReportIcon icon={Radar02Icon} size={16} className="text-black" />}
+                        {selectedType === t && <ReportIcon icon={Radar02Icon} size={16} className="text-black" aria-hidden="true" />}
                       </button>
                     ))}
                   </div>
@@ -195,7 +195,7 @@ export default function Reports() {
 
                 <div className="p-8 border-4 border-black border-dashed space-y-4 bg-charcoal-dark/50">
                   <div className="flex items-center gap-3">
-                    <ReportIcon icon={KnightShieldIcon} className="text-rag-green" />
+                    <ReportIcon icon={KnightShieldIcon} className="text-rag-green" aria-hidden="true" />
                     <h4 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic leading-none">Integrity_Secure</h4>
                   </div>
                   <p className="text-[10px] text-silver/40 font-black uppercase tracking-widest leading-loose italic">
@@ -241,7 +241,7 @@ export default function Reports() {
                           }`}>
                             {report.type}_TYPE
                           </span>
-                          <ReportIcon icon={File01Icon} size={24} className="text-silver/10 group-hover:text-silver-bright transition-colors" />
+                          <ReportIcon icon={File01Icon} size={24} className="text-silver/10 group-hover:text-silver-bright transition-colors" aria-hidden="true" />
                         </div>
 
                         <div>
@@ -275,9 +275,9 @@ export default function Reports() {
                             <button
                               onClick={() => navigate(`/task/${report.task_id}`)}
                               className="bg-charcoal-dark border-4 border-black p-3 text-silver/20 group-hover:text-silver-bright group-hover:bg-black transition-all"
-                              title="View Briefing"
+                              title="View Briefing" aria-label="View briefing"
                             >
-                              <ReportIcon icon={ScanEyeIcon} size={18} />
+                              <ReportIcon icon={ScanEyeIcon} size={18} aria-hidden="true"/>
                             </button>
                             {exportFormats.map((format) => (
                               <button
@@ -303,7 +303,7 @@ export default function Reports() {
                         <div className="text-silver-bright">
                           <ReportIcon
                             icon={report.type === 'executive' ? Analytics02Icon : report.type === 'compliance' ? UserShield02Icon : ShieldUserIcon}
-                            size={200}
+                            size={200} aria-hidden="true"
                           />
                         </div>
                       </div>
@@ -312,7 +312,7 @@ export default function Reports() {
 
                   {filteredReports.length === 0 && (
                     <div className="col-span-2 py-40 border-4 border-dashed border-black/5 text-center flex flex-col items-center gap-8 bg-charcoal/30">
-                      <ReportIcon icon={Archive02Icon} size={120} className="text-silver/5" />
+                      <ReportIcon icon={Archive02Icon} size={120} className="text-silver/5" aria-hidden="true" />
                       <div className="space-y-2">
                         <p className="text-xl font-black text-silver/20 uppercase tracking-[0.4em] italic">Archive Isolated</p>
                         <p className="text-xs font-mono text-silver/10 uppercase tracking-widest leading-relaxed">System buffer awaiting briefing generation protocols</p>
