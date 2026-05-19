@@ -73,6 +73,7 @@ from .plugins import get_plugin_manager, init_plugins
 from .executor import executor
 from .ratelimit import rate_limiter, concurrent_limiter
 from .validation import validate_target
+from .errors import TaskErrorCode, task_error_detail
 from .reporting import reporting
 from .vault import VaultCrypto
 from .workflows import scheduler
@@ -200,10 +201,13 @@ async def start_task(
     """
     # Validate consent
     if settings.require_consent and not request.consent_granted:
-        logger.warning(f"Task start failed: Consent not granted. Request: {request}")
+        logger.warning("Task start failed: consent not granted")
         raise HTTPException(
             status_code=400,
-            detail="Consent required. You must acknowledge the legal notice."
+            detail=task_error_detail(
+                TaskErrorCode.CONSENT_REQUIRED,
+                "Consent required. You must acknowledge the legal notice before starting a scan.",
+            ),
         )
 
     # Get plugin
@@ -211,9 +215,15 @@ async def start_task(
     plugin = plugin_manager.get_plugin(request.plugin_id)
 
     if not plugin:
-        logger.warning(f"Task start failed: Plugin not found: {request.plugin_id}")
-        raise HTTPException(status_code=404, detail=f"Plugin not found: {request.plugin_id}")
-
+        logger.warning("Task start failed: plugin not found (id omitted from response)")
+        raise HTTPException(
+            status_code=404,
+            detail=task_error_detail(
+                TaskErrorCode.PLUGIN_NOT_FOUND,
+                "The requested plugin was not found.",
+                hints={"available_plugins": [p["id"] for p in plugin_manager.list_plugins()]},
+            ),
+        )
     if target := request.inputs.get("target"):
         safe_mode = request.inputs.get("safe_mode", settings.safe_mode_default)
         target_str = str(target)
@@ -223,8 +233,15 @@ async def start_task(
             is_valid, error_msg = validate_target(target_str, safe_mode)
 
             if not is_valid:
-                logger.warning(f"Task start failed: Target validation failed for '{target}': {error_msg}")
-                raise HTTPException(status_code=400, detail=error_msg)
+                logger.warning("Task start failed: target validation failed (value omitted from response)")
+                raise HTTPException(
+                    status_code=400,
+                    detail=task_error_detail(
+                        TaskErrorCode.INVALID_TARGET,
+                        "The provided target did not pass validation. Check format and permissions.",
+                        hints={"safe_mode": bool(safe_mode)},
+                    ),
+                )
 
     # Check rate limits
     can_execute, error_msg = await rate_limiter.can_execute(
@@ -233,9 +250,18 @@ async def start_task(
     )
 
     if not can_execute:
-        raise HTTPException(status_code=429, detail=error_msg)
+        raise HTTPException(
+            status_code=429,
+            detail=task_error_detail(
+                TaskErrorCode.RATE_LIMIT_EXCEEDED,
+                "Rate limit reached. Please wait before starting another scan.",
+                hints={"max_per_hour": plugin.safety.get("rate_limit", {}).get("max_per_hour", settings.max_tasks_per_hour)},
+            ),
+        )
 
-    # Create task record first so we have a real task_id for the limiter
+    # Atomically acquire a concurrency slot using the real task_id.
+    can_acquire, error_msg = await concurrent_limiter.acquire(task_id)
+    # Create task
     try:
         task_id = await executor.create_task(
             request.plugin_id,

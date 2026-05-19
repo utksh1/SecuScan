@@ -1,5 +1,6 @@
 import time
 from unittest.mock import patch
+from urllib import response
 
 from backend.secuscan.models import TaskStatus
 
@@ -94,8 +95,7 @@ def test_missing_consent(test_client):
 
     response = test_client.post("/api/v1/task/start", json=payload)
     assert response.status_code == 400
-    assert "Consent required" in response.json()["detail"]
-
+    assert response.json()["detail"]["code"] == "consent_required"
 
 def test_get_settings(test_client):
     """Test settings endpoint."""
