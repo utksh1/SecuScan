@@ -742,4 +742,3 @@ export default function Findings() {
     </div>
   )
 }
-
