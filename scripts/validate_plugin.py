@@ -45,9 +45,11 @@ ALLOWED_SAFETY_LEVELS = {"safe", "intrusive", "exploit"}
 def resolve_plugin_dir(plugin_arg: str, plugins_dir: Path) -> Path:
     candidate = Path(plugin_arg)
     if candidate.exists():
-        if candidate.is_file() and candidate.name == "metadata.json":
-            return candidate.parent
         if candidate.is_dir():
+            return candidate
+        if candidate.is_file():
+            if candidate.name == "metadata.json":
+                return candidate.parent
             return candidate
     return plugins_dir / plugin_arg
 

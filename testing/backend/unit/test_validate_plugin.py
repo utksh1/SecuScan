@@ -104,6 +104,6 @@ def test_fails_on_invalid_metadata(tmp_path):
 
 
 def test_fails_when_plugin_path_is_file(tmp_path):
-    plugin_dir = make_plugin(tmp_path, "file-path")
-    metadata_file = plugin_dir / "metadata.json"
-    assert validate_plugin(metadata_file) is False
+    marker_file = tmp_path / "not-a-plugin.txt"
+    marker_file.write_text("not a plugin", encoding="utf-8")
+    assert validate_plugin(marker_file) is False
