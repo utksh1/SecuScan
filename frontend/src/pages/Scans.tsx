@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { API_BASE, deleteTask, clearAllTasks, bulkDeleteTasks } from '../api'
 import { routePath } from '../routes'
 import { parseDateSafe, formatLocaleDate, formatLocaleTime } from '../utils/date'
+import { usePageVisibility } from '../hooks/usePageVisibility'
 
 interface Task {
     task_id: string
@@ -54,13 +55,13 @@ export default function Scans() {
     const [filter, setFilter] = useState('all')
     const [expandedId, setExpandedId] = useState<string | null>(null)
     const [selectedIds, setSelectedIds] = useState<string[]>([])
-
+    const isPageVisible = usePageVisibility()
     useEffect(() => {
+        if (!isPageVisible) return
         loadTasks()
         const interval = setInterval(loadTasks, 5000)
         return () => clearInterval(interval)
-    }, [filter])
-
+    }, [filter, isPageVisible])
     async function loadTasks() {
         try {
             const url = filter === 'all'
