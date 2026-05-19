@@ -181,6 +181,7 @@ export default function Scanner() {
   const [tabOrder, setTabOrder] = useState<UITab[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [catalogLoadAttempt, setCatalogLoadAttempt] = useState(0)
 
   useEffect(() => {
     setRecentToolIds(readRecentToolIds())
@@ -190,6 +191,8 @@ export default function Scanner() {
     let cancelled = false
 
     async function loadCatalog() {
+      if (!cancelled) setLoading(true)
+
       try {
         const response = await listPlugins()
         if (cancelled) return
@@ -219,7 +222,7 @@ export default function Scanner() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [catalogLoadAttempt])
 
   useEffect(() => {
     if (tabOrder.length > 0 && !tabOrder.includes(activeTab)) {
@@ -288,7 +291,8 @@ export default function Scanner() {
 
         <div className="flex items-center gap-6 flex-wrap">
           <div className="relative group">
-            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-silver/20 group-focus-within:text-rag-red transition-colors text-sm">search</span>
+            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-silver/20 group-focus-within:text-rag-red transition-colors text-sm"
+            aria-hidden="true">search</span>
             <input
               type="text"
               aria-label="Search scanner catalog"
@@ -305,6 +309,14 @@ export default function Scanner() {
         <section className="bg-charcoal border-4 border-rag-red p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
           <p className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-red">Catalog load failed</p>
           <p className="text-[10px] text-silver/60 uppercase tracking-widest mt-3">{loadError}</p>
+          <button
+            type="button"
+            onClick={() => setCatalogLoadAttempt((value) => value + 1)}
+            disabled={loading}
+            className="mt-5 px-6 py-3 text-[10px] font-black uppercase tracking-[0.3em] bg-rag-red text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] disabled:opacity-60 disabled:cursor-not-allowed hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
+          >
+            {loading ? 'Retrying...' : 'Retry'}
+          </button>
         </section>
       )}
 
@@ -472,7 +484,7 @@ export default function Scanner() {
               filteredTools.length > 0 &&
               Array.from({ length: Math.max(0, 4 - (filteredTools.length % 4 || 4)) }).map((_, index) => (
                 <div key={index} className="bg-charcoal/30 border-4 border-black/5 border-dashed flex items-center justify-center opacity-10 p-10">
-                  <span className="material-symbols-outlined text-4xl">add_box</span>
+                  <span className="material-symbols-outlined text-4xl" aria-hidden="true">add_box</span>
                 </div>
               ))}
           </motion.div>
@@ -481,7 +493,7 @@ export default function Scanner() {
 
       <footer className="pt-24 opacity-20 hover:opacity-100 transition-opacity duration-700 pointer-events-none md:pointer-events-auto">
         <div className="p-12 border-4 border-black border-dashed flex flex-col md:flex-row items-center gap-10 bg-charcoal/50">
-          <span className="material-symbols-outlined text-rag-red text-6xl">gavel</span>
+          <span className="material-symbols-outlined text-rag-red text-6xl" aria-hidden="true">gavel</span>
           <div className="space-y-4">
             <p className="text-xs font-black text-rag-amber uppercase tracking-[0.4em] italic leading-relaxed">
               UNAUTHORIZED_DEPLOYMENT_IS_MONITORED

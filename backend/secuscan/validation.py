@@ -74,8 +74,13 @@ def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
     # Handle URLs
     hostname_to_validate = target
     if target.startswith(("http://", "https://")):
-        # Extract host:port or host
-        hostname_to_validate = target.split("://", 1)[1].split("/", 1)[0].split(":", 1)[0]
+        # Extract host:port or host (handle IPv6 literals in brackets)
+        host_part = target.split("://", 1)[1].split("/", 1)[0]
+        if host_part.startswith("["):
+            # IPv6 literal like [::1]:8080 or [::1] for ipv6
+            hostname_to_validate = host_part.split("]")[0][1:]
+        else:
+            hostname_to_validate = host_part.split(":", 1)[0]
 
     # Validate hostname format (RFC 1123)
     if not re.match(r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$', hostname_to_validate):
