@@ -96,12 +96,10 @@ function getToolAccessibilityLabel(tool: CatalogTool): string {
 function mapPluginCategoryToLegacyTab(category: string, pluginId?: string): UITab {
   const pinnedTool = scanTools.find(t => t.id === pluginId);
   
-  // If we found a tool in scanTools.ts, use its defined category
   if (pinnedTool) {
     return pinnedTool.category as UITab;
   }
 
-  // Fallback mapping for dynamic plugins
   switch (category) {
     case 'cms':
     case 'web':
@@ -230,63 +228,62 @@ export default function Scanner() {
     }
   }, [tabOrder, activeTab])
 
- const categoryToolsCount = useMemo(() => {
-  let count = 0
+  const categoryToolsCount = useMemo(() => {
+    let count = 0
 
-  for (const tool of tools) {
-    if (activeTab === 'quick-start') {
-      if (tool.isQuickStart) count++
-    } else {
-      if (tool.category === activeTab) count++
+    for (const tool of tools) {
+      if (activeTab === 'quick-start') {
+        if (tool.isQuickStart) count++
+      } else {
+        if (tool.category === activeTab) count++
+      }
     }
-  }
 
-  return count
-}, [tools, activeTab])
-  
+    return count
+  }, [tools, activeTab])
 
   const filteredTools = useMemo(() => {
-  const query = searchQuery.toLowerCase().trim()
-  const results: any[] = []
+    const query = searchQuery.toLowerCase().trim()
+    const results: CatalogTool[] = []
 
-  for (const tool of tools) {
-    const matchesCategory =
-      activeTab === 'quick-start'
-        ? tool.isQuickStart
-        : tool.category === activeTab
+    for (const tool of tools) {
+      const matchesCategory =
+        activeTab === 'quick-start'
+          ? tool.isQuickStart
+          : tool.category === activeTab
 
-    if (!matchesCategory) continue
+      if (!matchesCategory) continue
 
-    if (
-      !query ||
-      tool.name.toLowerCase().includes(query) ||
-      tool.purpose.toLowerCase().includes(query)
-    ) {
-      results.push(tool)
+      if (
+        !query ||
+        tool.name.toLowerCase().includes(query) ||
+        tool.purpose.toLowerCase().includes(query)
+      ) {
+        results.push(tool)
+      }
     }
-  }
 
-  return results
-}, [tools, activeTab, searchQuery])
+    return results
+  }, [tools, activeTab, searchQuery])
+
   const quickAccessTools = useMemo(() => {
-  const byId = new Map(tools.map((tool) => [tool.id, tool]))
+    const byId = new Map(tools.map((t) => [t.id, t]))
+    const recentTools: CatalogTool[] = []
 
-  const recentTools: CatalogTool[] = []
+    for (const id of recentToolIds) {
+      const tool = byId.get(id)
 
-  for (const id of recentToolIds) {
-    const tool = byId.get(id)
+      if (tool) {
+        recentTools.push(tool)
+      }
 
-    if (tool) {
-      recentTools.push(tool)
+      if (recentTools.length >= RECENT_TOOLS_LIMIT) {
+        break
+      }
     }
 
-    if (recentTools.length >= RECENT_TOOLS_LIMIT) {
-      break
-    }
-  }
-
-  return recentTools
-}, [tools, recentToolIds])
+    return recentTools
+  }, [tools, recentToolIds])
 
   const trackRecentTool = (toolId: string) => {
     setRecentToolIds((prev) => {
