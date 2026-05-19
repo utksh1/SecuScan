@@ -370,10 +370,8 @@ async def download_pdf_report(task_id: str):
         raise HTTPException(status_code=400, detail="Task is not finished yet")
 
     structured_data = json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
-    pdf_bytes = reporting.generate_pdf_report(dict(task_row), {"structured": structured_data})
     try:
-        structured_data = json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
-        pdf_bytes = bytes(reporting.generate_pdf_report(dict(task_row), {"structured": structured_data}))
+        pdf_bytes = reporting.generate_pdf_report(dict(task_row), {"structured": structured_data})
     except Exception:
         return _report_generation_error_response(task_id, "pdf")
 
