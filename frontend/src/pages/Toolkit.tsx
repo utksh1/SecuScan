@@ -247,7 +247,7 @@ export default function Scanner() {
 
   const filteredTools = useMemo(() => {
   const query = searchQuery.toLowerCase().trim()
-  const results: CatalogTool[] = []
+  const results: any[] = []
 
   for (const tool of tools) {
     const matchesCategory =
@@ -275,7 +275,7 @@ export default function Scanner() {
     byId.set(tool.id, tool)
   }
 
-  const recentTools: CatalogTool[] = []
+  const recentTools: any[] = []
 
   for (const id of recentToolIds) {
     const tool = byId.get(id)
