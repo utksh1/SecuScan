@@ -231,6 +231,42 @@ describe('Reports — export buttons on a ready report', () => {
   })
 })
 
+// ── Header export button ─────────────────────────────────────────────────────
+
+describe('Reports — header export button', () => {
+  beforeEach(() => {
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+    openSpy.mockClear()
+  })
+
+  it('opens the newest ready report PDF when available', async () => {
+    // include a generating report and a ready report; readyReport is newest-ready in fixtures
+    vi.mocked(getReports).mockResolvedValue({ reports: [generatingReport, readyReport] })
+
+    const user = userEvent.setup()
+    renderReports()
+
+    const btn = await screen.findByRole('button', { name: /Export Latest Report/i })
+    await user.click(btn)
+
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.stringContaining(`/task/${readyReport.task_id}/report/pdf`),
+      '_blank',
+    )
+  })
+
+  it('is disabled when there are no ready reports', async () => {
+    vi.mocked(getReports).mockResolvedValue({ reports: [generatingReport] })
+
+    renderReports()
+
+    const btn = await screen.findByRole('button', { name: /Export Latest Report/i })
+    expect(btn).toBeDisabled()
+    await userEvent.click(btn)
+    expect(openSpy).not.toHaveBeenCalled()
+  })
+})
+
 // ── Export buttons — non-ready reports ───────────────────────────────────────
 
 describe('Reports — export buttons on a generating report', () => {

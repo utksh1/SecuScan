@@ -109,6 +109,20 @@ export default function Reports() {
 
         <div className="flex items-center gap-6">
           <button
+            onClick={() => {
+              const readyReports = reports.filter(r => r.status === 'ready')
+              if (!readyReports.length) return
+              const newest = readyReports.sort((a, b) => new Date(b.generated_at).getTime() - new Date(a.generated_at).getTime())[0]
+              window.open(`${API_BASE}/task/${newest.task_id}/report/pdf`, '_blank')
+            }}
+            aria-label="Export Latest Report"
+            title={reports.some(r => r.status === 'ready') ? 'Export latest ready report' : 'No ready report available'}
+            disabled={!reports.some(r => r.status === 'ready')}
+            className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <ReportIcon icon={Download01Icon} className="block" />
+          </button>
+          <button
             onClick={fetchReports}
             className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
             title="Refresh Archive"
