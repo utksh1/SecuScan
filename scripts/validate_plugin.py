@@ -65,6 +65,9 @@ def _import_parser(parser_file: Path, plugin_id: str) -> Optional[str]:
     if not hasattr(module, "parse"):
         return f"parser.py for {plugin_id} is missing a parse() function"
 
+    if not callable(module.parse):
+        return f"parser.py for {plugin_id} defines parse, but it is not callable"
+
     return None
 
 
@@ -93,7 +96,9 @@ def validate_plugin(plugin_dir: Path) -> bool:
 
     if not plugin_dir.exists():
         errors.append(f"Plugin directory not found: {plugin_dir}")
-    if not metadata_file.exists():
+    elif not plugin_dir.is_dir():
+        errors.append(f"Plugin path is not a directory: {plugin_dir}")
+    elif not metadata_file.exists():
         errors.append(f"metadata.json not found in {plugin_dir}")
 
     if errors:
@@ -146,9 +151,9 @@ def validate_plugin(plugin_dir: Path) -> bool:
                         normalized_expected = None
 
                 if normalized_expected and checksum == normalized_expected:
-                    print(
-                        f"[WARNING] {plugin_id} parser.py uses CRLF line endings; checksum matches LF-normalized content.",
-                        file=sys.stderr,
+                    errors.append(
+                        f"Checksum mismatch for {plugin_id}: expected {expected}, found {checksum}. "
+                        "parser.py appears to use CRLF line endings; re-checkout with LF to match backend validation."
                     )
                 else:
                     errors.append(

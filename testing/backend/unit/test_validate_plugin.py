@@ -93,6 +93,17 @@ def test_fails_when_parser_missing_parse_function(tmp_path):
     assert validate_plugin(plugin_dir) is False
 
 
+def test_fails_when_parser_parse_not_callable(tmp_path):
+    plugin_dir = make_plugin(tmp_path, "bad-parser-callable", parser_content="parse = 123")
+    assert validate_plugin(plugin_dir) is False
+
+
 def test_fails_on_invalid_metadata(tmp_path):
     plugin_dir = make_plugin(tmp_path, "invalid-metadata", include_name=False)
     assert validate_plugin(plugin_dir) is False
+
+
+def test_fails_when_plugin_path_is_file(tmp_path):
+    plugin_dir = make_plugin(tmp_path, "file-path")
+    metadata_file = plugin_dir / "metadata.json"
+    assert validate_plugin(metadata_file) is False
