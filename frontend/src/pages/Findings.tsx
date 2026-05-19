@@ -371,11 +371,8 @@ export default function Findings() {
               </div>
             ) : null}
 
-<<<<<<< fix-light-mode-theme
             <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-silver-bright' : 'text-silver/90'}`}>
-=======
             <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-silver-bright' : 'text-silver/30'}`} aria-hidden="true">
->>>>>>> main
               east
             </span>
           </div>
@@ -423,18 +420,6 @@ export default function Findings() {
         <section className="border-2 border-slate-300  bg-charcoal/95 p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] backdrop-blur lg:sticky lg:top-4 lg:z-20">
           <div className="grid gap-4">
             <div className="grid gap-4 2xl:grid-cols-[minmax(320px,1fr)_auto] 2xl:items-end">
-<<<<<<< fix-light-mode-theme
-              <div className="space-y-2">
-                <label className={filterLabelClass}>Search</label>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Title, target, CVE, remediation..."
-                  className={`${filterControlClass} px-4 placeholder:text-silver/80`}
-                />
-              </div>
-=======
              <div className="space-y-2">
   <label className={filterLabelClass}>Search</label>
 
@@ -465,7 +450,6 @@ export default function Findings() {
     )}
   </div>
 </div>
->>>>>>> main
 
               <div className="flex flex-wrap gap-2 pb-2 sm:pb-0 2xl:max-w-[760px] 2xl:justify-end">
                 <button
@@ -558,25 +542,12 @@ export default function Findings() {
               </div>
 
               <button
-                type="button"
-<<<<<<< fix-light-mode-theme
-                onClick={() => {
-                  setFilterSeverity('all')
-                  setFilterTarget('all')
-                  setFilterScanner('all')
-                  setSortMode('severity')
-                  setDateFrom('')
-                  setDateTo('')
-                  setSearchQuery('')
-                }}
-                className="h-11 w-full border border-silver-bright/80 bg-charcoal-dark px-4 text-[10px] font-black uppercase tracking-[0.18em] text-silver/65 transition-all hover:border-rag-red hover:text-silver-bright xl:w-auto xl:min-w-[180px]"
-=======
-                onClick={resetAllFilters}
-                className="h-11 w-full border border-silver-bright/20 bg-charcoal-dark px-4 text-[10px] font-black uppercase tracking-[0.18em] text-silver/65 transition-all hover:border-rag-red hover:text-silver-bright xl:w-auto xl:min-w-[180px]"
->>>>>>> main
-              >
-                Reset Filters
-              </button>
+  type="button"
+  onClick={resetAllFilters}
+  className="h-11 w-full border border-silver-bright/20 bg-charcoal-dark px-4 text-[10px] font-black uppercase tracking-[0.18em] text-silver/65 transition-all hover:border-rag-red hover:text-silver-bright xl:w-auto xl:min-w-[180px]"
+>
+  Reset Filters
+</button>
             </div>
           </div>
         </section>
