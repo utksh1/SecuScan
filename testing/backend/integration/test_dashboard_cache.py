@@ -1,4 +1,9 @@
+import asyncio
+import sqlite3
+import json
+
 from unittest.mock import AsyncMock, patch
+from backend.secuscan.config import settings
 
 
 def test_dashboard_summary_second_request_hits_cache(test_client):
@@ -80,3 +85,57 @@ def test_dashboard_summary_cache_invalidated_after_task_start(test_client):
         assert mock_fetchall.call_count > calls_after_warm, (
             "post-invalidation request must rebuild from the database"
         )
+
+
+def test_dashboard_summary_cache_invalidated_when_task_enters_running(test_client):
+    """Transitioning a task to running must invalidate the summary cache.
+
+    The race: /task/start invalidates before returning, but the background
+    executor only schedules the scan. A dashboard poll between start and
+    the first execute_task tick can cache a snapshot where running_tasks is
+    empty. This test verifies that the cache is dropped as soon as the
+    executor marks the task running, so the next poll reflects the real state.
+    """
+    # Seed a queued task directly so we control its state
+    task_id = "cache-running-test-001"
+    conn = sqlite3.connect(settings.database_path)
+    conn.execute(
+        """
+        INSERT INTO tasks (id, plugin_id, tool_name, target, status, created_at,
+                           preset, inputs_json, command_used, structured_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            task_id, "http_inspector", "http_inspector", "https://example.com",
+            "queued", "2026-05-19T10:00:00",
+            "standard", json.dumps({"target": "https://example.com"}),
+            "", json.dumps({"findings": []}),
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    # Warm the cache while the task is still queued
+    r1 = test_client.get("/api/v1/dashboard/summary")
+    assert r1.status_code == 200
+    assert r1.json()["scan_activity"]["running"] == 0
+
+    # Simulate the executor's running transition
+    conn = sqlite3.connect(settings.database_path)
+    conn.execute(
+        "UPDATE tasks SET status = 'running', started_at = '2026-05-19T10:00:01' WHERE id = ?",
+        (task_id,),
+    )
+    conn.commit()
+    conn.close()
+
+    # Manually trigger the invalidation the executor now calls after updating to running
+    from backend.secuscan.executor import executor
+    asyncio.run(executor._invalidate_cached_views())
+
+    # Dashboard must reflect the running task, not the stale cached snapshot
+    r2 = test_client.get("/api/v1/dashboard/summary")
+    assert r2.status_code == 200
+    assert r2.json()["scan_activity"]["running"] == 1, (
+        "dashboard must show running count after cache invalidation on task start"
+    )

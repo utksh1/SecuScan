@@ -153,6 +153,7 @@ class TaskExecutor:
                 "UPDATE tasks SET status = ?, started_at = ? WHERE id = ?",
                 (TaskStatus.RUNNING.value, datetime.now().isoformat(), task_id)
             )
+            await self._invalidate_cached_views()
 
             # Get task details
             task_row = await db.fetchone(
