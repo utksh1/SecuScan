@@ -96,12 +96,10 @@ function getToolAccessibilityLabel(tool: CatalogTool): string {
 function mapPluginCategoryToLegacyTab(category: string, pluginId?: string): UITab {
   const pinnedTool = scanTools.find(t => t.id === pluginId);
   
-  // If we found a tool in scanTools.ts, use its defined category
   if (pinnedTool) {
     return pinnedTool.category as UITab;
   }
 
-  // Fallback mapping for dynamic plugins
   switch (category) {
     case 'cms':
     case 'web':
@@ -178,7 +176,7 @@ export default function Scanner() {
   const [searchQuery, setSearchQuery] = useState('')
   const [tools, setTools] = useState<CatalogTool[]>([])
   const [recentToolIds, setRecentToolIds] = useState<string[]>([])
-  const [tabOrder, setTabOrder] = useState<UITab[]>([])
+  const [tabOrder, setTabOrder] = useState<UITab[]>([...LEGACY_TAB_ORDER])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
 
@@ -209,6 +207,11 @@ export default function Scanner() {
       } catch (error) {
         if (!cancelled) {
           setLoadError(error instanceof Error ? error.message : 'Failed to load plugin catalog')
+          
+          // Degrade gracefully using static tools on API failure
+          const offlineLegacyTools = mapLegacyToolsToCatalogTools(new Set())
+          setTools(offlineLegacyTools)
+          setTabOrder([...LEGACY_TAB_ORDER])
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -227,31 +230,25 @@ export default function Scanner() {
     }
   }, [tabOrder, activeTab])
 
-  const categoryToolsCount = useMemo(
-    () => tools.filter((tool) => {
-      if (activeTab === 'quick-start') return tool.isQuickStart
-      return tool.category === activeTab
-    }).length,
-    [tools, activeTab],
-  )
-
   const filteredTools = useMemo(() => {
     const query = searchQuery.toLowerCase().trim()
+    
     return tools.filter((tool) => {
-      const matchesCategory = activeTab === 'quick-start' ? tool.isQuickStart : tool.category === activeTab
-      if (!matchesCategory) return false
-      if (!query) return true
-      return tool.name.toLowerCase().includes(query) || tool.purpose.toLowerCase().includes(query)
+      const matchesTab = activeTab === 'quick-start' 
+        ? tool.isQuickStart 
+        : tool.category === activeTab
+
+      if (query) {
+        return (
+          matchesTab &&
+          (tool.name.toLowerCase().includes(query) || 
+           tool.purpose.toLowerCase().includes(query))
+        )
+      }
+      
+      return matchesTab
     })
   }, [tools, activeTab, searchQuery])
-
-  const quickAccessTools = useMemo(() => {
-    const byId = new Map(tools.map((tool) => [tool.id, tool]))
-    return recentToolIds
-      .map((id) => byId.get(id))
-      .filter((tool): tool is CatalogTool => Boolean(tool))
-      .slice(0, RECENT_TOOLS_LIMIT)
-  }, [tools, recentToolIds])
 
   const trackRecentTool = (toolId: string) => {
     setRecentToolIds((prev) => {
@@ -259,7 +256,7 @@ export default function Scanner() {
       try {
         localStorage.setItem(RECENT_TOOLS_STORAGE_KEY, JSON.stringify(next))
       } catch {
-        // Ignore localStorage write errors and continue.
+        // Ignore localStorage errors
       }
       return next
     })
@@ -304,7 +301,9 @@ export default function Scanner() {
       {loadError && (
         <section className="bg-charcoal border-4 border-rag-red p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
           <p className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-red">Catalog load failed</p>
-          <p className="text-[10px] text-silver/60 uppercase tracking-widest mt-3">{loadError}</p>
+          <p className="text-[10px] text-silver/60 uppercase tracking-widest mt-3">
+            {loadError}. Showing locally available toolkit definitions instead.
+          </p>
         </section>
       )}
 
@@ -330,8 +329,6 @@ export default function Scanner() {
         ))}
       </nav>
 
-      {/* Quick Access section removed per user request */}
-
       <main
         role="tabpanel"
         id={`scanner-panel-${toDomId(activeTab)}`}
@@ -346,6 +343,12 @@ export default function Scanner() {
             exit={{ opacity: 0, y: 20 }}
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8"
           >
+            {loading && (
+              <div className="md:col-span-2 xl:col-span-4 py-20 text-center font-mono text-[10px] text-silver/40 uppercase tracking-[0.3em] italic animate-pulse">
+                RETRIEVING_PROTOCOL_CATALOG...
+              </div>
+            )}
+
             {!loading &&
               filteredTools.map((tool) => {
                 const toolId = toDomId(tool.id)
@@ -437,9 +440,11 @@ export default function Scanner() {
                 <div className="space-y-6">
                   {searchQuery.trim().length > 0 ? (
                     <>
-                      <div className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-amber">No tools match search</div>
+                      <div className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-amber">
+                        No matching plugins found
+                      </div>
                       <p className="text-[10px] text-silver/60 uppercase tracking-widest leading-relaxed">
-                        No tools in this category match the current query.
+                        No plugins match your search for <span className="text-rag-red font-mono font-black">"{searchQuery}"</span> inside the <span className="text-silver-bright font-black">"{formatCategoryLabel(activeTab)}"</span> category. Try adjusting your search or clearing the filter.
                       </p>
                       <button
                         onClick={() => setSearchQuery('')}
@@ -448,22 +453,16 @@ export default function Scanner() {
                         Clear Search
                       </button>
                     </>
-                  ) : categoryToolsCount === 0 ? (
+                  ) : (
                     <>
-                      <div className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-amber">No tools available in this category</div>
+                      <div className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-amber">
+                        No tools available in this category
+                      </div>
                       <p className="text-[10px] text-silver/60 uppercase tracking-widest leading-relaxed">
-                        This category currently has no active tools. Use the first available category to continue.
+                        There are currently no available tools in <span className="text-silver-bright font-black">"{formatCategoryLabel(activeTab)}"</span>.
                       </p>
-                      <button
-                        onClick={() => {
-                          if (tabOrder.length > 0) setActiveTab(tabOrder[0])
-                        }}
-                        className="px-6 py-3 text-[10px] font-black uppercase tracking-[0.3em] bg-silver-bright text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
-                      >
-                        Go to Quick Start
-                      </button>
                     </>
-                  ) : null}
+                  )}
                 </div>
               </motion.div>
             )}
