@@ -106,7 +106,7 @@ Only run scans against systems you own or are explicitly authorized to assess.
 
 ## Examples for common field types in metadata.json
 
-## string - Single-line text
+1. string - Single-line text
 
 -Use for free-form text inputs such as hostnames, domain names, file paths, or any
 value that does not fit a more specific type.
