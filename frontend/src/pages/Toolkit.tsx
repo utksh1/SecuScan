@@ -269,13 +269,9 @@ export default function Scanner() {
   return results
 }, [tools, activeTab, searchQuery])
   const quickAccessTools = useMemo(() => {
-  const byId = new Map<string, CatalogTool>()
+  const byId = new Map(tools.map((tool) => [tool.id, tool]))
 
-  for (const tool of tools) {
-    byId.set(tool.id, tool)
-  }
-
-  const recentTools: any[] = []
+  const recentTools: CatalogTool[] = []
 
   for (const id of recentToolIds) {
     const tool = byId.get(id)
