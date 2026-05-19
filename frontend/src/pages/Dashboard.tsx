@@ -302,6 +302,8 @@ export default function Dashboard() {
             </div>
             <div className="w-14 h-14 bg-charcoal-dark border-4 border-slate-300  flex items-center justify-center text-sky-500 shadow-inner group-hover:bg-rag-blue group-hover:text-slate-800 transition-all">
               <span className="material-symbols-outlined text-2xl font-black">terminal</span>
+            <div className="w-14 h-14 bg-charcoal-dark border-4 border-black flex items-center justify-center text-rag-blue shadow-inner group-hover:bg-rag-blue group-hover:text-black transition-all">
+              <span className="material-symbols-outlined text-2xl font-black" aria-hidden="true">terminal</span>
             </div>
           </div>
 
@@ -332,7 +334,7 @@ export default function Dashboard() {
               animate={{ opacity: 1 }}
               className="mt-12 py-16 flex flex-col items-center justify-center bg-charcoal border border-rag-red/90 rounded-md max-w-3xl mx-auto shadow-lg">
               <div className="w-12 h-12 rounded-full bg-rag-red/10 flex items-center justify-center mb-4">
-                <span className="material-symbols-outlined text-rag-red text-2xl">warning</span>
+                <span className="material-symbols-outlined text-rag-red text-2xl" aria-hidden="true">warning</span>
               </div>
               <h3 className="text-rag-red text-lg font-bold tracking-widest uppercase mb-2">
                 System Offline
@@ -525,7 +527,7 @@ export default function Dashboard() {
                                     onClick={() => handleAbort(task.id)}
                                     className="text-[10px] font-bold text-silver/100 hover:text-rag-red uppercase tracking-widest transition-colors flex items-center gap-2"
                                   >
-                                    <span className="material-symbols-outlined text-[14px]">cancel</span>
+                                    <span className="material-symbols-outlined text-[14px]" aria-hidden="true">cancel</span>
                                     Abort
                                   </button>
                                 </>

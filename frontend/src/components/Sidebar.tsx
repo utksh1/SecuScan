@@ -15,6 +15,7 @@ const NavItem = ({ to, icon, label, isExpanded, highlight = false }: NavItemProp
     return (
         <NavLink 
             to={to} 
+            end
             onClick={(e) => e.stopPropagation()}
             className={({ isActive }) => `
                 relative flex items-center transition-all duration-300 group
@@ -165,6 +166,7 @@ export default function Sidebar() {
                 <NavItem to={routes.findings} icon="emergency_home" label="Findings" isExpanded={isExpanded} />
 
                 <NavItem to={routes.reports} icon="summarize" label="Reports" isExpanded={isExpanded} />
+                <NavItem to={routes.workflows} icon="account_tree" label="Workflows" isExpanded={isExpanded} />
 
             </div>
 
