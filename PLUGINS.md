@@ -117,8 +117,7 @@ value that does not fit a more specific type.
   "label": "Root Domain",
   "type": "string",
   "required": true,
-  "placeholder": "example.com",
-  //"description": "The root domain to enumerate. Do not include a scheme or trailing slash."
+  "placeholder": "example.com"
 }
 ```
 
@@ -132,8 +131,7 @@ value that does not fit a more specific type.
   "label": "Target URL",
   "type": "url",
   "required": true,
-  "placeholder": "https://example.com",
-  //"description": "Full URL of the target, including scheme. Must begin with http:// or https://."
+  "placeholder": "https://example.com"
 }
 ```
 
@@ -148,8 +146,21 @@ value that does not fit a more specific type.
   "type": "select",
   "required": true,
   "options": ["shallow", "normal", "deep"],
-  "default": "normal",
-  //"description": "Controls how aggressively the plugin probes the target. Start with 'normal' for most scans."
+  "default": "normal"
+}
+```
+## boolean - Toggle/checkbox
+
+-Use boolean fields for true/false configuration options.
+-Always provide a default of true or false.
+
+```json
+{
+  "id": "verbose",
+  "label": "Verbose Output",
+  "type": "boolean",
+  "required": false,
+  "default": false
 }
 ```
 
