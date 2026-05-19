@@ -131,19 +131,29 @@ class TestRateLimitExceeded:
 
 class TestConcurrencyLimit:
     @patch(
+        "backend.secuscan.routes.rate_limiter.can_execute",
+        new_callable=AsyncMock,
+    )
+    @patch(
         "backend.secuscan.routes.concurrent_limiter.acquire",
         new_callable=AsyncMock,
     )
-    def test_status_503(self, mock_acquire, test_client):
+    def test_status_503(self, mock_acquire, mock_rate, test_client):
+        mock_rate.return_value = (True, "")          # let rate limiter pass
         mock_acquire.return_value = (False, "concurrency limit hit")
         r = post(test_client, VALID_PAYLOAD)
         assert r.status_code == 503
 
     @patch(
+        "backend.secuscan.routes.rate_limiter.can_execute",
+        new_callable=AsyncMock,
+    )
+    @patch(
         "backend.secuscan.routes.concurrent_limiter.acquire",
         new_callable=AsyncMock,
     )
-    def test_detail_shape(self, mock_acquire, test_client):
+    def test_detail_shape(self, mock_acquire, mock_rate, test_client):
+        mock_rate.return_value = (True, "")          # let rate limiter pass
         mock_acquire.return_value = (False, "concurrency limit hit")
         r = post(test_client, VALID_PAYLOAD)
         assert_error_shape(r.json()["detail"], "concurrency_limit")
