@@ -54,8 +54,11 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install frontend dependencies
         run: npm ci
-      - name: Run frontend typecheck
+      - name: Run frontend TypeScript typecheck
         run: npm run typecheck
+      - name: Note TypeScript typecheck in job summary
+        if: always()
+        run: echo "Frontend TypeScript typecheck: npm run typecheck" >> $GITHUB_STEP_SUMMARY
       - name: Run frontend quality gate
         run: npm run quality
       - name: Run unit tests
