@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { API_BASE, deleteTask, clearAllTasks, bulkDeleteTasks } from '../api'
 import { routePath } from '../routes'
 import { parseDateSafe, formatLocaleDate, formatLocaleTime } from '../utils/date'
+import Pagination from '../components/Pagination'
 
 interface Task {
     task_id: string
@@ -54,27 +55,38 @@ export default function Scans() {
     const [filter, setFilter] = useState('all')
     const [expandedId, setExpandedId] = useState<string | null>(null)
     const [selectedIds, setSelectedIds] = useState<string[]>([])
+    const [page, setPage] = useState(1)
+    const [total, setTotal] = useState(0)
+    const PAGE_LIMIT = 10
 
     useEffect(() => {
         loadTasks()
         const interval = setInterval(loadTasks, 5000)
         return () => clearInterval(interval)
-    }, [filter])
+    }, [filter, page])
 
     async function loadTasks() {
         try {
-            const url = filter === 'all'
-                ? `${API_BASE}/tasks`
-                : `${API_BASE}/tasks?status=${filter}`
+            const params = new URLSearchParams()
+            if (filter !== 'all') params.set('status', filter)
+            params.set('page', String(page))
+            params.set('per_page', String(PAGE_LIMIT))  
 
-            const res = await fetch(url)
+            const res = await fetch(`${API_BASE}/tasks?${params.toString()}`)
             const data = await res.json()
             setTasks(data.tasks || [])
+            if (data.pagination?.total_items !== undefined) {
+                setTotal(data.pagination.total_items)  
+            }
         } catch (err) {
             console.error('Failed to load tasks:', err)
         } finally {
             setLoading(false)
         }
+    }
+    function handleFilterChange(value: string) {
+        setFilter(value)
+        setPage(1)
     }
 
     async function handleRescan(task: Task) {
@@ -182,7 +194,7 @@ export default function Scans() {
                     Operational <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '1px var(--accent-silver-bright)' }}>Registry</span>
                   </h1>
                   <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic flex items-center gap-4">
-                    Total_Registry_Keys: {tasks.length} // SYSTEM_STATUS: {loading ? 'SYNCING...' : 'SYNCED'}
+                    Total_Registry_Keys: {total} // SYSTEM_STATUS: {loading ? 'SYNCING...' : 'SYNCED'}
                     <span className={`w-2 h-2 rounded-full ${loading ? 'bg-rag-amber animate-pulse' : 'bg-rag-green'}`}></span>
                   </p>
                 </div>
@@ -215,7 +227,7 @@ export default function Scans() {
                     {statusFilters.map(f => (
                         <button
                             key={f.value}
-                            onClick={() => setFilter(f.value)}
+                            onClick={() => handleFilterChange(f.value)}
                             className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-2 ${
                                 filter === f.value 
                                 ? 'bg-silver-bright text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-x-0.5 -translate-y-0.5' 
@@ -430,6 +442,16 @@ export default function Scans() {
                         </div>
                     )}
                 </AnimatePresence>
+                {total > PAGE_LIMIT && (
+                    <Pagination
+                        page={page}
+                        total={total}
+                        limit={PAGE_LIMIT}
+                        loading={loading}
+                        onPrev={() => setPage(p => p - 1)}
+                        onNext={() => setPage(p => p + 1)}
+                    />
+                )}
             </section>
 
             {/* Floating Bulk Action Bar */}
