@@ -476,24 +476,28 @@ npm run e2e
 
 ### Vitest Test File Locations
 
-Vitest test files are generally located:
-- alongside components/features
-- or inside dedicated testing folders
+Vitest unit tests are located in:
 
-Supported naming patterns:
+```bash
+frontend/testing/unit
+```
+
+Supported naming patterns include:
+
 - `*.test.js`
 - `*.test.jsx`
 - `*.spec.js`
 - `*.spec.jsx`
 
-> Note for Windows users:
+> Note for Windows users:  
 > Some npm scripts using `NODE_OPTIONS=...` may not run directly in PowerShell.
->
-> You can run tests manually using:
->
-> ```bash
-> npx vitest run
-> ```
+
+Run tests manually using:
+
+```bash
+npx vitest run
+```
+
 ### Browser Support
 
 - Chrome/Edge 90+
