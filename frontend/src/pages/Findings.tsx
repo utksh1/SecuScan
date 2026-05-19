@@ -397,16 +397,36 @@ export default function Findings() {
         <section className="border-2 border-black bg-charcoal/95 p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] backdrop-blur lg:sticky lg:top-4 lg:z-20">
           <div className="grid gap-4">
             <div className="grid gap-4 2xl:grid-cols-[minmax(320px,1fr)_auto] 2xl:items-end">
-              <div className="space-y-2">
-                <label className={filterLabelClass}>Search</label>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Title, target, CVE, remediation..."
-                  className={`${filterControlClass} px-4 placeholder:text-silver/20`}
-                />
-              </div>
+             <div className="space-y-2">
+  <label className={filterLabelClass}>Search</label>
+
+  <div className="relative">
+    <input
+      type="text"
+      value={searchQuery}
+      onChange={(event) => setSearchQuery(event.target.value)}
+      placeholder="Title, target, CVE, remediation..."
+      className={`${filterControlClass} px-4 pr-12 placeholder:text-silver/20`}
+    />
+
+    {searchQuery.trim() && (
+      <button
+        type="button"
+        aria-label="Clear search"
+        onClick={() => setSearchQuery('')}
+        className="
+          absolute right-3 top-1/2
+          -translate-y-1/2
+          text-silver/50
+          hover:text-silver-bright
+          transition
+        "
+      >
+        ✕
+      </button>
+    )}
+  </div>
+</div>
 
               <div className="flex flex-wrap gap-2 pb-2 sm:pb-0 2xl:max-w-[760px] 2xl:justify-end">
                 <button
