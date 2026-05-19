@@ -1,0 +1,14 @@
+name: Check for Frontend Artifacts
+
+on:
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  artifact-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run artifact check
+        run: bash scripts/check-artifacts.sh

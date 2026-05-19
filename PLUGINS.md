@@ -108,3 +108,54 @@ Only run scans against systems you own or are explicitly authorized to assess.
 
 - If a plugin is added, renamed, or removed, update this file from the plugin metadata rather than editing counts by hand.
 - Prefer keeping `id`, category, safety level, and dependency names aligned with each plugin's `metadata.json`.
+## Checksum Maintenance
+
+Plugin metadata files include integrity checksums. If you edit a plugin's
+`metadata.json` or `parser.py`, you must refresh the checksum before committing
+or the backend will reject the plugin during load and unrelated backend tests
+will fail.
+
+Use the helper script to refresh checksums:
+
+```bash
+# Refresh a single plugin after editing it
+python scripts/refresh_plugin_checksum.py --plugin <plugin-id>
+
+# Example
+python scripts/refresh_plugin_checksum.py --plugin nmap
+
+# Refresh all plugins at once
+python scripts/refresh_plugin_checksum.py --all
+
+# Preview what would change without writing anything
+python scripts/refresh_plugin_checksum.py --all --dry-run
+```
+
+Run this script any time you:
+- Edit a plugin's `metadata.json` fields
+- Edit a plugin's `parser.py`
+- Add a new plugin
+
+After refreshing, run the backend tests to confirm the plugin loads correctly:
+
+```bash
+cd backend && python -m pytest
+```
+
+## Plugin Validation
+
+Validate a single plugin without loading all plugins:
+
+```bash
+# Validate by plugin id
+python scripts/validate_plugin.py --plugin <plugin-id>
+
+# Example
+python scripts/validate_plugin.py --plugin nmap
+
+# Or pass a path to the plugin directory
+python scripts/validate_plugin.py --plugin plugins/nmap
+```
+
+The validation checks metadata JSON, required fields, checksums, and custom
+parser imports when applicable.
