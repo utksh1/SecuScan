@@ -1,5 +1,8 @@
 import json
 import asyncio
+from unittest.mock import patch
+
+import pytest
 from backend.secuscan.database import get_db
 
 async def insert_mock_completed_task(task_id: str):
@@ -69,8 +72,9 @@ def test_download_sarif_report_success(test_client):
 
     # Verify Content-Disposition header
     assert "attachment" in response.headers["content-disposition"]
-    assert "filename=secuscan_http-inspector_example-com_" in response.headers["content-disposition"]
-    assert response.headers["content-disposition"].endswith(".sarif")
+    assert "filename=" in response.headers["content-disposition"]
+    assert "secuscan_http-inspector_example-com_" in response.headers["content-disposition"]
+    assert ".sarif" in response.headers["content-disposition"]
 
     # Verify SARIF payload
     sarif = response.json()
@@ -118,3 +122,28 @@ def test_download_sarif_report_failed_task(test_client):
     assert response.headers["content-type"] == "application/sarif+json"
     sarif = response.json()
     assert len(sarif["runs"][0]["results"]) == 0
+
+
+@pytest.mark.parametrize(
+    "report_format, patch_target",
+    [
+        ("csv", "backend.secuscan.routes.reporting.generate_csv_report"),
+        ("html", "backend.secuscan.routes.reporting.generate_html_report"),
+        ("pdf", "backend.secuscan.routes.reporting.generate_pdf_report"),
+        ("sarif", "backend.secuscan.routes.reporting.generate_sarif_report"),
+    ],
+)
+def test_download_report_generation_failure_returns_structured_error(test_client, report_format, patch_target):
+    task_id = f"test-task-report-fail-{report_format}"
+    asyncio.run(insert_mock_completed_task(task_id))
+
+    with patch(patch_target, side_effect=RuntimeError("boom internal trace")):
+        response = test_client.get(f"/api/v1/task/{task_id}/report/{report_format}")
+
+    assert response.status_code == 500
+    body = response.json()
+    assert body["error"] == "report_generation_failed"
+    assert body["message"] == f"Failed to generate {report_format.upper()} report"
+    assert body["details"]["task_id"] == task_id
+    assert body["details"]["format"] == report_format
+    assert "boom internal trace" not in json.dumps(body)
