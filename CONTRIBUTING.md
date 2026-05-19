@@ -66,6 +66,79 @@ npm install
 npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
+## Backend Testing Quickstart
+
+This section explains how to run the backend test suite from a fresh checkout
+without touching the main development environment.
+
+### 1. Prerequisites
+
+Make sure your machine has Python 3.11 or newer before running any test commands.
+
+```bash
+python3 --version
+```
+
+If the version shown is older than 3.11, substitute the full path to a compatible
+interpreter (e.g. `python3.11`) wherever `python3` appears below.
+
+### 2. Run the Full Backend Test Suite
+
+From the repo root, run:
+
+```bash
+./testing/test_python.sh
+```
+
+This script handles everything automatically:
+
+- Creates an isolated virtual environment at `venv_tests/` (separate from your
+  dev environment)
+- Installs all required dependencies from `backend/requirements.txt` and
+  `backend/requirements-dev.txt`
+- Runs the full `testing/backend/` suite with pytest in quiet mode
+
+You do not need to activate any virtual environment manually for this command.
+
+### 3. Run a Single Test File
+
+When you want faster feedback on one specific file, activate the test virtual
+environment and call pytest directly. Run these commands from the repo root:
+
+```bash
+source venv_tests/bin/activate
+python -m pytest testing/backend/unit/test_models.py -v
+deactivate
+```
+
+Replace `test_models.py` with whichever file you want to target. All unit tests
+live under `testing/backend/unit/` and integration tests live under
+`testing/backend/integration/`.
+
+> **Note:** Run `./testing/test_python.sh` at least once before using this
+> shortcut so that `venv_tests/` exists and dependencies are installed.
+
+### 4. Where Requirements Files Live
+
+| File | Purpose |
+|---|---|
+| `backend/requirements.txt` | Core runtime dependencies |
+| `backend/requirements-dev.txt` | Test and development dependencies (pytest, etc.) |
+
+Both files must be installed for the test suite to run correctly. The
+`./testing/test_python.sh` script installs both automatically.
+
+### 5. Common Dependency Issues
+
+- **`ModuleNotFoundError` on any import** — the `venv_tests/` environment may
+  be outdated. Delete it and re-run `./testing/test_python.sh` to rebuild from
+  scratch.
+- **`python3` resolves to an older version** — check with `python3 --version`.
+  Use `python3.11` or `python3.12` explicitly if needed.
+- **Permission denied on `./testing/test_python.sh`** — make it executable
+  first with `chmod +x testing/test_python.sh`.
+  
+
 ## Project Layout
 
 - `backend/secuscan`: FastAPI routes, execution logic, workflows, validation, vault, and reporting
