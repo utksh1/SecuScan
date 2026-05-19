@@ -121,7 +121,7 @@ value that does not fit a more specific type.
 }
 ```
 
-## url - URL
+2. url - URL
 
 -Use when the field expects a well-formed URL (a complete target url).
 
@@ -135,7 +135,7 @@ value that does not fit a more specific type.
 }
 ```
 
-## select - Single-choice dropdown
+3. select - Single-choice dropdown
 
 - Use when user must choose a predefined option or say exactly one value from a fixed list.
 
@@ -149,7 +149,7 @@ value that does not fit a more specific type.
   "default": "normal"
 }
 ```
-## boolean - Toggle/checkbox
+4. boolean - Toggle/checkbox
 
 -Use boolean fields for true/false configuration options.
 -Always provide a default of true or false.
@@ -163,7 +163,7 @@ value that does not fit a more specific type.
   "default": false
 }
 ```
-## number - Numeric input
+5. number - Numeric input
 
 -Use for numeric limits, thresholds or timeout values.
 -Use min and max to constrain the accepted range (both bounds are inclusive).
@@ -181,7 +181,7 @@ value that does not fit a more specific type.
 }
 ```
 
-## multiselect - Multi-choice selection
+6. multiselect - Multi-choice selection
 
 -Use multiselect fields when users can choose multiple options.
 
