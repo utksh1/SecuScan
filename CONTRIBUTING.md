@@ -137,7 +137,6 @@ Both files must be installed for the test suite to run correctly. The
   Use `python3.11` or `python3.12` explicitly if needed.
 - **Permission denied on `./testing/test_python.sh`** — make it executable
   first with `chmod +x testing/test_python.sh`.
-  
 
 ## Project Layout
 
