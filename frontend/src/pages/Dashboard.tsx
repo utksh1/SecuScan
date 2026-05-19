@@ -137,20 +137,20 @@ function displayToolName(task: Task) {
 
 function getRiskProfile(summary: Summary) {
   if (summary.critical_findings > 0) return { label: 'Severe', color: 'text-rag-red', accent: 'bg-rag-red' }
-  if (summary.high_findings > 0 || summary.total_findings > 20) return { label: 'Moderate', color: 'text-rag-amber', accent: 'bg-rag-amber' }
-  return { label: 'Stable', color: 'text-rag-green', accent: 'bg-rag-green' }
+  if (summary.high_findings > 0 || summary.total_findings > 20) return { label: 'Moderate', color: 'text-amber-500', accent: 'bg-rag-amber' }
+  return { label: 'Stable', color: 'text-emerald-500', accent: 'bg-rag-green' }
 }
 
 function severityTone(severity: string) {
   switch (severity) {
     case 'critical':
-      return 'text-rag-red border-rag-red/20'
+      return 'text-rag-red border-rag-red/80'
     case 'high':
-      return 'text-rag-amber border-rag-amber/20'
+      return 'text-amber-500 border-rag-amber/80'
     case 'medium':
-      return 'text-silver-bright border-accent-silver/20'
+      return 'text-silver-bright border-accent-silver/80'
     default:
-      return 'text-rag-green border-rag-green/20'
+      return 'text-emerald-500 border-rag-green/80'
   }
 }
 
@@ -245,8 +245,8 @@ export default function Dashboard() {
   const statusBadgeClasses = backendConnected === null
     ? 'border-accent-silver/10 bg-silver/5 text-silver-bright'
     : backendConnected
-      ? 'border-rag-green/30 bg-rag-green/10 text-rag-green'
-      : 'border-rag-red/30 bg-rag-red/10 text-rag-red'
+      ? 'border-rag-green/90 bg-rag-green/10 text-emerald-500'
+      : 'border-rag-red/90 bg-rag-red/10 text-rag-red'
   const statusLabel = backendConnected === null
     ? 'Checking Backend'
     : backendConnected
@@ -262,13 +262,13 @@ export default function Dashboard() {
           transition={{ duration: 0.8, ease: [0.19, 1, 0.22, 1] }}
           className="space-y-4"
         >
-          <div className="bg-rag-amber text-black px-4 py-1 text-xs uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <div className="bg-rag-amber text-slate-800 px-4 py-1 text-xs uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
             SECUSCAN_WORKSPACE v2.4
           </div>
          <h1 className="text-4xl md:text-5xl lg:text-6xl text-silver-bright tracking-tight leading-none whitespace-nowrap font-bold">
-  SecuScan <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '1px var(--accent-silver-bright)' }}>Workspace</span>
+  SecuScan <span className="text-transparent [ -webkit-text-stroke:1px_#64748b ] opacity-90" style={{ WebkitTextStroke: '1px var(--accent-silver-bright)' }}>Workspace</span>
 </h1>
-<p className="text-sm font-mono text-silver/60 tracking-wider leading-relaxed mt-2">
+<p className="text-sm font-mono text-silver-dark tracking-wider leading-relaxed mt-2">
   Central Intelligence Overview // Vulnerabilities: {summary.total_findings} // Threat Level: {risk.label}
 </p>
         </motion.div>
@@ -280,7 +280,7 @@ export default function Dashboard() {
           className="flex flex-col md:flex-row items-start md:items-center gap-8 md:gap-10"
         >
           {/* Integrity Metric - High Visibility */}
-          <div className="flex items-center gap-6 px-6 py-4 bg-charcoal border-4 border-black shadow-[8px_8px_0px_0px_rgba(31,31,31,1)] group transition-all">
+          <div className="flex items-center gap-6 px-6 py-4 bg-charcoal border-4 border-slate-300  shadow-[8px_8px_0px_0px_rgba(31,31,31,1)] group transition-all">
             <div className="flex flex-col items-end text-right">
               <span className="text-[11px] font-black text-silver-bright/90 uppercase tracking-[0.4em] italic mb-1">
                 SYSTEM_STATUS_SYNC
@@ -290,17 +290,17 @@ export default function Dashboard() {
                   <span className="text-2xl font-mono text-silver-bright font-black tracking-tighter italic leading-none">
                     {(formatBriefingDate(lastSync).split(',')[0]?.trim().toUpperCase()) || 'INITIALIZING'}
                   </span>
-                  <span className="text-base font-mono text-rag-blue/90 font-black italic leading-none">
+                  <span className="text-base font-mono text-sky-500/90 font-black italic leading-none">
                     {(formatBriefingDate(lastSync).split(',')[1]?.trim().toUpperCase()) || '---'}
                   </span>
                 </div>
-                <div className="h-5 w-px bg-silver/20 self-center mx-1"></div>
-                <span className="text-lg font-mono text-rag-blue font-black italic leading-none">
+                <div className="h-5 w-px bg-silver/80 self-center mx-1"></div>
+                <span className="text-lg font-mono text-sky-500 font-black italic leading-none">
                   {(formatBriefingDate(lastSync).split(',')[2]?.trim().toUpperCase()) || '00:00'}
                 </span>
               </div>
             </div>
-            <div className="w-14 h-14 bg-charcoal-dark border-4 border-black flex items-center justify-center text-rag-blue shadow-inner group-hover:bg-rag-blue group-hover:text-black transition-all">
+            <div className="w-14 h-14 bg-charcoal-dark border-4 border-slate-300  flex items-center justify-center text-sky-500 shadow-inner group-hover:bg-rag-blue group-hover:text-slate-800 transition-all">
               <span className="material-symbols-outlined text-2xl font-black">terminal</span>
             </div>
           </div>
@@ -316,12 +316,12 @@ export default function Dashboard() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="mt-12 py-20 border-t border-accent-silver/10 text-xs text-silver/80 uppercase tracking-[0.25em] flex items-center gap-4"
+              className="mt-12 py-20 border-t border-accent-silver/10 text-xs text-silver-bright uppercase tracking-[0.25em] flex items-center gap-4"
             >
               <motion.span
                 animate={{ rotate: 360 }}
                 transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                className="w-4 h-4 border border-accent-silver/20 border-t-silver-bright rounded-full"
+                className="w-4 h-4 border border-accent-silver/80 border-t-silver-bright rounded-full"
               />
               Syncing operational data...
             </motion.section>
@@ -330,19 +330,19 @@ export default function Dashboard() {
               key="error"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="mt-12 py-16 flex flex-col items-center justify-center bg-charcoal border border-rag-red/30 rounded-md max-w-3xl mx-auto shadow-lg">
+              className="mt-12 py-16 flex flex-col items-center justify-center bg-charcoal border border-rag-red/90 rounded-md max-w-3xl mx-auto shadow-lg">
               <div className="w-12 h-12 rounded-full bg-rag-red/10 flex items-center justify-center mb-4">
                 <span className="material-symbols-outlined text-rag-red text-2xl">warning</span>
               </div>
               <h3 className="text-rag-red text-lg font-bold tracking-widest uppercase mb-2">
                 System Offline
               </h3>
-              <p className="text-silver/80 text-sm font-mono text-center px-8 mb-6 uppercase">
+              <p className="text-silver-bright text-sm font-mono text-center px-8 mb-6 uppercase">
                 {error}. Please verify network connectivity.
               </p>
               <button
                 onClick={() => window.location.reload()}
-                className="px-6 py-2 bg-rag-red/20 hover:bg-rag-red border border-rag-red/50 text-white text-xs font-bold uppercase tracking-widest rounded transition-all"
+                className="px-6 py-2 bg-rag-red/80 hover:bg-rag-red border border-rag-red/50 text-white text-xs font-bold uppercase tracking-widest rounded transition-all"
               >
                 Retry Connection
               </button>
@@ -376,18 +376,18 @@ export default function Dashboard() {
                 <div className="space-y-10">
                   <header>
                     <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-silver-bright flex items-center gap-3">
-                      <span className="w-2 h-2 border border-accent-silver/40 rotate-45"></span>
+                      <span className="w-2 h-2 border border-accent-silver/100 rotate-45"></span>
                       Vulnerability Summary
                     </h3>
                   </header>
 
-                  <div className="divide-y divide-accent-silver/5 bg-charcoal/30 p-10 border border-accent-silver/5">
+                  <div className="divide-y divide-accent-silver/5 bg-charcoal/90 p-10 border border-accent-silver/5">
                     {[
                       ['Critical Risk', summary.critical_findings, 'text-rag-red', summary.critical_findings > 0 ? 'DECREASING' : 'STABLE'],
-                      ['High Severity', summary.high_findings, 'text-rag-amber', 'ACTION REQ'],
+                      ['High Severity', summary.high_findings, 'text-amber-500', 'ACTION REQ'],
                       ['Medium Alert', summary.medium_findings, 'text-silver-bright', null],
-                      ['Low Exposure', summary.low_findings, 'text-rag-amber/70', null],
-                      ['Informational', summary.info_findings, 'text-silver/70', null],
+                      ['Low Exposure', summary.low_findings, 'text-amber-500/70', null],
+                      ['Informational', summary.info_findings, 'text-silver', null],
                     ].map(([label, count, color, note]) => {
                       const total = summary.total_findings || 1;
                       const percentage = (count as number / total) * 100;
@@ -402,7 +402,7 @@ export default function Dashboard() {
                                 {count as number}
                               </span>
                               {note ? (
-                                <span className={`min-w-[120px] text-right text-[11px] font-bold uppercase tracking-widest ${note === 'STABLE' ? 'text-rag-green' : 'text-silver/80'}`}>
+                                <span className={`min-w-[120px] text-right text-[11px] font-bold uppercase tracking-widest ${note === 'STABLE' ? 'text-emerald-500' : 'text-silver-bright'}`}>
                                   {note}
                                 </span>
                               ) : null}
@@ -427,21 +427,21 @@ export default function Dashboard() {
                   <header className="flex justify-between items-center">
                     <div className="flex items-center gap-4">
                       <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-silver-bright flex items-center gap-3">
-                        <span className="w-2 h-2 border border-accent-silver/40 rotate-45"></span>
+                        <span className="w-2 h-2 border border-accent-silver/100 rotate-45"></span>
                         Task Activity Feed
                       </h3>
                       {summary.scan_activity.running > 0 && (
-                        <div className="flex items-center gap-2 bg-rag-green/10 px-3 py-1 rounded-full border border-rag-green/20">
+                        <div className="flex items-center gap-2 bg-rag-green/10 px-3 py-1 rounded-full border border-rag-green/80">
                           <span className="w-1.5 h-1.5 rounded-full bg-rag-green animate-pulse shadow-[0_0_4px_rgba(46,213,115,0.6)]" />
-                          <span className="text-[10px] font-bold text-rag-green uppercase tracking-widest">Live</span>
+                          <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Live</span>
                         </div>
                       )}
                     </div>
                     <div className="flex gap-6">
-                      <Link className="text-[10px] font-bold text-silver/70 hover:text-silver-bright uppercase tracking-widest transition-all" to={routes.scans}>
+                      <Link className="text-[10px] font-bold text-silver hover:text-silver-bright uppercase tracking-widest transition-all" to={routes.scans}>
                         Full Schedule
                       </Link>
-                      <Link className="text-[10px] font-bold text-silver/70 hover:text-silver-bright uppercase tracking-widest transition-all" to={routes.findings}>
+                      <Link className="text-[10px] font-bold text-silver hover:text-silver-bright uppercase tracking-widest transition-all" to={routes.findings}>
                         Audit Ledger
                       </Link>
                     </div>
@@ -449,9 +449,9 @@ export default function Dashboard() {
 
                   <div className="space-y-4 bg-transparent">
                     {summary.recent_tasks.length === 0 && (
-                      <div className="bg-charcoal/30 p-12 text-center border border-accent-silver/5 relative overflow-hidden">
+                      <div className="bg-charcoal/90 p-12 text-center border border-accent-silver/5 relative overflow-hidden">
                         <div className="absolute inset-0 bg-accent-silver/2 animate-pulse" />
-                        <p className="text-[10px] text-silver/70 uppercase tracking-[0.3em] italic relative z-10">
+                        <p className="text-[10px] text-silver uppercase tracking-[0.3em] italic relative z-10">
                           Surveillance systems idle. No activity detected.
                         </p>
                       </div>
@@ -472,15 +472,15 @@ export default function Dashboard() {
                             className={`bg-charcoal px-6 py-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between group border border-accent-silver/5 transition-all duration-300 relative overflow-hidden ${!isActive ? 'opacity-80 hover:opacity-100' : ''}`}
                           >
                             <div className={`absolute top-0 left-0 w-1 h-full ${isActive ? 'bg-rag-green/60 shadow-[0_0_8px_var(--rag-green)]' :
-                                isFailed ? 'bg-rag-red/40' :
-                                  isCancelled ? 'bg-silver/20' :
-                                    'bg-rag-green/20'
+                                isFailed ? 'bg-rag-red/100' :
+                                  isCancelled ? 'bg-silver/80' :
+                                    'bg-rag-green/80'
                               }`} />
 
                             <div className="flex items-center gap-5">
                               <div className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-rag-green animate-pulse shadow-[0_0_8px_rgba(46,213,115,0.4)]' :
                                   isFailed ? 'bg-rag-red' :
-                                    isCancelled ? 'bg-silver/40' :
+                                    isCancelled ? 'bg-silver/100' :
                                       'bg-rag-green'
                                 }`} />
                               <div>
@@ -488,9 +488,9 @@ export default function Dashboard() {
                                   <p className="text-[13px] font-semibold text-silver-bright tracking-wide group-hover:text-white transition-colors">
                                     {displayToolName(task)}
                                   </p>
-                                  <span className={`text-[8px] font-mono px-1.5 py-0.5 border rounded-sm ${isActive ? 'text-rag-green border-rag-green/20 bg-rag-green/5' :
-                                      isFailed ? 'text-rag-red border-rag-red/20 bg-rag-red/5' :
-                                        'text-silver/70 border-silver/20'
+                                  <span className={`text-[8px] font-mono px-1.5 py-0.5 border rounded-sm ${isActive ? 'text-emerald-500 border-rag-green/80 bg-rag-green/5' :
+                                      isFailed ? 'text-rag-red border-rag-red/80 bg-rag-red/5' :
+                                        'text-silver border-silver/80'
                                     }`}>
                                     {task.status.toUpperCase()}
                                   </span>
@@ -498,7 +498,7 @@ export default function Dashboard() {
                                 <p className="text-[10px] text-silver/85 uppercase tracking-widest mt-1 flex items-center gap-2 font-mono italic">
                                   TARGET:: {task.target || 'N/A'}
                                 </p>
-                                <p className="text-[10px] text-silver/80 uppercase tracking-widest mt-1 flex items-center gap-3 font-mono">
+                                <p className="text-[10px] text-silver-bright uppercase tracking-widest mt-1 flex items-center gap-3 font-mono">
                                   <span>PLUGIN:: {task.plugin_id || 'N/A'}</span>
                                   <span>TASK:: {task.id.slice(0, 8)}</span>
                                 </p>
@@ -507,13 +507,13 @@ export default function Dashboard() {
 
                             <div className="flex items-center gap-6">
                               <div className="text-right hidden sm:block">
-                                <span className={`text-[9px] font-bold uppercase tracking-[0.2em] block mb-0.5 ${isActive ? 'text-rag-green' : 'text-silver/80'}`}>
+                                <span className={`text-[9px] font-bold uppercase tracking-[0.2em] block mb-0.5 ${isActive ? 'text-emerald-500' : 'text-silver-bright'}`}>
                                   {isActive ? 'Live Processing' : 'Cycle Log'}
                                 </span>
-                                <span className="text-[9px] font-mono text-silver/80 uppercase block">
+                                <span className="text-[9px] font-mono text-silver-bright uppercase block">
                                   INIT:: {taskInit.date} @ {taskInit.time} {taskInit.tz}
                                 </span>
-                                <span className="text-[9px] font-mono text-silver/70 uppercase block mt-0.5">
+                                <span className="text-[9px] font-mono text-silver uppercase block mt-0.5">
                                   DURATION:: {formatDuration(task.duration_seconds)}
                                 </span>
                               </div>
@@ -523,7 +523,7 @@ export default function Dashboard() {
                                   <div className="h-8 w-px bg-white/5 hidden sm:block" />
                                   <button
                                     onClick={() => handleAbort(task.id)}
-                                    className="text-[10px] font-bold text-silver/40 hover:text-rag-red uppercase tracking-widest transition-colors flex items-center gap-2"
+                                    className="text-[10px] font-bold text-silver/100 hover:text-rag-red uppercase tracking-widest transition-colors flex items-center gap-2"
                                   >
                                     <span className="material-symbols-outlined text-[14px]">cancel</span>
                                     Abort
@@ -532,7 +532,7 @@ export default function Dashboard() {
                               ) : (
                                 <Link
                                   to={routePath.task(task.id)}
-                                  className="text-[10px] font-bold text-silver/20 hover:text-silver-bright uppercase tracking-widest transition-colors"
+                                  className="text-[10px] font-bold text-silver/80 hover:text-silver-bright uppercase tracking-widest transition-colors"
                                 >
                                   Details
                                 </Link>
@@ -549,13 +549,13 @@ export default function Dashboard() {
                   {/* Operational Stats: Minimized and Integrated */}
                   <div className="pt-6 grid grid-cols-1 md:grid-cols-3 gap-px bg-accent-silver/10 border border-accent-silver/5">
                     <div className="bg-charcoal px-6 py-5">
-                      <span className="text-xs font-bold text-silver/70 uppercase tracking-[0.2em] block mb-2">Total Cycles</span>
+                      <span className="text-xs font-bold text-silver uppercase tracking-[0.2em] block mb-2">Total Cycles</span>
                       <span className="text-2xl font-light text-silver-bright font-mono italic">{summary.scan_activity.total}</span>
                     </div>
                     <div className="bg-charcoal px-8 py-8 md:col-span-2">
                       <div className="flex justify-between items-baseline mb-3">
-                        <span className="text-[10px] font-bold text-silver/80 uppercase tracking-widest">Efficiency Posture</span>
-                        <span className="text-[10px] text-rag-green font-mono uppercase">{progressWidth.toFixed(0)}% SYNCHRONIZED</span>
+                        <span className="text-[10px] font-bold text-silver-bright uppercase tracking-widest">Efficiency Posture</span>
+                        <span className="text-[10px] text-emerald-500 font-mono uppercase">{progressWidth.toFixed(0)}% SYNCHRONIZED</span>
                       </div>
                       <div className="h-1 w-full bg-accent-silver/10 relative overflow-hidden">
                         <motion.div
@@ -574,27 +574,27 @@ export default function Dashboard() {
               <motion.section variants={itemVariants} className="px-8">
                   <header className="mb-10">
                     <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-silver-bright flex items-center gap-3">
-                      <span className="w-2 h-2 border border-accent-silver/40 rotate-45"></span>
+                      <span className="w-2 h-2 border border-accent-silver/100 rotate-45"></span>
                       Recent Audit Findings
                     </h3>
                   </header>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                       {summary.recent_findings.length === 0 ? (
-                          <div className="col-span-full bg-charcoal/30 p-12 text-center border border-accent-silver/5">
-                              <p className="text-[10px] text-silver/70 uppercase tracking-[0.3em] italic">No findings detected in recent audits.</p>
+                          <div className="col-span-full bg-charcoal/90 p-12 text-center border border-accent-silver/5">
+                              <p className="text-[10px] text-silver uppercase tracking-[0.3em] italic">No findings detected in recent audits.</p>
                           </div>
                       ) : (
                           summary.recent_findings.map((finding) => (
-                              <div key={finding.id} className="bg-charcoal p-6 border border-accent-silver/5 hover:border-accent-silver/20 transition-all group">
+                              <div key={finding.id} className="bg-charcoal p-6 border border-accent-silver/5 hover:border-accent-silver/80 transition-all group">
                                   <div className="flex justify-between items-start mb-4">
                                       <span className={`text-[9px] font-black px-2 py-0.5 uppercase tracking-widest border ${severityTone(finding.severity)}`}>
                                           {finding.severity}
                                       </span>
-                                      <span className="text-[9px] font-mono text-silver/40 uppercase">{formatLocaleDate(finding.discovered_at)}</span>
+                                      <span className="text-[9px] font-mono text-silver/100 uppercase">{formatLocaleDate(finding.discovered_at)}</span>
                                   </div>
                                   <h4 className="text-sm font-bold text-silver-bright mb-2 group-hover:text-white transition-colors">{finding.title}</h4>
-                                  <p className="text-[10px] text-silver/60 uppercase tracking-widest font-mono italic truncate">Target: {finding.target}</p>
+                                  <p className="text-[10px] text-silver-dark uppercase tracking-widest font-mono italic truncate">Target: {finding.target}</p>
                               </div>
                           ))
                       )}
@@ -607,7 +607,7 @@ export default function Dashboard() {
       </main>
 
       <footer className="px-12 py-12 text-center border-t border-accent-silver/5">
-        <p className="text-[10px] text-silver/70 uppercase tracking-[0.5em] font-light">
+        <p className="text-[10px] text-silver uppercase tracking-[0.5em] font-light">
           SecuScan Intelligence Systems • Class 1 Operational View
         </p>
       </footer>

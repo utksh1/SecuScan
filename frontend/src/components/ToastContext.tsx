@@ -64,7 +64,7 @@ export function ToastContainer() {
                         initial={{ opacity: 0, x: 100, scale: 0.9 }}
                         animate={{ opacity: 1, x: 0, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.2 } }}
-                        className={`pointer-events-auto px-8 py-5 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex items-center gap-4 min-w-[320px] relative group ${
+                        className={`pointer-events-auto px-8 py-5 border-4 border-slate-300  shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex items-center gap-4 min-w-[320px] relative group ${
                             toast.type === 'success' ? 'bg-rag-green text-black' :
                             toast.type === 'error' ? 'bg-rag-red text-black' :
                             toast.type === 'warning' ? 'bg-rag-amber text-black' : 'bg-rag-blue text-black'

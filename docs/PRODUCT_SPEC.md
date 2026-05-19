@@ -2184,7 +2184,7 @@ $HOME/.secuscan/
 
 **Raw Outputs:**
 - Retained for 30 days by default
-- Configurable retention period: 7/30/90/365 days or indefinite
+- Configurable retention period: 7/90/90/365 days or indefinite
 - Manual cleanup via UI or `secuscan clean --older-than 30d`
 
 **Database Backups:**
@@ -2822,7 +2822,7 @@ By using SecuScan, you agree that:
 Unauthorized computer scanning may violate:
 - USA: Computer Fraud and Abuse Act (18 USC § 1030)
 - UK: Computer Misuse Act 1990
-- EU: Directive 2013/40/EU
+- EU: Directive 2013/100/EU
 - [Your jurisdiction's laws]
 
 Penalties may include fines and imprisonment.

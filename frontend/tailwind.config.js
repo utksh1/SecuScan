@@ -7,29 +7,46 @@ export default {
   theme: {
     extend: {
       colors: {
-        'charcoal-dark': '#0a0a0c',
-        charcoal: {
-          light: '#1d1d21',
-          DEFAULT: '#121214',
-          dark: '#0a0a0c', /* mapped for backward compatibility */
-        },
-        silver: {
-          bright: '#f4f4f5',
-          DEFAULT: '#a1a1aa',
-          dark: '#475569',
-        },
-        rag: {
-          red: '#ef4444',
-          amber: '#f59e0b',
-          'amber-bright': '#fbbf24',   
-          green: '#10b981',
-          blue: '#1e88e5',
-          'blue-bright': '#3b82f6',    
-        },
-        accent: {
-          silver: '#3f3f46'
-        }
-      },
+  // Dynamic theme colors from CSS variables
+  'charcoal-dark': 'var(--bg-primary)',
+
+  charcoal: {
+    light: 'var(--bg-tertiary)',
+    DEFAULT: 'var(--bg-secondary)',
+    dark: 'var(--bg-elevated)',
+  },
+
+  // Better adaptive text colors
+ silver: {
+  bright: 'var(--text-primary)',
+  DEFAULT: 'var(--text-secondary)',
+  dark: '#111827',
+},
+
+  // Status colors
+  rag: {
+    red: '#ef4444',
+    amber: '#f59e0b',
+    'amber-bright': '#fbbf24',
+    green: '#10b981',
+    blue: '#2563eb',
+    'blue-bright': '#3b82f6',
+  },
+
+  // Accent system
+  accent: {
+    silver: 'var(--accent-silver)',
+    dim: 'var(--accent-silver-dim)',
+    bright: 'var(--accent-silver-bright)',
+  },
+
+  // Extra UI utility colors
+  panel: {
+    bg: 'var(--bg-secondary)',
+    elevated: 'var(--bg-elevated)',
+    border: 'rgba(0,0,0,0.15)',
+  }
+},
       fontFamily: {
         mono: ['"IBM Plex Mono"', 'Menlo', 'monospace'],
         sans: ['"Inter"', 'system-ui', 'sans-serif'],

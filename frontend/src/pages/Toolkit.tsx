@@ -282,21 +282,21 @@ export default function Scanner() {
             Strike_Toolkit v12
           </div>
           <h1 className="text-6xl md:text-8xl text-silver-bright uppercase tracking-tighter leading-none italic whitespace-nowrap">
-            Tactical <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '2px var(--accent-silver-bright)' }}>Catalog</span>
+            Tactical <span className="text-transparent [ -webkit-text-stroke:1px_#64748b ] opacity-90" style={{ WebkitTextStroke: '2px var(--accent-silver-bright)' }}>Catalog</span>
           </h1>
-          <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic leading-relaxed">
+          <p className="text-sm font-mono text-silver/100 uppercase tracking-widest italic leading-relaxed">
             SELECT_TOOL_PROTOCOL // DEPLOY_PAYLOAD // MONITOR_FEED
           </p>
         </div>
 
         <div className="flex items-center gap-6 flex-wrap">
           <div className="relative group">
-            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-silver/20 group-focus-within:text-rag-red transition-colors text-sm">search</span>
+            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-silver/80 group-focus-within:text-rag-red transition-colors text-sm">search</span>
             <input
               type="text"
               aria-label="Search scanner catalog"
               placeholder="SEARCH_PROTOCOLS..."
-              className="bg-charcoal border-4 border-black pl-12 pr-4 py-4 text-xs font-black uppercase tracking-widest text-silver-bright focus:outline-none focus:border-rag-red transition-all w-80 placeholder:text-silver/10 italic shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+              className="bg-charcoal border-4 border-slate-300  pl-12 pr-4 py-4 text-xs font-black uppercase tracking-widest text-silver-bright focus:outline-none focus:border-rag-red transition-all w-80 placeholder:text-silver/10 italic shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
             />
@@ -307,12 +307,12 @@ export default function Scanner() {
       {loadError && (
         <section className="bg-charcoal border-4 border-rag-red p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
           <p className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-red">Catalog load failed</p>
-          <p className="text-[10px] text-silver/60 uppercase tracking-widest mt-3">{loadError}</p>
+          <p className="text-[10px] text-silver-dark uppercase tracking-widest mt-3">{loadError}</p>
           <button
             type="button"
             onClick={() => setCatalogLoadAttempt((value) => value + 1)}
             disabled={loading}
-            className="mt-5 px-6 py-3 text-[10px] font-black uppercase tracking-[0.3em] bg-rag-red text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] disabled:opacity-60 disabled:cursor-not-allowed hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
+            className="mt-5 px-6 py-3 text-[10px] font-black uppercase tracking-[0.3em] bg-rag-red text-black border-4 border-slate-300  shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] disabled:opacity-60 disabled:cursor-not-allowed hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
           >
             {loading ? 'Retrying...' : 'Retry'}
           </button>
@@ -331,12 +331,12 @@ export default function Scanner() {
             onClick={() => setActiveTab(category)}
             className={`px-8 py-4 text-[10px] font-black uppercase tracking-[0.3em] transition-all border-4 flex items-center gap-3 ${
               activeTab === category
-                ? 'bg-rag-red text-black border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] -translate-x-1 -translate-y-1'
-                : 'bg-charcoal text-silver/40 border-black hover:border-silver-bright/20'
+                ? 'bg-rag-red text-black border-slate-300  shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] -translate-x-1 -translate-y-1'
+                : 'bg-charcoal text-silver/100 border-slate-300  hover:border-silver-bright/80'
             }`}
           >
             {formatCategoryLabel(category)}
-            {activeTab === category && <span className="w-2 h-2 bg-black" aria-hidden="true" />}
+            {activeTab === category && <span className="w-2 h-2 bg-slate-100 border border-slate-300 text-slate-800" aria-hidden="true" />}
           </button>
         ))}
       </nav>
@@ -372,7 +372,7 @@ export default function Scanner() {
                     aria-label={getToolAccessibilityLabel(tool)}
                     aria-describedby={tool.disabled && tool.disabledReason ? `${descriptionId} ${disabledReasonId}` : descriptionId}
                     onClick={() => handleToolSelect(tool)}
-                    className={`group relative p-8 bg-charcoal border-4 border-black text-left flex flex-col justify-between h-80 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all overflow-hidden ${
+                    className={`group relative p-8 bg-charcoal border-4 border-slate-300  text-left flex flex-col justify-between h-80 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all overflow-hidden ${
                       tool.disabled
                         ? 'opacity-30 cursor-not-allowed grayscale'
                         : 'hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] hover:-translate-x-1 hover:-translate-y-1'
@@ -382,7 +382,7 @@ export default function Scanner() {
                       <div className="flex justify-between items-start">
                         <div
                           aria-hidden="true"
-                          className={`px-2 py-0.5 text-[8px] font-black uppercase tracking-widest italic border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
+                          className={`px-2 py-0.5 text-[8px] font-black uppercase tracking-widest italic border-2 border-slate-300  shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
                             tool.riskLevel === 'aggressive'
                               ? 'bg-rag-red text-black'
                               : tool.riskLevel === 'active'
@@ -406,32 +406,32 @@ export default function Scanner() {
                         <h3 className="text-3xl font-black text-silver-bright uppercase tracking-tighter italic leading-none group-hover:text-rag-red transition-colors">
                           {tool.name}
                         </h3>
-                        <div className="w-12 h-1 bg-silver-bright/10 mt-4 group-hover:w-full group-hover:bg-rag-red/30 transition-all duration-700" />
+                        <div className="w-12 h-1 bg-silver-bright/10 mt-4 group-hover:w-full group-hover:bg-rag-red/90 transition-all duration-700" />
                       </div>
 
-                      <p id={descriptionId} className="text-[10px] text-silver/40 uppercase tracking-widest leading-relaxed line-clamp-3 font-bold italic">
+                      <p id={descriptionId} className="text-[10px] text-silver/100 uppercase tracking-widest leading-relaxed line-clamp-3 font-bold italic">
                         {tool.purpose}
                       </p>
 
                       {tool.isPlugin && tool.availability && tool.availability.missing_binaries.length > 0 && (
-                        <div className="text-[9px] uppercase tracking-widest text-rag-amber font-black leading-relaxed">
+                        <div className="text-[9px] uppercase tracking-widest text-amber-500 font-black leading-relaxed">
                           {tool.availability.guidance ||
                             `Unavailable: Requires external binaries (${tool.availability.missing_binaries.join(', ')})`}
                         </div>
                       )}
                     </div>
 
-                    <div className="pt-6 border-t-2 border-black border-dashed flex justify-between items-end">
-                      <span className="text-[9px] font-black text-silver-bright/20 uppercase tracking-[0.4em] group-hover:text-silver-bright transition-colors">
+                    <div className="pt-6 border-t-2 border-slate-300  border-dashed flex justify-between items-end">
+                      <span className="text-[9px] font-black text-silver-bright/80 uppercase tracking-[0.4em] group-hover:text-silver-bright transition-colors">
                         INIT_DEPLOYMENT
                       </span>
-                      <span className="material-symbols-outlined text-silver/20 group-hover:text-rag-red group-hover:translate-x-1 transition-all duration-300" aria-hidden="true">
+                      <span className="material-symbols-outlined text-silver/80 group-hover:text-rag-red group-hover:translate-x-1 transition-all duration-300" aria-hidden="true">
                         double_arrow
                       </span>
                     </div>
 
                     {tool.disabled && tool.disabledReason && (
-                      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center p-8 text-center z-20">
+                      <div className="absolute inset-0 bg-slate-100 border border-slate-300 text-slate-800/60 backdrop-blur-sm flex flex-col items-center justify-center p-8 text-center z-20">
                         <span className="material-symbols-outlined text-rag-red text-3xl mb-4" aria-hidden="true">lock_reset</span>
                         <span id={disabledReasonId} className="text-[10px] text-rag-red font-black uppercase tracking-widest italic">{tool.disabledReason}</span>
                       </div>
@@ -443,33 +443,33 @@ export default function Scanner() {
             {!loading && filteredTools.length === 0 && (
               <motion.div
                 variants={itemVariants}
-                className="md:col-span-2 xl:col-span-4 bg-charcoal border-4 border-black p-10 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
+                className="md:col-span-2 xl:col-span-4 bg-charcoal border-4 border-slate-300  p-10 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
               >
                 <div className="space-y-6">
                   {searchQuery.trim().length > 0 ? (
                     <>
-                      <div className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-amber">No tools match search</div>
-                      <p className="text-[10px] text-silver/60 uppercase tracking-widest leading-relaxed">
+                      <div className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-500">No tools match search</div>
+                      <p className="text-[10px] text-silver-dark uppercase tracking-widest leading-relaxed">
                         No tools in this category match the current query.
                       </p>
                       <button
                         onClick={() => setSearchQuery('')}
-                        className="px-6 py-3 text-[10px] font-black uppercase tracking-[0.3em] bg-rag-blue text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
+                        className="px-6 py-3 text-[10px] font-black uppercase tracking-[0.3em] bg-rag-blue text-black border-4 border-slate-300  shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
                       >
                         Clear Search
                       </button>
                     </>
                   ) : categoryToolsCount === 0 ? (
                     <>
-                      <div className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-amber">No tools available in this category</div>
-                      <p className="text-[10px] text-silver/60 uppercase tracking-widest leading-relaxed">
+                      <div className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-500">No tools available in this category</div>
+                      <p className="text-[10px] text-silver-dark uppercase tracking-widest leading-relaxed">
                         This category currently has no active tools. Use the first available category to continue.
                       </p>
                       <button
                         onClick={() => {
                           if (tabOrder.length > 0) setActiveTab(tabOrder[0])
                         }}
-                        className="px-6 py-3 text-[10px] font-black uppercase tracking-[0.3em] bg-silver-bright text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
+                        className="px-6 py-3 text-[10px] font-black uppercase tracking-[0.3em] bg-silver-bright text-black border-4 border-slate-300  shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
                       >
                         Go to Quick Start
                       </button>
@@ -482,7 +482,7 @@ export default function Scanner() {
             {!loading &&
               filteredTools.length > 0 &&
               Array.from({ length: Math.max(0, 4 - (filteredTools.length % 4 || 4)) }).map((_, index) => (
-                <div key={index} className="bg-charcoal/30 border-4 border-black/5 border-dashed flex items-center justify-center opacity-10 p-10">
+                <div key={index} className="bg-charcoal/90 border-4 border-slate-300 /5 border-dashed flex items-center justify-center opacity-10 p-10">
                   <span className="material-symbols-outlined text-4xl">add_box</span>
                 </div>
               ))}
@@ -491,13 +491,13 @@ export default function Scanner() {
       </main>
 
       <footer className="pt-24 opacity-20 hover:opacity-100 transition-opacity duration-700 pointer-events-none md:pointer-events-auto">
-        <div className="p-12 border-4 border-black border-dashed flex flex-col md:flex-row items-center gap-10 bg-charcoal/50">
+        <div className="p-12 border-4 border-slate-300  border-dashed flex flex-col md:flex-row items-center gap-10 bg-charcoal/50">
           <span className="material-symbols-outlined text-rag-red text-6xl">gavel</span>
           <div className="space-y-4">
-            <p className="text-xs font-black text-rag-amber uppercase tracking-[0.4em] italic leading-relaxed">
+            <p className="text-xs font-black text-amber-500 uppercase tracking-[0.4em] italic leading-relaxed">
               UNAUTHORIZED_DEPLOYMENT_IS_MONITORED
             </p>
-            <p className="text-[10px] text-silver/40 uppercase tracking-widest font-bold leading-loose max-w-4xl">
+            <p className="text-[10px] text-silver/100 uppercase tracking-widest font-bold leading-loose max-w-4xl">
               Operation engagement rules strictly apply. By initializing any protocol, you acknowledge the jurisdiction of the Secure Enclave and provide full consent for activity recording and auditing. Escalate only under valid mission authorization.
             </p>
           </div>

@@ -59,12 +59,15 @@ export default function AppShell({ children }: AppShellProps) {
     return (
         <>
             <Background state="idle" />
-            <div className="flex bg-charcoal-dark min-h-screen">
+            <div
+  className="flex min-h-screen"
+  style={{ background: 'var(--bg-primary)' }}
+>
                 <Sidebar />
                 <div className="lg:hidden fixed inset-x-0 top-0 z-40 bg-secondary border-b border-accent-silver/10 h-14 px-4 flex items-center justify-between">
                     <button
                         onClick={() => setMobileMenuOpen((prev) => !prev)}
-                        className="w-9 h-9 border border-accent-silver/20 flex items-center justify-center text-silver-bright bg-charcoal-dark"
+                        className="w-9 h-9 border border-accent-silver/80 flex items-center justify-center text-silver-bright bg-charcoal-dark"
                         aria-label="Toggle navigation menu"
                     >
                         <span className="material-symbols-outlined text-[20px]">
@@ -76,7 +79,7 @@ export default function AppShell({ children }: AppShellProps) {
                 </div>
 
                 {mobileMenuOpen && (
-                    <div className="lg:hidden fixed inset-0 z-40 bg-black/60" onClick={() => setMobileMenuOpen(false)}>
+                    <div className="lg:hidden fixed inset-0 z-40 bg-slate-100 border border-slate-300 text-slate-800/60" onClick={() => setMobileMenuOpen(false)}>
                         <div
                             className="absolute top-14 left-0 right-0 bg-secondary border-b border-accent-silver/10 p-4"
                             onClick={(e) => e.stopPropagation()}
@@ -90,7 +93,7 @@ export default function AppShell({ children }: AppShellProps) {
                                             `px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] border rounded ${
                                                 isActive
                                                     ? 'border-rag-red/50 bg-rag-red/10 text-silver-bright'
-                                                    : 'border-accent-silver/20 text-silver/80'
+                                                    : 'border-accent-silver/80 text-silver-bright'
                                             }`
                                         }
                                     >
@@ -116,7 +119,7 @@ export default function AppShell({ children }: AppShellProps) {
                             to={item.to}
                             className={({ isActive }) =>
                                 `flex flex-col items-center justify-center gap-1 text-[9px] font-bold uppercase tracking-[0.08em] ${
-                                    isActive ? 'text-rag-red bg-rag-red/10' : 'text-silver/70'
+                                    isActive ? 'text-rag-red bg-rag-red/10' : 'text-silver'
                                 }`
                             }
                         >

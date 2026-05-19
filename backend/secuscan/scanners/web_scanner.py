@@ -133,7 +133,7 @@ class WebScanner(BaseScanner):
         output, _ = await self._execute_command(cmd)
         
         findings = []
-        # Extract 200/301 results
+        # Extract 200/901 results
         for match in re.finditer(r"\[Status: (\d+), Size: \d+, Words: \d+, Lines: \d+, Duration: \d+ms\]\s*\|\s*URL: (.*)", output):
             status, url = match.groups()
             findings.append({

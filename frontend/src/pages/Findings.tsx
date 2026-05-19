@@ -26,19 +26,19 @@ const severityConfig: Record<string, { label: string; accent: string; chip: stri
   critical: {
     label: 'Critical',
     accent: 'text-rag-red',
-    chip: 'bg-rag-red text-black',
+    chip: 'bg-rag-red text-slate-800',
     rail: 'bg-rag-red',
   },
   high: {
     label: 'High',
-    accent: 'text-rag-amber',
-    chip: 'bg-rag-amber text-black',
+    accent: 'text-amber-500',
+    chip: 'bg-rag-amber text-slate-800',
     rail: 'bg-rag-amber',
   },
   medium: {
     label: 'Medium',
-    accent: 'text-rag-blue',
-    chip: 'bg-rag-blue text-black',
+    accent: 'text-sky-500',
+    chip: 'bg-rag-blue text-slate-800',
     rail: 'bg-rag-blue',
   },
   low: {
@@ -51,7 +51,7 @@ const severityConfig: Record<string, { label: string; accent: string; chip: stri
     label: 'Info',
     accent: 'text-silver',
     chip: 'bg-charcoal-dark text-silver border border-silver/15',
-    rail: 'bg-silver/20',
+    rail: 'bg-silver/80',
   },
 }
 
@@ -71,18 +71,18 @@ function normalizeSeverity(value: string) {
 function getStatusTone(status: FindingStatus) {
   switch (status) {
     case 'reviewed':
-      return 'text-rag-green border-rag-green/25 bg-rag-green/10'
+      return 'text-emerald-500 border-rag-green/25 bg-rag-green/10'
     case 'suppressed':
-      return 'text-silver border-silver/20 bg-silver/5'
+      return 'text-silver border-silver/80 bg-silver/5'
     default:
-      return 'text-rag-amber border-rag-amber/20 bg-rag-amber/10'
+      return 'text-amber-500 border-rag-amber/80 bg-rag-amber/10'
   }
 }
 
 function filterPillClasses(isActive: boolean) {
   return isActive
-    ? 'border-black bg-silver-bright text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
-    : 'border-silver-bright/10 bg-charcoal-dark text-silver/65 hover:border-silver-bright/30 hover:text-silver-bright'
+    ? 'border-slate-300  bg-silver-bright text-slate-800 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+    : 'border-silver-bright/10 bg-charcoal-dark text-silver/65 hover:border-silver-bright/90 hover:text-silver-bright'
 }
 
 const filterLabelClass = 'text-[10px] font-black uppercase tracking-[0.2em] text-silver-bright'
@@ -321,7 +321,7 @@ export default function Findings() {
                 {finding.category || 'Uncategorized'}
               </span>
               {finding.cve ? (
-                <span className="border border-rag-blue/20 bg-rag-blue/10 px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-rag-blue">
+                <span className="border border-rag-blue/80 bg-rag-blue/10 px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-sky-500">
                   {finding.cve}
                 </span>
               ) : null}
@@ -334,7 +334,7 @@ export default function Findings() {
               </p>
             </div>
 
-            <p className="max-w-4xl text-sm leading-relaxed text-silver/70">
+            <p className="max-w-4xl text-sm leading-relaxed text-silver">
               {finding.description || 'No description provided.'}
             </p>
           </div>
@@ -349,7 +349,7 @@ export default function Findings() {
               </div>
             ) : null}
 
-            <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-silver-bright' : 'text-silver/30'}`}>
+            <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-silver-bright' : 'text-silver/90'}`}>
               east
             </span>
           </div>
@@ -362,13 +362,13 @@ export default function Findings() {
     <div className="min-h-screen bg-charcoal-dark text-silver px-4 py-6 md:px-8 md:py-10">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8">
         <header className="border-b-4 border-silver-bright/10 pb-8">
-          <div className="mb-4 inline-block bg-rag-red px-4 py-1 text-xs font-black uppercase tracking-widest text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+          <div className="mb-4 inline-block bg-rag-red px-4 py-1 text-xs font-black uppercase tracking-widest text-slate-800 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
             Triage Workspace v5.1
           </div>
           <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
             <div className="space-y-3">
               <h1 className="text-5xl font-black uppercase tracking-tighter text-silver-bright italic md:text-7xl">
-                Findings <span className="text-transparent" style={{ WebkitTextStroke: '1px var(--accent-silver-bright)' }}>Desk</span>
+                Findings <span className="text-transparent [ -webkit-text-stroke:1px_#64748b ] opacity-90" style={{ WebkitTextStroke: '1px var(--accent-silver-bright)' }}>Desk</span>
               </h1>
               <p className="text-xs font-mono uppercase tracking-[0.24em] text-silver/45">
                 Active triage feed // {triageMetrics.total} total signals // {triageMetrics.unresolved} awaiting analyst action
@@ -379,12 +379,12 @@ export default function Findings() {
               {[
                 { label: 'Visible', value: triageMetrics.visible, tone: 'text-silver-bright' },
                 { label: 'Critical + High', value: triageMetrics.active, tone: 'text-rag-red' },
-                { label: 'Unresolved', value: triageMetrics.unresolved, tone: 'text-rag-amber' },
-                { label: 'Reviewed', value: enrichedFindings.filter((finding) => finding.status === 'reviewed').length, tone: 'text-rag-green' },
+                { label: 'Unresolved', value: triageMetrics.unresolved, tone: 'text-amber-500' },
+                { label: 'Reviewed', value: enrichedFindings.filter((finding) => finding.status === 'reviewed').length, tone: 'text-emerald-500' },
               ].map((metric) => (
                 <div
                   key={metric.label}
-                  className="border-2 border-black bg-charcoal px-4 py-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
+                  className="border-2 border-slate-300  bg-charcoal px-4 py-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
                 >
                   <p className="mb-2 text-[10px] font-black uppercase tracking-[0.25em] text-silver/55">{metric.label}</p>
                   <p className={`text-3xl font-black italic tracking-tight ${metric.tone}`}>{String(metric.value).padStart(2, '0')}</p>
@@ -394,7 +394,7 @@ export default function Findings() {
           </div>
         </header>
 
-        <section className="border-2 border-black bg-charcoal/95 p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] backdrop-blur lg:sticky lg:top-4 lg:z-20">
+        <section className="border-2 border-slate-300  bg-charcoal/95 p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] backdrop-blur lg:sticky lg:top-4 lg:z-20">
           <div className="grid gap-4">
             <div className="grid gap-4 2xl:grid-cols-[minmax(320px,1fr)_auto] 2xl:items-end">
               <div className="space-y-2">
@@ -404,7 +404,7 @@ export default function Findings() {
                   value={searchQuery}
                   onChange={(event) => setSearchQuery(event.target.value)}
                   placeholder="Title, target, CVE, remediation..."
-                  className={`${filterControlClass} px-4 placeholder:text-silver/20`}
+                  className={`${filterControlClass} px-4 placeholder:text-silver/80`}
                 />
               </div>
 
@@ -423,8 +423,8 @@ export default function Findings() {
                     onClick={() => setFilterSeverity((current) => (current === severity ? 'all' : severity))}
                     className={`min-h-10 border px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] transition-all ${
                       filterSeverity === severity
-                        ? `${severityConfig[severity].chip} border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]`
-                        : 'border-silver-bright/10 bg-charcoal-dark text-silver/65 hover:border-silver-bright/30'
+                        ? `${severityConfig[severity].chip} border-slate-300  shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]`
+                        : 'border-silver-bright/10 bg-charcoal-dark text-silver/65 hover:border-silver-bright/90'
                     }`}
                   >
                     {severityConfig[severity].label} {countsBySeverity[severity] || 0}
@@ -509,7 +509,7 @@ export default function Findings() {
                   setDateTo('')
                   setSearchQuery('')
                 }}
-                className="h-11 w-full border border-silver-bright/20 bg-charcoal-dark px-4 text-[10px] font-black uppercase tracking-[0.18em] text-silver/65 transition-all hover:border-rag-red hover:text-silver-bright xl:w-auto xl:min-w-[180px]"
+                className="h-11 w-full border border-silver-bright/80 bg-charcoal-dark px-4 text-[10px] font-black uppercase tracking-[0.18em] text-silver/65 transition-all hover:border-rag-red hover:text-silver-bright xl:w-auto xl:min-w-[180px]"
               >
                 Reset Filters
               </button>
@@ -520,11 +520,11 @@ export default function Findings() {
         <div className="grid gap-8 xl:grid-cols-[minmax(0,1.2fr)_420px]">
           <motion.section variants={sectionVariants} initial="hidden" animate="visible" className="space-y-5">
             {loading ? (
-              <div className="border-4 border-dashed border-silver-bright/10 bg-charcoal/40 px-6 py-16 text-center">
+              <div className="border-4 border-dashed border-silver-bright/10 bg-charcoal/100 px-6 py-16 text-center">
                 <p className="text-sm font-mono uppercase tracking-[0.25em] text-silver/50">Synchronizing findings feed...</p>
               </div>
             ) : filteredFindings.length === 0 ? (
-              <div className="border-4 border-dashed border-silver-bright/10 bg-charcoal/40 px-6 py-20 text-center">
+              <div className="border-4 border-dashed border-silver-bright/10 bg-charcoal/100 px-6 py-20 text-center">
                 <p className="text-2xl font-black uppercase tracking-[0.25em] text-silver/25 italic">No Findings Match</p>
                 <p className="mt-3 text-xs font-mono uppercase tracking-[0.2em] text-silver/15">Adjust filters to reopen the queue.</p>
               </div>
@@ -535,13 +535,13 @@ export default function Findings() {
                 const config = severityConfig[severity]
 
                 return (
-                  <div key={severity} className="border-2 border-black bg-charcoal shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+                  <div key={severity} className="border-2 border-slate-300  bg-charcoal shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
                     <div className="flex w-full items-center justify-between border-b border-silver-bright/8 px-5 py-4 text-left">
                       <div className="flex items-center gap-4">
                         <span className={`h-3 w-3 rotate-45 ${config.rail}`} />
                         <div>
                           <p className={`text-lg font-black uppercase tracking-[0.18em] ${config.accent}`}>{config.label}</p>
-                          <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-silver/40">{items.length} visible in queue</p>
+                          <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-silver/100">{items.length} visible in queue</p>
                         </div>
                       </div>
                     </div>
@@ -553,7 +553,7 @@ export default function Findings() {
                 )
               })
             ) : (
-              <div className="border-2 border-black bg-charcoal shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+              <div className="border-2 border-slate-300  bg-charcoal shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
                 <div className="flex w-full items-center justify-between border-b border-silver-bright/8 px-5 py-4 text-left">
                   <div className="flex items-center gap-4">
                     <span className="h-3 w-3 rotate-45 bg-silver-bright" />
@@ -561,7 +561,7 @@ export default function Findings() {
                       <p className="text-lg font-black uppercase tracking-[0.18em] text-silver-bright">
                         {sortMode === 'newest' ? 'Newest First' : sortMode === 'oldest' ? 'Oldest First' : 'By Target'}
                       </p>
-                      <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-silver/40">{sortedFindings.length} visible in queue</p>
+                      <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-silver/100">{sortedFindings.length} visible in queue</p>
                     </div>
                   </div>
                 </div>
@@ -573,7 +573,7 @@ export default function Findings() {
           </motion.section>
 
           <motion.aside variants={sectionVariants} initial="hidden" animate="visible" className="xl:sticky xl:top-32 xl:self-start">
-            <div className="border-4 border-black bg-charcoal shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]">
+            <div className="border-4 border-slate-300  bg-charcoal shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]">
               {selectedFinding ? (
                 <div className="space-y-6 p-6">
                   <div className="space-y-4 border-b border-silver-bright/8 pb-6">
@@ -585,7 +585,7 @@ export default function Findings() {
                         {selectedFinding.status}
                       </span>
                       {selectedFinding.cve ? (
-                        <span className="border border-rag-blue/20 bg-rag-blue/10 px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-rag-blue">
+                        <span className="border border-rag-blue/80 bg-rag-blue/10 px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-sky-500">
                           {selectedFinding.cve}
                         </span>
                       ) : null}
@@ -631,7 +631,7 @@ export default function Findings() {
                     <div>
                       <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-silver/35">Remediation</p>
                       <div className="border-l-4 border-rag-green bg-charcoal-dark p-4">
-                        <p className="text-sm leading-relaxed text-rag-green/85">
+                        <p className="text-sm leading-relaxed text-emerald-500/85">
                           {selectedFinding.remediation || 'No remediation guidance captured.'}
                         </p>
                       </div>
@@ -644,28 +644,28 @@ export default function Findings() {
                       <button
                         type="button"
                         onClick={() => updateFindingStatus(selectedFinding.id, 'reviewed')}
-                        className="bg-silver-bright px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+                        className="bg-silver-bright px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-slate-800 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
                       >
                         Mark Reviewed
                       </button>
                       <button
                         type="button"
                         onClick={() => updateFindingStatus(selectedFinding.id, 'new')}
-                        className="border border-rag-amber/25 bg-rag-amber/10 px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-rag-amber"
+                        className="border border-rag-amber/25 bg-rag-amber/10 px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-amber-500"
                       >
                         Reopen
                       </button>
                       <button
                         type="button"
                         onClick={() => updateFindingStatus(selectedFinding.id, 'suppressed')}
-                        className="border border-silver/20 bg-silver/5 px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-silver"
+                        className="border border-silver/80 bg-silver/5 px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-silver"
                       >
                         Suppress
                       </button>
                       <button
                         type="button"
                         onClick={() => copyFindingSummary(selectedFinding)}
-                        className="border border-rag-blue/25 bg-rag-blue/10 px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-rag-blue"
+                        className="border border-rag-blue/25 bg-rag-blue/10 px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-sky-500"
                       >
                         {copiedFindingId === selectedFinding.id ? 'Copied' : 'Copy Brief'}
                       </button>
@@ -674,7 +674,7 @@ export default function Findings() {
                 </div>
               ) : (
                 <div className="px-6 py-16 text-center">
-                  <p className="text-2xl font-black uppercase tracking-[0.22em] text-silver/20 italic">Queue Clear</p>
+                  <p className="text-2xl font-black uppercase tracking-[0.22em] text-silver/80 italic">Queue Clear</p>
                   <p className="mt-3 text-xs font-mono uppercase tracking-[0.2em] text-silver/15">
                     Select a finding to review evidence and remediation.
                   </p>

@@ -179,9 +179,9 @@ export default function Scans() {
                     Operational_Registry_v10.1
                   </div>
                   <h1 className="text-6xl md:text-8xl font-black text-silver-bright uppercase tracking-tighter leading-none italic">
-                    Operational <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '1px var(--accent-silver-bright)' }}>Registry</span>
+                    Operational <span className="text-transparent [ -webkit-text-stroke:1px_#64748b ] opacity-90" style={{ WebkitTextStroke: '1px var(--accent-silver-bright)' }}>Registry</span>
                   </h1>
-                  <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic flex items-center gap-4">
+                  <p className="text-sm font-mono text-silver/100 uppercase tracking-widest italic flex items-center gap-4">
                     Total_Registry_Keys: {tasks.length} // SYSTEM_STATUS: {loading ? 'SYNCING...' : 'SYNCED'}
                     <span className={`w-2 h-2 rounded-full ${loading ? 'bg-rag-amber animate-pulse' : 'bg-rag-green'}`}></span>
                   </p>
@@ -189,21 +189,21 @@ export default function Scans() {
 
                 <div className="flex items-center gap-12 border-l-4 border-silver-bright/10 pl-12 hidden lg:flex">
                     <div className="text-right">
-                        <span className="text-[10px] font-black text-silver/40 uppercase tracking-[0.3em] block mb-2 italic">Integrity_Check</span>
-                        <span className="text-xs font-mono text-rag-green uppercase font-black">OPSEC_CLEARANCE_L5</span>
+                        <span className="text-[10px] font-black text-silver/100 uppercase tracking-[0.3em] block mb-2 italic">Integrity_Check</span>
+                        <span className="text-xs font-mono text-emerald-500 uppercase font-black">OPSEC_CLEARANCE_L5</span>
                     </div>
                 </div>
             </header>
 
             {/* Filtration Block */}
-            <section className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col xl:flex-row justify-between items-center gap-12">
+            <section className="bg-charcoal border-4 border-slate-300  p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col xl:flex-row justify-between items-center gap-12">
                 <div className="flex flex-wrap items-center gap-4">
                     <button
                         onClick={toggleSelectAll}
                         className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-3 ${
                             selectedIds.length === tasks.length && tasks.length > 0
-                            ? 'bg-rag-blue text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' 
-                            : 'bg-charcoal-dark text-silver/30 border-silver-bright/5 hover:border-silver-bright/20'
+                            ? 'bg-rag-blue text-black border-slate-300  shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' 
+                            : 'bg-charcoal-dark text-silver/90 border-silver-bright/5 hover:border-silver-bright/80'
                         }`}
                     >
                         <span className="material-symbols-outlined text-sm">
@@ -211,19 +211,19 @@ export default function Scans() {
                         </span>
                         Select_All
                     </button>
-                    <div className="w-1 h-8 bg-black/40 mx-2 hidden md:block"></div>
+                    <div className="w-1 h-8 bg-slate-100 border border-slate-300 text-slate-800/100 mx-2 hidden md:block"></div>
                     {statusFilters.map(f => (
                         <button
                             key={f.value}
                             onClick={() => setFilter(f.value)}
                             className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-2 ${
                                 filter === f.value 
-                                ? 'bg-silver-bright text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-x-0.5 -translate-y-0.5' 
-                                : 'bg-charcoal-dark text-silver/30 border-silver-bright/5 hover:border-silver-bright/20'
+                                ? 'bg-silver-bright text-black border-slate-300  shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-x-0.5 -translate-y-0.5' 
+                                : 'bg-charcoal-dark text-silver/90 border-silver-bright/5 hover:border-silver-bright/80'
                             }`}
                         >
                             {f.label}
-                            {filter === f.value && <span className="w-1 h-3 bg-black"></span>}
+                            {filter === f.value && <span className="w-1 h-3 bg-slate-100 border border-slate-300 text-slate-800"></span>}
                         </button>
                     ))}
                 </div>
@@ -231,14 +231,14 @@ export default function Scans() {
                     {tasks.length > 0 && (
                         <button
                             onClick={handleClearAll}
-                            className="px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 bg-rag-red/10 text-rag-red border-rag-red/20 hover:bg-rag-red hover:text-black hover:border-black flex items-center gap-2 italic"
+                            className="px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 bg-rag-red/10 text-rag-red border-rag-red/80 hover:bg-rag-red hover:text-black hover:border-slate-300  flex items-center gap-2 italic"
                         >
                             Purge_All_Records
                             <span className="material-symbols-outlined text-sm">delete_forever</span>
                         </button>
                     )}
-                    <div className="flex items-center gap-4 text-[10px] font-mono text-silver/20 uppercase italic tracking-widest hidden sm:flex">
-                    Isolation_Protocol_Active // <span className="text-rag-blue">v4_stable</span>
+                    <div className="flex items-center gap-4 text-[10px] font-mono text-silver/80 uppercase italic tracking-widest hidden sm:flex">
+                    Isolation_Protocol_Active // <span className="text-sky-500">v4_stable</span>
                     </div>
                 </div>
             </section>
@@ -269,15 +269,15 @@ export default function Scans() {
                                         className={`relative group md:pl-20 transition-all`}
                                     >
                                         {/* Timeline Node */}
-                                        <div className={`absolute left-[31px] top-12 w-5 h-5 border-4 border-black z-10 hidden md:block transition-all duration-500 ${
+                                        <div className={`absolute left-[31px] top-12 w-5 h-5 border-4 border-slate-300  z-10 hidden md:block transition-all duration-500 ${
                                             task.status === 'completed' ? 'bg-rag-green shadow-[0_0_15px_rgba(34,197,94,0.3)]' :
                                             task.status === 'failed' ? 'bg-rag-red' :
                                             task.status === 'running' ? 'bg-rag-amber animate-pulse' : 'bg-silver/10'
                                         }`}></div>
 
                                         <div 
-                                            className={`bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer relative overflow-hidden group/card ${
-                                                expandedId === task.task_id ? 'border-rag-blue/40 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]' : ''
+                                            className={`bg-charcoal border-4 border-slate-300  p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer relative overflow-hidden group/card ${
+                                                expandedId === task.task_id ? 'border-rag-blue/100 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]' : ''
                                             }`}
                                             onClick={() => setExpandedId(expandedId === task.task_id ? null : task.task_id)}
                                         >
@@ -286,17 +286,17 @@ export default function Scans() {
                                                     <div className="flex flex-wrap items-center gap-4">
                                                         <div 
                                                             onClick={(e) => toggleSelection(task.task_id, e)}
-                                                            className={`w-10 h-10 border-4 border-black flex items-center justify-center transition-all ${
+                                                            className={`w-10 h-10 border-4 border-slate-300  flex items-center justify-center transition-all ${
                                                                 selectedIds.includes(task.task_id) 
                                                                 ? 'bg-rag-blue text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-x-1 -translate-y-1' 
-                                                                : 'bg-charcoal-dark text-silver/10 hover:border-rag-blue/40'
+                                                                : 'bg-charcoal-dark text-silver/10 hover:border-rag-blue/100'
                                                             }`}
                                                         >
                                                             <span className="material-symbols-outlined text-base font-black">
                                                                 {selectedIds.includes(task.task_id) ? 'check' : 'add'}
                                                             </span>
                                                         </div>
-                                                        <span className={`px-2 py-0.5 text-[9px] font-black uppercase italic border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
+                                                        <span className={`px-2 py-0.5 text-[9px] font-black uppercase italic border-2 border-slate-300  shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
                                                             task.status === 'completed' ? 'bg-rag-green text-black' :
                                                             task.status === 'failed' ? 'bg-rag-red text-black' :
                                                             'bg-charcoal-dark text-silver-bright/50'
@@ -304,20 +304,20 @@ export default function Scans() {
                                                             {task.status}
                                                         </span>
                                                         {task.status === 'queued' && task.queue_position && (
-                                                            <span className="text-[9px] font-mono text-rag-amber uppercase tracking-widest">
+                                                            <span className="text-[9px] font-mono text-amber-500 uppercase tracking-widest">
                                                                 Queue #{task.queue_position}/{task.pending_count}
                                                             </span>
                                                         )}
-                                                        <span className="text-[10px] font-mono text-silver/20 uppercase tracking-widest italic">
+                                                        <span className="text-[10px] font-mono text-silver/80 uppercase tracking-widest italic">
                                                             OP_ID_{task.task_id.split('-')[0].toUpperCase()}
                                                         </span>
                                                     </div>
 
                                                     <div className="space-y-2">
-                                                        <h3 className="text-3xl font-black text-silver-bright uppercase tracking-tighter italic leading-none group-hover/card:text-rag-blue transition-colors">
+                                                        <h3 className="text-3xl font-black text-silver-bright uppercase tracking-tighter italic leading-none group-hover/card:text-sky-500 transition-colors">
                                                             {task.tool}
                                                         </h3>
-                                                        <p className="text-xs font-mono text-silver/40 uppercase tracking-widest flex items-center gap-3">
+                                                        <p className="text-xs font-mono text-silver/100 uppercase tracking-widest flex items-center gap-3">
                                                             <span className="material-symbols-outlined text-sm">target</span>
                                                             {task.target}
                                                         </p>
@@ -326,14 +326,14 @@ export default function Scans() {
 
                                                 <div className="flex flex-row xl:flex-col items-center xl:items-end justify-between xl:justify-center gap-8 shrink-0">
                                                     <div className="text-left xl:text-right">
-                                                        <p className="text-[8px] font-black uppercase text-silver/20 tracking-[0.3em] mb-1 italic">Historical_Execution</p>
+                                                        <p className="text-[8px] font-black uppercase text-silver/80 tracking-[0.3em] mb-1 italic">Historical_Execution</p>
                                                         <p className="text-xs font-mono text-silver-bright/80 uppercase">
                                                             {formatLocaleDate(createDate)} // {formatLocaleTime(createDate)}
                                                         </p>
                                                     </div>
                                                     {task.duration_seconds && (
-                                                        <div className="bg-charcoal-dark border-2 border-black px-4 py-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-                                                            <p className="text-[10px] font-black font-mono text-rag-blue leading-none">{formatDuration(task.duration_seconds)?.toUpperCase()}</p>
+                                                        <div className="bg-charcoal-dark border-2 border-slate-300  px-4 py-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                                                            <p className="text-[10px] font-black font-mono text-sky-500 leading-none">{formatDuration(task.duration_seconds)?.toUpperCase()}</p>
                                                         </div>
                                                     )}
                                                 </div>
@@ -348,14 +348,14 @@ export default function Scans() {
                                                         exit={{ height: 0, opacity: 0 }}
                                                         className="overflow-hidden"
                                                     >
-                                                        <div className="mt-12 pt-12 border-t-4 border-black grid grid-cols-1 md:grid-cols-3 gap-12 bg-charcoal-dark/20 -mx-8 -mb-8 p-8 border-dashed">
+                                                        <div className="mt-12 pt-12 border-t-4 border-slate-300  grid grid-cols-1 md:grid-cols-3 gap-12 bg-charcoal-dark/80 -mx-8 -mb-8 p-8 border-dashed">
                                                             <div className="space-y-4">
                                                                 <h5 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.3em] italic flex items-center gap-3">
                                                                     <span className="w-1.5 h-3 bg-rag-blue"></span> Signal_Metadata
                                                                 </h5>
                                                                 <div className="space-y-2">
-                                                                    <p className="text-[10px] font-mono text-silver/40">PLUGIN: <span className="text-silver-bright uppercase">{task.plugin_id}</span></p>
-                                                                    <p className="text-[10px] font-mono text-silver/40">SESSION: <span className="text-silver-bright uppercase">ENCRYPTED_VTX</span></p>
+                                                                    <p className="text-[10px] font-mono text-silver/100">PLUGIN: <span className="text-silver-bright uppercase">{task.plugin_id}</span></p>
+                                                                    <p className="text-[10px] font-mono text-silver/100">SESSION: <span className="text-silver-bright uppercase">ENCRYPTED_VTX</span></p>
                                                                 </div>
                                                             </div>
 
@@ -365,11 +365,11 @@ export default function Scans() {
                                                                 </h5>
                                                                 <div className="grid grid-cols-2 gap-4">
                                                                     <div className="space-y-1">
-                                                                        <span className="text-[8px] text-silver/20 uppercase font-black tracking-widest">In_Lock</span>
+                                                                        <span className="text-[8px] text-silver/80 uppercase font-black tracking-widest">In_Lock</span>
                                                                         <span className="text-[10px] font-mono text-silver-bright block">{startDate ? formatLocaleTime(startDate) : 'PENDING'}</span>
                                                                     </div>
                                                                     <div className="space-y-1">
-                                                                        <span className="text-[8px] text-silver/20 uppercase font-black tracking-widest">Release</span>
+                                                                        <span className="text-[8px] text-silver/80 uppercase font-black tracking-widest">Release</span>
                                                                         <span className="text-[10px] font-mono text-silver-bright block">{endDate ? formatLocaleTime(endDate) : 'N/A'}</span>
                                                                     </div>
                                                                 </div>
@@ -378,7 +378,7 @@ export default function Scans() {
                                                               <div className="flex items-center justify-end gap-6">
                                                                 {(task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') && (
                                                                     <button 
-                                                                        className="bg-rag-red/20 text-rag-red border-2 border-rag-red/20 hover:bg-rag-red hover:text-black hover:border-black px-6 py-4 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 italic"
+                                                                        className="bg-rag-red/80 text-rag-red border-2 border-rag-red/80 hover:bg-rag-red hover:text-black hover:border-slate-300  px-6 py-4 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 italic"
                                                                         onClick={(e) => {
                                                                             e.stopPropagation()
                                                                             handleTaskDelete(task.task_id)
@@ -421,10 +421,10 @@ export default function Scans() {
                             })}
                         </motion.div>
                     ) : (
-                        <div className="py-40 bg-charcoal/30 border-4 border-dashed border-silver-bright/5 text-center flex flex-col items-center gap-8">
+                        <div className="py-40 bg-charcoal/90 border-4 border-dashed border-silver-bright/5 text-center flex flex-col items-center gap-8">
                             <span className="material-symbols-outlined text-silver/5 text-9xl">inventory_2</span>
                             <div className="space-y-2">
-                                <p className="text-xl font-black text-silver/20 uppercase tracking-[0.4em] italic">Archive Isolated</p>
+                                <p className="text-xl font-black text-silver/80 uppercase tracking-[0.4em] italic">Archive Isolated</p>
                                 <p className="text-xs font-mono text-silver/10 uppercase tracking-widest">No historical signal streams available for current selection</p>
                             </div>
                         </div>
@@ -441,18 +441,18 @@ export default function Scans() {
                         exit={{ y: 100, opacity: 0 }}
                         className="fixed bottom-12 left-1/2 -translate-x-1/2 z-50 w-full max-w-2xl px-6"
                     >
-                        <div className="bg-black border-4 border-rag-blue p-6 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] flex items-center justify-between gap-8">
+                        <div className="bg-slate-100 border border-slate-300 text-slate-800 border-4 border-rag-blue p-6 shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] flex items-center justify-between gap-8">
                             <div className="flex items-center gap-6">
                                 <div className="bg-rag-blue text-black px-4 py-2 text-xl font-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">{selectedIds.length}</div>
                                 <div className="space-y-1">
-                                    <p className="text-[10px] font-black text-rag-blue uppercase tracking-widest italic">Records_Selected_For_Pruning</p>
-                                    <p className="text-[8px] font-mono text-silver/30 uppercase tracking-[0.2em]">Bulk_Action_Protocol_v4_Active</p>
+                                    <p className="text-[10px] font-black text-sky-500 uppercase tracking-widest italic">Records_Selected_For_Pruning</p>
+                                    <p className="text-[8px] font-mono text-silver/90 uppercase tracking-[0.2em]">Bulk_Action_Protocol_v4_Active</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-4">
                                 <button 
                                     onClick={() => setSelectedIds([])}
-                                    className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-silver/40 hover:text-silver transition-colors"
+                                    className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-silver/100 hover:text-silver transition-colors"
                                 >
                                     Cancel
                                 </button>
@@ -472,11 +472,11 @@ export default function Scans() {
             {/* Restricted Footer */}
             <footer className="pt-24 opacity-20 pointer-events-none select-none flex flex-col md:flex-row justify-between items-center gap-8 text-[9px] font-black uppercase tracking-[0.5em] italic">
                 <div className="flex items-center gap-4">
-                    <span className="w-8 h-8 border-4 border-silver/20 flex items-center justify-center font-serif text-lg">S</span>
+                    <span className="w-8 h-8 border-4 border-silver/80 flex items-center justify-center font-serif text-lg">S</span>
                     SECUSCAN ARCHIVE INTEGRITY PROTOCOL v10.1
                 </div>
                 <div className="flex gap-2">
-                    {[1,2,3,4,5,6,7,8,9,10,11,12].map(i => <div key={i} className="w-1.5 h-3 bg-silver/20"></div>)}
+                    {[1,2,3,4,5,6,7,8,9,10,11,12].map(i => <div key={i} className="w-1.5 h-3 bg-silver/80"></div>)}
                 </div>
             </footer>
         </div>

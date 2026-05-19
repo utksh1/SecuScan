@@ -62,7 +62,20 @@
   --sidebar-collapsed: 80px;
   --sidebar-expanded: 280px;
 }
+.theme-light {
+  --bg-primary: #f3f4f6;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #e5e7eb;
+  --bg-elevated: #d1d5db;
 
+  --text-primary: #111827;
+  --text-secondary: #374151;
+  --text-muted: #6b7280;
+
+  --accent-silver: #111827;
+  --accent-silver-dim: #4b5563;
+  --accent-silver-bright: #000000;
+}
 /* Base Overrides */
 body {
   background-color: var(--bg-primary);
@@ -73,7 +86,7 @@ body {
 
 @layer components {
   .executive-border {
-    @apply border border-accent-silver/10 hover:border-accent-silver/30 transition-all duration-500;
+    @apply border border-accent-silver/10 hover:border-accent-silver/90 transition-all duration-500;
   }
 
   .charcoal-gradient {
@@ -484,7 +497,7 @@ button,
     color: rgb(161 161 170 / 0.48) !important;
   }
 
-  .text-silver\/20 {
+  .text-silver\/80 {
     color: rgb(161 161 170 / 0.60) !important;
   }
 
@@ -492,11 +505,11 @@ button,
     color: rgb(161 161 170 / 0.64) !important;
   }
 
-  .text-silver\/30 {
+  .text-silver\/90 {
     color: rgb(161 161 170 / 0.68) !important;
   }
 
-  .text-silver\/40 {
+  .text-silver\/100 {
     color: rgb(161 161 170 / 0.76) !important;
   }
 
@@ -504,7 +517,7 @@ button,
     color: rgb(161 161 170 / 0.58) !important;
   }
 
-  .placeholder\:text-silver\/20::placeholder {
+  .placeholder\:text-silver\/80::placeholder {
     color: rgb(161 161 170 / 0.66) !important;
   }
 }
@@ -513,9 +526,9 @@ button,
   Prevent dark text from disappearing when placed inside muted silver tiles.
 */
 .bg-silver\/10 .text-black,
-.bg-silver\/20 .text-black,
-.bg-accent-silver\/20 .text-black,
-.bg-accent-silver\/30 .text-black {
+.bg-silver\/80 .text-black,
+.bg-accent-silver\/80 .text-black,
+.bg-accent-silver\/90 .text-black {
   color: var(--accent-silver-bright) !important;
 }
 
@@ -879,11 +892,12 @@ button,
    3D Background Layer
    ============================================ */
 .background {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  overflow: hidden;
-  pointer-events: none;
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    overflow: hidden;
+    pointer-events: none;
+    background: var(--bg-primary);
 }
 
 /* Grid Pattern */

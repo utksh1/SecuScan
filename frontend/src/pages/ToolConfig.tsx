@@ -227,12 +227,12 @@ export default function ToolConfig() {
 
   return (
     <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
-      <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-black/20">
+      <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-slate-300 /80">
         <div className="space-y-6">
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate(routes.scans)}
-              className="w-12 h-12 flex items-center justify-center border-4 border-black bg-charcoal hover:bg-rag-blue hover:text-black transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-x-1 active:translate-y-1"
+              className="w-12 h-12 flex items-center justify-center border-4 border-slate-300  bg-charcoal hover:bg-rag-blue hover:text-black transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-x-1 active:translate-y-1"
             >
               <span className="material-symbols-outlined font-black">arrow_back</span>
             </button>
@@ -244,16 +244,16 @@ export default function ToolConfig() {
             <h1 className="text-5xl md:text-7xl text-silver-bright uppercase tracking-tighter leading-none italic font-black">
               {plugin.name}
             </h1>
-            <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic leading-relaxed pt-2">
+            <p className="text-sm font-mono text-silver/100 uppercase tracking-widest italic leading-relaxed pt-2">
               {schema.description}
             </p>
           </div>
         </div>
 
         <div className="hidden lg:flex flex-col items-end gap-2 text-right">
-          <span className="text-[10px] font-black text-silver/20 uppercase tracking-[0.5em] italic">RISK_PROTOCOL</span>
+          <span className="text-[10px] font-black text-silver/80 uppercase tracking-[0.5em] italic">RISK_PROTOCOL</span>
           <div
-            className={`px-6 py-2 border-4 border-black text-black font-black uppercase tracking-widest shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] ${
+            className={`px-6 py-2 border-4 border-slate-300  text-black font-black uppercase tracking-widest shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] ${
               safetyLevel === 'exploit'
                 ? 'bg-rag-red'
                 : safetyLevel === 'intrusive'
@@ -268,14 +268,14 @@ export default function ToolConfig() {
 
       {plugin.availability.missing_binaries.length > 0 && (
         <section className="bg-charcoal border-4 border-rag-amber p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-          <p className="text-[10px] uppercase font-black tracking-[0.3em] text-rag-amber">
+          <p className="text-[10px] uppercase font-black tracking-[0.3em] text-amber-500">
             Plugin unavailable
           </p>
-          <p className="text-[10px] text-silver/70 uppercase tracking-widest mt-2 leading-relaxed">
+          <p className="text-[10px] text-silver uppercase tracking-widest mt-2 leading-relaxed">
             {plugin.availability.guidance ||
               `Unavailable: Requires external binaries (${plugin.availability.missing_binaries.join(', ')}). Install required tools locally to enable this scanner.`}
           </p>
-          <p className="text-[9px] text-silver/40 uppercase tracking-widest mt-3">
+          <p className="text-[9px] text-silver/100 uppercase tracking-widest mt-3">
             Task launch remains available, but execution may fail until dependencies are installed.
           </p>
         </section>
@@ -283,7 +283,7 @@ export default function ToolConfig() {
       <main className="grid grid-cols-1 xl:grid-cols-4 gap-12 pt-4">
         <div className="xl:col-span-3 space-y-10">
           {presetNames.length > 0 && (
-            <section className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+            <section className="bg-charcoal border-4 border-slate-300  p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
               <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic mb-6">Preset_Profile</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {presetNames.map((preset) => (
@@ -292,8 +292,8 @@ export default function ToolConfig() {
                     onClick={() => handlePresetChange(preset)}
                     className={`py-3 text-[10px] font-black uppercase tracking-[0.25em] border-4 transition-all ${
                       selectedPreset === preset
-                        ? 'bg-rag-red text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
-                        : 'bg-charcoal-dark border-black text-silver/30 hover:text-silver-bright'
+                        ? 'bg-rag-red text-black border-slate-300  shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+                        : 'bg-charcoal-dark border-slate-300  text-silver/90 hover:text-silver-bright'
                     }`}
                   >
                     {preset}
@@ -303,7 +303,7 @@ export default function ToolConfig() {
             </section>
           )}
 
-          <section className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-8">
+          <section className="bg-charcoal border-4 border-slate-300  p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-8">
             <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Input_Vector</h3>
 
             <div className="space-y-6">
@@ -328,7 +328,7 @@ export default function ToolConfig() {
                         placeholder={field.placeholder || ''}
                         aria-invalid={!!validationError}
                         className={`w-full min-h-[120px] bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none transition-all ${
-                          validationError ? 'border-rag-red' : 'border-black focus:border-rag-blue'
+                          validationError ? 'border-rag-red' : 'border-slate-300  focus:border-rag-blue'
                         }`}
                       />
                     ) : field.type === 'integer' ? (
@@ -339,13 +339,13 @@ export default function ToolConfig() {
                         placeholder={field.placeholder || ''}
                         aria-invalid={!!validationError}
                         className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none transition-all ${
-                          validationError ? 'border-rag-red' : 'border-black focus:border-rag-blue'
+                          validationError ? 'border-rag-red' : 'border-slate-300  focus:border-rag-blue'
                         }`}
                       />
                     ) : field.type === 'boolean' ? (
                       <button
                         onClick={() => handleFieldChange(field, !Boolean(value))}
-                        className={`w-full flex items-center justify-between p-4 border-4 border-black transition-all ${
+                        className={`w-full flex items-center justify-between p-4 border-4 border-slate-300  transition-all ${
                           value ? 'bg-rag-green text-black' : 'bg-charcoal-dark text-silver-bright'
                         }`}
                       >
@@ -358,7 +358,7 @@ export default function ToolConfig() {
                         onChange={(event) => handleFieldChange(field, event.target.value)}
                         aria-invalid={!!validationError}
                         className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none transition-all ${
-                          validationError ? 'border-rag-red' : 'border-black focus:border-rag-blue'
+                          validationError ? 'border-rag-red' : 'border-slate-300  focus:border-rag-blue'
                         }`}
                       >
                         <option value="">Select option</option>
@@ -382,7 +382,7 @@ export default function ToolConfig() {
                                   : [...current, option.value]
                                 handleFieldChange(field, next)
                               }}
-                              className={`p-3 border-4 border-black text-[10px] font-black uppercase tracking-[0.15em] ${
+                              className={`p-3 border-4 border-slate-300  text-[10px] font-black uppercase tracking-[0.15em] ${
                                 selected ? 'bg-rag-blue text-black' : 'bg-charcoal-dark text-silver-bright'
                               }`}
                             >
@@ -399,12 +399,12 @@ export default function ToolConfig() {
                         placeholder={field.placeholder || ''}
                         aria-invalid={!!validationError}
                         className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none transition-all ${
-                          validationError ? 'border-rag-red' : 'border-black focus:border-rag-blue'
+                          validationError ? 'border-rag-red' : 'border-slate-300  focus:border-rag-blue'
                         }`}
                       />
                     )}
 
-                    {field.help && <p className="text-[10px] text-silver/40 uppercase tracking-widest">{field.help}</p>}
+                    {field.help && <p className="text-[10px] text-silver/100 uppercase tracking-widest">{field.help}</p>}
                     {validationError && <p className="text-[10px] text-rag-red uppercase tracking-widest">{validationError}</p>}
                   </motion.div>
                 )
@@ -415,11 +415,11 @@ export default function ToolConfig() {
         </div>
 
         <aside className="xl:col-span-1">
-          <section className="bg-charcoal-dark border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
+          <section className="bg-charcoal-dark border-4 border-slate-300  p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
             <h3 className="text-[11px] font-black text-silver-bright uppercase tracking-[0.4em] italic">Deploy_Control</h3>
             {plugin.requires_consent && (
-              <div className="space-y-4 border-4 border-black bg-charcoal p-5">
-                <p className="text-[10px] text-silver/60 uppercase tracking-widest leading-6">
+              <div className="space-y-4 border-4 border-slate-300  bg-charcoal p-5">
+                <p className="text-[10px] text-silver-dark uppercase tracking-widest leading-6">
                   {plugin.consent_message || 'This plugin requires explicit authorization before execution.'}
                 </p>
                 <label className="flex items-start gap-3 text-[10px] uppercase tracking-widest font-black text-silver-bright">
@@ -436,11 +436,11 @@ export default function ToolConfig() {
             <button
               onClick={handleStartScan}
               disabled={submitting || invalidFieldCount > 0}
-              className="w-full py-4 bg-rag-red border-4 border-black text-black text-[10px] font-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              className="w-full py-4 bg-rag-red border-4 border-slate-300  text-black text-[10px] font-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {submitting ? 'QUEUEING...' : invalidFieldCount > 0 ? 'FIX_PARAMETERS' : 'INITIATE_SCAN'}
             </button>
-            <p className="text-[10px] text-silver/30 uppercase tracking-widest">
+            <p className="text-[10px] text-silver/90 uppercase tracking-widest">
               Parameter issues: {invalidFieldCount}
             </p>
           </section>

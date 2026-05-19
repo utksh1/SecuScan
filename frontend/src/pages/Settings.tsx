@@ -85,31 +85,46 @@ export default function Settings() {
     }
 
     const InputField = ({ label, description, type = "text", value, onChange, placeholder }: any) => (
-        <div className="bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] transition-all group">
+        <div className="bg-charcoal border-4 border-slate-300  p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] transition-all group">
             <div className="space-y-2 mb-6">
-                <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] block italic group-hover:text-rag-blue transition-colors">{label}</label>
-                <p className="text-[9px] text-silver/40 uppercase font-mono font-bold tracking-widest leading-relaxed">{description}</p>
+                <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] block italic group-hover:text-sky-500 transition-colors">{label}</label>
+                <p className="text-[9px] text-silver/100 uppercase font-mono font-bold tracking-widest leading-relaxed">{description}</p>
             </div>
             <input 
                 type={type}
                 value={value}
                 onChange={(e) => onChange(type === 'number' ? parseInt(e.target.value) || 0 : e.target.value)}
                 placeholder={placeholder}
-                className="w-full bg-black/40 border-4 border-black p-4 text-xs font-mono text-rag-blue font-bold focus:outline-none focus:border-rag-blue/50 transition-colors uppercase"
+                className="
+w-full
+bg-charcoal-dark
+border-2
+border-silver/20
+text-silver-bright
+placeholder:text-silver/40
+p-4
+text-xs
+font-mono
+tracking-[0.12em]
+focus:border-rag-blue
+focus:outline-none
+transition-all
+duration-300
+"
             />
         </div>
     )
 
     const SelectField = ({ label, description, value, onChange, options }: any) => (
-        <div className="bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] transition-all group">
+        <div className="bg-charcoal border-4 border-slate-300  p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] transition-all group">
             <div className="space-y-2 mb-6">
-                <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] block italic group-hover:text-rag-blue transition-colors">{label}</label>
-                <p className="text-[9px] text-silver/40 uppercase font-mono font-bold tracking-widest leading-relaxed">{description}</p>
+                <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] block italic group-hover:text-sky-500 transition-colors">{label}</label>
+                <p className="text-[9px] text-silver/100 uppercase font-mono font-bold tracking-widest leading-relaxed">{description}</p>
             </div>
             <select 
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
-                className="w-full bg-black/40 border-4 border-black p-4 text-xs font-mono text-rag-blue font-bold focus:outline-none focus:border-rag-blue/50 transition-colors uppercase appearance-none"
+                className="w-full bg-charcoal-dark border-2 border-silver/20 text-silver-bright p-4 text-xs font-mono uppercase tracking-[0.15em] focus:border-rag-blue focus:outline-none transition-all duration-300"
             >
                 {options.map((opt: any) => (
                     <option key={opt.value} value={opt.value} className="bg-charcoal text-silver-bright">{opt.label}</option>
@@ -121,16 +136,16 @@ export default function Settings() {
     const Toggle = ({ checked, onChange, label, description }: any) => (
         <button 
             onClick={() => onChange(!checked)}
-            className={`flex items-center justify-between p-8 bg-charcoal border-4 border-black transition-all group hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 ${
+            className={`flex items-center justify-between p-8 bg-charcoal border-4 border-silver/20  transition-all group hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 ${
                 checked ? 'shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' : 'shadow-none'
             }`}
         >
             <div className="space-y-2 text-left mr-8">
-                <label className="text-[10px] font-black text-silver-bright uppercase tracking-widest block group-hover:text-rag-green transition-colors">{label}</label>
-                <span className="text-[9px] text-silver/30 uppercase tracking-tighter italic font-mono font-bold leading-relaxed">{description}</span>
+                <label className="text-[10px] font-black text-silver-bright uppercase tracking-widest block group-hover:text-emerald-500 transition-colors">{label}</label>
+                <span className="text-[9px] text-silver/90 uppercase tracking-tighter italic font-mono font-bold leading-relaxed">{description}</span>
             </div>
-            <div className={`w-14 h-7 border-4 border-black relative shrink-0 transition-all ${checked ? 'bg-rag-green' : 'bg-charcoal-dark'}`}>
-                <div className={`absolute top-0 w-5 h-full bg-black transition-all ${checked ? 'left-7' : 'left-0'}`}></div>
+            <div className={`w-14 h-7 border-4 border-slate-300  relative shrink-0 transition-all ${checked ? 'bg-rag-green' : 'bg-charcoal-dark'}`}>
+                <div className={`absolute top-0 w-5 h-full bg-charcoal-dark border-2 border-silver/20 text-slate-800 transition-all ${checked ? 'left-7' : 'left-0'}`}></div>
             </div>
         </button>
     )
@@ -144,17 +159,17 @@ export default function Settings() {
                     Engine_Nexus_v4.5.3
                   </div>
                   <h1 className="text-6xl md:text-8xl text-silver-bright uppercase tracking-tighter leading-none italic font-black">
-                    Core <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '2px var(--accent-silver-bright)' }}>Array</span>
+                    Core <span className="text-transparent [ -webkit-text-stroke:1px_#64748b ] opacity-90" style={{ WebkitTextStroke: '2px var(--accent-silver-bright)' }}>Array</span>
                   </h1>
-                  <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic leading-relaxed">
+                  <p className="text-sm font-mono text-silver/100 uppercase tracking-widest italic leading-relaxed">
                     HARDWARE_TUNING // AUDIT_STRATEGY // SECTOR_ISOLATION
                   </p>
                 </div>
 
                 <div className="flex flex-col items-end gap-4">
-                   <div className="bg-charcoal border-4 border-black px-8 py-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-                        <span className="text-[10px] font-black text-silver/20 uppercase tracking-[0.4em] block mb-1 italic">SYSTEM_TIMEZONE_SYNC</span>
-                        <span className="text-xs font-black font-mono text-rag-blue tracking-widest italic">{systemTimezone.toUpperCase()}</span>
+                   <div className="bg-charcoal border-4 border-slate-300  px-8 py-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+                        <span className="text-[10px] font-black text-silver/80 uppercase tracking-[0.4em] block mb-1 italic">SYSTEM_TIMEZONE_SYNC</span>
+                        <span className="text-xs font-black font-mono text-sky-500 tracking-widest italic">{systemTimezone.toUpperCase()}</span>
                     </div>
                 </div>
             </header>
@@ -165,7 +180,7 @@ export default function Settings() {
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
                             <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Engine_Parameters</h3>
-                            <div className="h-0.5 flex-1 bg-black/10"></div>
+                            <div className="h-0.5 flex-1 bg-slate-100 border border-slate-300 text-slate-800/10"></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <SelectField 
@@ -211,7 +226,7 @@ export default function Settings() {
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
                             <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Security_Interface</h3>
-                            <div className="h-0.5 flex-1 bg-black/10"></div>
+                            <div className="h-0.5 flex-1 bg-slate-100 border border-slate-300 text-slate-800/10"></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <SelectField 
@@ -229,7 +244,10 @@ export default function Settings() {
                                 label="Visual_Spectrum" 
                                 description="OPERATIONAL_AESTHETIC_MODE"
                                 value={config.theme}
-                                onChange={(val: string) => setConfig({...config, theme: val})}
+                                onChange={(val: string) => {
+  setConfig({...config, theme: val})
+  setTheme(val as 'dark' | 'light')
+}}
                                 options={[
                                     { label: 'Dark (Obsidian)', value: 'dark' },
                                     { label: 'Light (Paper)', value: 'light' },
@@ -241,7 +259,7 @@ export default function Settings() {
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
                             <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Intelligence_API_Link</h3>
-                            <div className="h-0.5 flex-1 bg-black/10"></div>
+                            <div className="h-0.5 flex-1 bg-slate-100 border border-slate-300 text-slate-800/10"></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                             <InputField 
@@ -266,18 +284,34 @@ export default function Settings() {
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
                             <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Access_Perimeters</h3>
-                            <div className="h-0.5 flex-1 bg-black/10"></div>
+                            <div className="h-0.5 flex-1 bg-slate-100 border border-slate-300 text-slate-800/10"></div>
                         </div>
-                        <div className="bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
+                        <div className="bg-charcoal border-4 border-slate-300  p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-silver-bright uppercase tracking-widest block italic">Authorized_Ingress_Vectors</label>
-                                <p className="text-[10px] text-silver/40 uppercase font-bold italic mb-6 leading-relaxed">Line-delimited IP/CIDR whitelist for high-privilege access</p>
+                                <p className="text-[10px] text-silver/100 uppercase font-bold italic mb-6 leading-relaxed">Line-delimited IP/CIDR whitelist for high-privilege access</p>
                             </div>
                             <textarea 
                                 value={config.ipWhitelist}
                                 onChange={(e) => setConfig({...config, ipWhitelist: e.target.value})}
                                 rows={4}
-                                className="w-full bg-black/40 border-4 border-black p-6 text-xs font-mono text-rag-amber font-bold focus:outline-none focus:border-rag-amber/50 transition-colors uppercase resize-none"
+                                className="
+w-full
+bg-charcoal-dark
+border-2
+border-silver/20
+text-silver-bright
+placeholder:text-silver/40
+p-4
+text-xs
+font-mono
+tracking-[0.12em]
+resize-none
+focus:border-rag-blue
+focus:outline-none
+transition-all
+duration-300
+"
                             />
                         </div>
                     </section>
@@ -285,7 +319,7 @@ export default function Settings() {
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
                             <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Audit_Logic_Toggles</h3>
-                            <div className="h-0.5 flex-1 bg-black/10"></div>
+                            <div className="h-0.5 flex-1 bg-slate-100 border border-slate-300 text-slate-800/10"></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                             <Toggle 
@@ -321,23 +355,23 @@ export default function Settings() {
                 </main>
 
                 <aside className="xl:col-span-1 space-y-12">
-                    <section className="bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
+                    <section className="bg-charcoal border-4 border-slate-300  p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
                         <h3 className="text-[11px] font-black text-silver-bright uppercase tracking-[0.5em] italic mb-8">Management_Tools</h3>
                         <div className="space-y-4">
                             <button 
                                 onClick={handleExport}
-                                className="w-full py-4 bg-charcoal-dark border-4 border-black text-[10px] font-black text-silver/40 uppercase tracking-[0.3em] hover:bg-black hover:text-white transition-all italic"
+                                className="w-full py-4 bg-charcoal-dark border-4 border-slate-300  text-[10px] font-black text-silver/100 uppercase tracking-[0.3em] hover:bg-slate-100 border border-slate-300 text-slate-800 hover:text-white transition-all italic"
                             >
                                 TELEMETRY_EXPORT
                             </button>
                             <button 
                                 onClick={handleReset}
-                                className="w-full py-4 bg-rag-amber border-4 border-black text-[10px] font-black text-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all italic"
+                                className="w-full py-4 bg-rag-amber border-4 border-slate-300  text-[10px] font-black text-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all italic"
                             >
                                 ENGINE_RESET
                             </button>
                             <button 
-                                className="w-full py-4 bg-rag-red border-4 border-black text-[10px] font-black text-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all italic"
+                                className="w-full py-4 bg-rag-red border-4 border-slate-300  text-[10px] font-black text-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all italic"
                                 onClick={() => {
                                     if (window.confirm("CRITICAL: THIS WILL PURGE ALL HISTORY AND ASSETS. PROCEED?")) {
                                         localStorage.clear();
@@ -350,20 +384,20 @@ export default function Settings() {
                         </div>
                     </section>
 
-                    <section className="bg-charcoal-dark border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
+                    <section className="bg-charcoal-dark border-4 border-slate-300  p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
                         <div className="space-y-4">
-                            <h3 className="text-[11px] font-black text-silver-bright uppercase tracking-[0.5em] italic border-b-4 border-black pb-4">Engine_Status</h3>
+                            <h3 className="text-[11px] font-black text-silver-bright uppercase tracking-[0.5em] italic border-b-4 border-slate-300  pb-4">Engine_Status</h3>
                             <div className="space-y-4 font-mono">
                                 <div className="flex justify-between text-[10px]">
-                                    <span className="text-silver/30 uppercase tracking-tighter">Engine Version</span>
-                                    <span className="text-rag-blue font-bold">4.5.3-BETA</span>
+                                    <span className="text-silver/90 uppercase tracking-tighter">Engine Version</span>
+                                    <span className="text-sky-500 font-bold">4.5.3-BETA</span>
                                 </div>
                                 <div className="flex justify-between text-[10px]">
-                                    <span className="text-silver/30 uppercase tracking-tighter">Stack Health</span>
-                                    <span className="text-rag-green font-bold">NOMINAL</span>
+                                    <span className="text-silver/90 uppercase tracking-tighter">Stack Health</span>
+                                    <span className="text-emerald-500 font-bold">NOMINAL</span>
                                 </div>
                                 <div className="flex justify-between text-[10px]">
-                                    <span className="text-silver/30 uppercase tracking-tighter">Core Sync</span>
+                                    <span className="text-silver/90 uppercase tracking-tighter">Core Sync</span>
                                     <span className="text-silver-bright font-bold">STABLE</span>
                                 </div>
                             </div>
@@ -372,13 +406,13 @@ export default function Settings() {
                 </aside>
             </div>
 
-            <footer className="pt-24 border-t-4 border-black/5 flex flex-col md:flex-row justify-between items-center gap-8 text-[9px] font-black uppercase tracking-[0.5em] italic opacity-20">
+            <footer className="pt-24 border-t-4 border-slate-300 /5 flex flex-col md:flex-row justify-between items-center gap-8 text-[9px] font-black uppercase tracking-[0.5em] italic opacity-20">
                 <div className="flex items-center gap-6">
-                    <div className="w-12 h-1 bg-silver/20"></div>
+                    <div className="w-12 h-1 bg-silver/80"></div>
                     RESTRICTED_ACCESS_ENCLAVE // SECUSCAN_CORE_REV_4 // CLASSIFIED_VIEW
                 </div>
                 <div className="flex gap-4">
-                    {[1,2,3,4,5,6,7,8].map(i => <div key={i} className="w-2 h-2 bg-silver/20 rounded-full"></div>)}
+                    {[1,2,3,4,5,6,7,8].map(i => <div key={i} className="w-2 h-2 bg-silver/80 rounded-full"></div>)}
                 </div>
             </footer>
         </div>

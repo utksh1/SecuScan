@@ -22,7 +22,7 @@ const NavItem = ({ to, icon, label, isExpanded, highlight = false }: NavItemProp
                 ${isActive 
                     ? 'bg-accent-silver/10 text-primary shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)]' 
                     : highlight
-                        ? 'bg-rag-blue/15 border border-rag-blue/30 text-silver-bright hover:bg-rag-blue/25'
+                        ? 'bg-rag-blue/15 border border-rag-blue/90 text-silver-bright hover:bg-rag-blue/25'
                         : 'text-secondary hover:text-primary hover:bg-accent-silver/5'}
             `}
             title={!isExpanded ? label : undefined}
@@ -33,7 +33,7 @@ const NavItem = ({ to, icon, label, isExpanded, highlight = false }: NavItemProp
                     {isActive && (
                         <motion.div 
                             layoutId="activeGlow"
-                            className="absolute inset-0 bg-rag-red/5 rounded-lg border border-rag-red/20 shadow-[0_0_15px_rgba(255,59,59,0.1)]"
+                            className="absolute inset-0 bg-rag-red/5 rounded-lg border border-rag-red/80 shadow-[0_0_15px_rgba(255,59,59,0.1)]"
                             initial={false}
                             transition={{ type: "spring", stiffness: 300, damping: 30 }}
                         />
@@ -51,7 +51,7 @@ const NavItem = ({ to, icon, label, isExpanded, highlight = false }: NavItemProp
                     
                     <span className={`
                         material-symbols-outlined text-[20px] shrink-0 z-10
-                        ${isActive ? 'text-rag-red font-medium fill-1' : highlight ? 'text-rag-blue font-medium' : 'font-light'}
+                        ${isActive ? 'text-rag-red font-medium fill-1' : highlight ? 'text-sky-500 font-medium' : 'font-light'}
                         group-hover:scale-110 transition-transform duration-300
                     `}>
                         {icon}
@@ -129,7 +129,7 @@ export default function Sidebar() {
                             if (!isExpanded) setIsExpanded(true);
                         }}
                         className={`
-                            w-12 h-12 bg-bg-tertiary flex items-center justify-center rounded-xl border border-accent-silver/20
+                            w-12 h-12 bg-bg-tertiary flex items-center justify-center rounded-xl border border-accent-silver/80
                             shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]
                             ${!isExpanded && 'cursor-pointer'}
                         `}
@@ -169,7 +169,7 @@ export default function Sidebar() {
             </div>
 
             {/* Bottom Actions */}
-            <div className="p-4 mt-auto border-t border-accent-silver/5 bg-bg-primary/30 backdrop-blur-md">
+            <div className="p-4 mt-auto border-t border-accent-silver/5 bg-bg-primary/90 backdrop-blur-md">
                 <NavItem to={routes.settings} icon="settings" label="Settings" isExpanded={isExpanded} />
                 <button 
                     onClick={(e) => {
