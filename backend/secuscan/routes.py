@@ -2,7 +2,7 @@
 API routes for SecuScan backend
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Response
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request
 from typing import Any, Optional, List, Dict, Callable
 import json
 import logging
@@ -71,7 +71,7 @@ from .database import get_db
 from .plugins import get_plugin_manager, init_plugins
 from .executor import executor
 from .ratelimit import rate_limiter, concurrent_limiter
-from .validation import validate_target
+from .validation import validate_target, validate_task_start_payload
 from .reporting import reporting
 from .vault import VaultCrypto
 from .workflows import scheduler
@@ -145,11 +145,18 @@ async def get_all_presets():
 @router.post("/task/start")
 async def start_task(
     request: TaskCreateRequest,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    raw_request: Request,
 ):
     """
-    Start a new scan task
+    Start a new scan task.
     """
+    # ── Payload size / field-length guard ─────────────────────────────────
+    raw_body = await raw_request.body()
+    ok, status_code, error_msg = validate_task_start_payload(raw_body, request.inputs)
+    if not ok:
+        raise HTTPException(status_code=status_code, detail=error_msg)
+
     # Validate consent
     if settings.require_consent and not request.consent_granted:
         logger.warning(f"Task start failed: Consent not granted. Request: {request}")
