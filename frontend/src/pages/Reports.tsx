@@ -16,6 +16,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import { getDashboardSummary, getReports, API_BASE } from '../api'
 import { formatDateLong } from '../utils/date'
+import { usePreferredExportFormat } from '../hooks/usePreferredExportFormat'
 
 type Report = {
   id: string
@@ -47,7 +48,7 @@ const itemVariants = {
   },
 }
 
-const exportFormats = ['pdf', 'html', 'csv'] as const
+const exportFormats = ['pdf', 'html', 'csv' , 'sarif'] as const
 
 function ReportIcon({
   icon,
@@ -68,6 +69,7 @@ export default function Reports() {
   const [selectedType, setSelectedType] = useState('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const { preferred, savePreference } = usePreferredExportFormat()
 
   const fetchReports = () => {
     setLoading(true)
@@ -279,17 +281,24 @@ export default function Reports() {
                             >
                               <ReportIcon icon={ScanEyeIcon} size={18} />
                             </button>
-                            {exportFormats.map((format) => (
+                            {[...exportFormats].sort((a, b) =>
+                              a === preferred ? -1 : b === preferred ? 1 : 0
+                            ).map((format) => (
                               <button
                                 key={format}
                                 onClick={() => {
                                   if (report.status !== 'generating') {
+                                    savePreference(format)
                                     window.open(`${API_BASE}/task/${report.task_id}/report/${format}`, '_blank')
                                   }
                                 }}
                                 disabled={report.status === 'generating'}
-                                className="bg-charcoal-dark border-4 border-black px-3 py-2 text-[9px] font-black uppercase tracking-widest text-silver/20 group-hover:text-silver-bright group-hover:bg-black transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:group-hover:text-silver/20 disabled:group-hover:bg-charcoal-dark"
-                                title={report.status === 'generating' ? 'Export unavailable while report is generating' : `Download ${format.toUpperCase()}`}
+                                className={`border-4 border-black px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:group-hover:text-silver/20 disabled:group-hover:bg-charcoal-dark ${
+                                  format === preferred
+                                    ? 'bg-rag-amber text-black group-hover:bg-rag-amber'
+                                    : 'bg-charcoal-dark text-silver/20 group-hover:text-silver-bright group-hover:bg-black'
+                                }`}
+                                title={report.status === 'generating' ? 'Export unavailable while report is generating' : `Download ${format.toUpperCase()}${format === preferred ? ' (preferred)' : ''}`}
                               >
                                 {format}
                               </button>
