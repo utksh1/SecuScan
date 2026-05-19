@@ -121,6 +121,38 @@ async def list_plugins():
         total=len(plugins)
     )
 
+@router.get("/plugins/summary")
+async def get_plugins_summary():
+    """Return plugin summary statistics"""
+
+    plugin_manager = await get_plugin_manager_for_request()
+    plugins = plugin_manager.list_plugins()
+
+    total_plugins = len(plugins)
+    runnable_count = 0
+    unavailable_count = 0
+    category_counts: Dict[str, int] = {}
+
+    for plugin in plugins:
+        category = getattr(plugin, "category", "unknown")
+
+        category_counts[category] = (
+            category_counts.get(category, 0) + 1
+        )
+
+        availability = plugin.get("availability", {})
+        runnable = availability.get("runnable", False)
+
+        if runnable:
+            runnable_count += 1
+        else:
+            unavailable_count += 1
+    return {
+        "total_plugins": total_plugins,
+        "runnable_count": runnable_count,
+        "unavailable_count": unavailable_count,
+        "category_counts": dict(sorted(category_counts.items()))
+    }
 
 @router.get("/plugin/{plugin_id}/schema")
 async def get_plugin_schema(plugin_id: str):
