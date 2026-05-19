@@ -16,6 +16,9 @@ import {
 } from '@hugeicons/core-free-icons'
 import { getDashboardSummary, getReports, API_BASE } from '../api'
 import { formatDateLong } from '../utils/date'
+import LoadingSkeleton, { MetricSkeleton, CardSkeleton } from '../components/LoadingSkeleton'
+import EmptyState from '../components/EmptyState'
+import { useLoadingState } from '../hooks/useLoadingState'
 
 type Report = {
   id: string
@@ -66,22 +69,20 @@ export default function Reports() {
   const [reports, setReports] = useState<Report[]>([])
   const [summary, setSummary] = useState<any>({ total_findings: 0, total_assets: 0, critical_findings: 0, high_findings: 0, total_attack_surface: 0 })
   const [selectedType, setSelectedType] = useState('all')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { isLoading, isInitialLoad, error, startLoading, stopLoading, setError } = useLoadingState({ delay: 300, minDuration: 500 })
 
   const fetchReports = () => {
-    setLoading(true)
-    setError(null)
+    startLoading()
     Promise.all([getReports(), getDashboardSummary()])
       .then(([reportData, summaryData]: any) => {
         setReports(reportData.reports || [])
         setSummary(summaryData || {})
+        setError(null)
+        stopLoading()
       })
-      .catch(() => {
-        setError('Failed to fetch reports')
-      })
-      .finally(() => {
-        setLoading(false)
+      .catch((err) => {
+        const errorMessage = err instanceof Error ? err.message : 'Failed to fetch reports'
+        stopLoading(errorMessage)
       })
   }
 
@@ -119,21 +120,22 @@ export default function Reports() {
       </header>
 
       {/* Loading State */}
-      {loading && (
-        <div className="flex items-center justify-center py-40 gap-6">
-          <div className="animate-spin">
-            <ReportIcon icon={Refresh01Icon} size={48} className="text-silver/20" />
+      {isLoading && isInitialLoad ? (
+        <>
+          <section className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {[1, 2, 3, 4].map((i) => (
+              <MetricSkeleton key={i} />
+            ))}
+          </section>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {[1, 2, 3, 4].map((i) => (
+              <CardSkeleton key={i} />
+            ))}
           </div>
-          <p className="text-[10px] font-black text-silver/20 uppercase tracking-[0.4em] italic animate-pulse">
-            Retrieving Archive Data...
-          </p>
-        </div>
-      )}
-
-      {/* Error State */}
-      {!loading && error && (
+        </>
+      ) : error ? (
         <div className="border-4 border-rag-red bg-rag-red/10 p-8 flex items-center gap-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-          <div className="space-y-1">
+          <div className="space-y-1 flex-1">
             <p className="text-xs font-black text-rag-red uppercase tracking-widest">Archive_Retrieval_Failed</p>
             <p className="text-[10px] font-mono text-silver/40 uppercase tracking-widest">{error}</p>
           </div>
@@ -144,9 +146,7 @@ export default function Reports() {
             Retry
           </button>
         </div>
-      )}
-
-      {!loading && !error && (
+      ) : (
         <>
           {/* Metrics Row */}
           <section className="grid grid-cols-2 md:grid-cols-4 gap-6">
@@ -311,12 +311,14 @@ export default function Reports() {
                   ))}
 
                   {filteredReports.length === 0 && (
-                    <div className="col-span-2 py-40 border-4 border-dashed border-black/5 text-center flex flex-col items-center gap-8 bg-charcoal/30">
-                      <ReportIcon icon={Archive02Icon} size={120} className="text-silver/5" />
-                      <div className="space-y-2">
-                        <p className="text-xl font-black text-silver/20 uppercase tracking-[0.4em] italic">Archive Isolated</p>
-                        <p className="text-xs font-mono text-silver/10 uppercase tracking-widest leading-relaxed">System buffer awaiting briefing generation protocols</p>
-                      </div>
+                    <div className="col-span-2">
+                      <EmptyState
+                        type="reports"
+                        action={{
+                          label: 'Run New Scan',
+                          onClick: () => navigate('/toolkit')
+                        }}
+                      />
                     </div>
                   )}
                 </motion.div>

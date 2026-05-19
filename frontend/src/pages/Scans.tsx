@@ -4,6 +4,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { API_BASE, deleteTask, clearAllTasks, bulkDeleteTasks } from '../api'
 import { routePath } from '../routes'
 import { parseDateSafe, formatLocaleDate, formatLocaleTime } from '../utils/date'
+import LoadingSkeleton, { ListItemSkeleton } from '../components/LoadingSkeleton'
+import EmptyState from '../components/EmptyState'
+import { useLoadingState } from '../hooks/useLoadingState'
 
 interface Task {
     task_id: string
@@ -48,7 +51,7 @@ const itemVariants = {
 export default function Scans() {
     const navigate = useNavigate()
     const [tasks, setTasks] = useState<Task[]>([])
-    const [loading, setLoading] = useState(true)
+    const { isLoading, isInitialLoad, error, startLoading, stopLoading, setError } = useLoadingState({ delay: 300, minDuration: 500 })
     const [filter, setFilter] = useState('all')
     const [expandedId, setExpandedId] = useState<string | null>(null)
     const [selectedIds, setSelectedIds] = useState<string[]>([])
@@ -61,6 +64,7 @@ export default function Scans() {
 
     async function loadTasks() {
         try {
+            startLoading()
             const url = filter === 'all'
                 ? `${API_BASE}/tasks`
                 : `${API_BASE}/tasks?status=${filter}`
@@ -68,10 +72,12 @@ export default function Scans() {
             const res = await fetch(url)
             const data = await res.json()
             setTasks(data.tasks || [])
+            setError(null)
+            stopLoading()
         } catch (err) {
             console.error('Failed to load tasks:', err)
-        } finally {
-            setLoading(false)
+            const errorMessage = err instanceof Error ? err.message : 'Failed to load tasks'
+            stopLoading(errorMessage)
         }
     }
 
@@ -180,8 +186,8 @@ export default function Scans() {
                     Operational <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '1px var(--accent-silver-bright)' }}>Registry</span>
                   </h1>
                   <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic flex items-center gap-4">
-                    Total_Registry_Keys: {tasks.length} // SYSTEM_STATUS: {loading ? 'SYNCING...' : 'SYNCED'}
-                    <span className={`w-2 h-2 rounded-full ${loading ? 'bg-rag-amber animate-pulse' : 'bg-rag-green'}`}></span>
+                    Total_Registry_Keys: {tasks.length} // SYSTEM_STATUS: {isLoading ? 'SYNCING...' : 'SYNCED'}
+                    <span className={`w-2 h-2 rounded-full ${isLoading ? 'bg-rag-amber animate-pulse' : 'bg-rag-green'}`}></span>
                   </p>
                 </div>
 
@@ -246,8 +252,26 @@ export default function Scans() {
                 {/* Vertical Timeline Cable */}
                 <div className="absolute left-[39px] top-0 bottom-0 w-1 bg-silver-bright/5 hidden md:block"></div>
 
-                <AnimatePresence mode='popLayout'>
-                    {tasks.length > 0 ? (
+                {/* Loading State */}
+                {isLoading && isInitialLoad ? (
+                    <div className="space-y-8">
+                        <LoadingSkeleton count={3} type="list-item" />
+                    </div>
+                ) : error ? (
+                    <div className="border-4 border-rag-red bg-rag-red/10 p-8 flex items-center gap-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+                        <div className="space-y-1 flex-1">
+                            <p className="text-xs font-black text-rag-red uppercase tracking-widest">Registry_Load_Failed</p>
+                            <p className="text-[10px] font-mono text-silver/40 uppercase tracking-widest">{error}</p>
+                        </div>
+                        <button
+                            onClick={loadTasks}
+                            className="ml-auto bg-rag-red border-4 border-black px-6 py-3 text-[9px] font-black uppercase tracking-widest text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
+                        >
+                            Retry
+                        </button>
+                    </div>
+                ) : tasks.length > 0 ? (
+                    <AnimatePresence mode='popLayout'>
                         <motion.div 
                             variants={containerVariants}
                             initial="hidden"
@@ -413,16 +437,16 @@ export default function Scans() {
                                 );
                             })}
                         </motion.div>
-                    ) : (
-                        <div className="py-40 bg-charcoal/30 border-4 border-dashed border-silver-bright/5 text-center flex flex-col items-center gap-8">
-                            <span className="material-symbols-outlined text-silver/5 text-9xl">inventory_2</span>
-                            <div className="space-y-2">
-                                <p className="text-xl font-black text-silver/20 uppercase tracking-[0.4em] italic">Archive Isolated</p>
-                                <p className="text-xs font-mono text-silver/10 uppercase tracking-widest">No historical signal streams available for current selection</p>
-                            </div>
-                        </div>
-                    )}
-                </AnimatePresence>
+                    </AnimatePresence>
+                ) : (
+                    <EmptyState
+                        type="scans"
+                        action={{
+                            label: 'Start New Scan',
+                            onClick: () => navigate(routePath.toolkit)
+                        }}
+                    />
+                )}
             </section>
 
             {/* Floating Bulk Action Bar */}

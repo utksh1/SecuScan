@@ -5,6 +5,8 @@ import { getDashboardSummary, getHealth, cancelTask } from '../api'
 import { ExecutiveStatsBar } from '../components/ExecutiveStatsBar'
 import { routePath, routes } from '../routes'
 import { parseDateSafe, formatBriefingDate, formatTaskInit, formatLocaleDate } from '../utils/date'
+import LoadingSkeleton, { CardSkeleton, MetricSkeleton } from '../components/LoadingSkeleton'
+import { useLoadingState } from '../hooks/useLoadingState'
 
 type Finding = {
   id: string
@@ -177,8 +179,7 @@ const itemVariants = {
 
 export default function Dashboard() {
   const [summary, setSummary] = useState<Summary>(emptySummary)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { isLoading, isInitialLoad, error, startLoading, stopLoading, setError } = useLoadingState({ delay: 300, minDuration: 500 })
   const [backendConnected, setBackendConnected] = useState<boolean | null>(null)
   const [lastSync, setLastSync] = useState<string | null>(() => new Date().toISOString())
   const navigate = useNavigate()
@@ -188,13 +189,13 @@ export default function Dashboard() {
 
     const load = async () => {
       try {
+        startLoading()
         await getHealth()
         if (!cancelled) setBackendConnected(true)
       } catch {
         if (!cancelled) {
           setBackendConnected(false)
-          setError('Unable to reach the SecuScan backend')
-          setLoading(false)
+          stopLoading('Unable to reach the SecuScan backend')
         }
         return
       }
@@ -205,13 +206,11 @@ export default function Dashboard() {
           setSummary(normalizeSummary(data as Partial<Summary>))
           setLastSync(new Date().toISOString())
           setError(null)
+          stopLoading()
         })
         .catch((err) => {
           if (cancelled) return
-          setError(err.message)
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false)
+          stopLoading(err.message)
         })
     }
 
@@ -310,7 +309,7 @@ export default function Dashboard() {
 
       <main className="flex-1 px-0 pb-20 space-y-12 w-full">
         <AnimatePresence mode="wait">
-          {loading ? (
+          {isLoading && isInitialLoad ? (
             <motion.section
               key="loading"
               initial={{ opacity: 0 }}
@@ -325,7 +324,7 @@ export default function Dashboard() {
               />
               Syncing operational data...
             </motion.section>
-      ) : error ? (
+          ) : error ? (
             <motion.section
               key="error"
               initial={{ opacity: 0 }}
