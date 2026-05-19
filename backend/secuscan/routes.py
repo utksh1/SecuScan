@@ -259,15 +259,13 @@ async def start_task(
             ),
         )
 
-    # Atomically acquire a concurrency slot using the real task_id.
-    can_acquire, error_msg = await concurrent_limiter.acquire(task_id)
     # Create task
     try:
         task_id = await executor.create_task(
             request.plugin_id,
             request.inputs,
             request.preset,
-            request.consent_granted
+            request.consent_granted,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -279,7 +277,13 @@ async def start_task(
     if not can_acquire:
         # Roll back: mark the DB row failed so it isn't left orphaned
         await executor.mark_task_failed(task_id, reason="Concurrency limit reached; task was not started")
-        raise HTTPException(status_code=503, detail=error_msg)
+        raise HTTPException(
+            status_code=503,
+            detail=task_error_detail(
+                TaskErrorCode.CONCURRENCY_LIMIT,
+                "Maximum concurrent scans reached. Please wait for one to finish.",
+            ),
+        )
 
     # Slot is held — schedule execution.
     # execute_task releases the slot in its finally block on every exit path.

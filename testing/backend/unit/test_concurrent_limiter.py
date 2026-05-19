@@ -145,7 +145,8 @@ def test_temp_pattern_does_not_bypass_limit():
 # Route-level regression: simultaneous task starts honour max_concurrent
 # ---------------------------------------------------------------------------
 
-def test_route_rejects_task_when_limiter_full(test_client, monkeypatch):
+@patch("backend.secuscan.routes.rate_limiter.can_execute", new_callable=AsyncMock, return_value=(True, ""))
+def test_route_rejects_task_when_limiter_full(mock_rate, test_client, monkeypatch):
     """
     Simulate max_concurrent slots already held, then POST /task/start.
     The route must return 503 and must NOT schedule the background task.

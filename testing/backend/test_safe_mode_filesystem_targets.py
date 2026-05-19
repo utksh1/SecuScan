@@ -151,8 +151,11 @@ class TestNetworkTargetSafeMode:
         assert r.status_code == 400, (
             f"Expected public target '{public_target}' blocked, got {r.status_code}: {r.text}"
         )
-        detail = r.json().get("detail", "")
-        assert isinstance(detail, str) and len(detail) > 0
+        detail = r.json()["detail"]
+        assert detail["code"] == "invalid_target"
+        assert "message" in detail
+        assert isinstance(detail["message"], str)
+        assert len(detail["message"]) > 0
 
     @pytest.mark.parametrize("public_target", [
         "8.8.8.8",
@@ -211,9 +214,14 @@ class TestEdgeCases:
             "inputs": {"target": "./src"},
             "consent_granted": False,
         })
+
         assert r.status_code == 400
-        detail = r.json().get("detail", "")
-        assert "consent" in detail.lower()
+
+        detail = r.json()["detail"]
+
+        assert detail["code"] == "consent_required"
+        assert "consent" in detail["message"].lower()
+
 
     def test_consent_checked_before_target_for_network_plugin(self, test_client):
         r = post(test_client, {
@@ -221,6 +229,10 @@ class TestEdgeCases:
             "inputs": {"target": "192.168.1.1"},
             "consent_granted": False,
         })
+
         assert r.status_code == 400
-        detail = r.json().get("detail", "")
-        assert "consent" in detail.lower()
+
+        detail = r.json()["detail"]
+
+        assert detail["code"] == "consent_required"
+        assert "consent" in detail["message"].lower()
