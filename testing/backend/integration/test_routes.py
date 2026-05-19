@@ -1,5 +1,6 @@
 import time
 from unittest.mock import patch
+from xmlrpc import client
 
 from backend.secuscan.models import TaskStatus
 
@@ -82,3 +83,26 @@ def test_get_settings(test_client):
     assert "network" in data
     assert "sandbox" in data
     assert "safety" in data
+
+import pytest
+
+def test_audit_default(test_client):
+    """Test that the audit log endpoint returns default pagination values."""
+    response = test_client.get("/api/v1/audit")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["limit"] == 20
+    assert data["offset"] == 0
+
+def test_audit_custom(test_client):
+    """Test that the audit log endpoint respects custom limit and offset parameters."""
+    response = test_client.get("/api/v1/audit?limit=5&offset=10")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["limit"] == 5
+    assert data["offset"] == 10
+
+def test_audit_max_limit(test_client):
+    """Test that requesting a limit above the allowed safe maximum gets blocked."""
+    response = test_client.get("/api/v1/audit?limit=999")
+    assert response.status_code == 422

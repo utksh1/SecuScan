@@ -161,3 +161,22 @@ class ErrorResponse(BaseModel):
     message: str
     field: Optional[str] = None
     details: Optional[Dict[str, Any]] = None
+
+class AuditLogResponse(BaseModel):
+    """safe audit log response excluding sensitive context"""
+    id: int
+    timestamp: datetime
+    event_type: str
+    severity: str
+    user_id: Optional[str] = None
+    ip_address: Optional[str] = None
+    message: str
+    task_id: Optional[str] = None
+    plugin_id: Optional[str] = None
+
+class PaginatedAuditLogs(BaseModel):
+    """paginated response wrapper for audit logs"""
+    items: List[AuditLogResponse]
+    total: int
+    limit: int
+    offset: int

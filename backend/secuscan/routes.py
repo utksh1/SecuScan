@@ -2,7 +2,7 @@
 API routes for SecuScan backend
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Response
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Query
 from fastapi.responses import JSONResponse
 from typing import Any, Optional, List, Dict, Callable
 import json
@@ -65,7 +65,7 @@ logger = logging.getLogger(__name__)
 from .cache import get_cache
 from .models import (
     TaskCreateRequest, TaskResponse, TaskResult,
-    PluginListResponse, ErrorResponse
+    PluginListResponse, ErrorResponse, PaginatedAuditLogs
 )
 from .config import settings
 from .database import get_db
@@ -1035,3 +1035,36 @@ async def get_assets():
     rows = await db.fetchall("SELECT DISTINCT target FROM tasks UNION SELECT DISTINCT target FROM findings")
     assets = [{"id": str(uuid.uuid4()), "name": row["target"]} for row in rows]
     return {"assets": assets}
+
+
+@router.get("/audit", response_model=PaginatedAuditLogs, tags=["Audit"])
+async def get_audit_logs(
+    limit: int = Query(20, ge=1, le=100, description="Maximum number of logs to return"),
+    offset: int = Query(0, ge=0, description="Number of logs to skip")
+):
+    """
+    To get paginated audit logs.
+    Ordered by timestamp descending. Sensitive context data is intentionally excluded.
+    """
+    db = await get_db()
+    
+    # Get the total count of logs so the frontend knows how many pages exist
+    count_result = await db.fetchone("SELECT COUNT(*) as count FROM audit_log")
+    total = count_result["count"] if count_result else 0
+    
+    # Fetch the specific page of data with a stable sort
+    query = """
+        SELECT id, timestamp, event_type, severity, user_id, ip_address, message, task_id, plugin_id
+        FROM audit_log
+        ORDER BY timestamp DESC, id DESC
+        LIMIT ? OFFSET ?
+    """
+    rows = await db.fetchall(query, (limit, offset))
+    
+    # Return the formatted response wrapper
+    return {
+        "items": rows,
+        "total": total,
+        "limit": limit,
+        "offset": offset
+    }
