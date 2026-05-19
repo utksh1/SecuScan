@@ -545,7 +545,7 @@ async def get_dashboard_summary():
             )
         }
 
-    return await build()
+    return await get_or_set_cached("summary:dashboard", build)
 
 
 @router.get("/findings")
