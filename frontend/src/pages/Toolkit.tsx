@@ -484,8 +484,6 @@ export default function Scanner() {
             {!loading &&
               filteredTools.length > 0 &&
               Array.from({ length: Math.max(0, 4 - (filteredTools.length % 4 || 4)) }).map((_, index) => (
-                <div key={index} className="bg-charcoal/90 border-4 border-slate-300 /5 border-dashed flex items-center justify-center opacity-10 p-10">
-                  <span className="material-symbols-outlined text-4xl">add_box</span>
                 <div key={index} className="bg-charcoal/30 border-4 border-black/5 border-dashed flex items-center justify-center opacity-10 p-10">
                   <span className="material-symbols-outlined text-4xl" aria-hidden="true">add_box</span>
                 </div>
@@ -497,6 +495,7 @@ export default function Scanner() {
       <footer className="pt-24 opacity-20 hover:opacity-100 transition-opacity duration-700 pointer-events-none md:pointer-events-auto">
         <div className="p-12 border-4 border-slate-300  border-dashed flex flex-col md:flex-row items-center gap-10 bg-charcoal/50">
           <span className="material-symbols-outlined text-rag-red text-6xl">gavel</span>
+        </div>
         <div className="p-12 border-4 border-black border-dashed flex flex-col md:flex-row items-center gap-10 bg-charcoal/50">
           <span className="material-symbols-outlined text-rag-red text-6xl" aria-hidden="true">gavel</span>
           <div className="space-y-4">

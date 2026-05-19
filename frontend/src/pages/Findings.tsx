@@ -371,10 +371,14 @@ export default function Findings() {
               </div>
             ) : null}
 
-            <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-silver-bright' : 'text-silver/90'}`}>
-            <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-silver-bright' : 'text-silver/30'}`} aria-hidden="true">
-              east
-            </span>
+           <span
+  className={`material-symbols-outlined text-lg ${
+    isSelected ? 'text-silver-bright' : 'text-silver/30'
+  }`}
+  aria-hidden="true"
+>
+  east
+</span>
           </div>
         </div>
       </button>

@@ -300,8 +300,6 @@ export default function Dashboard() {
                 </span>
               </div>
             </div>
-            <div className="w-14 h-14 bg-charcoal-dark border-4 border-slate-300  flex items-center justify-center text-sky-500 shadow-inner group-hover:bg-rag-blue group-hover:text-slate-800 transition-all">
-              <span className="material-symbols-outlined text-2xl font-black">terminal</span>
             <div className="w-14 h-14 bg-charcoal-dark border-4 border-black flex items-center justify-center text-rag-blue shadow-inner group-hover:bg-rag-blue group-hover:text-black transition-all">
               <span className="material-symbols-outlined text-2xl font-black" aria-hidden="true">terminal</span>
             </div>

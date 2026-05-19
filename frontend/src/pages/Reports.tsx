@@ -281,8 +281,6 @@ export default function Reports() {
                           <div className="flex gap-4">
                             <button
                               onClick={() => navigate(`/task/${report.task_id}`)}
-                              className="bg-charcoal-dark border-4 border-slate-300  p-3 text-silver/80 group-hover:text-silver-bright group-hover:bg-slate-100 border border-slate-300 text-slate-800 transition-all"
-                              title="View Briefing"
                               className="bg-charcoal-dark border-4 border-black p-3 text-silver/20 group-hover:text-silver-bright group-hover:bg-black transition-all"
                               title="View Briefing" aria-label="View briefing"
                             >
@@ -300,12 +298,10 @@ export default function Reports() {
                                   }
                                 }}
                                 disabled={report.status === 'generating'}
-                                className="bg-charcoal-dark border-4 border-slate-300  px-3 py-2 text-[9px] font-black uppercase tracking-widest text-silver/80 group-hover:text-silver-bright group-hover:bg-slate-100 border border-slate-300 text-slate-800 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:group-hover:text-silver/80 disabled:group-hover:bg-charcoal-dark"
-                                title={report.status === 'generating' ? 'Export unavailable while report is generating' : `Download ${format.toUpperCase()}`}
-                                className={`border-4 border-black px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:group-hover:text-silver/20 disabled:group-hover:bg-charcoal-dark ${
+                                className={`border-4 px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:group-hover:text-silver/20 disabled:group-hover:bg-charcoal-dark ${
                                   format === preferred
                                     ? 'bg-rag-amber text-black group-hover:bg-rag-amber'
-                                    : 'bg-charcoal-dark text-silver/20 group-hover:text-silver-bright group-hover:bg-black'
+                                    : 'bg-charcoal-dark text-silver/20 group-hover:text-silver-bright group-hover:bg-black border-slate-300 text-slate-800'
                                 }`}
                                 title={report.status === 'generating' ? 'Export unavailable while report is generating' : `Download ${format.toUpperCase()}${format === preferred ? ' (preferred)' : ''}`}
                               >
@@ -329,8 +325,6 @@ export default function Reports() {
                   ))}
 
                   {filteredReports.length === 0 && (
-                    <div className="col-span-2 py-40 border-4 border-dashed border-slate-300 /5 text-center flex flex-col items-center gap-8 bg-charcoal/90">
-                      <ReportIcon icon={Archive02Icon} size={120} className="text-silver/5" />
                     <div className="col-span-2 py-40 border-4 border-dashed border-black/5 text-center flex flex-col items-center gap-8 bg-charcoal/30">
                       <ReportIcon icon={Archive02Icon} size={120} className="text-silver/5" aria-hidden="true" />
                       <div className="space-y-2">
