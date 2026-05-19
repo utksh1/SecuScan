@@ -419,6 +419,21 @@ function MyComponent() {
 - [ ] Navigation works between all pages
 - [ ] Responsive design works on mobile
 
+
+---
+
+## ⚡ Frontend Checks Quickstart
+
+Run all frontend commands from the `frontend/` directory.
+
+### Install Dependencies
+
+```bash
+cd frontend
+npm install
+
+
+
 ### Browser Support
 
 - Chrome/Edge 90+
