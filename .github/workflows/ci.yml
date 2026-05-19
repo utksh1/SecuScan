@@ -57,7 +57,7 @@ jobs:
       - name: Run frontend TypeScript typecheck
         run: npm run typecheck
       - name: Note TypeScript typecheck in job summary
-        if: always()
+        if: ${{ always() }}
         run: echo "Frontend TypeScript typecheck: npm run typecheck" >> $GITHUB_STEP_SUMMARY
       - name: Run frontend quality gate
         run: npm run quality
