@@ -421,7 +421,6 @@ function MyComponent() {
 
 
 ---
-
 ## ⚡ Frontend Checks Quickstart
 
 Run all frontend commands from the `frontend/` directory.
@@ -431,9 +430,70 @@ Run all frontend commands from the `frontend/` directory.
 ```bash
 cd frontend
 npm install
+```
 
+### Run Unit Tests
 
+```bash
+npm run test
+```
 
+### Run Tests in Watch Mode
+
+```bash
+npm run test:watch
+```
+
+### Run Type Checking
+
+```bash
+npm run typecheck
+```
+
+### Run Production Build
+
+```bash
+npm run build
+```
+
+### Run Quality Checks
+
+```bash
+npm run quality
+```
+
+### Run Full Quality Pipeline
+
+```bash
+npm run quality:full
+```
+
+### Run End-to-End Tests
+
+```bash
+npm run e2e
+```
+
+### Vitest Test File Locations
+
+Vitest test files are generally located:
+- alongside components/features
+- or inside dedicated testing folders
+
+Supported naming patterns:
+- `*.test.js`
+- `*.test.jsx`
+- `*.spec.js`
+- `*.spec.jsx`
+
+> Note for Windows users:
+> Some npm scripts using `NODE_OPTIONS=...` may not run directly in PowerShell.
+>
+> You can run tests manually using:
+>
+> ```bash
+> npx vitest run
+> ```
 ### Browser Support
 
 - Chrome/Edge 90+
