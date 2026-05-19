@@ -104,6 +104,88 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | Binary Signature Scan | `yara_scan` | `forensics` | `intrusive` | `yara` | Binary and file-system signature matching with YARA rules. |
 | DAST Web Proxy (ZAP) | `zap_scanner` | `vulnerability` | `exploit` | `python3` | Dynamic proxy spidering and payload injection. |
 
+## Plugin Input Schema with Examples
+
+Plugins can tell us about configurable user inputs through schema fields in their
+`metadata.json`.
+
+### Supported Field Types
+
+Example schema:
+
+```json
+{
+  "inputs": [
+    {
+      "key": "target",
+      "label": "Target URL",
+      "type": "text",
+      "required": true,
+      "placeholder": "https://example.com"
+    },
+    {
+      "key": "scan_type",
+      "label": "Scan Type",
+      "type": "select",
+      "required": true,
+      "options": ["quick", "full"]
+    },
+    {
+      "key": "checks",
+      "label": "Checks",
+      "type": "multiselect",
+      "required": false,
+      "options": ["headers", "ssl", "cookies"]
+    },
+    {
+      "key": "recursive",
+      "label": "Enable Recursive Scan",
+      "type": "checkbox",
+      "required": false,
+      "default": false
+    },
+    {
+      "key": "timeout",
+      "label": "Timeout (seconds)",
+      "type": "number",
+      "required": false,
+      "default": 30
+    },
+    {
+      "key": "wordlist_path",
+      "label": "Wordlist Path",
+      "type": "path",
+      "required": false
+    }
+  ]
+}
+```
+
+### Required vs Optional Fields
+
+- `"required": true` means that the user must provide a value before running the plugin.
+- `"required": false` means that the field is optional.
+- Optional fields may define a `"default"` value.
+
+### Preset Mapping
+
+Plugin presets shall map directly to schema keys.
+
+Example preset:
+
+```json
+{
+  "preset": {
+    "target": "https://example.com",
+    "scan_type": "quick",
+    "recursive": true,
+    "timeout": 60
+  }
+}
+```
+
+Each preset key shall exactly match a corresponding schema `"key"` value.
+
 ## Maintenance Notes
 
 - If a plugin is added, renamed, or removed, update this file from the plugin metadata rather than editing counts by hand.
