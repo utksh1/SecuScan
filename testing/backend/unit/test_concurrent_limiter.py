@@ -151,7 +151,6 @@ def test_route_rejects_task_when_limiter_full(test_client, monkeypatch):
     The route must return 503 and must NOT schedule the background task.
     """
     from backend.secuscan.ratelimit import concurrent_limiter, rate_limiter
-    from unittest.mock import patch, AsyncMock, MagicMock
     from backend.secuscan import routes as routes_module
 
     # Reset rate limiter so we test only the concurrency limiter
@@ -175,32 +174,19 @@ def test_route_rejects_task_when_limiter_full(test_client, monkeypatch):
             scheduled.append((fn, args, kwargs))
 
     try:
-        # Mock both the executor AND plugin validation
-        with patch("backend.secuscan.executor.TaskExecutor._execute_command") as mock_exec, \
-             patch("backend.secuscan.plugins.PluginManager.get_plugin") as mock_get_plugin:
-            
-            mock_exec.return_value = ("Mocked output", 0)
-            
-            # Mock a valid plugin object with required attributes
-            mock_plugin = MagicMock()
-            mock_plugin.id = "http_inspector"
-            mock_plugin.requires_consent = False
-            mock_plugin.safety = {"rate_limit": {"max_per_hour": 100}}
-            mock_get_plugin.return_value = mock_plugin
-            
-            response = test_client.post(
-                "/api/v1/task/start",
-                json={
-                    "plugin_id": "http_inspector",
-                    "inputs": {"url": "http://127.0.0.1:8000"},
-                    "consent_granted": True,
-                },
-            )
+        response = test_client.post(
+            "/api/v1/task/start",
+            json={
+                "plugin_id": "http_inspector",
+                "inputs": {"url": "http://127.0.0.1:8000"},
+                "consent_granted": True,
+            },
+        )
 
-            assert response.status_code == 503, (
-                f"Expected 503 when limiter is full, got {response.status_code}: {response.text}"
-            )
-            assert len(scheduled) == 0, "Background task must not be scheduled when acquire fails"
+        assert response.status_code == 503, (
+            f"Expected 503 when limiter is full, got {response.status_code}: {response.text}"
+        )
+        assert len(scheduled) == 0, "Background task must not be scheduled when acquire fails"
 
     finally:
         # Clean up pre-filled slots
