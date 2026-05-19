@@ -213,7 +213,7 @@ Add new endpoints in `src/services/api.js`:
 ```javascript
 export const api = {
   // ... existing methods
-  
+
   myNewEndpoint: (param) => request(`/my-endpoint/${param}`, {
     method: 'POST',
     body: JSON.stringify({ data: 'value' })
@@ -242,7 +242,7 @@ async function handleAction() {
 ### `<Layout>`
 Main app layout with sidebar navigation.
 
-**Props:** 
+**Props:**
 - `children` - Page content
 
 **Usage:**
@@ -353,9 +353,9 @@ import { useApp } from '../context/AppContext'
 
 function MyComponent() {
   const { plugins, settings, loading } = useApp()
-  
+
   if (loading) return <div>Loading...</div>
-  
+
   return <div>{plugins.length} plugins</div>
 }
 ```
@@ -494,14 +494,14 @@ The frontend resolves the backend URL via `src/api.ts::resolveApiBase()` in this
 | 2 | Window location heuristic | Dev server on a non-5173 port |
 | 3 | Vite proxy (`/api` → backend) | Local dev on port 5173 (default) |
 
-**`VITE_API_BASE` must be set at build time**, not at runtime. Vite inlines `import.meta.env` values during the 
+**`VITE_API_BASE` must be set at build time**, not at runtime. Vite inlines `import.meta.env` values during the
 build step — changing the env var after building has no effect.
 
 ```bash
 VITE_API_BASE=http://your-backend-host:8081/api/v1 npm run build
 ```
 
-Or create `frontend/.env.production`: 
+Or create `frontend/.env.production`:
 VITE_API_BASE=http://your-backend-host:8081/api/v1
 
 > ⚠️ Do not confuse `VITE_API_BASE` (frontend, build-time) with `VITE_API_PROXY_TARGET` (Vite dev server only — has no effect in a production build).
@@ -619,5 +619,5 @@ For issues or questions:
 
 ---
 
-**Last Updated:** October 29, 2025  
+**Last Updated:** October 29, 2025
 **Version:** 0.1.0-alpha
