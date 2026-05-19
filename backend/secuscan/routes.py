@@ -357,6 +357,31 @@ async def download_pdf_report(task_id: str):
     )
 
 
+@router.get("/task/{task_id}/report/sarif")
+async def download_sarif_report(task_id: str):
+    """Download task results as a SARIF report."""
+    db = await get_db()
+    task_row = await db.fetchone(
+        "SELECT id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
+        (task_id,)
+    )
+
+    if not task_row:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if task_row["status"] not in ["completed", "failed"]:
+        raise HTTPException(status_code=400, detail="Task is not finished yet")
+
+    structured_data = json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
+    sarif_data = reporting.generate_sarif_report(dict(task_row), {"structured": structured_data})
+
+    return Response(
+        content=sarif_data,
+        media_type="application/sarif+json",
+        headers={"Content-Disposition": f"attachment; filename={build_report_filename(dict(task_row), 'sarif')}"}
+    )
+
+
 @router.get("/task/{task_id}/result")
 async def get_task_result(task_id: str):
     """Get task execution result"""
@@ -388,15 +413,19 @@ async def get_task_result(task_id: str):
         severity = str(finding.get("severity", "info")).lower()
         severity_counts[severity] = severity_counts.get(severity, 0) + 1
 
-    summary: List[str] = []
+    structured_summary = structured.get("summary") if isinstance(structured, dict) else None
+    summary: List[str] = [
+        str(item) for item in structured_summary
+        if isinstance(item, (str, int, float)) and str(item).strip()
+    ] if isinstance(structured_summary, list) else []
     total_findings = len(findings)
-    if total_findings > 0:
+    if not summary and total_findings > 0:
         critical_high = severity_counts.get("critical", 0) + severity_counts.get("high", 0)
         if critical_high > 0:
             summary.append(f"Assessment identified {total_findings} security risks, including {critical_high} high-priority items requiring remediation.")
         else:
             summary.append(f"Assessment identified {total_findings} minor observations; no critical or high-severity threats were found.")
-    else:
+    elif not summary:
         summary.append("Security analysis revealed no significant vulnerabilities or exposed risks.")
 
     if ports := structured.get("open_ports"):

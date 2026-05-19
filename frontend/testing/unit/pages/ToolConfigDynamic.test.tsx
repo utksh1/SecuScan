@@ -147,4 +147,76 @@ describe('ToolConfig dynamic schema flow', () => {
       screen.getByText(/subfinder|Install required tools locally|Unavailable:/i)
     ).toBeInTheDocument()
   })
+
+  it('validates dynamic fields in real-time and disables scan button', async () => {
+    vi.mocked(listPlugins).mockResolvedValue({
+      total: 1,
+      plugins: [
+        {
+          id: 'nuclei_mock',
+          name: 'Nuclei Mock',
+          description: 'Mock scanner',
+          category: 'web',
+          safety_level: 'intrusive',
+          enabled: true,
+          icon: '🔧',
+          requires_consent: false,
+          availability: {
+            runnable: true,
+            missing_binaries: [],
+          },
+        },
+      ],
+    })
+
+    vi.mocked(getPluginSchema).mockResolvedValue({
+      id: 'nuclei_mock',
+      name: 'Nuclei Mock',
+      description: 'Mock scanner',
+      fields: [
+        {
+          id: 'target',
+          label: 'Target',
+          type: 'string',
+          required: true,
+          placeholder: 'https://secuscan.in',
+          validation: {
+            pattern: '^https?://',
+            message: 'Must be a valid URL',
+          },
+        },
+      ],
+      presets: {},
+      safety: { level: 'intrusive', requires_consent: false },
+    })
+
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/toolkit/nuclei_mock']}>
+        <Routes>
+          <Route path={routes.scanTool} element={<ToolConfig />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByText(/Nuclei Mock/i)
+    const targetInput = screen.getByPlaceholderText('https://secuscan.in')
+
+    // Initially FIX_PARAMETERS because target is required and empty
+    expect(screen.getByText(/FIX_PARAMETERS/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /FIX_PARAMETERS/i })).toBeDisabled()
+
+    // Type invalid data
+    await user.type(targetInput, 'not-a-url')
+    expect(screen.getByText(/Must be a valid URL/i)).toBeInTheDocument()
+    expect(targetInput).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByRole('button', { name: /FIX_PARAMETERS/i })).toBeDisabled()
+
+    // Clear and type valid data
+    await user.clear(targetInput)
+    await user.type(targetInput, 'https://example.com')
+    expect(screen.queryByText(/Must be a valid URL/i)).not.toBeInTheDocument()
+    expect(targetInput).toHaveAttribute('aria-invalid', 'false')
+    expect(screen.getByRole('button', { name: /INITIATE_SCAN/i })).not.toBeDisabled()
+  })
 })

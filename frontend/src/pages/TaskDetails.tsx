@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { HugeiconsIcon } from '@hugeicons/react'
@@ -141,11 +141,30 @@ export default function TaskDetails() {
     const [copiedRawOutput, setCopiedRawOutput] = useState(false)
 
     const FindingDrawer = ({ finding, onClose }: { finding: Finding, onClose: () => void }) => {
+        const drawerRef = useRef<HTMLDivElement>(null)
+
+        useEffect(() => {
+            drawerRef.current?.focus()
+
+            const handleKeyDown = (event: KeyboardEvent) => {
+                if (event.key === 'Escape') onClose()
+            }
+
+            window.addEventListener('keydown', handleKeyDown)
+            return () => window.removeEventListener('keydown', handleKeyDown)
+        }, [onClose])
+
         if (!finding) return null
         const severityColor = severityTone(finding.severity).split(' ')[0]
+        const drawerTitleId = `finding-drawer-title-${finding.id ?? finding.title.replace(/\s+/g, '-').toLowerCase()}`
         
         return (
             <motion.div
+                ref={drawerRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={drawerTitleId}
+                tabIndex={-1}
                 initial={{ x: '100%' }}
                 animate={{ x: 0 }}
                 exit={{ x: '100%' }}
@@ -157,13 +176,15 @@ export default function TaskDetails() {
                         <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-2 py-0.5 border ${severityTone(finding.severity)}`}>
                             {finding.severity}
                         </span>
-                        <h2 className="text-xl font-black text-silver-bright italic uppercase tracking-tight">{finding.title}</h2>
+                        <h2 id={drawerTitleId} className="text-xl font-black text-silver-bright italic uppercase tracking-tight">{finding.title}</h2>
                     </div>
                     <button 
+                        type="button"
                         onClick={onClose}
+                        aria-label="Close finding details"
                         className="p-2 hover:bg-white/5 transition-colors text-silver/40 hover:text-silver-bright"
                     >
-                        <DetailIcon icon={Cancel02Icon} />
+                        <DetailIcon icon={Cancel02Icon} className="pointer-events-none" />
                     </button>
                 </div>
 
@@ -1108,6 +1129,7 @@ export default function TaskDetails() {
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             onClick={() => setSelectedFinding(null)}
+                            aria-hidden="true"
                             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[90]"
                         />
                         <FindingDrawer finding={selectedFinding as Finding} onClose={() => setSelectedFinding(null)} />

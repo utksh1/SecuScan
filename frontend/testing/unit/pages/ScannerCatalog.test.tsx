@@ -69,14 +69,17 @@ describe('Scanner catalog integration', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('button', { name: /Recon Tools/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^Quick Start$/i })).toBeInTheDocument()
+    expect(await screen.findByRole('tab', { name: /Recon Tools/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^Quick Start$/i })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /Recon Tools/i }))
-    await screen.findByText(/Subdomain Discovery/i)
+    await user.click(screen.getByRole('tab', { name: /Recon Tools/i }))
+    expect(await screen.findByRole('button', { name: /Subdomain Discovery, passive risk scanner/i })).toHaveAttribute(
+      'aria-describedby',
+      expect.stringContaining('scanner-tool-subdomain_discovery-description'),
+    )
     expect(screen.getByText(/Unavailable:/i)).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: /^Quick Start$/i }))
+    await user.click(screen.getByRole('tab', { name: /^Quick Start$/i }))
     expect(await screen.findByText(/Backend plugin pending|No tools available in this category/i)).toBeInTheDocument()
   })
 })

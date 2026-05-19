@@ -1,3 +1,0 @@
-Usage: httpx [OPTIONS] URL
-
-Error: No such option: -u
