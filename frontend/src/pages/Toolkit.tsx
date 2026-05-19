@@ -266,24 +266,27 @@ export default function Scanner() {
     return results
   }, [tools, activeTab, searchQuery])
 
-  const quickAccessTools = useMemo(() => {
-    const byId = new Map(tools.map((t) => [t.id, t]))
-    const recentTools: CatalogTool[] = []
+  const quickAccessTools = useMemo<CatalogTool[]>(() => {
+  const byId = new Map<string, CatalogTool>(
+    tools.map((tool) => [tool.id, tool])
+  )
 
-    for (const id of recentToolIds) {
-      const tool = byId.get(id)
+  const recentTools: CatalogTool[] = []
 
-      if (tool) {
-        recentTools.push(tool)
-      }
+  for (const id of recentToolIds) {
+    const tool = byId.get(id)
 
-      if (recentTools.length >= RECENT_TOOLS_LIMIT) {
-        break
-      }
+    if (tool !== undefined) {
+      recentTools.push(tool)
     }
 
-    return recentTools
-  }, [tools, recentToolIds])
+    if (recentTools.length >= RECENT_TOOLS_LIMIT) {
+      break
+    }
+  }
+
+  return recentTools
+}, [tools, recentToolIds])
 
   const trackRecentTool = (toolId: string) => {
     setRecentToolIds((prev) => {
