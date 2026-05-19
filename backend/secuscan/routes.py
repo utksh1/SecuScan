@@ -3,6 +3,7 @@ API routes for SecuScan backend
 """
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Response
+from fastapi.responses import JSONResponse
 from typing import Any, Optional, List, Dict, Callable
 import json
 import logging
@@ -98,6 +99,21 @@ async def invalidate_view_cache():
     cache = await get_cache()
     for prefix in ["summary:", "findings:", "reports:", "tasks:"]:
         await cache.delete_prefix(prefix)
+
+
+def _report_generation_error_response(task_id: str, report_format: str) -> JSONResponse:
+    logger.exception("Report generation failed for task_id=%s format=%s", task_id, report_format)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "report_generation_failed",
+            "message": f"Failed to generate {report_format.upper()} report",
+            "details": {
+                "task_id": task_id,
+                "format": report_format,
+            },
+        },
+    )
 
 
 async def get_plugin_manager_for_request():
@@ -299,8 +315,11 @@ async def download_csv_report(task_id: str):
     if task_row["status"] not in ["completed", "failed"]:
         raise HTTPException(status_code=400, detail="Task is not finished yet")
 
-    structured_data = json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
-    csv_data = reporting.generate_csv_report(dict(task_row), {"structured": structured_data})
+    try:
+        structured_data = json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
+        csv_data = reporting.generate_csv_report(dict(task_row), {"structured": structured_data})
+    except Exception:
+        return _report_generation_error_response(task_id, "csv")
 
     return Response(
         content=csv_data,
@@ -323,8 +342,11 @@ async def download_html_report(task_id: str):
     if task_row["status"] not in ["completed", "failed"]:
         raise HTTPException(status_code=400, detail="Task is not finished yet")
 
-    structured_data = json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
-    html_content = reporting.generate_html_report(dict(task_row), {"structured": structured_data})
+    try:
+        structured_data = json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
+        html_content = reporting.generate_html_report(dict(task_row), {"structured": structured_data})
+    except Exception:
+        return _report_generation_error_response(task_id, "html")
 
     return Response(
         content=html_content,
@@ -347,8 +369,11 @@ async def download_pdf_report(task_id: str):
     if task_row["status"] not in ["completed", "failed"]:
         raise HTTPException(status_code=400, detail="Task is not finished yet")
 
-    structured_data = json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
-    pdf_bytes = bytes(reporting.generate_pdf_report(dict(task_row), {"structured": structured_data}))
+    try:
+        structured_data = json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
+        pdf_bytes = bytes(reporting.generate_pdf_report(dict(task_row), {"structured": structured_data}))
+    except Exception:
+        return _report_generation_error_response(task_id, "pdf")
 
     return Response(
         content=pdf_bytes,
@@ -372,8 +397,11 @@ async def download_sarif_report(task_id: str):
     if task_row["status"] not in ["completed", "failed"]:
         raise HTTPException(status_code=400, detail="Task is not finished yet")
 
-    structured_data = json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
-    sarif_data = reporting.generate_sarif_report(dict(task_row), {"structured": structured_data})
+    try:
+        structured_data = json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
+        sarif_data = reporting.generate_sarif_report(dict(task_row), {"structured": structured_data})
+    except Exception:
+        return _report_generation_error_response(task_id, "sarif")
 
     return Response(
         content=sarif_data,

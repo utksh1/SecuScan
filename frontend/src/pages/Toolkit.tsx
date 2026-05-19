@@ -181,6 +181,7 @@ export default function Scanner() {
   const [tabOrder, setTabOrder] = useState<UITab[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [catalogLoadAttempt, setCatalogLoadAttempt] = useState(0)
 
   useEffect(() => {
     setRecentToolIds(readRecentToolIds())
@@ -190,6 +191,8 @@ export default function Scanner() {
     let cancelled = false
 
     async function loadCatalog() {
+      if (!cancelled) setLoading(true)
+
       try {
         const response = await listPlugins()
         if (cancelled) return
@@ -219,7 +222,7 @@ export default function Scanner() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [catalogLoadAttempt])
 
   useEffect(() => {
     if (tabOrder.length > 0 && !tabOrder.includes(activeTab)) {
@@ -305,6 +308,14 @@ export default function Scanner() {
         <section className="bg-charcoal border-4 border-rag-red p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
           <p className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-red">Catalog load failed</p>
           <p className="text-[10px] text-silver/60 uppercase tracking-widest mt-3">{loadError}</p>
+          <button
+            type="button"
+            onClick={() => setCatalogLoadAttempt((value) => value + 1)}
+            disabled={loading}
+            className="mt-5 px-6 py-3 text-[10px] font-black uppercase tracking-[0.3em] bg-rag-red text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] disabled:opacity-60 disabled:cursor-not-allowed hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
+          >
+            {loading ? 'Retrying...' : 'Retry'}
+          </button>
         </section>
       )}
 
