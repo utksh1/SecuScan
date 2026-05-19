@@ -17,6 +17,8 @@ interface Task {
     duration_seconds?: number
     inputs?: any
     preset?: string
+    queue_position?: number
+    pending_count?: number
 }
 
 const statusFilters = [
@@ -301,6 +303,11 @@ export default function Scans() {
                                                         }`}>
                                                             {task.status}
                                                         </span>
+                                                        {task.status === 'queued' && task.queue_position && (
+                                                            <span className="text-[9px] font-mono text-rag-amber uppercase tracking-widest">
+                                                                Queue #{task.queue_position}/{task.pending_count}
+                                                            </span>
+                                                        )}
                                                         <span className="text-[10px] font-mono text-silver/20 uppercase tracking-widest italic">
                                                             OP_ID_{task.task_id.split('-')[0].toUpperCase()}
                                                         </span>

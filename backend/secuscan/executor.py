@@ -535,7 +535,19 @@ class TaskExecutor:
         )
         if not task_row:
             return None
-            
+
+        queue_position = None
+        pending_count = None
+
+        if task_row["status"] == TaskStatus.QUEUED.value:
+            queued_rows = await db.fetchall(
+                "SELECT id FROM tasks WHERE status = ? ORDER BY created_at ASC",
+                (TaskStatus.QUEUED.value,)
+            )
+            ids = [r["id"] for r in queued_rows]
+            pending_count = len(ids)
+            queue_position = (ids.index(task_id) + 1) if task_id in ids else None
+
         return {
             "task_id": task_row["id"],
             "plugin_id": task_row["plugin_id"],
@@ -549,7 +561,9 @@ class TaskExecutor:
             "exit_code": task_row["exit_code"],
             "error_message": task_row["error_message"],
             "preset": task_row["preset"],
-            "inputs": json.loads(task_row["inputs_json"] or "{}")
+            "inputs": json.loads(task_row["inputs_json"] or "{}"),
+            "queue_position": queue_position,
+            "pending_count": pending_count,
         }
 
     async def _upsert_findings_and_report(self, db, task_id: str, plugin, plugin_id: str, target: str, status: str, output: str = ""):

@@ -41,6 +41,8 @@ interface Task {
     error_message?: string
     inputs?: Record<string, any>
     preset?: string
+    queue_position?: number
+    pending_count?: number
 }
 
 interface Finding {
@@ -645,8 +647,10 @@ export default function TaskDetails() {
                 />
                 <DetailCard
                     label="MISSION_START"
-                    value={startedTime}
-                    subValue={task.started_at ? formatDateLong(task.started_at) : 'PENDING'}
+                    value={task.status === 'queued' && task.queue_position ? `QUEUE #${task.queue_position}` : startedTime}
+                    subValue={task.status === 'queued' && task.pending_count
+                        ? `${task.pending_count} SCAN${task.pending_count > 1 ? 'S' : ''} PENDING`
+                        : task.started_at ? formatDateLong(task.started_at) : 'PENDING'}
                 />
                 <DetailCard
                     label="SCAN_DURATION"
