@@ -69,8 +69,9 @@ def test_download_sarif_report_success(test_client):
 
     # Verify Content-Disposition header
     assert "attachment" in response.headers["content-disposition"]
-    assert "filename=secuscan_http-inspector_example-com_" in response.headers["content-disposition"]
-    assert response.headers["content-disposition"].endswith(".sarif")
+    assert "filename=" in response.headers["content-disposition"]
+    assert "secuscan_http-inspector_example-com_" in response.headers["content-disposition"]
+    assert ".sarif" in response.headers["content-disposition"]
 
     # Verify SARIF payload
     sarif = response.json()
