@@ -320,3 +320,16 @@ If a PR has been quiet for more than a week, a polite follow-up comment is compl
 - For security-sensitive reports, do not use public issues. Follow [SECURITY.md](SECURITY.md).
 
 Thank you for helping make SecuScan more useful, safer, and more welcoming to new contributors.
+## Frontend Generated Artifacts
+
+Never commit these auto-generated paths:
+- `frontend/dist/`
+- `frontend/playwright-report/`
+- `frontend/test-results/`
+- `frontend/.vite/`
+- `.vite/deps/`
+
+If CI fails, run:
+```bash
+git rm --cached <file>
+echo 'frontend/dist/' >> .gitignore
