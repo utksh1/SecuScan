@@ -188,10 +188,10 @@ describe('Reports — export buttons on a ready report', () => {
 
     await user.click(await screen.findByRole('button', { name: /^pdf$/i }))
 
-    expect(openSpy).toHaveBeenCalledWith(
-      expect.stringContaining(`/task/${readyReport.task_id}/report/pdf`),
-      '_blank',
-    )
+    expect(openSpy).toHaveBeenCalled()
+    const args = openSpy.mock.calls[0]
+    expect(args[0]).toEqual(expect.stringContaining(`/task/${readyReport.task_id}/report/pdf`))
+    expect(args[1]).toBe('_blank')
   })
 
   it('clicking HTML opens the correct backend URL', async () => {
@@ -200,10 +200,10 @@ describe('Reports — export buttons on a ready report', () => {
 
     await user.click(await screen.findByRole('button', { name: /^html$/i }))
 
-    expect(openSpy).toHaveBeenCalledWith(
-      expect.stringContaining(`/task/${readyReport.task_id}/report/html`),
-      '_blank',
-    )
+    expect(openSpy).toHaveBeenCalled()
+    const args = openSpy.mock.calls[0]
+    expect(args[0]).toEqual(expect.stringContaining(`/task/${readyReport.task_id}/report/html`))
+    expect(args[1]).toBe('_blank')
   })
 
   it('clicking CSV opens the correct backend URL', async () => {
@@ -212,10 +212,10 @@ describe('Reports — export buttons on a ready report', () => {
 
     await user.click(await screen.findByRole('button', { name: /^csv$/i }))
 
-    expect(openSpy).toHaveBeenCalledWith(
-      expect.stringContaining(`/task/${readyReport.task_id}/report/csv`),
-      '_blank',
-    )
+    expect(openSpy).toHaveBeenCalled()
+    const args = openSpy.mock.calls[0]
+    expect(args[0]).toEqual(expect.stringContaining(`/task/${readyReport.task_id}/report/csv`))
+    expect(args[1]).toBe('_blank')
   })
 
   it('does not use the old placeholder latest-report route', async () => {
@@ -249,10 +249,10 @@ describe('Reports — header export button', () => {
     const btn = await screen.findByRole('button', { name: /Export Latest Report/i })
     await user.click(btn)
 
-    expect(openSpy).toHaveBeenCalledWith(
-      expect.stringContaining(`/task/${readyReport.task_id}/report/pdf`),
-      '_blank',
-    )
+    expect(openSpy).toHaveBeenCalled()
+    const args = openSpy.mock.calls[0]
+    expect(args[0]).toEqual(expect.stringContaining(`/task/${readyReport.task_id}/report/pdf`))
+    expect(args[1]).toBe('_blank')
   })
 
   it('is disabled when there are no ready reports', async () => {
