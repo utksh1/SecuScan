@@ -106,7 +106,7 @@ Only run scans against systems you own or are explicitly authorized to assess.
 
 ## Examples for common field types in metadata.json
 
-# String Field - Single-line text
+## string - Single-line text
 
 -Use for free-form text inputs such as hostnames, domain names, file paths, or any
 value that does not fit a more specific type.
@@ -118,9 +118,42 @@ value that does not fit a more specific type.
   "type": "string",
   "required": true,
   "placeholder": "example.com",
-  "description": "The root domain to enumerate. Do not include a scheme or trailing slash."
+  //"description": "The root domain to enumerate. Do not include a scheme or trailing slash."
 }
 ```
+
+## url - URL
+
+-Use when the field expects a well-formed URL (a complete target url).
+
+```json
+{
+  "id": "target_url",
+  "label": "Target URL",
+  "type": "url",
+  "required": true,
+  "placeholder": "https://example.com",
+  //"description": "Full URL of the target, including scheme. Must begin with http:// or https://."
+}
+```
+
+## select - Single-choice dropdown
+
+- Use when user must choose a predefined option or say exactly one value from a fixed list.
+
+```json
+{
+  "id": "scan_depth",
+  "label": "Scan Depth",
+  "type": "select",
+  "required": true,
+  "options": ["shallow", "normal", "deep"],
+  "default": "normal",
+  //"description": "Controls how aggressively the plugin probes the target. Start with 'normal' for most scans."
+}
+```
+
+
 
 
 
