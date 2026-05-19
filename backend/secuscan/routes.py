@@ -645,7 +645,7 @@ async def list_tasks(
             t["task_id"] = t.pop("id")
         t["inputs"] = t.pop("inputs_json", {})
 
-    total_pages = (total + per_page - 1)  per_page if per_page > 0 else 0
+    total_pages = (total + per_page - 1) // per_page if per_page > 0 else 0
     return {
         "tasks": tasks_list,
         "pagination": {
