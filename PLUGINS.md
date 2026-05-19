@@ -159,3 +159,62 @@ python scripts/validate_plugin.py --plugin plugins/nmap
 
 The validation checks metadata JSON, required fields, checksums, and custom
 parser imports when applicable.
+#plugin
+{
+  "textInput": {
+    "query": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "numberInput": {
+    "limit": {
+      "type": "number",
+      "required": false,
+      "default": 10
+    }
+  },
+  "checkboxInput": {
+    "verbose": {
+      "type": "boolean",
+      "required": false,
+      "default": false
+    }
+  },
+  "selectInput": {
+    "mode": {
+      "type": "select",
+      "options": ["fast", "balanced", "deep"],
+      "required": false,
+      "default": "balanced"
+    }
+  },
+  "multiselectInput": {
+    "tags": {
+      "type": "multiselect",
+      "options": ["news", "sports", "finance", "tech"],
+      "required": false,
+      "default": []
+    }
+  },
+  "filePathInput": {
+    "filePath": {
+      "type": "string",
+      "format": "path",
+      "required": true
+    }
+  },
+  "presets": {
+    "quick": {
+      "limit": 5,
+      "verbose": false,
+      "mode": "fast"
+    },
+    "deepDive": {
+      "limit": 50,
+      "verbose": true,
+      "mode": "deep",
+      "tags": ["tech", "finance"]
+    }
+  }
+}
