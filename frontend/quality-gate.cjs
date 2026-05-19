@@ -111,13 +111,19 @@ class QualityGate {
 
         for (const file of sourceFiles) {
             const content = fs.readFileSync(file, 'utf8');
-            const refs = [];
+            const refs = new Set();
+           const routePatterns = [
+                    /to=\s*["'](\/[^"']*)["']/g,
+                    /navigate\(\s*["'](\/[^"']*)["']\s*\)/g,
+                    /to=\s*\{\s*`(\/[^`]+)`\s*\}/g,
+                    /navigate\(\s*`(\/[^`]+)`\s*\)/g
+                ];
 
-            for (const match of content.matchAll(/to=\s*["'](\/[^"']*)["']/g)) refs.push(match[1]);
-            for (const match of content.matchAll(/navigate\(\s*["'](\/[^"']*)["']\s*\)/g)) refs.push(match[1]);
-            for (const match of content.matchAll(/to=\s*\{\s*`(\/[^`]+)`\s*\}/g)) refs.push(match[1]);
-            for (const match of content.matchAll(/navigate\(\s*`(\/[^`]+)`\s*\)/g)) refs.push(match[1]);
-
+            for (const pattern of routePatterns) {
+                for (const match of content.matchAll(pattern)) {
+                    refs.add(match[1]);
+                }
+            }
             for (const match of content.matchAll(/to=\s*\{\s*routes\.(\w+)\s*\}/g)) {
                 const key = match[1];
                 if (!routeMap[key]) {

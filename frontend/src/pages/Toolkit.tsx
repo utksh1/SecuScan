@@ -230,31 +230,67 @@ export default function Scanner() {
     }
   }, [tabOrder, activeTab])
 
-  const categoryToolsCount = useMemo(
-    () => tools.filter((tool) => {
-      if (activeTab === 'quick-start') return tool.isQuickStart
-      return tool.category === activeTab
-    }).length,
-    [tools, activeTab],
-  )
+ const categoryToolsCount = useMemo(() => {
+  let count = 0
+
+  for (const tool of tools) {
+    if (activeTab === 'quick-start') {
+      if (tool.isQuickStart) count++
+    } else {
+      if (tool.category === activeTab) count++
+    }
+  }
+
+  return count
+}, [tools, activeTab])
+  
 
   const filteredTools = useMemo(() => {
-    const query = searchQuery.toLowerCase().trim()
-    return tools.filter((tool) => {
-      const matchesCategory = activeTab === 'quick-start' ? tool.isQuickStart : tool.category === activeTab
-      if (!matchesCategory) return false
-      if (!query) return true
-      return tool.name.toLowerCase().includes(query) || tool.purpose.toLowerCase().includes(query)
-    })
-  }, [tools, activeTab, searchQuery])
+  const query = searchQuery.toLowerCase().trim()
+  const results: CatalogTool[] = []
 
+  for (const tool of tools) {
+    const matchesCategory =
+      activeTab === 'quick-start'
+        ? tool.isQuickStart
+        : tool.category === activeTab
+
+    if (!matchesCategory) continue
+
+    if (
+      !query ||
+      tool.name.toLowerCase().includes(query) ||
+      tool.purpose.toLowerCase().includes(query)
+    ) {
+      results.push(tool)
+    }
+  }
+
+  return results
+}, [tools, activeTab, searchQuery])
   const quickAccessTools = useMemo(() => {
-    const byId = new Map(tools.map((tool) => [tool.id, tool]))
-    return recentToolIds
-      .map((id) => byId.get(id))
-      .filter((tool): tool is CatalogTool => Boolean(tool))
-      .slice(0, RECENT_TOOLS_LIMIT)
-  }, [tools, recentToolIds])
+  const byId = new Map<string, CatalogTool>()
+
+  for (const tool of tools) {
+    byId.set(tool.id, tool)
+  }
+
+  const recentTools: CatalogTool[] = []
+
+  for (const id of recentToolIds) {
+    const tool = byId.get(id)
+
+    if (tool) {
+      recentTools.push(tool)
+    }
+
+    if (recentTools.length >= RECENT_TOOLS_LIMIT) {
+      break
+    }
+  }
+
+  return recentTools
+}, [tools, recentToolIds])
 
   const trackRecentTool = (toolId: string) => {
     setRecentToolIds((prev) => {
