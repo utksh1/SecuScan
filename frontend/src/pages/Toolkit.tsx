@@ -75,6 +75,24 @@ function formatCategoryLabel(category: string): string {
     .join(' ')
 }
 
+function toDomId(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, '-')
+}
+
+function getToolAccessibilityLabel(tool: CatalogTool): string {
+  const parts = [
+    tool.name,
+    `${tool.riskLevel} risk scanner`,
+    tool.requiresConsent ? 'requires consent' : 'does not require consent',
+  ]
+
+  if (tool.disabled) {
+    parts.push(`unavailable: ${tool.disabledReason || 'backend plugin pending'}`)
+  }
+
+  return parts.join(', ')
+}
+
 function mapPluginCategoryToLegacyTab(category: string, pluginId?: string): UITab {
   const pinnedTool = scanTools.find(t => t.id === pluginId);
   
@@ -273,6 +291,7 @@ export default function Scanner() {
             <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-silver/20 group-focus-within:text-rag-red transition-colors text-sm">search</span>
             <input
               type="text"
+              aria-label="Search scanner catalog"
               placeholder="SEARCH_PROTOCOLS..."
               className="bg-charcoal border-4 border-black pl-12 pr-4 py-4 text-xs font-black uppercase tracking-widest text-silver-bright focus:outline-none focus:border-rag-red transition-all w-80 placeholder:text-silver/10 italic shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
               value={searchQuery}
@@ -289,10 +308,15 @@ export default function Scanner() {
         </section>
       )}
 
-      <nav className="flex flex-wrap gap-4">
+      <nav className="flex flex-wrap gap-4" role="tablist" aria-label="Scanner categories">
         {tabOrder.map((category) => (
           <button
             key={category}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === category}
+            aria-controls={`scanner-panel-${toDomId(category)}`}
+            id={`scanner-tab-${toDomId(category)}`}
             onClick={() => setActiveTab(category)}
             className={`px-8 py-4 text-[10px] font-black uppercase tracking-[0.3em] transition-all border-4 flex items-center gap-3 ${
               activeTab === category
@@ -301,14 +325,18 @@ export default function Scanner() {
             }`}
           >
             {formatCategoryLabel(category)}
-            {activeTab === category && <span className="w-2 h-2 bg-black" />}
+            {activeTab === category && <span className="w-2 h-2 bg-black" aria-hidden="true" />}
           </button>
         ))}
       </nav>
 
       {/* Quick Access section removed per user request */}
 
-      <main>
+      <main
+        role="tabpanel"
+        id={`scanner-panel-${toDomId(activeTab)}`}
+        aria-labelledby={`scanner-tab-${toDomId(activeTab)}`}
+      >
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab || 'loading'}
@@ -319,77 +347,87 @@ export default function Scanner() {
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8"
           >
             {!loading &&
-              filteredTools.map((tool) => (
-                <motion.button
-                  key={tool.id}
-                  variants={itemVariants}
-                  disabled={tool.disabled}
-                  onClick={() => handleToolSelect(tool)}
-                  className={`group relative p-8 bg-charcoal border-4 border-black text-left flex flex-col justify-between h-80 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all overflow-hidden ${
-                    tool.disabled
-                      ? 'opacity-30 cursor-not-allowed grayscale'
-                      : 'hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] hover:-translate-x-1 hover:-translate-y-1'
-                  }`}
-                >
-                  <div className="space-y-6 relative z-10">
-                    <div className="flex justify-between items-start">
-                      <div
-                        className={`px-2 py-0.5 text-[8px] font-black uppercase tracking-widest italic border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
-                          tool.riskLevel === 'aggressive'
-                            ? 'bg-rag-red text-black'
-                            : tool.riskLevel === 'active'
-                              ? 'bg-rag-amber text-black'
-                              : 'bg-rag-green text-black'
-                        }`}
-                      >
-                        {tool.riskLevel}_STRIKE
+              filteredTools.map((tool) => {
+                const toolId = toDomId(tool.id)
+                const descriptionId = `scanner-tool-${toolId}-description`
+                const disabledReasonId = `scanner-tool-${toolId}-disabled`
+
+                return (
+                  <motion.button
+                    key={tool.id}
+                    type="button"
+                    variants={itemVariants}
+                    aria-disabled={tool.disabled}
+                    aria-label={getToolAccessibilityLabel(tool)}
+                    aria-describedby={tool.disabled && tool.disabledReason ? `${descriptionId} ${disabledReasonId}` : descriptionId}
+                    onClick={() => handleToolSelect(tool)}
+                    className={`group relative p-8 bg-charcoal border-4 border-black text-left flex flex-col justify-between h-80 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all overflow-hidden ${
+                      tool.disabled
+                        ? 'opacity-30 cursor-not-allowed grayscale'
+                        : 'hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] hover:-translate-x-1 hover:-translate-y-1'
+                    }`}
+                  >
+                    <div className="space-y-6 relative z-10">
+                      <div className="flex justify-between items-start">
+                        <div
+                          aria-hidden="true"
+                          className={`px-2 py-0.5 text-[8px] font-black uppercase tracking-widest italic border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
+                            tool.riskLevel === 'aggressive'
+                              ? 'bg-rag-red text-black'
+                              : tool.riskLevel === 'active'
+                                ? 'bg-rag-amber text-black'
+                                : 'bg-rag-green text-black'
+                          }`}
+                        >
+                          {tool.riskLevel}_STRIKE
+                        </div>
+                        {tool.isProfessional && (
+                          <div className="px-2 py-0.5 text-[8px] font-black uppercase tracking-widest italic border-2 border-rag-blue text-black bg-rag-blue shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" aria-hidden="true">
+                            PROFESSIONAL
+                          </div>
+                        )}
+                        <span className="material-symbols-outlined text-silver/10 group-hover:text-silver-bright transition-colors duration-500" aria-hidden="true">
+                          {tool.presetCompatibility === 'quick-recon' ? 'bolt' : 'psychology'}
+                        </span>
                       </div>
-                      {tool.isProfessional && (
-                        <div className="px-2 py-0.5 text-[8px] font-black uppercase tracking-widest italic border-2 border-rag-blue text-black bg-rag-blue shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                          PROFESSIONAL
+
+                      <div>
+                        <h3 className="text-3xl font-black text-silver-bright uppercase tracking-tighter italic leading-none group-hover:text-rag-red transition-colors">
+                          {tool.name}
+                        </h3>
+                        <div className="w-12 h-1 bg-silver-bright/10 mt-4 group-hover:w-full group-hover:bg-rag-red/30 transition-all duration-700" />
+                      </div>
+
+                      <p id={descriptionId} className="text-[10px] text-silver/40 uppercase tracking-widest leading-relaxed line-clamp-3 font-bold italic">
+                        {tool.purpose}
+                      </p>
+
+                      {tool.isPlugin && tool.availability && tool.availability.missing_binaries.length > 0 && (
+                        <div className="text-[9px] uppercase tracking-widest text-rag-amber font-black leading-relaxed">
+                          {tool.availability.guidance ||
+                            `Unavailable: Requires external binaries (${tool.availability.missing_binaries.join(', ')})`}
                         </div>
                       )}
-                      <span className="material-symbols-outlined text-silver/10 group-hover:text-silver-bright transition-colors duration-500">
-                        {tool.presetCompatibility === 'quick-recon' ? 'bolt' : 'psychology'}
+                    </div>
+
+                    <div className="pt-6 border-t-2 border-black border-dashed flex justify-between items-end">
+                      <span className="text-[9px] font-black text-silver-bright/20 uppercase tracking-[0.4em] group-hover:text-silver-bright transition-colors">
+                        INIT_DEPLOYMENT
+                      </span>
+                      <span className="material-symbols-outlined text-silver/20 group-hover:text-rag-red group-hover:translate-x-1 transition-all duration-300" aria-hidden="true">
+                        double_arrow
                       </span>
                     </div>
 
-                    <div>
-                      <h3 className="text-3xl font-black text-silver-bright uppercase tracking-tighter italic leading-none group-hover:text-rag-red transition-colors">
-                        {tool.name}
-                      </h3>
-                      <div className="w-12 h-1 bg-silver-bright/10 mt-4 group-hover:w-full group-hover:bg-rag-red/30 transition-all duration-700" />
-                    </div>
-
-                    <p className="text-[10px] text-silver/40 uppercase tracking-widest leading-relaxed line-clamp-3 font-bold italic">
-                      {tool.purpose}
-                    </p>
-
-                    {tool.isPlugin && tool.availability && tool.availability.missing_binaries.length > 0 && (
-                    <div className="text-[9px] uppercase tracking-widest text-rag-amber font-black leading-relaxed">
-                      {tool.availability.guidance ||
-                        `Unavailable: Requires external binaries (${tool.availability.missing_binaries.join(', ')})`}
-                    </div>
-                  )}
-                  </div>
-
-                  <div className="pt-6 border-t-2 border-black border-dashed flex justify-between items-end">
-                    <span className="text-[9px] font-black text-silver-bright/20 uppercase tracking-[0.4em] group-hover:text-silver-bright transition-colors">
-                      INIT_DEPLOYMENT
-                    </span>
-                    <span className="material-symbols-outlined text-silver/20 group-hover:text-rag-red group-hover:translate-x-1 transition-all duration-300">
-                      double_arrow
-                    </span>
-                  </div>
-
-                  {tool.disabled && tool.disabledReason && (
-                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center p-8 text-center z-20">
-                      <span className="material-symbols-outlined text-rag-red text-3xl mb-4">lock_reset</span>
-                      <span className="text-[10px] text-rag-red font-black uppercase tracking-widest italic">{tool.disabledReason}</span>
-                    </div>
-                  )}
-                </motion.button>
-              ))}
+                    {tool.disabled && tool.disabledReason && (
+                      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center p-8 text-center z-20">
+                        <span className="material-symbols-outlined text-rag-red text-3xl mb-4" aria-hidden="true">lock_reset</span>
+                        <span id={disabledReasonId} className="text-[10px] text-rag-red font-black uppercase tracking-widest italic">{tool.disabledReason}</span>
+                      </div>
+                    )}
+                  </motion.button>
+                )
+              })}
 
             {!loading && filteredTools.length === 0 && (
               <motion.div

@@ -255,7 +255,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen flex flex-col bg-charcoal-dark selection:bg-silver-bright selection:text-charcoal-dark">
-      <header className="w-full px-0 pt-12 pb-12 flex flex-col gap-8 xl:flex-row xl:items-end xl:justify-between border-b-4 border-silver-bright/10 mb-12 font-black pl-8 pr-8">
+      <header className="w-full pt-8 pb-6 flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between border-b border-silver-bright/10 mb-8 px-8">
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -265,12 +265,12 @@ export default function Dashboard() {
           <div className="bg-rag-amber text-black px-4 py-1 text-xs uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
             SECUSCAN_WORKSPACE v2.4
           </div>
-          <h1 className="text-5xl md:text-7xl lg:text-8xl text-silver-bright uppercase tracking-tighter leading-none italic whitespace-nowrap">
-            SecuScan <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '2px var(--accent-silver-bright)' }}>Workspace</span>
-          </h1>
-          <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic leading-relaxed">
-            CENTRAL_INTELLIGENCE_OVERVIEW // VULNERABILITIES: {summary.total_findings} // THREAT_LEVEL: {risk.label.toUpperCase()}
-          </p>
+         <h1 className="text-4xl md:text-5xl lg:text-6xl text-silver-bright tracking-tight leading-none whitespace-nowrap font-bold">
+  SecuScan <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '1px var(--accent-silver-bright)' }}>Workspace</span>
+</h1>
+<p className="text-sm font-mono text-silver/60 tracking-wider leading-relaxed mt-2">
+  Central Intelligence Overview // Vulnerabilities: {summary.total_findings} // Threat Level: {risk.label}
+</p>
         </motion.div>
 
         <motion.div
@@ -325,14 +325,27 @@ export default function Dashboard() {
               />
               Syncing operational data...
             </motion.section>
-          ) : error ? (
+      ) : error ? (
             <motion.section
               key="error"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="mt-12 py-20 border-t border-rag-red/20 text-xs text-rag-red uppercase tracking-[0.25em]"
-            >
-              Briefing unavailable: {error}
+              className="mt-12 py-16 flex flex-col items-center justify-center bg-charcoal border border-rag-red/30 rounded-md max-w-3xl mx-auto shadow-lg">
+              <div className="w-12 h-12 rounded-full bg-rag-red/10 flex items-center justify-center mb-4">
+                <span className="material-symbols-outlined text-rag-red text-2xl">warning</span>
+              </div>
+              <h3 className="text-rag-red text-lg font-bold tracking-widest uppercase mb-2">
+                System Offline
+              </h3>
+              <p className="text-silver/80 text-sm font-mono text-center px-8 mb-6 uppercase">
+                {error}. Please verify network connectivity.
+              </p>
+              <button
+                onClick={() => window.location.reload()}
+                className="px-6 py-2 bg-rag-red/20 hover:bg-rag-red border border-rag-red/50 text-white text-xs font-bold uppercase tracking-widest rounded transition-all"
+              >
+                Retry Connection
+              </button>
             </motion.section>
           ) : (
             <motion.div
