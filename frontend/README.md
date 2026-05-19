@@ -489,7 +489,7 @@ Supported naming patterns include:
 - `*.spec.js`
 - `*.spec.jsx`
 
-> Note for Windows users:  
+> Note for Windows users:
 > Some npm scripts using `NODE_OPTIONS=...` may not run directly in PowerShell.
 
 Run tests manually using:
