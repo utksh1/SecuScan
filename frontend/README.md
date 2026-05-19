@@ -436,6 +436,85 @@ All commands must be run from the `frontend/` directory.
 - [ ] Navigation works between all pages
 - [ ] Responsive design works on mobile
 
+
+---
+## ⚡ Frontend Checks Quickstart
+
+Run all frontend commands from the `frontend/` directory.
+
+### Install Dependencies
+
+```bash
+cd frontend
+npm install
+```
+
+### Run Unit Tests
+
+```bash
+npm run test
+```
+
+### Run Tests in Watch Mode
+
+```bash
+npm run test:watch
+```
+
+### Run Type Checking
+
+```bash
+npm run typecheck
+```
+
+### Run Production Build
+
+```bash
+npm run build
+```
+
+### Run Quality Checks
+
+```bash
+npm run quality
+```
+
+### Run Full Quality Pipeline
+
+```bash
+npm run quality:full
+```
+
+### Run End-to-End Tests
+
+```bash
+npm run e2e
+```
+
+### Vitest Test File Locations
+
+Vitest unit tests are located in:
+
+```bash
+frontend/testing/unit
+```
+
+Supported naming patterns include:
+
+- `*.test.js`
+- `*.test.jsx`
+- `*.spec.js`
+- `*.spec.jsx`
+
+> Note for Windows users:
+> Some npm scripts using `NODE_OPTIONS=...` may not run directly in PowerShell.
+
+Run tests manually using:
+
+```bash
+npx vitest run
+```
+
 ### Browser Support
 
 - Chrome/Edge 90+
