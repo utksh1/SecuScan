@@ -113,7 +113,7 @@ export default function Reports() {
               const readyReports = reports.filter(r => r.status === 'ready')
               if (!readyReports.length) return
               const newest = readyReports.sort((a, b) => new Date(b.generated_at).getTime() - new Date(a.generated_at).getTime())[0]
-              window.open(`${API_BASE}/task/${newest.task_id}/report/pdf`, '_blank')
+              window.open(`${API_BASE}/task/${newest.task_id}/report/pdf`, '_blank', 'noopener,noreferrer')
             }}
             aria-label="Export Latest Report"
             title={reports.some(r => r.status === 'ready') ? 'Export latest ready report' : 'No ready report available'}
