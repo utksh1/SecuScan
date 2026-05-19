@@ -55,10 +55,9 @@ export default function Scans() {
     const [selectedIds, setSelectedIds] = useState<string[]>([])
     const isPageVisible = usePageVisibility()
     useEffect(() => {
+        if (!isPageVisible) return
         loadTasks()
-
-        const intervalMs = isPageVisible ? 5000 : 60000
-        const interval = setInterval(loadTasks, intervalMs)
+        const interval = setInterval(loadTasks, 5000)
         return () => clearInterval(interval)
     }, [filter, isPageVisible])
     async function loadTasks() {
