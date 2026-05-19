@@ -321,12 +321,16 @@ export default function TaskDetails() {
     }
 
     const copyTaskId = async () => {
+        if (!taskId) {
+            addToast('No Task ID available', 'warning')
+            return
+        }
         try {
             await navigator.clipboard.writeText(taskId || '')
-            addToast('Task ID copied to clipboard', 'success')
+            addToast('Task ID copied successfully', 'success')
         } catch (err) {
             console.error('Failed to copy task ID:', err)
-            addToast('Failed to copy Task ID', 'error')
+            addToast('Unable to copy Task ID', 'error')
         }
     }
     const handleRescan = async () => {
@@ -594,9 +598,17 @@ export default function TaskDetails() {
                                     Mission_Dossier_SIG#{taskId?.split('-')[0].toUpperCase()}
                                 </span>
                                 <button
+                                    type="button"
                                     onClick={copyTaskId}
-                                    className="border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-black text-silver-bright hover:bg-white/[0.04] transition-colors"
+                                    aria-label="Copy task ID"
+                                    title="Copy Task ID"
+                                    disabled={!taskId}
+                                    className="flex items-center gap-1 border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-black text-silver-bright hover:bg-white/[0.04] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                                 >
+                                    <span className="material-symbols-outlined text-sm">
+                                        content_copy
+                                    </span>
+
                                     Copy ID
                                 </button>
                                 <span className={`px-3 py-1 text-[10px] uppercase tracking-[0.3em] border ${statusTone}`}>
