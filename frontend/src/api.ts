@@ -41,6 +41,7 @@ export interface PluginFieldSchema {
   help?: string
   options?: PluginFieldOption[]
   validation?: Record<string, unknown>
+  sensitive?: boolean
 }
 export interface PluginAvailability {
   runnable: boolean
