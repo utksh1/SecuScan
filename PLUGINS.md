@@ -163,12 +163,38 @@ value that does not fit a more specific type.
   "default": false
 }
 ```
+## number - Numeric input
 
+-Use for numeric limits, thresholds or timeout values.
+-Use min and max to constrain the accepted range (both bounds are inclusive).
+-The backend will reject values outside the declared range.
 
+```json
+{
+  "id": "timeout",
+  "label": "Timeout (seconds)",
+  "type": "number",
+  "required": false,
+  "default": 30,
+  "min": 1,
+  "max": 300
+}
+```
 
+## multiselect - Multi-choice selection
 
+-Use multiselect fields when users can choose multiple options.
 
-
+```json
+{
+  "id": "output_formats",
+  "label": "Output Formats",
+  "type": "multiselect",
+  "required": false,
+  "options": ["json", "csv", "txt"],
+  "default": ["json"]
+}
+```
 
 
 
