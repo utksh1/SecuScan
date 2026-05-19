@@ -445,7 +445,7 @@ class TaskExecutor:
         if "unknown option:" in normalized_output or "flag provided but not defined:" in normalized_output:
             return (
                 TaskStatus.FAILED.value,
-                "Tool rejected one or more generated CLI options. Check the final command and raw output for details.",
+                output or "Tool rejected one or more generated CLI options. Check the final command and raw output for details.",
             )
 
         if exit_code == 0:

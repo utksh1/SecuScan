@@ -1,6 +1,0 @@
-api.utksh.in
-client.utksh.in
-codex.utksh.in
-server.utksh.in
-vox.utksh.in
-www.utksh.in

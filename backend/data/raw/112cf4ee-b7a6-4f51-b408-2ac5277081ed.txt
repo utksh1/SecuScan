@@ -1,2 +1,0 @@
-TCP/IP fingerprinting (for OS scan) requires root privileges.
-QUITTING!
