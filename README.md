@@ -30,8 +30,6 @@
 - [Security Policy](SECURITY.md)
 - [Contributing Guidelines](CONTRIBUTING.md)
 - [Quick Start](#quick-start)
-  
-
 ## Project Purpose
 
 SecuScan is an open source, plugin-driven platform for running security scans from your own machine. It combines a FastAPI backend, a React frontend, and a growing plugin system for recon, web, cloud, container, and reporting workflows.
