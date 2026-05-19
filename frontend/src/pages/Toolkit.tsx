@@ -280,7 +280,7 @@ export default function Scanner() {
         <div className="space-y-4">
           <div className="bg-rag-red text-black px-4 py-1 text-xs uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
             Strike_Toolkit v12
-          </div> 
+          </div>
           <h1 className="text-6xl md:text-8xl text-silver-bright uppercase tracking-tighter leading-none italic whitespace-nowrap">
             Tactical <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '2px var(--accent-silver-bright)' }}>Catalog</span>
           </h1>
