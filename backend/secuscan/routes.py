@@ -321,6 +321,14 @@ async def download_csv_report(task_id: str):
     except Exception:
         return _report_generation_error_response(task_id, "csv")
 
+    await db.log_audit(
+        "report_downloaded",
+        f"CSV report downloaded for task {task_id}",
+        context={"format": "csv", "task_id": task_id, "plugin_id": task_row["plugin_id"]},
+        task_id=task_id,
+        plugin_id=task_row["plugin_id"],
+    )
+
     return Response(
         content=csv_data,
         media_type="text/csv",
@@ -347,6 +355,14 @@ async def download_html_report(task_id: str):
         html_content = reporting.generate_html_report(dict(task_row), {"structured": structured_data})
     except Exception:
         return _report_generation_error_response(task_id, "html")
+
+    await db.log_audit(
+        "report_downloaded",
+        f"HTML report downloaded for task {task_id}",
+        context={"format": "html", "task_id": task_id, "plugin_id": task_row["plugin_id"]},
+        task_id=task_id,
+        plugin_id=task_row["plugin_id"],
+    )
 
     return Response(
         content=html_content,
@@ -375,6 +391,14 @@ async def download_pdf_report(task_id: str):
     except Exception:
         return _report_generation_error_response(task_id, "pdf")
 
+    await db.log_audit(
+        "report_downloaded",
+        f"PDF report downloaded for task {task_id}",
+        context={"format": "pdf", "task_id": task_id, "plugin_id": task_row["plugin_id"]},
+        task_id=task_id,
+        plugin_id=task_row["plugin_id"],
+    )
+
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
@@ -402,6 +426,14 @@ async def download_sarif_report(task_id: str):
         sarif_data = reporting.generate_sarif_report(dict(task_row), {"structured": structured_data})
     except Exception:
         return _report_generation_error_response(task_id, "sarif")
+
+    await db.log_audit(
+        "report_downloaded",
+        f"SARIF report downloaded for task {task_id}",
+        context={"format": "sarif", "task_id": task_id, "plugin_id": task_row["plugin_id"]},
+        task_id=task_id,
+        plugin_id=task_row["plugin_id"],
+    )
 
     return Response(
         content=sarif_data,
