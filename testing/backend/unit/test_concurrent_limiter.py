@@ -156,7 +156,6 @@ def test_route_rejects_task_when_limiter_full(test_client, monkeypatch):
     # Mock rate limiter to always allow
     async def mock_can_execute(*args, **kwargs):
         return True, ""
-    
     monkeypatch.setattr(rate_limiter, "can_execute", mock_can_execute)
 
     # Pre-fill all slots so the next acquire will fail
