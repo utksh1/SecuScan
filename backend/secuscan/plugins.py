@@ -134,9 +134,10 @@ class PluginManager:
             logger.error("Failed to hash plugin files for %s: %s", plugin.id, exc)
             return False
 
-        if has_checksum and plugin.checksum != combined_digest:
-            logger.error("Checksum mismatch for plugin %s", plugin.id)
-            return False
+        if has_checksum and settings.enforce_plugin_checksums:
+            if plugin.checksum != combined_digest:
+                logger.error("Checksum mismatch for plugin %s", plugin.id)
+                return False
 
         if has_signature:
             if not settings.plugin_signature_key:

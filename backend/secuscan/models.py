@@ -180,4 +180,3 @@ class PaginatedAuditLogs(BaseModel):
     total: int
     limit: int
     offset: int
-

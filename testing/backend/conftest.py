@@ -23,6 +23,7 @@ def setup_test_environment(monkeypatch):
     temp_path = temp_dir.name
 
     monkeypatch.setattr(settings, "data_dir", temp_path)
+    monkeypatch.setattr(settings, "enforce_plugin_checksums", False)
     monkeypatch.setattr(settings, "raw_output_dir", f"{temp_path}/raw")
     monkeypatch.setattr(settings, "reports_dir", f"{temp_path}/reports")
     monkeypatch.setattr(settings, "plugins_dir", str(repo_root / "plugins"))

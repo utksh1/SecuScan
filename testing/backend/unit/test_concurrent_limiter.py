@@ -150,8 +150,14 @@ def test_route_rejects_task_when_limiter_full(test_client, monkeypatch):
     Simulate max_concurrent slots already held, then POST /task/start.
     The route must return 503 and must NOT schedule the background task.
     """
-    from backend.secuscan.ratelimit import concurrent_limiter
+    from backend.secuscan.ratelimit import concurrent_limiter, rate_limiter
     from backend.secuscan import routes as routes_module
+
+    # Mock rate limiter to always allow
+    async def mock_can_execute(*args, **kwargs):
+        return True, ""
+    
+    monkeypatch.setattr(rate_limiter, "can_execute", mock_can_execute)
 
     # Pre-fill all slots so the next acquire will fail
     async def prefill():
