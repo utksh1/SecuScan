@@ -433,3 +433,46 @@ describe('Findings — empty state', () => {
     expect(await screen.findByText(/No Findings Match/i)).toBeInTheDocument()
   })
 })
+
+// ── Active filter summary ─────────────────────────────────────────────────────
+
+describe('Findings — active filter summary', () => {
+  beforeEach(() => {
+    vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
+  })
+
+  it('is hidden when no filters are active', async () => {
+    renderFindings()
+    await waitForLoad()
+    expect(screen.queryByLabelText('active filters')).not.toBeInTheDocument()
+  })
+
+  it('shows target + scanner chips when both filters are applied', async () => {
+    const user = userEvent.setup()
+    renderFindings()
+    await waitForLoad()
+
+    await user.selectOptions(screen.getByDisplayValue(/All Targets/i), 'api.example.com')
+    await user.selectOptions(screen.getByDisplayValue(/All Scanners/i), 'sqlmap')
+
+    const strip = await screen.findByLabelText('active filters')
+    expect(strip).toBeInTheDocument()
+    expect(within(strip).getByText(/target: api\.example\.com/i)).toBeInTheDocument()
+    expect(within(strip).getByText(/scanner: sqlmap/i)).toBeInTheDocument()
+  })
+
+  it('shows date range chips when both dates are set', async () => {
+    renderFindings()
+    await waitForLoad()
+
+    const fromInput = screen.getByText('From Date').parentElement!.querySelector('input')!
+    const toInput   = screen.getByText('To Date').parentElement!.querySelector('input')!
+
+    fireEvent.change(fromInput, { target: { value: '2026-05-14' } })
+    fireEvent.change(toInput,   { target: { value: '2026-05-15' } })
+
+    const strip = await screen.findByLabelText('active filters')
+    expect(within(strip).getByText(/from: 2026-05-14/i)).toBeInTheDocument()
+    expect(within(strip).getByText(/to: 2026-05-15/i)).toBeInTheDocument()
+  })
+})

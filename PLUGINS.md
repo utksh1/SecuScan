@@ -141,3 +141,21 @@ After refreshing, run the backend tests to confirm the plugin loads correctly:
 ```bash
 cd backend && python -m pytest
 ```
+
+## Plugin Validation
+
+Validate a single plugin without loading all plugins:
+
+```bash
+# Validate by plugin id
+python scripts/validate_plugin.py --plugin <plugin-id>
+
+# Example
+python scripts/validate_plugin.py --plugin nmap
+
+# Or pass a path to the plugin directory
+python scripts/validate_plugin.py --plugin plugins/nmap
+```
+
+The validation checks metadata JSON, required fields, checksums, and custom
+parser imports when applicable.
