@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { getFindings } from '../api'
 import { formatLocaleDate, parseDateSafe, getCurrentTimeZone } from '../utils/date'
-
 type Finding = {
   id: string
   severity: string
@@ -267,6 +266,29 @@ export default function Findings() {
     [enrichedFindings, filteredFindings, countsBySeverity],
   )
 
+  // Derives a flat list of active filter chips from non-default filter state.
+  const activeFilters = useMemo(() => {
+    const chips: { key: string; label: string }[] = []
+    if (searchQuery.trim())      chips.push({ key: 'search',  label: `Search: "${searchQuery.trim()}"` })
+    if (filterTarget !== 'all')  chips.push({ key: 'target',  label: `Target: ${filterTarget}` })
+    if (filterScanner !== 'all') chips.push({ key: 'scanner', label: `Scanner: ${filterScanner}` })
+    if (sortMode !== 'severity') chips.push({ key: 'sort',    label: `Sort: ${sortMode}` })
+    if (dateFrom)                chips.push({ key: 'from',    label: `From: ${dateFrom}` })
+    if (dateTo)                  chips.push({ key: 'to',      label: `To: ${dateTo}` })
+    return chips
+  }, [searchQuery, filterTarget, filterScanner, sortMode, dateFrom, dateTo])
+
+
+  function resetAllFilters() {
+    setFilterSeverity('all')
+    setFilterTarget('all')
+    setFilterScanner('all')
+    setSortMode('severity')
+    setDateFrom('')
+    setDateTo('')
+    setSearchQuery('')
+  }
+
   function updateFindingStatus(id: string, status: FindingStatus) {
     setReviewState((current) => ({ ...current, [id]: status }))
   }
@@ -349,7 +371,7 @@ export default function Findings() {
               </div>
             ) : null}
 
-            <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-silver-bright' : 'text-silver/30'}`}>
+            <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-silver-bright' : 'text-silver/30'}`} aria-hidden="true">
               east
             </span>
           </div>
@@ -397,16 +419,36 @@ export default function Findings() {
         <section className="border-2 border-black bg-charcoal/95 p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] backdrop-blur lg:sticky lg:top-4 lg:z-20">
           <div className="grid gap-4">
             <div className="grid gap-4 2xl:grid-cols-[minmax(320px,1fr)_auto] 2xl:items-end">
-              <div className="space-y-2">
-                <label className={filterLabelClass}>Search</label>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Title, target, CVE, remediation..."
-                  className={`${filterControlClass} px-4 placeholder:text-silver/20`}
-                />
-              </div>
+             <div className="space-y-2">
+  <label className={filterLabelClass}>Search</label>
+
+  <div className="relative">
+    <input
+      type="text"
+      value={searchQuery}
+      onChange={(event) => setSearchQuery(event.target.value)}
+      placeholder="Title, target, CVE, remediation..."
+      className={`${filterControlClass} px-4 pr-12 placeholder:text-silver/20`}
+    />
+
+    {searchQuery.trim() && (
+      <button
+        type="button"
+        aria-label="Clear search"
+        onClick={() => setSearchQuery('')}
+        className="
+          absolute right-3 top-1/2
+          -translate-y-1/2
+          text-silver/50
+          hover:text-silver-bright
+          transition
+        "
+      >
+        ✕
+      </button>
+    )}
+  </div>
+</div>
 
               <div className="flex flex-wrap gap-2 pb-2 sm:pb-0 2xl:max-w-[760px] 2xl:justify-end">
                 <button
@@ -500,15 +542,7 @@ export default function Findings() {
 
               <button
                 type="button"
-                onClick={() => {
-                  setFilterSeverity('all')
-                  setFilterTarget('all')
-                  setFilterScanner('all')
-                  setSortMode('severity')
-                  setDateFrom('')
-                  setDateTo('')
-                  setSearchQuery('')
-                }}
+                onClick={resetAllFilters}
                 className="h-11 w-full border border-silver-bright/20 bg-charcoal-dark px-4 text-[10px] font-black uppercase tracking-[0.18em] text-silver/65 transition-all hover:border-rag-red hover:text-silver-bright xl:w-auto xl:min-w-[180px]"
               >
                 Reset Filters
@@ -516,6 +550,27 @@ export default function Findings() {
             </div>
           </div>
         </section>
+
+        {/* ── Active filter summary strip ────────────────────────────────────────
+            Hidden when all filters are at their default values.    */}
+        {activeFilters.length > 0 && (
+          <div
+            aria-label="active filters"
+            className="flex flex-wrap items-center gap-2 border border-silver-bright/10 bg-charcoal/60 px-4 py-3"
+          >
+            <span className="mr-1 text-[10px] font-black uppercase tracking-[0.2em] text-silver/40">
+              Active Filters
+            </span>
+            {activeFilters.map(({ key, label }) => (
+              <span
+                key={key}
+                className="border border-rag-red/30 bg-rag-red/10 px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-rag-red"
+              >
+                {label}
+              </span>
+            ))}
+          </div>
+        )}
 
         <div className="grid gap-8 xl:grid-cols-[minmax(0,1.2fr)_420px]">
           <motion.section variants={sectionVariants} initial="hidden" animate="visible" className="space-y-5">
