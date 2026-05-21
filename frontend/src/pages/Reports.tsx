@@ -394,14 +394,18 @@ export default function Reports() {
                   ))}
 
                   {filteredReports.length === 0 && (
-                    <div className="col-span-2 py-40 border-4 border-dashed border-black/5 text-center flex flex-col items-center gap-8 bg-charcoal/30">
-                      <ReportIcon icon={Archive02Icon} size={120} className="text-silver/5" aria-hidden="true" />
-                      <div className="space-y-2">
-                        <p className="text-xl font-black text-silver/20 uppercase tracking-[0.4em] italic">Archive Isolated</p>
-                        <p className="text-xs font-mono text-silver/10 uppercase tracking-widest leading-relaxed">System buffer awaiting briefing generation protocols</p>
-                      </div>
-                    </div>
-                  )}
+  <div className="col-span-2 py-40 border-4 border-dashed border-black/5 text-center flex flex-col items-center gap-8 bg-charcoal/30">
+    <ReportIcon icon={Archive02Icon} size={120} className="text-silver/5" />
+    <div className="space-y-2">
+      <p className="text-xl font-black text-silver/20 uppercase tracking-[0.4em] italic">Archive Isolated</p>
+      <p className="text-xs font-mono text-silver/10 uppercase tracking-widest leading-relaxed">
+        {selectedStatus !== 'all' || selectedDate !== 'all'
+          ? 'No entries match the selected filters'
+          : 'System buffer awaiting briefing generation protocols'}
+      </p>
+    </div>
+  </div>
+)}
                 </motion.div>
               </AnimatePresence>
             </main>
