@@ -164,7 +164,13 @@ class PluginManager:
         metadata.pop("signature", None)
         metadata_canonical = json.dumps(metadata, sort_keys=True, separators=(",", ":"))
         metadata_digest = hashlib.sha256(metadata_canonical.encode("utf-8")).hexdigest()
-        parser_digest = hashlib.sha256(parser_file.read_bytes()).hexdigest() if parser_file.exists() else ""
+        
+        parser_digest = ""
+        if parser_file.exists():
+            parser_bytes = parser_file.read_bytes()
+            parser_bytes_normalized = parser_bytes.replace(b"\r\n", b"\n")
+            parser_digest = hashlib.sha256(parser_bytes_normalized).hexdigest()
+            
         return hashlib.sha256(f"{metadata_digest}:{parser_digest}".encode("utf-8")).hexdigest()
     
     def get_plugin(self, plugin_id: str) -> Optional[PluginMetadata]:

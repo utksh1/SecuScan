@@ -680,11 +680,11 @@ async def list_tasks(
         t["inputs"] = t.pop("inputs_json", {})
 
     total_pages = (total + per_page - 1) // per_page if per_page > 0 else 0
-    
+
     # Calculate next and previous page numbers
     next_page = page + 1 if page < total_pages else None
     prev_page = page - 1 if page > 1 else None
-    
+
     # Function to build URL with all query parameters
     def build_page_url(page_num):
         if page_num is None:
@@ -698,7 +698,6 @@ async def list_tasks(
             params_list.append(f"status={status}")
         # Join with & and return
         return f"/api/v1/tasks?{'&'.join(params_list)}"
-    
     return {
         "tasks": tasks_list,
         "pagination": {
