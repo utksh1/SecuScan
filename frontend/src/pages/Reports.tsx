@@ -16,7 +16,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import { getDashboardSummary, getReports, API_BASE } from '../api'
 import { formatDateLong, isWithinDateRange, type DateRange } from '../utils/date'
-import { usePreferredExportFormat } from '../hooks/usePreferredExportFormat'  
+import { usePreferredExportFormat } from '../hooks/usePreferredExportFormat'
 
 type Report = {
   id: string
