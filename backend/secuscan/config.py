@@ -67,7 +67,12 @@ class Settings(BaseSettings):
     sandbox_timeout: int = 600  # seconds
     sandbox_cpu_quota: float = 0.5
     sandbox_memory_mb: int = 512
-    
+
+    # Task-start payload limits (tunable via env vars)
+    task_start_max_body_bytes: int = 64_000       # 64 KB total JSON body
+    task_start_max_field_length: int = 1_000      # max chars per string input value
+    task_start_max_array_length: int = 50         # max items in any list/multiselect input
+
     # Logging
     log_level: str = "INFO"
     log_file: str = str(PROJECT_ROOT / "logs" / "secuscan.log")

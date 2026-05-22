@@ -72,7 +72,7 @@ from .database import get_db
 from .plugins import get_plugin_manager, init_plugins
 from .executor import executor
 from .ratelimit import rate_limiter, concurrent_limiter
-from .validation import validate_target
+from .validation import validate_target, validate_task_start_payload
 from .reporting import reporting
 from .vault import VaultCrypto
 from .workflows import scheduler
@@ -193,11 +193,18 @@ async def get_all_presets():
 @router.post("/task/start")
 async def start_task(
     request: TaskCreateRequest,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    raw_request: Request,
 ):
     """
-    Start a new scan task
+    Start a new scan task.
     """
+    # ── Payload size / field-length guard ─────────────────────────────────
+    raw_body = await raw_request.body()
+    ok, status_code, error_msg = validate_task_start_payload(raw_body, request.inputs)
+    if not ok:
+        raise HTTPException(status_code=status_code, detail=error_msg)
+
     # Validate consent
     if settings.require_consent and not request.consent_granted:
         logger.warning(f"Task start failed: Consent not granted. Request: {request}")
@@ -355,6 +362,14 @@ async def download_csv_report(task_id: str):
     except Exception:
         return _report_generation_error_response(task_id, "csv")
 
+    await db.log_audit(
+        "report_downloaded",
+        f"CSV report downloaded for task {task_id}",
+        context={"format": "csv", "task_id": task_id, "plugin_id": task_row["plugin_id"]},
+        task_id=task_id,
+        plugin_id=task_row["plugin_id"],
+    )
+
     return Response(
         content=csv_data,
         media_type="text/csv",
@@ -382,6 +397,14 @@ async def download_html_report(task_id: str):
     except Exception:
         return _report_generation_error_response(task_id, "html")
 
+    await db.log_audit(
+        "report_downloaded",
+        f"HTML report downloaded for task {task_id}",
+        context={"format": "html", "task_id": task_id, "plugin_id": task_row["plugin_id"]},
+        task_id=task_id,
+        plugin_id=task_row["plugin_id"],
+    )
+
     return Response(
         content=html_content,
         media_type="text/html",
@@ -403,11 +426,19 @@ async def download_pdf_report(task_id: str):
     if task_row["status"] not in ["completed", "failed"]:
         raise HTTPException(status_code=400, detail="Task is not finished yet")
 
-    structured_data = json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
     try:
-        pdf_bytes = reporting.generate_pdf_report(dict(task_row), {"structured": structured_data})
+        structured_data = json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
+        pdf_bytes = bytes(reporting.generate_pdf_report(dict(task_row), {"structured": structured_data}))
     except Exception:
         return _report_generation_error_response(task_id, "pdf")
+
+    await db.log_audit(
+        "report_downloaded",
+        f"PDF report downloaded for task {task_id}",
+        context={"format": "pdf", "task_id": task_id, "plugin_id": task_row["plugin_id"]},
+        task_id=task_id,
+        plugin_id=task_row["plugin_id"],
+    )
 
     return Response(
         content=pdf_bytes,
@@ -436,6 +467,14 @@ async def download_sarif_report(task_id: str):
         sarif_data = reporting.generate_sarif_report(dict(task_row), {"structured": structured_data})
     except Exception:
         return _report_generation_error_response(task_id, "sarif")
+
+    await db.log_audit(
+        "report_downloaded",
+        f"SARIF report downloaded for task {task_id}",
+        context={"format": "sarif", "task_id": task_id, "plugin_id": task_row["plugin_id"]},
+        task_id=task_id,
+        plugin_id=task_row["plugin_id"],
+    )
 
     return Response(
         content=sarif_data,
@@ -698,7 +737,6 @@ async def list_tasks(
             params_list.append(f"status={status}")
         # Join with & and return
         return f"/api/v1/tasks?{'&'.join(params_list)}"
-
     return {
         "tasks": tasks_list,
         "pagination": {
