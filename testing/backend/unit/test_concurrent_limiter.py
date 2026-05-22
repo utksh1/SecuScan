@@ -179,8 +179,8 @@ def test_route_rejects_task_when_limiter_full(test_client, monkeypatch):
             },
         )
 
-        assert response.status_code == 503, (
-            f"Expected 503 when limiter is full, got {response.status_code}: {response.text}"
+        assert response.status_code == 409, (
+            f"Expected 429 when limiter is full, got {response.status_code}: {response.text}"
         )
         assert len(scheduled) == 0, "Background task must not be scheduled when acquire fails"
 
