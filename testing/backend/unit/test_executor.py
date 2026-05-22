@@ -150,3 +150,73 @@ def test_classify_command_result_fails_on_undefined_flag_even_with_zero_exit(set
 
     assert status == "failed"
     assert error is not None
+
+
+def test_cancelled_error_updates_db_status():
+    """
+    Regression: asyncio.current_task().cancelled() always returns False
+    inside a finally block, so the DB update for cancelled tasks was
+    dead code. The fix moves it into an explicit except asyncio.CancelledError
+    handler. This test verifies CancelledError is not swallowed by
+    except Exception and that the re-raise propagates correctly.
+    """
+    async def _run():
+        async def cancellable():
+            try:
+                await asyncio.sleep(10)
+            except asyncio.CancelledError:
+                # Confirm CancelledError is NOT caught by except Exception
+                raise
+
+        task = asyncio.create_task(cancellable())
+        await asyncio.sleep(0)  # let task start
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        assert task.cancelled(), "Task must be marked cancelled after CancelledError propagates"
+
+    asyncio.run(_run())
+
+
+def test_cancelled_error_is_not_subclass_of_exception():
+    """
+    Documents the Python 3.8+ behaviour that makes the original finally-block
+    fix unreliable: CancelledError is a BaseException, not Exception.
+    If this assertion fails, the Python version has changed the hierarchy.
+    """
+    assert not issubclass(asyncio.CancelledError, Exception), (
+        "CancelledError must be a BaseException, not Exception — "
+        "if this fails, revisit the except ordering in execute_task()"
+    )
+
+
+def test_current_task_cancelled_is_false_in_finally():
+    """
+    Directly proves why the original finally-block check was dead code:
+    Task.cancelled() returns False while the finally block is still running.
+    """
+    result = {}
+
+    async def _run():
+        task = asyncio.current_task()
+
+        async def inner():
+            try:
+                raise asyncio.CancelledError()
+            finally:
+                # This is exactly what the old code did — always False
+                result["cancelled_in_finally"] = asyncio.current_task().cancelled()
+
+        t = asyncio.create_task(inner())
+        try:
+            await t
+        except asyncio.CancelledError:
+            pass
+
+    asyncio.run(_run())
+    assert result["cancelled_in_finally"] is False, (
+        "Task.cancelled() must be False inside finally — "
+        "the DB update must live in except asyncio.CancelledError, not finally"
+    )

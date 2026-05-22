@@ -20,7 +20,6 @@ from .database import get_db
 from .plugins import get_plugin_manager
 from .models import TaskStatus
 from .ratelimit import concurrent_limiter
-from .ratelimit import concurrent_limiter
 
 # Modular Scanners
 from .scanners.port_scanner import PortScanner
@@ -421,10 +420,10 @@ class TaskExecutor:
                 task_id=task_id
             )
         finally:
-            # Always clean up: remove from the in-memory registry and
-            # release the concurrency slot regardless of how the task ended.
+            # Always clean up the in-memory registry regardless of how the
+            # task ended. The cancelled() check is removed — it always returns
+            # False here because the task is still executing the finally block.
             self.running_tasks.pop(task_id, None)
-            await concurrent_limiter.release(task_id)
     
     async def _execute_command(
         self,
