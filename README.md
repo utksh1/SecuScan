@@ -47,16 +47,14 @@
 ---
 
 <p align="center">
-  
   🚀 Fast Scanning • 🔒 Privacy Focused • ⚡ Lightweight • 🧠 Learning Friendly
-  
 </p>
 
 ---
 
 ## 🎯 Project Purpose
 
-> NOTE: Detailed setup, deployment, and contributor onboarding content has been moved to the `docs/` folder to keep this README clean and concise.  
+> NOTE: Detailed setup, deployment, and contributor onboarding content has been moved to the `docs/` folder to keep this README clean and concise.
 > See [Installation and Setup](docs/installation.md) and [Contributing](docs/contributing.md) for complete guides.
 
 SecuScan is an open-source, plugin-driven security scanning platform built for learning, experimentation, and ethical security workflows. It combines a powerful FastAPI backend, a modern React frontend, and an extensible plugin ecosystem for recon, web, cloud, container, and reporting operations.
@@ -78,24 +76,20 @@ The project is designed to be:
 
 ## 🚀 Core Areas
 
-- 🔗 **Scan Orchestration & API Workflows**  
+- 🔗 **Scan Orchestration & API Workflows**
   Backend services and scanning pipelines inside `backend/secuscan`
-
-- 🖥️ **React Frontend & Dashboard Experience**  
+- 🖥️ **React Frontend & Dashboard Experience**
   Modern UI components, dashboard interactions, and user workflows in `frontend/src`
-
-- 🔌 **Plugin System & Parser Integrations**  
+- 🔌 **Plugin System & Parser Integrations**
   Scanner plugins, metadata handling, and parsing utilities inside `plugins`
-
-- 📊 **Reports, Exports & Result Normalization**  
+- 📊 **Reports, Exports & Result Normalization**
   Unified reporting, export generation, and scan result processing across backend and frontend 
 
   ---
 
-## Architecture Diagram 
+## Architecture Diagram
 ```mermaid
 flowchart LR
-
     User[User / Browser]
     Frontend[Frontend - React + Vite]
     Backend[Backend - FastAPI]
@@ -201,7 +195,7 @@ docker compose up --build
 
 ## 🐍 Backend Setup
 
-> **Python Requirement:**  
+> **Python Requirement:**
 > `python3` must resolve to **Python 3.11+**.  
 > If your default version is older, use a compatible interpreter such as `python3.11` or specify it manually using:
 >
@@ -277,7 +271,7 @@ npm run e2e
 
 # 🌱 New Contributors Start Here
 
-Welcome to SecuScan!  
+Welcome to SecuScan!
 If you're making your first contribution, these are great areas to begin with:
 
 - 📚 **Documentation** — Improve setup instructions, fix outdated content, or enhance contributor guidance.
@@ -289,7 +283,7 @@ If you're making your first contribution, these are great areas to begin with:
 
 ## 📖 Recommended Reading Before You Start
 
-Before contributing, take a few minutes to explore the core project guides below.  
+Before contributing, take a few minutes to explore the core project guides below.
 These documents will help you understand the development workflow, project standards, security practices, and plugin ecosystem.
 
 | 📘 Guide | 📄 Purpose |
