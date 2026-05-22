@@ -287,127 +287,123 @@ export default function ToolConfig() {
                     </div>
 
                     {field.type === 'text' ? (
-                      <textarea
-                        id={fieldId}
-                        value={String(value ?? '')}
-                        onChange={(event) => handleFieldChange(field, event.target.value)}
-                        placeholder={field.placeholder || ''}
-                        aria-invalid={!!validationError}
-                        className={`w-full min-h-[120px] bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none transition-all ${
-                          validationError ? 'border-rag-red' : 'border-slate-300  focus:border-rag-blue'
-                        }`}
-                        aria-invalid={isInvalid}
-                        aria-describedby={isInvalid ? errorId : field.help ? `help-${field.id}` : undefined}
-                        className={`w-full min-h-[120px] bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
-                      />
-                    ) : field.type === 'integer' ? (
-                      <input
-                        id={fieldId}
-                        type="number"
-                        value={value === '' ? '' : String(value ?? '')}
-                        onChange={(event) => handleFieldChange(field, coerceInteger(event.target.value))}
-                        placeholder={field.placeholder || ''}
-                        aria-invalid={!!validationError}
-                        className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none transition-all ${
-                          validationError ? 'border-rag-red' : 'border-slate-300  focus:border-rag-blue'
-                        }`}
-                        aria-invalid={isInvalid}
-                        aria-describedby={isInvalid ? errorId : field.help ? `help-${field.id}` : undefined}
-                        className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
-                      />
-                    ) : field.type === 'boolean' ? (
-                      <button
-                        id={fieldId}
-                        onClick={() => handleFieldChange(field, !Boolean(value))}
-                        className={`w-full flex items-center justify-between p-4 border-4 border-slate-300  transition-all ${
-                        aria-pressed={Boolean(value)}
-                        className={`w-full flex items-center justify-between p-4 border-4 border-black transition-all ${
-                          value ? 'bg-rag-green text-black' : 'bg-charcoal-dark text-silver-bright'
-                        }`}
-                      >
-                        <span className="text-[10px] font-black uppercase tracking-[0.2em]">{field.help || field.label}</span>
-                        <span className="material-symbols-outlined">{value ? 'toggle_on' : 'toggle_off'}</span>
-                      </button>
-                    ) : field.type === 'select' ? (
-                      <select
-                        id={fieldId}
-                        value={String(value ?? '')}
-                        onChange={(event) => handleFieldChange(field, event.target.value)}
-                        aria-invalid={!!validationError}
-                        className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none transition-all ${
-                          validationError ? 'border-rag-red' : 'border-slate-300  focus:border-rag-blue'
-                        }`}
-                        aria-invalid={isInvalid}
-                        aria-describedby={isInvalid ? errorId : field.help ? `help-${field.id}` : undefined}
-                        className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
-                      >
-                        <option value="">Select option</option>
-                        {(field.options || []).map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : field.type === 'multiselect' ? (
-                      <div
-                        role="group"
-                        aria-labelledby={`label-${field.id}`}
-                        className="grid grid-cols-1 md:grid-cols-2 gap-3"
-                      >
-                        {(field.options || []).map((option) => {
-                          const selected = Array.isArray(value) && value.includes(option.value)
-                          return (
-                            <button
-                              key={option.value}
-                              aria-pressed={selected}
-                              onClick={() => {
-                                const current = Array.isArray(value) ? [...value] : []
-                                const next = selected
-                                  ? current.filter((item) => item !== option.value)
-                                  : [...current, option.value]
-                                handleFieldChange(field, next)
-                              }}
-                              className={`p-3 border-4 border-slate-300  text-[10px] font-black uppercase tracking-[0.15em] ${
-                                selected ? 'bg-rag-blue text-black' : 'bg-charcoal-dark text-silver-bright'
-                              }`}
-                            >
-                              {option.label}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    ) : (
-                      <input
-                        id={fieldId}
-                        type="text"
-                        value={String(value ?? '')}
-                        onChange={(event) => handleFieldChange(field, event.target.value)}
-                        placeholder={field.placeholder || ''}
-                        aria-invalid={!!validationError}
-                        className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none transition-all ${
-                          validationError ? 'border-rag-red' : 'border-slate-300  focus:border-rag-blue'
-                        }`}
-                      />
-                    )}
+  <textarea
+    id={fieldId}
+    value={String(value ?? '')}
+    onChange={(event) => handleFieldChange(field, event.target.value)}
+    placeholder={field.placeholder || ''}
+    aria-invalid={isInvalid}
+    aria-describedby={isInvalid ? errorId : field.help ? `help-${field.id}` : undefined}
+    className={`w-full min-h-[120px] bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
+  />
+) : field.type === 'integer' ? (
+  <input
+    id={fieldId}
+    type="number"
+    value={value === '' ? '' : String(value ?? '')}
+    onChange={(event) => handleFieldChange(field, coerceInteger(event.target.value))}
+    placeholder={field.placeholder || ''}
+    aria-invalid={isInvalid}
+    aria-describedby={isInvalid ? errorId : field.help ? `help-${field.id}` : undefined}
+    className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
+  />
+) : field.type === 'boolean' ? (
+  <button
+    id={fieldId}
+    onClick={() => handleFieldChange(field, !Boolean(value))}
+    aria-pressed={Boolean(value)}
+    className={`w-full flex items-center justify-between p-4 border-4 border-slate-300 transition-all ${
+      value ? 'bg-rag-green text-black' : 'bg-charcoal-dark text-silver-bright'
+    }`}
+  >
+    <span className="text-[10px] font-black uppercase tracking-[0.2em]">
+      {field.help || field.label}
+    </span>
+    <span className="material-symbols-outlined">
+      {value ? 'toggle_on' : 'toggle_off'}
+    </span>
+  </button>
+) : field.type === 'select' ? (
+  <select
+    id={fieldId}
+    value={String(value ?? '')}
+    onChange={(event) => handleFieldChange(field, event.target.value)}
+    aria-invalid={isInvalid}
+    aria-describedby={isInvalid ? errorId : field.help ? `help-${field.id}` : undefined}
+    className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
+  >
+    <option value="">Select option</option>
+    {(field.options || []).map((option) => (
+      <option key={option.value} value={option.value}>
+        {option.label}
+      </option>
+    ))}
+  </select>
+) : field.type === 'multiselect' ? (
+  <div
+    role="group"
+    aria-labelledby={`label-${field.id}`}
+    className="grid grid-cols-1 md:grid-cols-2 gap-3"
+  >
+    {(field.options || []).map((option) => {
+      const selected = Array.isArray(value) && value.includes(option.value)
 
-                    {field.help && <p className="text-[10px] text-silver/100 uppercase tracking-widest">{field.help}</p>}
-                    {validationError && <p className="text-[10px] text-rag-red uppercase tracking-widest">{validationError}</p>}
-                        aria-invalid={isInvalid}
-                        aria-describedby={isInvalid ? errorId : field.help ? `help-${field.id}` : undefined}
-                        className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
-                      />
-                    )}
+      return (
+        <button
+          key={option.value}
+          type="button"
+          aria-pressed={selected}
+          onClick={() => {
+            const current = Array.isArray(value) ? [...value] : []
 
-                    {field.help && !isInvalid && (
-                      <p id={`help-${field.id}`} className="text-[10px] text-silver/40 uppercase tracking-widest">
-                        {field.help}
-                      </p>
-                    )}
-                    {isInvalid && (
-                      <p id={errorId} role="alert" className="text-[10px] text-rag-red uppercase tracking-widest font-black">
-                        {validationError}
-                      </p>
-                    )}
+            const next = selected
+              ? current.filter((item) => item !== option.value)
+              : [...current, option.value]
+
+            handleFieldChange(field, next)
+          }}
+          className={`p-3 border-4 border-slate-300 text-[10px] font-black uppercase tracking-[0.15em] ${
+            selected
+              ? 'bg-rag-blue text-black'
+              : 'bg-charcoal-dark text-silver-bright'
+          }`}
+        >
+          {option.label}
+        </button>
+      )
+    })}
+  </div>
+) : (
+  <input
+    id={fieldId}
+    type="text"
+    value={String(value ?? '')}
+    onChange={(event) => handleFieldChange(field, event.target.value)}
+    placeholder={field.placeholder || ''}
+    aria-invalid={isInvalid}
+    aria-describedby={isInvalid ? errorId : field.help ? `help-${field.id}` : undefined}
+    className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
+  />
+)}
+
+{field.help && !isInvalid && (
+  <p
+    id={`help-${field.id}`}
+    className="text-[10px] text-silver/40 uppercase tracking-widest"
+  >
+    {field.help}
+  </p>
+)}
+
+{isInvalid && (
+  <p
+    id={errorId}
+    role="alert"
+    className="text-[10px] text-rag-red uppercase tracking-widest font-black"
+  >
+    {validationError}
+  </p>
+)}
                   </motion.div>
                 )
               })}
@@ -435,15 +431,13 @@ export default function ToolConfig() {
               </div>
             )}
             <button
-              onClick={handleStartScan}
-              disabled={submitting || invalidFieldCount > 0}
-              className="w-full py-4 bg-rag-red border-4 border-slate-300  text-black text-[10px] font-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-              disabled={submitting || hasValidationErrors}
-              aria-disabled={submitting || hasValidationErrors}
-              className="w-full py-4 bg-rag-red border-4 border-black text-black text-[10px] font-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:shadow-none disabled:hover:translate-y-0"
-            >
-              {submitting ? 'QUEUEING...' : 'INITIATE_SCAN'}
-            </button>
+  onClick={handleStartScan}
+  disabled={submitting || hasValidationErrors}
+  aria-disabled={submitting || hasValidationErrors}
+  className="w-full py-4 bg-rag-red border-4 border-black text-black text-[10px] font-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:shadow-none disabled:hover:translate-y-0"
+>
+  {submitting ? 'QUEUEING...' : 'INITIATE_SCAN'}
+</button>
             <p className="text-[10px] text-silver/90 uppercase tracking-widest">
               Parameter issues: {invalidFieldCount}
             </p>

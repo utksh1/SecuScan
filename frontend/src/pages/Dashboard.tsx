@@ -290,7 +290,6 @@ export default function Dashboard() {
           {/* Integrity Metric - High Visibility */}
           <div className="flex items-center gap-6 px-6 py-4 bg-charcoal border-4 border-slate-300  shadow-[8px_8px_0px_0px_rgba(31,31,31,1)] group transition-all">
             <div className="flex flex-col items-end text-right">
-              <span className="text-[11px] font-black text-silver-bright/90 uppercase tracking-[0.4em] italic mb-1">
           {/* Integrity Metric - Live Status Panel */}
           <div className="relative flex items-center gap-5 px-6 py-4 bg-charcoal/80 border border-rag-blue/20 backdrop-blur-sm rounded-sm group transition-all hover:border-rag-blue/40 hover:bg-charcoal/90">
             {/* Subtle top glow */}
@@ -315,7 +314,7 @@ export default function Dashboard() {
                   <span className="text-sm font-mono text-rag-blue/90 font-black italic leading-none">
                     {lastSync ? (formatBriefingDate(lastSync).split(',')[1]?.trim().toUpperCase()) : '---'}
                   </span>
-                </div>
+                </span>
                 <div className="h-4 w-px bg-gradient-to-b from-rag-blue/40 via-rag-blue/20 to-transparent self-center mx-0.5"></div>
                 <span className="text-lg font-mono text-rag-blue font-black italic leading-none">
                   {lastSync ? (formatBriefingDate(lastSync).split(',')[2]?.trim().toUpperCase()) : '00:00'}
@@ -332,7 +331,8 @@ export default function Dashboard() {
               <span className="material-symbols-outlined text-xl font-black">terminal</span>
             </div>
           </div>
-
+            </div>
+          </div>
         </motion.div>
       </header>
 

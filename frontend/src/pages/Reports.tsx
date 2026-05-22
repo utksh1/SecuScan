@@ -185,7 +185,6 @@ export default function Reports() {
           <div className="grid grid-cols-1 xl:grid-cols-4 gap-12">
             {/* Filtration Sidebar */}
             <aside className="xl:col-span-1 space-y-12">
-              <section className="bg-charcoal border-4 border-slate-300  p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-8">
               <section className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-8">
 
                 {/* Type Filter */}
@@ -265,6 +264,8 @@ export default function Reports() {
                   </div>
                 </div>
 
+                </div>
+
                 <div className="p-8 border-4 border-black border-dashed space-y-4 bg-charcoal-dark/50">
                   <div className="flex items-center gap-3">
                     <ReportIcon icon={KnightShieldIcon} className="text-emerald-500" />
@@ -317,10 +318,8 @@ export default function Reports() {
                           <ReportIcon icon={File01Icon} size={24} className="text-silver/10 group-hover:text-silver-bright transition-colors" aria-hidden="true" />
                         </div>
 
-                        <div>
-                          <h3 className="text-3xl font-black text-silver-bright uppercase tracking-tighter italic leading-tight group-hover:text-rag-red transition-colors font-mono">
-                            {report.name}
-                          </h3>
+                        
+                        <div className="p-8 border-4 border-slate-300  border-dashed space-y-4 bg-charcoal-dark/50">
                           <div className="w-12 h-1 bg-silver-bright/10 mt-6 group-hover:w-full group-hover:bg-rag-red/90 transition-all duration-700"></div>
                         </div>
 
