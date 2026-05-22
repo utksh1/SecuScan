@@ -121,16 +121,23 @@ def validate_port_range(port_range: str) -> Tuple[bool, str]:
     Returns:
         Tuple of (is_valid, error_message)
     """
-    # Handle comma-separated ports
+    # Handle comma-separated ports (supports mixed specs like "80,443-8080")
     if ',' in port_range:
         for port_str in port_range.split(','):
-            try:
-                port = int(port_str.strip())
-                is_valid, msg = validate_port(port)
+            port_str = port_str.strip()
+            if '-' in port_str:
+                # Delegate sub-ranges like "443-8080" to the range parser below
+                is_valid, msg = validate_port_range(port_str)
                 if not is_valid:
                     return False, msg
-            except ValueError:
-                return False, f"Invalid port number: {port_str}"
+            else:
+                try:
+                    port = int(port_str)
+                    is_valid, msg = validate_port(port)
+                    if not is_valid:
+                        return False, msg
+                except ValueError:
+                    return False, f"Invalid port number: {port_str}"
         return True, ""
 
     # Handle port ranges
