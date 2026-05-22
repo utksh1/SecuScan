@@ -313,15 +313,15 @@ export default function Reports() {
 
                       <div className="space-y-8 relative z-10">
                         <div className="flex justify-between items-start">
-                          <span className={`px-2 py-0.5 text-[9px] font-black uppercase italic border-2 border-slate-300  shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
-                            report.type === 'executive' ? 'bg-silver-bright text-slate-800' :
-                              report.type === 'compliance' ? 'bg-rag-green text-slate-800' :
-                                'bg-rag-blue text-slate-800'
-                          }`}>
-                            {report.type}_TYPE
-                          </span>
-                          <ReportIcon icon={File01Icon} size={24} className="text-silver/10 group-hover:text-silver-bright transition-colors" aria-hidden="true" />
-                        </div>
+  <span className="text-[10px] font-black text-slate-800 uppercase tracking-[0.2em] italic">
+  {report.type}
+</span>
+
+  <ReportIcon
+    icon={Archive02Icon}
+    className="text-slate-800/80 group-hover:text-slate-800 transition-colors"
+  />
+</div>
                         <div className="p-8 border-4 border-slate-300  border-dashed space-y-4 bg-charcoal-dark/50">
                           <div className="w-12 h-1 bg-silver-bright/10 mt-6 group-hover:w-full group-hover:bg-rag-red/90 transition-all duration-700"></div>
                         </div>
