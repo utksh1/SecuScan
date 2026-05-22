@@ -317,8 +317,6 @@ export default function Reports() {
                           </span>
                           <ReportIcon icon={File01Icon} size={24} className="text-silver/10 group-hover:text-silver-bright transition-colors" aria-hidden="true" />
                         </div>
-
-                        
                         <div className="p-8 border-4 border-slate-300  border-dashed space-y-4 bg-charcoal-dark/50">
                           <div className="w-12 h-1 bg-silver-bright/10 mt-6 group-hover:w-full group-hover:bg-rag-red/90 transition-all duration-700"></div>
                         </div>
