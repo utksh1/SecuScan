@@ -83,7 +83,7 @@ The project is designed to be:
 - 🔌 **Plugin System & Parser Integrations**
   Scanner plugins, metadata handling, and parsing utilities inside `plugins`
 - 📊 **Reports, Exports & Result Normalization**
-  Unified reporting, export generation, and scan result processing across backend and frontend 
+  Unified reporting, export generation, and scan result processing across backend and frontend
 
   ---
 
@@ -196,7 +196,7 @@ docker compose up --build
 ## 🐍 Backend Setup
 
 > **Python Requirement:**
-> `python3` must resolve to **Python 3.11+**.  
+> `python3` must resolve to **Python 3.11+**.
 > If your default version is older, use a compatible interpreter such as `python3.11` or specify it manually using:
 >
 > ```bash
