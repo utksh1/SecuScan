@@ -360,8 +360,8 @@ export default function Reports() {
                       <div className="space-y-8 relative z-10">
                         <div className="flex justify-between items-start">
                           <span className="text-[10px] font-black text-slate-800 uppercase tracking-[0.2em] italic">
-                            Security Scan — example.com
-                          </span>
+  {report.name}
+</span>
                           <ReportIcon
                             icon={Archive02Icon}
                             className="text-slate-800/80 group-hover:text-slate-800 transition-colors"
@@ -374,6 +374,33 @@ export default function Reports() {
                         </div>
 
                         <div className="grid grid-cols-3 gap-6 py-6 border-y-2 border-slate-300 border-dashed">
+                          {/* Export Buttons */}
+{/* Export Buttons */}
+<div className="flex gap-2">
+  {[...exportFormats.filter(f => f !== 'sarif')]
+    .sort((a, b) => (a === preferred ? -1 : b === preferred ? 1 : 0))
+    .map((fmt) => (
+      <button
+        key={fmt}
+        disabled={report.status === 'generating'}
+        onClick={() => {
+          if (report.status !== 'generating') {
+            window.open(`${API_BASE}/task/${report.task_id}/report/${fmt}`, '_blank')
+            savePreference(fmt)
+          }
+        }}
+        className={`px-3 py-1 text-[9px] font-black uppercase tracking-widest border-2 transition-all ${
+          report.status === 'generating'
+            ? 'border-slate-600 text-slate-600 cursor-not-allowed'
+            : preferred === fmt
+            ? 'bg-rag-amber border-black text-black'
+            : 'border-slate-300 text-silver-bright hover:bg-silver-bright/10'
+        }`}
+      >
+        {fmt}
+      </button>
+    ))}
+</div>
                           <div className="space-y-1">
                             <span className="text-[8px] font-black text-silver/80 uppercase tracking-widest italic block">
                               Findings
@@ -405,6 +432,20 @@ export default function Reports() {
                     </motion.div>
                   ))}
                 </motion.div>
+                {filteredReports.length === 0 && (
+  <motion.div
+    key="empty"
+    variants={itemVariants}
+    className="col-span-2 py-20 text-center space-y-4"
+  >
+    <p className="text-2xl font-black text-silver-bright uppercase tracking-widest italic">
+      Archive Isolated
+    </p>
+    <p className="text-[10px] font-black text-silver/60 uppercase tracking-widest">
+      No entries match the current filter configuration
+    </p>
+  </motion.div>
+)}
               </AnimatePresence>
 
               {/* Tactical Footer */}
