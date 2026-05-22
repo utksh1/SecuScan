@@ -270,8 +270,12 @@ export default function Dashboard() {
             SECUSCAN_WORKSPACE v2.4
           </div>
          <h1 className="text-4xl md:text-5xl lg:text-6xl text-silver-bright tracking-tight leading-none whitespace-nowrap font-bold">
-  SecuScan <span className="text-transparent [ -webkit-text-stroke:1px_#64748b ] opacity-90" style={{ WebkitTextStroke: '1px var(--accent-silver-bright)' }}>Workspace</span>
-</h1>
+<span
+  className="text-transparent opacity-90"
+  style={{ WebkitTextStroke: '1px #64748b' }}
+>
+  Workspace
+</span></h1>
 <p className="text-sm font-mono text-silver-dark tracking-wider leading-relaxed mt-2">
   Central Intelligence Overview // Vulnerabilities: {summary.total_findings} // Threat Level: {risk.label}
 </p>
