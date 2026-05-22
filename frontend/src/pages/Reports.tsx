@@ -169,11 +169,16 @@ export default function Reports() {
             ].map((m, i) => (
               <div key={i} className={`${m.color} border-4 border-slate-300  p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between h-40 group hover:-translate-y-1 transition-transform`}>
                 <div className="flex justify-between items-start">
-                  <span className="text-[10px] font-black text-slate-800 uppercase tracking-[0.2em] italic">{m.label}</span>
-                  <ReportIcon icon={Archive02Icon} className="text-slate-800/80 group-hover:text-slate-800 transition-colors" />
-                  <span className="text-[10px] font-black text-black uppercase tracking-[0.2em] italic">{m.label}</span>
-                  <ReportIcon icon={Archive02Icon} className="text-black/20 group-hover:text-black transition-colors" aria-hidden="true" />
-                </div>
+  <span className="text-[10px] font-black text-slate-800 uppercase tracking-[0.2em] italic">
+    {m.label}
+  </span>
+
+  <ReportIcon
+    icon={Archive02Icon}
+    className="text-slate-800/80 group-hover:text-slate-800 transition-colors"
+    aria-hidden="true"
+  />
+</div>
                 <div className="flex items-baseline gap-2">
                   <span className="text-5xl font-black text-slate-800 font-mono leading-none tracking-tighter">{m.val}</span>
                   <span className="text-[10px] font-black text-slate-800/100 uppercase tracking-widest">{m.unit}</span>
