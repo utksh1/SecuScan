@@ -755,22 +755,28 @@ class TaskExecutor:
         parser_path = plugin_dir / "parser.py"
         
         if parser_path.exists():
-            try:
-                import importlib.util
-                spec = importlib.util.spec_from_file_location(f"parser_{plugin.id}", parser_path)
-                if spec is not None:
-                    loader = spec.loader
-                    if loader is not None:
-                        module = importlib.util.module_from_spec(spec)
-                        loader.exec_module(module)
-                        if hasattr(module, "parse"):
-                            logger.info(f"Using custom parser for {plugin.id}")
-                            parsed = module.parse(parser_input)
-                            return self._normalize_parsed_result(plugin, parser_input, parsed)
-                        else:
-                            logger.warning(f"Custom parser {parser_path} missing 'parse' function")
-            except Exception as e:
-                logger.error(f"Error executing custom parser for {plugin.id}: {e}")
+            if not plugin_manager.verify_parser_at_exec_time(plugin, plugin_dir):
+                logger.error(
+                    "Skipping custom parser for plugin %s: integrity check failed at exec time",
+                    plugin.id,
+                )
+            else:
+                try:
+                    import importlib.util
+                    spec = importlib.util.spec_from_file_location(f"parser_{plugin.id}", parser_path)
+                    if spec is not None:
+                        loader = spec.loader
+                        if loader is not None:
+                            module = importlib.util.module_from_spec(spec)
+                            loader.exec_module(module)
+                            if hasattr(module, "parse"):
+                                logger.info(f"Using custom parser for {plugin.id}")
+                                parsed = module.parse(parser_input)
+                                return self._normalize_parsed_result(plugin, parser_input, parsed)
+                            else:
+                                logger.warning(f"Custom parser {parser_path} missing 'parse' function")
+                except Exception as e:
+                    logger.error(f"Error executing custom parser for {plugin.id}: {e}")
 
         # 2. Fallback to legacy built-in parsers
         if parser_type == "builtin_nmap":
