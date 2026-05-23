@@ -592,8 +592,15 @@ async def get_dashboard_summary():
         db = await get_db()
 
         # Get data
-        raw_findings = await db.fetchall("SELECT * FROM findings ORDER BY discovered_at DESC")
-        findings = parse_json_fields(raw_findings, ["metadata_json"])
+        # Push severity aggregation to DB — avoids full table scan in Python
+        severity_rows = await db.fetchall(
+            """
+            SELECT severity, COUNT(*) AS cnt
+            FROM findings
+            GROUP BY severity
+            """
+        )
+        severity_counts = {row["severity"]: row["cnt"] for row in severity_rows}
 
         task_stats = await db.fetchone(
             """
@@ -605,27 +612,39 @@ async def get_dashboard_summary():
             """
         )
 
-        critical_findings: int = sum(bool(item.get("severity") == "critical")
-                                 for item in findings)
-        high_findings: int = sum(bool(item.get("severity") == "high")
-                             for item in findings)
-        medium_findings: int = sum(bool(item.get("severity") == "medium")
-                               for item in findings)
-        low_findings: int = sum(bool(item.get("severity") == "low")
-                            for item in findings)
-        info_findings: int = sum(bool(item.get("severity") == "info")
-                             for item in findings)
+        total_findings_row = await db.fetchone("SELECT COUNT(*) AS total FROM findings")
+        total_findings = total_findings_row["total"] if total_findings_row else 0
 
-        recent_findings: List[Dict] = findings[:5]
+        critical_findings: int = severity_counts.get("critical", 0)
+        high_findings: int = severity_counts.get("high", 0)
+        medium_findings: int = severity_counts.get("medium", 0)
+        low_findings: int = severity_counts.get("low", 0)
+        info_findings: int = severity_counts.get("info", 0)
+
+        # Fetch only the 5 most recent findings — not the entire table
+        recent_rows = await db.fetchall(
+            """
+            SELECT id, title, category, severity, target, description,
+                remediation, proof, cvss, cve, discovered_at, metadata_json
+            FROM findings
+            ORDER BY discovered_at DESC
+            LIMIT 5
+            """
+        )
+        recent_findings: List[Dict] = parse_json_fields(recent_rows, ["metadata_json"])
+
+        last_scan_row = await db.fetchone(
+            "SELECT discovered_at FROM findings ORDER BY discovered_at DESC LIMIT 1"
+        )
 
         return {
-            "total_findings": len(findings),
+            "total_findings": total_findings,
             "critical_findings": critical_findings,
             "high_findings": high_findings,
             "medium_findings": medium_findings,
             "low_findings": low_findings,
             "info_findings": info_findings,
-            "last_scan_time": findings[0].get("discovered_at") if findings else None,
+            "last_scan_time": last_scan_row["discovered_at"] if last_scan_row else None,
             "recent_findings": recent_findings,
             "scan_activity": {
                 "total": int(task_stats["total"]) if task_stats and task_stats.get("total") is not None else 0,
