@@ -43,8 +43,8 @@ describe('Reports page preference integration', () => {
     const techButton = screen.getByRole('button', { name: /technical BRIEFINGS/i })
     await user.click(techButton)
 
-    // Check localStorage
-    expect(localStorage.getItem('secuscan-pref:reports-type-filter')).toBe('technical')
+    // Check localStorage (stores JSON-stringified value)
+    expect(localStorage.getItem('secuscan-pref:reports-type-filter')).toBe(JSON.stringify('technical'))
 
     unmount()
 

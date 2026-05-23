@@ -5,7 +5,6 @@ import { HugeiconsIcon } from '@hugeicons/react'
 import {
   Analytics02Icon,
   Archive02Icon,
-  Download01Icon,
   File01Icon,
   KnightShieldIcon,
   Pdf02Icon,
@@ -372,19 +371,36 @@ export default function Reports() {
                                                          <p className="text-[10px] font-mono text-silver-bright uppercase font-black">{formatDateLong(report.generated_at)}</p>
                                                      </div>
                                                      <div className="flex gap-4">
-                                                         <button
+                                                        <button
                                                              onClick={() => navigate(`/task/${report.task_id}`)}
                                                              className="bg-charcoal-dark border-4 border-black p-3 text-silver/20 group-hover:text-silver-bright group-hover:bg-black transition-all"
                                                              title="View Briefing"
                                                          >
                                                              <ReportIcon icon={ScanEyeIcon} size={18} />
                                                          </button>
-                                                         <button
+                                                        <button
                                                              onClick={() => window.open(`${API_BASE}/task/${report.task_id}/report/pdf`, '_blank')}
-                                                             className="bg-charcoal-dark border-4 border-black p-3 text-silver/20 group-hover:text-silver-bright group-hover:bg-black transition-all"
+                                                             disabled={report.status === 'generating'}
+                                                             className="bg-charcoal-dark border-4 border-black p-3 text-silver/20 group-hover:text-silver-bright group-hover:bg-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                                              title="Download PDF"
+                                                        >
+                                                             PDF
+                                                         </button>
+                                                         <button
+                                                             onClick={() => window.open(`${API_BASE}/task/${report.task_id}/report/html`, '_blank')}
+                                                             disabled={report.status === 'generating'}
+                                                             className="bg-charcoal-dark border-4 border-black p-3 text-silver/20 group-hover:text-silver-bright group-hover:bg-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                                             title="Download HTML"
                                                          >
-                                                             <ReportIcon icon={Download01Icon} size={18} />
+                                                             HTML
+                                                         </button>
+                                                         <button
+                                                             onClick={() => window.open(`${API_BASE}/task/${report.task_id}/report/csv`, '_blank')}
+                                                             disabled={report.status === 'generating'}
+                                                             className="bg-charcoal-dark border-4 border-black p-3 text-silver/20 group-hover:text-silver-bright group-hover:bg-black transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                                             title="Download CSV"
+                                                         >
+                                                             CSV
                                                          </button>
                                                      </div>
                                                  </div>
