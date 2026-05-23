@@ -11,6 +11,7 @@ import {
 } from '../api'
 import { useToast } from '../components/ToastContext'
 import { routePath, routes } from '../routes'
+import { getValidationError } from '../utils/validation'
 
 type InputState = Record<string, unknown>
 
@@ -27,59 +28,6 @@ function buildDefaultInputs(fields: PluginFieldSchema[]): InputState {
   const defaults: InputState = {}
   for (const field of fields) defaults[field.id] = defaultValueForField(field)
   return defaults
-}
-
-function isRequiredFieldValid(field: PluginFieldSchema, value: unknown): boolean {
-  if (!field.required) return true
-  if (value === undefined || value === null) return false
-  if (typeof value === 'string') return value.trim().length > 0
-  if (Array.isArray(value)) return value.length > 0
-  return true
-}
-
-function asFiniteNumber(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value)
-    return Number.isFinite(parsed) ? parsed : null
-  }
-  return null
-}
-
-function getFieldValidationError(field: PluginFieldSchema, value: unknown): string | null {
-  if (!isRequiredFieldValid(field, value)) {
-    return `${field.label} is required`
-  }
-
-  const validation = field.validation || {}
-  const message = typeof validation.message === 'string' ? validation.message : null
-
-  if (typeof value === 'string' && value.trim()) {
-    const pattern = typeof validation.pattern === 'string' ? validation.pattern : null
-    if (pattern) {
-      try {
-        if (!new RegExp(pattern).test(value.trim())) {
-          return message || `${field.label} is not valid`
-        }
-      } catch {
-        return null
-      }
-    }
-  }
-
-  if (field.type === 'integer' && value !== '' && value !== undefined && value !== null) {
-    const numericValue = asFiniteNumber(value)
-    if (numericValue === null || !Number.isInteger(numericValue)) {
-      return message || `${field.label} must be a whole number`
-    }
-
-    const min = asFiniteNumber(validation.min)
-    const max = asFiniteNumber(validation.max)
-    if (min !== null && numericValue < min) return message || `${field.label} must be at least ${min}`
-    if (max !== null && numericValue > max) return message || `${field.label} must be no more than ${max}`
-  }
-
-  return null
 }
 
 function resolvePresetInputs(
@@ -162,15 +110,18 @@ export default function ToolConfig() {
   }, [toolId, navigate, addToast])
 
   const presetNames = useMemo(() => Object.keys(schema?.presets || {}), [schema])
+
   const validationErrors = useMemo<Record<string, string>>(() => {
     if (!schema) return {}
     return schema.fields.reduce<Record<string, string>>((errors, field) => {
-      const error = getFieldValidationError(field, inputs[field.id])
+      const error = getValidationError(field, inputs[field.id])
       if (error) errors[field.id] = error
       return errors
     }, {})
   }, [schema, inputs])
+
   const invalidFieldCount = Object.keys(validationErrors).length
+  const hasValidationErrors = invalidFieldCount > 0
   const safetyLevel = String(schema?.safety?.level || 'safe')
 
   const handleFieldChange = (field: PluginFieldSchema, value: unknown) => {
@@ -185,7 +136,7 @@ export default function ToolConfig() {
 
   const handleStartScan = async () => {
     if (!plugin || !schema || submitting) return
-    if (invalidFieldCount > 0) {
+    if (hasValidationErrors) {
       addToast('Fix highlighted scan parameters before starting the scan.', 'error')
       return
     }
@@ -279,7 +230,8 @@ export default function ToolConfig() {
             Task launch remains available, but execution may fail until dependencies are installed.
           </p>
         </section>
-     )}
+      )}
+
       <main className="grid grid-cols-1 xl:grid-cols-4 gap-12 pt-4">
         <div className="xl:col-span-3 space-y-10">
           {presetNames.length > 0 && (
@@ -310,41 +262,56 @@ export default function ToolConfig() {
               {schema.fields.map((field) => {
                 const value = inputs[field.id]
                 const validationError = validationErrors[field.id]
+                const isInvalid = Boolean(validationError)
+                const inputBorderClass = isInvalid
+                  ? 'border-rag-red focus:border-rag-red'
+                  : 'border-black focus:border-rag-blue'
+                const fieldId = `field-${field.id}`
+                const errorId = `error-${field.id}`
 
                 return (
                   <motion.div key={field.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
                     <div className="flex items-center justify-between gap-6">
-                      <label className="text-[10px] font-black uppercase tracking-[0.3em] text-silver-bright italic">
+                      <label
+                        htmlFor={fieldId}
+                        className="text-[10px] font-black uppercase tracking-[0.3em] text-silver-bright italic"
+                      >
                         {field.label}
-                        {field.required && <span className="text-rag-red ml-2">*</span>}
+                        {field.required && <span className="text-rag-red ml-2" aria-hidden="true">*</span>}
                       </label>
-                      {validationError && <span className="text-[9px] uppercase tracking-widest text-rag-red font-black">invalid</span>}
+                      {isInvalid && (
+                        <span className="text-[9px] uppercase tracking-widest text-rag-red font-black" aria-live="polite">
+                          invalid
+                        </span>
+                      )}
                     </div>
 
                     {field.type === 'text' ? (
                       <textarea
+                        id={fieldId}
                         value={String(value ?? '')}
                         onChange={(event) => handleFieldChange(field, event.target.value)}
                         placeholder={field.placeholder || ''}
-                        aria-invalid={!!validationError}
-                        className={`w-full min-h-[120px] bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none transition-all ${
-                          validationError ? 'border-rag-red' : 'border-black focus:border-rag-blue'
-                        }`}
+                        aria-invalid={isInvalid}
+                        aria-describedby={isInvalid ? errorId : field.help ? `help-${field.id}` : undefined}
+                        className={`w-full min-h-[120px] bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
                       />
                     ) : field.type === 'integer' ? (
                       <input
+                        id={fieldId}
                         type="number"
                         value={value === '' ? '' : String(value ?? '')}
                         onChange={(event) => handleFieldChange(field, coerceInteger(event.target.value))}
                         placeholder={field.placeholder || ''}
-                        aria-invalid={!!validationError}
-                        className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none transition-all ${
-                          validationError ? 'border-rag-red' : 'border-black focus:border-rag-blue'
-                        }`}
+                        aria-invalid={isInvalid}
+                        aria-describedby={isInvalid ? errorId : field.help ? `help-${field.id}` : undefined}
+                        className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
                       />
                     ) : field.type === 'boolean' ? (
                       <button
+                        id={fieldId}
                         onClick={() => handleFieldChange(field, !Boolean(value))}
+                        aria-pressed={Boolean(value)}
                         className={`w-full flex items-center justify-between p-4 border-4 border-black transition-all ${
                           value ? 'bg-rag-green text-black' : 'bg-charcoal-dark text-silver-bright'
                         }`}
@@ -354,12 +321,12 @@ export default function ToolConfig() {
                       </button>
                     ) : field.type === 'select' ? (
                       <select
+                        id={fieldId}
                         value={String(value ?? '')}
                         onChange={(event) => handleFieldChange(field, event.target.value)}
-                        aria-invalid={!!validationError}
-                        className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none transition-all ${
-                          validationError ? 'border-rag-red' : 'border-black focus:border-rag-blue'
-                        }`}
+                        aria-invalid={isInvalid}
+                        aria-describedby={isInvalid ? errorId : field.help ? `help-${field.id}` : undefined}
+                        className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
                       >
                         <option value="">Select option</option>
                         {(field.options || []).map((option) => (
@@ -369,12 +336,17 @@ export default function ToolConfig() {
                         ))}
                       </select>
                     ) : field.type === 'multiselect' ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div
+                        role="group"
+                        aria-labelledby={`label-${field.id}`}
+                        className="grid grid-cols-1 md:grid-cols-2 gap-3"
+                      >
                         {(field.options || []).map((option) => {
                           const selected = Array.isArray(value) && value.includes(option.value)
                           return (
                             <button
                               key={option.value}
+                              aria-pressed={selected}
                               onClick={() => {
                                 const current = Array.isArray(value) ? [...value] : []
                                 const next = selected
@@ -393,25 +365,32 @@ export default function ToolConfig() {
                       </div>
                     ) : (
                       <input
+                        id={fieldId}
                         type="text"
                         value={String(value ?? '')}
                         onChange={(event) => handleFieldChange(field, event.target.value)}
                         placeholder={field.placeholder || ''}
-                        aria-invalid={!!validationError}
-                        className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none transition-all ${
-                          validationError ? 'border-rag-red' : 'border-black focus:border-rag-blue'
-                        }`}
+                        aria-invalid={isInvalid}
+                        aria-describedby={isInvalid ? errorId : field.help ? `help-${field.id}` : undefined}
+                        className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
                       />
                     )}
 
-                    {field.help && <p className="text-[10px] text-silver/40 uppercase tracking-widest">{field.help}</p>}
-                    {validationError && <p className="text-[10px] text-rag-red uppercase tracking-widest">{validationError}</p>}
+                    {field.help && !isInvalid && (
+                      <p id={`help-${field.id}`} className="text-[10px] text-silver/40 uppercase tracking-widest">
+                        {field.help}
+                      </p>
+                    )}
+                    {isInvalid && (
+                      <p id={errorId} role="alert" className="text-[10px] text-rag-red uppercase tracking-widest font-black">
+                        {validationError}
+                      </p>
+                    )}
                   </motion.div>
                 )
               })}
             </div>
           </section>
-
         </div>
 
         <aside className="xl:col-span-1">
@@ -435,14 +414,22 @@ export default function ToolConfig() {
             )}
             <button
               onClick={handleStartScan}
-              disabled={submitting || invalidFieldCount > 0}
-              className="w-full py-4 bg-rag-red border-4 border-black text-black text-[10px] font-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              disabled={submitting || hasValidationErrors}
+              aria-disabled={submitting || hasValidationErrors}
+              className="w-full py-4 bg-rag-red border-4 border-black text-black text-[10px] font-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:shadow-none disabled:hover:translate-y-0"
             >
-              {submitting ? 'QUEUEING...' : invalidFieldCount > 0 ? 'FIX_PARAMETERS' : 'INITIATE_SCAN'}
+              {submitting ? 'QUEUEING...' : 'INITIATE_SCAN'}
             </button>
-            <p className="text-[10px] text-silver/30 uppercase tracking-widest">
-              Parameter issues: {invalidFieldCount}
-            </p>
+            {hasValidationErrors && (
+              <p role="status" className="text-[10px] text-rag-red uppercase tracking-widest font-black">
+                {invalidFieldCount} field{invalidFieldCount > 1 ? 's' : ''} need{invalidFieldCount === 1 ? 's' : ''} attention
+              </p>
+            )}
+            {!hasValidationErrors && (
+              <p className="text-[10px] text-rag-green uppercase tracking-widest font-black">
+                All fields valid
+              </p>
+            )}
           </section>
         </aside>
       </main>
