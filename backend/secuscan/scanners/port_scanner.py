@@ -26,24 +26,18 @@ class PortScanner(BaseScanner):
         Runs Nmap scan and parses output into structured findings.
         """
         self.update_progress(0.1)
-        
-        # Prepare inputs for the Nmap plugin
-        # Map PortScanner inputs to Nmap plugin fields
+
+        raw_scan_type = inputs.get("scan_type", "T")
+        scan_type, service_detection = self._resolve_scan_type(raw_scan_type)
+
         plugin_inputs = {
             "target": target,
-            "scan_type": inputs.get("scan_type", "-sV"),
-            "ports": inputs.get("ports", "top100"),
-            "speed": inputs.get("speed", "T4"),
-            "safe_mode": inputs.get("safe_mode", True)
+            "scan_type": scan_type,
+            "ports": self._resolve_ports(inputs.get("ports", "")),
+            "service_detection": inputs.get("service_detection", service_detection),
+            "os_detection": inputs.get("os_detection", False),
+            "safe_mode": inputs.get("safe_mode", True),
         }
-        
-        # Handle port shortcuts
-        if plugin_inputs["ports"] == "top100":
-            plugin_inputs["ports"] = "--top-ports 100"
-        elif plugin_inputs["ports"] == "top1000":
-            plugin_inputs["ports"] = "--top-ports 1000"
-        elif plugin_inputs["ports"] == "all":
-            plugin_inputs["ports"] = "-p-"
 
         plugin_manager = get_plugin_manager()
         command = plugin_manager.build_command("nmap", plugin_inputs)
@@ -66,6 +60,43 @@ class PortScanner(BaseScanner):
             "open_ports": [f["metadata"]["port"] for f in findings],
             "status": "completed" if exit_code == 0 else "failed"
         }
+
+    @staticmethod
+    def _resolve_scan_type(raw: str) -> tuple:
+        """Normalize raw scan type to the single-letter code expected by the nmap plugin.
+
+        Returns (scan_type_letter, service_detection_implied) where
+        service_detection_implied is True when the raw value requests version probing.
+        """
+        raw = raw.strip().lstrip("-")
+        # '-sV' or 'sV' implies TCP connect + service version detection
+        if raw.lower() in ("sv", "v"):
+            return "T", True
+        # Full nmap flag like 'sS', 'sT', 'sU' — strip the leading 's'
+        if raw.lower().startswith("s") and len(raw) > 1:
+            letter = raw[1].upper()
+        elif len(raw) >= 1:
+            letter = raw[0].upper()
+        else:
+            return "T", False
+        return (letter if letter in ("S", "T", "U") else "T"), False
+
+    @staticmethod
+    def _resolve_ports(raw: str) -> str:
+        """Map convenience shorthand labels to valid numeric port specifications.
+
+        Empty string tells the nmap template to use its --top-ports default.
+        Shorthand values like 'top100' and 'all' are mapped to numeric ranges
+        accepted by both the nmap CLI and the port-spec validator.
+        """
+        raw = raw.strip()
+        if raw in ("top100", ""):
+            return ""        # nmap template emits --top-ports 100
+        if raw == "top1000":
+            return "1-1000"
+        if raw == "all":
+            return "1-65535"
+        return raw
 
     async def _execute_command(self, command: List[str]) -> tuple:
         """Executes the command and returns (output, exit_code)"""

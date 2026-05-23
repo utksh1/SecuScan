@@ -12,15 +12,18 @@ import shutil
 import hashlib
 import hmac
 
-from .models import PluginMetadata
+from .models import PluginMetadata, PluginFieldType
 from .config import settings
 
 logger = logging.getLogger(__name__)
 
 
+_PORT_SPEC_PATTERN = re.compile(r"^[\d,\-]+$")
+
+
 class PluginManager:
     """Manages plugin loading and validation"""
-    
+
     def __init__(self, plugins_dir: str):
         self.plugins_dir = Path(plugins_dir)
         self.plugins: Dict[str, PluginMetadata] = {}
@@ -166,7 +169,119 @@ class PluginManager:
         metadata_digest = hashlib.sha256(metadata_canonical.encode("utf-8")).hexdigest()
         parser_digest = hashlib.sha256(parser_file.read_bytes()).hexdigest() if parser_file.exists() else ""
         return hashlib.sha256(f"{metadata_digest}:{parser_digest}".encode("utf-8")).hexdigest()
-    
+
+    def verify_parser_at_exec_time(self, plugin: PluginMetadata, plugin_dir: Path) -> bool:
+        """Re-verify parser file integrity immediately before execution.
+
+        Closes the TOCTOU window between plugin load (where _verify_plugin_integrity
+        runs) and the moment the parser module is actually executed. Any modification
+        to parser.py or metadata.json after startup is caught here.
+        """
+        parser_file = plugin_dir / "parser.py"
+        metadata_file = plugin_dir / "metadata.json"
+
+        if not plugin.checksum:
+            if settings.enforce_plugin_signatures:
+                logger.error(
+                    "Refusing to execute parser for plugin %s: "
+                    "no checksum present and enforce_plugin_signatures is enabled",
+                    plugin.id,
+                )
+                return False
+            logger.warning(
+                "Executing unverified parser for plugin %s (no checksum configured). "
+                "Set SECUSCAN_ENFORCE_PLUGIN_SIGNATURES=true to require integrity checks.",
+                plugin.id,
+            )
+            return True
+
+        try:
+            current_digest = self.compute_plugin_digest(metadata_file, parser_file)
+        except Exception as exc:
+            logger.error(
+                "Failed to compute digest for plugin %s at execution time: %s",
+                plugin.id,
+                exc,
+            )
+            return False
+
+        if not hmac.compare_digest(current_digest, plugin.checksum):
+            logger.error(
+                "SECURITY: Parser integrity check failed for plugin %s "
+                "(digest mismatch — possible tampering). Refusing execution.",
+                plugin.id,
+            )
+            return False
+
+        return True
+
+    def _validate_inputs_against_schema(self, plugin: PluginMetadata, inputs: Dict[str, Any]) -> None:
+        """Validate user inputs against the plugin field schema.
+
+        Enforces type constraints and allowed-value sets declared in plugin metadata,
+        and rejects string values that would inject unexpected arguments into the
+        constructed CLI command.
+
+        Raises ValueError for any invalid or potentially injected input.
+        """
+        for field in plugin.fields:
+            value = inputs.get(field.id)
+            if value is None or value == "":
+                continue
+
+            str_value = str(value)
+
+            if field.type == PluginFieldType.SELECT and field.options:
+                allowed = {opt.get("value", "") for opt in field.options}
+                if str_value not in allowed:
+                    raise ValueError(
+                        f"Field '{field.id}': value {str_value!r} is not in the allowed set "
+                        f"{sorted(v for v in allowed if v)}"
+                    )
+
+            if field.type == PluginFieldType.INTEGER:
+                try:
+                    int(value)
+                except (TypeError, ValueError):
+                    raise ValueError(
+                        f"Field '{field.id}' expects an integer, got {value!r}"
+                    )
+
+            if field.validation and isinstance(field.validation.get("pattern"), str):
+                pattern = field.validation["pattern"]
+                if not re.search(pattern, str_value):
+                    msg = field.validation.get(
+                        "message",
+                        f"Field '{field.id}' value {str_value!r} does not match the required pattern",
+                    )
+                    raise ValueError(msg)
+
+            if field.type in (PluginFieldType.STRING, PluginFieldType.TEXT):
+                self._reject_injected_args(field.id, str_value)
+
+    def _reject_injected_args(self, field_id: str, value: str) -> None:
+        """Reject string values that could inject unintended CLI flags.
+
+        Port fields must only contain digits, commas, and hyphens so that a value
+        like '--script=evil.nse' cannot be passed as a separate argv element that
+        tools like nmap would interpret as a flag.
+
+        All other string fields must not begin with a dash, which would be treated
+        as a flag prefix by virtually every CLI tool.
+        """
+        if field_id in ("ports", "port"):
+            if value and not _PORT_SPEC_PATTERN.match(value):
+                raise ValueError(
+                    f"Invalid port specification {value!r}: only digits, commas, "
+                    "and hyphens are permitted (e.g. '80,443' or '1-1000')"
+                )
+            return
+
+        if value.lstrip().startswith("-"):
+            raise ValueError(
+                f"Field '{field_id}' value must not begin with '-': {value!r}"
+            )
+
     def get_plugin(self, plugin_id: str) -> Optional[PluginMetadata]:
         """Get plugin by ID"""
         return self.plugins.get(plugin_id)
@@ -326,6 +441,9 @@ class PluginManager:
         if not plugin:
             return None
 
+        # Validate raw inputs before normalization transforms values (e.g. wordlist
+        # alias → resolved path) so that select-field checks see the original value.
+        self._validate_inputs_against_schema(plugin, inputs)
         inputs = self._normalize_inputs(plugin, inputs)
         command = []
 
