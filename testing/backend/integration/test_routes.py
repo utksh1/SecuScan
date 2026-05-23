@@ -28,6 +28,29 @@ def test_list_plugins(test_client):
         assert "runnable" in first["availability"]
         assert "missing_binaries" in first["availability"]
 
+def test_plugin_summary(test_client):
+    """Test plugin summary endpoint."""
+
+    response = test_client.get("/api/v1/plugins/summary")
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert "total_plugins" in data
+    assert "runnable_count" in data
+    assert "unavailable_count" in data
+    assert "category_counts" in data
+
+    assert isinstance(data["total_plugins"], int)
+    assert isinstance(data["runnable_count"], int)
+    assert isinstance(data["unavailable_count"], int)
+    assert isinstance(data["category_counts"], dict)
+    assert (
+    data["runnable_count"] +
+    data["unavailable_count"]
+    ) == data["total_plugins"]
+
 
 def test_start_task(test_client):
     """Test starting a task with a mocked executor."""
@@ -82,3 +105,17 @@ def test_get_settings(test_client):
     assert "network" in data
     assert "sandbox" in data
     assert "safety" in data
+
+def test_start_task_missing_plugin(test_client):
+    """Starting a task with a missing plugin should return 404 and helpful detail."""
+    missing_id = "plugin_does_not_exist_123"
+    payload = {
+        "plugin_id": missing_id,
+        "inputs": {"url": "http://127.0.0.1:8000"},
+        "consent_granted": True,
+    }
+
+    response = test_client.post("/api/v1/task/start", json=payload)
+    assert response.status_code == 404
+    detail = response.json().get("detail", "")
+    assert missing_id in detail or "plugin" in detail.lower()

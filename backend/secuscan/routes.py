@@ -3,6 +3,7 @@ API routes for SecuScan backend
 """
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Response
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request
 from fastapi.responses import JSONResponse
 from typing import Any, Optional, List, Dict, Callable
 import json
@@ -79,7 +80,7 @@ from .database import get_db
 from .plugins import get_plugin_manager, init_plugins
 from .executor import executor
 from .ratelimit import rate_limiter, concurrent_limiter
-from .validation import validate_target
+from .validation import validate_target, validate_task_start_payload
 from .reporting import reporting
 from .vault import VaultCrypto
 from .workflows import scheduler
@@ -138,12 +139,44 @@ async def list_plugins():
     """List all available plugins"""
     plugin_manager = await get_plugin_manager_for_request()
     plugins = plugin_manager.list_plugins()
-    
+
     return PluginListResponse(
         plugins=plugins,
         total=len(plugins)
     )
 
+@router.get("/plugins/summary")
+async def get_plugins_summary():
+    """Return plugin summary statistics"""
+
+    plugin_manager = await get_plugin_manager_for_request()
+    plugins = plugin_manager.list_plugins()
+
+    total_plugins = len(plugins)
+    runnable_count = 0
+    unavailable_count = 0
+    category_counts: Dict[str, int] = {}
+
+    for plugin in plugins:
+        category = getattr(plugin, "category", "unknown")
+
+        category_counts[category] = (
+            category_counts.get(category, 0) + 1
+        )
+
+        availability = plugin.get("availability", {})
+        runnable = availability.get("runnable", False)
+
+        if runnable:
+            runnable_count += 1
+        else:
+            unavailable_count += 1
+    return {
+        "total_plugins": total_plugins,
+        "runnable_count": runnable_count,
+        "unavailable_count": unavailable_count,
+        "category_counts": dict(sorted(category_counts.items()))
+    }
 
 @router.get("/plugin/{plugin_id}/schema")
 async def get_plugin_schema(plugin_id: str):
@@ -168,11 +201,18 @@ async def get_all_presets():
 @router.post("/task/start")
 async def start_task(
     request: TaskCreateRequest,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    raw_request: Request,
 ):
     """
-    Start a new scan task
+    Start a new scan task.
     """
+    # ── Payload size / field-length guard ─────────────────────────────────
+    raw_body = await raw_request.body()
+    ok, status_code, error_msg = validate_task_start_payload(raw_body, request.inputs)
+    if not ok:
+        raise HTTPException(status_code=status_code, detail=error_msg)
+
     # Validate consent
     if settings.require_consent and not request.consent_granted:
         logger.warning(f"Task start failed: Consent not granted. Request: {request}")
@@ -210,13 +250,7 @@ async def start_task(
     if not can_execute:
         raise HTTPException(status_code=429, detail=error_msg)
 
-    # Check concurrent task limit
-    can_acquire, error_msg = await concurrent_limiter.acquire("temp")
-    if not can_acquire:
-        raise HTTPException(status_code=503, detail=error_msg)
-    await concurrent_limiter.release("temp")
-
-    # Create task
+    # Create task record first so we have a real task_id for the limiter
     try:
         task_id = await executor.create_task(
             request.plugin_id,
@@ -224,21 +258,29 @@ async def start_task(
             request.preset,
             request.consent_granted
         )
-
-        # Execute task in background
-        background_tasks.add_task(executor.execute_task, task_id)
-        await invalidate_view_cache()
-
-        return {
-            "task_id": task_id,
-            "status": "queued",
-            "created_at": "now",
-            "stream_url": f"/api/v1/task/{task_id}/stream"
-        }
-
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
+    # Atomically acquire a concurrency slot using the real task_id.
+    # acquire() is lock-protected internally, so the check and register
+    # happen in a single operation — no TOCTOU window between requests.
+    can_acquire, error_msg = await concurrent_limiter.acquire(task_id)
+    if not can_acquire:
+        # Roll back: mark the DB row failed so it isn't left orphaned
+        await executor.mark_task_failed(task_id, reason="Concurrency limit reached; task was not started")
+        raise HTTPException(status_code=503, detail=error_msg)
+
+    # Slot is held — schedule execution.
+    # execute_task releases the slot in its finally block on every exit path.
+    background_tasks.add_task(executor.execute_task, task_id)
+    await invalidate_view_cache()
+
+    return {
+        "task_id": task_id,
+        "status": "queued",
+        "created_at": "now",
+        "stream_url": f"/api/v1/task/{task_id}/stream"
+    }
 
 @router.get("/task/{task_id}/status")
 async def get_task_status(task_id: str):
@@ -497,7 +539,7 @@ async def get_task_result(task_id: str):
 
     if ports := structured.get("open_ports"):
         summary.append(f"Perimeter analysis confirmed {len(ports)} active network entry points.")
-    
+
     if techs := structured.get("technologies"):
         summary.append(f"Fingerprinting identified {len(techs)} unique technologies powering the target infrastructure.")
 
@@ -539,10 +581,10 @@ async def get_task_result(task_id: str):
 async def cancel_task(task_id: str):
     """Cancel a running task"""
     cancelled = await executor.cancel_task(task_id)
-    
+
     if not cancelled:
         raise HTTPException(status_code=404, detail="Task not found or not running")
-    
+
     return {
         "task_id": task_id,
         "status": "cancelled",
@@ -556,11 +598,11 @@ async def get_dashboard_summary():
 
     async def build():
         db = await get_db()
-        
+
         # Get data
         raw_findings = await db.fetchall("SELECT * FROM findings ORDER BY discovered_at DESC")
         findings = parse_json_fields(raw_findings, ["metadata_json"])
-        
+
         task_stats = await db.fetchone(
             """
             SELECT
@@ -612,7 +654,7 @@ async def get_dashboard_summary():
             )
         }
 
-    return await build()
+    return await get_or_set_cached("summary:dashboard", build)
 
 
 @router.get("/findings")
@@ -685,13 +727,33 @@ async def list_tasks(
         t["inputs"] = t.pop("inputs_json", {})
 
     total_pages = (total + per_page - 1) // per_page if per_page > 0 else 0
+
+    # Calculate next and previous page numbers
+    next_page = page + 1 if page < total_pages else None
+    prev_page = page - 1 if page > 1 else None
+
+    # Function to build URL with all query parameters
+    def build_page_url(page_num):
+        if page_num is None:
+            return None
+        # Start with page and per_page
+        params_list = [f"page={page_num}", f"per_page={per_page}"]
+        # Add filters if they exist
+        if plugin_id:
+            params_list.append(f"plugin_id={plugin_id}")
+        if status:
+            params_list.append(f"status={status}")
+        # Join with & and return
+        return f"/api/v1/tasks?{'&'.join(params_list)}"
     return {
         "tasks": tasks_list,
         "pagination": {
             "page": page,
             "per_page": per_page,
             "total_pages": total_pages,
-            "total_items": total
+            "total_items": total,
+            "next": build_page_url(next_page),      # ← NEW
+            "previous": build_page_url(prev_page)    # ← NEW
         }
     }
 
@@ -699,17 +761,17 @@ async def list_tasks(
 async def delete_task_records(task_ids: List[str]):
     """Helper to delete database records and files for multiple tasks."""
     db = await get_db()
-    
+
     # Get raw output paths for file cleanup
     placeholders = ",".join(["?"] * len(task_ids))
     task_rows = await db.fetchall(f"SELECT raw_output_path FROM tasks WHERE id IN ({placeholders})", tuple(task_ids))
-    
+
     # Delete associated data
     await db.execute(f"DELETE FROM findings WHERE task_id IN ({placeholders})", tuple(task_ids))
     await db.execute(f"DELETE FROM reports WHERE task_id IN ({placeholders})", tuple(task_ids))
     await db.execute(f"DELETE FROM audit_log WHERE task_id IN ({placeholders})", tuple(task_ids))
     await db.execute(f"DELETE FROM tasks WHERE id IN ({placeholders})", tuple(task_ids))
-    
+
     # Cleanup files on disk
     for row in task_rows:
         if row and row["raw_output_path"]:
@@ -724,7 +786,7 @@ async def delete_task_records(task_ids: List[str]):
 async def delete_task(task_id: str):
     """Delete a task and its associated data (findings, reports, audit logs, and files)"""
     db = await get_db()
-    
+
     # Check if task is running
     status = await executor.get_task_status(task_id)
     if status and status.get("status") == "running":
@@ -732,7 +794,7 @@ async def delete_task(task_id: str):
 
     await delete_task_records([task_id])
     await invalidate_view_cache()
-    
+
     return {
         "task_id": task_id,
         "deleted": True
@@ -743,7 +805,7 @@ async def delete_task(task_id: str):
 async def bulk_delete_tasks(task_ids: List[str]):
     """Delete multiple tasks at once"""
     db = await get_db()
-    
+
     # Check if any tasks are running
     placeholders = ",".join(["?"] * len(task_ids))
     running_tasks = await db.fetchone(f"SELECT id FROM tasks WHERE id IN ({placeholders}) AND status = 'running' LIMIT 1", tuple(task_ids))
@@ -752,7 +814,7 @@ async def bulk_delete_tasks(task_ids: List[str]):
 
     await delete_task_records(task_ids)
     await invalidate_view_cache()
-    
+
     return {
         "deleted_count": len(task_ids),
         "success": True
@@ -763,7 +825,7 @@ async def bulk_delete_tasks(task_ids: List[str]):
 async def clear_all_tasks():
     """Wipe all scan history and associated data (findings, reports, assets, attack surface)"""
     db = await get_db()
-    
+
     # Prevent clearing if any tasks are running
     running_tasks = await db.fetchone("SELECT id FROM tasks WHERE status = 'running' LIMIT 1")
     if running_tasks:
@@ -777,7 +839,7 @@ async def clear_all_tasks():
 
     # Purge other tables
     await db.execute("DELETE FROM findings")
-    
+
     # Fallback cleanup for any orphaned files in data directories
     for subdir in ["raw", "reports"]:
         dir_path = Path(settings.data_dir) / subdir
@@ -792,7 +854,7 @@ async def clear_all_tasks():
                     logger.error(f"Failed to cleanup {item}: {e}")
 
     await invalidate_view_cache()
-    
+
     return {
         "cleared": True,
         "message": "All scan history and associated data has been purged."
@@ -981,7 +1043,7 @@ async def trigger_workflow_tick():
 async def get_finding_details(finding_id: str):
     """Get detailed information for a specific finding"""
     db = await get_db()
-    
+
     finding_row = await db.fetchone(
         """
         SELECT f.*, t.tool_name, t.target as task_target
@@ -991,17 +1053,17 @@ async def get_finding_details(finding_id: str):
         """,
         (finding_id,)
     )
-    
+
     if not finding_row:
         raise HTTPException(status_code=404, detail="Finding not found")
-        
+
     metadata = {}
     if finding_row["metadata_json"]:
         try:
             metadata = json.loads(finding_row["metadata_json"])
         except json.JSONDecodeError:
             metadata = {}
-            
+
     return {
         "id": finding_row["id"],
         "task_id": finding_row["task_id"],
@@ -1025,14 +1087,14 @@ async def get_finding_details(finding_id: str):
 async def get_attack_surface():
     """Return an aggregated view of the monitored attack surface."""
     db = await get_db()
-    
+
     # We aggregate unique targets from tasks and findings
     tasks = await db.fetchall("SELECT DISTINCT target, tool_name, created_at FROM tasks ORDER BY created_at DESC")
     findings = await db.fetchall("SELECT DISTINCT target, category, severity, discovered_at FROM findings ORDER BY discovered_at DESC")
-    
+
     entries = []
     seen_targets = set()
-    
+
     # Add findings as high-priority surface entries
     for f in findings:
         target = f["target"]
@@ -1047,7 +1109,7 @@ async def get_attack_surface():
                 "last_seen": f["discovered_at"]
             })
             seen_targets.add(target)
-            
+
     # Add other scanned targets
     for t in tasks:
         target = t["target"]
@@ -1062,7 +1124,7 @@ async def get_attack_surface():
                 "last_seen": t["created_at"]
             })
             seen_targets.add(target)
-            
+
     return {"entries": entries}
 
 
