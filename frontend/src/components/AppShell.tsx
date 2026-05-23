@@ -44,6 +44,7 @@ export default function AppShell({ children }: AppShellProps) {
         { to: routes.scans, icon: 'history', label: 'Scans' },
         { to: routes.findings, icon: 'emergency_home', label: 'Findings' },
         { to: routes.reports, icon: 'summarize', label: 'Reports' },
+        { to: routes.workflows, icon: 'account_tree', label: 'Workflows' },
         { to: routes.toolkit, icon: 'add_circle', label: 'Toolkit' },
     ]
     const mobileDrawerNav = [
@@ -51,6 +52,7 @@ export default function AppShell({ children }: AppShellProps) {
         { to: routes.scans, label: 'Scans' },
         { to: routes.findings, label: 'Findings' },
         { to: routes.reports, label: 'Reports' },
+        { to: routes.workflows, label: 'Workflows' },
         { to: routes.toolkit, label: 'Toolkit' },
         { to: routes.settings, label: 'Settings' },
     ]

@@ -54,10 +54,10 @@ describe('Scanner tool visibility', () => {
       </MemoryRouter>,
     )
 
-    await user.click(await screen.findByRole('button', { name: /Recon Tools/i }))
+    await user.click(await screen.findByRole('tab', { name: /Recon Tools/i }))
     await screen.findByText(/Subdomain Discovery/i)
 
-    await user.click(screen.getByRole('button', { name: /Exploit Detection/i }))
+    await user.click(screen.getByRole('tab', { name: /Exploit Detection/i }))
     expect(await screen.findByText(/Metasploit/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Expert Mode/i })).not.toBeInTheDocument()
   })

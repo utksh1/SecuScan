@@ -54,6 +54,10 @@ data/reports/*
 !data/raw/.gitkeep
 !data/reports/.gitkeep
 
+# Backend scan artifacts
+backend/data/raw/*
+!backend/data/raw/.gitkeep
+
 # Scanner assets downloaded by scripts/bootstrap_scanner_assets.sh
 wordlists/common.txt
 wordlists/large.txt
@@ -83,3 +87,19 @@ temp/
 *.tmp
 node_modules/
 .vercel
+
+# Vite cache
+.vite/
+
+# Frontend builds
+frontend/dist/
+frontend/build/
+
+# Backend cache
+backend/__pycache__/
+
+# Misc
+Thumbs.db
+
+backend/data/reports/*
+!backend/data/reports/.gitkeep
