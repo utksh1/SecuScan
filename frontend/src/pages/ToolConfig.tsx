@@ -421,7 +421,7 @@ export default function ToolConfig() {
             <section className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Execution_Timeout</h3>
-                <span className="text-[10px] font-black text-rag-blue uppercase tracking-widest">{inputs.timeout || schema.timeout_config.default}s</span>
+                <span className="text-[10px] font-black text-rag-blue uppercase tracking-widest">{((inputs.timeout as number) || schema.timeout_config.default)}s</span>
               </div>
               <div className="space-y-4">
                 <input
@@ -429,7 +429,7 @@ export default function ToolConfig() {
                   min={schema.timeout_config.min || 10}
                   max={schema.timeout_config.max || 300}
                   step={10}
-                  value={inputs.timeout || schema.timeout_config.default}
+                  value={(inputs.timeout as number) || schema.timeout_config.default}
                   onChange={(e) => setInputs(prev => ({ ...prev, timeout: parseInt(e.target.value) }))}
                   className="w-full h-2 bg-black rounded-none appearance-none cursor-pointer accent-rag-blue"
                 />
