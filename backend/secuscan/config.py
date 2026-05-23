@@ -4,7 +4,7 @@ Configuration management for SecuScan backend
 
 from pathlib import Path
 from typing import Any, List, Optional
-from pydantic import field_validator
+from pydantic import ConfigDict, field_validator
 from pydantic_settings import BaseSettings
 import base64
 import hashlib
@@ -13,6 +13,11 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 class Settings(BaseSettings):
+    model_config = ConfigDict(
+        env_prefix="SECUSCAN_",
+        case_sensitive=False,
+    )
+
     """Application settings loaded from environment variables"""
     
     # Server Configuration
@@ -70,10 +75,6 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
     log_file: str = str(PROJECT_ROOT / "logs" / "secuscan.log")
-    
-    class Config:
-        env_prefix = "SECUSCAN_"
-        case_sensitive = False
 
     @field_validator("cors_allowed_origins", "cors_allowed_methods", "cors_allowed_headers", mode="before")
     @classmethod

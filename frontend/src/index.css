@@ -211,6 +211,17 @@ textarea:disabled {
   cursor: not-allowed;
 }
 
+input[type='date'] {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+}
+
+input[type='date']::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  cursor: pointer;
+}
+
 label {
   display: block;
   font-size: var(--text-sm);

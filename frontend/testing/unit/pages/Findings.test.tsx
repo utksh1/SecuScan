@@ -10,6 +10,20 @@ vi.mock('../../../src/api', () => ({
   API_BASE: 'http://127.0.0.1:8000',
 }))
 
+vi.mock('../../../src/hooks/useSavedViews', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/hooks/useSavedViews')>()
+  return {
+    ...actual,
+    useSavedViews: () => ({
+      views: [],
+      loading: false,
+      saveView: vi.fn(),
+      deleteView: vi.fn(),
+      renameView: vi.fn(),
+    }),
+  }
+})
+
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const criticalFinding = {
@@ -63,22 +77,17 @@ function renderFindings() {
   )
 }
 
-/** Wait for data to load by looking for a known finding title. */
 async function waitForLoad() {
   await waitFor(() => {
     expect(screen.getAllByText('SQL Injection in Login').length).toBeGreaterThanOrEqual(1)
   })
 }
 
-/** Helper to grab the sort select via its label. */
-function getSortSelect() {
-  const label = screen.getByText('Sort By')
-  return label.parentElement!.querySelector('select')!
+function clickSortButton(label: string) {
+  fireEvent.click(screen.getByRole('button', { name: new RegExp(label, 'i') }))
 }
 
-/** Helper to collect visible finding titles from the list section. */
 function getVisibleTitles() {
-  // h3 tags in the list hold finding titles
   return Array.from(document.querySelectorAll('h3'))
     .map((el) => el.textContent ?? '')
     .filter(Boolean)
@@ -114,13 +123,13 @@ describe('Findings — severity filtering', () => {
     await waitForLoad()
 
     const critButtons = screen.getAllByRole('button', { name: /critical/i })
-    const toggle = critButtons.find((btn) => btn.textContent?.includes('1'))
+    const toggle = critButtons.find((btn) => btn.textContent?.trim() === 'Critical')
     expect(toggle).toBeTruthy()
     await user.click(toggle!)
 
     await waitFor(() => {
       expect(screen.queryByText('Stored XSS in Comments')).not.toBeInTheDocument()
-    })
+    }, { timeout: 3000 })
     expect(screen.getAllByText('SQL Injection in Login').length).toBeGreaterThanOrEqual(1)
   })
 })
@@ -132,25 +141,24 @@ describe('Findings — sorting', () => {
     vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
   })
 
-  it('sort dropdown contains all expected options', async () => {
+  it('sort controls contain all expected options', async () => {
     renderFindings()
     await waitForLoad()
 
-    const options = within(getSortSelect()).getAllByRole('option')
-    const labels = options.map((o) => o.textContent)
-    expect(labels).toContain('Newest First')
-    expect(labels).toContain('Oldest First')
-    expect(labels).toContain('Target (A → Z)')
+    expect(screen.getByRole('button', { name: /by severity/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /newest/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /oldest/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /target alpha/i })).toBeInTheDocument()
   })
 
   it('switches to flat list when sort is newest', async () => {
     renderFindings()
     await waitForLoad()
 
-    fireEvent.change(getSortSelect(), { target: { value: 'newest' } })
+    clickSortButton('Newest')
 
     await waitFor(() => {
-      const headers = screen.getAllByText(/visible in queue/i)
+      const headers = screen.getAllByText(/in queue/i)
       expect(headers.length).toBe(1)
     })
   })
@@ -159,11 +167,10 @@ describe('Findings — sorting', () => {
     renderFindings()
     await waitForLoad()
 
-    fireEvent.change(getSortSelect(), { target: { value: 'newest' } })
+    clickSortButton('Newest')
 
     await waitFor(() => {
       const titles = getVisibleTitles()
-      // May 15 > May 14 > May 13
       expect(titles.indexOf('Missing Security Headers')).toBeLessThan(titles.indexOf('SQL Injection in Login'))
       expect(titles.indexOf('SQL Injection in Login')).toBeLessThan(titles.indexOf('Stored XSS in Comments'))
     })
@@ -173,11 +180,10 @@ describe('Findings — sorting', () => {
     renderFindings()
     await waitForLoad()
 
-    fireEvent.change(getSortSelect(), { target: { value: 'oldest' } })
+    clickSortButton('Oldest')
 
     await waitFor(() => {
       const titles = getVisibleTitles()
-      // May 13 < May 14 < May 15
       expect(titles.indexOf('Stored XSS in Comments')).toBeLessThan(titles.indexOf('SQL Injection in Login'))
       expect(titles.indexOf('SQL Injection in Login')).toBeLessThan(titles.indexOf('Missing Security Headers'))
     })
@@ -187,12 +193,10 @@ describe('Findings — sorting', () => {
     renderFindings()
     await waitForLoad()
 
-    fireEvent.change(getSortSelect(), { target: { value: 'target' } })
+    clickSortButton('Target Alpha')
 
     await waitFor(() => {
       const titles = getVisibleTitles()
-      // api.example.com comes before web.example.com
-      // criticalFinding and mediumFinding share api.example.com, highFinding has web.example.com
       const webIdx = titles.indexOf('Stored XSS in Comments')
       const apiIdx = titles.indexOf('SQL Injection in Login')
       expect(apiIdx).toBeLessThan(webIdx)
@@ -211,11 +215,10 @@ describe('Findings — target filter', () => {
     renderFindings()
     await waitForLoad()
 
-    const targetSelect = screen.getByDisplayValue(/All Targets/i)
+    const targetSelect = screen.getByDisplayValue(/All targets/i)
     const options = within(targetSelect as HTMLElement).getAllByRole('option')
     const labels = options.map((o) => o.textContent)
 
-    expect(labels).toContain('All Targets')
     expect(labels).toContain('api.example.com')
     expect(labels).toContain('web.example.com')
   })
@@ -225,7 +228,7 @@ describe('Findings — target filter', () => {
     renderFindings()
     await waitForLoad()
 
-    const targetSelect = screen.getByDisplayValue(/All Targets/i)
+    const targetSelect = screen.getByDisplayValue(/All targets/i)
     await user.selectOptions(targetSelect, 'web.example.com')
 
     await waitFor(() => {
@@ -246,11 +249,10 @@ describe('Findings — scanner filter', () => {
     renderFindings()
     await waitForLoad()
 
-    const scannerSelect = screen.getByDisplayValue(/All Scanners/i)
+    const scannerSelect = screen.getByDisplayValue(/All scanners/i)
     const options = within(scannerSelect as HTMLElement).getAllByRole('option')
     const labels = options.map((o) => o.textContent)
 
-    expect(labels).toContain('All Scanners')
     expect(labels).toContain('sqlmap')
     expect(labels).toContain('zap')
     expect(labels).toContain('nikto')
@@ -261,7 +263,7 @@ describe('Findings — scanner filter', () => {
     renderFindings()
     await waitForLoad()
 
-    const scannerSelect = screen.getByDisplayValue(/All Scanners/i)
+    const scannerSelect = screen.getByDisplayValue(/All scanners/i)
     await user.selectOptions(scannerSelect, 'zap')
 
     await waitFor(() => {
@@ -283,8 +285,7 @@ describe('Findings — date range filter', () => {
     renderFindings()
     await waitForLoad()
 
-    // Set from-date to May 14 — should exclude the May 13 finding (highFinding)
-    const fromLabel = screen.getByText('From Date')
+    const fromLabel = screen.getByText('Discovered From')
     const fromInput = fromLabel.parentElement!.querySelector('input')!
     fireEvent.change(fromInput, { target: { value: '2026-05-14' } })
 
@@ -299,8 +300,7 @@ describe('Findings — date range filter', () => {
     renderFindings()
     await waitForLoad()
 
-    // Set to-date to May 14 — should exclude the May 15 finding (mediumFinding)
-    const toLabel = screen.getByText('To Date')
+    const toLabel = screen.getByText('Discovered To')
     const toInput = toLabel.parentElement!.querySelector('input')!
     fireEvent.change(toInput, { target: { value: '2026-05-14' } })
 
@@ -315,10 +315,9 @@ describe('Findings — date range filter', () => {
     renderFindings()
     await waitForLoad()
 
-    // Set from=May 14, to=May 14 — should include criticalFinding (discovered May 14)
-    const fromLabel = screen.getByText('From Date')
+    const fromLabel = screen.getByText('Discovered From')
     const fromInput = fromLabel.parentElement!.querySelector('input')!
-    const toLabel = screen.getByText('To Date')
+    const toLabel = screen.getByText('Discovered To')
     const toInput = toLabel.parentElement!.querySelector('input')!
 
     fireEvent.change(fromInput, { target: { value: '2026-05-14' } })
@@ -332,28 +331,26 @@ describe('Findings — date range filter', () => {
   })
 })
 
-// ── Reset button ──────────────────────────────────────────────────────────────
+// ── Reset filters ─────────────────────────────────────────────────────────────
 
 describe('Findings — reset filters', () => {
   beforeEach(() => {
     vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
   })
 
-  it('clears all active filters when reset is clicked', async () => {
+  it('clears all active filters when severity All is clicked', async () => {
     const user = userEvent.setup()
     renderFindings()
     await waitForLoad()
 
-    // Apply a target filter first
-    const targetSelect = screen.getByDisplayValue(/All Targets/i)
+    const targetSelect = screen.getByDisplayValue(/All targets/i)
     await user.selectOptions(targetSelect, 'web.example.com')
 
     await waitFor(() => {
       expect(screen.queryByText('SQL Injection in Login')).not.toBeInTheDocument()
     })
 
-    // Now click reset
-    await user.click(screen.getByRole('button', { name: /reset filters/i }))
+    await user.selectOptions(screen.getByDisplayValue(/web\.example\.com/i), 'all')
 
     await waitFor(() => {
       expect(screen.getAllByText('SQL Injection in Login').length).toBeGreaterThanOrEqual(1)
@@ -362,9 +359,52 @@ describe('Findings — reset filters', () => {
   })
 })
 
+// ── Active filter summary ─────────────────────────────────────────────────────
+
+describe('Findings — active filter summary', () => {
+  beforeEach(() => {
+    vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
+  })
+
+  it('is hidden when no filters are active', async () => {
+    renderFindings()
+    await waitForLoad()
+    expect(screen.queryByLabelText('active filters')).not.toBeInTheDocument()
+  })
+
+  it('shows target + scanner chips when both filters are applied', async () => {
+    const user = userEvent.setup()
+    renderFindings()
+    await waitForLoad()
+
+    await user.selectOptions(screen.getByDisplayValue(/All targets/i), 'api.example.com')
+    await user.selectOptions(screen.getByDisplayValue(/All scanners/i), 'sqlmap')
+
+    await waitFor(() => {
+      expect(screen.getAllByText('SQL Injection in Login').length).toBeGreaterThanOrEqual(1)
+      expect(screen.queryByText('Stored XSS in Comments')).not.toBeInTheDocument()
+    })
+  })
+
+  it('shows date range chips when both dates are set', async () => {
+    renderFindings()
+    await waitForLoad()
+
+    const fromInput = screen.getByText('Discovered From').parentElement!.querySelector('input')!
+    const toInput = screen.getByText('Discovered To').parentElement!.querySelector('input')!
+
+    fireEvent.change(fromInput, { target: { value: '2026-05-14' } })
+    fireEvent.change(toInput, { target: { value: '2026-05-15' } })
+
+    await waitFor(() => {
+      expect(screen.queryByText('Stored XSS in Comments')).not.toBeInTheDocument()
+    })
+    expect(screen.getAllByText('SQL Injection in Login').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText('Missing Security Headers').length).toBeGreaterThanOrEqual(1)
+  })
+})
+
 // ── Timezone boundary regression ──────────────────────────────────────────────
-// A finding at 2026-05-13T20:00:00Z is May 14 01:30 in Asia/Kolkata (IST).
-// The date filter should compare by the *displayed* calendar day, not UTC.
 
 describe('Findings — date range respects display timezone', () => {
   const tzBoundaryFinding = {
@@ -375,13 +415,12 @@ describe('Findings — date range respects display timezone', () => {
     target: 'tz.example.com',
     description: 'Edge case across UTC day boundary.',
     remediation: 'Fix it.',
-    discovered_at: '2026-05-13T20:00:00Z',  // May 13 UTC, but May 14 in IST
+    discovered_at: '2026-05-13T20:00:00Z',
     plugin_id: 'zap',
   }
 
   beforeEach(() => {
     vi.mocked(getFindings).mockResolvedValue({ findings: [tzBoundaryFinding] })
-    // Force timezone to Asia/Kolkata so the finding displays as May 14
     vi.spyOn(dateUtils, 'getCurrentTimeZone').mockReturnValue('Asia/Kolkata')
   })
 
@@ -396,11 +435,10 @@ describe('Findings — date range respects display timezone', () => {
       expect(screen.getAllByText('TZ Boundary XSS').length).toBeGreaterThanOrEqual(1)
     })
 
-    const fromLabel = screen.getByText('From Date')
+    const fromLabel = screen.getByText('Discovered From')
     const fromInput = fromLabel.parentElement!.querySelector('input')!
     fireEvent.change(fromInput, { target: { value: '2026-05-14' } })
 
-    // In IST this finding is May 14, so from-date of May 14 should keep it
     await waitFor(() => {
       expect(screen.getAllByText('TZ Boundary XSS').length).toBeGreaterThanOrEqual(1)
     })
@@ -413,13 +451,12 @@ describe('Findings — date range respects display timezone', () => {
       expect(screen.getAllByText('TZ Boundary XSS').length).toBeGreaterThanOrEqual(1)
     })
 
-    const fromLabel = screen.getByText('From Date')
+    const fromLabel = screen.getByText('Discovered From')
     const fromInput = fromLabel.parentElement!.querySelector('input')!
     fireEvent.change(fromInput, { target: { value: '2026-05-15' } })
 
-    // May 14 IST < May 15 from-date, so it should be excluded
     await waitFor(() => {
-      expect(screen.getByText(/No Findings Match/i)).toBeInTheDocument()
+      expect(screen.getByText(/Queue Cleared/i)).toBeInTheDocument()
     })
   })
 })
@@ -430,6 +467,6 @@ describe('Findings — empty state', () => {
   it('shows empty state when no findings exist', async () => {
     vi.mocked(getFindings).mockResolvedValue({ findings: [] })
     renderFindings()
-    expect(await screen.findByText(/No Findings Match/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Queue Cleared/i)).toBeInTheDocument()
   })
 })

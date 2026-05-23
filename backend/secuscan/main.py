@@ -17,6 +17,7 @@ from .cache import init_cache, cache as global_cache
 from .database import init_db, db as global_db
 from .plugins import init_plugins
 from .routes import router
+from .saved_views import saved_views_router
 from .workflows import scheduler
 
 
@@ -38,29 +39,29 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     # Startup
     logger.info("🚀 Starting SecuScan backend...")
-    
+
     # Ensure directories exist
     settings.ensure_directories()
     logger.info("✓ Directories initialized")
-    
+
     # Initialize database
     await init_db(settings.database_path)
     logger.info("✓ SQLite connected")
 
     await init_cache()
     logger.info("✓ In-memory cache initialized")
-    
+
     # Load plugins
     await init_plugins(settings.plugins_dir)
     logger.info("✓ Plugins loaded")
 
     await scheduler.start()
     logger.info("✓ Workflow scheduler started")
-    
+
     logger.info("✓ Ready to serve on %s:%d", settings.bind_address, settings.bind_port)
-    
+
     yield
-    
+
     # Shutdown
     logger.info("🛑 Shutting down SecuScan backend...")
     if global_db:
@@ -116,7 +117,7 @@ app.add_middleware(
 
 # Include API routes
 app.include_router(router)
-
+app.include_router(saved_views_router)
 
 # Health check endpoint
 @app.get("/api/v1/health")
@@ -124,7 +125,7 @@ async def health_check():
     """Health check endpoint"""
     import platform
     import sys
-    
+
     return {
         "status": "operational",
         "version": "0.1.0-alpha",
@@ -152,7 +153,7 @@ async def root():
 def main():
     """Main entry point"""
     import uvicorn
-    
+
     logger.info("""
     ╔═══════════════════════════════════════════════════════╗
     ║                                                       ║
@@ -163,7 +164,7 @@ def main():
     ║                                                       ║
     ╚═══════════════════════════════════════════════════════╝
     """)
-    
+
     uvicorn.run(
         "backend.secuscan.main:app",
         host=settings.bind_address,
