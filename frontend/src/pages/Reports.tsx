@@ -72,6 +72,7 @@ export default function Reports() {
   const [selectedDateRange, setSelectedDateRange] = useState<DateRange>('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [preferredFormat, setPreferredFormat] = useState<string | null>(null)
   const latestReadyReport = [...reports]
     .filter((report) => report.status === 'ready')
     .sort((a, b) => new Date(b.generated_at).getTime() - new Date(a.generated_at).getTime())[0]
@@ -94,6 +95,8 @@ export default function Reports() {
 
   useEffect(() => {
     fetchReports()
+    const pref = localStorage.getItem('secuscan:preferred-export-format')
+    if (pref) setPreferredFormat(pref)
   }, [])
 
   const filteredReports = reports.filter((report) =>
@@ -358,23 +361,35 @@ export default function Reports() {
                             >
                               <ReportIcon icon={ScanEyeIcon} size={18} aria-hidden="true"/>
                             </button>
-                            {exportFormats.map((format) => (
-                              <button
-                                key={format}
-                                onClick={() => {
-                                  if (report.status !== 'generating') {
+                            {(() => {
+                              const ordered = preferredFormat
+                                ? [preferredFormat, ...exportFormats.filter((f) => f !== preferredFormat)]
+                                : exportFormats
+
+                              return ordered.map((format) => (
+                                <button
+                                  key={format}
+                                  onClick={() => {
+                                    if (report.status === 'generating') return
+                                    // Persist preferred export format for future sessions/tests
+                                    try {
+                                      localStorage.setItem('secuscan:preferred-export-format', format)
+                                    } catch {}
+                                    setPreferredFormat(format)
                                     window.open(`${API_BASE}/task/${report.task_id}/report/${format}`, '_blank')
-                                  }
-                                }}
-                                disabled={report.status === 'generating'}
-                                className={`border-4 border-black px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:group-hover:text-silver/20 disabled:group-hover:bg-charcoal-dark ${
-                                  'bg-charcoal-dark text-silver/20 group-hover:text-silver-bright group-hover:bg-black'
-                                }`}
-                                title={report.status === 'generating' ? 'Export unavailable while report is generating' : `Download ${format.toUpperCase()}`}
-                              >
-                                {format}
-                              </button>
-                            ))}
+                                  }}
+                                  disabled={report.status === 'generating'}
+                                  className={`border-4 border-black px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:group-hover:text-silver/20 disabled:group-hover:bg-charcoal-dark ${
+                                    format === preferredFormat
+                                      ? 'bg-rag-amber border-black text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+                                      : 'bg-charcoal-dark text-silver/20 group-hover:text-silver-bright group-hover:bg-black'
+                                  }`}
+                                  title={report.status === 'generating' ? 'Export unavailable while report is generating' : `Download ${format.toUpperCase()}`}
+                                >
+                                  {format}
+                                </button>
+                              ))
+                            })()}
                           </div>
                         </div>
                       </div>
