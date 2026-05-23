@@ -185,3 +185,65 @@ export function streamTask(taskId: string, onEvent: (ev: MessageEvent) => void) 
   es.onerror = () => {}
   return es
 }
+export interface WorkflowStep {
+  plugin_id: string
+  inputs: Record<string, unknown>
+}
+
+export interface Workflow {
+  id: string
+  name: string
+  schedule_interval: string
+  enabled: boolean
+  steps: WorkflowStep[]
+  last_run_at?: string | null
+  queued_task_ids?: string[]
+  created_at?: string
+}
+
+export interface WorkflowCreatePayload {
+  name: string
+  schedule_interval: string
+  enabled: boolean
+  steps: WorkflowStep[]
+}
+
+export interface WorkflowUpdatePayload {
+  name?: string
+  schedule_interval?: string
+  enabled?: boolean
+  steps?: WorkflowStep[]
+}
+
+export function getWorkflows(): Promise<Workflow[]> {
+  return request<Workflow[]>('/workflows')
+}
+
+export function createWorkflow(data: WorkflowCreatePayload): Promise<Workflow> {
+  return request<Workflow>('/workflows', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+}
+
+export function runWorkflow(workflowId: string): Promise<{ queued_task_ids: string[] }> {
+  return request<{ queued_task_ids: string[] }>(`/workflows/${workflowId}/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
+export function updateWorkflow(workflowId: string, data: WorkflowUpdatePayload): Promise<Workflow> {
+  return request<Workflow>(`/workflows/${workflowId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+}
+
+export function deleteWorkflow(workflowId: string): Promise<{ deleted: boolean }> {
+  return request<{ deleted: boolean }>(`/workflows/${workflowId}`, {
+    method: 'DELETE',
+  })
+}

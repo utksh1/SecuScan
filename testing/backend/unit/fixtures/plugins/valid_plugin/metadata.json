@@ -1,0 +1,42 @@
+{
+  "id": "test_ping",
+  "name": "Test Ping",
+  "description": "A minimal valid plugin used as a test fixture.",
+  "version": "1.0.0",
+  "category": "utils",
+  "icon": "ping",
+  "engine": {
+    "type": "cli",
+    "binary": "ping"
+  },
+  "command_template": [
+    "ping",
+    "-c",
+    "{count:4}",
+    "{target}"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target Host",
+      "type": "text",
+      "required": true,
+      "placeholder": "192.168.1.1"
+    },
+    {
+      "id": "count",
+      "label": "Packet Count",
+      "type": "number",
+      "required": false,
+      "default": 4
+    }
+  ],
+  "output": {
+    "parser": "text"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": false
+  },
+  "checksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}
