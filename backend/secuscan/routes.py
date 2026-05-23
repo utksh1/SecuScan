@@ -637,6 +637,12 @@ async def get_dashboard_summary():
         )
         recent_findings: List[Dict] = parse_json_fields(recent_rows, ["metadata_json"])
 
+        risk_scores = [
+            f.get("risk_score") for f in findings
+            if isinstance(f.get("risk_score"), (int, float))
+        ]
+        avg_risk_score = round(sum(risk_scores) / len(risk_scores), 1) if risk_scores else None
+
         return {
             "total_findings": total_findings,
             "critical_findings": critical_findings,
@@ -644,6 +650,7 @@ async def get_dashboard_summary():
             "medium_findings": medium_findings,
             "low_findings": low_findings,
             "info_findings": info_findings,
+            "avg_risk_score": avg_risk_score,
             "last_scan_time": recent_findings[0].get("discovered_at") if recent_findings else None,
             "recent_findings": recent_findings,
             "scan_activity": {
@@ -675,7 +682,11 @@ async def get_findings():
     async def build():
         db = await get_db()
         rows = await db.fetchall("SELECT * FROM findings ORDER BY discovered_at DESC")
-        return {"findings": parse_json_fields(rows, ["metadata_json"])}
+        findings = parse_json_fields(rows, ["metadata_json", "risk_factors_json"])
+        for f in findings:
+            if "risk_factors_json" in f:
+                f["risk_factors"] = f.pop("risk_factors_json")
+        return {"findings": findings}
 
     return await get_or_set_cached("findings:list", build)
 
@@ -1075,6 +1086,13 @@ async def get_finding_details(finding_id: str):
         except json.JSONDecodeError:
             metadata = {}
 
+    risk_factors = []
+    if finding_row.get("risk_factors_json"):
+        try:
+            risk_factors = json.loads(finding_row["risk_factors_json"])
+        except (json.JSONDecodeError, TypeError):
+            risk_factors = []
+
     return {
         "id": finding_row["id"],
         "task_id": finding_row["task_id"],
@@ -1090,7 +1108,12 @@ async def get_finding_details(finding_id: str):
         "cvss": finding_row["cvss"],
         "cve": finding_row["cve"],
         "discovered_at": finding_row["discovered_at"],
-        "metadata": metadata
+        "metadata": metadata,
+        "exploitability": finding_row.get("exploitability"),
+        "confidence": finding_row.get("confidence"),
+        "asset_exposure": finding_row.get("asset_exposure"),
+        "risk_score": finding_row.get("risk_score"),
+        "risk_factors": risk_factors,
     }
 
 
