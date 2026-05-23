@@ -420,10 +420,11 @@ class TaskExecutor:
                 task_id=task_id
             )
         finally:
-            # Always clean up the in-memory registry regardless of how the
-            # task ended. The cancelled() check is removed — it always returns
-            # False here because the task is still executing the finally block.
+            # Always runs regardless of success, failure, or cancellation.
+            # Remove from in-memory registry and release the concurrency slot
+            # so future tasks are not permanently blocked.
             self.running_tasks.pop(task_id, None)
+            await concurrent_limiter.release(task_id)
     
     async def _execute_command(
         self,
