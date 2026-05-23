@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { getFindings } from '../api'
 import { formatLocaleDate } from '../utils/date'
+import { getPreference, setPreference } from '../utils/preferences'
 
 type Finding = {
   id: string
@@ -88,7 +89,8 @@ export default function Findings() {
   const [findings, setFindings] = useState<Finding[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [filterSeverity, setFilterSeverity] = useState('all')
+  const [filterSeverity, setFilterSeverity] = useState(() => getPreference('findings-severity-filter', 'all'))
+  const [sortBy, setSortBy] = useState<'severity' | 'date'>(() => getPreference('findings-sort-by', 'severity'))
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null)
   const [reviewState, setReviewState] = useState<ReviewState>({})
   const [copiedFindingId, setCopiedFindingId] = useState<string | null>(null)
@@ -119,6 +121,14 @@ export default function Findings() {
     localStorage.setItem('secuscan-finding-review-state', JSON.stringify(reviewState))
   }, [reviewState])
 
+  useEffect(() => {
+    setPreference('findings-severity-filter', filterSeverity)
+  }, [filterSeverity])
+
+  useEffect(() => {
+    setPreference('findings-sort-by', sortBy)
+  }, [sortBy])
+
   const enrichedFindings = useMemo(
     () =>
       findings.map((finding) => ({
@@ -132,7 +142,7 @@ export default function Findings() {
   const filteredFindings = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
 
-    return enrichedFindings.filter((finding) => {
+    const list = enrichedFindings.filter((finding) => {
       const matchesSeverity = filterSeverity === 'all' || finding.severity === filterSeverity
       const haystack = [
         finding.title,
@@ -148,7 +158,17 @@ export default function Findings() {
 
       return matchesSeverity && haystack.includes(query)
     })
-  }, [enrichedFindings, filterSeverity, searchQuery])
+
+    if (sortBy === 'date') {
+      return list.sort((a, b) => new Date(b.discovered_at).getTime() - new Date(a.discovered_at).getTime())
+    }
+
+    return list.sort((a, b) => {
+      const diff = (b.cvss || 0) - (a.cvss || 0)
+      if (diff !== 0) return diff
+      return new Date(b.discovered_at).getTime() - new Date(a.discovered_at).getTime()
+    })
+  }, [enrichedFindings, filterSeverity, searchQuery, sortBy])
 
   const groupedFindings = useMemo(
     () =>
@@ -257,7 +277,7 @@ export default function Findings() {
 
         <section className="sticky top-4 z-20 border-2 border-black bg-charcoal/95 p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] backdrop-blur">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div className="grid flex-1 gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1.8fr)]">
+            <div className="grid flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)_minmax(0,0.8fr)]">
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-[0.2em] text-silver-bright">Search</label>
                 <input
@@ -289,6 +309,26 @@ export default function Findings() {
                       {severityConfig[severity].label} {countsBySeverity[severity] || 0}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-silver-bright">Sort</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSortBy('severity')}
+                    className={`border px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] transition-all ${filterPillClasses(sortBy === 'severity')}`}
+                  >
+                    Priority
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSortBy('date')}
+                    className={`border px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] transition-all ${filterPillClasses(sortBy === 'date')}`}
+                  >
+                    Recent
+                  </button>
                 </div>
               </div>
             </div>

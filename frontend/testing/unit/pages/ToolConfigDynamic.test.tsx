@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import ToolConfig from '../../../src/pages/ToolConfig'
@@ -67,6 +67,7 @@ describe('ToolConfig dynamic schema flow', () => {
         comprehensive: { threads: 20, scan_type: 'active' },
       },
       safety: { level: 'safe', requires_consent: true },
+      timeout_config: { enabled: true, min: 10, max: 100, default: 30 },
     })
     vi.mocked(startTask).mockResolvedValue({
       task_id: 'task-123',
@@ -105,12 +106,40 @@ describe('ToolConfig dynamic schema flow', () => {
         'subdomain_discovery',
         expect.objectContaining({
           target: 'example.com',
+          threads: 10,
+          scan_type: 'passive',
+          timeout: 30,
         }),
         true,
         'quick',
       )
     })
   })
+
+  it('renders timeout control and validates bounds', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/toolkit/subdomain_discovery']}>
+        <Routes>
+          <Route path={routes.scanTool} element={<ToolConfig />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByText(/Execution_Timeout/i)
+    const timeoutSlider = screen.getByRole('slider')
+    expect(timeoutSlider).toHaveValue('30')
+
+    // Since it's a range input, 'invalid' bounds are handled by min/max attributes
+    expect(timeoutSlider).toHaveAttribute('min', '10')
+    expect(timeoutSlider).toHaveAttribute('max', '100')
+
+    // Valid value change
+    fireEvent.change(timeoutSlider, { target: { value: '50' } })
+    expect(timeoutSlider).toHaveValue('50')
+    expect(screen.getByText('50s')).toBeInTheDocument()
+  })
+
   it('falls back gracefully when guidance is absent', async () => {
     vi.mocked(listPlugins).mockResolvedValue({
       total: 1,

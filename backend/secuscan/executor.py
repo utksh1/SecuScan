@@ -18,6 +18,7 @@ from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager
 from .models import TaskStatus
+from .validation import validate_timeout
 
 # Modular Scanners
 from .scanners.port_scanner import PortScanner
@@ -103,6 +104,15 @@ class TaskExecutor:
             preset_values = plugin.presets[preset]
             # Merge preset with user inputs (user inputs take precedence)
             inputs = {**preset_values, **inputs}
+        
+        # Validate timeout if provided and supported
+        if "timeout" in inputs and plugin.timeout_config:
+            timeout_val = int(inputs["timeout"])
+            min_t = plugin.timeout_config.get("min", 10)
+            max_t = plugin.timeout_config.get("max", 3600)
+            is_valid, err = validate_timeout(timeout_val, min_t, max_t)
+            if not is_valid:
+                raise ValueError(err)
         
         # Store task in database
         db = await get_db()

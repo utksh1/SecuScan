@@ -74,6 +74,12 @@ export interface PluginSchemaResponse {
   fields: PluginFieldSchema[]
   presets: Record<string, Record<string, unknown>>
   safety: Record<string, unknown>
+  timeout_config?: {
+    enabled: boolean
+    min: number
+    max: number
+    default: number
+  }
 }
 
 export interface TaskStartResponse {

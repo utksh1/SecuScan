@@ -66,6 +66,11 @@ class PluginMetadata(BaseModel):
     fields: List[PluginField]
     presets: Dict[str, Dict[str, Any]]
     
+    timeout_config: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Configuration for timeout behavior: { 'enabled': bool, 'min': int, 'max': int, 'default': int }"
+    )
+    
     output: Dict[str, Any]
     safety: Dict[str, Any]
     learning: Optional[Dict[str, Any]] = None

@@ -1,7 +1,7 @@
 import pytest
 from backend.secuscan.validation import (
     validate_target, validate_port, validate_url,
-    sanitize_input, is_safe_path, match_pattern
+    validate_timeout, sanitize_input, is_safe_path, match_pattern
 )
 
 
@@ -28,6 +28,17 @@ def test_validate_port():
     assert validate_port(0)[0] is False
     assert validate_port(65536)[0] is False
     assert validate_port(-1)[0] is False
+
+
+def test_validate_timeout():
+    assert validate_timeout(60) == (True, "")
+    assert validate_timeout(10) == (True, "")
+    assert validate_timeout(3600) == (True, "")
+
+    assert validate_timeout(5)[0] is False
+    assert validate_timeout(3601)[0] is False
+    assert validate_timeout(60, min_val=100)[0] is False
+    assert validate_timeout(100, max_val=99)[0] is False
 
 
 def test_validate_url():

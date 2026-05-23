@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { API_BASE, deleteTask, clearAllTasks, bulkDeleteTasks } from '../api'
 import { routePath } from '../routes'
 import { parseDateSafe, formatLocaleDate, formatLocaleTime } from '../utils/date'
+import { getPreference, setPreference } from '../utils/preferences'
 
 interface Task {
     task_id: string
@@ -49,7 +50,7 @@ export default function Scans() {
     const navigate = useNavigate()
     const [tasks, setTasks] = useState<Task[]>([])
     const [loading, setLoading] = useState(true)
-    const [filter, setFilter] = useState('all')
+    const [filter, setFilter] = useState(() => getPreference('scans-status-filter', 'all'))
     const [expandedId, setExpandedId] = useState<string | null>(null)
     const [selectedIds, setSelectedIds] = useState<string[]>([])
 
@@ -57,6 +58,10 @@ export default function Scans() {
         loadTasks()
         const interval = setInterval(loadTasks, 5000)
         return () => clearInterval(interval)
+    }, [filter])
+
+    useEffect(() => {
+        setPreference('scans-status-filter', filter)
     }, [filter])
 
     async function loadTasks() {

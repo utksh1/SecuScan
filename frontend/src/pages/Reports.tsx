@@ -17,6 +17,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import { getDashboardSummary, getReports, API_BASE } from '../api'
 import { formatDateLong } from '../utils/date'
+import { getPreference, setPreference } from '../utils/preferences'
 
 type Report = {
   id: string
@@ -64,7 +65,7 @@ export default function Reports() {
   const navigate = useNavigate()
   const [reports, setReports] = useState<Report[]>([])
   const [summary, setSummary] = useState<any>({ total_findings: 0, total_assets: 0, critical_findings: 0, high_findings: 0, total_attack_surface: 0 })
-  const [selectedType, setSelectedType] = useState('all')
+  const [selectedType, setSelectedType] = useState(() => getPreference('reports-type-filter', 'all'))
 
   const fetchReports = () => {
     Promise.all([getReports(), getDashboardSummary()]).then(([reportData, summaryData]: any) => {
@@ -76,6 +77,10 @@ export default function Reports() {
   useEffect(() => {
     fetchReports()
   }, [])
+
+  useEffect(() => {
+    setPreference('reports-type-filter', selectedType)
+  }, [selectedType])
 
   const filteredReports = reports.filter((report) => selectedType === 'all' || report.type === selectedType)
   

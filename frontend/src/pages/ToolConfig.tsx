@@ -194,11 +194,16 @@ export default function ToolConfig() {
       return
     }
 
+    const taskInputs = { ...inputs }
+    if (schema.timeout_config?.enabled && taskInputs.timeout === undefined) {
+      taskInputs.timeout = schema.timeout_config.default
+    }
+
     try {
       setSubmitting(true)
       const task = await startTask(
         plugin.id,
-        inputs,
+        taskInputs,
         plugin.requires_consent ? consentGranted : true,
         selectedPreset || undefined,
       )
@@ -411,6 +416,30 @@ export default function ToolConfig() {
               })}
             </div>
           </section>
+
+          {schema.timeout_config?.enabled && (
+            <section className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Execution_Timeout</h3>
+                <span className="text-[10px] font-black text-rag-blue uppercase tracking-widest">{inputs.timeout || schema.timeout_config.default}s</span>
+              </div>
+              <div className="space-y-4">
+                <input
+                  type="range"
+                  min={schema.timeout_config.min || 10}
+                  max={schema.timeout_config.max || 300}
+                  step={10}
+                  value={inputs.timeout || schema.timeout_config.default}
+                  onChange={(e) => setInputs(prev => ({ ...prev, timeout: parseInt(e.target.value) }))}
+                  className="w-full h-2 bg-black rounded-none appearance-none cursor-pointer accent-rag-blue"
+                />
+                <div className="flex justify-between text-[8px] font-black text-silver/40 uppercase tracking-[0.2em]">
+                  <span>Min: {schema.timeout_config.min || 10}s</span>
+                  <span>Max: {schema.timeout_config.max || 300}s</span>
+                </div>
+              </div>
+            </section>
+          )}
 
         </div>
 

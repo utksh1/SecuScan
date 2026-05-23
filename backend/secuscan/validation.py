@@ -90,6 +90,25 @@ def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
     return True, ""
 
 
+def validate_timeout(timeout: int, min_val: int = 10, max_val: int = 3600) -> Tuple[bool, str]:
+    """
+    Validate scan timeout value.
+    
+    Args:
+        timeout: Timeout in seconds
+        min_val: Minimum allowed timeout
+        max_val: Maximum allowed timeout
+    
+    Returns:
+        Tuple of (is_valid, error_message)
+    """
+    if timeout < min_val:
+        return False, f"Timeout must be at least {min_val} seconds"
+    if timeout > max_val:
+        return False, f"Timeout cannot exceed {max_val} seconds"
+    return True, ""
+
+
 def validate_port(port: int) -> Tuple[bool, str]:
     """
     Validate port number.
