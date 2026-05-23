@@ -27,6 +27,7 @@ def setup_test_environment(monkeypatch):
     monkeypatch.setattr(settings, "reports_dir", f"{temp_path}/reports")
     monkeypatch.setattr(settings, "plugins_dir", str(repo_root / "plugins"))
     monkeypatch.setattr(settings, "database_path", f"{temp_path}/test_secuscan.db")
+    monkeypatch.setattr(settings, "vault_key", "test-vault-key-for-unit-tests-only")
 
     settings.ensure_directories()
 

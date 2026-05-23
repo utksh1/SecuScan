@@ -90,8 +90,20 @@ class Settings(BaseSettings):
 
     @property
     def resolved_vault_key(self) -> bytes:
-        """Return a deterministic 32-byte key for credential vault encryption."""
-        seed = self.vault_key or self.plugin_signature_key or "secuscan-dev-key"
+        """Return a deterministic 32-byte key for credential vault encryption.
+
+        Raises RuntimeError when neither SECUSCAN_VAULT_KEY nor
+        SECUSCAN_PLUGIN_SIGNATURE_KEY is set, rather than falling back to the
+        insecure hardcoded string that was present in earlier versions.
+        """
+        seed = self.vault_key or self.plugin_signature_key
+        if not seed:
+            raise RuntimeError(
+                "SECUSCAN_VAULT_KEY is not set. "
+                "Set a strong random value in your environment or .env file before "
+                "starting the server. "
+                "Example: python -c \"import secrets; print(secrets.token_hex(32))\""
+            )
         digest = hashlib.sha256(seed.encode("utf-8")).digest()
         return base64.urlsafe_b64encode(digest)
     
