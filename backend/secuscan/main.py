@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from .auth import init_api_key
 from .config import settings
 from .cache import init_cache, cache as global_cache
 from .database import init_db, db as global_db
@@ -38,10 +39,14 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     # Startup
     logger.info("🚀 Starting SecuScan backend...")
-    
+
     # Ensure directories exist
     settings.ensure_directories()
     logger.info("✓ Directories initialized")
+
+    # Initialise API key (generates on first run, loads on subsequent runs)
+    init_api_key(settings.data_dir)
+    logger.info("✓ API key ready")
     
     # Initialize database
     await init_db(settings.database_path)

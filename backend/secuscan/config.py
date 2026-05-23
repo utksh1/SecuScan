@@ -90,8 +90,20 @@ class Settings(BaseSettings):
 
     @property
     def resolved_vault_key(self) -> bytes:
-        """Return a deterministic 32-byte key for credential vault encryption."""
-        seed = self.vault_key or self.plugin_signature_key or "secuscan-dev-key"
+        """Return a 32-byte key (base64url-encoded) for AES-256-GCM vault encryption.
+
+        Requires SECUSCAN_VAULT_KEY to be set explicitly — no insecure default is
+        provided. If the variable is absent the application will raise at startup
+        rather than silently encrypt secrets with a publicly known key.
+        """
+        seed = self.vault_key or self.plugin_signature_key
+        if not seed:
+            raise RuntimeError(
+                "SECUSCAN_VAULT_KEY is not set. "
+                "Generate a secure key with: python3 -c \"import secrets, base64; "
+                "print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())\" "
+                "and add it to your .env file as SECUSCAN_VAULT_KEY=<value>."
+            )
         digest = hashlib.sha256(seed.encode("utf-8")).digest()
         return base64.urlsafe_b64encode(digest)
     

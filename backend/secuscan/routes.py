@@ -2,7 +2,7 @@
 API routes for SecuScan backend
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Response
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Response
 from fastapi.responses import JSONResponse
 from typing import Any, Optional, List, Dict, Callable
 import json
@@ -31,12 +31,18 @@ def parse_json_fields(rows: List[Dict], fields: List[str]) -> List[Dict]:
 
 
 def is_filesystem_target(target: str) -> bool:
-    """Best-effort detection for path-based targets that should bypass host validation."""
-    if target.startswith(("/", "./", "../", "~")):
+    """Detect explicit local filesystem paths that should bypass host validation.
+
+    Only match genuine filesystem roots. Network notation (CIDR, URLs with paths)
+    must NOT match here — they must pass through validate_target so safe mode is
+    enforced correctly. The previous broad '/' check allowed bypassing safe mode
+    via targets like '8.8.8.8/32'.
+    """
+    # Absolute POSIX path, relative path, or home-dir expansion
+    if target.startswith(("/", "./", "../", "~/")):
         return True
+    # Windows absolute path (C:\, D:/, …)
     if re.match(r"^[A-Za-z]:[\\/]", target):
-        return True
-    if "/" in target and not target.startswith(("http://", "https://")):
         return True
     return False
 
@@ -62,6 +68,7 @@ def build_report_filename(task: Dict[str, Any], extension: str) -> str:
 
 logger = logging.getLogger(__name__)
 
+from .auth import require_api_key
 from .cache import get_cache
 from .models import (
     TaskCreateRequest, TaskResponse, TaskResult,
@@ -79,7 +86,7 @@ from .workflows import scheduler
 
 from sse_starlette.sse import EventSourceResponse
 
-router = APIRouter(prefix="/api/v1")
+router = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
 
 
 async def get_or_set_cached(key: str, builder):
