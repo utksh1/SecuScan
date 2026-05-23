@@ -74,9 +74,6 @@ export default function Reports() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { preferred, savePreference } = usePreferredExportFormat()
-  const latestReadyReport = [...reports]
-    .filter((report) => report.status === 'ready')
-    .sort((a, b) => new Date(b.generated_at).getTime() - new Date(a.generated_at).getTime())[0]
 
   const fetchReports = () => {
     setLoading(true)
@@ -121,18 +118,6 @@ export default function Reports() {
         </div>
 
         <div className="flex items-center gap-6">
-          <button
-            onClick={() => {
-              if (!latestReadyReport) return
-              window.open(`${API_BASE}/task/${latestReadyReport.task_id}/report/pdf`, '_blank')
-            }}
-            disabled={!latestReadyReport}
-            className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:translate-x-0 disabled:hover:translate-y-0 disabled:hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
-            title={latestReadyReport ? 'Download latest ready report PDF' : 'No ready report available'}
-            aria-label="Download latest ready report PDF"
-          >
-            <ReportIcon icon={Download01Icon} className="block" aria-hidden="true" />
-          </button>
           <button
             onClick={fetchReports}
             className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
