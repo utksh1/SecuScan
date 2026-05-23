@@ -172,7 +172,7 @@ class PluginManager:
             parser_digest = hashlib.sha256(parser_bytes_normalized).hexdigest()
 
         return hashlib.sha256(f"{metadata_digest}:{parser_digest}".encode("utf-8")).hexdigest()
-    
+
     def verify_parser_at_exec_time(
         self, plugin: PluginMetadata, plugin_dir: Path
     ) -> bool:
