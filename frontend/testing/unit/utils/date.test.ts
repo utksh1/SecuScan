@@ -65,7 +65,7 @@ import {
         expect(formatLocaleDate(null)).toBe("N/A");
       });
 
-      test("returns N/A for undefinied input", () =>{
+      test("returns N/A for undefined input", () => {
         expect(formatLocaleDate(undefined)).toBe("N/A");
       });
     });
@@ -81,10 +81,10 @@ import {
       });
 
       test("returns N/A for null input", () => {
-        expect (formatLocaleTime(null)).toBe("N/A");
+        expect(formatLocaleTime(null)).toBe("N/A");
       });
 
-      test("returns N/A for undefinied input", () =>{
+      test("returns N/A for undefined input", () => {
         expect(formatLocaleTime(undefined)).toBe("N/A");
       });
     });
