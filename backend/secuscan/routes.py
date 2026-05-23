@@ -633,10 +633,6 @@ async def get_dashboard_summary():
         )
         recent_findings: List[Dict] = parse_json_fields(recent_rows, ["metadata_json"])
 
-        last_scan_row = await db.fetchone(
-            "SELECT discovered_at FROM findings ORDER BY discovered_at DESC LIMIT 1"
-        )
-
         return {
             "total_findings": total_findings,
             "critical_findings": critical_findings,
@@ -644,7 +640,7 @@ async def get_dashboard_summary():
             "medium_findings": medium_findings,
             "low_findings": low_findings,
             "info_findings": info_findings,
-            "last_scan_time": last_scan_row["discovered_at"] if last_scan_row else None,
+            "last_scan_time": recent_findings[0].get("discovered_at") if recent_findings else None,
             "recent_findings": recent_findings,
             "scan_activity": {
                 "total": int(task_stats["total"]) if task_stats and task_stats.get("total") is not None else 0,
