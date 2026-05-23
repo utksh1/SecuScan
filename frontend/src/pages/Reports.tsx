@@ -17,6 +17,7 @@ import {
 } from '@hugeicons/core-free-icons'
 import { getDashboardSummary, getReports, API_BASE } from '../api'
 import { formatDateLong } from '../utils/date'
+import { getPreference, setPreference } from '../utils/preferences'
 
 type Report = {
   id: string
@@ -60,25 +61,81 @@ function ReportIcon({
   return <HugeiconsIcon icon={icon} size={size} strokeWidth={1.9} className={className} />
 }
 
+export function isWithinDateRange(dateString: string, range: string): boolean {
+  if (range === 'all') return true
+  if (!dateString) return false
+
+  try {
+    const date = new Date(dateString)
+    if (isNaN(date.getTime())) return false
+
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+
+    if (diffMs < 0) return false // Future dates are invalid
+
+    const diffHours = diffMs / (1000 * 60 * 60)
+    const diffDays = diffMs / (1000 * 60 * 60 * 24)
+
+    switch (range) {
+      case '24h':
+        return diffHours <= 24
+      case '7d':
+        return diffDays <= 7
+      case '30d':
+        return diffDays <= 30
+      default:
+        return false
+    }
+  } catch {
+    return false
+  }
+}
+
 export default function Reports() {
   const navigate = useNavigate()
   const [reports, setReports] = useState<Report[]>([])
   const [summary, setSummary] = useState<any>({ total_findings: 0, total_assets: 0, critical_findings: 0, high_findings: 0, total_attack_surface: 0 })
-  const [selectedType, setSelectedType] = useState('all')
+  const [selectedType, setSelectedType] = useState(() => getPreference('reports-type-filter', 'all'))
+  const [selectedStatus, setSelectedStatus] = useState(() => getPreference('reports-status-filter', 'all'))
+  const [selectedDateRange, setSelectedDateRange] = useState(() => getPreference('reports-date-filter', 'all'))
+  const [error, setError] = useState<string | null>(null)
 
   const fetchReports = () => {
-    Promise.all([getReports(), getDashboardSummary()]).then(([reportData, summaryData]: any) => {
-      setReports(reportData.reports || [])
-      setSummary(summaryData || {})
-    })
+    setError(null)
+    Promise.all([getReports(), getDashboardSummary()])
+      .then(([reportData, summaryData]: any) => {
+        setReports(reportData.reports || [])
+        setSummary(summaryData || {})
+      })
+      .catch((err) => {
+        console.error('Error fetching reports:', err)
+        setError('Failed to fetch reports')
+      })
   }
 
   useEffect(() => {
     fetchReports()
   }, [])
 
-  const filteredReports = reports.filter((report) => selectedType === 'all' || report.type === selectedType)
-  
+  // Save preferences when filters change
+  useEffect(() => {
+    setPreference('reports-type-filter', selectedType)
+  }, [selectedType])
+
+  useEffect(() => {
+    setPreference('reports-status-filter', selectedStatus)
+  }, [selectedStatus])
+
+  useEffect(() => {
+    setPreference('reports-date-filter', selectedDateRange)
+  }, [selectedDateRange])
+
+  const filteredReports = reports
+    .filter((report) => selectedType === 'all' || report.type === selectedType)
+    .filter((report) => selectedStatus === 'all' || report.status === selectedStatus)
+    .filter((report) => isWithinDateRange(report.generated_at, selectedDateRange))
+
   // Check if any report with status 'ready' exists
   const hasReadyReport = reports.some(report => report.status === 'ready')
 
@@ -148,7 +205,7 @@ export default function Reports() {
       </section>
 
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-12">
-          {/* Filtration Sidebar */}
+      {/* Filtration Sidebar */}
           <aside className="xl:col-span-1 space-y-12">
               <section className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-8">
                   <div className="space-y-4">
@@ -171,6 +228,46 @@ export default function Reports() {
                       </div>
                   </div>
 
+                  <div className="space-y-4">
+                      <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic">Status_Filter</label>
+                      <div className="grid grid-cols-1 gap-2">
+                          {['all', 'ready', 'generating', 'failed'].map(s => (
+                              <button
+                                  key={s}
+                                  onClick={() => setSelectedStatus(s)}
+                                  className={`px-6 py-4 text-left text-[10px] font-black uppercase tracking-widest border-4 transition-all flex justify-between items-center ${
+                                      selectedStatus === s
+                                      ? 'bg-rag-green border-black text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+                                      : 'bg-charcoal-dark border-black text-silver/40 hover:border-silver-bright/20'
+                                  }`}
+                              >
+                                  Status {s}
+                                  {selectedStatus === s && <ReportIcon icon={Radar02Icon} size={16} className="text-black" />}
+                              </button>
+                          ))}
+                      </div>
+                  </div>
+
+                  <div className="space-y-4">
+                      <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic">Temporal_Range</label>
+                      <div className="grid grid-cols-1 gap-2">
+                          {['all', '24h', '7d', '30d'].map(d => (
+                              <button
+                                  key={d}
+                                  onClick={() => setSelectedDateRange(d)}
+                                  className={`px-6 py-4 text-left text-[10px] font-black uppercase tracking-widest border-4 transition-all flex justify-between items-center ${
+                                      selectedDateRange === d
+                                      ? 'bg-rag-blue border-black text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+                                      : 'bg-charcoal-dark border-black text-silver/40 hover:border-silver-bright/20'
+                                  }`}
+                              >
+                                  Date {d === 'all' ? 'All' : d === '24h' ? 'Last 24 hours' : d === '7d' ? 'Last 7 days' : 'Last 30 days'}
+                                  {selectedDateRange === d && <ReportIcon icon={Radar02Icon} size={16} className="text-black" />}
+                              </button>
+                          ))}
+                      </div>
+                  </div>
+
                   <div className="p-8 border-4 border-black border-dashed space-y-4 bg-charcoal-dark/50">
                       <div className="flex items-center gap-3">
                         <ReportIcon icon={KnightShieldIcon} className="text-rag-green" />
@@ -185,6 +282,18 @@ export default function Reports() {
 
           {/* Ledger Section */}
           <main className="xl:col-span-3 space-y-8">
+              {error && (
+                <div className="p-8 border-4 border-rag-red bg-charcoal-dark space-y-4 shadow-[8px_8px_0px_0px_rgba(255,0,0,0.1)]">
+                  <p className="text-sm font-black text-rag-red uppercase tracking-widest">Archive_Retrieval_Failed</p>
+                  <p className="text-xs text-silver/60">{error}</p>
+                  <button
+                    onClick={fetchReports}
+                    className="px-6 py-3 bg-rag-red text-black font-black uppercase text-xs border-4 border-black hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
               <div className="flex flex-col md:flex-row justify-between items-end gap-6 border-b-4 border-black pb-8">
                   <h2 className="text-5xl font-black text-silver-bright italic uppercase tracking-tighter shrink-0">Historical_Ledger</h2>
                   <div className="h-0.5 bg-black/10 flex-1 mb-2 hidden md:block"></div>
@@ -203,7 +312,7 @@ export default function Reports() {
                                 <span className="material-symbols-outlined text-silver/5 text-9xl">filter_alt_off</span>
                                 <div className="space-y-2">
                                     <p className="text-xl font-black text-silver/20 uppercase tracking-[0.4em] italic">
-                                        No Matching Reports
+                                        Archive Isolated
                                     </p>
                                     <p className="text-xs font-mono text-silver/10 uppercase tracking-widest leading-relaxed">
                                         No reports match the current filter. Adjust classification to view additional dossiers.
@@ -294,11 +403,11 @@ export default function Reports() {
                                      ))
                         )}
 
-                      {reports.length === 0 && (
+                      {reports.length === 0 && !error && (
                           <div className="col-span-2 py-40 border-4 border-dashed border-black/5 text-center flex flex-col items-center gap-8 bg-charcoal/30">
                               <ReportIcon icon={Archive02Icon} size={120} className="text-silver/5" />
                               <div className="space-y-2">
-                                  <p className="text-xl font-black text-silver/20 uppercase tracking-[0.4em] italic">Archive Isolated</p>
+                                  <p className="text-xl font-black text-silver/20 uppercase tracking-[0.4em] italic">Retrieving Archive Data</p>
                                   <p className="text-xs font-mono text-silver/10 uppercase tracking-widest leading-relaxed">System buffer awaiting briefing generation protocols</p>
                               </div>
                           </div>

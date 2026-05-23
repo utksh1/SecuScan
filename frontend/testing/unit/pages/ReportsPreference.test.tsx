@@ -44,7 +44,7 @@ describe('Reports page preference integration', () => {
     await user.click(techButton)
 
     // Check localStorage
-    expect(localStorage.getItem('secuscan-pref:reports-type-filter')).toContain('technical')
+    expect(localStorage.getItem('secuscan-pref:reports-type-filter')).toBe('technical')
 
     unmount()
 
