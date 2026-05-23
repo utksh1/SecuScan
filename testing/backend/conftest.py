@@ -20,6 +20,7 @@ from backend.secuscan.database import init_db
 from backend.secuscan.main import app
 from backend.secuscan.plugins import init_plugins
 from backend.secuscan.ratelimit import concurrent_limiter, rate_limiter
+from backend.secuscan import auth as auth_module
 
 
 @pytest.fixture(autouse=True)
@@ -61,7 +62,9 @@ def test_client(setup_test_environment):
 
     asyncio.run(setup())
 
-    with TestClient(app) as client:
+    api_key = auth_module.init_api_key(settings.data_dir)
+
+    with TestClient(app, headers={"X-Api-Key": api_key}) as client:
         yield client
 
     async def teardown():

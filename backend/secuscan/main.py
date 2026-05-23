@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
+from .auth import init_api_key
 from .cache import init_cache, cache as global_cache
 from .database import init_db, db as global_db
 from .plugins import init_plugins
@@ -50,6 +51,10 @@ async def lifespan(app: FastAPI):
     # Ensure directories exist
     settings.ensure_directories()
     logger.info("✓ Directories initialized")
+
+    # Initialize API key authentication
+    api_key = init_api_key(settings.data_dir)
+    logger.info("✓ API key authentication ready (key file: %s/.api_key)", settings.data_dir)
     
     # Initialize database
     await init_db(settings.database_path)
