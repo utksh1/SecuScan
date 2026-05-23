@@ -16,7 +16,6 @@ import {
 } from '@hugeicons/core-free-icons'
 import { getDashboardSummary, getReports, API_BASE } from '../api'
 import { formatDateLong, isWithinDateRange, type DateRange } from '../utils/date'
-import { usePreferredExportFormat } from '../hooks/usePreferredExportFormat'
 
 type Report = {
   id: string
@@ -73,7 +72,9 @@ export default function Reports() {
   const [selectedDateRange, setSelectedDateRange] = useState<DateRange>('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const { preferred, savePreference } = usePreferredExportFormat()
+  const latestReadyReport = [...reports]
+    .filter((report) => report.status === 'ready')
+    .sort((a, b) => new Date(b.generated_at).getTime() - new Date(a.generated_at).getTime())[0]
 
   const fetchReports = () => {
     setLoading(true)
@@ -118,6 +119,18 @@ export default function Reports() {
         </div>
 
         <div className="flex items-center gap-6">
+          <button
+            onClick={() => {
+              if (!latestReadyReport) return
+              window.open(`${API_BASE}/task/${latestReadyReport.task_id}/report/pdf`, '_blank')
+            }}
+            aria-label="Download latest ready report PDF"
+            title={latestReadyReport ? 'Download latest ready report PDF' : 'No ready report available'}
+            disabled={!latestReadyReport}
+            className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <ReportIcon icon={Download01Icon} className="block" aria-hidden="true" />
+          </button>
           <button
             onClick={fetchReports}
             className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
@@ -345,24 +358,19 @@ export default function Reports() {
                             >
                               <ReportIcon icon={ScanEyeIcon} size={18} aria-hidden="true"/>
                             </button>
-                            {[...exportFormats].sort((a, b) =>
-                              a === preferred ? -1 : b === preferred ? 1 : 0
-                            ).map((format) => (
+                            {exportFormats.map((format) => (
                               <button
                                 key={format}
                                 onClick={() => {
                                   if (report.status !== 'generating') {
-                                    savePreference(format)
                                     window.open(`${API_BASE}/task/${report.task_id}/report/${format}`, '_blank')
                                   }
                                 }}
                                 disabled={report.status === 'generating'}
                                 className={`border-4 border-black px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:group-hover:text-silver/20 disabled:group-hover:bg-charcoal-dark ${
-                                  format === preferred
-                                    ? 'bg-rag-amber text-black group-hover:bg-rag-amber'
-                                    : 'bg-charcoal-dark text-silver/20 group-hover:text-silver-bright group-hover:bg-black'
+                                  'bg-charcoal-dark text-silver/20 group-hover:text-silver-bright group-hover:bg-black'
                                 }`}
-                                title={report.status === 'generating' ? 'Export unavailable while report is generating' : `Download ${format.toUpperCase()}${format === preferred ? ' (preferred)' : ''}`}
+                                title={report.status === 'generating' ? 'Export unavailable while report is generating' : `Download ${format.toUpperCase()}`}
                               >
                                 {format}
                               </button>
