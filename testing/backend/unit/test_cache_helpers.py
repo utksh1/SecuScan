@@ -1,8 +1,6 @@
 import asyncio
-from unittest.mock import AsyncMock, patch
 
 from backend.secuscan.cache import CacheClient
-
 
 # ---------------------------------------------------------------------------
 # get_or_set_cached unit tests (directly against CacheClient)

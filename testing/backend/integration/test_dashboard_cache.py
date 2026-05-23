@@ -1,8 +1,8 @@
 import asyncio
-import sqlite3
 import json
-
+import sqlite3
 from unittest.mock import AsyncMock, patch
+
 from backend.secuscan.config import settings
 
 

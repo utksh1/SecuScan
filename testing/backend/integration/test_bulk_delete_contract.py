@@ -14,7 +14,6 @@ Acceptance Criteria:
   - Associated findings/reports are cleaned for deleted tasks
 """
 
-import pytest
 
 ENDPOINT = "/api/v1/tasks/bulk"
 START_ENDPOINT = "/api/v1/task/start"

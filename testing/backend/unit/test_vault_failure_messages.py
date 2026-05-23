@@ -13,9 +13,11 @@ Coverage:
 """
 
 import base64
+
 import pytest
-from backend.secuscan.vault import VaultCrypto
+
 from backend.secuscan.config import settings
+from backend.secuscan.vault import VaultCrypto
 
 ENDPOINT_PUT    = "/api/v1/vault/{name}"
 ENDPOINT_GET    = "/api/v1/vault/{name}"

@@ -4,13 +4,14 @@ import html
 import io
 import json
 import re
-from .redaction import redact, redact_dict
 from datetime import datetime
 from functools import lru_cache
 from typing import Any, Dict, List
 
 from PIL import Image, ImageDraw
 from xhtml2pdf import pisa
+
+from .redaction import redact, redact_dict
 
 
 class ReportGenerator:

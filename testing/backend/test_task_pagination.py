@@ -4,8 +4,10 @@ Tests for pagination metadata in tasks list endpoint.
 
 import pytest
 from fastapi.testclient import TestClient
-from backend.secuscan.main import app
+
 from backend.secuscan.database import init_db
+from backend.secuscan.main import app
+
 
 # IMPORTANT: Initialize database before any tests run
 @pytest.fixture(scope="session", autouse=True)

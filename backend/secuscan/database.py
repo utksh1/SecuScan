@@ -2,13 +2,12 @@
 SQLite database access for SecuScan.
 """
 
-import asyncio
 import json
-import sqlite3
 from pathlib import Path
-from typing import Any, Optional, List, Dict
+from typing import Dict, List, Optional
 
 import aiosqlite
+
 from .config import settings
 
 

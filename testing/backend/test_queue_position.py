@@ -3,8 +3,10 @@ Tests for queue_position and pending_count in get_task_status().
 Covers: queued tasks get position, non-queued tasks get None.
 """
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+
 from backend.secuscan.executor import TaskExecutor
 from backend.secuscan.models import TaskStatus
 

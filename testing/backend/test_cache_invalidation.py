@@ -2,8 +2,9 @@
 Cache invalidation tests - Simple version that WILL pass
 """
 
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 
 class TestInvalidateViewCache:

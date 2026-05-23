@@ -2,10 +2,10 @@
 Rate limiting for task execution
 """
 
+import asyncio
 from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Tuple, Dict, List
-import asyncio
+from typing import Dict, List, Tuple
 
 
 class RateLimiter:

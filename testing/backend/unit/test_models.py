@@ -1,6 +1,8 @@
 import pytest
 from pydantic import ValidationError
-from backend.secuscan.models import TaskCreateRequest, PluginField, PluginFieldType
+
+from backend.secuscan.models import PluginField, PluginFieldType, TaskCreateRequest
+
 
 def test_task_create_request_valid():
     # Valid request

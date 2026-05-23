@@ -34,10 +34,10 @@ describe('preferences utility', () => {
     const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
       throw new Error('Blocked!');
     });
-    
+
     // Should return default instead of crashing
     expect(getPreference('anything', 'fallback')).toBe('fallback');
-    
+
     getItemSpy.mockRestore();
   });
 
@@ -48,7 +48,7 @@ describe('preferences utility', () => {
 
     // Should not crash
     expect(() => setPreference('full', 'too much data')).not.toThrow();
-    
+
     setItemSpy.mockRestore();
   });
 });

@@ -9,8 +9,8 @@ from fastapi.testclient import TestClient
 repo_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(repo_root))
 
-from backend.secuscan.config import settings
 from backend.secuscan import database as database_module
+from backend.secuscan.config import settings
 from backend.secuscan.database import init_db
 from backend.secuscan.main import app
 from backend.secuscan.plugins import init_plugins

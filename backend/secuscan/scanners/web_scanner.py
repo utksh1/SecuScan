@@ -1,11 +1,9 @@
-import asyncio
-import json
 import re
-from typing import Dict, Any, List
-from .base import BaseScanner
+from typing import Any, Dict, List
+
 from ..plugins import get_plugin_manager
-from ..config import settings
-from datetime import datetime
+from .base import BaseScanner
+
 
 class WebScanner(BaseScanner):
     """

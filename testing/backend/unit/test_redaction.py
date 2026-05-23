@@ -7,9 +7,7 @@ or directly:
     pytest testing/backend/unit/test_redaction.py -v
 """
 
-import pytest
-from backend.secuscan.redaction import redact, redact_dict, REDACTED
-
+from backend.secuscan.redaction import REDACTED, redact, redact_dict
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

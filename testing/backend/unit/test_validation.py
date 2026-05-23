@@ -1,12 +1,12 @@
-import pytest
 from backend.secuscan.validation import (
- 
-    validate_target, validate_port, validate_url,
-    validate_timeout, sanitize_input, is_safe_path, match_pattern
- 
-    validate_target, validate_port, validate_port_range, validate_url,
-    sanitize_input, is_safe_path, match_pattern
- 
+    is_safe_path,
+    match_pattern,
+    sanitize_input,
+    validate_port,
+    validate_port_range,
+    validate_target,
+    validate_timeout,
+    validate_url,
 )
 
 

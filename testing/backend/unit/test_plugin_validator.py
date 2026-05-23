@@ -18,14 +18,13 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO_ROOT))
 
 from backend.secuscan.plugin_validator import (
-    PluginMetadataValidator,
+    VALID_ENGINE_TYPES,
+    VALID_FIELD_TYPES,
+    VALID_PARSER_TYPES,
+    VALID_SAFETY_LEVELS,
     ValidationResult,
     validate_all_plugins,
     validate_one_plugin,
-    VALID_ENGINE_TYPES,
-    VALID_SAFETY_LEVELS,
-    VALID_FIELD_TYPES,
-    VALID_PARSER_TYPES,
 )
 
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "plugins"

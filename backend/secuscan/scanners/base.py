@@ -1,7 +1,7 @@
-from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Optional
-from datetime import datetime
 import logging
+from abc import ABC, abstractmethod
+from datetime import datetime
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 

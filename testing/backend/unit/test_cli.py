@@ -1,7 +1,9 @@
-import sys
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from backend.secuscan.cli import run_scan, main
+
+from backend.secuscan.cli import main, run_scan
+
 
 @pytest.mark.anyio
 async def test_run_scan_plugin_not_found():

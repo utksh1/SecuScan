@@ -2,8 +2,8 @@ import asyncio
 import json
 from pathlib import Path
 
-from backend.secuscan.plugins import PluginManager
 from backend.secuscan.config import settings
+from backend.secuscan.plugins import PluginManager
 
 
 def test_plugins_load_without_signature_enforcement(setup_test_environment):

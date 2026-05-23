@@ -1,5 +1,7 @@
 import json
+
 from backend.secuscan.reporting import ReportGenerator
+
 
 def sample_task():
     return {

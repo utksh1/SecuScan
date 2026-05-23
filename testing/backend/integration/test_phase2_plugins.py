@@ -1,7 +1,8 @@
-import time
 import re
+import time
 from pathlib import Path
 from unittest.mock import patch
+
 from backend.secuscan.models import TaskStatus
 
 PHASE2_PLUGIN_IDS = {

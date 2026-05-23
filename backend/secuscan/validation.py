@@ -2,13 +2,12 @@
 Input validation and security checks
 """
 
-import re
 import ipaddress
-from typing import Any, Dict, Tuple
+import re
 from fnmatch import fnmatch
+from typing import Any, Dict, Tuple
 
 from .config import settings
-
 
 # Blocked network ranges
 BLOCKED_NETWORKS = [
@@ -98,12 +97,12 @@ def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
 def validate_timeout(timeout: int, min_val: int = 10, max_val: int = 3600) -> Tuple[bool, str]:
     """
     Validate scan timeout value.
-    
+
     Args:
         timeout: Timeout in seconds
         min_val: Minimum allowed timeout
         max_val: Maximum allowed timeout
-    
+
     Returns:
         Tuple of (is_valid, error_message)
     """

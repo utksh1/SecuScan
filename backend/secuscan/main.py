@@ -3,22 +3,22 @@ SecuScan Backend - Main application entry point
 """
 
 import logging
-import sys
 import shutil
-from pathlib import Path
+import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
+from .cache import cache as global_cache
+from .cache import init_cache
 from .config import settings
-from .cache import init_cache, cache as global_cache
-from .database import init_db, db as global_db
+from .database import db as global_db
+from .database import init_db
 from .plugins import init_plugins
 from .routes import router
 from .workflows import scheduler
-
 
 # Configure logging
 logging.basicConfig(

@@ -2,24 +2,23 @@
 SecuScan CLI - Command line interface for running security scans
 """
 
-import asyncio
 import argparse
+import asyncio
 import json
 import sys
-import os
-from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional
 
 # Add the parent directory to sys.path to allow absolute imports
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
-from backend.secuscan.executor import executor
-from backend.secuscan.database import init_db, get_db
 from backend.secuscan.cache import init_cache
 from backend.secuscan.config import settings
-from backend.secuscan.plugins import init_plugins, get_plugin_manager
+from backend.secuscan.database import get_db, init_db
+from backend.secuscan.executor import executor
+from backend.secuscan.plugins import get_plugin_manager, init_plugins
 from backend.secuscan.reporting import reporting
+
 
 async def run_scan(target: str, plugin_id: str, output_format: str, output_file: Optional[str] = None):
     """Initialize components and execute a scan task."""

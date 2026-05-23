@@ -13,7 +13,7 @@ export function getPreference<T>(key: string, defaultValue: T): T {
   try {
     const value = localStorage.getItem(PREF_KEY_PREFIX + key);
     if (value === null) return defaultValue;
-    
+
     // Attempt to parse JSON. Primitive values are also valid JSON.
     return JSON.parse(value) as T;
   } catch (err) {

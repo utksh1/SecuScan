@@ -2,10 +2,11 @@
 Pydantic models for API requests and responses
 """
 
-from typing import Optional, Dict, Any, List
 from datetime import datetime
-from pydantic import BaseModel, Field
 from enum import Enum
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field
 
 
 class SafetyLevel(str, Enum):
@@ -70,7 +71,7 @@ class PluginMetadata(BaseModel):
         default=None,
         description="Configuration for timeout behavior: { 'enabled': bool, 'min': int, 'max': int, 'default': int }"
     )
-    
+
     output: Dict[str, Any]
     safety: Dict[str, Any]
     learning: Optional[Dict[str, Any]] = None

@@ -2,18 +2,18 @@
 Plugin loader and management system
 """
 
-import json
-import os
-import re
-from pathlib import Path
-from typing import Any, Dict, Optional, List
-import logging
-import shutil
 import hashlib
 import hmac
+import json
+import logging
+import os
+import re
+import shutil
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from .models import PluginMetadata
 from .config import settings
+from .models import PluginMetadata
 
 logger = logging.getLogger(__name__)
 

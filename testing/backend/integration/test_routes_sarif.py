@@ -1,9 +1,11 @@
-import json
 import asyncio
+import json
 from unittest.mock import patch
 
 import pytest
+
 from backend.secuscan.database import get_db
+
 
 async def insert_mock_completed_task(task_id: str):
     db = await get_db()

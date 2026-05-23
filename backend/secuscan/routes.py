@@ -2,18 +2,19 @@
 API routes for SecuScan backend
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request
-from fastapi.responses import JSONResponse
-from typing import Any, Optional, List, Dict, Callable
+import asyncio
 import json
 import logging
 import re
-import os
 import shutil
 import uuid
-import asyncio
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
+
 
 def parse_json_fields(rows: List[Dict], fields: List[str]) -> List[Dict]:
     """Helper to parse stringified JSON fields from SQLite."""
@@ -62,22 +63,22 @@ def build_report_filename(task: Dict[str, Any], extension: str) -> str:
 
 logger = logging.getLogger(__name__)
 
+from sse_starlette.sse import EventSourceResponse
+
 from .cache import get_cache
-from .models import (
-    TaskCreateRequest, TaskResponse, TaskResult,
-    PluginListResponse, ErrorResponse
-)
 from .config import settings
 from .database import get_db
-from .plugins import get_plugin_manager, init_plugins
 from .executor import executor
-from .ratelimit import rate_limiter, concurrent_limiter
-from .validation import validate_target, validate_task_start_payload
+from .models import (
+    PluginListResponse,
+    TaskCreateRequest,
+)
+from .plugins import get_plugin_manager, init_plugins
+from .ratelimit import concurrent_limiter, rate_limiter
 from .reporting import reporting
+from .validation import validate_target, validate_task_start_payload
 from .vault import VaultCrypto
 from .workflows import scheduler
-
-from sse_starlette.sse import EventSourceResponse
 
 router = APIRouter(prefix="/api/v1")
 

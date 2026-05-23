@@ -3,10 +3,11 @@ Integration tests: audit log entries are created on successful report downloads
 and are NOT created on 404 or 400 error responses.
 """
 
-import json
 import asyncio
+import json
 
 import pytest
+
 from backend.secuscan.database import get_db
 
 

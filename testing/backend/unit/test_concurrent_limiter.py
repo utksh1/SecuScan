@@ -10,11 +10,8 @@ Covers:
 """
 
 import asyncio
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 
 from backend.secuscan.ratelimit import ConcurrentTaskLimiter
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -151,7 +148,6 @@ def test_route_rejects_task_when_limiter_full(test_client, monkeypatch):
     The route must return 503 and must NOT schedule the background task.
     """
     from backend.secuscan.ratelimit import concurrent_limiter
-    from backend.secuscan import routes as routes_module
 
     # Pre-fill all slots so the next acquire will fail
     async def prefill():

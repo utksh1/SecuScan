@@ -13,7 +13,6 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -38,9 +37,9 @@ async def app_client(db_path):
 
     with patch("backend.secuscan.routes.executor", mock_executor):
 
-        from backend.secuscan.main import app
-        from backend.secuscan import database as db_module
         from backend.secuscan import cache as cache_module
+        from backend.secuscan import database as db_module
+        from backend.secuscan.main import app
 
         # Initialise a real in-memory cache (it's just a dict, no external deps)
         await cache_module.init_cache()

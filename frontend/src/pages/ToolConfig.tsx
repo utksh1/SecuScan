@@ -395,7 +395,7 @@ export default function ToolConfig() {
                 )
               })}
             </div>
-          </section> 
+          </section>
 
           {schema.timeout_config?.enabled && (
             <section className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
@@ -421,7 +421,6 @@ export default function ToolConfig() {
             </section>
           )}
 
- 
         </div>
 
         <aside className="xl:col-span-1">

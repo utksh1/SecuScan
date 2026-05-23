@@ -9,9 +9,9 @@ What we're testing:
 - Dry run mode does not write anything
 """
 
+import hashlib
 import json
 import sys
-import hashlib
 from pathlib import Path
 
 import pytest
@@ -20,8 +20,11 @@ import pytest
 repo_root = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(repo_root))
 
-from scripts.refresh_plugin_checksum import compute_plugin_digest, refresh_plugin, refresh_all_plugins
-
+from scripts.refresh_plugin_checksum import (
+    compute_plugin_digest,
+    refresh_all_plugins,
+    refresh_plugin,
+)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

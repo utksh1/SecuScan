@@ -1,5 +1,5 @@
-import json, pytest
-from unittest.mock import patch, MagicMock
+import json
+from unittest.mock import MagicMock, patch
 
 MOCK_SETTINGS = MagicMock()
 MOCK_SETTINGS.task_start_max_body_bytes = 64_000

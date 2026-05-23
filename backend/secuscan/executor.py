@@ -3,33 +3,29 @@ Task execution engine with Docker sandboxing
 """
 
 import asyncio
-from asyncio import subprocess
-import uuid
 import json
-import time
-from pathlib import Path
-from datetime import datetime
-from typing import Optional, Dict, Any, List
 import logging
 import re
+import time
+import uuid
+from asyncio import subprocess
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-from .redaction import redact
 from .cache import get_cache
 from .config import settings
 from .database import get_db
-from .plugins import get_plugin_manager
 from .models import TaskStatus
- 
-from .validation import validate_timeout
- 
+from .plugins import get_plugin_manager
 from .ratelimit import concurrent_limiter
-from .ratelimit import concurrent_limiter
- 
+from .redaction import redact
 
 # Modular Scanners
 from .scanners.port_scanner import PortScanner
-from .scanners.web_scanner import WebScanner
 from .scanners.recon_scanner import ReconScanner
+from .scanners.web_scanner import WebScanner
+from .validation import validate_timeout
 
 MODULAR_SCANNERS = {
     "port_scanner": PortScanner,
@@ -119,7 +115,7 @@ class TaskExecutor:
             is_valid, err = validate_timeout(timeout_val, min_t, max_t)
             if not is_valid:
                 raise ValueError(err)
-        
+
         # Store task in database
         db = await get_db()
         await db.execute(

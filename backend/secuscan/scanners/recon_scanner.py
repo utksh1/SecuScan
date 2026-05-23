@@ -1,12 +1,10 @@
-import asyncio
 import json
-import re
-from typing import Dict, Any, List
-from .base import BaseScanner
-from ..plugins import get_plugin_manager
-from ..config import settings
 import logging
-from datetime import datetime
+import re
+from typing import Any, Dict, List
+
+from ..plugins import get_plugin_manager
+from .base import BaseScanner
 
 logger = logging.getLogger(__name__)
 
