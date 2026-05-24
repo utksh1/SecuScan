@@ -14,26 +14,26 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables"""
-    
+
     # Server Configuration
     bind_address: str = "127.0.0.1"
     bind_port: int = 8000
     debug: bool = True
-    
+
     # Primary data store
     database_path: str = str(PROJECT_ROOT / "data" / "secuscan.db")
 
     # Cache store (In-memory used when redis_url is None or Docker is disabled)
     redis_url: Optional[str] = None
     cache_ttl_seconds: int = 30
-    
+
     # Storage
     data_dir: str = str(PROJECT_ROOT / "data")
     raw_output_dir: str = str(PROJECT_ROOT / "data" / "raw")
     reports_dir: str = str(PROJECT_ROOT / "data" / "reports")
     plugins_dir: str = str(PROJECT_ROOT.parent / "plugins")
     wordlists_dir: str = str(PROJECT_ROOT / "wordlists")
-    
+
     # Security
     safe_mode_default: bool = True
     require_consent: bool = True
@@ -55,12 +55,27 @@ class Settings(BaseSettings):
     plugin_signature_key: Optional[str] = None
     enforce_plugin_signatures: bool = False
     vault_key: Optional[str] = None
-    
+
     # Rate Limiting
     max_concurrent_tasks: int = 3
     max_tasks_per_hour: int = 50
     max_requests_per_minute: int = 100
-    
+
+    # Endpoint rate limiting buckets
+    rate_limit_task_start_limit: int = 50
+    rate_limit_task_start_window: int = 3600
+
+    rate_limit_vault_limit: int = 15
+    rate_limit_vault_window: int = 60
+
+    rate_limit_report_download_limit: int = 30
+    rate_limit_report_download_window: int = 60
+
+    rate_limit_read_heavy_limit: int = 100
+    rate_limit_read_heavy_window: int = 60
+
+    trusted_proxies: List[str] = ["127.0.0.1", "::1"]
+
     # Sandbox
     docker_enabled: bool = False
     sandbox_timeout: int = 600  # seconds
@@ -75,19 +90,19 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
     log_file: str = str(PROJECT_ROOT / "logs" / "secuscan.log")
-    
+
     class Config:
         env_prefix = "SECUSCAN_"
         case_sensitive = False
 
-    @field_validator("cors_allowed_origins", "cors_allowed_methods", "cors_allowed_headers", mode="before")
+    @field_validator("cors_allowed_origins", "cors_allowed_methods", "cors_allowed_headers", "trusted_proxies", mode="before")
     @classmethod
     def parse_csv_or_list(cls, value: Any) -> Any:
         """Allow comma-separated env values in addition to JSON arrays."""
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
-    
+
     @property
     def base_url(self) -> str:
         """Full base URL for the API"""
@@ -99,7 +114,7 @@ class Settings(BaseSettings):
         seed = self.vault_key or self.plugin_signature_key or "secuscan-dev-key"
         digest = hashlib.sha256(seed.encode("utf-8")).digest()
         return base64.urlsafe_b64encode(digest)
-    
+
     def ensure_directories(self) -> None:
         """Create necessary directories if they don't exist"""
         for directory in [
@@ -109,7 +124,7 @@ class Settings(BaseSettings):
             Path(self.log_file).parent,
         ]:
             Path(directory).mkdir(parents=True, exist_ok=True)
-            
+
         # Create gitkeep files
         (Path(self.raw_output_dir) / ".gitkeep").touch()
         (Path(self.reports_dir) / ".gitkeep").touch()

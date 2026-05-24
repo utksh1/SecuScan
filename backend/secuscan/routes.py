@@ -2,7 +2,7 @@
 API routes for SecuScan backend
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request, Depends
 from fastapi.responses import JSONResponse
 from typing import Any, Optional, List, Dict, Callable
 import json
@@ -71,7 +71,11 @@ from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager, init_plugins
 from .executor import executor
-from .ratelimit import rate_limiter, concurrent_limiter
+from .ratelimit import (
+    rate_limiter, concurrent_limiter,
+    task_start_limiter, vault_limiter,
+    report_download_limiter, read_heavy_limiter
+)
 from .validation import validate_target, validate_task_start_payload
 from .reporting import reporting
 from .vault import VaultCrypto
@@ -190,7 +194,7 @@ async def get_all_presets():
     }
 
 
-@router.post("/task/start")
+@router.post("/task/start", dependencies=[Depends(task_start_limiter)])
 async def start_task(
     request: TaskCreateRequest,
     background_tasks: BackgroundTasks,
@@ -341,7 +345,7 @@ async def stream_task_output(task_id: str):
 
     return EventSourceResponse(event_generator())
 
-@router.get("/task/{task_id}/report/csv")
+@router.get("/task/{task_id}/report/csv", dependencies=[Depends(report_download_limiter)])
 async def download_csv_report(task_id: str):
     """Download task results as a CSV report."""
     db = await get_db()
@@ -376,7 +380,7 @@ async def download_csv_report(task_id: str):
         headers={"Content-Disposition": f'attachment; filename="{build_report_filename(dict(task_row), "csv")}"'}
     )
 
-@router.get("/task/{task_id}/report/html")
+@router.get("/task/{task_id}/report/html", dependencies=[Depends(report_download_limiter)])
 async def download_html_report(task_id: str):
     """Download task results as an HTML report."""
     db = await get_db()
@@ -411,7 +415,7 @@ async def download_html_report(task_id: str):
         headers={"Content-Disposition": f'attachment; filename="{build_report_filename(dict(task_row), "html")}"'}
     )
 
-@router.get("/task/{task_id}/report/pdf")
+@router.get("/task/{task_id}/report/pdf", dependencies=[Depends(report_download_limiter)])
 async def download_pdf_report(task_id: str):
     """Download task results as a PDF report."""
     db = await get_db()
@@ -447,7 +451,7 @@ async def download_pdf_report(task_id: str):
     )
 
 
-@router.get("/task/{task_id}/report/sarif")
+@router.get("/task/{task_id}/report/sarif", dependencies=[Depends(report_download_limiter)])
 async def download_sarif_report(task_id: str):
     """Download task results as a SARIF report."""
     db = await get_db()
@@ -584,7 +588,7 @@ async def cancel_task(task_id: str):
     }
 
 
-@router.get("/dashboard/summary")
+@router.get("/dashboard/summary", dependencies=[Depends(read_heavy_limiter)])
 async def get_dashboard_summary():
     """Return aggregate dashboard data from the primary store, cached in Redis."""
 
@@ -649,7 +653,7 @@ async def get_dashboard_summary():
     return await get_or_set_cached("summary:dashboard", build)
 
 
-@router.get("/findings")
+@router.get("/findings", dependencies=[Depends(read_heavy_limiter)])
 async def get_findings():
     """Return vulnerability findings."""
 
@@ -661,7 +665,7 @@ async def get_findings():
     return await get_or_set_cached("findings:list", build)
 
 
-@router.get("/reports")
+@router.get("/reports", dependencies=[Depends(read_heavy_limiter)])
 async def get_reports():
     """Return generated reports."""
 
@@ -673,7 +677,7 @@ async def get_reports():
     return await get_or_set_cached("reports:list", build)
 
 
-@router.get("/tasks")
+@router.get("/tasks", dependencies=[Depends(read_heavy_limiter)])
 async def list_tasks(
     page: int = 1,
     per_page: int = 25,
@@ -878,7 +882,7 @@ async def get_settings():
     }
 
 
-@router.get("/vault")
+@router.get("/vault", dependencies=[Depends(vault_limiter)])
 async def list_vault_secrets():
     db = await get_db()
     rows = await db.fetchall(
@@ -887,7 +891,7 @@ async def list_vault_secrets():
     return {"items": rows, "total": len(rows)}
 
 
-@router.put("/vault/{name}")
+@router.put("/vault/{name}", dependencies=[Depends(vault_limiter)])
 async def upsert_vault_secret(name: str, payload: Dict[str, str]):
     value = str(payload.get("value", ""))
     if not value:
@@ -912,7 +916,7 @@ async def upsert_vault_secret(name: str, payload: Dict[str, str]):
     return {"name": name, "stored": True}
 
 
-@router.get("/vault/{name}")
+@router.get("/vault/{name}", dependencies=[Depends(vault_limiter)])
 async def get_vault_secret(name: str):
     db = await get_db()
     row = await db.fetchone("SELECT encrypted_value FROM credential_vault WHERE name = ?", (name,))
@@ -922,7 +926,7 @@ async def get_vault_secret(name: str):
     return {"name": name, "value": crypto.decrypt(row["encrypted_value"])}
 
 
-@router.delete("/vault/{name}")
+@router.delete("/vault/{name}", dependencies=[Depends(vault_limiter)])
 async def delete_vault_secret(name: str):
     db = await get_db()
     await db.execute("DELETE FROM credential_vault WHERE name = ?", (name,))

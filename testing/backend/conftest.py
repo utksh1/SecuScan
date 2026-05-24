@@ -45,6 +45,11 @@ def test_client(setup_test_environment):
         await rate_limiter.reset()
         async with concurrent_limiter.lock:
             concurrent_limiter.running_tasks.clear()
+        try:
+            from backend.secuscan.ratelimit import reset_all_endpoint_limiters
+            await reset_all_endpoint_limiters()
+        except ImportError:
+            pass
         await init_db(settings.database_path)
         await init_plugins(settings.plugins_dir)
 
@@ -57,6 +62,11 @@ def test_client(setup_test_environment):
         await rate_limiter.reset()
         async with concurrent_limiter.lock:
             concurrent_limiter.running_tasks.clear()
+        try:
+            from backend.secuscan.ratelimit import reset_all_endpoint_limiters
+            await reset_all_endpoint_limiters()
+        except ImportError:
+            pass
         if database_module.db:
             await database_module.db.disconnect()
 
