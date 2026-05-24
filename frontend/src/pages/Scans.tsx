@@ -1,7 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { API_BASE, deleteTask, clearAllTasks, bulkDeleteTasks, getTaskResult } from "../api";
+import {
+  API_BASE,
+  deleteTask,
+  clearAllTasks,
+  bulkDeleteTasks,
+  getTaskResult,
+} from "../api";
 import { routePath } from "../routes";
 import {
   parseDateSafe,
@@ -63,7 +69,10 @@ export default function Scans() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [comparing, setComparing] = useState(false);
-  const [comparisonData, setComparisonData] = useState<{ oldFindings: any[]; newFindings: any[] } | null>(null);
+  const [comparisonData, setComparisonData] = useState<{
+    oldFindings: any[];
+    newFindings: any[];
+  } | null>(null);
   const [comparisonLoading, setComparisonLoading] = useState(false);
   const PAGE_LIMIT = 10;
 
@@ -181,12 +190,14 @@ export default function Scans() {
 
   async function handleCompare() {
     if (selectedIds.length !== 2) return;
-    
-    const selectedTasks = tasks.filter(t => selectedIds.includes(t.task_id));
-    const completedTasks = selectedTasks.filter(t => t.status === 'completed');
-    
+
+    const selectedTasks = tasks.filter((t) => selectedIds.includes(t.task_id));
+    const completedTasks = selectedTasks.filter(
+      (t) => t.status === "completed",
+    );
+
     if (completedTasks.length !== 2) {
-      alert('Both selected scans must be completed to compare findings.');
+      alert("Both selected scans must be completed to compare findings.");
       return;
     }
 
@@ -196,12 +207,12 @@ export default function Scans() {
     try {
       const [oldResult, newResult] = await Promise.all([
         getTaskResult(selectedIds[0]),
-        getTaskResult(selectedIds[1])
+        getTaskResult(selectedIds[1]),
       ]);
 
       setComparisonData({
         oldFindings: oldResult.findings || [],
-        newFindings: newResult.findings || []
+        newFindings: newResult.findings || [],
       });
     } catch (err) {
       console.error("Failed to load comparison data:", err);
@@ -682,7 +693,7 @@ export default function Scans() {
                   </span>
                 </button>
               </div>
-              
+
               {comparisonLoading ? (
                 <div className="border-4 border-dashed border-silver-bright/10 bg-charcoal/40 p-16 text-center">
                   <p className="text-sm font-mono uppercase tracking-widest text-silver/40 animate-pulse">
@@ -690,7 +701,7 @@ export default function Scans() {
                   </p>
                 </div>
               ) : comparisonData ? (
-                <ReportDiffView 
+                <ReportDiffView
                   oldScanFindings={comparisonData.oldFindings}
                   newScanFindings={comparisonData.newFindings}
                 />
