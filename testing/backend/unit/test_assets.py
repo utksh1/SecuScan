@@ -36,6 +36,11 @@ async def test_asset_deduplication_and_relationships(setup_test_environment):
         """,
         (task_id1,)
     )
+    # Create report
+    await db.execute(
+        "INSERT INTO reports (id, task_id, name, type) VALUES (?, ?, 'Test Report', 'technical')",
+        (f"report:{task_id1}", task_id1)
+    )
 
     # Create findings
     finding_id1 = "finding:1"
@@ -81,6 +86,11 @@ async def test_asset_deduplication_and_relationships(setup_test_environment):
         """,
         (task_id2,)
     )
+    # Create report
+    await db.execute(
+        "INSERT INTO reports (id, task_id, name, type) VALUES (?, ?, 'Test Report', 'technical')",
+        (f"report:{task_id2}", task_id2)
+    )
 
     # Run updater
     await executor._update_assets_for_task(db, task_id2)
@@ -99,6 +109,10 @@ def test_assets_rest_endpoints(test_client):
         # Task
         await db.execute(
             "INSERT INTO tasks (id, plugin_id, tool_name, target, status) VALUES ('task:test', 'subfinder', 'Subfinder', 'example.com', 'completed')"
+        )
+        # Create report
+        await db.execute(
+            "INSERT INTO reports (id, task_id, name, type) VALUES ('report:task:test', 'task:test', 'Test Report', 'technical')"
         )
         # Findings
         await db.execute(
@@ -160,3 +174,43 @@ def test_negative_cases(test_client):
     # 2. Fetch non-existent finding details -> should return 404
     response = test_client.get("/api/v1/finding/finding:nonexistent")
     assert response.status_code == 404
+
+@pytest.mark.asyncio
+async def test_ipv6_normalization_and_uniqueness_constraints(setup_test_environment):
+    """Verify that IPv6 targets are parsed correctly and that database-level unique constraints prevent duplicate inserts."""
+    db = await init_db(f"{setup_test_environment}/test_secuscan.db")
+
+    # 1. Test IPv6 parsing
+    ipv6_task_id = "task:ipv6"
+    await db.execute(
+        """
+        INSERT INTO tasks (id, plugin_id, tool_name, target, status, inputs_json)
+        VALUES (?, 'nmap', 'Nmap', 'http://[2001:db8::1]:8080/path', 'completed', '{}')
+        """,
+        (ipv6_task_id,)
+    )
+    await db.execute(
+        "INSERT INTO reports (id, task_id, name, type) VALUES (?, ?, 'Test Report', 'technical')",
+        (f"report:{ipv6_task_id}", ipv6_task_id)
+    )
+    await executor._update_assets_for_task(db, ipv6_task_id)
+
+    # Check normalized host
+    host_assets = await db.fetchall("SELECT * FROM assets WHERE type='host'")
+    host_names = {h["name"] for h in host_assets}
+    assert "2001:db8::1" in host_names
+
+    # 2. Test SQLite uniqueness constraints by trying to insert a duplicate host directly
+    import sqlite3
+    try:
+        await db.execute(
+            """
+            INSERT INTO assets (id, type, name, host_id, metadata_json)
+            VALUES ('asset:host:duplicate', 'host', '2001:db8::1', NULL, '{}')
+            """
+        )
+        assert False, "Should have raised IntegrityError"
+    except sqlite3.IntegrityError:
+        pass
+
+    await db.disconnect()

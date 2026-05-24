@@ -766,32 +766,32 @@ class TaskExecutor:
         else:
             host_name = target.split("/", 1)[0]
 
-        if ":" in host_name:
-            if host_name.startswith("[") and "]" in host_name:
-                host_name = host_name.split("]")[0][1:]
-            else:
-                host_name = host_name.split(":", 1)[0]
+        if host_name.startswith("[") and "]" in host_name:
+            host_name = host_name.split("]")[0][1:]
+        elif host_name.count(":") == 1:
+            parts = host_name.split(":")
+            if parts[1].isdigit():
+                host_name = parts[0]
 
         host_name = host_name.strip()
         if not host_name:
             return
 
-        # Deduplicate and upsert host asset
+        # Deduplicate and upsert host asset (race-safe)
+        host_asset_id = f"asset:host:{str(uuid.uuid4()).replace('-', '')[:16]}"
+        await db.execute(
+            """
+            INSERT OR IGNORE INTO assets (id, type, name, host_id, metadata_json, created_at, updated_at)
+            VALUES (?, 'host', ?, NULL, '{}', (datetime('now')), (datetime('now')))
+            """,
+            (host_asset_id, host_name)
+        )
         host_row = await db.fetchone(
             "SELECT id FROM assets WHERE type = 'host' AND name = ?",
             (host_name,)
         )
         if host_row:
             host_asset_id = host_row["id"]
-        else:
-            host_asset_id = f"asset:host:{str(uuid.uuid4()).replace('-', '')[:16]}"
-            await db.execute(
-                """
-                INSERT INTO assets (id, type, name, host_id, metadata_json, created_at, updated_at)
-                VALUES (?, 'host', ?, NULL, '{}', (datetime('now')), (datetime('now')))
-                """,
-                (host_asset_id, host_name)
-            )
 
         # Link host to task and report
         await db.execute(
@@ -831,28 +831,27 @@ class TaskExecutor:
 
             if port:
                 service_name = f"{port}/{protocol}"
-                # Deduplicate service asset under host
+                # Deduplicate service asset under host (race-safe)
+                service_asset_id = f"asset:service:{str(uuid.uuid4()).replace('-', '')[:16]}"
+                service_meta = {
+                    "port": str(port),
+                    "protocol": protocol,
+                    "service": metadata.get("service") or "unknown",
+                    "version": metadata.get("version") or ""
+                }
+                await db.execute(
+                    """
+                    INSERT OR IGNORE INTO assets (id, type, name, host_id, metadata_json, created_at, updated_at)
+                    VALUES (?, 'service', ?, ?, ?, (datetime('now')), (datetime('now')))
+                    """,
+                    (service_asset_id, service_name, host_asset_id, json.dumps(service_meta))
+                )
                 service_row = await db.fetchone(
                     "SELECT id FROM assets WHERE type = 'service' AND name = ? AND host_id = ?",
                     (service_name, host_asset_id)
                 )
                 if service_row:
                     service_asset_id = service_row["id"]
-                else:
-                    service_asset_id = f"asset:service:{str(uuid.uuid4()).replace('-', '')[:16]}"
-                    service_meta = {
-                        "port": str(port),
-                        "protocol": protocol,
-                        "service": metadata.get("service") or "unknown",
-                        "version": metadata.get("version") or ""
-                    }
-                    await db.execute(
-                        """
-                        INSERT INTO assets (id, type, name, host_id, metadata_json, created_at, updated_at)
-                        VALUES (?, 'service', ?, ?, ?, (datetime('now')), (datetime('now')))
-                        """,
-                        (service_asset_id, service_name, host_asset_id, json.dumps(service_meta))
-                    )
 
                 # Link service asset
                 await db.execute(
@@ -871,22 +870,21 @@ class TaskExecutor:
                 subdomain = metadata.get("subdomain")
                 if subdomain and isinstance(subdomain, str) and subdomain.strip():
                     subdomain = subdomain.strip()
-                    # Deduplicate subdomain host
+                    # Deduplicate subdomain host (race-safe)
+                    sub_asset_id = f"asset:host:{str(uuid.uuid4()).replace('-', '')[:16]}"
+                    await db.execute(
+                        """
+                        INSERT OR IGNORE INTO assets (id, type, name, host_id, metadata_json, created_at, updated_at)
+                        VALUES (?, 'host', ?, NULL, '{}', (datetime('now')), (datetime('now')))
+                        """,
+                        (sub_asset_id, subdomain)
+                    )
                     sub_row = await db.fetchone(
                         "SELECT id FROM assets WHERE type = 'host' AND name = ?",
                         (subdomain,)
                     )
                     if sub_row:
                         sub_asset_id = sub_row["id"]
-                    else:
-                        sub_asset_id = f"asset:host:{str(uuid.uuid4()).replace('-', '')[:16]}"
-                        await db.execute(
-                            """
-                            INSERT INTO assets (id, type, name, host_id, metadata_json, created_at, updated_at)
-                            VALUES (?, 'host', ?, NULL, '{}', (datetime('now')), (datetime('now')))
-                            """,
-                            (sub_asset_id, subdomain)
-                        )
 
                     # Link subdomain
                     await db.execute(

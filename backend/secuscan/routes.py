@@ -771,6 +771,7 @@ async def delete_task_records(task_ids: List[str]):
         WHERE id NOT IN (SELECT asset_id FROM asset_findings)
           AND id NOT IN (SELECT asset_id FROM asset_tasks)
           AND id NOT IN (SELECT asset_id FROM asset_reports)
+          AND id NOT IN (SELECT host_id FROM assets WHERE host_id IS NOT NULL)
         """
     )
 
@@ -1153,7 +1154,10 @@ async def get_assets():
     db = await get_db()
     rows = await db.fetchall(
         """
-        SELECT a.id, a.type, a.name, a.host_id, h.name as host_name, a.metadata_json, a.created_at, a.updated_at
+        SELECT a.id, a.type, a.name, a.host_id, h.name as host_name, a.metadata_json, a.created_at, a.updated_at,
+               (SELECT COUNT(*) FROM asset_findings WHERE asset_id = a.id) as findings_count,
+               (SELECT COUNT(*) FROM asset_tasks WHERE asset_id = a.id) as tasks_count,
+               (SELECT COUNT(*) FROM asset_reports WHERE asset_id = a.id) as reports_count
         FROM assets a
         LEFT JOIN assets h ON a.host_id = h.id
         ORDER BY a.type ASC, a.name ASC
@@ -1169,10 +1173,6 @@ async def get_assets():
             except json.JSONDecodeError:
                 pass
 
-        findings_count = (await db.fetchone("SELECT COUNT(*) as count FROM asset_findings WHERE asset_id = ?", (row["id"],)))["count"]
-        tasks_count = (await db.fetchone("SELECT COUNT(*) as count FROM asset_tasks WHERE asset_id = ?", (row["id"],)))["count"]
-        reports_count = (await db.fetchone("SELECT COUNT(*) as count FROM asset_reports WHERE asset_id = ?", (row["id"],)))["count"]
-
         assets.append({
             "id": row["id"],
             "type": row["type"],
@@ -1182,9 +1182,9 @@ async def get_assets():
             "metadata": metadata,
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
-            "findings_count": findings_count,
-            "tasks_count": tasks_count,
-            "reports_count": reports_count
+            "findings_count": row["findings_count"],
+            "tasks_count": row["tasks_count"],
+            "reports_count": row["reports_count"]
         })
 
     return {"assets": assets}

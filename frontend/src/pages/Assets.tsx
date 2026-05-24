@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { getAssets, getAssetsGraph, getAssetDetails } from '../api'
+import { getAssets, getAssetsGraph, getAssetDetails, getFindingDetails } from '../api'
 import { routePath, routes } from '../routes'
 import { formatLocaleDate } from '../utils/date'
 
@@ -156,34 +156,64 @@ export default function Assets() {
       setSelectedAssetDetails(null)
       return
     }
+    let active = true
     setDetailsLoading(true)
     // Extract real ID if it's prefix (finding details handle separately)
     const isAsset = selectedAssetId.startsWith('asset:')
     if (isAsset) {
       getAssetDetails(selectedAssetId)
         .then((data: any) => {
-          setSelectedAssetDetails({ ...data, isDirectAsset: true })
+          if (active) {
+            setSelectedAssetDetails({ ...data, isDirectAsset: true })
+          }
         })
-        .catch((err) => console.error(err))
-        .finally(() => setDetailsLoading(false))
+        .catch((err) => {
+          if (active) {
+            console.error(err)
+          }
+        })
+        .finally(() => {
+          if (active) {
+            setDetailsLoading(false)
+          }
+        })
     } else {
       // It is a finding, task, or report node clicked in the graph
       // Let's resolve its details accordingly
       const parts = selectedAssetId.split(':')
       const type = parts[0]
       if (type === 'finding') {
-        fetch(`${window.location.origin}/api/v1/finding/${selectedAssetId}`)
-          .then((r) => r.json())
-          .then((data) => setSelectedAssetDetails({ ...data, type: 'finding', label: data.title }))
-          .finally(() => setDetailsLoading(false))
+        getFindingDetails(selectedAssetId)
+          .then((data: any) => {
+            if (active) {
+              setSelectedAssetDetails({ ...data, type: 'finding', label: data.title })
+            }
+          })
+          .catch((err) => {
+            if (active) {
+              console.error(err)
+            }
+          })
+          .finally(() => {
+            if (active) {
+              setDetailsLoading(false)
+            }
+          })
       } else if (type === 'report') {
-        setSelectedAssetDetails({ id: selectedAssetId, type: 'report', label: 'PDF/HTML Security Report' })
-        setDetailsLoading(false)
+        if (active) {
+          setSelectedAssetDetails({ id: selectedAssetId, type: 'report', label: 'PDF/HTML Security Report' })
+          setDetailsLoading(false)
+        }
       } else {
         // Task
-        setSelectedAssetDetails({ id: selectedAssetId, type: 'task', label: 'Scan Task Record' })
-        setDetailsLoading(false)
+        if (active) {
+          setSelectedAssetDetails({ id: selectedAssetId, type: 'task', label: 'Scan Task Record' })
+          setDetailsLoading(false)
+        }
       }
+    }
+    return () => {
+      active = false
     }
   }, [selectedAssetId])
 

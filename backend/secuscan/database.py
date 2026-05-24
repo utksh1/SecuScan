@@ -33,10 +33,11 @@ class Database:
         """Establish database connection and ensure schema exists."""
         # Ensure data directory exists
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        
+
         conn = await aiosqlite.connect(self.db_path)
         self._connection = conn
         conn.row_factory = aiosqlite.Row
+        await conn.execute("PRAGMA foreign_keys = ON")
         await self._create_schema()
 
     async def disconnect(self):
@@ -149,6 +150,9 @@ class Database:
                 PRIMARY KEY (asset_id, report_id)
             );
 
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_assets_unique_host ON assets(name) WHERE type = 'host';
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_assets_unique_service ON assets(host_id, name) WHERE type = 'service';
+
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL,
@@ -210,7 +214,7 @@ class Database:
         # Migration logic: ensure latest columns exist in 'tasks' table
         tasks_columns = await self.fetchall("PRAGMA table_info(tasks)")
         existing_cols = {col["name"] for col in tasks_columns}
-        
+
         needed_cols = {
             "exit_code": "INTEGER",
             "structured_json": "TEXT",

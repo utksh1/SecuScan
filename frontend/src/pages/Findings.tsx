@@ -112,21 +112,33 @@ export default function Findings() {
       setSelectedFindingAssets([])
       return
     }
+    let active = true
     setAssetsLoading(true)
     const promise = getFindingDetails(selectedFindingId)
     if (promise && typeof promise.then === 'function') {
       promise
         .then((data: any) => {
-          setSelectedFindingAssets(data?.assets || [])
+          if (active) {
+            setSelectedFindingAssets(data?.assets || [])
+          }
         })
         .catch((err) => {
-          console.error(err)
-          setSelectedFindingAssets([])
+          if (active) {
+            console.error(err)
+            setSelectedFindingAssets([])
+          }
         })
-        .finally(() => setAssetsLoading(false))
+        .finally(() => {
+          if (active) {
+            setAssetsLoading(false)
+          }
+        })
     } else {
       setSelectedFindingAssets([])
       setAssetsLoading(false)
+    }
+    return () => {
+      active = false
     }
   }, [selectedFindingId])
   const [copiedFindingId, setCopiedFindingId] = useState<string | null>(null)
