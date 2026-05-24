@@ -42,19 +42,19 @@ def parse_ts_interfaces(ts_content: str):
         r'export\s+interface\s+(\w+)(?:\s+extends\s+(\w+))?\s*\{([^}]+)\}',
         re.MULTILINE
     )
-    
+
     interfaces = {}
     for match in interface_pattern.finditer(ts_content):
         name = match.group(1)
         extends_name = match.group(2)
         body = match.group(3)
-        
+
         fields = {}
         for line in body.split('\n'):
             line = line.strip()
             if not line or line.startswith('//') or line.startswith('/*') or line.startswith('*'):
                 continue
-            
+
             # Matches: fieldName?: type; or fieldName: type;
             field_match = re.match(r'^(\w+)(\?)?\s*:\s*([^;]+);?$', line)
             if field_match:
@@ -65,12 +65,12 @@ def parse_ts_interfaces(ts_content: str):
                     "optional": optional,
                     "type": field_type
                 }
-        
+
         interfaces[name] = {
             "extends": extends_name,
             "fields": fields
         }
-        
+
     # Resolve extends inheritance
     resolved_interfaces = {}
     for name, data in interfaces.items():
@@ -89,7 +89,7 @@ def parse_ts_interfaces(ts_content: str):
             else:
                 break
         resolved_interfaces[name] = fields
-        
+
     return resolved_interfaces
 
 
@@ -100,12 +100,12 @@ def check_type_match(ts_type: str, schema: dict, schemas: dict, path: str):
     if not clean_parts:
         return
     clean_ts_type = clean_parts[0]
-    
+
     # Resolve ref
     if "$ref" in schema:
         ref_name = schema["$ref"].split("/")[-1]
         schema = schemas.get(ref_name, {})
-        
+
     # Resolve anyOf / oneOf
     if "anyOf" in schema:
         non_null_schemas = [s for s in schema["anyOf"] if s.get("type") != "null"]
@@ -119,19 +119,19 @@ def check_type_match(ts_type: str, schema: dict, schemas: dict, path: str):
             schema = non_null_schemas[0]
         else:
             schema = schema["oneOf"][0]
-            
+
     # Resolve ref inside resolved schemas
     if "$ref" in schema:
         ref_name = schema["$ref"].split("/")[-1]
         schema = schemas.get(ref_name, {})
-        
+
     schema_types = schema.get("type", "any")
-    
+
     if isinstance(schema_types, list):
         schema_type = [t for t in schema_types if t != "null"][0] if [t for t in schema_types if t != "null"] else "any"
     else:
         schema_type = schema_types
-            
+
     # Resolve array types
     if clean_ts_type.endswith("[]"):
         item_ts_type = clean_ts_type[:-2]
@@ -140,7 +140,7 @@ def check_type_match(ts_type: str, schema: dict, schemas: dict, path: str):
         items_schema = schema.get("items", {})
         check_type_match(item_ts_type, items_schema, schemas, f"{path}[]")
         return
-        
+
     # Resolve literal unions (e.g. 'queued' | 'running')
     if len(clean_parts) > 1 and all(p.startswith(("'", '"')) and p.endswith(("'", '"')) for p in clean_parts):
         literals = [p.strip("'\"") for p in clean_parts]
@@ -151,7 +151,7 @@ def check_type_match(ts_type: str, schema: dict, schemas: dict, path: str):
             if lit not in schema_enum:
                 raise AssertionError(f"{path}: TS enum value '{lit}' not in OpenAPI enum values: {schema_enum}")
         return
-        
+
     # Check primitive type matches
     if clean_ts_type == "string":
         if schema_type != "string":
@@ -183,7 +183,7 @@ def check_type_match(ts_type: str, schema: dict, schemas: dict, path: str):
 def verify_interface_schema_match(ts_name: str, ts_fields: dict, schema: dict, schemas: dict):
     schema_properties = schema.get("properties", {})
     schema_required = schema.get("required", [])
-    
+
     # Verify that all properties in OpenAPI schema exist in TS interface
     for prop_name, prop_schema in schema_properties.items():
         path = f"{ts_name}.{prop_name}"
@@ -192,16 +192,16 @@ def verify_interface_schema_match(ts_name: str, ts_fields: dict, schema: dict, s
             if prop_name in schema_required:
                 raise AssertionError(f"Required OpenAPI property '{prop_name}' in schema is missing in TS interface '{ts_name}'")
             continue
-            
+
         ts_field = ts_fields[prop_name]
-        
+
         # Check optionality matching
         if prop_name in schema_required and ts_field["optional"]:
             raise AssertionError(f"{path}: Property is required in OpenAPI, but optional ('?') in TS")
-            
+
         # Verify type matching
         check_type_match(ts_field["type"], prop_schema, schemas, path)
-        
+
     # Verify that any non-optional property present in TS also exists in the OpenAPI schema properties
     for field_name, field_data in ts_fields.items():
         if field_name not in schema_properties and not field_data["optional"]:
@@ -213,21 +213,21 @@ def test_api_contract_drift():
     # Find api.ts path relative to this test file
     repo_root = Path(__file__).resolve().parent.parent.parent.parent
     api_ts_path = repo_root / "frontend" / "src" / "api.ts"
-    
+
     assert api_ts_path.exists(), f"Could not find api.ts at {api_ts_path}"
-    
+
     with open(api_ts_path, "r", encoding="utf-8") as f:
         ts_content = f.read()
-        
+
     ts_interfaces = parse_ts_interfaces(ts_content)
     openapi = app.openapi()
     openapi_schemas = openapi.get("components", {}).get("schemas", {})
-    
+
     # Verify that each mapped interface matches
     for ts_name, openapi_name in TS_TO_OPENAPI_MAP.items():
         assert ts_name in ts_interfaces, f"TS interface '{ts_name}' missing from api.ts"
         assert openapi_name in openapi_schemas, f"OpenAPI schema '{openapi_name}' missing from backend"
-        
+
         ts_fields = ts_interfaces[ts_name]
         schema = openapi_schemas[openapi_name]
         verify_interface_schema_match(ts_name, ts_fields, schema, openapi_schemas)
