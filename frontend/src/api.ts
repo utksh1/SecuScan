@@ -124,6 +124,22 @@ export function getReports() {
   return request('/reports')
 }
 
+export function getAssets() {
+  return request<any>('/assets')
+}
+
+export function getAssetsGraph() {
+  return request<any>('/assets/graph')
+}
+
+export function getAssetDetails(assetId: string) {
+  return request<any>(`/asset/${assetId}`)
+}
+
+export function getFindingDetails(findingId: string) {
+  return request<any>(`/finding/${findingId}`)
+}
+
 export function getTasks(params?: URLSearchParams) {
   const suffix = params ? `?${params.toString()}` : ''
   return request(`/tasks${suffix}`)

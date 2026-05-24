@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { getFindings } from '../api'
+import { getFindings, getFindingDetails } from '../api'
+import { routes } from '../routes'
 import { formatLocaleDate, parseDateSafe, getCurrentTimeZone } from '../utils/date'
 type Finding = {
   id: string
@@ -102,6 +104,31 @@ export default function Findings() {
   const [dateTo, setDateTo] = useState('')
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null)
   const [reviewState, setReviewState] = useState<ReviewState>({})
+  const [selectedFindingAssets, setSelectedFindingAssets] = useState<any[]>([])
+  const [assetsLoading, setAssetsLoading] = useState(false)
+
+  useEffect(() => {
+    if (!selectedFindingId) {
+      setSelectedFindingAssets([])
+      return
+    }
+    setAssetsLoading(true)
+    const promise = getFindingDetails(selectedFindingId)
+    if (promise && typeof promise.then === 'function') {
+      promise
+        .then((data: any) => {
+          setSelectedFindingAssets(data?.assets || [])
+        })
+        .catch((err) => {
+          console.error(err)
+          setSelectedFindingAssets([])
+        })
+        .finally(() => setAssetsLoading(false))
+    } else {
+      setSelectedFindingAssets([])
+      setAssetsLoading(false)
+    }
+  }, [selectedFindingId])
   const [copiedFindingId, setCopiedFindingId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -689,6 +716,29 @@ export default function Findings() {
                         <p className="text-sm leading-relaxed text-rag-green/85">
                           {selectedFinding.remediation || 'No remediation guidance captured.'}
                         </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-silver/35">Associated Assets</p>
+                      <div className="border-l-4 border-rag-blue bg-charcoal-dark p-4">
+                        {assetsLoading ? (
+                          <p className="text-xs font-mono text-silver/45 uppercase">Loading linked assets...</p>
+                        ) : selectedFindingAssets.length === 0 ? (
+                          <p className="text-xs font-mono text-silver/45 uppercase italic">No assets mapped to this finding.</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            {selectedFindingAssets.map((asset) => (
+                              <Link
+                                key={asset.id}
+                                to={`${routes.assets}?selected=${encodeURIComponent(asset.id)}`}
+                                className="px-2 py-1 text-xs font-mono bg-rag-blue/10 border border-rag-blue/20 text-rag-blue hover:bg-rag-blue/25 transition-colors uppercase"
+                              >
+                                {asset.name} ({asset.type.toUpperCase()})
+                              </Link>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

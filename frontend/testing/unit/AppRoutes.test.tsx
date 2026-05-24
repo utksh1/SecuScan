@@ -33,6 +33,7 @@ vi.mock('../../src/api', () => ({
     ],
   }),
   cancelTask: vi.fn(),
+  getFindingDetails: vi.fn().mockResolvedValue({ assets: [] }),
 }))
 
 function PathProbe() {

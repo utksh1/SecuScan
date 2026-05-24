@@ -764,6 +764,16 @@ async def delete_task_records(task_ids: List[str]):
     await db.execute(f"DELETE FROM audit_log WHERE task_id IN ({placeholders})", tuple(task_ids))
     await db.execute(f"DELETE FROM tasks WHERE id IN ({placeholders})", tuple(task_ids))
 
+    # Cleanup orphaned assets
+    await db.execute(
+        f"""
+        DELETE FROM assets 
+        WHERE id NOT IN (SELECT asset_id FROM asset_findings)
+          AND id NOT IN (SELECT asset_id FROM asset_tasks)
+          AND id NOT IN (SELECT asset_id FROM asset_reports)
+        """
+    )
+
     # Cleanup files on disk
     for row in task_rows:
         if row and row["raw_output_path"]:
@@ -831,6 +841,10 @@ async def clear_all_tasks():
 
     # Purge other tables
     await db.execute("DELETE FROM findings")
+    await db.execute("DELETE FROM assets")
+    await db.execute("DELETE FROM asset_findings")
+    await db.execute("DELETE FROM asset_tasks")
+    await db.execute("DELETE FROM asset_reports")
 
     # Fallback cleanup for any orphaned files in data directories
     for subdir in ["raw", "reports"]:
@@ -1056,6 +1070,18 @@ async def get_finding_details(finding_id: str):
         except json.JSONDecodeError:
             metadata = {}
 
+    # Fetch associated assets
+    assets_rows = await db.fetchall(
+        """
+        SELECT a.id, a.name, a.type
+        FROM assets a
+        JOIN asset_findings af ON a.id = af.asset_id
+        WHERE af.finding_id = ?
+        """,
+        (finding_id,)
+    )
+    assets = [{"id": r["id"], "name": r["name"], "type": r["type"]} for r in assets_rows]
+
     return {
         "id": finding_row["id"],
         "task_id": finding_row["task_id"],
@@ -1071,7 +1097,8 @@ async def get_finding_details(finding_id: str):
         "cvss": finding_row["cvss"],
         "cve": finding_row["cve"],
         "discovered_at": finding_row["discovered_at"],
-        "metadata": metadata
+        "metadata": metadata,
+        "assets": assets
     }
 
 
@@ -1124,7 +1151,243 @@ async def get_attack_surface():
 async def get_assets():
     """Return a list of tracked assets."""
     db = await get_db()
-    # For now, we use unique targets as assets
-    rows = await db.fetchall("SELECT DISTINCT target FROM tasks UNION SELECT DISTINCT target FROM findings")
-    assets = [{"id": str(uuid.uuid4()), "name": row["target"]} for row in rows]
+    rows = await db.fetchall(
+        """
+        SELECT a.id, a.type, a.name, a.host_id, h.name as host_name, a.metadata_json, a.created_at, a.updated_at
+        FROM assets a
+        LEFT JOIN assets h ON a.host_id = h.id
+        ORDER BY a.type ASC, a.name ASC
+        """
+    )
+    
+    assets = []
+    for row in rows:
+        metadata = {}
+        if row["metadata_json"]:
+            try:
+                metadata = json.loads(row["metadata_json"])
+            except json.JSONDecodeError:
+                pass
+        
+        findings_count = (await db.fetchone("SELECT COUNT(*) as count FROM asset_findings WHERE asset_id = ?", (row["id"],)))["count"]
+        tasks_count = (await db.fetchone("SELECT COUNT(*) as count FROM asset_tasks WHERE asset_id = ?", (row["id"],)))["count"]
+        reports_count = (await db.fetchone("SELECT COUNT(*) as count FROM asset_reports WHERE asset_id = ?", (row["id"],)))["count"]
+        
+        assets.append({
+            "id": row["id"],
+            "type": row["type"],
+            "name": row["name"],
+            "host_id": row["host_id"],
+            "host_name": row["host_name"],
+            "metadata": metadata,
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "findings_count": findings_count,
+            "tasks_count": tasks_count,
+            "reports_count": reports_count
+        })
+        
     return {"assets": assets}
+
+
+@router.get("/assets/graph")
+async def get_assets_graph():
+    """Return a graph representing the connections between hosts, services, findings, tasks, and reports."""
+    db = await get_db()
+    
+    nodes = []
+    links = []
+    seen_nodes = set()
+    
+    # 1. Fetch assets (hosts and services)
+    assets = await db.fetchall(
+        """
+        SELECT a.id, a.type, a.name, a.host_id, h.name as host_name
+        FROM assets a
+        LEFT JOIN assets h ON a.host_id = h.id
+        """
+    )
+    for asset in assets:
+        nodes.append({
+            "id": asset["id"],
+            "label": asset["name"],
+            "type": asset["type"],
+            "details": {
+                "host_name": asset["host_name"]
+            }
+        })
+        seen_nodes.add(asset["id"])
+        
+        if asset["host_id"]:
+            links.append({
+                "source": asset["host_id"],
+                "target": asset["id"],
+                "type": "has_service"
+            })
+            
+    # 2. Fetch findings and their links to assets
+    findings = await db.fetchall(
+        """
+        SELECT f.id, f.title, f.severity, f.category, f.task_id, af.asset_id
+        FROM findings f
+        JOIN asset_findings af ON f.id = af.finding_id
+        """
+    )
+    for f in findings:
+        f_id = f["id"]
+        if f_id not in seen_nodes:
+            nodes.append({
+                "id": f_id,
+                "label": f["title"],
+                "type": "finding",
+                "details": {
+                    "severity": f["severity"],
+                    "category": f["category"]
+                }
+            })
+            seen_nodes.add(f_id)
+        
+        links.append({
+            "source": f["asset_id"],
+            "target": f_id,
+            "type": "has_finding"
+        })
+        
+        # Link task to finding if task node exists
+        if f["task_id"]:
+            links.append({
+                "source": f["task_id"],
+                "target": f_id,
+                "type": "produced_finding"
+            })
+        
+    # 3. Fetch tasks and their links to assets
+    tasks = await db.fetchall(
+        """
+        SELECT t.id, t.tool_name, t.status, at.asset_id
+        FROM tasks t
+        JOIN asset_tasks at ON t.id = at.task_id
+        """
+    )
+    for t in tasks:
+        t_id = t["id"]
+        if t_id not in seen_nodes:
+            nodes.append({
+                "id": t_id,
+                "label": f"Task: {t['tool_name']}",
+                "type": "task",
+                "details": {
+                    "status": t["status"]
+                }
+            })
+            seen_nodes.add(t_id)
+            
+        links.append({
+            "source": t["asset_id"],
+            "target": t_id,
+            "type": "associated_task"
+        })
+        
+    # 4. Fetch reports and their links to assets
+    reports = await db.fetchall(
+        """
+        SELECT r.id, r.name, r.task_id, ar.asset_id
+        FROM reports r
+        JOIN asset_reports ar ON r.id = ar.report_id
+        """
+    )
+    for r in reports:
+        r_id = r["id"]
+        if r_id not in seen_nodes:
+            nodes.append({
+                "id": r_id,
+                "label": r["name"],
+                "type": "report",
+                "details": {}
+            })
+            seen_nodes.add(r_id)
+            
+        links.append({
+            "source": r["asset_id"],
+            "target": r_id,
+            "type": "associated_report"
+        })
+        
+        # Link task to report if task node exists
+        if r["task_id"]:
+            links.append({
+                "source": r["task_id"],
+                "target": r_id,
+                "type": "produced_report"
+            })
+        
+    return {"nodes": nodes, "links": links}
+
+
+@router.get("/asset/{asset_id}")
+async def get_asset_details(asset_id: str):
+    """Get detailed information for a specific asset and its relationships."""
+    db = await get_db()
+    
+    asset = await db.fetchone(
+        """
+        SELECT a.id, a.type, a.name, a.host_id, h.name as host_name, a.metadata_json, a.created_at, a.updated_at
+        FROM assets a
+        LEFT JOIN assets h ON a.host_id = h.id
+        WHERE a.id = ?
+        """,
+        (asset_id,)
+    )
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+        
+    metadata = {}
+    if asset["metadata_json"]:
+        try:
+            metadata = json.loads(asset["metadata_json"])
+        except json.JSONDecodeError:
+            pass
+            
+    findings = await db.fetchall(
+        """
+        SELECT f.id, f.title, f.severity, f.category, f.discovered_at
+        FROM findings f
+        JOIN asset_findings af ON f.id = af.finding_id
+        WHERE af.asset_id = ?
+        """,
+        (asset_id,)
+    )
+    
+    tasks = await db.fetchall(
+        """
+        SELECT t.id, t.tool_name, t.status, t.created_at
+        FROM tasks t
+        JOIN asset_tasks at ON t.id = at.task_id
+        WHERE at.asset_id = ?
+        """,
+        (asset_id,)
+    )
+    
+    reports = await db.fetchall(
+        """
+        SELECT r.id, r.name, r.type, r.generated_at, r.status
+        FROM reports r
+        JOIN asset_reports ar ON r.id = ar.report_id
+        WHERE ar.asset_id = ?
+        """,
+        (asset_id,)
+    )
+    
+    return {
+        "id": asset["id"],
+        "type": asset["type"],
+        "name": asset["name"],
+        "host_id": asset["host_id"],
+        "host_name": asset["host_name"],
+        "metadata": metadata,
+        "created_at": asset["created_at"],
+        "updated_at": asset["updated_at"],
+        "findings": findings,
+        "tasks": tasks,
+        "reports": reports
+    }

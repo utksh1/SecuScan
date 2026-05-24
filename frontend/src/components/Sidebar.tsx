@@ -164,6 +164,7 @@ export default function Sidebar() {
 
                 <NavSection label="Analyze" isExpanded={isExpanded} />
                 <NavItem to={routes.findings} icon="emergency_home" label="Findings" isExpanded={isExpanded} />
+                <NavItem to={routes.assets} icon="hub" label="Assets" isExpanded={isExpanded} />
 
                 <NavItem to={routes.reports} icon="summarize" label="Reports" isExpanded={isExpanded} />
                 <NavItem to={routes.workflows} icon="account_tree" label="Workflows" isExpanded={isExpanded} />

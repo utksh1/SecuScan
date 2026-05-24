@@ -7,6 +7,7 @@ import * as dateUtils from '../../../src/utils/date'
 
 vi.mock('../../../src/api', () => ({
   getFindings: vi.fn(),
+  getFindingDetails: vi.fn().mockResolvedValue({ assets: [] }),
   API_BASE: 'http://127.0.0.1:8000',
 }))
 

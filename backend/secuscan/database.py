@@ -121,6 +121,34 @@ class Database:
                 file_path TEXT
             );
 
+            CREATE TABLE IF NOT EXISTS assets (
+                id TEXT PRIMARY KEY,
+                type TEXT NOT NULL,
+                name TEXT NOT NULL,
+                host_id TEXT REFERENCES assets(id) ON DELETE CASCADE,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS asset_findings (
+                asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+                finding_id TEXT NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
+                PRIMARY KEY (asset_id, finding_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS asset_tasks (
+                asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+                task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+                PRIMARY KEY (asset_id, task_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS asset_reports (
+                asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+                report_id TEXT NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
+                PRIMARY KEY (asset_id, report_id)
+            );
+
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL,
