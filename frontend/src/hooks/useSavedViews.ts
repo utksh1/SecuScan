@@ -142,7 +142,7 @@ export function useSavedViews(): UseSavedViewsReturn {
 
     async function hydrate() {
       // Try backend first
-      const data = await apiFetch<{ views: BackendRow[] }>('/saved-views')
+      const data = await apiFetch<{ views: BackendRow[] }>('/api/v1/saved-views')
       if (!cancelled) {
         if (data && Array.isArray(data.views)) {
           const parsed = data.views.map(rowToView).filter(Boolean) as SavedView[]
@@ -191,7 +191,7 @@ export function useSavedViews(): UseSavedViewsReturn {
             name: trimmed,
             filter_json: JSON.stringify(preset),
           }
-          apiFetch(`/saved-views/${existing.id}`, {
+          apiFetch(`/api/v1/saved-views/${existing.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -217,7 +217,7 @@ export function useSavedViews(): UseSavedViewsReturn {
           name: trimmed,
           filter_json: JSON.stringify(preset),
         }
-        const result = await apiFetch<{ id: string }>('/saved-views', {
+        const result = await apiFetch<{ id: string }>('/api/v1/saved-views', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -240,7 +240,7 @@ export function useSavedViews(): UseSavedViewsReturn {
       syncSet(views.filter((v) => v.id !== id))
 
       if (backendAvailable.current && !id.startsWith('local-')) {
-        apiFetch(`/saved-views/${id}`, { method: 'DELETE' })
+        apiFetch(`/api/v1/saved-views/${id}`, { method: 'DELETE' })
       }
     },
     [views, syncSet],
@@ -264,7 +264,7 @@ export function useSavedViews(): UseSavedViewsReturn {
             name: trimmed,
             filter_json: JSON.stringify(target.preset),
           }
-          apiFetch(`/saved-views/${id}`, {
+          apiFetch(`/api/v1/saved-views/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
