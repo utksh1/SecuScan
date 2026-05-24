@@ -359,8 +359,9 @@ describe('Findings — reset filters', () => {
   })
 })
 
-// ── Active filter summary ─────────────────────────────────────────────────────
 
+
+// ── Active filter summary ─────────────────────────────────────────────────────
 describe('Findings — active filter summary', () => {
   beforeEach(() => {
     vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
@@ -403,7 +404,6 @@ describe('Findings — active filter summary', () => {
     expect(screen.getAllByText('Missing Security Headers').length).toBeGreaterThanOrEqual(1)
   })
 })
-
 // ── Timezone boundary regression ──────────────────────────────────────────────
 
 describe('Findings — date range respects display timezone', () => {
