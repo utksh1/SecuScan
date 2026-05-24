@@ -203,7 +203,7 @@ describe('ToolConfig dynamic schema flow', () => {
     const targetInput = screen.getByPlaceholderText('https://secuscan.in')
 
     // Initially FIX_PARAMETERS because target is required and empty
-    expect(screen.getByRole('button', { name: /INITIATE_SCAN/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /INITIATE_SCAN/i })).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByText(/1 field.*attention/i)).toBeInTheDocument()
 
     // Type invalid data
@@ -217,7 +217,7 @@ describe('ToolConfig dynamic schema flow', () => {
     await user.type(targetInput, 'https://example.com')
     expect(screen.queryByText(/Must be a valid URL/i)).not.toBeInTheDocument()
     expect(targetInput).toHaveAttribute('aria-invalid', 'false')
-    expect(screen.getByRole('button', { name: /INITIATE_SCAN/i })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /INITIATE_SCAN/i })).toHaveAttribute('aria-disabled', 'false')
   })
 
   it('focuses the first invalid field when scan start is attempted', async () => {
