@@ -181,10 +181,6 @@ export function isWithinDateRange(dateStr: string, range: DateRange): boolean {
   const d = parseDateSafe(dateStr)
   if (!d) return false
   const msMap = { '24h': 86400000, '7d': 604800000, '30d': 2592000000 }
-<<<<<<< HEAD
   const diff = Date.now() - d.getTime()
   return diff >= 0 && diff <= msMap[range]
-=======
-  return Date.now() - d.getTime() <= msMap[range]
->>>>>>> f04c199 (feat(reports): add status and date range filters (#29))
 }
