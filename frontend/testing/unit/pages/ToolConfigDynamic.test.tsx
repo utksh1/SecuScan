@@ -203,14 +203,14 @@ describe('ToolConfig dynamic schema flow', () => {
     const targetInput = screen.getByPlaceholderText('https://secuscan.in')
 
     // Initially FIX_PARAMETERS because target is required and empty
-    expect(screen.getByText(/FIX_PARAMETERS/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /FIX_PARAMETERS/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /INITIATE_SCAN/i })).toBeDisabled()
+    expect(screen.getByText(/1 field.*attention/i)).toBeInTheDocument()
 
     // Type invalid data
     await user.type(targetInput, 'not-a-url')
     expect(screen.getByText(/Must be a valid URL/i)).toBeInTheDocument()
     expect(targetInput).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByRole('button', { name: /FIX_PARAMETERS/i })).toBeDisabled()
+    expect(screen.getByText(/1 field.*attention/i)).toBeInTheDocument()
 
     // Clear and type valid data
     await user.clear(targetInput)

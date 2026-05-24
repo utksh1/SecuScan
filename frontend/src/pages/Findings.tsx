@@ -294,6 +294,29 @@ export default function Findings() {
     [enrichedFindings, filteredFindings, countsBySeverity],
   )
 
+  // Derives a flat list of active filter chips from non-default filter state.
+  const activeFilters = useMemo(() => {
+    const chips: { key: string; label: string }[] = []
+    if (searchQuery.trim())      chips.push({ key: 'search',  label: `Search: "${searchQuery.trim()}"` })
+    if (filterTarget !== 'all')  chips.push({ key: 'target',  label: `Target: ${filterTarget}` })
+    if (filterScanner !== 'all') chips.push({ key: 'scanner', label: `Scanner: ${filterScanner}` })
+    if (sortMode !== 'severity') chips.push({ key: 'sort',    label: `Sort: ${sortMode}` })
+    if (dateFrom)                chips.push({ key: 'from',    label: `From: ${dateFrom}` })
+    if (dateTo)                  chips.push({ key: 'to',      label: `To: ${dateTo}` })
+    return chips
+  }, [searchQuery, filterTarget, filterScanner, sortMode, dateFrom, dateTo])
+
+
+  function resetAllFilters() {
+    setFilterSeverity('all')
+    setFilterTarget('all')
+    setFilterScanner('all')
+    setSortMode('severity')
+    setDateFrom('')
+    setDateTo('')
+    setSearchQuery('')
+  }
+
   function updateFindingStatus(id: string, status: FindingStatus) {
     setReviewState((current) => ({ ...current, [id]: status }))
   }
@@ -376,7 +399,7 @@ export default function Findings() {
               </div>
             ) : null}
 
-            <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-silver-bright' : 'text-silver/30'}`}>
+            <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-silver-bright' : 'text-silver/30'}`} aria-hidden="true">
               east
             </span>
           </div>
