@@ -11,7 +11,10 @@ vi.mock('../../../src/api', () => ({
   API_BASE: 'http://127.0.0.1:8000',
 }))
 
-const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+let openSpy: any;
+beforeAll(() => {
+  openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
+})
 
 // Fixed base time so date-range tests are deterministic
 const BASE_NOW = new Date('2026-05-14T12:00:00Z').getTime()
