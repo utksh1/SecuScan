@@ -2,6 +2,7 @@ import React from 'react'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { vi, describe, it, expect } from 'vitest'
+import userEvent from '@testing-library/user-event'
 import Reports from '../../../src/pages/Reports'
 import { getReports, getDashboardSummary } from '../../../src/api'
 import { isWithinDateRange } from '../../../src/utils/date'
@@ -139,6 +140,7 @@ describe('Reports — export buttons on a ready report', () => {
   })
 
   it('entry count updates correctly when filters are applied', async () => {
+    const user = userEvent.setup()
     renderReports()
     await user.click(await screen.findByRole('button', { name: /^pdf$/i }))
     expect(openSpy).toHaveBeenCalledWith(
@@ -154,6 +156,7 @@ describe('Reports — export buttons on a ready report', () => {
   })
 
   it('export buttons remain functional on filtered reports', async () => {
+    const user = userEvent.setup()
     const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
     renderReports()
     await user.click(await screen.findByRole('button', { name: /^csv$/i }))
