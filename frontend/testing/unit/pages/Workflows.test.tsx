@@ -142,7 +142,7 @@ describe('Workflows — toggle action', () => {
 describe('Workflows — delete action', () => {
   beforeEach(() => {
     vi.mocked(getWorkflows).mockResolvedValue([mockWorkflow])
-    vi.mocked(deleteWorkflow).mockResolvedValue({ deleted: true })
+    vi.mocked(deleteWorkflow).mockResolvedValue({ deleted: true } as any)
     vi.mocked(deleteWorkflow).mockClear()
   })
 

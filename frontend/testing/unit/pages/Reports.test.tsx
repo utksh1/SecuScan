@@ -94,7 +94,7 @@ describe('Reports — error state', () => {
 describe('Reports — empty state', () => {
   beforeEach(() => {
     vi.mocked(getReports).mockResolvedValue({ reports: [] })
-    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary as any)
   })
 
   it('shows Archive Isolated when there are no reports at all', async () => {
@@ -117,7 +117,7 @@ describe('Reports — empty state', () => {
 describe('Reports — export buttons on a ready report', () => {
   beforeEach(() => {
     vi.mocked(getReports).mockResolvedValue({ reports: [readyReport] })
-    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary as any)
     openSpy.mockClear()
   })
 
@@ -173,7 +173,7 @@ describe('Reports — export buttons on a ready report', () => {
 describe('Reports — export buttons on a generating report', () => {
   beforeEach(() => {
     vi.mocked(getReports).mockResolvedValue({ reports: [generatingReport] })
-    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary as any)
     openSpy.mockClear()
   })
 
@@ -197,7 +197,7 @@ describe('Reports — export buttons on a generating report', () => {
 describe('Reports — export buttons on a failed report', () => {
   beforeEach(() => {
     vi.mocked(getReports).mockResolvedValue({ reports: [failedReport] })
-    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary as any)
     openSpy.mockClear()
   })
 
@@ -215,7 +215,7 @@ describe('Reports — export buttons on a failed report', () => {
 describe('Reports — type filter', () => {
   beforeEach(() => {
     vi.mocked(getReports).mockResolvedValue({ reports: [readyReport, generatingReport] })
-    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary as any)
   })
 
   it('shows all reports when All filter is selected', async () => {
@@ -241,7 +241,7 @@ describe('Reports — type filter', () => {
 describe('Reports — status filter', () => {
   beforeEach(() => {
     vi.mocked(getReports).mockResolvedValue({ reports: [readyReport, generatingReport, failedReport] })
-    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary as any)
   })
 
   it('shows only ready reports when status filter is Ready', async () => {
@@ -348,7 +348,7 @@ describe('isWithinDateRange', () => {
 describe('Reports — combined filters', () => {
   beforeEach(() => {
     vi.mocked(getReports).mockResolvedValue({ reports: [readyReport, generatingReport, failedReport] })
-    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary as any)
   })
 
   it('type + status filter works correctly', async () => {
