@@ -64,7 +64,7 @@ export default function Assets() {
   const dragNodeId = useRef<string | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
   const animationFrameId = useRef<number | null>(null)
-  
+
   // Highlight state
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null)
 
@@ -104,7 +104,7 @@ export default function Assets() {
   useEffect(() => {
     loadAssetsData()
     loadGraphData()
-    
+
     const params = new URLSearchParams(window.location.search)
     const selected = params.get('selected')
     if (selected) {
@@ -195,7 +195,7 @@ export default function Assets() {
     const height = 500
     const centerX = width / 2
     const centerY = height / 2
-    
+
     // Physics constants
     const kRepulsion = 1200
     const kAttraction = 0.04
@@ -220,7 +220,7 @@ export default function Assets() {
               const force = kRepulsion / (dist * dist)
               const fx = (dx / dist) * force
               const fy = (dy / dist) * force
-              
+
               if (n1.id !== dragNodeId.current) {
                 n1.vx -= fx
                 n1.vy -= fy
@@ -338,7 +338,7 @@ export default function Assets() {
     } else if (dragNodeId.current) {
       if (!svgRef.current) return
       const rect = svgRef.current.getBoundingClientRect()
-      
+
       // Calculate coordinates relative to SVG local viewport
       const x = ((e.clientX - rect.left) / rect.width) * 800
       const y = ((e.clientY - rect.top) / rect.height) * 500
@@ -379,7 +379,7 @@ export default function Assets() {
   return (
     <div className="min-h-screen bg-charcoal-dark text-silver px-4 py-6 md:px-8 md:py-10">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8">
-        
+
         {/* Header */}
         <header className="border-b-4 border-silver-bright/10 pb-8">
           <div className="mb-4 inline-block bg-rag-blue px-4 py-1 text-xs font-black uppercase tracking-widest text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -423,14 +423,14 @@ export default function Assets() {
 
         {/* Content Panel split into main view and sidebar details */}
         <div className="grid gap-8 xl:grid-cols-[minmax(0,1.2fr)_420px]">
-          
+
           {/* Main Workspace Area */}
           <main className="space-y-6">
-            
+
             {activeTab === 'list' ? (
               /* --- INVENTORY LIST VIEW --- */
               <div className="space-y-6">
-                
+
                 {/* Search & Filters */}
                 <div className="border-2 border-black bg-charcoal p-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="relative flex-1">
@@ -447,7 +447,7 @@ export default function Assets() {
                       </button>
                     )}
                   </div>
-                  
+
                   <div className="flex gap-2">
                     <button
                       onClick={() => setFilterType('all')}
@@ -522,8 +522,8 @@ export default function Assets() {
                                 </td>
                                 <td className="px-6 py-4">
                                   <span className={`text-[9px] font-black px-2 py-0.5 border ${
-                                    isHost 
-                                      ? 'text-rag-blue border-rag-blue/20 bg-rag-blue/5' 
+                                    isHost
+                                      ? 'text-rag-blue border-rag-blue/20 bg-rag-blue/5'
                                       : 'text-purple-400 border-purple-500/20 bg-purple-500/5'
                                   }`}>
                                     {asset.type.toUpperCase()}
@@ -569,7 +569,7 @@ export default function Assets() {
                   <span className="text-xs font-mono text-silver/45 uppercase tracking-widest">
                     Interactive topology map // Drag nodes to position // Zoom: {Math.round(zoom * 100)}%
                   </span>
-                  
+
                   <div className="flex gap-2">
                     <button
                       onClick={() => setZoom((z) => Math.min(2.5, z + 0.1))}
@@ -595,7 +595,7 @@ export default function Assets() {
                   </div>
                 </div>
 
-                <div 
+                <div
                   className="border-2 border-black bg-charcoal-darker relative shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] overflow-hidden cursor-grab active:cursor-grabbing select-none"
                   style={{ height: '560px' }}
                   onMouseDown={handleMouseDown}
@@ -626,16 +626,16 @@ export default function Assets() {
 
                     {/* Scale and pan group */}
                     <g transform={`translate(${400 + pan.x}, ${250 + pan.y}) scale(${zoom}) translate(-400, -250)`}>
-                      
+
                       {/* Connection Lines (Links) */}
                       {graphData.links.map((link, idx) => {
                         const sourceNode = graphData.nodes.find((n) => n.id === link.source)
                         const targetNode = graphData.nodes.find((n) => n.id === link.target)
                         if (!sourceNode || !targetNode) return null
 
-                        const isHighlighted = hoveredNodeId === null || 
+                        const isHighlighted = hoveredNodeId === null ||
                           (hoveredNodeId === link.source || hoveredNodeId === link.target)
-                        
+
                         return (
                           <line
                             key={`link-${idx}`}
@@ -648,7 +648,7 @@ export default function Assets() {
                             strokeDasharray={link.type === 'has_service' ? 'none' : '4,4'}
                             opacity={isHighlighted ? 0.75 : 0.2}
                             markerEnd="url(#arrow)"
-                            transition="stroke 0.2s"
+                            style={{ transition: 'stroke 0.2s, stroke-width 0.2s, opacity 0.2s' }}
                           />
                         )
                       })}
@@ -728,7 +728,7 @@ export default function Assets() {
           {/* Details Sidebar */}
           <aside className="xl:sticky xl:top-32 xl:self-start">
             <div className="border-4 border-black bg-charcoal shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] min-h-[480px]">
-              
+
               <AnimatePresence mode="wait">
                 {selectedAssetId ? (
                   detailsLoading ? (
@@ -753,7 +753,7 @@ export default function Assets() {
                       <div className="border-b border-silver-bright/8 pb-4 space-y-2">
                         <div className="flex items-center justify-between">
                           <span className={`text-[9px] font-black px-2 py-0.5 uppercase tracking-widest border ${
-                            selectedAssetDetails.type === 'host' 
+                            selectedAssetDetails.type === 'host'
                               ? 'text-rag-blue border-rag-blue/20 bg-rag-blue/5'
                               : selectedAssetDetails.type === 'service'
                                 ? 'text-purple-400 border-purple-500/20 bg-purple-500/5'
@@ -761,7 +761,7 @@ export default function Assets() {
                           }`}>
                             {selectedAssetDetails.type?.toUpperCase()}
                           </span>
-                          
+
                           <button
                             onClick={() => setSelectedAssetId(null)}
                             className="text-silver/40 hover:text-white text-xs uppercase tracking-widest font-mono"
@@ -785,7 +785,7 @@ export default function Assets() {
                               {selectedAssetDetails.name}
                             </p>
                           </div>
-                          
+
                           <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
                             <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Host Reference</p>
                             <p className="mt-2 text-xs font-mono uppercase tracking-[0.14em] text-silver-bright">
@@ -823,7 +823,7 @@ export default function Assets() {
                                 <p className="text-xs font-mono uppercase tracking-wide text-silver/50 mb-2">Category: {selectedAssetDetails.category}</p>
                                 <p className="text-xs leading-relaxed text-silver/80">{selectedAssetDetails.description}</p>
                               </div>
-                              
+
                               <Link
                                 to={routes.findings}
                                 className="block w-full py-2.5 bg-silver-bright text-black font-black uppercase text-[10px] tracking-widest text-center shadow-[4px_4px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all"
@@ -889,8 +889,8 @@ export default function Assets() {
                                       {f.title}
                                     </span>
                                     <span className={`text-[8px] font-black px-1.5 py-0.5 border ${
-                                      f.severity === 'critical' || f.severity === 'high' 
-                                        ? 'text-rag-red border-rag-red/25 bg-rag-red/10' 
+                                      f.severity === 'critical' || f.severity === 'high'
+                                        ? 'text-rag-red border-rag-red/25 bg-rag-red/10'
                                         : f.severity === 'medium'
                                           ? 'text-rag-amber border-rag-amber/25 bg-rag-amber/10'
                                           : 'text-silver border-silver/20 bg-silver/5'

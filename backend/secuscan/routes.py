@@ -767,7 +767,7 @@ async def delete_task_records(task_ids: List[str]):
     # Cleanup orphaned assets
     await db.execute(
         f"""
-        DELETE FROM assets 
+        DELETE FROM assets
         WHERE id NOT IN (SELECT asset_id FROM asset_findings)
           AND id NOT IN (SELECT asset_id FROM asset_tasks)
           AND id NOT IN (SELECT asset_id FROM asset_reports)
@@ -1159,7 +1159,7 @@ async def get_assets():
         ORDER BY a.type ASC, a.name ASC
         """
     )
-    
+
     assets = []
     for row in rows:
         metadata = {}
@@ -1168,11 +1168,11 @@ async def get_assets():
                 metadata = json.loads(row["metadata_json"])
             except json.JSONDecodeError:
                 pass
-        
+
         findings_count = (await db.fetchone("SELECT COUNT(*) as count FROM asset_findings WHERE asset_id = ?", (row["id"],)))["count"]
         tasks_count = (await db.fetchone("SELECT COUNT(*) as count FROM asset_tasks WHERE asset_id = ?", (row["id"],)))["count"]
         reports_count = (await db.fetchone("SELECT COUNT(*) as count FROM asset_reports WHERE asset_id = ?", (row["id"],)))["count"]
-        
+
         assets.append({
             "id": row["id"],
             "type": row["type"],
@@ -1186,7 +1186,7 @@ async def get_assets():
             "tasks_count": tasks_count,
             "reports_count": reports_count
         })
-        
+
     return {"assets": assets}
 
 
@@ -1194,11 +1194,11 @@ async def get_assets():
 async def get_assets_graph():
     """Return a graph representing the connections between hosts, services, findings, tasks, and reports."""
     db = await get_db()
-    
+
     nodes = []
     links = []
     seen_nodes = set()
-    
+
     # 1. Fetch assets (hosts and services)
     assets = await db.fetchall(
         """
@@ -1217,14 +1217,14 @@ async def get_assets_graph():
             }
         })
         seen_nodes.add(asset["id"])
-        
+
         if asset["host_id"]:
             links.append({
                 "source": asset["host_id"],
                 "target": asset["id"],
                 "type": "has_service"
             })
-            
+
     # 2. Fetch findings and their links to assets
     findings = await db.fetchall(
         """
@@ -1246,13 +1246,13 @@ async def get_assets_graph():
                 }
             })
             seen_nodes.add(f_id)
-        
+
         links.append({
             "source": f["asset_id"],
             "target": f_id,
             "type": "has_finding"
         })
-        
+
         # Link task to finding if task node exists
         if f["task_id"]:
             links.append({
@@ -1260,7 +1260,7 @@ async def get_assets_graph():
                 "target": f_id,
                 "type": "produced_finding"
             })
-        
+
     # 3. Fetch tasks and their links to assets
     tasks = await db.fetchall(
         """
@@ -1281,13 +1281,13 @@ async def get_assets_graph():
                 }
             })
             seen_nodes.add(t_id)
-            
+
         links.append({
             "source": t["asset_id"],
             "target": t_id,
             "type": "associated_task"
         })
-        
+
     # 4. Fetch reports and their links to assets
     reports = await db.fetchall(
         """
@@ -1306,13 +1306,13 @@ async def get_assets_graph():
                 "details": {}
             })
             seen_nodes.add(r_id)
-            
+
         links.append({
             "source": r["asset_id"],
             "target": r_id,
             "type": "associated_report"
         })
-        
+
         # Link task to report if task node exists
         if r["task_id"]:
             links.append({
@@ -1320,7 +1320,7 @@ async def get_assets_graph():
                 "target": r_id,
                 "type": "produced_report"
             })
-        
+
     return {"nodes": nodes, "links": links}
 
 
@@ -1328,7 +1328,7 @@ async def get_assets_graph():
 async def get_asset_details(asset_id: str):
     """Get detailed information for a specific asset and its relationships."""
     db = await get_db()
-    
+
     asset = await db.fetchone(
         """
         SELECT a.id, a.type, a.name, a.host_id, h.name as host_name, a.metadata_json, a.created_at, a.updated_at
@@ -1340,14 +1340,14 @@ async def get_asset_details(asset_id: str):
     )
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
-        
+
     metadata = {}
     if asset["metadata_json"]:
         try:
             metadata = json.loads(asset["metadata_json"])
         except json.JSONDecodeError:
             pass
-            
+
     findings = await db.fetchall(
         """
         SELECT f.id, f.title, f.severity, f.category, f.discovered_at
@@ -1357,7 +1357,7 @@ async def get_asset_details(asset_id: str):
         """,
         (asset_id,)
     )
-    
+
     tasks = await db.fetchall(
         """
         SELECT t.id, t.tool_name, t.status, t.created_at
@@ -1367,7 +1367,7 @@ async def get_asset_details(asset_id: str):
         """,
         (asset_id,)
     )
-    
+
     reports = await db.fetchall(
         """
         SELECT r.id, r.name, r.type, r.generated_at, r.status
@@ -1377,7 +1377,7 @@ async def get_asset_details(asset_id: str):
         """,
         (asset_id,)
     )
-    
+
     return {
         "id": asset["id"],
         "type": asset["type"],
