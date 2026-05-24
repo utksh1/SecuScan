@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getAssets, getAssetsGraph, getAssetDetails, getFindingDetails } from '../api'
 import { routePath, routes } from '../routes'
@@ -36,13 +36,6 @@ interface GraphLink {
   type: string
 }
 
-const severityConfig: Record<string, string> = {
-  critical: 'bg-rag-red text-black border-rag-red/30',
-  high: 'bg-rag-amber text-black border-rag-amber/30',
-  medium: 'bg-rag-blue text-black border-rag-blue/30',
-  low: 'bg-charcoal-dark text-silver-bright border border-silver-bright/15',
-  info: 'bg-charcoal-dark text-silver border border-silver/15',
-}
 
 export default function Assets() {
   const [assets, setAssets] = useState<Asset[]>([])
@@ -54,7 +47,7 @@ export default function Assets() {
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null)
   const [selectedAssetDetails, setSelectedAssetDetails] = useState<any>(null)
   const [detailsLoading, setDetailsLoading] = useState(false)
-  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   // Graph state
   const [zoom, setZoom] = useState(1.0)
@@ -114,21 +107,12 @@ export default function Assets() {
   }, [])
 
   useEffect(() => {
-    const handleLocationChange = () => {
-      const params = new URLSearchParams(window.location.search)
-      const selected = params.get('selected')
-      if (selected) {
-        setSelectedAssetId(selected)
-        setActiveTab('list')
-      }
+    const selected = searchParams.get('selected')
+    if (selected) {
+      setSelectedAssetId(selected)
+      setActiveTab('list')
     }
-    window.addEventListener('popstate', handleLocationChange)
-    const interval = setInterval(handleLocationChange, 500)
-    return () => {
-      window.removeEventListener('popstate', handleLocationChange)
-      clearInterval(interval)
-    }
-  }, [])
+  }, [searchParams])
 
   // Poll for updates in graph or lists
   useEffect(() => {

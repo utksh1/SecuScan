@@ -78,6 +78,7 @@ CRON_TO_SECONDS = {
 SECONDS_TO_CRON = {v: k for k, v in CRON_TO_SECONDS.items()}
 
 def cron_to_seconds(cron_str: str) -> int:
+    from fastapi import HTTPException
     cron_str = cron_str.strip()
     if cron_str.isdigit():
         return int(cron_str)
@@ -89,7 +90,12 @@ def cron_to_seconds(cron_str: str) -> int:
             return minutes * 60
         except ValueError:
             pass
-    return 3600
+    raise HTTPException(
+        status_code=400,
+        detail=f"Unrecognized schedule_interval '{cron_str}'. "
+               "Use a numeric seconds value, a cron expression like '*/5 * * * *', "
+               "or one of the known shortcuts (e.g. '0 * * * *', '0 0 * * *')."
+    )
 
 def seconds_to_cron(seconds: int) -> str:
     if seconds in SECONDS_TO_CRON:
