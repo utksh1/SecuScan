@@ -24,7 +24,7 @@ vi.mock('../../../src/hooks/useSavedViews', async (importOriginal) => {
   }
 })
 
-// ── Fixtures ──────────────────────────────────────────────────────────────────
+// â”€â”€ Fixtures â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const criticalFinding = {
   id: 'finding-crit-1',
@@ -67,7 +67,7 @@ const mediumFinding = {
 
 const allFindings = [criticalFinding, highFinding, mediumFinding]
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function renderFindings() {
   return render(
@@ -93,9 +93,9 @@ function getVisibleTitles() {
     .filter(Boolean)
 }
 
-// ── Loading ───────────────────────────────────────────────────────────────────
+// â”€â”€ Loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('Findings — loading state', () => {
+describe('Findings â€” loading state', () => {
   it('shows loading text while fetching', () => {
     vi.mocked(getFindings).mockReturnValue(new Promise(() => {}))
     renderFindings()
@@ -103,9 +103,9 @@ describe('Findings — loading state', () => {
   })
 })
 
-// ── Severity filter ───────────────────────────────────────────────────────────
+// â”€â”€ Severity filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('Findings — severity filtering', () => {
+describe('Findings â€” severity filtering', () => {
   beforeEach(() => {
     vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
   })
@@ -134,9 +134,9 @@ describe('Findings — severity filtering', () => {
   })
 })
 
-// ── Sort options ──────────────────────────────────────────────────────────────
+// â”€â”€ Sort options â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('Findings — sorting', () => {
+describe('Findings â€” sorting', () => {
   beforeEach(() => {
     vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
   })
@@ -204,9 +204,9 @@ describe('Findings — sorting', () => {
   })
 })
 
-// ── Target filter ─────────────────────────────────────────────────────────────
+// â”€â”€ Target filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('Findings — target filter', () => {
+describe('Findings â€” target filter', () => {
   beforeEach(() => {
     vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
   })
@@ -238,9 +238,9 @@ describe('Findings — target filter', () => {
   })
 })
 
-// ── Scanner / tool filter ─────────────────────────────────────────────────────
+// â”€â”€ Scanner / tool filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('Findings — scanner filter', () => {
+describe('Findings â€” scanner filter', () => {
   beforeEach(() => {
     vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
   })
@@ -274,9 +274,9 @@ describe('Findings — scanner filter', () => {
   })
 })
 
-// ── Date range filter ─────────────────────────────────────────────────────────
+// â”€â”€ Date range filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('Findings — date range filter', () => {
+describe('Findings â€” date range filter', () => {
   beforeEach(() => {
     vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
   })
@@ -331,9 +331,9 @@ describe('Findings — date range filter', () => {
   })
 })
 
-// ── Reset filters ─────────────────────────────────────────────────────────────
+// â”€â”€ Reset filters â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('Findings — reset filters', () => {
+describe('Findings â€” reset filters', () => {
   beforeEach(() => {
     vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
   })
@@ -361,8 +361,8 @@ describe('Findings — reset filters', () => {
 
 
 
-// ── Active filter summary ─────────────────────────────────────────────────────
-describe('Findings — active filter summary', () => {
+// â”€â”€ Active filter summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+describe('Findings â€” active filter summary', () => {
   beforeEach(() => {
     vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
   })
@@ -404,9 +404,9 @@ describe('Findings — active filter summary', () => {
     expect(screen.getAllByText('Missing Security Headers').length).toBeGreaterThanOrEqual(1)
   })
 })
-// ── Timezone boundary regression ──────────────────────────────────────────────
+// â”€â”€ Timezone boundary regression â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('Findings — date range respects display timezone', () => {
+describe('Findings â€” date range respects display timezone', () => {
   const tzBoundaryFinding = {
     id: 'finding-tz-edge',
     severity: 'high',
@@ -460,4 +460,3 @@ describe('Findings — date range respects display timezone', () => {
     })
   })
 })
-
