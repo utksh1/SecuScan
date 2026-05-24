@@ -16,10 +16,6 @@ beforeAll(() => {
   openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
 })
 
-beforeEach(() => {
-  localStorage.clear()
-})
-
 // Fixed base time so date-range tests are deterministic
 const BASE_NOW = new Date('2026-05-14T12:00:00Z').getTime()
 
@@ -104,9 +100,9 @@ describe('Reports — empty state', () => {
     vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
   })
 
-  it('shows Retrieving Archive Data when there are no reports at all', async () => {
+  it('shows Archive Isolated when there are no reports at all', async () => {
     renderReports()
-    expect(await screen.findByText(/Retrieving Archive Data/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Archive Isolated/i)).toBeInTheDocument()
   })
 
   it('shows Archive Isolated when filter returns no matching reports', async () => {
