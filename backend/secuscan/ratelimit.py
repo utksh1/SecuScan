@@ -4,8 +4,10 @@ Rate limiting for task execution
 
 from collections import defaultdict
 from datetime import datetime, timedelta
+from dataclasses import dataclass
 from typing import Tuple, Dict, List
 import asyncio
+import time
 
 
 class RateLimiter:
@@ -95,6 +97,80 @@ class ConcurrentTaskLimiter:
             return self.max_concurrent - len(self.running_tasks)
 
 
+@dataclass(frozen=True)
+class EndpointRateLimitDecision:
+    allowed: bool
+    limit: int
+    remaining: int
+    reset: int
+    retry_after: int
+
+
+class EndpointRateLimiter:
+    """Fixed-window limiter for endpoint and client-identity buckets."""
+
+    def __init__(self):
+        self.buckets: Dict[Tuple[str, str], Tuple[int, float]] = {}
+        self.lock = asyncio.Lock()
+
+    async def check(
+        self,
+        bucket: str,
+        identity: str,
+        limit: int,
+        window_seconds: int,
+    ) -> EndpointRateLimitDecision:
+        async with self.lock:
+            now = time.time()
+            window = max(1, int(window_seconds))
+            safe_limit = max(1, int(limit))
+            key = (bucket, identity)
+            count, reset_at = self.buckets.get(key, (0, now + window))
+
+            if now >= reset_at:
+                count = 0
+                reset_at = now + window
+
+            reset = int(reset_at)
+            retry_after = max(1, int(reset_at - now))
+
+            if count >= safe_limit:
+                return EndpointRateLimitDecision(
+                    allowed=False,
+                    limit=safe_limit,
+                    remaining=0,
+                    reset=reset,
+                    retry_after=retry_after,
+                )
+
+            count += 1
+            self.buckets[key] = (count, reset_at)
+            return EndpointRateLimitDecision(
+                allowed=True,
+                limit=safe_limit,
+                remaining=max(0, safe_limit - count),
+                reset=reset,
+                retry_after=retry_after,
+            )
+
+    async def reset(self, bucket: str | None = None, identity: str | None = None):
+        """Reset endpoint buckets, optionally scoped by bucket and identity."""
+        async with self.lock:
+            if bucket is None and identity is None:
+                self.buckets.clear()
+                return
+
+            keys_to_delete = [
+                key
+                for key in self.buckets
+                if (bucket is None or key[0] == bucket)
+                and (identity is None or key[1] == identity)
+            ]
+            for key in keys_to_delete:
+                del self.buckets[key]
+
+
 # Global instances
 rate_limiter = RateLimiter()
 concurrent_limiter = ConcurrentTaskLimiter()
+endpoint_rate_limiter = EndpointRateLimiter()

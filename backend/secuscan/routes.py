@@ -71,7 +71,7 @@ from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager, init_plugins
 from .executor import executor
-from .ratelimit import rate_limiter, concurrent_limiter
+from .ratelimit import rate_limiter, concurrent_limiter, endpoint_rate_limiter
 from .validation import validate_target, validate_task_start_payload
 from .reporting import reporting
 from .vault import VaultCrypto
@@ -80,6 +80,67 @@ from .workflows import scheduler
 from sse_starlette.sse import EventSourceResponse
 
 router = APIRouter(prefix="/api/v1")
+
+
+ENDPOINT_RATE_LIMITS = {
+    "task_start": lambda: settings.task_start_rate_limit,
+    "vault": lambda: settings.vault_rate_limit,
+    "report_download": lambda: settings.report_download_rate_limit,
+    "read_heavy": lambda: settings.read_heavy_rate_limit,
+}
+
+
+def _client_identity(request: Request) -> str:
+    api_key = request.headers.get("x-api-key")
+    if api_key:
+        return f"api-key:{api_key}"
+
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        token = auth_header[7:].strip()
+        if token:
+            return f"bearer:{token}"
+
+    host = request.client.host if request.client else "unknown"
+    return f"ip:{host}"
+
+
+def _apply_rate_limit_headers(response: Response, decision) -> None:
+    response.headers["X-RateLimit-Limit"] = str(decision.limit)
+    response.headers["X-RateLimit-Remaining"] = str(decision.remaining)
+    response.headers["X-RateLimit-Reset"] = str(decision.reset)
+
+
+async def enforce_endpoint_rate_limit(
+    request: Request,
+    response: Response,
+    bucket: str,
+) -> None:
+    limit = ENDPOINT_RATE_LIMITS[bucket]()
+    decision = await endpoint_rate_limiter.check(
+        bucket=bucket,
+        identity=_client_identity(request),
+        limit=limit,
+        window_seconds=settings.endpoint_rate_limit_window_seconds,
+    )
+    _apply_rate_limit_headers(response, decision)
+
+    if not decision.allowed:
+        headers = {
+            "Retry-After": str(decision.retry_after),
+            "X-RateLimit-Limit": str(decision.limit),
+            "X-RateLimit-Remaining": str(decision.remaining),
+            "X-RateLimit-Reset": str(decision.reset),
+        }
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "rate_limit_exceeded",
+                "bucket": bucket,
+                "message": "Too many requests for this endpoint bucket.",
+            },
+            headers=headers,
+        )
 
 
 async def get_or_set_cached(key: str, builder):
@@ -195,10 +256,13 @@ async def start_task(
     request: TaskCreateRequest,
     background_tasks: BackgroundTasks,
     raw_request: Request,
+    response: Response,
 ):
     """
     Start a new scan task.
     """
+    await enforce_endpoint_rate_limit(raw_request, response, "task_start")
+
     # ── Payload size / field-length guard ─────────────────────────────────
     raw_body = await raw_request.body()
     ok, status_code, error_msg = validate_task_start_payload(raw_body, request.inputs)
@@ -342,8 +406,9 @@ async def stream_task_output(task_id: str):
     return EventSourceResponse(event_generator())
 
 @router.get("/task/{task_id}/report/csv")
-async def download_csv_report(task_id: str):
+async def download_csv_report(task_id: str, request: Request, response: Response):
     """Download task results as a CSV report."""
+    await enforce_endpoint_rate_limit(request, response, "report_download")
     db = await get_db()
     task_row = await db.fetchone(
         "SELECT id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
@@ -377,8 +442,9 @@ async def download_csv_report(task_id: str):
     )
 
 @router.get("/task/{task_id}/report/html")
-async def download_html_report(task_id: str):
+async def download_html_report(task_id: str, request: Request, response: Response):
     """Download task results as an HTML report."""
+    await enforce_endpoint_rate_limit(request, response, "report_download")
     db = await get_db()
     task_row = await db.fetchone(
         "SELECT id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
@@ -412,8 +478,9 @@ async def download_html_report(task_id: str):
     )
 
 @router.get("/task/{task_id}/report/pdf")
-async def download_pdf_report(task_id: str):
+async def download_pdf_report(task_id: str, request: Request, response: Response):
     """Download task results as a PDF report."""
+    await enforce_endpoint_rate_limit(request, response, "report_download")
     db = await get_db()
     task_row = await db.fetchone(
         "SELECT id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
@@ -448,8 +515,9 @@ async def download_pdf_report(task_id: str):
 
 
 @router.get("/task/{task_id}/report/sarif")
-async def download_sarif_report(task_id: str):
+async def download_sarif_report(task_id: str, request: Request, response: Response):
     """Download task results as a SARIF report."""
+    await enforce_endpoint_rate_limit(request, response, "report_download")
     db = await get_db()
     task_row = await db.fetchone(
         "SELECT id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
@@ -585,8 +653,9 @@ async def cancel_task(task_id: str):
 
 
 @router.get("/dashboard/summary")
-async def get_dashboard_summary():
+async def get_dashboard_summary(request: Request, response: Response):
     """Return aggregate dashboard data from the primary store, cached in Redis."""
+    await enforce_endpoint_rate_limit(request, response, "read_heavy")
 
     async def build():
         db = await get_db()
@@ -650,8 +719,9 @@ async def get_dashboard_summary():
 
 
 @router.get("/findings")
-async def get_findings():
+async def get_findings(request: Request, response: Response):
     """Return vulnerability findings."""
+    await enforce_endpoint_rate_limit(request, response, "read_heavy")
 
     async def build():
         db = await get_db()
@@ -662,8 +732,9 @@ async def get_findings():
 
 
 @router.get("/reports")
-async def get_reports():
+async def get_reports(request: Request, response: Response):
     """Return generated reports."""
+    await enforce_endpoint_rate_limit(request, response, "read_heavy")
 
     async def build():
         db = await get_db()
@@ -675,12 +746,15 @@ async def get_reports():
 
 @router.get("/tasks")
 async def list_tasks(
+    request: Request,
+    response: Response,
     page: int = 1,
     per_page: int = 25,
     plugin_id: Optional[str] = None,
     status: Optional[str] = None
 ):
     """List all tasks with pagination"""
+    await enforce_endpoint_rate_limit(request, response, "read_heavy")
     db = await get_db()
 
     # Build query
@@ -879,7 +953,8 @@ async def get_settings():
 
 
 @router.get("/vault")
-async def list_vault_secrets():
+async def list_vault_secrets(request: Request, response: Response):
+    await enforce_endpoint_rate_limit(request, response, "vault")
     db = await get_db()
     rows = await db.fetchall(
         "SELECT id, name, created_at, updated_at FROM credential_vault ORDER BY name ASC"
@@ -888,7 +963,8 @@ async def list_vault_secrets():
 
 
 @router.put("/vault/{name}")
-async def upsert_vault_secret(name: str, payload: Dict[str, str]):
+async def upsert_vault_secret(name: str, payload: Dict[str, str], request: Request, response: Response):
+    await enforce_endpoint_rate_limit(request, response, "vault")
     value = str(payload.get("value", ""))
     if not value:
         raise HTTPException(status_code=400, detail="Secret value is required")
@@ -913,7 +989,8 @@ async def upsert_vault_secret(name: str, payload: Dict[str, str]):
 
 
 @router.get("/vault/{name}")
-async def get_vault_secret(name: str):
+async def get_vault_secret(name: str, request: Request, response: Response):
+    await enforce_endpoint_rate_limit(request, response, "vault")
     db = await get_db()
     row = await db.fetchone("SELECT encrypted_value FROM credential_vault WHERE name = ?", (name,))
     if not row:
@@ -923,7 +1000,8 @@ async def get_vault_secret(name: str):
 
 
 @router.delete("/vault/{name}")
-async def delete_vault_secret(name: str):
+async def delete_vault_secret(name: str, request: Request, response: Response):
+    await enforce_endpoint_rate_limit(request, response, "vault")
     db = await get_db()
     await db.execute("DELETE FROM credential_vault WHERE name = ?", (name,))
     return {"name": name, "deleted": True}

@@ -60,6 +60,11 @@ class Settings(BaseSettings):
     max_concurrent_tasks: int = 3
     max_tasks_per_hour: int = 50
     max_requests_per_minute: int = 100
+    endpoint_rate_limit_window_seconds: int = 60
+    task_start_rate_limit: int = 20
+    vault_rate_limit: int = 30
+    report_download_rate_limit: int = 60
+    read_heavy_rate_limit: int = 120
     
     # Sandbox
     docker_enabled: bool = False

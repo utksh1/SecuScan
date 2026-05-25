@@ -14,7 +14,7 @@ from backend.secuscan import database as database_module
 from backend.secuscan.database import init_db
 from backend.secuscan.main import app
 from backend.secuscan.plugins import init_plugins
-from backend.secuscan.ratelimit import concurrent_limiter, rate_limiter
+from backend.secuscan.ratelimit import concurrent_limiter, endpoint_rate_limiter, rate_limiter
 
 
 @pytest.fixture(autouse=True)
@@ -43,6 +43,7 @@ def test_client(setup_test_environment):
 
     async def setup():
         await rate_limiter.reset()
+        await endpoint_rate_limiter.reset()
         async with concurrent_limiter.lock:
             concurrent_limiter.running_tasks.clear()
         await init_db(settings.database_path)
@@ -55,6 +56,7 @@ def test_client(setup_test_environment):
 
     async def teardown():
         await rate_limiter.reset()
+        await endpoint_rate_limiter.reset()
         async with concurrent_limiter.lock:
             concurrent_limiter.running_tasks.clear()
         if database_module.db:
