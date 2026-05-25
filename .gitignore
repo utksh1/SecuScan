@@ -94,6 +94,8 @@ node_modules/
 # Frontend builds
 frontend/dist/
 frontend/build/
+frontend/playwright-report/
+frontend/test-results/
 
 # Backend cache
 backend/__pycache__/
@@ -104,7 +106,3 @@ Thumbs.db
 backend/data/reports/*
 !backend/data/reports/.gitkeep
 
-# Frontend generated test artifacts (see CONTRIBUTING.md)
-frontend/playwright-report/
-frontend/test-results/
-frontend/.vite/
