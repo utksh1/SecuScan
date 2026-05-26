@@ -313,6 +313,20 @@ async def init_db(db_path: Optional[str] = None) -> Database:
     global db
     # Fallback to config path if not provided
     path = db_path or f"{settings.data_dir}/secuscan.db"
+
+    # Reuse an existing live connection for the same path.
+    if db is not None and db.db_path == path and db._connection is not None:
+        return db
+
+    # If a previous global connection exists for a different path (or stale
+    # state), close it before replacing to avoid leaking aiosqlite worker
+    # threads that can outlive test event loops.
+    if db is not None:
+        try:
+            await db.disconnect()
+        except Exception:
+            pass
+
     db_instance = Database(path)
     await db_instance.connect()
     db = db_instance
