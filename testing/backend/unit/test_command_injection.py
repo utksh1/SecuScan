@@ -190,8 +190,13 @@ class TestSchemaValidation:
         self._validate({"ports": ""})
 
     # Unknown fields are silently ignored
-    def test_unknown_field_ignored(self):
-        self._validate({"unknown_field": "--evil"})
+    def test_unknown_field_rejected(self):
+        with pytest.raises(ValueError, match="Unknown field"):
+            self._validate({"unknown_field": "--evil"})
+
+    def test_unknown_field_empty_value_rejected(self):
+        with pytest.raises(ValueError, match="Unknown field"):
+            self._validate({"not_in_schema": ""})
 
 
 # ---------------------------------------------------------------------------
@@ -207,13 +212,23 @@ class TestPortScannerResolveScanType:
         ("-sS", "S"),
         ("-sU", "U"),
         ("sT", "T"),
-        ("-sV", "T"),   # -sV is not a scan-type letter; defaults to T
-        ("V", "T"),     # V is not a valid scan-type
         (None, "T"),
         ("", "T"),
     ])
-    def test_resolve_scan_type(self, raw, expected):
+    def test_resolve_scan_type_valid(self, raw, expected):
         assert PortScanner._resolve_scan_type(raw) == expected
+
+    @pytest.mark.parametrize("raw", [
+        "-sV",           # -sV is a version-detection flag, not a scan-type
+        "V",             # V is not a valid scan-type letter
+        "X",
+        "TCP",
+        "--script=evil",
+        "T; rm -rf /",
+    ])
+    def test_resolve_scan_type_invalid_raises(self, raw):
+        with pytest.raises(ValueError, match="Invalid scan_type"):
+            PortScanner._resolve_scan_type(raw)
 
 
 class TestPortScannerResolvePorts:
@@ -225,11 +240,25 @@ class TestPortScannerResolvePorts:
         ("all", "1-65535"),
         ("22,80,443", "22,80,443"),
         ("1-1000", "1-1000"),
-        ("--script=evil.nse", ""),   # injection attempt → empty (rejected by schema validation upstream)
-        ("--top-ports 100", ""),     # flag injection → empty
+        ("22,80,1000-2000", "22,80,1000-2000"),
     ])
-    def test_resolve_ports(self, raw, expected):
+    def test_resolve_ports_valid(self, raw, expected):
         assert PortScanner._resolve_ports(raw) == expected
+
+    @pytest.mark.parametrize("raw", [
+        "--script=evil.nse",
+        "--top-ports 100",
+        "-p 80",
+        "80 --script",
+        "1--2",          # repeated hyphens
+        "--",
+        ",,",
+        ",80",           # leading comma
+        "80,",           # trailing comma
+    ])
+    def test_resolve_ports_invalid_raises(self, raw):
+        with pytest.raises(ValueError, match="Invalid port specification"):
+            PortScanner._resolve_ports(raw)
 
 
 # ---------------------------------------------------------------------------
@@ -242,11 +271,19 @@ class TestPortSpecPattern:
         ("22,80,443", True),
         ("1-1000", True),
         ("1-65535", True),
+        ("22,80,1000-2000", True),
+        # invalid
         ("", False),
         ("--script=evil", False),
         ("80 --script", False),
         ("22;whoami", False),
         ("$(id)", False),
+        ("--", False),        # repeated hyphens
+        ("1--2", False),      # double hyphen in range
+        (",,", False),        # empty comma-separated entries
+        (",80", False),       # leading comma
+        ("80,", False),       # trailing comma
+        ("-80", False),       # leading hyphen
     ])
     def test_pattern(self, value, should_match):
         assert bool(_PORT_SPEC_PATTERN.match(value)) == should_match

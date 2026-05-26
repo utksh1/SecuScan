@@ -29,6 +29,7 @@ class PortScanner(BaseScanner):
 
         The plugin field 'scan_type' accepts only "S" | "T" | "U".
         Callers may pass the raw letter, "-sX", or "sX" forms.
+        Raises ValueError for any value that cannot be resolved.
         """
         _VALID = {"S", "T", "U"}
         if not raw:
@@ -40,7 +41,11 @@ class PortScanner(BaseScanner):
         # Strip a leading "-S" or "S" prefix (e.g. "-sT" → "T", "sS" → "S")
         stripped = re.sub(r"^-?S", "", value)
         letter = stripped[0] if stripped else ""
-        return letter if letter in _VALID else "T"
+        if letter in _VALID:
+            return letter
+        raise ValueError(
+            f"Invalid scan_type {raw!r}: must be one of 'S' (SYN), 'T' (TCP connect), 'U' (UDP)"
+        )
 
     @staticmethod
     def _resolve_ports(raw: Any) -> str:
@@ -56,10 +61,13 @@ class PortScanner(BaseScanner):
             return "1-1000"
         if raw == "all":
             return "1-65535"
-        # If it looks like a numeric spec (digits, commas, hyphens), pass through
-        if re.match(r"^[\d,\-]+$", str(raw)):
+        # Validate strict port spec: comma-separated port numbers/ranges
+        if re.match(r"^\d+(-\d+)?(,\d+(-\d+)?)*$", str(raw)):
             return str(raw)
-        return ""
+        raise ValueError(
+            f"Invalid port specification {raw!r}: use a number (80), range (1-1000), "
+            "or comma-separated list (22,80,443), or a shorthand: top100, top1000, all"
+        )
 
     async def run(self, target: str, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Runs Nmap scan and parses output into structured findings."""

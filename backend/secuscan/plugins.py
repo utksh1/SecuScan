@@ -15,8 +15,10 @@ import hmac
 from .models import PluginMetadata, PluginFieldType
 from .config import settings
 
-# Port specifications: digits, commas, and hyphens only (e.g. "22,80,443" or "1-1000")
-_PORT_SPEC_PATTERN = re.compile(r"^[\d,\-]+$")
+# Port specifications: one or more comma-separated port numbers or port ranges.
+# Valid: "22", "80,443", "1-1000", "22,80,1000-2000"
+# Invalid: "--", "1--2", ",,", "-80"
+_PORT_SPEC_PATTERN = re.compile(r"^\d+(-\d+)?(,\d+(-\d+)?)*$")
 
 logger = logging.getLogger(__name__)
 
@@ -380,7 +382,7 @@ class PluginManager:
             if value and not _PORT_SPEC_PATTERN.match(value):
                 raise ValueError(
                     f"Invalid port specification {value!r}: "
-                    "only digits, commas, and hyphens are permitted"
+                    "must be a number (80), range (1-1000), or comma-separated list (22,80,443)"
                 )
             return
         if value.lstrip().startswith("-"):
@@ -400,7 +402,9 @@ class PluginManager:
         for field_id, raw_value in inputs.items():
             field = field_map.get(field_id)
             if field is None:
-                continue
+                raise ValueError(
+                    f"Unknown field {field_id!r} is not declared in plugin {plugin.id!r} schema"
+                )
 
             # Skip None / empty values — defaults will be applied later by _with_field_defaults
             if raw_value is None or raw_value == "":
