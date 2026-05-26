@@ -20,6 +20,7 @@ from backend.secuscan.cache import init_cache
 from backend.secuscan.config import settings
 from backend.secuscan.plugins import init_plugins, get_plugin_manager
 from backend.secuscan.reporting import reporting
+from backend.secuscan.retention import ArtifactRetentionManager
 
 async def run_scan(target: str, plugin_id: str, output_format: str, output_file: Optional[str] = None):
     """Initialize components and execute a scan task."""
@@ -132,6 +133,49 @@ async def run_scan(target: str, plugin_id: str, output_format: str, output_file:
 
     return 0
 
+
+async def run_cleanup(
+    dry_run: bool = False,
+    max_age_days: int = 0,
+    max_count: int = 0,
+) -> int:
+    """
+    Run the artifact retention policy once and print a summary.
+
+    Returns 0 on success, 1 on error.
+    """
+    settings.ensure_directories()
+    await init_db(settings.database_path)
+    await init_cache()
+
+    # CLI flags override config; fall back to configured defaults when 0.
+    age = max_age_days if max_age_days > 0 else settings.artifact_max_age_days
+    count = max_count if max_count > 0 else settings.artifact_max_count
+
+    manager = ArtifactRetentionManager(
+        max_age_days=age,
+        max_count=count,
+        keep_statuses=settings.artifact_keep_statuses,
+    )
+
+    try:
+        result = await manager.purge(dry_run=dry_run)
+    except Exception as exc:
+        print(f"[!] Retention purge failed: {exc}")
+        return 1
+
+    prefix = "[DRY-RUN] " if dry_run else ""
+    print(f"{prefix}Tasks eligible for removal : {result.tasks_removed}")
+    print(f"{prefix}Files eligible for removal : {result.files_removed}")
+    if result.file_errors:
+        print(f"[!] File deletion errors ({len(result.file_errors)}):")
+        for err in result.file_errors:
+            print(f"    {err}")
+    if result.task_ids_removed:
+        print(f"{prefix}Task IDs: {', '.join(result.task_ids_removed)}")
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description="SecuScan CLI - Local-First Pentesting Toolkit")
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
@@ -146,12 +190,36 @@ def main():
     # List plugins command
     subparsers.add_parser("plugins", help="List available plugins")
 
+    # Cleanup / retention command
+    cleanup_parser = subparsers.add_parser(
+        "cleanup", help="Purge old scan artifacts according to retention policy"
+    )
+    cleanup_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="Report what would be removed without deleting anything",
+    )
+    cleanup_parser.add_argument(
+        "--max-age-days",
+        type=int,
+        default=0,
+        metavar="N",
+        help="Remove tasks older than N days (overrides SECUSCAN_ARTIFACT_MAX_AGE_DAYS)",
+    )
+    cleanup_parser.add_argument(
+        "--max-count",
+        type=int,
+        default=0,
+        metavar="N",
+        help="Keep only the N most recent purgeable tasks (overrides SECUSCAN_ARTIFACT_MAX_COUNT)",
+    )
+
     args = parser.parse_args()
 
     if args.command == "scan":
         sys.exit(asyncio.run(run_scan(args.target, args.plugin, args.format, args.output)))
     elif args.command == "plugins":
-        # Synchronous shortcut for listing
         async def list_plugins():
             await init_plugins(settings.plugins_dir)
             pm = get_plugin_manager()
@@ -160,6 +228,12 @@ def main():
             for p_id, p in pm.plugins.items():
                 print(f"{p_id:<20} {p.name:<30} {p.category:<15}")
         asyncio.run(list_plugins())
+    elif args.command == "cleanup":
+        sys.exit(asyncio.run(run_cleanup(
+            dry_run=args.dry_run,
+            max_age_days=args.max_age_days,
+            max_count=args.max_count,
+        )))
     else:
         parser.print_help()
 

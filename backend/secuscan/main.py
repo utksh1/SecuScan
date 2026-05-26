@@ -2,6 +2,7 @@
 SecuScan Backend - Main application entry point
 """
 
+import asyncio
 import logging
 import sys
 import shutil
@@ -16,6 +17,7 @@ from .config import settings
 from .cache import init_cache, cache as global_cache
 from .database import init_db, db as global_db
 from .plugins import init_plugins
+from .retention import init_retention
 from .routes import router
 from .workflows import scheduler
 
@@ -38,31 +40,42 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     # Startup
     logger.info("🚀 Starting SecuScan backend...")
-    
+
     # Ensure directories exist
     settings.ensure_directories()
     logger.info("✓ Directories initialized")
-    
+
     # Initialize database
     await init_db(settings.database_path)
     logger.info("✓ SQLite connected")
 
     await init_cache()
     logger.info("✓ In-memory cache initialized")
-    
+
     # Load plugins
     await init_plugins(settings.plugins_dir)
     logger.info("✓ Plugins loaded")
 
     await scheduler.start()
     logger.info("✓ Workflow scheduler started")
-    
+
+    # Start background artifact retention loop (no-op when disabled).
+    _retention_task = None
+    if settings.artifact_retention_enabled:
+        manager = init_retention()
+        _retention_task = asyncio.ensure_future(
+            manager.run_loop(settings.artifact_cleanup_interval_seconds)
+        )
+        logger.info("✓ Artifact retention loop started")
+
     logger.info("✓ Ready to serve on %s:%d", settings.bind_address, settings.bind_port)
-    
+
     yield
-    
+
     # Shutdown
     logger.info("🛑 Shutting down SecuScan backend...")
+    if _retention_task is not None:
+        _retention_task.cancel()
     if global_db:
         await global_db.disconnect()
     if global_cache:
@@ -124,7 +137,7 @@ async def health_check():
     """Health check endpoint"""
     import platform
     import sys
-    
+
     return {
         "status": "operational",
         "version": "0.1.0-alpha",
@@ -152,7 +165,7 @@ async def root():
 def main():
     """Main entry point"""
     import uvicorn
-    
+
     logger.info("""
     ╔═══════════════════════════════════════════════════════╗
     ║                                                       ║
@@ -163,7 +176,7 @@ def main():
     ║                                                       ║
     ╚═══════════════════════════════════════════════════════╝
     """)
-    
+
     uvicorn.run(
         "backend.secuscan.main:app",
         host=settings.bind_address,

@@ -87,6 +87,13 @@ class Settings(BaseSettings):
     task_start_max_field_length: int = 1_000      # max chars per string input value
     task_start_max_array_length: int = 50         # max items in any list/multiselect input
 
+    # Artifact retention
+    artifact_retention_enabled: bool = False
+    artifact_max_age_days: int = 0        # 0 = disabled
+    artifact_max_count: int = 0           # 0 = disabled
+    artifact_keep_statuses: List[str] = ["completed", "failed", "cancelled"]
+    artifact_cleanup_interval_seconds: int = 3600  # 1 hour
+
     # Logging
     log_level: str = "INFO"
     log_file: str = str(PROJECT_ROOT / "logs" / "secuscan.log")
@@ -95,7 +102,7 @@ class Settings(BaseSettings):
         env_prefix = "SECUSCAN_"
         case_sensitive = False
 
-    @field_validator("cors_allowed_origins", "cors_allowed_methods", "cors_allowed_headers", "trusted_proxies", mode="before")
+    @field_validator("cors_allowed_origins", "cors_allowed_methods", "cors_allowed_headers", "trusted_proxies", "artifact_keep_statuses", mode="before")
     @classmethod
     def parse_csv_or_list(cls, value: Any) -> Any:
         """Allow comma-separated env values in addition to JSON arrays."""
