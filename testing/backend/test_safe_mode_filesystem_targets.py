@@ -186,6 +186,22 @@ class TestNetworkTargetSafeMode:
         if r.status_code == 400:
             assert sentinel not in r.text
 
+    @pytest.mark.parametrize("cidr_target", [
+        "8.8.8.8/32",
+        "192.168.1.0/24",
+    ])
+    def test_cidr_targets_are_validated_in_safe_mode(self, test_client, cidr_target):
+        """CIDR targets must not bypass filesystem-path detection."""
+        r = post(test_client, network_payload(cidr_target, safe_mode=True))
+        if cidr_target.startswith("192.168"):
+            assert r.status_code != 400, (
+                f"Private CIDR target '{cidr_target}' incorrectly blocked: {r.text}"
+            )
+        else:
+            assert r.status_code == 400, (
+                f"Public CIDR target '{cidr_target}' must be blocked in safe mode: {r.text}"
+            )
+
 
 # ---------------------------------------------------------------------------
 # 4. Edge cases
