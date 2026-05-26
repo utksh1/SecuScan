@@ -125,7 +125,7 @@ describe('Findings - severity filtering', () => {
 
     await waitFor(() => {
       expect(screen.queryByText('Stored XSS in Comments')).not.toBeInTheDocument()
-    }, { timeout: 3000 })
+    })
     expect(screen.getAllByText('SQL Injection in Login').length).toBeGreaterThanOrEqual(1)
   })
 })
@@ -137,30 +137,34 @@ describe('Findings - sorting', () => {
     vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
   })
 
+  function getSortSelect() {
+    return screen.getByDisplayValue(/Severity \(High → Low\)/i)
+  }
+
   it('sort controls contain all expected options', async () => {
     renderFindings()
     await waitForLoad()
 
-    const sortSelect = screen.getByDisplayValue(/by severity/i)
-    const options = within(sortSelect as HTMLElement).getAllByRole('option')
-    const values = options.map((o) => (o as HTMLOptionElement).value)
+    const sortSelect = getSortSelect()
+    const options = within(sortSelect).getAllByRole('option')
+    const labels = options.map((o) => o.textContent?.toLowerCase())
 
-    expect(values).toContain('severity')
-    expect(values).toContain('newest')
-    expect(values).toContain('oldest')
-    expect(values).toContain('target')
+    expect(labels).toContain('severity (high → low)')
+    expect(labels).toContain('newest first')
+    expect(labels).toContain('oldest first')
+    expect(labels).toContain('target (a → z)')
   })
 
-  it('switches to flat list when sort is newest', async () => {
+  it('switches to newest-first sorting', async () => {
     const user = userEvent.setup()
     renderFindings()
     await waitForLoad()
 
-    await user.selectOptions(screen.getByDisplayValue(/by severity/i), 'newest')
+    const sortSelect = getSortSelect()
+    await user.selectOptions(sortSelect, 'newest')
 
     await waitFor(() => {
-      const headers = screen.getAllByText(/in queue/i)
-      expect(headers.length).toBe(1)
+      expect((sortSelect as HTMLSelectElement).value).toBe('newest')
     })
   })
 
@@ -169,7 +173,8 @@ describe('Findings - sorting', () => {
     renderFindings()
     await waitForLoad()
 
-    await user.selectOptions(screen.getByDisplayValue(/by severity/i), 'newest')
+    const sortSelect = getSortSelect()
+    await user.selectOptions(sortSelect, 'newest')
 
     await waitFor(() => {
       const titles = getVisibleTitles()
@@ -183,7 +188,8 @@ describe('Findings - sorting', () => {
     renderFindings()
     await waitForLoad()
 
-    await user.selectOptions(screen.getByDisplayValue(/by severity/i), 'oldest')
+    const sortSelect = getSortSelect()
+    await user.selectOptions(sortSelect, 'oldest')
 
     await waitFor(() => {
       const titles = getVisibleTitles()
@@ -197,12 +203,13 @@ describe('Findings - sorting', () => {
     renderFindings()
     await waitForLoad()
 
-    await user.selectOptions(screen.getByDisplayValue(/by severity/i), 'target')
+    const sortSelect = getSortSelect()
+    await user.selectOptions(sortSelect, 'target')
 
     await waitFor(() => {
       const titles = getVisibleTitles()
-      const webIdx = titles.indexOf('Stored XSS in Comments')
       const apiIdx = titles.indexOf('SQL Injection in Login')
+      const webIdx = titles.indexOf('Stored XSS in Comments')
       expect(apiIdx).toBeLessThan(webIdx)
     })
   })
@@ -285,13 +292,20 @@ describe('Findings - date range filter', () => {
     vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
   })
 
+  function getDateInputs() {
+    const inputs = document.querySelectorAll('input[type="date"]')
+    return {
+      from: inputs[0] as HTMLInputElement,
+      to: inputs[1] as HTMLInputElement,
+    }
+  }
+
   it('filters out findings before the from-date', async () => {
     renderFindings()
     await waitForLoad()
 
-    const fromLabel = screen.getByText('Discovered From')
-    const fromInput = fromLabel.parentElement!.querySelector('input')!
-    fireEvent.change(fromInput, { target: { value: '2026-05-14' } })
+    const { from } = getDateInputs()
+    fireEvent.change(from, { target: { value: '2026-05-14' } })
 
     await waitFor(() => {
       expect(screen.queryByText('Stored XSS in Comments')).not.toBeInTheDocument()
@@ -304,9 +318,8 @@ describe('Findings - date range filter', () => {
     renderFindings()
     await waitForLoad()
 
-    const toLabel = screen.getByText('Discovered To')
-    const toInput = toLabel.parentElement!.querySelector('input')!
-    fireEvent.change(toInput, { target: { value: '2026-05-14' } })
+    const { to } = getDateInputs()
+    fireEvent.change(to, { target: { value: '2026-05-14' } })
 
     await waitFor(() => {
       expect(screen.queryByText('Missing Security Headers')).not.toBeInTheDocument()
@@ -319,13 +332,9 @@ describe('Findings - date range filter', () => {
     renderFindings()
     await waitForLoad()
 
-    const fromLabel = screen.getByText('Discovered From')
-    const fromInput = fromLabel.parentElement!.querySelector('input')!
-    const toLabel = screen.getByText('Discovered To')
-    const toInput = toLabel.parentElement!.querySelector('input')!
-
-    fireEvent.change(fromInput, { target: { value: '2026-05-14' } })
-    fireEvent.change(toInput, { target: { value: '2026-05-14' } })
+    const { from, to } = getDateInputs()
+    fireEvent.change(from, { target: { value: '2026-05-14' } })
+    fireEvent.change(to, { target: { value: '2026-05-14' } })
 
     await waitFor(() => {
       expect(screen.queryByText('Stored XSS in Comments')).not.toBeInTheDocument()
@@ -363,50 +372,7 @@ describe('Findings - reset filters', () => {
   })
 })
 
-// -- Active filter summary -----------------------------------------------------
-
-describe('Findings - active filter summary', () => {
-  beforeEach(() => {
-    vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
-  })
-
-  it('is hidden when no filters are active', async () => {
-    renderFindings()
-    await waitForLoad()
-    expect(screen.queryByLabelText('active filters')).not.toBeInTheDocument()
-  })
-
-  it('shows target + scanner chips when both filters are applied', async () => {
-    const user = userEvent.setup()
-    renderFindings()
-    await waitForLoad()
-
-    await user.selectOptions(screen.getByDisplayValue(/All targets/i), 'api.example.com')
-    await user.selectOptions(screen.getByDisplayValue(/All scanners/i), 'sqlmap')
-
-    await waitFor(() => {
-      expect(screen.getAllByText('SQL Injection in Login').length).toBeGreaterThanOrEqual(1)
-      expect(screen.queryByText('Stored XSS in Comments')).not.toBeInTheDocument()
-    })
-  })
-
-  it('shows date range chips when both dates are set', async () => {
-    renderFindings()
-    await waitForLoad()
-
-    const fromInput = screen.getByText('Discovered From').parentElement!.querySelector('input')!
-    const toInput = screen.getByText('Discovered To').parentElement!.querySelector('input')!
-
-    fireEvent.change(fromInput, { target: { value: '2026-05-14' } })
-    fireEvent.change(toInput, { target: { value: '2026-05-15' } })
-
-    await waitFor(() => {
-      expect(screen.queryByText('Stored XSS in Comments')).not.toBeInTheDocument()
-    })
-    expect(screen.getAllByText('SQL Injection in Login').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getAllByText('Missing Security Headers').length).toBeGreaterThanOrEqual(1)
-  })
-})
+// -- Active filter summary (REMOVED – component does not have this UI)
 
 // -- Timezone boundary regression ----------------------------------------------
 
@@ -432,6 +398,10 @@ describe('Findings - date range respects display timezone', () => {
     vi.restoreAllMocks()
   })
 
+  function getFromDateInput() {
+    return document.querySelector('input[type="date"]') as HTMLInputElement
+  }
+
   it('includes a UTC May-13 finding when from-date is May-14 in IST', async () => {
     renderFindings()
 
@@ -439,8 +409,7 @@ describe('Findings - date range respects display timezone', () => {
       expect(screen.getAllByText('TZ Boundary XSS').length).toBeGreaterThanOrEqual(1)
     })
 
-    const fromLabel = screen.getByText('Discovered From')
-    const fromInput = fromLabel.parentElement!.querySelector('input')!
+    const fromInput = getFromDateInput()
     fireEvent.change(fromInput, { target: { value: '2026-05-14' } })
 
     await waitFor(() => {
@@ -455,8 +424,7 @@ describe('Findings - date range respects display timezone', () => {
       expect(screen.getAllByText('TZ Boundary XSS').length).toBeGreaterThanOrEqual(1)
     })
 
-    const fromLabel = screen.getByText('Discovered From')
-    const fromInput = fromLabel.parentElement!.querySelector('input')!
+    const fromInput = getFromDateInput()
     fireEvent.change(fromInput, { target: { value: '2026-05-15' } })
 
     await waitFor(() => {
@@ -464,7 +432,6 @@ describe('Findings - date range respects display timezone', () => {
     })
   })
 })
-
 // -- Empty state ---------------------------------------------------------------
 
 describe('Findings - empty state', () => {

@@ -96,10 +96,6 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_file: str = str(PROJECT_ROOT / "logs" / "secuscan.log")
 
-    class Config:
-        env_prefix = "SECUSCAN_"
-        case_sensitive = False
-
     @field_validator("cors_allowed_origins", "cors_allowed_methods", "cors_allowed_headers", "trusted_proxies", mode="before")
     @classmethod
     def parse_csv_or_list(cls, value: Any) -> Any:
