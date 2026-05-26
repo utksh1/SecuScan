@@ -158,11 +158,11 @@ class TestNetworkTargetSafeMode:
         "8.8.8.8",
         "1.1.1.1",
     ])
-    def test_public_targets_allowed_when_safe_mode_disabled(self, test_client, public_target):
-        """safe_mode=False lifts the public IP restriction."""
+    def test_public_targets_blocked_even_with_safe_mode_bypass_attempt(self, test_client, public_target):
+        """safe_mode=False payload flag must be ignored, maintaining public IP restriction."""
         r = post(test_client, network_payload(public_target, safe_mode=False))
-        assert r.status_code != 400, (
-            f"Public target '{public_target}' incorrectly blocked with safe_mode=False: {r.text}"
+        assert r.status_code == 400, (
+            f"VULNERABILITY: Public target '{public_target}' was allowed when user passed safe_mode=False: {r.text}"
         )
 
     @pytest.mark.parametrize("blocked_target", [
