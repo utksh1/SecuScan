@@ -1,6 +1,7 @@
 """Workflow automation and scheduling."""
 
 from __future__ import annotations
+from .request_context import get_request_id, set_request_id
 
 import asyncio
 import json
@@ -74,13 +75,27 @@ class WorkflowScheduler:
 
     async def _run_workflow(self, workflow_id: str, steps: List[Dict[str, Any]]):
         logger.info("Running workflow %s with %d step(s)", workflow_id, len(steps))
+
         for step in steps:
             plugin_id = step.get("plugin_id")
             inputs = step.get("inputs") or {}
+
             if not plugin_id:
                 continue
-            task_id = await executor.create_task(plugin_id, inputs, preset=step.get("preset"), consent_granted=True)
-            asyncio.create_task(executor.execute_task(task_id))
 
+            request_id = get_request_id()
 
+            task_id = await executor.create_task(
+                plugin_id,
+                inputs,
+                preset=step.get("preset"),
+                consent_granted=True
+            )
+
+            async def run_task():
+                set_request_id(request_id)
+                await executor.execute_task(task_id)
+
+            asyncio.create_task(run_task())
+            
 scheduler = WorkflowScheduler()
