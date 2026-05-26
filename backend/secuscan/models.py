@@ -113,7 +113,7 @@ class Finding(BaseModel):
     title: str
     category: str
     severity: str
-    target: Optional[str] = None
+    target: str
     description: str
     remediation: Optional[str] = ""
     cvss: Optional[float] = None
@@ -121,7 +121,6 @@ class Finding(BaseModel):
     proof: Optional[str] = None
     discovered_at: Optional[datetime] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
-    metadata_json: Optional[Dict[str, Any]] = None
 
 
 class TaskResult(BaseModel):

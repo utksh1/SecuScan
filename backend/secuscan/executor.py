@@ -757,7 +757,6 @@ class TaskExecutor:
 
         target = task_row["target"]
         plugin_id = task_row["plugin_id"]
-        report_id = f"report:{task_id}"
 
         # Normalize target to extract host
         host_name = target
@@ -797,10 +796,6 @@ class TaskExecutor:
         await db.execute(
             "INSERT OR IGNORE INTO asset_tasks (asset_id, task_id) VALUES (?, ?)",
             (host_asset_id, task_id)
-        )
-        await db.execute(
-            "INSERT OR IGNORE INTO asset_reports (asset_id, report_id) VALUES (?, ?)",
-            (host_asset_id, report_id)
         )
 
         # Fetch findings for this task
@@ -859,10 +854,6 @@ class TaskExecutor:
                     (service_asset_id, task_id)
                 )
                 await db.execute(
-                    "INSERT OR IGNORE INTO asset_reports (asset_id, report_id) VALUES (?, ?)",
-                    (service_asset_id, report_id)
-                )
-                await db.execute(
                     "INSERT OR IGNORE INTO asset_findings (asset_id, finding_id) VALUES (?, ?)",
                     (service_asset_id, finding_id)
                 )
@@ -890,10 +881,6 @@ class TaskExecutor:
                     await db.execute(
                         "INSERT OR IGNORE INTO asset_tasks (asset_id, task_id) VALUES (?, ?)",
                         (sub_asset_id, task_id)
-                    )
-                    await db.execute(
-                        "INSERT OR IGNORE INTO asset_reports (asset_id, report_id) VALUES (?, ?)",
-                        (sub_asset_id, report_id)
                     )
                     await db.execute(
                         "INSERT OR IGNORE INTO asset_findings (asset_id, finding_id) VALUES (?, ?)",

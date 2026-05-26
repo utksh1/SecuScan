@@ -131,7 +131,7 @@ export interface Finding {
   title: string
   category: string
   severity: string
-  target?: string | null
+  target: string
   description: string
   remediation?: string | null
   cvss?: number | null
@@ -139,7 +139,6 @@ export interface Finding {
   proof?: string | null
   discovered_at?: string | null
   metadata?: Record<string, unknown>
-  metadata_json?: Record<string, unknown> | null
 }
 
 export interface TaskResult {

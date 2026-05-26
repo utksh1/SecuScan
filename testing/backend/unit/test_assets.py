@@ -18,7 +18,6 @@ async def test_database_schema_assets(setup_test_environment):
     assert "assets" in table_names
     assert "asset_findings" in table_names
     assert "asset_tasks" in table_names
-    assert "asset_reports" in table_names
 
     await db.disconnect()
 

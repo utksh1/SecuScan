@@ -837,7 +837,6 @@ async def delete_task_records(task_ids: List[str]):
         DELETE FROM assets
         WHERE id NOT IN (SELECT asset_id FROM asset_findings)
           AND id NOT IN (SELECT asset_id FROM asset_tasks)
-          AND id NOT IN (SELECT asset_id FROM asset_reports)
           AND id NOT IN (SELECT host_id FROM assets WHERE host_id IS NOT NULL)
         """
     )
@@ -912,7 +911,6 @@ async def clear_all_tasks():
     await db.execute("DELETE FROM assets")
     await db.execute("DELETE FROM asset_findings")
     await db.execute("DELETE FROM asset_tasks")
-    await db.execute("DELETE FROM asset_reports")
 
     # Fallback cleanup for any orphaned files in data directories
     for subdir in ["raw", "reports"]:
@@ -1283,7 +1281,7 @@ async def get_assets():
         SELECT a.id, a.type, a.name, a.host_id, h.name as host_name, a.metadata_json, a.created_at, a.updated_at,
                (SELECT COUNT(*) FROM asset_findings WHERE asset_id = a.id) as findings_count,
                (SELECT COUNT(*) FROM asset_tasks WHERE asset_id = a.id) as tasks_count,
-               (SELECT COUNT(*) FROM asset_reports WHERE asset_id = a.id) as reports_count
+               (SELECT COUNT(DISTINCT r.id) FROM reports r JOIN asset_tasks at ON r.task_id = at.task_id WHERE at.asset_id = a.id) as reports_count
         FROM assets a
         LEFT JOIN assets h ON a.host_id = h.id
         ORDER BY a.type ASC, a.name ASC
@@ -1417,9 +1415,9 @@ async def get_assets_graph():
     # 4. Fetch reports and their links to assets
     reports = await db.fetchall(
         """
-        SELECT r.id, r.name, r.task_id, ar.asset_id
+        SELECT r.id, r.name, r.task_id, at.asset_id
         FROM reports r
-        JOIN asset_reports ar ON r.id = ar.report_id
+        JOIN asset_tasks at ON r.task_id = at.task_id
         """
     )
     for r in reports:
@@ -1498,8 +1496,8 @@ async def get_asset_details(asset_id: str):
         """
         SELECT r.id, r.name, r.type, r.generated_at, r.status
         FROM reports r
-        JOIN asset_reports ar ON r.id = ar.report_id
-        WHERE ar.asset_id = ?
+        JOIN asset_tasks at ON r.task_id = at.task_id
+        WHERE at.asset_id = ?
         """,
         (asset_id,)
     )

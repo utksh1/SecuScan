@@ -144,11 +144,7 @@ class Database:
                 PRIMARY KEY (asset_id, task_id)
             );
 
-            CREATE TABLE IF NOT EXISTS asset_reports (
-                asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
-                report_id TEXT NOT NULL REFERENCES reports(id) ON DELETE CASCADE,
-                PRIMARY KEY (asset_id, report_id)
-            );
+
 
             CREATE UNIQUE INDEX IF NOT EXISTS idx_assets_unique_host ON assets(name) WHERE type = 'host';
             CREATE UNIQUE INDEX IF NOT EXISTS idx_assets_unique_service ON assets(host_id, name) WHERE type = 'service';
@@ -270,6 +266,26 @@ class Database:
                 print("Added missing column 'proof' to findings table.")
             except Exception as e:
                 print(f"Failed to add 'proof' to findings: {e}")
+
+        # Backfill asset graph data for existing tasks if assets table is empty
+        assets_count = await self.fetchone("SELECT COUNT(*) as c FROM assets")
+        if assets_count and assets_count["c"] == 0:
+            tasks_count = await self.fetchone("SELECT COUNT(*) as c FROM tasks")
+            if tasks_count and tasks_count["c"] > 0:
+                print("Backfilling assets table from existing tasks and findings...")
+                try:
+                    from .executor import TaskExecutor
+                    # Mock execution to backfill
+                    executor = TaskExecutor()
+                    all_tasks = await self.fetchall("SELECT id FROM tasks")
+                    for t in all_tasks:
+                        await executor._update_assets_for_task(self, t["id"])
+                    print(f"Backfill complete for {len(all_tasks)} tasks.")
+                except Exception as e:
+                    print(f"Failed to backfill assets: {e}")
+
+        # Ensure any read transactions (like fetchone) are committed to release locks
+        await self.connection.commit()
 
     async def execute(self, query: str, params: tuple = ()):
         """Execute a write query."""
