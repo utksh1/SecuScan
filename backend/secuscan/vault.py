@@ -21,23 +21,49 @@ class VaultCrypto:
 
     _NONCE_LEN = 12
 
-    def __init__(self, key: bytes):
-        """
+    def __init__(
+        self,
+        current_key: bytes | None,
+        previous_keys: list[bytes] | None = None,
+        current_version: int = 1,
+    ):
+        """Initialize vault crypto with current and optional previous keys.
+
         Args:
-            key: 44-byte base64url-encoded representation of a 32-byte AES-256 key,
-                 as produced by ``settings.resolved_vault_key``.
+            current_key: base64url-encoded 32-byte key (bytes) or None.
+            previous_keys: list of base64url-encoded 32-byte keys (bytes) to try
+                when decrypting older records.
+            current_version: integer version assigned to values encrypted by
+                `current_key`.
         """
-        try:
-            raw = base64.urlsafe_b64decode(key)
-        except Exception as exc:
-            raise ValueError("Vault key must be base64url-encoded") from exc
-        if len(raw) != 32:
-            raise ValueError(
-                f"Vault key must decode to exactly 32 bytes (AES-256); got {len(raw)}"
-            )
-        self._aesgcm = AESGCM(raw)
+        def _make_aesgcm(b: bytes):
+            try:
+                raw = base64.urlsafe_b64decode(b)
+            except Exception as exc:
+                raise ValueError("Vault key must be base64url-encoded") from exc
+            if len(raw) != 32:
+                raise ValueError(
+                    f"Vault key must decode to exactly 32 bytes (AES-256); got {len(raw)}"
+                )
+            return AESGCM(raw)
+
+        self._current_version = int(current_version)
+        self._aesgcm = _make_aesgcm(current_key) if current_key is not None else None
+        self._previous_aes = []
+        if previous_keys:
+            for pk in previous_keys:
+                if pk is None:
+                    continue
+                self._previous_aes.append(_make_aesgcm(pk))
+
+    @property
+    def version(self) -> int:
+        """Returns the integer version associated with the current key."""
+        return self._current_version
 
     def encrypt(self, plaintext: str) -> str:
+        if self._aesgcm is None:
+            raise ValueError("No current vault key configured for encryption")
         nonce = os.urandom(self._NONCE_LEN)
         ciphertext = self._aesgcm.encrypt(nonce, plaintext.encode("utf-8"), None)
         blob = nonce + ciphertext
@@ -52,9 +78,20 @@ class VaultCrypto:
         nonce = blob[: self._NONCE_LEN]
         ciphertext = blob[self._NONCE_LEN :]
 
-        try:
-            raw = self._aesgcm.decrypt(nonce, ciphertext, None)
-        except Exception as exc:
-            raise ValueError("Vault payload integrity verification failed") from exc
+        # Try current key first
+        if self._aesgcm is not None:
+            try:
+                raw = self._aesgcm.decrypt(nonce, ciphertext, None)
+                return raw.decode("utf-8")
+            except Exception:
+                pass
 
-        return raw.decode("utf-8")
+        # Try previous keys in order
+        for aes in self._previous_aes:
+            try:
+                raw = aes.decrypt(nonce, ciphertext, None)
+                return raw.decode("utf-8")
+            except Exception:
+                continue
+
+        raise ValueError("Vault payload integrity verification failed")
