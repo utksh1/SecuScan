@@ -158,8 +158,8 @@ class TestVerifyParserAtExecTime:
 # ---------------------------------------------------------------------------
 
 class TestExecutorParserGate:
-    def test_exec_module_skipped_when_integrity_fails(self, tmp_path, monkeypatch):
-        """When verify_parser_at_exec_time returns False the parser must not run."""
+    def test_integrity_failure_raises_and_blocks_exec(self, tmp_path, monkeypatch):
+        """When verify_parser_at_exec_time returns False the task must fail with a security error."""
         monkeypatch.setattr(settings, "enforce_plugin_signatures", False)
 
         parser_src = "def parse(output): return {'findings': []}\n"
@@ -172,7 +172,6 @@ class TestExecutorParserGate:
             encoding="utf-8",
         )
 
-        from backend.secuscan.models import PluginMetadata
         plugin = _minimal_plugin_meta(checksum=metadata["checksum"])
 
         mgr = _make_manager(tmp_path)
@@ -180,15 +179,6 @@ class TestExecutorParserGate:
         mgr.plugins[plugin.id] = plugin
 
         exec_called = []
-
-        original_exec = __builtins__.__class__.__dict__  # not used
-        import importlib.util as ilu
-
-        original_exec_module = None
-
-        class _CapturingLoader:
-            def exec_module(self, module):
-                exec_called.append(True)
 
         with patch("importlib.util.spec_from_file_location") as mock_spec:
             mock_loader = MagicMock()
@@ -198,17 +188,15 @@ class TestExecutorParserGate:
             mock_spec.return_value = mock_spec_obj
 
             with patch("importlib.util.module_from_spec", return_value=MagicMock()):
-                # Import executor lazily to avoid circular-import issues at module level
                 from backend.secuscan import executor as executor_module
 
-                plugin_obj = plugin
-                # Directly call _parse_results, patching plugin_manager
                 exec_instance = executor_module.TaskExecutor.__new__(executor_module.TaskExecutor)
 
                 with patch(
                     "backend.secuscan.executor.get_plugin_manager", return_value=mgr
                 ):
-                    result = exec_instance._parse_results(plugin_obj, "raw output")
+                    with pytest.raises(ValueError, match="Security error.*integrity check failed"):
+                        exec_instance._parse_results(plugin, "raw output")
 
         assert len(exec_called) == 0, "exec_module must not be called when integrity check fails"
 

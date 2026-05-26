@@ -73,7 +73,7 @@ class TaskExecutor:
             event = {"type": event_type, "data": data}
             for q in self._listeners[task_id]:
                 await q.put(event)
-
+    
     async def create_task(
         self,
         plugin_id: str,
@@ -83,29 +83,29 @@ class TaskExecutor:
     ) -> str:
         """
         Create a new scan task.
-
+        
         Args:
             plugin_id: Plugin identifier
             inputs: User input values
             preset: Optional preset name
             consent_granted: Whether user granted consent
-
+        
         Returns:
             Task ID
         """
         task_id = str(uuid.uuid4())
         plugin_manager = get_plugin_manager()
         plugin = plugin_manager.get_plugin(plugin_id)
-
+        
         if not plugin:
             raise ValueError(f"Plugin not found: {plugin_id}")
-
+        
         # Apply preset if provided
         if preset and preset in plugin.presets:
             preset_values = plugin.presets[preset]
             # Merge preset with user inputs (user inputs take precedence)
             inputs = {**preset_values, **inputs}
-
+        
         # Store task in database
         db = await get_db()
         await db.execute(
@@ -127,7 +127,7 @@ class TaskExecutor:
                 inputs.get("safe_mode", True)
             )
         )
-
+        
         # Log audit event
         await db.log_audit(
             "task_created",
@@ -136,9 +136,9 @@ class TaskExecutor:
             task_id=task_id,
             plugin_id=plugin_id
         )
-
+        
         return task_id
-
+    
     async def mark_task_failed(self, task_id: str, reason: str) -> None:
         """
         Mark a task as failed without running it.
@@ -177,7 +177,7 @@ class TaskExecutor:
     async def execute_task(self, task_id: str):
         """
         Execute a task asynchronously.
-
+        
         Args:
             task_id: Task identifier
         """
@@ -210,18 +210,18 @@ class TaskExecutor:
             if plugin_id in MODULAR_SCANNERS:
                 scanner_class = MODULAR_SCANNERS[plugin_id]
                 scanner = scanner_class(task_id, db)
-
+                
                 logger.info(f"Executing modular scanner {plugin_id} for task {task_id}")
                 await self._broadcast(task_id, "status", TaskStatus.RUNNING.value)
-
+                
                 start_time = time.time()
                 # Run the scanner
                 result = await scanner.run(target, inputs)
                 duration = time.time() - start_time
-
+                
                 # Update task with results
                 final_status = TaskStatus.COMPLETED.value if result.get("status") != "failed" else TaskStatus.FAILED.value
-
+                
                 await db.execute(
                     """
                     UPDATE tasks SET
@@ -261,7 +261,7 @@ class TaskExecutor:
                     raise ValueError(f"Plugin not found: {plugin_id}")
 
                 # Pending records for assets removed
-
+                
                 command = plugin_manager.build_command(plugin_id, inputs)
 
                 if not command:
@@ -420,12 +420,11 @@ class TaskExecutor:
                 task_id=task_id
             )
         finally:
-            # Always runs regardless of success, failure, or cancellation.
-            # Remove from in-memory registry and release the concurrency slot
-            # so future tasks are not permanently blocked.
+            # Always clean up: remove from the in-memory registry and
+            # release the concurrency slot regardless of how the task ended.
             self.running_tasks.pop(task_id, None)
             await concurrent_limiter.release(task_id)
-
+    
     async def _execute_command(
         self,
         command: list,
@@ -456,7 +455,7 @@ class TaskExecutor:
                 stdout = process.stdout
                 if stdout is None:
                     return
-
+                    
                 while not stdout.at_eof():
                     line = await stdout.readline()
                     if line:
@@ -583,13 +582,13 @@ class TaskExecutor:
         )
 
         return True
-
+    
     async def get_task_status(self, task_id: str) -> Optional[Dict]:
         """Get task status and progress"""
         db = await get_db()
         task_row = await db.fetchone(
             """
-            SELECT id, plugin_id, tool_name, target, status, created_at, started_at, completed_at,
+            SELECT id, plugin_id, tool_name, target, status, created_at, started_at, completed_at, 
                    duration_seconds, exit_code, error_message, preset, inputs_json
             FROM tasks WHERE id = ?
             """,
@@ -632,7 +631,7 @@ class TaskExecutor:
         """Persist derived findings and report records into SQLite."""
         parsed = self._parse_results(plugin, output)
         findings_data = parsed.get("findings", [])
-
+        
         # Update task with structured results
         await db.execute(
             "UPDATE tasks SET structured_json = ? WHERE id = ?",
@@ -692,7 +691,7 @@ class TaskExecutor:
     async def _upsert_findings_and_report_from_scanner(self, db, task_id: str, scanner: Any, plugin_id: str, target: str, status: str, result: Dict[str, Any]):
         """Persist modular scanner results into findings, and reports."""
         findings_data = result.get("findings", [])
-
+        
         # Insert findings
         for finding in findings_data:
             u_id = str(uuid.uuid4()).replace("-", "")
@@ -748,42 +747,44 @@ class TaskExecutor:
         """Route to appropriate parser based on plugin metadata."""
         parser_type = plugin.output.get("parser")
         parser_input = self._resolve_parser_input(plugin, output)
-
+        
         # 1. Check for custom parser.py in plugin directory (Recommended)
         plugin_manager = get_plugin_manager()
         plugin_dir = plugin_manager.plugins_dir / plugin.id
         parser_path = plugin_dir / "parser.py"
-
+        
         if parser_path.exists():
             if not plugin_manager.verify_parser_at_exec_time(plugin, plugin_dir):
-                logger.error(
-                    "Skipping custom parser for plugin %s: integrity check failed at exec time",
-                    plugin.id,
+                raise ValueError(
+                    f"Security error: parser.py integrity check failed for plugin {plugin.id!r}; "
+                    "the file may have been tampered with. Rotate the plugin checksum or "
+                    "reinstall the plugin before retrying."
                 )
-            else:
-                try:
-                    import importlib.util
-                    spec = importlib.util.spec_from_file_location(f"parser_{plugin.id}", parser_path)
-                    if spec is not None:
-                        loader = spec.loader
-                        if loader is not None:
-                            module = importlib.util.module_from_spec(spec)
-                            loader.exec_module(module)
-                            if hasattr(module, "parse"):
-                                logger.info(f"Using custom parser for {plugin.id}")
-                                parsed = module.parse(parser_input)
-                                return self._normalize_parsed_result(plugin, parser_input, parsed)
-                            else:
-                                logger.warning(f"Custom parser {parser_path} missing 'parse' function")
-                except Exception as e:
-                    logger.error(f"Error executing custom parser for {plugin.id}: {e}")
+            try:
+                import importlib.util
+                spec = importlib.util.spec_from_file_location(f"parser_{plugin.id}", parser_path)
+                if spec is not None:
+                    loader = spec.loader
+                    if loader is not None:
+                        module = importlib.util.module_from_spec(spec)
+                        loader.exec_module(module)
+                        if hasattr(module, "parse"):
+                            logger.info(f"Using custom parser for {plugin.id}")
+                            parsed = module.parse(parser_input)
+                            return self._normalize_parsed_result(plugin, parser_input, parsed)
+                        else:
+                            logger.warning(f"Custom parser {parser_path} missing 'parse' function")
+            except ValueError:
+                raise
+            except Exception as e:
+                logger.error(f"Error executing custom parser for {plugin.id}: {e}")
 
         # 2. Fallback to legacy built-in parsers
         if parser_type == "builtin_nmap":
             return self._normalize_parsed_result(plugin, parser_input, self._parse_nmap_output(parser_input))
         elif parser_type == "builtin_http":
             return self._normalize_parsed_result(plugin, parser_input, self._parse_http_output(parser_input))
-
+        
         return self._normalize_parsed_result(plugin, parser_input, {"findings": [], "raw": parser_input})
 
     def _resolve_parser_input(self, plugin, output: str) -> str:
@@ -942,7 +943,7 @@ class TaskExecutor:
         findings = []
         ports = []
         services = []
-
+        
         # Regex for open ports: 80/tcp open http
         port_pattern = re.compile(r"(\d+)/(tcp|udp)\s+open\s+([\w-]+)")
         for match in port_pattern.finditer(output):
@@ -958,7 +959,7 @@ class TaskExecutor:
                 "remediation": "Close unnecessary ports and use a firewall to restrict access.",
                 "metadata": {"port": port_str, "protocol": proto, "service": service}
             })
-
+        
         return {
             "open_ports": sorted(list(set(ports))),
             "services": sorted(list(set(services))),
