@@ -567,12 +567,7 @@ class TaskExecutor:
             except Exception as e:
                 logger.error(f"Failed to kill docker container for {task_id}: {e}")
 
-        db = await get_db()
-        await db.execute(
-            "UPDATE tasks SET status = ?, completed_at = ? WHERE id = ?",
-            (TaskStatus.CANCELLED.value, datetime.now().isoformat(), task_id)
-        )
-
+        
         await self._broadcast(task_id, "status", TaskStatus.CANCELLED.value)
         await self._invalidate_cached_views()
 
@@ -590,7 +585,7 @@ class TaskExecutor:
         task_row = await db.fetchone(
             """
             SELECT id, plugin_id, tool_name, target, status, created_at, started_at, completed_at, 
-                   duration_seconds, exit_code, error_message, preset, inputs_json
+            duration_seconds, exit_code, error_message, preset, inputs_json
             FROM tasks WHERE id = ?
             """,
             (task_id,)
