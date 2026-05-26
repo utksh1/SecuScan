@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { routes } from '../routes'
 import ThemeToggle from './ThemeToggle'
+import { useOfflineQueue } from './OfflineQueueContext'
 
 interface NavItemProps {
     to: string;
@@ -173,6 +174,7 @@ export default function Sidebar() {
 
             {/* Bottom Actions */}
             <div className="p-4 mt-auto border-t border-accent-silver/5 bg-bg-primary/30 backdrop-blur-md space-y-3">
+                <OfflineQueueIndicator isExpanded={isExpanded} />
                 <NavItem to={routes.settings} icon="settings" label="Settings" isExpanded={isExpanded} />
                 <div className="flex items-center gap-2">
                     <ThemeToggle size="sm" />
@@ -191,4 +193,78 @@ export default function Sidebar() {
             </div>
         </motion.aside>
     )
+}
+
+function OfflineQueueIndicator({ isExpanded }: { isExpanded: boolean }) {
+  const { isOnline, pendingCount, queue, retryAll, remove } = useOfflineQueue()
+  const [showDropdown, setShowDropdown] = useState(false)
+
+  if (isOnline && pendingCount === 0) return null
+
+  return (
+    <div className="relative mb-2">
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setShowDropdown(!showDropdown) }}
+        className={`flex items-center w-full transition-all duration-300 group ${
+          isExpanded ? 'gap-3 px-5 py-2.5 mx-2 rounded-lg' : 'justify-center py-3 px-2 mx-2 rounded-lg'
+        } ${!isOnline ? 'text-rag-amber' : 'text-rag-blue'}`}
+        title={!isExpanded ? `${pendingCount} pending` : undefined}
+      >
+        <span className="material-symbols-outlined text-[20px] shrink-0 z-10 relative">
+          {!isOnline ? 'cloud_off' : 'cloud_sync'}
+          {pendingCount > 0 && (
+            <span className="absolute -top-1 -right-1 w-2 h-2 bg-rag-amber rounded-full animate-pulse" />
+          )}
+        </span>
+        <AnimatePresence>
+          {isExpanded && (
+            <motion.span
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -10 }}
+              className="text-[11px] font-bold tracking-[0.15em] uppercase whitespace-nowrap z-10 flex-1 text-left"
+            >
+              {!isOnline ? 'Offline' : `${pendingCount} Pending`}
+            </motion.span>
+          )}
+        </AnimatePresence>
+        {isExpanded && pendingCount > 0 && (
+          <span className="text-[9px] font-black text-rag-amber bg-rag-amber/10 px-1.5 py-0.5 rounded z-10">
+            {pendingCount}
+          </span>
+        )}
+      </button>
+
+      {showDropdown && pendingCount > 0 && (
+        <div
+          className="absolute bottom-full left-0 right-0 mb-1 mx-2 bg-secondary border border-accent-silver/10 rounded-lg shadow-xl z-50 max-h-48 overflow-y-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="p-2 space-y-1">
+            {queue.map((action) => (
+              <div key={action.id} className="flex items-center justify-between gap-2 px-2 py-1 text-[10px] text-silver/80">
+                <span className="truncate flex-1">{action.label || action.url}</span>
+                <button
+                  type="button"
+                  onClick={() => remove(action.id)}
+                  className="text-silver/40 hover:text-rag-red"
+                  aria-label={`Remove ${action.label || 'action'} from queue`}
+                >
+                  <span className="material-symbols-outlined text-[14px]">close</span>
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); retryAll() }}
+              className="w-full mt-1 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider bg-rag-blue/20 text-rag-blue hover:bg-rag-blue/30 rounded"
+            >
+              Retry All
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }

@@ -1,3 +1,5 @@
+import * as offlineQueue from './services/offlineQueue'
+
 function resolveApiBase(): string {
   const configured = (import.meta as any).env.VITE_API_BASE
   if (configured) return configured
@@ -83,7 +85,27 @@ export interface TaskStartResponse {
   stream_url: string
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+interface RequestOptions extends RequestInit {
+  retryable?: boolean
+  label?: string
+}
+
+async function request<T>(path: string, init?: RequestOptions): Promise<T> {
+  const method = (init?.method || 'GET').toUpperCase()
+  const isSafe = method === 'GET' || method === 'HEAD'
+
+  if (!offlineQueue.isOnline() && !isSafe && init?.retryable) {
+    offlineQueue.enqueue({
+      url: `${API_BASE}${path}`,
+      method,
+      headers: init?.headers as Record<string, string> | undefined,
+      body: init?.body as string | undefined,
+      maxRetries: 3,
+      label: init?.label || `${method} ${path}`,
+    })
+    throw new OfflineQueueError(`Queued for replay when online: ${method} ${path}`)
+  }
+
   const controller = new AbortController()
   const timeoutId = window.setTimeout(() => controller.abort(), 10000)
 
@@ -96,6 +118,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(`Request failed: ${response.status}`)
   }
   return response.json()
+}
+
+export class OfflineQueueError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'OfflineQueueError'
+  }
 }
 
 export function getHealth() {
@@ -148,12 +177,15 @@ export function startTask(plugin_id: string, inputs: Record<string, unknown>, co
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ plugin_id, inputs, consent_granted, preset }),
+    retryable: true,
+    label: 'Start Scan',
   })
 }
 
 export function deleteTask(taskId: string) {
   return request<{ task_id: string; deleted: boolean }>(`/task/${taskId}`, {
     method: 'DELETE',
+    label: 'Delete Task',
   })
 }
 
@@ -162,12 +194,14 @@ export function bulkDeleteTasks(taskIds: string[]) {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(taskIds),
+    label: 'Bulk Delete Tasks',
   })
 }
 
 export function clearAllTasks() {
   return request<{ cleared: boolean; message: string }>('/tasks/clear', {
     method: 'DELETE',
+    label: 'Clear All Tasks',
   })
 }
 
@@ -175,6 +209,7 @@ export function cancelTask(taskId: string) {
   return request(`/task/${taskId}/cancel`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    label: 'Cancel Task',
   })
 }
 
@@ -266,6 +301,8 @@ export async function createWorkflow(data: WorkflowCreatePayload): Promise<Workf
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
+    retryable: true,
+    label: 'Create Workflow',
   })
   return normalizeWorkflow(workflow)
 }
@@ -274,6 +311,7 @@ export async function runWorkflow(workflowId: string): Promise<{ queued_task_ids
   const result: any = await request(`/workflows/${workflowId}/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    label: 'Run Workflow',
   })
   return {
     queued_task_ids: Array.isArray(result.queued_task_ids)
@@ -289,6 +327,8 @@ export async function updateWorkflow(workflowId: string, data: WorkflowUpdatePay
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
+    retryable: true,
+    label: 'Update Workflow',
   })
   return normalizeWorkflow(workflow)
 }
@@ -296,5 +336,6 @@ export async function updateWorkflow(workflowId: string, data: WorkflowUpdatePay
 export function deleteWorkflow(workflowId: string): Promise<{ deleted: boolean }> {
   return request<{ deleted: boolean }>(`/workflows/${workflowId}`, {
     method: 'DELETE',
+    label: 'Delete Workflow',
   })
 }

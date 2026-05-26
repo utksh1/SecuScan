@@ -14,6 +14,7 @@ import Workflows from './pages/Workflows'
 import { ThemeProvider } from './components/ThemeContext'
 import { ToastProvider, ToastContainer } from './components/ToastContext'
 import { I18nProvider } from './components/I18nContext'
+import { OfflineQueueProvider } from './components/OfflineQueueContext'
 import { routes } from './routes'
 
 export function AppRoutes() {
@@ -39,11 +40,13 @@ export default function App() {
     <ThemeProvider>
       <I18nProvider>
         <ToastProvider>
+          <OfflineQueueProvider>
           <Router>
             <AppShell>
               <AppRoutes />
             </AppShell>
           </Router>
+          </OfflineQueueProvider>
         </ToastProvider>
       </I18nProvider>
     </ThemeProvider>
