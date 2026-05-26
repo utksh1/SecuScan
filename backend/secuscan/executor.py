@@ -558,7 +558,12 @@ class TaskExecutor:
             return f"Execution error: {str(e)}", -1
 
     def _resolve_execution_timeout(self, inputs: Dict[str, Any]) -> int:
-        """Resolve per-task process timeout from plugin inputs."""
+        """Resolve per-task process timeout from plugin inputs.
+
+        The caller may request a shorter timeout than the operator cap, but
+        never a longer one. ``settings.sandbox_timeout`` is the hard ceiling
+        and is always enforced regardless of what the client supplies.
+        """
         for key in ("max_scan_time", "timeout"):
             raw_value = inputs.get(key)
             try:
@@ -566,7 +571,7 @@ class TaskExecutor:
             except (TypeError, ValueError):
                 continue
             if timeout > 0:
-                return timeout
+                return min(timeout, settings.sandbox_timeout)
         return settings.sandbox_timeout
 
     def _classify_command_result(self, plugin, output: str, exit_code: int) -> tuple[str, Optional[str]]:
