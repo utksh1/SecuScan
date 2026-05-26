@@ -1,0 +1,144 @@
+name: Release Provenance & Signing
+
+# Requirements & Prerequisites:
+# 1. Keyless OIDC Signing: No static secrets, GPG/PGP keys, or certificates are required to be stored/configured.
+# 2. Permissions:
+#    - id-token: write (Mandatory for requesting the OIDC token from GitHub's token authority to authenticate with Fulcio CA)
+#    - contents: write (Mandatory for publishing GitHub Releases and uploading assets)
+# 3. Environment: Runs on standard ubuntu-latest runners.
+# 4. Triggers:
+#    - Automatic production release when a tag starting with 'v' is pushed.
+#    - Manual execution (workflow_dispatch) for dry-runs or manual release overrides.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (do not publish to actual GitHub release)'
+        required: true
+        default: true
+        type: boolean
+      custom_version:
+        description: 'Custom version string for dry-run naming (optional)'
+        required: false
+        default: ''
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  build-and-sign:
+    name: Build & Sign Release Artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Determine Release Version
+        id: version
+        run: |
+          # Robust and explicit handling of dry-run and release contexts
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            DRY_RUN="${{ inputs.dry_run }}"
+            CUSTOM_VER="${{ inputs.custom_version }}"
+            if [ -n "$CUSTOM_VER" ]; then
+              VERSION="$CUSTOM_VER"
+            else
+              VERSION="${{ github.ref_name }}"
+            fi
+          else
+            DRY_RUN="false"
+            VERSION="${{ github.ref_name }}"
+          fi
+
+          # Replace slashes and other unsafe characters with hyphens for clean filenames
+          SAFE_VERSION=$(echo "$VERSION" | sed 's/[^a-zA-Z0-9.-]/-/g')
+
+          # Ensure production releases only run on valid tags starting with 'v'
+          if [ "$DRY_RUN" = "false" ] && [[ ! "$SAFE_VERSION" =~ ^v ]]; then
+            echo "::error::Release builds must be tagged with a version starting with 'v' (e.g., v1.0.0). Current: $SAFE_VERSION"
+            exit 1
+          fi
+
+          echo "RELEASE_VERSION=${SAFE_VERSION}" >> $GITHUB_ENV
+          echo "IS_DRY_RUN=${DRY_RUN}" >> $GITHUB_ENV
+          echo "Determined release version: ${SAFE_VERSION} (Dry Run: ${DRY_RUN})"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build Backend Artifact
+        run: |
+          mkdir -p dist
+          # Compress the backend package excluding unnecessary local dev and cache assets.
+          # We sort files, reset ownership, and clamp mtime to make the tarball 100% deterministic.
+          tar --sort=name \
+              --mtime="2026-01-01 00:00:00Z" \
+              --owner=0 --group=0 \
+              --numeric-owner \
+              --exclude="backend/__pycache__" \
+              --exclude="backend/*.db" \
+              --exclude="backend/logs" \
+              -czf dist/secuscan-backend-${{ env.RELEASE_VERSION }}.tar.gz backend/
+          echo "Backend bundle size: $(du -sh dist/secuscan-backend-${{ env.RELEASE_VERSION }}.tar.gz | cut -f1)"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Build Frontend Artifact
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+          # Compress the compiled build output folder.
+          # We sort files, reset ownership, and clamp mtime to make the tarball 100% deterministic.
+          tar --sort=name \
+              --mtime="2026-01-01 00:00:00Z" \
+              --owner=0 --group=0 \
+              --numeric-owner \
+              -czf ../dist/secuscan-frontend-${{ env.RELEASE_VERSION }}.tar.gz dist/
+          cd ..
+          echo "Frontend bundle size: $(du -sh dist/secuscan-frontend-${{ env.RELEASE_VERSION }}.tar.gz | cut -f1)"
+
+      - name: Generate Checksums
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS
+          echo "Generated Checksums:"
+          cat SHA256SUMS
+          cd ..
+
+      - name: Sign Artifacts with Sigstore
+        uses: sigstore/gh-action-sigstore-python@v3.0.0
+        with:
+          inputs: |
+            ./dist/secuscan-backend-${{ env.RELEASE_VERSION }}.tar.gz
+            ./dist/secuscan-frontend-${{ env.RELEASE_VERSION }}.tar.gz
+            ./dist/SHA256SUMS
+
+      - name: Upload Dry-run Artifacts
+        if: env.IS_DRY_RUN == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: secuscan-release-dryrun-${{ env.RELEASE_VERSION }}
+          path: ./dist/*
+          retention-days: 7
+
+      - name: Create GitHub Release and Upload Assets
+        if: env.IS_DRY_RUN == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ./dist/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
