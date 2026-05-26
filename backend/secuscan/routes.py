@@ -2,7 +2,14 @@
 API routes for SecuScan backend
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request
+from fastapi import (
+    APIRouter,
+    HTTPException,
+    BackgroundTasks,
+    Response,
+    Request,
+    Depends,
+)
 from fastapi.responses import JSONResponse
 from typing import Any, Optional, List, Dict, Callable
 import json
@@ -78,7 +85,14 @@ from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager, init_plugins
 from .executor import executor
-from .ratelimit import rate_limiter, concurrent_limiter
+from .ratelimit import (
+    rate_limiter,
+    concurrent_limiter,
+    task_start_limiter,
+    vault_limiter,
+    report_download_limiter,
+    read_heavy_limiter,
+)
 from .validation import validate_target, validate_task_start_payload
 from .reporting import reporting
 from .vault import VaultCrypto
@@ -196,7 +210,7 @@ async def get_all_presets():
     }
 
 
-@router.post("/task/start")
+@router.post("/task/start", dependencies=[Depends(task_start_limiter)])
 async def start_task(
     request: TaskCreateRequest,
     background_tasks: BackgroundTasks,
@@ -230,54 +244,7 @@ async def start_task(
         )
 
     if target := request.inputs.get("target"):
-        # Fix for Issue #283: Enforce immutable server config state and ignore untrusted user inputs
-        safe_mode = settings.safe_mode_default
-        target_str = str(target)
-        should_validate_target = plugin.category != "code" and not is_filesystem_target(
-            target_str
-        )
-
-        if should_validate_target:
-            is_valid, error_msg = validate_target(target_str, safe_mode)
-
-            if not is_valid:
-                logger.warning(
-                    f"Task start failed: Target validation failed for '{target}': {error_msg}"
-                )
-                raise HTTPException(status_code=400, detail=error_msg)
-
-    # Check rate limits
-    can_execute, error_msg = await rate_limiter.can_execute(
-        request.plugin_id,
-        plugin.safety.get("rate_limit", {}).get(
-            "max_per_hour", settings.max_tasks_per_hour
-        ),
-    )
-
-    if not can_execute:
-        raise HTTPException(status_code=429, detail=error_msg)
-
-    # Create task record first so we have a real task_id for the limiter
-    try:
-        task_id = await executor.create_task(
-            request.plugin_id, request.inputs, request.preset, request.consent_granted
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-    # Get plugin
-    plugin_manager = await get_plugin_manager_for_request()
-    plugin = plugin_manager.get_plugin(request.plugin_id)
-
-    if not plugin:
-        logger.warning(f"Task start failed: Plugin not found: {request.plugin_id}")
-        raise HTTPException(
-            status_code=404, detail=f"Plugin not found: {request.plugin_id}"
-        )
-
-    if target := request.inputs.get("target"):
-        # Fix for Issue #283: Force safe_mode to use strict server-side configuration only
-        safe_mode = settings.safe_mode_default
+        safe_mode = request.inputs.get("safe_mode", settings.safe_mode_default)
         target_str = str(target)
         should_validate_target = plugin.category != "code" and not is_filesystem_target(
             target_str
@@ -403,7 +370,9 @@ async def stream_task_output(task_id: str):
     return EventSourceResponse(event_generator())
 
 
-@router.get("/task/{task_id}/report/csv")
+@router.get(
+    "/task/{task_id}/report/csv", dependencies=[Depends(report_download_limiter)]
+)
 async def download_csv_report(task_id: str):
     """Download task results as a CSV report."""
     db = await get_db()
@@ -451,7 +420,9 @@ async def download_csv_report(task_id: str):
     )
 
 
-@router.get("/task/{task_id}/report/html")
+@router.get(
+    "/task/{task_id}/report/html", dependencies=[Depends(report_download_limiter)]
+)
 async def download_html_report(task_id: str):
     """Download task results as an HTML report."""
     db = await get_db()
@@ -499,7 +470,9 @@ async def download_html_report(task_id: str):
     )
 
 
-@router.get("/task/{task_id}/report/pdf")
+@router.get(
+    "/task/{task_id}/report/pdf", dependencies=[Depends(report_download_limiter)]
+)
 async def download_pdf_report(task_id: str):
     """Download task results as a PDF report."""
     db = await get_db()
@@ -549,7 +522,9 @@ async def download_pdf_report(task_id: str):
     )
 
 
-@router.get("/task/{task_id}/report/sarif")
+@router.get(
+    "/task/{task_id}/report/sarif", dependencies=[Depends(report_download_limiter)]
+)
 async def download_sarif_report(task_id: str):
     """Download task results as a SARIF report."""
     db = await get_db()
@@ -717,7 +692,7 @@ async def cancel_task(task_id: str):
     return {"task_id": task_id, "status": "cancelled", "cancelled_at": "now"}
 
 
-@router.get("/dashboard/summary")
+@router.get("/dashboard/summary", dependencies=[Depends(read_heavy_limiter)])
 async def get_dashboard_summary():
     """Return aggregate dashboard data from the primary store, cached in Redis."""
 
@@ -725,10 +700,15 @@ async def get_dashboard_summary():
         db = await get_db()
 
         # Get data
-        raw_findings = await db.fetchall(
-            "SELECT * FROM findings ORDER BY discovered_at DESC"
+        # Push severity aggregation to DB — avoids full table scan in Python
+        severity_rows = await db.fetchall(
+            """
+            SELECT severity, COUNT(*) AS cnt
+            FROM findings
+            GROUP BY severity
+            """
         )
-        findings = parse_json_fields(raw_findings, ["metadata_json"])
+        severity_counts = {row["severity"]: row["cnt"] for row in severity_rows}
 
         task_stats = await db.fetchone(
             """
@@ -740,32 +720,37 @@ async def get_dashboard_summary():
             """
         )
 
-        critical_findings: int = sum(
-            bool(item.get("severity") == "critical") for item in findings
-        )
-        high_findings: int = sum(
-            bool(item.get("severity") == "high") for item in findings
-        )
-        medium_findings: int = sum(
-            bool(item.get("severity") == "medium") for item in findings
-        )
-        low_findings: int = sum(
-            bool(item.get("severity") == "low") for item in findings
-        )
-        info_findings: int = sum(
-            bool(item.get("severity") == "info") for item in findings
-        )
+        total_findings_row = await db.fetchone("SELECT COUNT(*) AS total FROM findings")
+        total_findings = total_findings_row["total"] if total_findings_row else 0
 
-        recent_findings: List[Dict] = findings[:5]
+        critical_findings: int = severity_counts.get("critical", 0)
+        high_findings: int = severity_counts.get("high", 0)
+        medium_findings: int = severity_counts.get("medium", 0)
+        low_findings: int = severity_counts.get("low", 0)
+        info_findings: int = severity_counts.get("info", 0)
+
+        # Fetch only the 5 most recent findings — not the entire table
+        recent_rows = await db.fetchall(
+            """
+            SELECT id, title, category, severity, target, description,
+                remediation, proof, cvss, cve, discovered_at, metadata_json
+            FROM findings
+            ORDER BY discovered_at DESC
+            LIMIT 5
+            """
+        )
+        recent_findings: List[Dict] = parse_json_fields(recent_rows, ["metadata_json"])
 
         return {
-            "total_findings": len(findings),
+            "total_findings": total_findings,
             "critical_findings": critical_findings,
             "high_findings": high_findings,
             "medium_findings": medium_findings,
             "low_findings": low_findings,
             "info_findings": info_findings,
-            "last_scan_time": findings[0].get("discovered_at") if findings else None,
+            "last_scan_time": (
+                recent_findings[0].get("discovered_at") if recent_findings else None
+            ),
             "recent_findings": recent_findings,
             "scan_activity": {
                 "total": (
@@ -801,7 +786,7 @@ async def get_dashboard_summary():
     return await get_or_set_cached("summary:dashboard", build)
 
 
-@router.get("/findings")
+@router.get("/findings", dependencies=[Depends(read_heavy_limiter)])
 async def get_findings():
     """Return vulnerability findings."""
 
@@ -813,7 +798,7 @@ async def get_findings():
     return await get_or_set_cached("findings:list", build)
 
 
-@router.get("/reports")
+@router.get("/reports", dependencies=[Depends(read_heavy_limiter)])
 async def get_reports():
     """Return generated reports."""
 
@@ -825,7 +810,7 @@ async def get_reports():
     return await get_or_set_cached("reports:list", build)
 
 
-@router.get("/tasks")
+@router.get("/tasks", dependencies=[Depends(read_heavy_limiter)])
 async def list_tasks(
     page: int = 1,
     per_page: int = 25,
@@ -1056,7 +1041,7 @@ async def get_settings():
     }
 
 
-@router.get("/vault")
+@router.get("/vault", dependencies=[Depends(vault_limiter)])
 async def list_vault_secrets():
     db = await get_db()
     rows = await db.fetchall(
@@ -1065,7 +1050,7 @@ async def list_vault_secrets():
     return {"items": rows, "total": len(rows)}
 
 
-@router.put("/vault/{name}")
+@router.put("/vault/{name}", dependencies=[Depends(vault_limiter)])
 async def upsert_vault_secret(name: str, payload: Dict[str, str]):
     value = str(payload.get("value", ""))
     if not value:
@@ -1092,7 +1077,7 @@ async def upsert_vault_secret(name: str, payload: Dict[str, str]):
     return {"name": name, "stored": True}
 
 
-@router.get("/vault/{name}")
+@router.get("/vault/{name}", dependencies=[Depends(vault_limiter)])
 async def get_vault_secret(name: str):
     db = await get_db()
     row = await db.fetchone(
@@ -1104,7 +1089,7 @@ async def get_vault_secret(name: str):
     return {"name": name, "value": crypto.decrypt(row["encrypted_value"])}
 
 
-@router.delete("/vault/{name}")
+@router.delete("/vault/{name}", dependencies=[Depends(vault_limiter)])
 async def delete_vault_secret(name: str):
     db = await get_db()
     await db.execute("DELETE FROM credential_vault WHERE name = ?", (name,))
