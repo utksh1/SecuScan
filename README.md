@@ -151,6 +151,24 @@ cd frontend
 npm run e2e
 ```
 
+
+### UI Regression Tests
+
+Run visual regression coverage:
+
+```bash
+cd frontend
+npm run e2e
+```
+
+Update screenshot baselines intentionally:
+
+```bash
+npx playwright test testing/e2e/ui-regression.spec.ts --update-snapshots
+```
+
+Only update snapshots when UI changes are expected and reviewed.
+
 ## New Contributors Start Here
 
 If this is your first contribution, start with one of these areas:
