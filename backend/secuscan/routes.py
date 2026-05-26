@@ -74,7 +74,8 @@ from .executor import executor
 from .ratelimit import (
     rate_limiter, concurrent_limiter,
     task_start_limiter, vault_limiter,
-    report_download_limiter, read_heavy_limiter
+    report_download_limiter, read_heavy_limiter,
+    resolve_client_identity,
 )
 from .validation import validate_target, validate_task_start_payload
 from .reporting import reporting
@@ -237,10 +238,13 @@ async def start_task(
                 logger.warning(f"Task start failed: Target validation failed for '{target}': {error_msg}")
                 raise HTTPException(status_code=400, detail=error_msg)
 
-    # Check rate limits
+    # Check rate limits per (client, plugin) so one client cannot exhaust
+    # the quota for all other users of the same plugin.
+    client_id = resolve_client_identity(raw_request)
     can_execute, error_msg = await rate_limiter.can_execute(
         request.plugin_id,
-        plugin.safety.get("rate_limit", {}).get("max_per_hour", settings.max_tasks_per_hour)
+        plugin.safety.get("rate_limit", {}).get("max_per_hour", settings.max_tasks_per_hour),
+        client_id=client_id,
     )
 
     if not can_execute:
