@@ -131,6 +131,7 @@ app.add_middleware(RequestIDMiddleware)
 # Include API routes
 app.include_router(router)
 
+
 # Health check endpoint
 @app.get("/api/v1/health")
 async def health_check():
