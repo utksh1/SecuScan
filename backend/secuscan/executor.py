@@ -20,6 +20,7 @@ from .database import get_db
 from .plugins import get_plugin_manager
 from .models import TaskStatus
 from .ratelimit import concurrent_limiter
+from .telemetry import PluginTelemetry
 
 # Modular Scanners
 from .scanners.port_scanner import PortScanner
@@ -288,13 +289,29 @@ class TaskExecutor:
                 await self._broadcast(task_id, "status", TaskStatus.RUNNING.value)
 
                 # Execute command
-                start_time = time.time()
-                output, exit_code = await self._execute_command(
-                    command,
-                    task_id,
-                    timeout=self._resolve_execution_timeout(inputs),
+                execution_timeout = self._resolve_execution_timeout(inputs)
+                telemetry = PluginTelemetry(
+                    plugin_name=plugin.name,
+                    resource_hints={
+                        "memory_limit_mb": settings.sandbox_memory_mb,
+                        "cpu_quota": settings.sandbox_cpu_quota,
+                        "docker_enabled": settings.docker_enabled,
+                    }
                 )
+                start_time = time.time()
+                output, exit_code, timed_out, timeout_reason, output_size_bytes = \
+                    await self._execute_command(
+                        command,
+                        task_id,
+                        timeout=execution_timeout,
+                    )
                 duration = time.time() - start_time
+
+                telemetry.duration_seconds = duration
+                telemetry.exit_code = exit_code
+                telemetry.output_size_bytes = output_size_bytes
+                telemetry.timed_out = timed_out
+                telemetry.timeout_reason = timeout_reason
 
                 # Save raw output
                 raw_path = Path(settings.raw_output_dir) / f"{task_id}.txt"
@@ -334,16 +351,26 @@ class TaskExecutor:
                     )
                 )
 
-                # Upsert findings and report
-                await self._upsert_findings_and_report(
-                    db=db,
-                    task_id=task_id,
-                    plugin=plugin,
-                    plugin_id=plugin_id,
-                    target=target,
-                    status=final_status,
-                    output=output
-                )
+                # Upsert findings and report (timed for telemetry)
+                _parser_start = time.time()
+                _parser_error = None
+                try:
+                    await self._upsert_findings_and_report(
+                        db=db,
+                        parser_time_seconds=parser_time_seconds,
+                        plugin=plugin,
+                        plugin_id=plugin_id,
+                        target=target,
+                        status=final_status,
+                        output=output
+                    )
+                except Exception as _pe:
+                    _parser_error = str(_pe)
+                    raise
+                finally:
+                    telemetry.parser_time_seconds = time.time() - _parser_start
+                    telemetry.parser_error = _parser_error
+                    telemetry.log(task_id)
 
             await self._broadcast(task_id, "status", final_status)
             await self._invalidate_cached_views()
@@ -467,12 +494,26 @@ class TaskExecutor:
             try:
                 await asyncio.wait_for(read_stream(), timeout=timeout)
                 await process.wait()
-                return "".join(output_lines), process.returncode if process.returncode is not None else -1
+                full_output = "".join(output_lines)
+                return (
+                    full_output,
+                    process.returncode if process.returncode is not None else -1,
+                    False,
+                    None,
+                    len(full_output.encode("utf-8", errors="replace")),
+                )
 
             except asyncio.TimeoutError:
                 process.kill()
                 await process.wait()
-                return "".join(output_lines) + "\nTask timed out", -1
+                partial_output = "".join(output_lines)
+                return (
+                    partial_output + "\nTask timed out",
+                    -1,
+                    True,
+                    f"Hard limit of {timeout}s exceeded",
+                    len(partial_output.encode("utf-8", errors="replace")),
+                )
 
             except asyncio.CancelledError:
                 # Handle task cancellation by killing the subprocess
@@ -486,7 +527,7 @@ class TaskExecutor:
 
         except Exception as e:
             logger.error(f"Failed to execute command: {e}")
-            return f"Execution error: {str(e)}", -1
+            return f"Execution error: {str(e)}", -1, False, None, 0
 
     def _resolve_execution_timeout(self, inputs: Dict[str, Any]) -> int:
         """Resolve per-task process timeout from plugin inputs."""

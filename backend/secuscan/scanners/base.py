@@ -1,8 +1,11 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+import asyncio
 import logging
+import time
 
+from ..telemetry import PluginTelemetry
 logger = logging.getLogger(__name__)
 
 class BaseScanner(ABC):
@@ -16,6 +19,64 @@ class BaseScanner(ABC):
         self.db = db
         self.start_time = datetime.now()
         self._progress = 0.0
+        self.telemetry: Optional[PluginTelemetry] = None
+
+    async def _execute_command_timed(
+        self,
+        command: list,
+        timeout: int = 300,
+    ) -> tuple:
+        """
+        Execute a subprocess command and return
+        (output, exit_code, timed_out, timeout_reason, output_size_bytes).
+        Populates self.telemetry automatically.
+        """
+        if self.telemetry is None:
+            self.telemetry = PluginTelemetry(plugin_name=self.name)
+
+        start = time.monotonic()
+        timed_out = False
+        timeout_reason = None
+        output = ""
+        exit_code = -1
+
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *command,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            try:
+                stdout, _ = await asyncio.wait_for(
+                    process.communicate(), timeout=timeout
+                )
+                output = stdout.decode("utf-8", errors="replace")
+                exit_code = process.returncode or 0
+
+            except asyncio.TimeoutError:
+                process.kill()
+                await process.wait()
+                exit_code = -1
+                timed_out = True
+                timeout_reason = f"Hard limit of {timeout}s exceeded"
+
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.error("Scanner command failed: %s", exc)
+            output = f"Execution error: {exc}"
+            exit_code = -1
+
+        elapsed = time.monotonic() - start
+        output_size = len(output.encode("utf-8", errors="replace"))
+
+        self.telemetry.duration_seconds += elapsed
+        self.telemetry.exit_code = exit_code
+        self.telemetry.output_size_bytes += output_size
+        self.telemetry.timed_out = timed_out
+        self.telemetry.timeout_reason = timeout_reason
+
+        return output, exit_code, timed_out, timeout_reason, output_size
 
     @property
     @abstractmethod
