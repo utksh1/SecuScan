@@ -632,11 +632,11 @@ class TaskExecutor:
         """Persist derived findings and report records into SQLite."""
         parsed = self._parse_results(plugin, output)
         findings_data = parsed.get("findings", [])
-        
+
         # Inject target into findings so they pass Pydantic validation when fetched
         for finding in findings_data:
             finding["target"] = target
-            
+
         # Update task with structured results
         await db.execute(
             "UPDATE tasks SET structured_json = ? WHERE id = ?",
