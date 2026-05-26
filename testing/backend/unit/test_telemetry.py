@@ -21,7 +21,7 @@ from unittest.mock import AsyncMock, MagicMock, patch, call
 # Helpers
 
 def make_telemetry(plugin_name="test_plugin", **kwargs):
-    from secuscan.telemetry import PluginTelemetry
+    from backend.secuscan.telemetry import PluginTelemetry
     return PluginTelemetry(plugin_name=plugin_name, **kwargs)
 
 
@@ -152,7 +152,7 @@ class TestExecuteCommandSuccess:
 
     @pytest.fixture
     def executor(self):
-        from secuscan.executor import TaskExecutor
+        from backend.secuscan.executor import TaskExecutor
         ex = TaskExecutor.__new__(TaskExecutor)
         ex._broadcast = AsyncMock()
         return ex
@@ -205,7 +205,7 @@ class TestExecuteCommandTimeout:
 
     @pytest.fixture
     def executor(self):
-        from secuscan.executor import TaskExecutor
+        from backend.secuscan.executor import TaskExecutor
         ex = TaskExecutor.__new__(TaskExecutor)
         ex._broadcast = AsyncMock()
         return ex
@@ -295,7 +295,7 @@ class TestExecuteCommandNonZeroExit:
 
     @pytest.fixture
     def executor(self):
-        from secuscan.executor import TaskExecutor
+        from backend.secuscan.executor import TaskExecutor
         ex = TaskExecutor.__new__(TaskExecutor)
         ex._broadcast = AsyncMock()
         return ex
@@ -333,7 +333,7 @@ class TestExecuteCommandSpawnError:
 
     @pytest.fixture
     def executor(self):
-        from secuscan.executor import TaskExecutor
+        from backend.secuscan.executor import TaskExecutor
         ex = TaskExecutor.__new__(TaskExecutor)
         ex._broadcast = AsyncMock()
         return ex
@@ -452,14 +452,14 @@ class _ConcreteScanner:
     """Minimal stand-in that avoids importing the full BaseScanner ABC."""
 
     def __init__(self):
-        from secuscan.telemetry import PluginTelemetry
+        from backend.secuscan.telemetry import PluginTelemetry
         self.task_id = "t-base"
         self.name = "test_scanner"
         self.telemetry = PluginTelemetry(plugin_name=self.name)
 
     async def _execute_command_timed(self, command, timeout=300):
         # Delegate to the real implementation via mixin call
-        from secuscan.scanners.base import BaseScanner
+        from backend.secuscan.scanners.base import BaseScanner
         return await BaseScanner._execute_command_timed(self, command, timeout=timeout)
 
 
@@ -629,4 +629,4 @@ class TestTelemetrySecurityNegative:
         d = t.to_dict()
         assert isinstance(d["output_size_bytes"], int)
         assert "secret" not in str(d["output_size_bytes"])
-        
+

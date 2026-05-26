@@ -49,4 +49,4 @@ class PluginTelemetry:
             self.timeout_reason,
             self.parser_error,
         )
-        
+

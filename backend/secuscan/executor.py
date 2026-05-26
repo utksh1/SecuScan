@@ -357,7 +357,6 @@ class TaskExecutor:
                 try:
                     await self._upsert_findings_and_report(
                         db=db,
-                        parser_time_seconds=parser_time_seconds,
                         plugin=plugin,
                         plugin_id=plugin_id,
                         target=target,
