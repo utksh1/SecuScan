@@ -102,6 +102,25 @@ function rowToView(row: BackendRow): SavedView | null {
   }
 }
 
+/**
+ * Backend sync failure behaviour
+ * ─────────────────────────────
+ * All backend calls are fire-and-forget with a hard 8-second timeout.
+ * On any network error, non-2xx response, or timeout:
+ *
+ *   • The optimistic local state (already written to localStorage) is
+ *     kept as-is — the user never sees an error for a backend outage.
+ *   • `backendAvailable` stays false so subsequent mutations skip the
+ *     network entirely rather than hammering an unreachable server.
+ *   • On the next page load the hook retries the backend hydration; if
+ *     it succeeds, remote state is merged (remote wins on timestamp).
+ *   • There is intentionally no retry queue — SecuScan is local-first
+ *     and localStorage is the source of truth.  The backend is a
+ *     convenience sync layer, not a required dependency.
+ *
+ * Callers (SavedViewsPanel) can rely on the returned Promise always
+ * resolving — it never rejects due to a backend failure.
+ */
 async function apiFetch<T>(
   path: string,
   init?: RequestInit,
@@ -142,7 +161,7 @@ export function useSavedViews(): UseSavedViewsReturn {
 
     async function hydrate() {
       // Try backend first
-      const data = await apiFetch<{ views: BackendRow[] }>('/api/v1/saved-views')
+      const data = await apiFetch<{ views: BackendRow[] }>('/saved-views')
       if (!cancelled) {
         if (data && Array.isArray(data.views)) {
           const parsed = data.views.map(rowToView).filter(Boolean) as SavedView[]
@@ -191,7 +210,7 @@ export function useSavedViews(): UseSavedViewsReturn {
             name: trimmed,
             filter_json: JSON.stringify(preset),
           }
-          apiFetch(`/api/v1/saved-views/${existing.id}`, {
+          apiFetch(`/saved-views/${existing.id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
@@ -217,7 +236,7 @@ export function useSavedViews(): UseSavedViewsReturn {
           name: trimmed,
           filter_json: JSON.stringify(preset),
         }
-        const result = await apiFetch<{ id: string }>('/api/v1/saved-views', {
+        const result = await apiFetch<{ id: string }>('/saved-views', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -240,7 +259,7 @@ export function useSavedViews(): UseSavedViewsReturn {
       syncSet(views.filter((v) => v.id !== id))
 
       if (backendAvailable.current && !id.startsWith('local-')) {
-        apiFetch(`/api/v1/saved-views/${id}`, { method: 'DELETE' })
+        apiFetch(`/saved-views/${id}`, { method: 'DELETE' })
       }
     },
     [views, syncSet],
@@ -264,7 +283,7 @@ export function useSavedViews(): UseSavedViewsReturn {
             name: trimmed,
             filter_json: JSON.stringify(target.preset),
           }
-          apiFetch(`/api/v1/saved-views/${id}`, {
+          apiFetch(`/saved-views/${id}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),

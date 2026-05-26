@@ -93,33 +93,11 @@ class SavedViewUpdate(BaseModel):
 
 
 
-async def ensure_saved_views_table() -> None:
-    """
-    Idempotently create the saved_views table.
-    Call this from the router startup or from database._create_schema.
-
-    If you prefer to add this SQL directly to database.py's _create_schema,
-    paste the CREATE TABLE block there and remove this function.
-    """
-    db = await get_db()
-    await db.execute(
-        """
-        CREATE TABLE IF NOT EXISTS saved_views (
-            id          TEXT PRIMARY KEY,
-            name        TEXT NOT NULL UNIQUE,
-            filter_json TEXT NOT NULL,
-            created_at  TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-            updated_at  TIMESTAMP NOT NULL DEFAULT (datetime('now'))
-        )
-        """
-    )
-
 
 
 @saved_views_router.get("")
 async def list_saved_views() -> Dict[str, Any]:
     """Return all saved views ordered by creation date."""
-    await ensure_saved_views_table()
     db = await get_db()
     rows: List[Dict] = await db.fetchall(
         "SELECT id, name, filter_json, created_at, updated_at "
@@ -134,7 +112,6 @@ async def create_saved_view(body: SavedViewCreate) -> Dict[str, Any]:
     Create a new saved view.
     Returns 409 if a view with the same name already exists.
     """
-    await ensure_saved_views_table()
     db = await get_db()
 
 
@@ -165,7 +142,6 @@ async def update_saved_view(view_id: str, body: SavedViewUpdate) -> Dict[str, An
     Overwrite name and/or filter_json for an existing view.
     Also accepts PATCH semantics — only supplied fields are updated.
     """
-    await ensure_saved_views_table()
     db = await get_db()
 
     row = await db.fetchone("SELECT id FROM saved_views WHERE id = ?", (view_id,))
@@ -209,7 +185,6 @@ async def update_saved_view(view_id: str, body: SavedViewUpdate) -> Dict[str, An
 @saved_views_router.delete("/{view_id}")
 async def delete_saved_view(view_id: str) -> Dict[str, Any]:
     """Delete a saved view by id. Idempotent — returns 200 even if not found."""
-    await ensure_saved_views_table()
     db = await get_db()
     await db.execute("DELETE FROM saved_views WHERE id = ?", (view_id,))
     return {"id": view_id, "deleted": True}

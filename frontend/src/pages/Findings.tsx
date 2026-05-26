@@ -107,21 +107,9 @@ export default function Findings() {
   const [reviewState, setReviewState] = useState<ReviewState>({})
   const [copiedFindingId, setCopiedFindingId] = useState<string | null>(null)
 
-  // ── Saved views hook ───────────────────────────────────────────────────────
+  // ── Saved views ────────────────────────────────────────────────────────────
   const { views, loading: viewsLoading, saveView, deleteView, renameView } = useSavedViews()
 
-  /** Apply a saved preset to all filter controls. */
-  function applyPreset(preset: FilterPreset) {
-    setFilterSeverity(preset.severity)
-    setFilterTarget(preset.target)
-    setFilterScanner(preset.scanner)
-    setSortMode(preset.sortMode as SortMode)
-    setDateFrom(preset.dateFrom)
-    setDateTo(preset.dateTo)
-    setSearchQuery(preset.searchQuery)
-  }
-
-  /** Snapshot the current filter controls as a FilterPreset. */
   const currentPreset: FilterPreset = {
     severity: filterSeverity,
     target: filterTarget,
@@ -130,6 +118,16 @@ export default function Findings() {
     dateFrom,
     dateTo,
     searchQuery,
+  }
+
+  function applyPreset(preset: FilterPreset) {
+    setFilterSeverity(preset.severity)
+    setFilterTarget(preset.target)
+    setFilterScanner(preset.scanner)
+    setSortMode(preset.sortMode as SortMode)
+    setDateFrom(preset.dateFrom)
+    setDateTo(preset.dateTo)
+    setSearchQuery(preset.searchQuery)
   }
 
   useEffect(() => {
@@ -294,29 +292,6 @@ export default function Findings() {
     [enrichedFindings, filteredFindings, countsBySeverity],
   )
 
-  // Derives a flat list of active filter chips from non-default filter state.
-  const activeFilters = useMemo(() => {
-    const chips: { key: string; label: string }[] = []
-    if (searchQuery.trim())      chips.push({ key: 'search',  label: `Search: "${searchQuery.trim()}"` })
-    if (filterTarget !== 'all')  chips.push({ key: 'target',  label: `Target: ${filterTarget}` })
-    if (filterScanner !== 'all') chips.push({ key: 'scanner', label: `Scanner: ${filterScanner}` })
-    if (sortMode !== 'severity') chips.push({ key: 'sort',    label: `Sort: ${sortMode}` })
-    if (dateFrom)                chips.push({ key: 'from',    label: `From: ${dateFrom}` })
-    if (dateTo)                  chips.push({ key: 'to',      label: `To: ${dateTo}` })
-    return chips
-  }, [searchQuery, filterTarget, filterScanner, sortMode, dateFrom, dateTo])
-
-
-  function resetAllFilters() {
-    setFilterSeverity('all')
-    setFilterTarget('all')
-    setFilterScanner('all')
-    setSortMode('severity')
-    setDateFrom('')
-    setDateTo('')
-    setSearchQuery('')
-  }
-
   function updateFindingStatus(id: string, status: FindingStatus) {
     setReviewState((current) => ({ ...current, [id]: status }))
   }
@@ -399,7 +374,7 @@ export default function Findings() {
               </div>
             ) : null}
 
-            <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-silver-bright' : 'text-silver/30'}`} aria-hidden="true">
+            <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-silver-bright' : 'text-silver/30'}`}>
               east
             </span>
           </div>
@@ -409,195 +384,146 @@ export default function Findings() {
   }
 
   return (
-    <div className="min-h-screen bg-charcoal-dark text-silver">
-      <div className="mx-auto flex w-full max-w-[1600px] flex-col">
-
-        {/* ── Page Header ──────────────────────────────────────────────────── */}
-        <header className="border-b border-silver-bright/8 px-6 py-6 md:px-10 md:py-8">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            {/* Left: eyebrow + title + stats */}
-            <div>
-              <p className="mb-1 text-[10px] font-black uppercase tracking-[0.3em] text-silver/35">
-                SecuScan · Triage Interface
-              </p>
-              <h1 className="text-5xl font-black uppercase italic tracking-tighter text-silver-bright md:text-6xl">
-                Findings
+    <div className="min-h-screen bg-charcoal-dark text-silver px-4 py-6 md:px-8 md:py-10">
+      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8">
+        <header className="border-b-4 border-silver-bright/10 pb-8">
+          <div className="mb-4 inline-block bg-rag-red px-4 py-1 text-xs font-black uppercase tracking-widest text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            Triage Workspace v5.1
+          </div>
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+            <div className="space-y-3">
+              <h1 className="text-5xl font-black uppercase tracking-tighter text-silver-bright italic md:text-7xl">
+                Findings <span className="text-transparent" style={{ WebkitTextStroke: '1px var(--accent-silver-bright)' }}>Desk</span>
               </h1>
-              <p className="mt-2 text-[11px] font-mono uppercase tracking-[0.22em] text-silver/40">
-                {triageMetrics.total} Total
-                {' · '}
-                <span className="text-rag-red">{triageMetrics.active} Urgent</span>
-                {' · '}
-                {triageMetrics.unresolved} Triaging
+              <p className="text-xs font-mono uppercase tracking-[0.24em] text-silver/45">
+                Active triage feed // {triageMetrics.total} total signals // {triageMetrics.unresolved} awaiting analyst action
               </p>
             </div>
 
-            {/* Right: severity quick-filter pills */}
-            <div className="flex flex-wrap items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setFilterSeverity('all')}
-                className={`border px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] transition-all ${
-                  filterSeverity === 'all'
-                    ? 'border-silver-bright bg-silver-bright text-black'
-                    : 'border-silver-bright/15 bg-transparent text-silver/50 hover:border-silver-bright/40 hover:text-silver-bright'
-                }`}
-              >
-                All
-              </button>
-              {severityOrder.map((severity) => (
-                <button
-                  key={severity}
-                  type="button"
-                  onClick={() => setFilterSeverity((cur) => cur === severity ? 'all' : severity)}
-                  className={`border px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.18em] transition-all ${
-                    filterSeverity === severity
-                      ? `${severityConfig[severity].chip} border-black`
-                      : 'border-silver-bright/15 bg-transparent text-silver/50 hover:border-silver-bright/40 hover:text-silver-bright'
-                  }`}
+            <div className="grid w-full gap-3 sm:grid-cols-2 xl:w-auto xl:grid-cols-4">
+              {[
+                { label: 'Visible', value: triageMetrics.visible, tone: 'text-silver-bright' },
+                { label: 'Critical + High', value: triageMetrics.active, tone: 'text-rag-red' },
+                { label: 'Unresolved', value: triageMetrics.unresolved, tone: 'text-rag-amber' },
+                { label: 'Reviewed', value: enrichedFindings.filter((finding) => finding.status === 'reviewed').length, tone: 'text-rag-green' },
+              ].map((metric) => (
+                <div
+                  key={metric.label}
+                  className="border-2 border-black bg-charcoal px-4 py-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
                 >
-                  {severityConfig[severity].label}
-                </button>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.25em] text-silver/55">{metric.label}</p>
+                  <p className={`text-3xl font-black italic tracking-tight ${metric.tone}`}>{String(metric.value).padStart(2, '0')}</p>
+                </div>
               ))}
             </div>
           </div>
         </header>
 
-        <div className="flex flex-col gap-0 px-6 py-6 md:px-10 md:py-8 xl:flex-row xl:gap-6 xl:items-start">
-
-          {/* ── Left column: filter + findings list ─────────────────────── */}
-          <div className="flex min-w-0 flex-1 flex-col gap-4">
-
-            {/* Filter panel */}
-            <section className="border border-silver-bright/8 bg-charcoal/80 p-5 backdrop-blur lg:sticky lg:top-4 lg:z-20">
-
-              {/* Search */}
-              <div className="mb-4">
-                <label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.25em] text-silver/40">
-                  Search Scope
-                </label>
+        <section className="border-2 border-black bg-charcoal/95 p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] backdrop-blur lg:sticky lg:top-4 lg:z-20">
+          <div className="grid gap-4">
+            <div className="grid gap-4 2xl:grid-cols-[minmax(320px,1fr)_auto] 2xl:items-end">
+              <div className="space-y-2">
+                <label className={filterLabelClass}>Search</label>
                 <input
                   type="text"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Query via titles, target endpoints, CVE IDs..."
-                  className="h-10 w-full border border-silver-bright/10 bg-charcoal-dark px-3 text-xs font-mono text-silver-bright placeholder:text-silver/20 focus:border-silver-bright/30 focus:outline-none"
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Title, target, CVE, remediation..."
+                  className={`${filterControlClass} px-4 placeholder:text-silver/20`}
                 />
               </div>
 
-              {/* Dropdowns + date row */}
-              <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-                {/* Target Host */}
-                <div>
-                  <label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.22em] text-silver/40">
-                    Target Host
-                  </label>
+              <div className="flex flex-wrap gap-2 pb-2 sm:pb-0 2xl:max-w-[760px] 2xl:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setFilterSeverity('all')}
+                  className={`min-h-10 border px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] transition-all ${filterPillClasses(filterSeverity === 'all')}`}
+                >
+                  All
+                </button>
+                {severityOrder.map((severity) => (
+                  <button
+                    key={severity}
+                    type="button"
+                    onClick={() => setFilterSeverity((current) => (current === severity ? 'all' : severity))}
+                    className={`min-h-10 border px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] transition-all ${
+                      filterSeverity === severity
+                        ? `${severityConfig[severity].chip} border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]`
+                        : 'border-silver-bright/10 bg-charcoal-dark text-silver/65 hover:border-silver-bright/30'
+                    }`}
+                  >
+                    {severityConfig[severity].label} {countsBySeverity[severity] || 0}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+                <div className="space-y-2">
+                  <label className={filterLabelClass}>Target</label>
                   <select
                     value={filterTarget}
                     onChange={(e) => setFilterTarget(e.target.value)}
-                    className="h-10 w-full border border-silver-bright/10 bg-charcoal-dark px-3 text-xs font-mono text-silver-bright focus:border-silver-bright/30 focus:outline-none"
+                    className={filterControlClass}
                   >
-                    <option value="all">All targets</option>
+                    <option value="all">All Targets</option>
                     {uniqueTargets.map((t) => (
                       <option key={t} value={t}>{t}</option>
                     ))}
                   </select>
                 </div>
 
-                {/* Engine / Scanner */}
-                <div>
-                  <label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.22em] text-silver/40">
-                    Engine/Scanner
-                  </label>
+                <div className="space-y-2">
+                  <label className={filterLabelClass}>Scanner / Tool</label>
                   <select
                     value={filterScanner}
                     onChange={(e) => setFilterScanner(e.target.value)}
-                    className="h-10 w-full border border-silver-bright/10 bg-charcoal-dark px-3 text-xs font-mono text-silver-bright focus:border-silver-bright/30 focus:outline-none"
+                    className={filterControlClass}
                   >
-                    <option value="all">All scanners</option>
+                    <option value="all">All Scanners</option>
                     {uniqueScanners.map((s) => (
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
                 </div>
 
-                {/* Discovered From */}
-                <div>
-                  <label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.22em] text-silver/40">
-                    Discovered From
-                  </label>
-                  <div className="relative flex h-10">
-                    <input
-                      id="date-from-input"
-                      type="date"
-                      value={dateFrom}
-                      onChange={(e) => setDateFrom(e.target.value)}
-                      className="h-10 w-full border border-silver-bright/10 bg-charcoal-dark px-3 text-xs font-mono text-silver-bright [color-scheme:dark] focus:border-silver-bright/30 focus:outline-none [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-                    />
-                    <button
-                      type="button"
-                      aria-label="Open date picker for Discovered From"
-                      onClick={() => (document.getElementById('date-from-input') as HTMLInputElement)?.showPicker?.()}
-                      className="absolute right-0 top-0 flex h-10 w-10 items-center justify-center border-l border-silver-bright/10 bg-charcoal-dark text-silver/40 transition-colors hover:bg-silver-bright/5 hover:text-silver-bright"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">calendar_month</span>
-                    </button>
-                  </div>
+                <div className="space-y-2">
+                  <label className={filterLabelClass}>Sort By</label>
+                  <select
+                    value={sortMode}
+                    onChange={(e) => setSortMode(e.target.value as SortMode)}
+                    className={filterControlClass}
+                  >
+                    <option value="severity">Severity (High → Low)</option>
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="target">Target (A → Z)</option>
+                  </select>
                 </div>
 
-                {/* Discovered To */}
-                <div>
-                  <label className="mb-1.5 block text-[9px] font-black uppercase tracking-[0.22em] text-silver/40">
-                    Discovered To
-                  </label>
-                  <div className="relative flex h-10">
-                    <input
-                      id="date-to-input"
-                      type="date"
-                      value={dateTo}
-                      onChange={(e) => setDateTo(e.target.value)}
-                      className="h-10 w-full border border-silver-bright/10 bg-charcoal-dark px-3 text-xs font-mono text-silver-bright [color-scheme:dark] focus:border-silver-bright/30 focus:outline-none [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:inset-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
-                    />
-                    <button
-                      type="button"
-                      aria-label="Open date picker for Discovered To"
-                      onClick={() => (document.getElementById('date-to-input') as HTMLInputElement)?.showPicker?.()}
-                      className="absolute right-0 top-0 flex h-10 w-10 items-center justify-center border-l border-silver-bright/10 bg-charcoal-dark text-silver/40 transition-colors hover:bg-silver-bright/5 hover:text-silver-bright"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">calendar_month</span>
-                    </button>
-                  </div>
+                <div className="space-y-2">
+                  <label className={filterLabelClass}>From Date</label>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className={`${filterControlClass} [color-scheme:dark]`}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className={filterLabelClass}>To Date</label>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className={`${filterControlClass} [color-scheme:dark]`}
+                  />
                 </div>
               </div>
 
-              {/* Sort tabs + Saved Views */}
-              <div className="mt-4 flex items-center justify-between gap-2 flex-wrap">
-                {/* Segmented sort tabs */}
-                <div className="flex items-center gap-0">
-                  {(
-                    [
-                      { value: 'severity', label: 'By Severity' },
-                      { value: 'newest',   label: 'Newest' },
-                      { value: 'oldest',   label: 'Oldest' },
-                      { value: 'target',   label: 'Target Alpha' },
-                    ] as { value: SortMode; label: string }[]
-                  ).map(({ value, label }) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setSortMode(value)}
-                      className={`border px-4 py-2 text-[10px] font-black uppercase tracking-[0.16em] transition-all -ml-px first:ml-0 ${
-                        sortMode === value
-                          ? 'relative z-10 border-silver-bright bg-silver-bright text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
-                          : 'border-silver-bright/15 bg-transparent text-silver/50 hover:text-silver-bright hover:border-silver-bright/30'
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Saved Views button (uses the panel component) */}
+              <div className="flex flex-wrap items-center gap-2">
                 <SavedViewsPanel
                   views={views}
                   loading={viewsLoading}
@@ -607,64 +533,83 @@ export default function Findings() {
                   currentPreset={currentPreset}
                   onApply={applyPreset}
                 />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterSeverity('all')
+                    setFilterTarget('all')
+                    setFilterScanner('all')
+                    setSortMode('severity')
+                    setDateFrom('')
+                    setDateTo('')
+                    setSearchQuery('')
+                  }}
+                  className="h-11 w-full border border-silver-bright/20 bg-charcoal-dark px-4 text-[10px] font-black uppercase tracking-[0.18em] text-silver/65 transition-all hover:border-rag-red hover:text-silver-bright xl:w-auto xl:min-w-[180px]"
+                >
+                  Reset Filters
+                </button>
               </div>
-            </section>
+            </div>
+          </div>
+        </section>
 
-            {/* Findings list */}
-            <motion.section variants={sectionVariants} initial="hidden" animate="visible" className="space-y-3">
-              {loading ? (
-                <div className="border border-dashed border-silver-bright/10 bg-charcoal/40 px-6 py-16 text-center">
-                  <p className="text-sm font-mono uppercase tracking-[0.25em] text-silver/50">Synchronizing findings feed...</p>
-                </div>
-              ) : filteredFindings.length === 0 ? (
-                <div className="border border-dashed border-silver-bright/10 bg-charcoal/40 px-6 py-20 text-center">
-                  <p className="text-2xl font-black uppercase italic tracking-[0.25em] text-silver/20">Queue Cleared</p>
-                  <p className="mt-3 text-xs font-mono uppercase tracking-[0.2em] text-silver/15">
-                    No items match your active profile matrices.
-                  </p>
-                </div>
-              ) : sortMode === 'severity' ? (
-                groupedFindings.map(({ severity, items }) => {
-                  if (items.length === 0) return null
-                  const config = severityConfig[severity]
-                  return (
-                    <div key={severity} className="border border-silver-bright/8 bg-charcoal">
-                      <div className="flex items-center gap-3 border-b border-silver-bright/8 px-5 py-3">
-                        <span className={`h-2.5 w-2.5 rotate-45 ${config.rail}`} />
-                        <p className={`text-[11px] font-black uppercase tracking-[0.2em] ${config.accent}`}>{config.label}</p>
-                        <p className="text-[9px] font-mono uppercase tracking-[0.15em] text-silver/30">{items.length} in queue</p>
-                      </div>
-                      <div className="divide-y divide-silver-bright/6">
-                        {items.map((finding) => renderFindingRow(finding))}
+        <div className="grid gap-8 xl:grid-cols-[minmax(0,1.2fr)_420px]">
+          <motion.section variants={sectionVariants} initial="hidden" animate="visible" className="space-y-5">
+            {loading ? (
+              <div className="border-4 border-dashed border-silver-bright/10 bg-charcoal/40 px-6 py-16 text-center">
+                <p className="text-sm font-mono uppercase tracking-[0.25em] text-silver/50">Synchronizing findings feed...</p>
+              </div>
+            ) : filteredFindings.length === 0 ? (
+              <div className="border-4 border-dashed border-silver-bright/10 bg-charcoal/40 px-6 py-20 text-center">
+                <p className="text-2xl font-black uppercase tracking-[0.25em] text-silver/25 italic">No Findings Match</p>
+                <p className="mt-3 text-xs font-mono uppercase tracking-[0.2em] text-silver/15">Adjust filters to reopen the queue.</p>
+              </div>
+            ) : sortMode === 'severity' ? (
+              groupedFindings.map(({ severity, items }) => {
+                if (items.length === 0) return null
+
+                const config = severityConfig[severity]
+
+                return (
+                  <div key={severity} className="border-2 border-black bg-charcoal shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+                    <div className="flex w-full items-center justify-between border-b border-silver-bright/8 px-5 py-4 text-left">
+                      <div className="flex items-center gap-4">
+                        <span className={`h-3 w-3 rotate-45 ${config.rail}`} />
+                        <div>
+                          <p className={`text-lg font-black uppercase tracking-[0.18em] ${config.accent}`}>{config.label}</p>
+                          <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-silver/40">{items.length} visible in queue</p>
+                        </div>
                       </div>
                     </div>
-                  )
-                })
-              ) : (
-                <div className="border border-silver-bright/8 bg-charcoal">
-                  <div className="flex items-center gap-3 border-b border-silver-bright/8 px-5 py-3">
-                    <span className="h-2.5 w-2.5 rotate-45 bg-silver-bright" />
-                    <p className="text-[11px] font-black uppercase tracking-[0.2em] text-silver-bright">
-                      {sortMode === 'newest' ? 'Newest First' : sortMode === 'oldest' ? 'Oldest First' : 'By Target'}
-                    </p>
-                    <p className="text-[9px] font-mono uppercase tracking-[0.15em] text-silver/30">{sortedFindings.length} in queue</p>
+
+                    <div className="divide-y divide-silver-bright/6">
+                      {items.map((finding) => renderFindingRow(finding))}
+                    </div>
                   </div>
-                  <div className="divide-y divide-silver-bright/6">
-                    {sortedFindings.map((finding) => renderFindingRow(finding))}
+                )
+              })
+            ) : (
+              <div className="border-2 border-black bg-charcoal shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+                <div className="flex w-full items-center justify-between border-b border-silver-bright/8 px-5 py-4 text-left">
+                  <div className="flex items-center gap-4">
+                    <span className="h-3 w-3 rotate-45 bg-silver-bright" />
+                    <div>
+                      <p className="text-lg font-black uppercase tracking-[0.18em] text-silver-bright">
+                        {sortMode === 'newest' ? 'Newest First' : sortMode === 'oldest' ? 'Oldest First' : 'By Target'}
+                      </p>
+                      <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-silver/40">{sortedFindings.length} visible in queue</p>
+                    </div>
                   </div>
                 </div>
-              )}
-            </motion.section>
-          </div>
+                <div className="divide-y divide-silver-bright/6">
+                  {sortedFindings.map((finding) => renderFindingRow(finding))}
+                </div>
+              </div>
+            )}
+          </motion.section>
 
-          {/* ── Right column: detail panel ──────────────────────────────── */}
-          <motion.aside
-            variants={sectionVariants}
-            initial="hidden"
-            animate="visible"
-            className="w-full xl:sticky xl:top-4 xl:w-[420px] xl:self-start xl:shrink-0"
-          >
-            <div className="border border-silver-bright/8 bg-charcoal">
+          <motion.aside variants={sectionVariants} initial="hidden" animate="visible" className="xl:sticky xl:top-32 xl:self-start">
+            <div className="border-4 border-black bg-charcoal shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]">
               {selectedFinding ? (
                 <div className="space-y-6 p-6">
                   <div className="space-y-4 border-b border-silver-bright/8 pb-6">
@@ -681,78 +626,98 @@ export default function Findings() {
                         </span>
                       ) : null}
                     </div>
+
                     <div>
-                      <p className="mb-2 text-[9px] font-black uppercase tracking-[0.2em] text-silver/30">Selected Finding</p>
-                      <h2 className="text-2xl font-black uppercase italic tracking-tight text-silver-bright">{selectedFinding.title}</h2>
+                      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-silver/35">Selected Finding</p>
+                      <h2 className="text-3xl font-black uppercase italic tracking-tight text-silver-bright">{selectedFinding.title}</h2>
                     </div>
-                    <div className="grid gap-2 sm:grid-cols-2">
+
+                    <div className="grid gap-3 sm:grid-cols-2">
                       <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
-                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/30">Target</p>
-                        <p className="mt-1.5 text-xs font-mono uppercase tracking-[0.14em] text-silver-bright">{selectedFinding.target || 'Unknown'}</p>
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Target</p>
+                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">{selectedFinding.target || 'Unknown'}</p>
                       </div>
                       <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
-                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/30">Category</p>
-                        <p className="mt-1.5 text-xs font-mono uppercase tracking-[0.14em] text-silver-bright">{selectedFinding.category || 'Uncategorized'}</p>
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Category</p>
+                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">{selectedFinding.category || 'Uncategorized'}</p>
                       </div>
                       <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
-                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/30">Observed</p>
-                        <p className="mt-1.5 text-xs font-mono uppercase tracking-[0.14em] text-silver-bright">{formatLocaleDate(selectedFinding.discovered_at)}</p>
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Observed</p>
+                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">
+                          {formatLocaleDate(selectedFinding.discovered_at)}
+                        </p>
                       </div>
                       <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
-                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/30">Severity Score</p>
-                        <p className="mt-1.5 text-xs font-mono uppercase tracking-[0.14em] text-silver-bright">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Severity Score</p>
+                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">
                           {typeof selectedFinding.cvss === 'number' ? selectedFinding.cvss.toFixed(1) : 'N/A'}
                         </p>
                       </div>
                     </div>
                   </div>
-                  <div className="space-y-4">
+
+                  <div className="space-y-5">
                     <div>
-                      <p className="mb-2 text-[9px] font-black uppercase tracking-[0.2em] text-silver/30">Evidence Brief</p>
-                      <div className="border-l-2 border-rag-red bg-charcoal-dark p-4">
-                        <p className="text-sm leading-relaxed text-silver/70">{selectedFinding.description || 'No description provided.'}</p>
+                      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-silver/35">Evidence Brief</p>
+                      <div className="border-l-4 border-rag-red bg-charcoal-dark p-4">
+                        <p className="text-sm leading-relaxed text-silver/78">{selectedFinding.description || 'No description provided.'}</p>
                       </div>
                     </div>
+
                     <div>
-                      <p className="mb-2 text-[9px] font-black uppercase tracking-[0.2em] text-silver/30">Remediation</p>
-                      <div className="border-l-2 border-rag-green bg-charcoal-dark p-4">
-                        <p className="text-sm leading-relaxed text-rag-green/80">{selectedFinding.remediation || 'No remediation guidance captured.'}</p>
+                      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-silver/35">Remediation</p>
+                      <div className="border-l-4 border-rag-green bg-charcoal-dark p-4">
+                        <p className="text-sm leading-relaxed text-rag-green/85">
+                          {selectedFinding.remediation || 'No remediation guidance captured.'}
+                        </p>
                       </div>
                     </div>
                   </div>
+
                   <div className="space-y-3 border-t border-silver-bright/8 pt-5">
-                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/30">Workflow Actions</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-silver/35">Workflow Actions</p>
                     <div className="grid gap-2 sm:grid-cols-2">
-                      <button type="button" onClick={() => updateFindingStatus(selectedFinding.id, 'reviewed')}
-                        className="border border-silver-bright bg-silver-bright px-4 py-2.5 text-[9px] font-black uppercase tracking-[0.18em] text-black transition-all active:opacity-80">
+                      <button
+                        type="button"
+                        onClick={() => updateFindingStatus(selectedFinding.id, 'reviewed')}
+                        className="bg-silver-bright px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-x-0.5 active:translate-y-0.5 active:shadow-none"
+                      >
                         Mark Reviewed
                       </button>
-                      <button type="button" onClick={() => updateFindingStatus(selectedFinding.id, 'new')}
-                        className="border border-rag-amber/25 bg-rag-amber/10 px-4 py-2.5 text-[9px] font-black uppercase tracking-[0.18em] text-rag-amber">
+                      <button
+                        type="button"
+                        onClick={() => updateFindingStatus(selectedFinding.id, 'new')}
+                        className="border border-rag-amber/25 bg-rag-amber/10 px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-rag-amber"
+                      >
                         Reopen
                       </button>
-                      <button type="button" onClick={() => updateFindingStatus(selectedFinding.id, 'suppressed')}
-                        className="border border-silver/20 bg-silver/5 px-4 py-2.5 text-[9px] font-black uppercase tracking-[0.18em] text-silver">
+                      <button
+                        type="button"
+                        onClick={() => updateFindingStatus(selectedFinding.id, 'suppressed')}
+                        className="border border-silver/20 bg-silver/5 px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-silver"
+                      >
                         Suppress
                       </button>
-                      <button type="button" onClick={() => copyFindingSummary(selectedFinding)}
-                        className="border border-rag-blue/25 bg-rag-blue/10 px-4 py-2.5 text-[9px] font-black uppercase tracking-[0.18em] text-rag-blue">
+                      <button
+                        type="button"
+                        onClick={() => copyFindingSummary(selectedFinding)}
+                        className="border border-rag-blue/25 bg-rag-blue/10 px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-rag-blue"
+                      >
                         {copiedFindingId === selectedFinding.id ? 'Copied' : 'Copy Brief'}
                       </button>
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center px-6 py-24 text-center">
-                  <p className="text-2xl font-black uppercase italic tracking-[0.18em] text-silver/15">Queue Neutral</p>
-                  <p className="mt-3 max-w-[240px] text-[10px] font-mono uppercase leading-relaxed tracking-[0.16em] text-silver/12">
-                    Select a live finding from the queue to mount inspection context.
+                <div className="px-6 py-16 text-center">
+                  <p className="text-2xl font-black uppercase tracking-[0.22em] text-silver/20 italic">Queue Clear</p>
+                  <p className="mt-3 text-xs font-mono uppercase tracking-[0.2em] text-silver/15">
+                    Select a finding to review evidence and remediation.
                   </p>
                 </div>
               )}
             </div>
           </motion.aside>
-
         </div>
       </div>
     </div>

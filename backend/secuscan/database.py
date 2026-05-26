@@ -176,6 +176,14 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
             CREATE INDEX IF NOT EXISTS idx_tasks_plugin ON tasks(plugin_id);
             CREATE INDEX IF NOT EXISTS idx_workflows_enabled ON workflows(enabled);
+
+            CREATE TABLE IF NOT EXISTS saved_views (
+                id          TEXT PRIMARY KEY,
+                name        TEXT NOT NULL UNIQUE,
+                filter_json TEXT NOT NULL,
+                created_at  TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                updated_at  TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+            );
             """
         )
 
