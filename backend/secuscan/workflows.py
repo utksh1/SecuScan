@@ -10,7 +10,7 @@ from typing import Any, Dict, List
 
 from .database import get_db
 from .executor import executor
-
+from .ratelimit import concurrent_limiter
 logger = logging.getLogger(__name__)
 
 
@@ -80,6 +80,11 @@ class WorkflowScheduler:
             if not plugin_id:
                 continue
             task_id = await executor.create_task(plugin_id, inputs, preset=step.get("preset"), consent_granted=True)
+            can_acquire, _ = await concurrent_limiter.acquire(task_id)
+            if not can_acquire:
+                logger.warning("Workflow %s: concurrency limit reached, task %s will not run", workflow_id, task_id)
+                await executor.mark_task_failed(task_id, reason="Concurrency limit reached")
+                continue
             asyncio.create_task(executor.execute_task(task_id))
 
 
