@@ -1,5 +1,5 @@
 """
-Configuration management for SecuScan backend
+Configuration manFagement for SecuScan backend
 """
 
 from pathlib import Path
@@ -11,7 +11,6 @@ import hashlib
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-
 class Settings(BaseSettings):
     """Application settings loaded from environment variables"""
     
@@ -19,7 +18,8 @@ class Settings(BaseSettings):
     bind_address: str = "127.0.0.1"
     bind_port: int = 8000
     debug: bool = True
-    
+
+    max_port_range_size: int = 1000
     # Primary data store
     database_path: str = str(PROJECT_ROOT / "data" / "secuscan.db")
 
