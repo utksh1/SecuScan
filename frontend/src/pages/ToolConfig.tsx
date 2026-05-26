@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -62,6 +62,7 @@ export default function ToolConfig() {
   const [consentGranted, setConsentGranted] = useState(false)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const fieldRefs = useRef<Record<string, HTMLElement | null>>({})
 
   useEffect(() => {
     let cancelled = false
@@ -137,6 +138,10 @@ export default function ToolConfig() {
   const handleStartScan = async () => {
     if (!plugin || !schema || submitting) return
     if (hasValidationErrors) {
+      const firstInvalidField = schema.fields.find((field) => validationErrors[field.id])
+      if (firstInvalidField) {
+        fieldRefs.current[firstInvalidField.id]?.focus()
+      }
       addToast('Fix highlighted scan parameters before starting the scan.', 'error')
       return
     }
@@ -182,6 +187,8 @@ export default function ToolConfig() {
         <div className="space-y-6">
           <div className="flex items-center gap-4">
             <button
+              type="button"
+              aria-label="Back to scans"
               onClick={() => navigate(routes.scans)}
               className="w-12 h-12 flex items-center justify-center border-4 border-black bg-charcoal hover:bg-rag-blue hover:text-black transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-x-1 active:translate-y-1"
             >
@@ -267,13 +274,17 @@ export default function ToolConfig() {
                   ? 'border-rag-red focus:border-rag-red'
                   : 'border-black focus:border-rag-blue'
                 const fieldId = `field-${field.id}`
+                const labelId = `label-${field.id}`
+                const helpId = `help-${field.id}`
                 const errorId = `error-${field.id}`
+                const describedBy = [field.help ? helpId : null, isInvalid ? errorId : null].filter(Boolean).join(' ') || undefined
 
                 return (
                   <motion.div key={field.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
                     <div className="flex items-center justify-between gap-6">
                       <label
                         htmlFor={fieldId}
+                        id={labelId}
                         className="text-[10px] font-black uppercase tracking-[0.3em] text-silver-bright italic"
                       >
                         {field.label}
@@ -289,29 +300,40 @@ export default function ToolConfig() {
                     {field.type === 'text' ? (
                       <textarea
                         id={fieldId}
+                        ref={(node) => {
+                          fieldRefs.current[field.id] = node
+                        }}
                         value={String(value ?? '')}
                         onChange={(event) => handleFieldChange(field, event.target.value)}
                         placeholder={field.placeholder || ''}
                         aria-invalid={isInvalid}
-                        aria-describedby={isInvalid ? errorId : field.help ? `help-${field.id}` : undefined}
+                        aria-describedby={describedBy}
                         className={`w-full min-h-[120px] bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
                       />
                     ) : field.type === 'integer' ? (
                       <input
                         id={fieldId}
+                        ref={(node) => {
+                          fieldRefs.current[field.id] = node
+                        }}
                         type="number"
                         value={value === '' ? '' : String(value ?? '')}
                         onChange={(event) => handleFieldChange(field, coerceInteger(event.target.value))}
                         placeholder={field.placeholder || ''}
                         aria-invalid={isInvalid}
-                        aria-describedby={isInvalid ? errorId : field.help ? `help-${field.id}` : undefined}
+                        aria-describedby={describedBy}
                         className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
                       />
                     ) : field.type === 'boolean' ? (
                       <button
                         id={fieldId}
+                        ref={(node) => {
+                          fieldRefs.current[field.id] = node
+                        }}
+                        type="button"
                         onClick={() => handleFieldChange(field, !Boolean(value))}
                         aria-pressed={Boolean(value)}
+                        aria-describedby={describedBy}
                         className={`w-full flex items-center justify-between p-4 border-4 border-black transition-all ${
                           value ? 'bg-rag-green text-black' : 'bg-charcoal-dark text-silver-bright'
                         }`}
@@ -322,10 +344,13 @@ export default function ToolConfig() {
                     ) : field.type === 'select' ? (
                       <select
                         id={fieldId}
+                        ref={(node) => {
+                          fieldRefs.current[field.id] = node
+                        }}
                         value={String(value ?? '')}
                         onChange={(event) => handleFieldChange(field, event.target.value)}
                         aria-invalid={isInvalid}
-                        aria-describedby={isInvalid ? errorId : field.help ? `help-${field.id}` : undefined}
+                        aria-describedby={describedBy}
                         className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
                       >
                         <option value="">Select option</option>
@@ -336,16 +361,21 @@ export default function ToolConfig() {
                         ))}
                       </select>
                     ) : field.type === 'multiselect' ? (
-                      <div
-                        role="group"
-                        aria-labelledby={`label-${field.id}`}
+                      <fieldset
+                        ref={(node) => {
+                          fieldRefs.current[field.id] = node
+                        }}
+                        aria-invalid={isInvalid}
+                        aria-describedby={describedBy}
                         className="grid grid-cols-1 md:grid-cols-2 gap-3"
                       >
+                        <legend className="sr-only">{field.label}</legend>
                         {(field.options || []).map((option) => {
                           const selected = Array.isArray(value) && value.includes(option.value)
                           return (
                             <button
                               key={option.value}
+                              type="button"
                               aria-pressed={selected}
                               onClick={() => {
                                 const current = Array.isArray(value) ? [...value] : []
@@ -362,22 +392,25 @@ export default function ToolConfig() {
                             </button>
                           )
                         })}
-                      </div>
+                      </fieldset>
                     ) : (
                       <input
                         id={fieldId}
+                        ref={(node) => {
+                          fieldRefs.current[field.id] = node
+                        }}
                         type="text"
                         value={String(value ?? '')}
                         onChange={(event) => handleFieldChange(field, event.target.value)}
                         placeholder={field.placeholder || ''}
                         aria-invalid={isInvalid}
-                        aria-describedby={isInvalid ? errorId : field.help ? `help-${field.id}` : undefined}
+                        aria-describedby={describedBy}
                         className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
                       />
                     )}
 
-                    {field.help && !isInvalid && (
-                      <p id={`help-${field.id}`} className="text-[10px] text-silver/40 uppercase tracking-widest">
+                    {field.help && (
+                      <p id={helpId} className="text-[10px] text-silver/40 uppercase tracking-widest">
                         {field.help}
                       </p>
                     )}
@@ -396,6 +429,17 @@ export default function ToolConfig() {
         <aside className="xl:col-span-1">
           <section className="bg-charcoal-dark border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
             <h3 className="text-[11px] font-black text-silver-bright uppercase tracking-[0.4em] italic">Deploy_Control</h3>
+            <p
+              role={hasValidationErrors ? 'alert' : 'status'}
+              aria-live="polite"
+              className={`text-[10px] uppercase tracking-widest font-black ${
+                hasValidationErrors ? 'text-rag-red' : 'text-rag-green'
+              }`}
+            >
+              {hasValidationErrors
+                ? `${invalidFieldCount} field${invalidFieldCount > 1 ? 's' : ''} need${invalidFieldCount === 1 ? 's' : ''} attention before scan start`
+                : 'All fields valid'}
+            </p>
             {plugin.requires_consent && (
               <div className="space-y-4 border-4 border-black bg-charcoal p-5">
                 <p className="text-[10px] text-silver/60 uppercase tracking-widest leading-6">
@@ -413,16 +457,21 @@ export default function ToolConfig() {
               </div>
             )}
             <button
+              type="button"
               onClick={handleStartScan}
-              disabled={submitting || hasValidationErrors}
+              disabled={submitting}
               aria-disabled={submitting || hasValidationErrors}
-              className="w-full py-4 bg-rag-red border-4 border-black text-black text-[10px] font-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:shadow-none disabled:hover:translate-y-0"
+              className={`w-full py-4 border-4 border-black text-black text-[10px] font-black uppercase tracking-[0.3em] transition-all ${
+                submitting || hasValidationErrors
+                  ? 'bg-rag-red/70 cursor-not-allowed opacity-60'
+                  : 'bg-rag-red hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1'
+              } disabled:hover:shadow-none disabled:hover:translate-y-0`}
             >
               {submitting ? 'QUEUEING...' : 'INITIATE_SCAN'}
             </button>
             {hasValidationErrors && (
               <p role="status" className="text-[10px] text-rag-red uppercase tracking-widest font-black">
-                {invalidFieldCount} field{invalidFieldCount > 1 ? 's' : ''} need{invalidFieldCount === 1 ? 's' : ''} attention
+                {invalidFieldCount} invalid field{invalidFieldCount > 1 ? 's' : ''} highlighted
               </p>
             )}
             {!hasValidationErrors && (

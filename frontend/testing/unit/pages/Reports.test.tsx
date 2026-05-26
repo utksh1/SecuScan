@@ -25,6 +25,12 @@ const readyReport = {
   generated_at: '2026-05-14T10:00:00Z', status: 'ready',
   findings: 7, assets: 3, pages: 12,
 }
+const newerReadyReport = {
+  id: 'report-4', task_id: 'task-jkl-012',
+  name: 'Security Scan — docs.example.com', type: 'technical',
+  generated_at: '2026-05-14T11:30:00Z', status: 'ready',
+  findings: 2, assets: 1, pages: 4,
+}
 const generatingReport = {
   id: 'report-2', task_id: 'task-def-456',
   name: 'Security Scan — staging.example.com', type: 'executive',
@@ -169,6 +175,39 @@ describe('Reports — export buttons on a ready report', () => {
     renderReports()
     await user.click(await screen.findByRole('button', { name: /^pdf$/i }))
     expect(openSpy).not.toHaveBeenCalledWith(expect.stringContaining('latest'), expect.anything())
+  })
+})
+
+describe('Reports — header export button', () => {
+  beforeEach(() => {
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+    openSpy.mockClear()
+  })
+
+  it('opens the newest ready report PDF from the header button', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getReports).mockResolvedValue({ reports: [readyReport, generatingReport, newerReadyReport, failedReport] })
+
+    renderReports()
+
+    await user.click(await screen.findByRole('button', { name: /download latest ready report pdf/i }))
+
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.stringContaining('/task/' + newerReadyReport.task_id + '/report/pdf'), '_blank')
+    expect(openSpy).not.toHaveBeenCalledWith(expect.stringContaining('/task/latest/report/pdf'), expect.anything())
+  })
+
+  it('disables the header export button when there is no ready report', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getReports).mockResolvedValue({ reports: [generatingReport, failedReport] })
+
+    renderReports()
+
+    const button = await screen.findByRole('button', { name: /download latest ready report pdf/i })
+    expect(button).toBeDisabled()
+
+    await user.click(button)
+    expect(openSpy).not.toHaveBeenCalled()
   })
 })
 
