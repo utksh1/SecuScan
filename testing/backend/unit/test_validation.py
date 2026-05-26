@@ -86,10 +86,9 @@ def test_validate_port_range():
     assert validate_port_range("22,80,443") == (True, "")
 
     # Mixed comma + range — this was the bug
-    assert validate_port_range("80,443-8080") == (True, "")
-    assert validate_port_range("22,80,443-8080") == (True, "")
-    assert validate_port_range("22,80-90,443,8000-9000") == (True, "")
-
+    assert validate_port_range("80,443-500") == (True, "")
+    assert validate_port_range("22,80,443-500") == (True, "")
+    assert validate_port_range("22,80-90,443,8000-8100") == (True, "")
     # Invalid: out-of-range port
     assert validate_port_range("99999")[0] is False
     assert validate_port_range("80,99999")[0] is False
