@@ -47,25 +47,27 @@ class TestVaultCryptoFailures:
     """
 
     def test_tampered_payload_raises_value_error(self):
-        """Flipping a byte in the ciphertext must fail HMAC verification."""
+        """Flipping a byte in the ciphertext must fail GCM authentication."""
         crypto = VaultCrypto(settings.resolved_vault_key)
         encrypted = crypto.encrypt("my-secret-token")
 
-        # Decode, flip one byte in the ciphertext area (after nonce+signature = 48 bytes)
+        # AES-GCM blob: nonce(12) + ciphertext + auth_tag(16)
+        # Flip a byte inside the ciphertext (after the 12-byte nonce)
         blob = bytearray(base64.urlsafe_b64decode(encrypted.encode("ascii")))
-        blob[50] ^= 0xFF
+        blob[14] ^= 0xFF
         tampered = base64.urlsafe_b64encode(bytes(blob)).decode("ascii")
 
         with pytest.raises(ValueError, match="integrity verification failed"):
             crypto.decrypt(tampered)
 
     def test_tampered_signature_raises_value_error(self):
-        """Flipping a byte in the HMAC signature must fail verification."""
+        """Flipping a byte in the auth tag must fail GCM verification."""
         crypto = VaultCrypto(settings.resolved_vault_key)
         encrypted = crypto.encrypt("another-secret")
 
+        # AES-GCM auth tag occupies the last 16 bytes of the blob
         blob = bytearray(base64.urlsafe_b64decode(encrypted.encode("ascii")))
-        blob[20] ^= 0x01  # inside signature bytes (16–48)
+        blob[-1] ^= 0x01
         tampered = base64.urlsafe_b64encode(bytes(blob)).decode("ascii")
 
         with pytest.raises(ValueError, match="integrity verification failed"):
@@ -78,9 +80,16 @@ class TestVaultCryptoFailures:
             crypto.decrypt("not-valid-base64!!!")
 
     def test_wrong_key_raises_value_error(self):
-        """Decrypting with a different key must fail HMAC check."""
-        crypto_a = VaultCrypto(b"key-used-to-encrypt-AAAAAAAAAAAAA")
-        crypto_b = VaultCrypto(b"key-used-to-decrypt-BBBBBBBBBBBBB")
+        """Decrypting with a different key must fail GCM authentication."""
+        import hashlib
+        import base64
+
+        def _make_key(seed: str) -> bytes:
+            raw = hashlib.sha256(seed.encode()).digest()
+            return base64.urlsafe_b64encode(raw)
+
+        crypto_a = VaultCrypto(_make_key("key-seed-A"))
+        crypto_b = VaultCrypto(_make_key("key-seed-B"))
         encrypted = crypto_a.encrypt("secret-value")
 
         with pytest.raises(ValueError, match="integrity verification failed"):
@@ -92,8 +101,9 @@ class TestVaultCryptoFailures:
         secret = "SENTINEL_SECRET_VALUE"
         encrypted = crypto.encrypt(secret)
 
+        # AES-GCM blob: nonce(12) + ciphertext + auth_tag(16); flip last auth-tag byte
         blob = bytearray(base64.urlsafe_b64decode(encrypted.encode("ascii")))
-        blob[50] ^= 0xFF
+        blob[-1] ^= 0xFF
         tampered = base64.urlsafe_b64encode(bytes(blob)).decode("ascii")
 
         try:
