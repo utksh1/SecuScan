@@ -21,11 +21,8 @@ from .routes import router
 from .workflows import scheduler
 
 
-from .logging_utils import RequestIDFilter
-
 logging.basicConfig(
     level=getattr(logging, settings.log_level),
-    format="%(asctime)s %(levelname)s [request_id=%(request_id)s] %(name)s - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
         logging.FileHandler(settings.log_file)
@@ -34,10 +31,13 @@ logging.basicConfig(
     ]
 )
 
+from .logging_utils import RequestIDFilter, JSONFormatter
+
 for handler in logging.getLogger().handlers:
     handler.addFilter(RequestIDFilter())
+    handler.setFormatter(JSONFormatter())
 
-    
+
 logger = logging.getLogger(__name__)
 
 
