@@ -71,6 +71,7 @@ from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager, init_plugins
 from .executor import executor
+from .redaction import redact_inputs
 from .ratelimit import (
     rate_limiter, concurrent_limiter,
     task_start_limiter, vault_limiter,
@@ -557,7 +558,7 @@ async def get_task_result(task_id: str):
         "duration_seconds": task_row["duration_seconds"],
         "status": task_row["status"],
         "preset": task_row["preset"],
-        "inputs": json.loads(task_row["inputs_json"] or "{}"),
+        "inputs": redact_inputs(json.loads(task_row["inputs_json"] or "{}")),
         "summary": summary,
         "severity_counts": severity_counts,
         "findings": findings,
@@ -735,7 +736,7 @@ async def list_tasks(
     for t in tasks_list:
         if "id" in t:
             t["task_id"] = t.pop("id")
-        t["inputs"] = t.pop("inputs_json", {})
+        t["inputs"] = redact_inputs(t.pop("inputs_json", {}) or {})
 
     total_pages = (total + per_page - 1) // per_page if per_page > 0 else 0
 
