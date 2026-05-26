@@ -60,6 +60,14 @@ import {
       test("returns N/A for invalid input", () => {
         expect(formatLocaleDate("bad-date")).toBe("N/A");
       });
+
+      test("returns N/A for null input", () => {
+        expect(formatLocaleDate(null)).toBe("N/A");
+      });
+
+      test("returns N/A for undefined input", () => {
+        expect(formatLocaleDate(undefined)).toBe("N/A");
+      });
     });
   
     describe("formatLocaleTime", () => {
@@ -70,6 +78,14 @@ import {
   
       test("returns N/A for invalid input", () => {
         expect(formatLocaleTime("bad-date")).toBe("N/A");
+      });
+
+      test("returns N/A for null input", () => {
+        expect(formatLocaleTime(null)).toBe("N/A");
+      });
+
+      test("returns N/A for undefined input", () => {
+        expect(formatLocaleTime(undefined)).toBe("N/A");
       });
     });
   
