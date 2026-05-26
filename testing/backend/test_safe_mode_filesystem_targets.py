@@ -36,10 +36,10 @@ def code_payload(target: str) -> dict:
     }
 
 
-def network_payload(target: str, safe_mode: bool = True) -> dict:
+def network_payload(target: str) -> dict:
     return {
         "plugin_id": "nmap",
-        "inputs": {"target": target, "safe_mode": safe_mode},
+        "inputs": {"target": target},
         "consent_granted": True,
     }
 
@@ -48,9 +48,6 @@ def assert_not_blocked_by_host_validation(r):
     """Fails only if route returned 400 with an error_msg from validate_target."""
     if r.status_code == 400:
         detail = r.json().get("detail", "")
-        # validate_target returns messages like "Public IPs/networks not allowed"
-        # consent failure returns "Consent required..."
-        # We only fail if it looks like a target validation rejection
         assert "not allowed" not in detail.lower() and "invalid" not in detail.lower(), (
             f"Path target incorrectly blocked by host validation: {r.text}"
         )
@@ -119,10 +116,6 @@ class TestNonCodePluginFilesystemTargets:
 
 # ---------------------------------------------------------------------------
 # 3. Network targets — safe-mode guardrails (validation.py behavior)
-#
-# safe_mode=True  → private IPs ALLOWED, public IPs BLOCKED
-# safe_mode=False → public IPs ALLOWED
-# Always blocked  → broadcast, link-local, multicast
 # ---------------------------------------------------------------------------
 
 class TestNetworkTargetSafeMode:
@@ -134,11 +127,17 @@ class TestNetworkTargetSafeMode:
         "127.0.0.1",
     ])
     def test_private_targets_allowed_in_safe_mode(self, test_client, private_target):
-        """safe_mode=True allows private/loopback ranges."""
-        r = post(test_client, network_payload(private_target, safe_mode=True))
-        assert r.status_code != 400, (
-            f"Private target '{private_target}' incorrectly blocked: {r.text}"
-        )
+        """Default safe_mode configuration allows private/loopback ranges."""
+        from backend.secuscan.config import settings
+        original_safe_mode = settings.safe_mode_default
+        try:
+            settings.safe_mode_default = True
+            r = post(test_client, network_payload(private_target))
+            assert r.status_code != 400, (
+                f"Private target '{private_target}' incorrectly blocked: {r.text}"
+            )
+        finally:
+            settings.safe_mode_default = original_safe_mode
 
     @pytest.mark.parametrize("public_target", [
         "8.8.8.8",
@@ -146,24 +145,36 @@ class TestNetworkTargetSafeMode:
         "93.184.216.34",
     ])
     def test_public_targets_blocked_in_safe_mode(self, test_client, public_target):
-        """safe_mode=True must block public IPs."""
-        r = post(test_client, network_payload(public_target, safe_mode=True))
-        assert r.status_code == 400, (
-            f"Expected public target '{public_target}' blocked, got {r.status_code}: {r.text}"
-        )
-        detail = r.json().get("detail", "")
-        assert isinstance(detail, str) and len(detail) > 0
+        """Default safe_mode configuration must block public IPs."""
+        from backend.secuscan.config import settings
+        original_safe_mode = settings.safe_mode_default
+        try:
+            settings.safe_mode_default = True
+            r = post(test_client, network_payload(public_target))
+            assert r.status_code == 400, (
+                f"Expected public target '{public_target}' blocked, got {r.status_code}: {r.text}"
+            )
+            detail = r.json().get("detail", "")
+            assert isinstance(detail, str) and len(detail) > 0
+        finally:
+            settings.safe_mode_default = original_safe_mode
 
     @pytest.mark.parametrize("public_target", [
         "8.8.8.8",
         "1.1.1.1",
     ])
     def test_public_targets_allowed_when_safe_mode_disabled(self, test_client, public_target):
-        """safe_mode=False lifts the public IP restriction."""
-        r = post(test_client, network_payload(public_target, safe_mode=False))
-        assert r.status_code != 400, (
-            f"Public target '{public_target}' incorrectly blocked with safe_mode=False: {r.text}"
-        )
+        """Disabling system configuration safe_mode lifts public IP restrictions."""
+        from backend.secuscan.config import settings
+        original_safe_mode = settings.safe_mode_default
+        try:
+            settings.safe_mode_default = False
+            r = post(test_client, network_payload(public_target))
+            assert r.status_code != 400, (
+                f"Public target '{public_target}' incorrectly blocked when server safe_mode is disabled: {r.text}"
+            )
+        finally:
+            settings.safe_mode_default = original_safe_mode
 
     @pytest.mark.parametrize("blocked_target", [
         "169.254.1.1",   # link-local
@@ -172,19 +183,31 @@ class TestNetworkTargetSafeMode:
     ])
     def test_always_blocked_ranges_rejected(self, test_client, blocked_target):
         """Broadcast, link-local, multicast blocked in all modes."""
-        for safe_mode in (True, False):
-            r = post(test_client, network_payload(blocked_target, safe_mode=safe_mode))
-            assert r.status_code == 400, (
-                f"Expected '{blocked_target}' blocked (safe_mode={safe_mode}), "
-                f"got {r.status_code}: {r.text}"
-            )
+        from backend.secuscan.config import settings
+        original_safe_mode = settings.safe_mode_default
+        try:
+            for safe_mode_state in (True, False):
+                settings.safe_mode_default = safe_mode_state
+                r = post(test_client, network_payload(blocked_target))
+                assert r.status_code == 400, (
+                    f"Expected '{blocked_target}' blocked (safe_mode={safe_mode_state}), "
+                    f"got {r.status_code}: {r.text}"
+                )
+        finally:
+            settings.safe_mode_default = original_safe_mode
 
     def test_raw_target_not_leaked_in_response(self, test_client):
         """Sentinel value must not appear in error response."""
-        sentinel = "8.8.SENTINEL.8"
-        r = post(test_client, network_payload(sentinel, safe_mode=True))
-        if r.status_code == 400:
-            assert sentinel not in r.text
+        from backend.secuscan.config import settings
+        original_safe_mode = settings.safe_mode_default
+        try:
+            settings.safe_mode_default = True
+            sentinel = "8.8.SENTINEL.8"
+            r = post(test_client, network_payload(sentinel))
+            if r.status_code == 400:
+                assert sentinel not in r.text
+        finally:
+            settings.safe_mode_default = original_safe_mode
 
 
 # ---------------------------------------------------------------------------
@@ -224,3 +247,4 @@ class TestEdgeCases:
         assert r.status_code == 400
         detail = r.json().get("detail", "")
         assert "consent" in detail.lower()
+        
