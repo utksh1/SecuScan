@@ -24,7 +24,7 @@ vi.mock('../../../src/hooks/useSavedViews', async (importOriginal) => {
   }
 })
 
-// â”€â”€ Fixtures â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Fixtures -----------------------------------------------------------------
 
 const criticalFinding = {
   id: 'finding-crit-1',
@@ -67,7 +67,7 @@ const mediumFinding = {
 
 const allFindings = [criticalFinding, highFinding, mediumFinding]
 
-// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Helpers ------------------------------------------------------------------
 
 function renderFindings() {
   return render(
@@ -83,19 +83,15 @@ async function waitForLoad() {
   })
 }
 
-function clickSortButton(label: string) {
-  fireEvent.click(screen.getByRole('button', { name: new RegExp(label, 'i') }))
-}
-
 function getVisibleTitles() {
   return Array.from(document.querySelectorAll('h3'))
     .map((el) => el.textContent ?? '')
     .filter(Boolean)
 }
 
-// â”€â”€ Loading â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Loading ------------------------------------------------------------------
 
-describe('Findings â€” loading state', () => {
+describe('Findings - loading state', () => {
   it('shows loading text while fetching', () => {
     vi.mocked(getFindings).mockReturnValue(new Promise(() => {}))
     renderFindings()
@@ -103,9 +99,9 @@ describe('Findings â€” loading state', () => {
   })
 })
 
-// â”€â”€ Severity filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Severity filter ----------------------------------------------------------
 
-describe('Findings â€” severity filtering', () => {
+describe('Findings - severity filtering', () => {
   beforeEach(() => {
     vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
   })
@@ -123,7 +119,7 @@ describe('Findings â€” severity filtering', () => {
     await waitForLoad()
 
     const critButtons = screen.getAllByRole('button', { name: /critical/i })
-    const toggle = critButtons.find((btn) => btn.textContent?.trim() === 'Critical')
+    const toggle = critButtons.find((btn) => btn.textContent?.trim().startsWith('Critical'))
     expect(toggle).toBeTruthy()
     await user.click(toggle!)
 
@@ -134,9 +130,9 @@ describe('Findings â€” severity filtering', () => {
   })
 })
 
-// â”€â”€ Sort options â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Sort options --------------------------------------------------------------
 
-describe('Findings â€” sorting', () => {
+describe('Findings - sorting', () => {
   beforeEach(() => {
     vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
   })
@@ -145,17 +141,22 @@ describe('Findings â€” sorting', () => {
     renderFindings()
     await waitForLoad()
 
-    expect(screen.getByRole('button', { name: /by severity/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /newest/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /oldest/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /target alpha/i })).toBeInTheDocument()
+    const sortSelect = screen.getByDisplayValue(/by severity/i)
+    const options = within(sortSelect as HTMLElement).getAllByRole('option')
+    const values = options.map((o) => (o as HTMLOptionElement).value)
+
+    expect(values).toContain('severity')
+    expect(values).toContain('newest')
+    expect(values).toContain('oldest')
+    expect(values).toContain('target')
   })
 
   it('switches to flat list when sort is newest', async () => {
+    const user = userEvent.setup()
     renderFindings()
     await waitForLoad()
 
-    clickSortButton('Newest')
+    await user.selectOptions(screen.getByDisplayValue(/by severity/i), 'newest')
 
     await waitFor(() => {
       const headers = screen.getAllByText(/in queue/i)
@@ -164,10 +165,11 @@ describe('Findings â€” sorting', () => {
   })
 
   it('newest-first puts most recent finding on top', async () => {
+    const user = userEvent.setup()
     renderFindings()
     await waitForLoad()
 
-    clickSortButton('Newest')
+    await user.selectOptions(screen.getByDisplayValue(/by severity/i), 'newest')
 
     await waitFor(() => {
       const titles = getVisibleTitles()
@@ -177,10 +179,11 @@ describe('Findings â€” sorting', () => {
   })
 
   it('oldest-first puts earliest finding on top', async () => {
+    const user = userEvent.setup()
     renderFindings()
     await waitForLoad()
 
-    clickSortButton('Oldest')
+    await user.selectOptions(screen.getByDisplayValue(/by severity/i), 'oldest')
 
     await waitFor(() => {
       const titles = getVisibleTitles()
@@ -190,10 +193,11 @@ describe('Findings â€” sorting', () => {
   })
 
   it('target A-Z sorts alphabetically by target', async () => {
+    const user = userEvent.setup()
     renderFindings()
     await waitForLoad()
 
-    clickSortButton('Target Alpha')
+    await user.selectOptions(screen.getByDisplayValue(/by severity/i), 'target')
 
     await waitFor(() => {
       const titles = getVisibleTitles()
@@ -204,9 +208,9 @@ describe('Findings â€” sorting', () => {
   })
 })
 
-// â”€â”€ Target filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Target filter -------------------------------------------------------------
 
-describe('Findings â€” target filter', () => {
+describe('Findings - target filter', () => {
   beforeEach(() => {
     vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
   })
@@ -238,9 +242,9 @@ describe('Findings â€” target filter', () => {
   })
 })
 
-// â”€â”€ Scanner / tool filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Scanner filter ------------------------------------------------------------
 
-describe('Findings â€” scanner filter', () => {
+describe('Findings - scanner filter', () => {
   beforeEach(() => {
     vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
   })
@@ -274,9 +278,9 @@ describe('Findings â€” scanner filter', () => {
   })
 })
 
-// â”€â”€ Date range filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Date range filter ---------------------------------------------------------
 
-describe('Findings â€” date range filter', () => {
+describe('Findings - date range filter', () => {
   beforeEach(() => {
     vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
   })
@@ -331,14 +335,14 @@ describe('Findings â€” date range filter', () => {
   })
 })
 
-// â”€â”€ Reset filters â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Reset filters -------------------------------------------------------------
 
-describe('Findings â€” reset filters', () => {
+describe('Findings - reset filters', () => {
   beforeEach(() => {
     vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
   })
 
-  it('clears all active filters when severity All is clicked', async () => {
+  it('clears all active filters when target is reset to all', async () => {
     const user = userEvent.setup()
     renderFindings()
     await waitForLoad()
@@ -359,10 +363,9 @@ describe('Findings â€” reset filters', () => {
   })
 })
 
+// -- Active filter summary -----------------------------------------------------
 
-
-// â”€â”€ Active filter summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-describe('Findings â€” active filter summary', () => {
+describe('Findings - active filter summary', () => {
   beforeEach(() => {
     vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
   })
@@ -404,9 +407,10 @@ describe('Findings â€” active filter summary', () => {
     expect(screen.getAllByText('Missing Security Headers').length).toBeGreaterThanOrEqual(1)
   })
 })
-// â”€â”€ Timezone boundary regression â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-describe('Findings â€” date range respects display timezone', () => {
+// -- Timezone boundary regression ----------------------------------------------
+
+describe('Findings - date range respects display timezone', () => {
   const tzBoundaryFinding = {
     id: 'finding-tz-edge',
     severity: 'high',
@@ -456,7 +460,17 @@ describe('Findings â€” date range respects display timezone', () => {
     fireEvent.change(fromInput, { target: { value: '2026-05-15' } })
 
     await waitFor(() => {
-      expect(screen.getByText(/Queue Cleared/i)).toBeInTheDocument()
+      expect(screen.getByText(/No Findings Match/i)).toBeInTheDocument()
     })
+  })
+})
+
+// -- Empty state ---------------------------------------------------------------
+
+describe('Findings - empty state', () => {
+  it('shows empty state when no findings exist', async () => {
+    vi.mocked(getFindings).mockResolvedValue({ findings: [] })
+    renderFindings()
+    expect(await screen.findByText(/No Findings Match/i)).toBeInTheDocument()
   })
 })

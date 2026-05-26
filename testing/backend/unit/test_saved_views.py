@@ -1,14 +1,3 @@
-"""
-testing/backend/unit/test_saved_views.py
-
-Unit tests for the saved-views API routes.
-Covers: create, apply (list), overwrite (PUT), rename, delete,
-        and negative paths for invalid/missing data.
-
-Run with:
-    pytest testing/backend/unit/test_saved_views.py -v
-"""
-
 from __future__ import annotations
 
 import json
@@ -16,13 +5,9 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
-# ─── App bootstrap ────────────────────────────────────────────────────────────
-# We import the FastAPI app with the saved_views_router registered.
-# The router is added in conftest.py via the fixture below, so we only need
-# a minimal app that registers the router and an in-memory database.
-
 from fastapi import FastAPI
-from backend.secuscan.saved_views import saved_views_router, ensure_saved_views_table
+from backend.secuscan.saved_views import saved_views_router
+from backend.secuscan.database import Database
 from backend.secuscan.database import Database, get_db
 import backend.secuscan.database as _db_module
 
@@ -43,9 +28,6 @@ async def app_client():
     # Minimal app
     _app = FastAPI()
     _app.include_router(saved_views_router)
-
-    # Create the saved_views table
-    await ensure_saved_views_table()
 
     transport = ASGITransport(app=_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
