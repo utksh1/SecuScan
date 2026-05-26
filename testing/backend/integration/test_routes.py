@@ -105,3 +105,17 @@ def test_get_settings(test_client):
     assert "network" in data
     assert "sandbox" in data
     assert "safety" in data
+
+def test_start_task_missing_plugin(test_client):
+    """Starting a task with a missing plugin should return 404 and helpful detail."""
+    missing_id = "plugin_does_not_exist_123"
+    payload = {
+        "plugin_id": missing_id,
+        "inputs": {"url": "http://127.0.0.1:8000"},
+        "consent_granted": True,
+    }
+
+    response = test_client.post("/api/v1/task/start", json=payload)
+    assert response.status_code == 404
+    detail = response.json().get("detail", "")
+    assert missing_id in detail or "plugin" in detail.lower()
