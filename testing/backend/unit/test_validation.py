@@ -1,6 +1,6 @@
 import pytest
 from backend.secuscan.validation import (
-    validate_target, validate_port, validate_url,
+    validate_target, validate_port, validate_port_range, validate_url,
     sanitize_input, is_safe_path, match_pattern
 )
 
@@ -69,3 +69,34 @@ def test_match_pattern():
     assert match_pattern("nmap", "nmap") is True
     assert match_pattern("tls_inspector", "*inspector") is True
     assert match_pattern("dirb", "http_*") is False
+
+
+def test_validate_port_range():
+    # Single port
+    assert validate_port_range("80") == (True, "")
+    assert validate_port_range("1") == (True, "")
+    assert validate_port_range("65535") == (True, "")
+
+    # Plain range
+    assert validate_port_range("1-1000") == (True, "")
+    assert validate_port_range("443-443") == (True, "")
+
+    # Comma-separated single ports
+    assert validate_port_range("80,443") == (True, "")
+    assert validate_port_range("22,80,443") == (True, "")
+
+    # Mixed comma + range — this was the bug
+    assert validate_port_range("80,443-8080") == (True, "")
+    assert validate_port_range("22,80,443-8080") == (True, "")
+    assert validate_port_range("22,80-90,443,8000-9000") == (True, "")
+
+    # Invalid: out-of-range port
+    assert validate_port_range("99999")[0] is False
+    assert validate_port_range("80,99999")[0] is False
+
+    # Invalid: inverted range
+    assert validate_port_range("1000-80")[0] is False
+
+    # Invalid: non-numeric
+    assert validate_port_range("abc")[0] is False
+    assert validate_port_range("80,bad")[0] is False
