@@ -1,46 +1,60 @@
-"""Lightweight encrypted credential vault."""
+"""Authenticated encrypted credential vault using AES-256-GCM."""
 
 from __future__ import annotations
 
 import base64
-import hashlib
-import hmac
 import os
-from itertools import cycle
+
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
 class VaultCrypto:
-    """Symmetric encryption helper backed by a deterministic keystream.
+    """AES-256-GCM authenticated encryption for stored credentials.
 
-    This is intentionally lightweight for local-first usage where secret-at-rest
-    protection is needed without adding third-party crypto dependencies.
+    Each call to encrypt() generates a fresh random 12-byte nonce so no two
+    ciphertexts ever share a nonce under the same key.  The GCM auth tag
+    (16 bytes, appended by AESGCM) provides both confidentiality and integrity —
+    any tampering causes decrypt() to raise ValueError.
+
+    Wire format (base64url): nonce(12) || ciphertext || auth_tag(16)
     """
 
-    def __init__(self, key: bytes):
-        self.key = key
+    _NONCE_LEN = 12
 
-    def _derive_stream_key(self, nonce: bytes) -> bytes:
-        return hashlib.sha256(self.key + nonce).digest()
+    def __init__(self, key: bytes):
+        """
+        Args:
+            key: 44-byte base64url-encoded representation of a 32-byte AES-256 key,
+                 as produced by ``settings.resolved_vault_key``.
+        """
+        try:
+            raw = base64.urlsafe_b64decode(key)
+        except Exception as exc:
+            raise ValueError("Vault key must be base64url-encoded") from exc
+        if len(raw) != 32:
+            raise ValueError(
+                f"Vault key must decode to exactly 32 bytes (AES-256); got {len(raw)}"
+            )
+        self._aesgcm = AESGCM(raw)
 
     def encrypt(self, plaintext: str) -> str:
-        raw = plaintext.encode("utf-8")
-        nonce = os.urandom(16)
-        stream_key = self._derive_stream_key(nonce)
-        ciphertext = bytes(b ^ k for b, k in zip(raw, cycle(stream_key)))
-        signature = hmac.new(self.key, nonce + ciphertext, hashlib.sha256).digest()
-        blob = nonce + signature + ciphertext
+        nonce = os.urandom(self._NONCE_LEN)
+        ciphertext = self._aesgcm.encrypt(nonce, plaintext.encode("utf-8"), None)
+        blob = nonce + ciphertext
         return base64.urlsafe_b64encode(blob).decode("ascii")
 
     def decrypt(self, payload: str) -> str:
-        blob = base64.urlsafe_b64decode(payload.encode("ascii"))
-        nonce = blob[:16]
-        signature = blob[16:48]
-        ciphertext = blob[48:]
+        try:
+            blob = base64.urlsafe_b64decode(payload.encode("ascii"))
+        except Exception as exc:
+            raise ValueError("Vault payload is not valid base64url") from exc
 
-        expected = hmac.new(self.key, nonce + ciphertext, hashlib.sha256).digest()
-        if not hmac.compare_digest(signature, expected):
-            raise ValueError("Vault payload integrity verification failed")
+        nonce = blob[: self._NONCE_LEN]
+        ciphertext = blob[self._NONCE_LEN :]
 
-        stream_key = self._derive_stream_key(nonce)
-        raw = bytes(b ^ k for b, k in zip(ciphertext, cycle(stream_key)))
+        try:
+            raw = self._aesgcm.decrypt(nonce, ciphertext, None)
+        except Exception as exc:
+            raise ValueError("Vault payload integrity verification failed") from exc
+
         return raw.decode("utf-8")

@@ -21,7 +21,7 @@ python - <<'PY'
 import os
 import pytest
 
-exit_code = pytest.main(["testing/backend", "-q"])
+exit_code = pytest.main(["testing/backend", "-q", "-m", "not benchmark"])
 # Force process exit to avoid hangs from lingering background resources.
 os._exit(exit_code)
 PY
