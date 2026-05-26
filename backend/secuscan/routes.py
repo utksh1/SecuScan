@@ -226,11 +226,11 @@ async def start_task(
         raise HTTPException(status_code=404, detail=f"Plugin not found: {request.plugin_id}")
 
     if target := request.inputs.get("target"):
-        # Fix for Issue #283: Strictly bind guardrail enforcement directly to the 
+        # Fix for Issue #283: Strictly bind guardrail enforcement directly to the
         # server's immutable environment configuration state. Completely ignore
         # any client-supplied input payload parameters.
         safe_mode = settings.safe_mode_default
-        
+
         target_str = str(target)
         should_validate_target = plugin.category != "code" and not is_filesystem_target(target_str)
 
@@ -524,7 +524,7 @@ async def get_task_result(task_id: str):
         str(item) for item in structured_summary
         if isinstance(item, (str, int, float)) and str(item).strip()
     ] if isinstance(structured_summary, list) else []
-    
+
     total_findings = len(findings)
     if not summary and total_findings > 0:
         critical_high = severity_counts.get("critical", 0) + severity_counts.get("high", 0)
@@ -1125,4 +1125,3 @@ async def get_assets():
     rows = await db.fetchall("SELECT DISTINCT target FROM tasks UNION SELECT DISTINCT target FROM findings")
     assets = [{"id": str(uuid.uuid4()), "name": row["target"]} for row in rows]
     return {"assets": assets}
-
