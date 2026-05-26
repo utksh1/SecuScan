@@ -32,11 +32,9 @@ def parse_json_fields(rows: List[Dict], fields: List[str]) -> List[Dict]:
 
 def is_filesystem_target(target: str) -> bool:
     """Best-effort detection for path-based targets that should bypass host validation."""
-    if target.startswith(("/", "./", "../", "~")):
+    if target.startswith(("/", "./", "../", "~/", ".\\", "..\\", "\\\\")):
         return True
     if re.match(r"^[A-Za-z]:[\\/]", target):
-        return True
-    if "/" in target and not target.startswith(("http://", "https://")):
         return True
     return False
 
