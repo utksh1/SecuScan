@@ -2,11 +2,13 @@
 Pydantic models for API requests and responses
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Annotated
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, RootModel
 from enum import Enum
 
+
+MAX_BULK_DELETE = 500
 
 class SafetyLevel(str, Enum):
     """Plugin safety level classification"""
@@ -161,3 +163,8 @@ class ErrorResponse(BaseModel):
     message: str
     field: Optional[str] = None
     details: Optional[Dict[str, Any]] = None
+
+
+class BulkDeleteRequest(RootModel[Annotated[List[str], Field(max_length=MAX_BULK_DELETE)]]):
+    """Accepts a JSON array of task IDs directly. Max 500 per request."""
+    pass

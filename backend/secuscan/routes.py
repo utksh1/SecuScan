@@ -65,7 +65,7 @@ logger = logging.getLogger(__name__)
 from .cache import get_cache
 from .models import (
     TaskCreateRequest, TaskResponse, TaskResult,
-    PluginListResponse, ErrorResponse
+    PluginListResponse, ErrorResponse, BulkDeleteRequest
 )
 from .config import settings
 from .database import get_db
@@ -744,28 +744,47 @@ async def list_tasks(
             "per_page": per_page,
             "total_pages": total_pages,
             "total_items": total,
-            "next": build_page_url(next_page),      # ← NEW
-            "previous": build_page_url(prev_page)    # ← NEW
+            "next": build_page_url(next_page),
+            "previous": build_page_url(prev_page)
         }
     }
 
 
+SQLITE_CHUNK_SIZE = 500  # safely under SQLITE_LIMIT_VARIABLE_NUMBER = 999
+
 async def delete_task_records(task_ids: List[str]):
-    """Helper to delete database records and files for multiple tasks."""
+    """Helper to delete database records and files for multiple tasks.
+
+    Processes IDs in chunks of SQLITE_CHUNK_SIZE to stay under
+    SQLite's SQLITE_LIMIT_VARIABLE_NUMBER = 999 limit.
+    """
+    if not task_ids:
+        return
+
     db = await get_db()
 
-    # Get raw output paths for file cleanup
-    placeholders = ",".join(["?"] * len(task_ids))
-    task_rows = await db.fetchall(f"SELECT raw_output_path FROM tasks WHERE id IN ({placeholders})", tuple(task_ids))
+    # Collect all raw_output_paths across chunks for file cleanup
+    all_task_rows = []
+    for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
+        chunk = task_ids[i : i + SQLITE_CHUNK_SIZE]
+        placeholders = ",".join(["?"] * len(chunk))
+        rows = await db.fetchall(
+            f"SELECT raw_output_path FROM tasks WHERE id IN ({placeholders})",
+            tuple(chunk)
+        )
+        all_task_rows.extend(rows)
 
-    # Delete associated data
-    await db.execute(f"DELETE FROM findings WHERE task_id IN ({placeholders})", tuple(task_ids))
-    await db.execute(f"DELETE FROM reports WHERE task_id IN ({placeholders})", tuple(task_ids))
-    await db.execute(f"DELETE FROM audit_log WHERE task_id IN ({placeholders})", tuple(task_ids))
-    await db.execute(f"DELETE FROM tasks WHERE id IN ({placeholders})", tuple(task_ids))
+    # Delete associated records in chunks
+    for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
+        chunk = task_ids[i : i + SQLITE_CHUNK_SIZE]
+        placeholders = ",".join(["?"] * len(chunk))
+        await db.execute(f"DELETE FROM findings   WHERE task_id IN ({placeholders})", tuple(chunk))
+        await db.execute(f"DELETE FROM reports    WHERE task_id IN ({placeholders})", tuple(chunk))
+        await db.execute(f"DELETE FROM audit_log  WHERE task_id IN ({placeholders})", tuple(chunk))
+        await db.execute(f"DELETE FROM tasks      WHERE id       IN ({placeholders})", tuple(chunk))
 
     # Cleanup files on disk
-    for row in task_rows:
+    for row in all_task_rows:
         if row and row["raw_output_path"]:
             try:
                 path = Path(row["raw_output_path"])
@@ -794,13 +813,21 @@ async def delete_task(task_id: str):
 
 
 @router.delete("/tasks/bulk")
-async def bulk_delete_tasks(task_ids: List[str]):
-    """Delete multiple tasks at once"""
+async def bulk_delete_tasks(request: BulkDeleteRequest):
+    """Delete multiple tasks at once (max 500 IDs per request)"""
+    task_ids = request.root  # RootModel exposes data via .root
     db = await get_db()
 
-    # Check if any tasks are running
+    # Empty list — return early cleanly (test requires 200, not 422)
+    if not task_ids:
+        return {"deleted_count": 0, "success": True}
+
+    # Check running tasks — safe: len(task_ids) <= 500 guaranteed by Pydantic
     placeholders = ",".join(["?"] * len(task_ids))
-    running_tasks = await db.fetchone(f"SELECT id FROM tasks WHERE id IN ({placeholders}) AND status = 'running' LIMIT 1", tuple(task_ids))
+    running_tasks = await db.fetchone(
+        f"SELECT id FROM tasks WHERE id IN ({placeholders}) AND status = 'running' LIMIT 1",
+        tuple(task_ids)
+    )
     if running_tasks:
         raise HTTPException(status_code=400, detail="Cannot delete running tasks. Abort them first.")
 
@@ -811,7 +838,6 @@ async def bulk_delete_tasks(task_ids: List[str]):
         "deleted_count": len(task_ids),
         "success": True
     }
-
 
 @router.delete("/tasks/clear")
 async def clear_all_tasks():
