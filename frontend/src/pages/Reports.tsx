@@ -77,20 +77,47 @@ export default function Reports() {
     .filter((report) => report.status === 'ready')
     .sort((a, b) => new Date(b.generated_at).getTime() - new Date(a.generated_at).getTime())[0]
 
-  const fetchReports = () => {
-    setLoading(true)
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+
+  const fetchReports = (cursor: string | null = null, limit = 50) => {
+    const isFirst = !cursor
+    if (isFirst) setLoading(true)
+    else setLoadingMore(true)
+
     setError(null)
-    Promise.all([getReports(), getDashboardSummary()])
-      .then(([reportData, summaryData]: any) => {
-        setReports(reportData.reports || [])
-        setSummary(summaryData || {})
+
+    const promises: any[] = [getReports(limit, cursor)]
+    if (isFirst) promises.push(getDashboardSummary())
+
+    Promise.all(promises)
+      .then((results: any[]) => {
+        const reportData = results[0]
+        const newReports = reportData.reports || []
+        const pagination = reportData.pagination || {}
+
+        setReports(current => isFirst ? newReports : [...current, ...newReports])
+        setNextCursor(pagination.next_cursor || null)
+        setHasMore(pagination.has_more || false)
+
+        if (isFirst && results.length > 1) {
+          setSummary(results[1] || {})
+        }
       })
       .catch(() => {
         setError('Failed to fetch reports')
       })
       .finally(() => {
         setLoading(false)
+        setLoadingMore(false)
       })
+  }
+
+  const loadMore = () => {
+    if (!loadingMore && hasMore && nextCursor) {
+      fetchReports(nextCursor, 50)
+    }
   }
 
   useEffect(() => {
@@ -135,7 +162,7 @@ export default function Reports() {
             <ReportIcon icon={Download01Icon} className="block" aria-hidden="true" />
           </button>
           <button
-            onClick={fetchReports}
+            onClick={() => fetchReports()}
             className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
             title="Refresh Archive"
           >
@@ -164,7 +191,7 @@ export default function Reports() {
             <p className="text-[10px] font-mono text-silver/40 uppercase tracking-widest">{error}</p>
           </div>
           <button
-            onClick={fetchReports}
+            onClick={() => fetchReports()}
             className="ml-auto bg-rag-red border-4 border-black px-6 py-3 text-[9px] font-black uppercase tracking-widest text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
           >
             Retry
@@ -417,6 +444,19 @@ export default function Reports() {
                   )}
                 </motion.div>
               </AnimatePresence>
+
+              {/* Load More Button */}
+              {hasMore && (
+                <div className="pt-8 flex justify-center">
+                  <button
+                    onClick={loadMore}
+                    disabled={loadingMore}
+                    className="bg-charcoal border-4 border-black px-8 py-4 text-xs font-black text-silver-bright uppercase tracking-widest shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-50 disabled:cursor-wait"
+                  >
+                    {loadingMore ? 'Retrieving...' : 'Load More Entries'}
+                  </button>
+                </div>
+              )}
             </main>
           </div>
         </>

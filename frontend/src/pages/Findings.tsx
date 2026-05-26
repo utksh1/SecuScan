@@ -104,16 +104,42 @@ export default function Findings() {
   const [reviewState, setReviewState] = useState<ReviewState>({})
   const [copiedFindingId, setCopiedFindingId] = useState<string | null>(null)
 
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
+
+  const fetchFindings = async (cursor: string | null = null, limit = 50) => {
+    try {
+      const isFirst = !cursor
+      if (isFirst) setLoading(true)
+      else setLoadingMore(true)
+
+      const data: any = await getFindings(limit, cursor)
+      const newFindings = data.findings || []
+      const pagination = data.pagination || {}
+      
+      setFindings((current) => isFirst ? newFindings : [...current, ...newFindings])
+      setNextCursor(pagination.next_cursor || null)
+      setHasMore(pagination.has_more || false)
+      
+      if (isFirst) {
+        setSelectedFindingId((current) => current ?? newFindings[0]?.id ?? null)
+      }
+    } finally {
+      setLoading(false)
+      setLoadingMore(false)
+    }
+  }
+
   useEffect(() => {
-    setLoading(true)
-    getFindings()
-      .then((data: any) => {
-        const nextFindings = data.findings || []
-        setFindings(nextFindings)
-        setSelectedFindingId((current) => current ?? nextFindings[0]?.id ?? null)
-      })
-      .finally(() => setLoading(false))
+    fetchFindings()
   }, [])
+
+  const loadMore = () => {
+    if (!loadingMore && hasMore && nextCursor) {
+      fetchFindings(nextCursor, 50)
+    }
+  }
 
   useEffect(() => {
     try {
@@ -623,6 +649,19 @@ export default function Findings() {
                 <div className="divide-y divide-silver-bright/6">
                   {sortedFindings.map((finding) => renderFindingRow(finding))}
                 </div>
+              </div>
+            )}
+
+            {/* Load More Button */}
+            {hasMore && (
+              <div className="pt-8 flex justify-center">
+                <button
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="bg-charcoal border-4 border-black px-8 py-4 text-xs font-black text-silver-bright uppercase tracking-widest shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-50 disabled:cursor-wait"
+                >
+                  {loadingMore ? 'Retrieving...' : 'Load More Entities'}
+                </button>
               </div>
             )}
           </motion.section>

@@ -161,3 +161,22 @@ class ErrorResponse(BaseModel):
     message: str
     field: Optional[str] = None
     details: Optional[Dict[str, Any]] = None
+
+
+class CursorPaginationMeta(BaseModel):
+    """Cursor-based pagination metadata"""
+    next_cursor: Optional[str] = None
+    has_more: bool
+    total_count: int
+
+
+class FindingsResponse(BaseModel):
+    """Paginated list of findings"""
+    findings: List[Finding]
+    pagination: CursorPaginationMeta
+
+
+class ReportsResponse(BaseModel):
+    """Paginated list of reports"""
+    reports: List[Dict[str, Any]]
+    pagination: CursorPaginationMeta

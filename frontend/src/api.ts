@@ -115,13 +115,19 @@ export function getDashboardSummary() {
 }
 
 
-export function getFindings() {
-  return request('/findings')
+export function getFindings(limit: number = 50, cursor?: string | null) {
+  const params = new URLSearchParams()
+  params.set('limit', limit.toString())
+  if (cursor) params.set('cursor', cursor)
+  return request(`/findings?${params.toString()}`)
 }
 
 
-export function getReports() {
-  return request('/reports')
+export function getReports(limit: number = 50, cursor?: string | null) {
+  const params = new URLSearchParams()
+  params.set('limit', limit.toString())
+  if (cursor) params.set('cursor', cursor)
+  return request(`/reports?${params.toString()}`)
 }
 
 export function getTasks(params?: URLSearchParams) {
