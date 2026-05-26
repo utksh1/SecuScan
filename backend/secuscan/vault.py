@@ -1,46 +1,39 @@
-"""Lightweight encrypted credential vault."""
-
+"""Lightweight encrypted credential vault backed by AES-256-GCM."""
 from __future__ import annotations
-
 import base64
-import hashlib
-import hmac
 import os
-from itertools import cycle
+
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
 class VaultCrypto:
-    """Symmetric encryption helper backed by a deterministic keystream.
+    """Symmetric encryption helper using AES-256-GCM.
 
-    This is intentionally lightweight for local-first usage where secret-at-rest
-    protection is needed without adding third-party crypto dependencies.
+    AES-256-GCM is an authenticated encryption scheme that provides:
+    - Confidentiality regardless of secret length (no keystream cycling)
+    - Built-in integrity verification via authentication tag
+    - Replaces the previous XOR stream cipher which was trivially breakable
+      via crib-dragging for secrets longer than 32 bytes.
     """
 
     def __init__(self, key: bytes):
-        self.key = key
-
-    def _derive_stream_key(self, nonce: bytes) -> bytes:
-        return hashlib.sha256(self.key + nonce).digest()
+        if len(key) != 32:
+            raise ValueError("VaultCrypto requires a 32-byte key")
+        self.aesgcm = AESGCM(key)
 
     def encrypt(self, plaintext: str) -> str:
         raw = plaintext.encode("utf-8")
-        nonce = os.urandom(16)
-        stream_key = self._derive_stream_key(nonce)
-        ciphertext = bytes(b ^ k for b, k in zip(raw, cycle(stream_key)))
-        signature = hmac.new(self.key, nonce + ciphertext, hashlib.sha256).digest()
-        blob = nonce + signature + ciphertext
+        nonce = os.urandom(12)  # 96-bit nonce recommended for GCM
+        ciphertext = self.aesgcm.encrypt(nonce, raw, None)
+        blob = nonce + ciphertext
         return base64.urlsafe_b64encode(blob).decode("ascii")
 
     def decrypt(self, payload: str) -> str:
         blob = base64.urlsafe_b64decode(payload.encode("ascii"))
-        nonce = blob[:16]
-        signature = blob[16:48]
-        ciphertext = blob[48:]
-
-        expected = hmac.new(self.key, nonce + ciphertext, hashlib.sha256).digest()
-        if not hmac.compare_digest(signature, expected):
-            raise ValueError("Vault payload integrity verification failed")
-
-        stream_key = self._derive_stream_key(nonce)
-        raw = bytes(b ^ k for b, k in zip(ciphertext, cycle(stream_key)))
+        nonce = blob[:12]
+        ciphertext = blob[12:]
+        try:
+            raw = self.aesgcm.decrypt(nonce, ciphertext, None)
+        except Exception as exc:
+            raise ValueError("Vault payload integrity verification failed") from exc
         return raw.decode("utf-8")
