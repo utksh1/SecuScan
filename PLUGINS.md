@@ -106,10 +106,10 @@ Only run scans against systems you own or are explicitly authorized to assess.
 
 ## Examples for common field types in metadata.json
 
-1. string - Single-line text
+1. **string** - Single-line text
 
--Use for free-form text inputs such as hostnames, domain names, file paths, or any
-value that does not fit a more specific type.
+   - Use for free-form text inputs such as hostnames, domain names, file paths, or any
+     value that does not fit a more specific type.
 
 ```json
 {
@@ -121,9 +121,9 @@ value that does not fit a more specific type.
 }
 ```
 
-2. url - URL
+2. **url** - URL
 
--Use when the field expects a well-formed URL (a complete target url).
+   - Use when the field expects a well-formed URL (a complete target URL).
 
 ```json
 {
@@ -135,9 +135,9 @@ value that does not fit a more specific type.
 }
 ```
 
-3. select - Single-choice dropdown
+3. **select** - Single-choice dropdown
 
-- Use when user must choose a predefined option or say exactly one value from a fixed list.
+   - Use when user must choose a predefined option or say exactly one value from a fixed list.
 
 ```json
 {
@@ -149,10 +149,11 @@ value that does not fit a more specific type.
   "default": "normal"
 }
 ```
-4. boolean - Toggle/checkbox
 
--Use boolean fields for true/false configuration options.
--Always provide a default of true or false.
+4. **boolean** - Toggle/checkbox
+
+   - Use boolean fields for true/false configuration options.
+   - Always provide a default of true or false.
 
 ```json
 {
@@ -163,11 +164,12 @@ value that does not fit a more specific type.
   "default": false
 }
 ```
-5. number - Numeric input
 
--Use for numeric limits, thresholds or timeout values.
--Use min and max to constrain the accepted range (both bounds are inclusive).
--The backend will reject values outside the declared range.
+5. **number** - Numeric input
+
+   - Use for numeric limits, thresholds or timeout values.
+   - Use min and max to constrain the accepted range (both bounds are inclusive).
+   - The backend will reject values outside the declared range.
 
 ```json
 {
@@ -181,9 +183,9 @@ value that does not fit a more specific type.
 }
 ```
 
-6. multiselect - Multi-choice selection
+6. **multiselect** - Multi-choice selection
 
--Use multiselect fields when users can choose multiple options.
+   - Use multiselect fields when users can choose multiple options.
 
 ```json
 {
@@ -195,11 +197,6 @@ value that does not fit a more specific type.
   "default": ["json"]
 }
 ```
-
-
-
-
-
 
 ## Maintenance Notes
 
