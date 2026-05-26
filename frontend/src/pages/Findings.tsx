@@ -117,11 +117,11 @@ export default function Findings() {
       const data: any = await getFindings(limit, cursor)
       const newFindings = data.findings || []
       const pagination = data.pagination || {}
-      
+
       setFindings((current) => isFirst ? newFindings : [...current, ...newFindings])
       setNextCursor(pagination.next_cursor || null)
       setHasMore(pagination.has_more || false)
-      
+
       if (isFirst) {
         setSelectedFindingId((current) => current ?? newFindings[0]?.id ?? null)
       }

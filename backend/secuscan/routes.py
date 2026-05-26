@@ -673,10 +673,10 @@ async def get_dashboard_summary():
 async def get_findings(limit: int = Query(50, ge=1, le=100), cursor: Optional[str] = None):
     """Return vulnerability findings with cursor pagination."""
     db = await get_db()
-    
+
     query = "SELECT * FROM findings"
     params = []
-    
+
     if cursor:
         try:
             decoded = base64.b64decode(cursor).decode('utf-8')
@@ -685,27 +685,27 @@ async def get_findings(limit: int = Query(50, ge=1, le=100), cursor: Optional[st
             params.extend([cursor_time, cursor_time, cursor_id])
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid cursor format")
-            
+
     query += " ORDER BY discovered_at DESC, id DESC LIMIT ?"
     params.append(limit + 1)  # Fetch one extra to check if there are more
-    
+
     rows = await db.fetchall(query, tuple(params))
-    
+
     has_more = len(rows) > limit
     if has_more:
         rows = rows[:limit]
-        
+
     next_cursor = None
     if rows:
         last_row = rows[-1]
         next_cursor_str = f"{last_row['discovered_at']}|{last_row['id']}"
         next_cursor = base64.b64encode(next_cursor_str.encode('utf-8')).decode('utf-8')
-        
+
     count_row = await db.fetchone("SELECT COUNT(*) as total FROM findings")
     total = count_row["total"] if count_row else 0
-    
+
     parsed_findings = parse_json_fields(rows, ["metadata_json"])
-    
+
     return {
         "findings": parsed_findings,
         "pagination": {
@@ -720,10 +720,10 @@ async def get_findings(limit: int = Query(50, ge=1, le=100), cursor: Optional[st
 async def get_reports(limit: int = Query(50, ge=1, le=100), cursor: Optional[str] = None):
     """Return generated reports with cursor pagination."""
     db = await get_db()
-    
+
     query = "SELECT * FROM reports"
     params = []
-    
+
     if cursor:
         try:
             decoded = base64.b64decode(cursor).decode('utf-8')
@@ -732,27 +732,27 @@ async def get_reports(limit: int = Query(50, ge=1, le=100), cursor: Optional[str
             params.extend([cursor_time, cursor_time, cursor_id])
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid cursor format")
-            
+
     query += " ORDER BY generated_at DESC, id DESC LIMIT ?"
     params.append(limit + 1)
-    
+
     rows = await db.fetchall(query, tuple(params))
-    
+
     has_more = len(rows) > limit
     if has_more:
         rows = rows[:limit]
-        
+
     next_cursor = None
     if rows:
         last_row = rows[-1]
         next_cursor_str = f"{last_row['generated_at']}|{last_row['id']}"
         next_cursor = base64.b64encode(next_cursor_str.encode('utf-8')).decode('utf-8')
-        
+
     count_row = await db.fetchone("SELECT COUNT(*) as total FROM reports")
     total = count_row["total"] if count_row else 0
-    
+
     parsed_reports = parse_json_fields(rows, ["metadata_json"])
-    
+
     return {
         "reports": parsed_reports,
         "pagination": {
