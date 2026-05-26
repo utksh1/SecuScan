@@ -199,10 +199,6 @@ Only run scans against systems you own or are explicitly authorized to assess.
 }
 ```
 
-<<<<<<< HEAD
-=======
-
-
 ## Plugin Input Schema with Examples
 
 Plugins can tell us about configurable user inputs through schema fields in their
@@ -286,7 +282,6 @@ Example preset:
 Each preset key shall exactly match a corresponding schema `"key"` value.
 
 
->>>>>>> 5038c6e18911a8f42ca308f69ef55075c5c5eef8
 ## Maintenance Notes
 
 - If a plugin is added, renamed, or removed, update this file from the plugin metadata rather than editing counts by hand.
