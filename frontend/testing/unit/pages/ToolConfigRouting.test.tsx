@@ -67,7 +67,7 @@ describe('ToolConfig route consistency', () => {
     const user = userEvent.setup()
     renderWithRoutes('/toolkit/whois_lookup')
 
-    const backButton = await screen.findByRole('button', { name: /arrow_back/i })
+    const backButton = await screen.findByRole('button', { name: /back to scans/i })
     await user.click(backButton)
 
     await waitFor(() => {

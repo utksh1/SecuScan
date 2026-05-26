@@ -1,6 +1,9 @@
 # SecuScan Frontend
 
 React-based web interface for the SecuScan pentesting toolkit.
+<p align="center">
+  <img src="Favicon-SecuScan.png" alt="Favicon" width="120"/>
+</p>
 
 ## 🚀 Quick Start
 

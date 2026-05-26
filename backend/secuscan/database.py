@@ -203,10 +203,34 @@ class Database:
                 last_run_at TIMESTAMP
             );
 
+            -- Tasks indexes (existing)
             CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at);
             CREATE INDEX IF NOT EXISTS idx_tasks_target ON tasks(target);
             CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
             CREATE INDEX IF NOT EXISTS idx_tasks_plugin ON tasks(plugin_id);
+            -- Composite index for dashboard running tasks query
+            CREATE INDEX IF NOT EXISTS idx_tasks_status_created ON tasks(status, created_at DESC);
+
+            -- Findings indexes (new)
+            CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
+            CREATE INDEX IF NOT EXISTS idx_findings_task_id ON findings(task_id);
+            CREATE INDEX IF NOT EXISTS idx_findings_discovered_at ON findings(discovered_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_findings_plugin_id ON findings(plugin_id);
+            CREATE INDEX IF NOT EXISTS idx_findings_target ON findings(target);
+            -- Composite index for severity counting by task
+            CREATE INDEX IF NOT EXISTS idx_findings_task_severity ON findings(task_id, severity);
+
+            -- Reports indexes (new)
+            CREATE INDEX IF NOT EXISTS idx_reports_task_id ON reports(task_id);
+            CREATE INDEX IF NOT EXISTS idx_reports_generated_at ON reports(generated_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status);
+
+            -- Audit log indexes (new)
+            CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp DESC);
+            CREATE INDEX IF NOT EXISTS idx_audit_event_type ON audit_log(event_type);
+            CREATE INDEX IF NOT EXISTS idx_audit_task_id ON audit_log(task_id);
+
+            -- Workflows index (existing)
             CREATE INDEX IF NOT EXISTS idx_workflows_enabled ON workflows(enabled);
             """
         )
