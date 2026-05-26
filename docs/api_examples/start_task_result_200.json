@@ -1,10 +1,10 @@
 {
-  "task_id": "87244a27-cdf2-4209-ae97-0e8d354b24ab",
+  "task_id": "00000000-0000-0000-0000-000000000000",
   "plugin_id": "http_inspector",
   "tool": "HTTP Inspector",
-  "target": "http://127.0.0.1:8000",
+  "target": "http://example.com",
   "timestamp": "2026-05-24 10:32:54",
-  "duration_seconds": 7.414817810058594e-05,
+  "duration_seconds": 1.0,
   "status": "completed",
   "preset": "quick",
   "inputs": {
@@ -91,12 +91,9 @@
     "headers": {},
     "count": 4
   },
-  "raw_output_path": "C:\\Users\\shanu\\AppData\\Local\\Temp\\tmppv_bkwr1\\raw\\87244a27-cdf2-4209-ae97-0e8d354b24ab.txt",
   "raw_output_excerpt": "Mocked successful output",
   "raw_output": "Mocked successful output",
-  "command_used": "curl -i -L --max-time 5 http://127.0.0.1:8000",
   "errors": [],
   "error_message": null,
-  "exit_code": 0,
-  "metadata": {}
+  "exit_code": 0
 }

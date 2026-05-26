@@ -1,9 +1,4 @@
 {
   "status": "operational",
-  "version": "0.1.0-alpha",
-  "system": {
-    "platform": "Windows",
-    "python_version": "3.13.7",
-    "docker_available": false
-  }
+  "version": "0.1.0-alpha"
 }
