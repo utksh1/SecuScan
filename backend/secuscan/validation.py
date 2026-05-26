@@ -141,11 +141,15 @@ def validate_port_range(port_range: str) -> Tuple[bool, str]:
         return True, ""
 
     # Handle port ranges
+# Handle port ranges
     if '-' in port_range:
         try:
             start, end = map(int, port_range.split('-'))
             if start > end:
                 return False, "Port range start must be less than end"
+
+            if (end - start) > settings.max_port_range_size:
+                return False, f"Port range too large (max {settings.max_port_range_size} ports allowed)"
 
             is_valid, msg = validate_port(start)
             if not is_valid:
