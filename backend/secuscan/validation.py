@@ -198,7 +198,7 @@ def sanitize_input(value: str) -> str:
         Sanitized value
     """
     # Remove shell metacharacters
-    dangerous_chars = [';', '|', '&', '$', '`', '(', ')', '<', '>', '\n', '\r']
+    dangerous_chars = [';', '|', '&', '$', '`', '(', ')', '<', '>', '\n', '\r', "'", '"', '\\', '!', '{', '}']
     for char in dangerous_chars:
         value = value.replace(char, '')
     
