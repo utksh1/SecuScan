@@ -96,6 +96,5 @@ class WorkflowScheduler:
                 set_request_id(request_id)
                 await executor.execute_task(task_id)
 
-            asyncio.create_task(run_task())
-            
+            asyncio.create_task(run_task())           
 scheduler = WorkflowScheduler()
