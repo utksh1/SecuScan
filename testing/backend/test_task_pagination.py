@@ -5,6 +5,7 @@ Tests for pagination metadata in tasks list endpoint.
 import pytest
 from fastapi.testclient import TestClient
 from backend.secuscan.main import app
+from backend.secuscan import database as db_module
 from backend.secuscan.database import init_db
 
 # IMPORTANT: Initialize database before any tests run
@@ -12,7 +13,15 @@ from backend.secuscan.database import init_db
 def setup_database():
     """Initialize database for testing"""
     import asyncio
-    asyncio.run(init_db())
+
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(init_db())
+        yield
+    finally:
+        if db_module.db is not None:
+            loop.run_until_complete(db_module.db.disconnect())
+        loop.close()
 
 client = TestClient(app)
 
