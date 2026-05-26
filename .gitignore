@@ -35,13 +35,13 @@ venv_tests/
 *.swo
 *~
 .DS_Store
-
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
 *.cover
 .hypothesis/
+benchmark_results.json
 
 # Database
 *.db
@@ -103,3 +103,8 @@ Thumbs.db
 
 backend/data/reports/*
 !backend/data/reports/.gitkeep
+
+# Frontend generated test artifacts (see CONTRIBUTING.md)
+frontend/playwright-report/
+frontend/test-results/
+frontend/.vite/
