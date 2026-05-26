@@ -38,11 +38,11 @@ class PortScanner(BaseScanner):
         # Already a bare valid letter
         if value in _VALID:
             return value
-        # Strip a leading "-S" or "S" prefix (e.g. "-sT" → "T", "sS" → "S")
+        # Strip a leading "-s" or "s" prefix (e.g. "-sT" → "T", "sS" → "S")
+        # The result must be exactly one valid letter — multi-char leftovers are invalid.
         stripped = re.sub(r"^-?S", "", value)
-        letter = stripped[0] if stripped else ""
-        if letter in _VALID:
-            return letter
+        if len(stripped) == 1 and stripped in _VALID:
+            return stripped
         raise ValueError(
             f"Invalid scan_type {raw!r}: must be one of 'S' (SYN), 'T' (TCP connect), 'U' (UDP)"
         )
