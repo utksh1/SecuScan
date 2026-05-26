@@ -357,6 +357,7 @@ class TaskExecutor:
                 try:
                     await self._upsert_findings_and_report(
                         db=db,
+                        task_id=task_id,
                         plugin=plugin,
                         plugin_id=plugin_id,
                         target=target,

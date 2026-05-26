@@ -629,4 +629,3 @@ class TestTelemetrySecurityNegative:
         d = t.to_dict()
         assert isinstance(d["output_size_bytes"], int)
         assert "secret" not in str(d["output_size_bytes"])
-
