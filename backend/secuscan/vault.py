@@ -4,43 +4,49 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import hmac
 import os
-from itertools import cycle
+
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 
 class VaultCrypto:
-    """Symmetric encryption helper backed by a deterministic keystream.
+    """Symmetric encryption helper backed by AES-256-GCM.
 
-    This is intentionally lightweight for local-first usage where secret-at-rest
-    protection is needed without adding third-party crypto dependencies.
+    AES-GCM provides both confidentiality and authenticity in a single pass,
+    replacing the previous XOR-stream + HMAC approach which was vulnerable to
+    key-reuse attacks on secrets longer than 32 bytes.
+
+    Wire format (all concatenated, then base64url-encoded):
+        nonce (12 bytes) || ciphertext+tag (len(plaintext) + 16 bytes)
+
+    The AES key is derived from the user-supplied key material via SHA-256 so
+    that any-length key bytes are accepted without padding issues.
     """
 
-    def __init__(self, key: bytes):
-        self.key = key
+    _NONCE_SIZE = 12  # 96-bit nonce recommended for AES-GCM
 
-    def _derive_stream_key(self, nonce: bytes) -> bytes:
-        return hashlib.sha256(self.key + nonce).digest()
+    def __init__(self, key: bytes):
+        # Derive a fixed-length 256-bit AES key from arbitrary key material.
+        self._aes_key = hashlib.sha256(key).digest()
 
     def encrypt(self, plaintext: str) -> str:
         raw = plaintext.encode("utf-8")
-        nonce = os.urandom(16)
-        stream_key = self._derive_stream_key(nonce)
-        ciphertext = bytes(b ^ k for b, k in zip(raw, cycle(stream_key)))
-        signature = hmac.new(self.key, nonce + ciphertext, hashlib.sha256).digest()
-        blob = nonce + signature + ciphertext
+        nonce = os.urandom(self._NONCE_SIZE)
+        aesgcm = AESGCM(self._aes_key)
+        # AESGCM.encrypt() returns ciphertext + 16-byte authentication tag.
+        ciphertext_tag = aesgcm.encrypt(nonce, raw, associated_data=None)
+        blob = nonce + ciphertext_tag
         return base64.urlsafe_b64encode(blob).decode("ascii")
 
     def decrypt(self, payload: str) -> str:
         blob = base64.urlsafe_b64decode(payload.encode("ascii"))
-        nonce = blob[:16]
-        signature = blob[16:48]
-        ciphertext = blob[48:]
-
-        expected = hmac.new(self.key, nonce + ciphertext, hashlib.sha256).digest()
-        if not hmac.compare_digest(signature, expected):
-            raise ValueError("Vault payload integrity verification failed")
-
-        stream_key = self._derive_stream_key(nonce)
-        raw = bytes(b ^ k for b, k in zip(ciphertext, cycle(stream_key)))
+        nonce = blob[: self._NONCE_SIZE]
+        ciphertext_tag = blob[self._NONCE_SIZE :]
+        aesgcm = AESGCM(self._aes_key)
+        # decrypt() raises cryptography.exceptions.InvalidTag if the tag
+        # doesn't match — i.e. the payload was tampered with or the key is wrong.
+        try:
+            raw = aesgcm.decrypt(nonce, ciphertext_tag, associated_data=None)
+        except Exception as exc:
+            raise ValueError("Vault payload integrity verification failed") from exc
         return raw.decode("utf-8")
