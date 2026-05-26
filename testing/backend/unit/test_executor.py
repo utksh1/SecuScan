@@ -213,6 +213,7 @@ async def test_execute_task_sets_cancelled_status_in_db(setup_test_environment):
         "except asyncio.CancelledError handler is not writing to DB."
     )
     mock_limiter.release.assert_called_once_with(task_id)
+    await db.disconnect()
 
 
 @pytest.mark.asyncio
@@ -264,6 +265,7 @@ async def test_execute_task_releases_limiter_on_normal_completion(setup_test_env
         await executor.execute_task(task_id)
 
     mock_limiter.release.assert_called_once_with(task_id)
+    await db.disconnect()
 
 
 def test_cancelled_error_is_not_subclass_of_exception():
