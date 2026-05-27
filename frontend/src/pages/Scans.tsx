@@ -9,6 +9,7 @@ import {
   formatLocaleTime,
 } from "../utils/date";
 import Pagination from "../components/Pagination";
+import ConfirmModal from "../components/ConfirmModal";
 
 interface Task {
   task_id: string;
@@ -25,7 +26,6 @@ interface Task {
   queue_position?: number;
   pending_count?: number;
 }
-
 const statusFilters = [
   { value: "all", label: "ALL_OPERATIONS" },
   { value: "running", label: "ACTIVE_EXECUTION" },
@@ -52,6 +52,8 @@ const itemVariants = {
   },
 } as const;
 
+type ModalType = "delete" | "clearAll" | "bulkDelete" | null;
+
 export default function Scans() {
   const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -62,6 +64,10 @@ export default function Scans() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const PAGE_LIMIT = 10;
+
+  // Modal state
+  const [modalType, setModalType] = useState<ModalType>(null);
+  const [pendingTaskId, setPendingTaskId] = useState<string | null>(null);
 
   useEffect(() => {
     loadTasks();
@@ -88,6 +94,7 @@ export default function Scans() {
       setLoading(false);
     }
   }
+
   function handleFilterChange(value: string) {
     setFilter(value);
     setPage(1);
@@ -114,19 +121,36 @@ export default function Scans() {
     }
   }
 
-  async function handleTaskDelete(taskId: string) {
-    if (
-      !window.confirm(
-        "Are you sure you want to delete this scan record? This will also remove associated findings and reports.",
-      )
-    ) {
-      return;
-    }
+  // ── Modal trigger helpers ──────────────────────────────────────────────────
 
+  function confirmTaskDelete(taskId: string) {
+    setPendingTaskId(taskId);
+    setModalType("delete");
+  }
+
+  function confirmClearAll() {
+    setModalType("clearAll");
+  }
+
+  function confirmBulkDelete() {
+    if (selectedIds.length === 0) return;
+    setModalType("bulkDelete");
+  }
+
+  function closeModal() {
+    setModalType(null);
+    setPendingTaskId(null);
+  }
+
+  // ── Actual action handlers (called after modal confirm) ───────────────────
+
+  async function handleTaskDelete() {
+    if (!pendingTaskId) return;
+    closeModal();
     try {
-      await deleteTask(taskId);
-      setTasks((prev) => prev.filter((t) => t.task_id !== taskId));
-      if (expandedId === taskId) setExpandedId(null);
+      await deleteTask(pendingTaskId);
+      setTasks((prev) => prev.filter((t) => t.task_id !== pendingTaskId));
+      if (expandedId === pendingTaskId) setExpandedId(null);
     } catch (err) {
       console.error("Failed to delete task:", err);
       alert("Failed to delete task. It might still be running.");
@@ -134,14 +158,7 @@ export default function Scans() {
   }
 
   async function handleClearAll() {
-    if (
-      !window.confirm(
-        "CRITICAL: Are you sure you want to PURGE ALL RECORDS? This will wipe all scan history, findings, assets, and reports. This action is irreversible.",
-      )
-    ) {
-      return;
-    }
-
+    closeModal();
     try {
       await clearAllTasks();
       setTasks([]);
@@ -154,15 +171,7 @@ export default function Scans() {
   }
 
   async function handleBulkDelete() {
-    if (selectedIds.length === 0) return;
-    if (
-      !window.confirm(
-        `Are you sure you want to delete ${selectedIds.length} selected scan records?`,
-      )
-    ) {
-      return;
-    }
-
+    closeModal();
     try {
       await bulkDeleteTasks(selectedIds);
       setTasks((prev) => prev.filter((t) => !selectedIds.includes(t.task_id)));
@@ -174,6 +183,41 @@ export default function Scans() {
       );
     }
   }
+
+  // ── Modal config per type ─────────────────────────────────────────────────
+
+  const modalConfig: Record<
+    NonNullable<ModalType>,
+    {
+      title: string;
+      message: string;
+      confirmLabel: string;
+      onConfirm: () => void;
+    }
+  > = {
+    delete: {
+      title: "Delete_Scan_Record",
+      message:
+        "Are you sure you want to delete this scan record? This will also remove associated findings and reports.",
+      confirmLabel: "Delete_Record",
+      onConfirm: handleTaskDelete,
+    },
+    clearAll: {
+      title: "Purge_All_Records",
+      message:
+        "CRITICAL: Are you sure you want to PURGE ALL RECORDS? This will wipe all scan history, findings, assets, and reports. This action is irreversible.",
+      confirmLabel: "Purge_All",
+      onConfirm: handleClearAll,
+    },
+    bulkDelete: {
+      title: "Bulk_Delete_Records",
+      message: `Are you sure you want to delete ${selectedIds.length} selected scan record${selectedIds.length !== 1 ? "s" : ""}?`,
+      confirmLabel: "Delete_Selected",
+      onConfirm: handleBulkDelete,
+    },
+  };
+
+  // ── Selection helpers ─────────────────────────────────────────────────────
 
   function toggleSelection(taskId: string, e: React.MouseEvent) {
     e.stopPropagation();
@@ -199,8 +243,23 @@ export default function Scans() {
     return `${Math.round(seconds / 3600)}h`;
   }
 
+  const activeModal = modalType ? modalConfig[modalType] : null;
+
   return (
     <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
+      {/* Confirmation Modal */}
+      {activeModal && (
+        <ConfirmModal
+          isOpen={!!modalType}
+          title={activeModal.title}
+          message={activeModal.message}
+          confirmLabel={activeModal.confirmLabel}
+          danger={true}
+          onConfirm={activeModal.onConfirm}
+          onCancel={closeModal}
+        />
+      )}
+
       {/* Neo-Brutalist Header */}
       <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10">
         <div className="space-y-4">
@@ -274,7 +333,7 @@ export default function Scans() {
         <div className="flex items-center gap-6">
           {tasks.length > 0 && (
             <button
-              onClick={handleClearAll}
+              onClick={confirmClearAll}
               className="px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 bg-rag-red/10 text-rag-red border-rag-red/20 hover:bg-rag-red hover:text-black hover:border-black flex items-center gap-2 italic"
             >
               Purge_All_Records
@@ -487,7 +546,7 @@ export default function Scans() {
                                     className="bg-rag-red/20 text-rag-red border-2 border-rag-red/20 hover:bg-rag-red hover:text-black hover:border-black px-6 py-4 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 italic"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleTaskDelete(task.task_id);
+                                      confirmTaskDelete(task.task_id);
                                     }}
                                   >
                                     Delete_Record
@@ -592,7 +651,7 @@ export default function Scans() {
                   Cancel
                 </button>
                 <button
-                  onClick={handleBulkDelete}
+                  onClick={confirmBulkDelete}
                   className="bg-rag-red text-black px-8 py-3 text-[10px] font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3 italic"
                 >
                   Prune_Selected_Records
