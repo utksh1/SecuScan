@@ -19,6 +19,7 @@ from .database import init_db, db as global_db
 from .plugins import init_plugins
 from .routes import router
 from .workflows import scheduler
+from .models import HealthResponse
 
 
 logging.basicConfig(
@@ -127,7 +128,7 @@ app.add_middleware(RequestIDMiddleware)
 app.include_router(router)
 
 # Health check endpoint
-@app.get("/api/v1/health")
+@app.get("/api/v1/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint"""
     import platform

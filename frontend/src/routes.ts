@@ -8,6 +8,7 @@ export const routes = {
   workflows: '/workflows',
   settings: '/settings',
   task: '/task/:taskId',
+  assets: '/assets',
 } as const
 
 export const routePath = {

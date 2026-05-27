@@ -62,10 +62,58 @@ def build_report_filename(task: Dict[str, Any], extension: str) -> str:
 
 logger = logging.getLogger(__name__)
 
+CRON_TO_SECONDS = {
+    "*/5 * * * *": 300,
+    "*/10 * * * *": 600,
+    "*/15 * * * *": 900,
+    "*/30 * * * *": 1800,
+    "0 * * * *": 3600,
+    "0 */2 * * *": 7200,
+    "0 */4 * * *": 14400,
+    "0 */8 * * *": 28800,
+    "0 */12 * * *": 43200,
+    "0 0 * * *": 86400,
+}
+
+SECONDS_TO_CRON = {v: k for k, v in CRON_TO_SECONDS.items()}
+
+def cron_to_seconds(cron_str: str) -> int:
+    from fastapi import HTTPException
+    cron_str = cron_str.strip()
+    if cron_str.isdigit():
+        return int(cron_str)
+    if cron_str in CRON_TO_SECONDS:
+        return CRON_TO_SECONDS[cron_str]
+    if cron_str.startswith("*/") and cron_str.endswith(" * * * *"):
+        try:
+            minutes = int(cron_str.split(" ")[0][2:])
+            return minutes * 60
+        except ValueError:
+            pass
+    raise HTTPException(
+        status_code=400,
+        detail=f"Unrecognized schedule_interval '{cron_str}'. "
+               "Use a numeric seconds value, a cron expression like '*/5 * * * *', "
+               "or one of the known shortcuts (e.g. '0 * * * *', '0 0 * * *')."
+    )
+
+def seconds_to_cron(seconds: int) -> str:
+    if seconds in SECONDS_TO_CRON:
+        return SECONDS_TO_CRON[seconds]
+    if seconds > 0 and seconds % 60 == 0:
+        minutes = seconds // 60
+        if minutes < 60:
+            return f"*/{minutes} * * * *"
+    return f"{seconds}"
+
 from .cache import get_cache
 from .models import (
-    TaskCreateRequest, TaskResponse, TaskResult,
-    PluginListResponse, ErrorResponse
+    TaskCreateRequest, TaskResponse, TaskResult, TaskStatusResponse,
+    PluginListResponse, ErrorResponse, TaskStartResponse, TasksResponse,
+    FindingsResponse, ReportsResponse, AssetsResponse, GraphResponse,
+    AssetDetailsResponse, WorkflowsResponse, WorkflowCreateResponse,
+    WorkflowRunResponse, WorkflowUpdateResponse, WorkflowDeleteResponse,
+    DashboardSummaryResponse, PluginSchemaResponse, Finding, FindingDetailsResponse
 )
 from .config import settings
 from .database import get_db
@@ -174,7 +222,7 @@ async def get_plugins_summary():
         "category_counts": dict(sorted(category_counts.items()))
     }
 
-@router.get("/plugin/{plugin_id}/schema")
+@router.get("/plugin/{plugin_id}/schema", response_model=PluginSchemaResponse)
 async def get_plugin_schema(plugin_id: str):
     """Get plugin schema for UI generation"""
     plugin_manager = await get_plugin_manager_for_request()
@@ -194,7 +242,7 @@ async def get_all_presets():
     }
 
 
-@router.post("/task/start", dependencies=[Depends(task_start_limiter)])
+@router.post("/task/start", response_model=TaskStartResponse, dependencies=[Depends(task_start_limiter)])
 async def start_task(
     request: TaskCreateRequest,
     background_tasks: BackgroundTasks,
@@ -278,7 +326,7 @@ async def start_task(
         "stream_url": f"/api/v1/task/{task_id}/stream"
     }
 
-@router.get("/task/{task_id}/status")
+@router.get("/task/{task_id}/status", response_model=TaskStatusResponse)
 async def get_task_status(task_id: str):
     """Get task status"""
     status = await executor.get_task_status(task_id)
@@ -487,7 +535,7 @@ async def download_sarif_report(task_id: str):
     )
 
 
-@router.get("/task/{task_id}/result")
+@router.get("/task/{task_id}/result", response_model=TaskResult)
 async def get_task_result(task_id: str):
     """Get task execution result"""
     db = await get_db()
@@ -588,7 +636,7 @@ async def cancel_task(task_id: str):
     }
 
 
-@router.get("/dashboard/summary", dependencies=[Depends(read_heavy_limiter)])
+@router.get("/dashboard/summary", response_model=DashboardSummaryResponse, dependencies=[Depends(read_heavy_limiter)])
 async def get_dashboard_summary():
     """Return aggregate dashboard data from the primary store, cached in Redis."""
 
@@ -668,7 +716,7 @@ async def get_dashboard_summary():
     return await get_or_set_cached("summary:dashboard", build)
 
 
-@router.get("/findings", dependencies=[Depends(read_heavy_limiter)])
+@router.get("/findings", response_model=FindingsResponse, dependencies=[Depends(read_heavy_limiter)])
 async def get_findings():
     """Return vulnerability findings."""
 
@@ -680,7 +728,7 @@ async def get_findings():
     return await get_or_set_cached("findings:list", build)
 
 
-@router.get("/reports", dependencies=[Depends(read_heavy_limiter)])
+@router.get("/reports", response_model=ReportsResponse, dependencies=[Depends(read_heavy_limiter)])
 async def get_reports():
     """Return generated reports."""
 
@@ -692,7 +740,7 @@ async def get_reports():
     return await get_or_set_cached("reports:list", build)
 
 
-@router.get("/tasks", dependencies=[Depends(read_heavy_limiter)])
+@router.get("/tasks", response_model=TasksResponse, dependencies=[Depends(read_heavy_limiter)])
 async def list_tasks(
     page: int = 1,
     per_page: int = 25,
@@ -783,6 +831,16 @@ async def delete_task_records(task_ids: List[str]):
     await db.execute(f"DELETE FROM audit_log WHERE task_id IN ({placeholders})", tuple(task_ids))
     await db.execute(f"DELETE FROM tasks WHERE id IN ({placeholders})", tuple(task_ids))
 
+    # Cleanup orphaned assets
+    await db.execute(
+        f"""
+        DELETE FROM assets
+        WHERE id NOT IN (SELECT asset_id FROM asset_findings)
+          AND id NOT IN (SELECT asset_id FROM asset_tasks)
+          AND id NOT IN (SELECT host_id FROM assets WHERE host_id IS NOT NULL)
+        """
+    )
+
     # Cleanup files on disk
     for row in task_rows:
         if row and row["raw_output_path"]:
@@ -850,6 +908,9 @@ async def clear_all_tasks():
 
     # Purge other tables
     await db.execute("DELETE FROM findings")
+    await db.execute("DELETE FROM assets")
+    await db.execute("DELETE FROM asset_findings")
+    await db.execute("DELETE FROM asset_tasks")
 
     # Fallback cleanup for any orphaned files in data directories
     for subdir in ["raw", "reports"]:
@@ -948,14 +1009,36 @@ async def delete_vault_secret(name: str):
     return {"name": name, "deleted": True}
 
 
-@router.get("/workflows")
+@router.get("/workflows", response_model=WorkflowsResponse)
 async def list_workflows():
     db = await get_db()
     rows = await db.fetchall("SELECT * FROM workflows ORDER BY created_at DESC")
-    return {"workflows": parse_json_fields(rows, ["steps_json"]), "total": len(rows)}
+    workflows = []
+    for r in rows:
+        item = dict(r)
+        steps = []
+        if item.get("steps_json"):
+            try:
+                steps = json.loads(item["steps_json"])
+            except Exception:
+                pass
+
+        schedule_seconds = item.get("schedule_seconds")
+        interval = seconds_to_cron(schedule_seconds) if schedule_seconds else "0 * * * *"
+
+        workflows.append({
+            "id": item["id"],
+            "name": item["name"],
+            "schedule_interval": interval,
+            "enabled": bool(item["enabled"]),
+            "steps": steps,
+            "created_at": item.get("created_at"),
+            "last_run_at": item.get("last_run_at"),
+        })
+    return {"workflows": workflows, "total": len(workflows)}
 
 
-@router.post("/workflows")
+@router.post("/workflows", response_model=WorkflowCreateResponse)
 async def create_workflow(payload: Dict[str, Any]):
     name = str(payload.get("name", "")).strip()
     if not name:
@@ -966,7 +1049,8 @@ async def create_workflow(payload: Dict[str, Any]):
         raise HTTPException(status_code=400, detail="Workflow requires at least one step")
 
     workflow_id = str(uuid.uuid4())
-    schedule_seconds = payload.get("schedule_seconds")
+    schedule_interval = payload.get("schedule_interval") or "0 * * * *"
+    schedule_seconds = cron_to_seconds(schedule_interval)
     enabled = bool(payload.get("enabled", True))
     db = await get_db()
     await db.execute(
@@ -977,15 +1061,28 @@ async def create_workflow(payload: Dict[str, Any]):
         (
             workflow_id,
             name,
-            int(schedule_seconds) if schedule_seconds else None,
+            schedule_seconds,
             1 if enabled else 0,
             json.dumps(steps),
         ),
     )
-    return {"id": workflow_id, "created": True}
+
+    row = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
+    if not row:
+        raise HTTPException(status_code=500, detail="Failed to retrieve created workflow")
+
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "schedule_interval": seconds_to_cron(row["schedule_seconds"]) if row["schedule_seconds"] else "0 * * * *",
+        "enabled": bool(row["enabled"]),
+        "steps": steps,
+        "created_at": row["created_at"],
+        "last_run_at": row["last_run_at"]
+    }
 
 
-@router.post("/workflows/{workflow_id}/run")
+@router.post("/workflows/{workflow_id}/run", response_model=WorkflowRunResponse)
 async def run_workflow_once(workflow_id: str):
     db = await get_db()
     row = await db.fetchone("SELECT steps_json FROM workflows WHERE id = ?", (workflow_id,))
@@ -1006,7 +1103,7 @@ async def run_workflow_once(workflow_id: str):
     return {"workflow_id": workflow_id, "queued_tasks": created_task_ids}
 
 
-@router.patch("/workflows/{workflow_id}")
+@router.patch("/workflows/{workflow_id}", response_model=WorkflowUpdateResponse)
 async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
     db = await get_db()
     row = await db.fetchone("SELECT id FROM workflows WHERE id = ?", (workflow_id,))
@@ -1021,7 +1118,10 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
     if "steps" in payload:
         updates.append("steps_json = ?")
         params.append(json.dumps(payload["steps"]))
-    if "schedule_seconds" in payload:
+    if "schedule_interval" in payload:
+        updates.append("schedule_seconds = ?")
+        params.append(cron_to_seconds(payload["schedule_interval"]))
+    elif "schedule_seconds" in payload:
         val = payload["schedule_seconds"]
         updates.append("schedule_seconds = ?")
         params.append(int(val) if val else None)
@@ -1034,10 +1134,30 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
 
     params.append(workflow_id)
     await db.execute(f"UPDATE workflows SET {', '.join(updates)} WHERE id = ?", tuple(params))
-    return {"workflow_id": workflow_id, "updated": True}
+
+    updated_row = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
+    if not updated_row:
+        raise HTTPException(status_code=500, detail="Failed to retrieve updated workflow")
+
+    steps = []
+    if updated_row["steps_json"]:
+        try:
+            steps = json.loads(updated_row["steps_json"])
+        except Exception:
+            pass
+
+    return {
+        "id": updated_row["id"],
+        "name": updated_row["name"],
+        "schedule_interval": seconds_to_cron(updated_row["schedule_seconds"]) if updated_row["schedule_seconds"] else "0 * * * *",
+        "enabled": bool(updated_row["enabled"]),
+        "steps": steps,
+        "created_at": updated_row["created_at"],
+        "last_run_at": updated_row["last_run_at"]
+    }
 
 
-@router.delete("/workflows/{workflow_id}")
+@router.delete("/workflows/{workflow_id}", response_model=WorkflowDeleteResponse)
 async def delete_workflow(workflow_id: str):
     db = await get_db()
     await db.execute("DELETE FROM workflows WHERE id = ?", (workflow_id,))
@@ -1050,7 +1170,7 @@ async def trigger_workflow_tick():
     return {"tick": "ok"}
 
 
-@router.get("/finding/{finding_id}")
+@router.get("/finding/{finding_id}", response_model=FindingDetailsResponse)
 async def get_finding_details(finding_id: str):
     """Get detailed information for a specific finding"""
     db = await get_db()
@@ -1075,6 +1195,18 @@ async def get_finding_details(finding_id: str):
         except json.JSONDecodeError:
             metadata = {}
 
+    # Fetch associated assets
+    assets_rows = await db.fetchall(
+        """
+        SELECT a.id, a.name, a.type
+        FROM assets a
+        JOIN asset_findings af ON a.id = af.asset_id
+        WHERE af.finding_id = ?
+        """,
+        (finding_id,)
+    )
+    assets = [{"id": r["id"], "name": r["name"], "type": r["type"]} for r in assets_rows]
+
     return {
         "id": finding_row["id"],
         "task_id": finding_row["task_id"],
@@ -1090,7 +1222,8 @@ async def get_finding_details(finding_id: str):
         "cvss": finding_row["cvss"],
         "cve": finding_row["cve"],
         "discovered_at": finding_row["discovered_at"],
-        "metadata": metadata
+        "metadata": metadata,
+        "assets": assets
     }
 
 
@@ -1139,11 +1272,246 @@ async def get_attack_surface():
     return {"entries": entries}
 
 
-@router.get("/assets")
+@router.get("/assets", response_model=AssetsResponse)
 async def get_assets():
     """Return a list of tracked assets."""
     db = await get_db()
-    # For now, we use unique targets as assets
-    rows = await db.fetchall("SELECT DISTINCT target FROM tasks UNION SELECT DISTINCT target FROM findings")
-    assets = [{"id": str(uuid.uuid4()), "name": row["target"]} for row in rows]
+    rows = await db.fetchall(
+        """
+        SELECT a.id, a.type, a.name, a.host_id, h.name as host_name, a.metadata_json, a.created_at, a.updated_at,
+               (SELECT COUNT(*) FROM asset_findings WHERE asset_id = a.id) as findings_count,
+               (SELECT COUNT(*) FROM asset_tasks WHERE asset_id = a.id) as tasks_count,
+               (SELECT COUNT(DISTINCT r.id) FROM reports r JOIN asset_tasks at ON r.task_id = at.task_id WHERE at.asset_id = a.id) as reports_count
+        FROM assets a
+        LEFT JOIN assets h ON a.host_id = h.id
+        ORDER BY a.type ASC, a.name ASC
+        """
+    )
+
+    assets = []
+    for row in rows:
+        metadata = {}
+        if row["metadata_json"]:
+            try:
+                metadata = json.loads(row["metadata_json"])
+            except json.JSONDecodeError:
+                pass
+
+        assets.append({
+            "id": row["id"],
+            "type": row["type"],
+            "name": row["name"],
+            "host_id": row["host_id"],
+            "host_name": row["host_name"],
+            "metadata": metadata,
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "findings_count": row["findings_count"],
+            "tasks_count": row["tasks_count"],
+            "reports_count": row["reports_count"]
+        })
+
     return {"assets": assets}
+
+
+@router.get("/assets/graph", response_model=GraphResponse)
+async def get_assets_graph():
+    """Return a graph representing the connections between hosts, services, findings, tasks, and reports."""
+    db = await get_db()
+
+    nodes = []
+    links = []
+    seen_nodes = set()
+
+    # 1. Fetch assets (hosts and services)
+    assets = await db.fetchall(
+        """
+        SELECT a.id, a.type, a.name, a.host_id, h.name as host_name
+        FROM assets a
+        LEFT JOIN assets h ON a.host_id = h.id
+        """
+    )
+    for asset in assets:
+        nodes.append({
+            "id": asset["id"],
+            "label": asset["name"],
+            "type": asset["type"],
+            "details": {
+                "host_name": asset["host_name"]
+            }
+        })
+        seen_nodes.add(asset["id"])
+
+        if asset["host_id"]:
+            links.append({
+                "source": asset["host_id"],
+                "target": asset["id"],
+                "type": "has_service"
+            })
+
+    # 2. Fetch findings and their links to assets
+    findings = await db.fetchall(
+        """
+        SELECT f.id, f.title, f.severity, f.category, f.task_id, af.asset_id
+        FROM findings f
+        JOIN asset_findings af ON f.id = af.finding_id
+        """
+    )
+    for f in findings:
+        f_id = f["id"]
+        if f_id not in seen_nodes:
+            nodes.append({
+                "id": f_id,
+                "label": f["title"],
+                "type": "finding",
+                "details": {
+                    "severity": f["severity"],
+                    "category": f["category"]
+                }
+            })
+            seen_nodes.add(f_id)
+
+        links.append({
+            "source": f["asset_id"],
+            "target": f_id,
+            "type": "has_finding"
+        })
+
+        # Link task to finding if task node exists
+        if f["task_id"]:
+            links.append({
+                "source": f["task_id"],
+                "target": f_id,
+                "type": "produced_finding"
+            })
+
+    # 3. Fetch tasks and their links to assets
+    tasks = await db.fetchall(
+        """
+        SELECT t.id, t.tool_name, t.status, at.asset_id
+        FROM tasks t
+        JOIN asset_tasks at ON t.id = at.task_id
+        """
+    )
+    for t in tasks:
+        t_id = t["id"]
+        if t_id not in seen_nodes:
+            nodes.append({
+                "id": t_id,
+                "label": f"Task: {t['tool_name']}",
+                "type": "task",
+                "details": {
+                    "status": t["status"]
+                }
+            })
+            seen_nodes.add(t_id)
+
+        links.append({
+            "source": t["asset_id"],
+            "target": t_id,
+            "type": "associated_task"
+        })
+
+    # 4. Fetch reports and their links to assets
+    reports = await db.fetchall(
+        """
+        SELECT r.id, r.name, r.task_id, at.asset_id
+        FROM reports r
+        JOIN asset_tasks at ON r.task_id = at.task_id
+        """
+    )
+    for r in reports:
+        r_id = r["id"]
+        if r_id not in seen_nodes:
+            nodes.append({
+                "id": r_id,
+                "label": r["name"],
+                "type": "report",
+                "details": {}
+            })
+            seen_nodes.add(r_id)
+
+        links.append({
+            "source": r["asset_id"],
+            "target": r_id,
+            "type": "associated_report"
+        })
+
+        # Link task to report if task node exists
+        if r["task_id"]:
+            links.append({
+                "source": r["task_id"],
+                "target": r_id,
+                "type": "produced_report"
+            })
+
+    return {"nodes": nodes, "links": links}
+
+
+@router.get("/asset/{asset_id}", response_model=AssetDetailsResponse)
+async def get_asset_details(asset_id: str):
+    """Get detailed information for a specific asset and its relationships."""
+    db = await get_db()
+
+    asset = await db.fetchone(
+        """
+        SELECT a.id, a.type, a.name, a.host_id, h.name as host_name, a.metadata_json, a.created_at, a.updated_at
+        FROM assets a
+        LEFT JOIN assets h ON a.host_id = h.id
+        WHERE a.id = ?
+        """,
+        (asset_id,)
+    )
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    metadata = {}
+    if asset["metadata_json"]:
+        try:
+            metadata = json.loads(asset["metadata_json"])
+        except json.JSONDecodeError:
+            pass
+
+    findings = await db.fetchall(
+        """
+        SELECT f.id, f.title, f.severity, f.category, f.discovered_at
+        FROM findings f
+        JOIN asset_findings af ON f.id = af.finding_id
+        WHERE af.asset_id = ?
+        """,
+        (asset_id,)
+    )
+
+    tasks = await db.fetchall(
+        """
+        SELECT t.id, t.tool_name, t.status, t.created_at
+        FROM tasks t
+        JOIN asset_tasks at ON t.id = at.task_id
+        WHERE at.asset_id = ?
+        """,
+        (asset_id,)
+    )
+
+    reports = await db.fetchall(
+        """
+        SELECT r.id, r.name, r.type, r.generated_at, r.status
+        FROM reports r
+        JOIN asset_tasks at ON r.task_id = at.task_id
+        WHERE at.asset_id = ?
+        """,
+        (asset_id,)
+    )
+
+    return {
+        "id": asset["id"],
+        "type": asset["type"],
+        "name": asset["name"],
+        "host_id": asset["host_id"],
+        "host_name": asset["host_name"],
+        "metadata": metadata,
+        "created_at": asset["created_at"],
+        "updated_at": asset["updated_at"],
+        "findings": findings,
+        "tasks": tasks,
+        "reports": reports
+    }

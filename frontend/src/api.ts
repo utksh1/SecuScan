@@ -83,6 +83,230 @@ export interface TaskStartResponse {
   stream_url: string
 }
 
+export interface HealthResponse {
+  status: string
+  version: string
+  uptime_seconds?: number
+  system: Record<string, unknown>
+  limits?: Record<string, number>
+}
+
+export interface TaskResponse {
+  task_id: string
+  plugin_id: string
+  tool: string
+  target: string
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  created_at: string
+  started_at?: string | null
+  completed_at?: string | null
+  duration_seconds?: number | null
+  inputs?: Record<string, unknown> | null
+  preset?: string | null
+  error_message?: string | null
+  exit_code?: number | null
+}
+
+export interface TaskStatusResponse extends TaskResponse {
+  queue_position?: number | null
+  pending_count?: number | null
+}
+
+export interface TaskPagination {
+  page: number
+  per_page: number
+  total_pages: number
+  total_items: number
+  next?: string | null
+  previous?: string | null
+}
+
+export interface TasksResponse {
+  tasks: TaskResponse[]
+  pagination?: TaskPagination | null
+}
+
+export interface Finding {
+  id?: string | null
+  title: string
+  category: string
+  severity: string
+  target: string
+  description: string
+  remediation?: string | null
+  cvss?: number | null
+  cve?: string | null
+  proof?: string | null
+  discovered_at?: string | null
+  metadata?: Record<string, unknown>
+}
+
+export interface TaskResult {
+  task_id: string
+  plugin_id: string
+  tool: string
+  target: string
+  timestamp: string
+  duration_seconds?: number | null
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  summary?: string[]
+  severity_counts?: Record<string, number>
+  findings?: Finding[]
+  structured?: Record<string, unknown>
+  raw_output_path?: string | null
+  raw_output_excerpt?: string | null
+  errors?: Record<string, unknown>[]
+  error_message?: string | null
+  exit_code?: number | null
+  metadata?: Record<string, unknown>
+}
+
+export interface ScanActivity {
+  total: number
+  completed: number
+  running: number
+}
+
+export interface DashboardTask {
+  id: string
+  plugin_id: string
+  tool_name: string
+  target: string
+  status: string
+  created_at: string
+  duration_seconds?: number | null
+}
+
+export interface DashboardSummaryResponse {
+  total_findings: number
+  critical_findings: number
+  high_findings: number
+  medium_findings: number
+  low_findings: number
+  info_findings: number
+  last_scan_time?: string | null
+  recent_findings: Finding[]
+  scan_activity: ScanActivity
+  running_tasks: DashboardTask[]
+  recent_tasks: DashboardTask[]
+}
+
+export interface FindingsResponse {
+  findings: Finding[]
+}
+
+export interface FindingAssetRef {
+  id: string
+  name: string
+  type: string
+}
+
+export interface FindingDetailsResponse {
+  id: string
+  task_id?: string | null
+  plugin_id: string
+  tool: string
+  title: string
+  category: string
+  severity: string
+  target: string
+  description: string
+  remediation?: string | null
+  cvss?: number | null
+  cve?: string | null
+  proof?: string | null
+  discovered_at: string
+  metadata?: Record<string, unknown>
+  assets: FindingAssetRef[]
+}
+
+export interface ReportItem {
+  id: string
+  task_id?: string | null
+  name: string
+  type: string
+  generated_at: string
+  status: string
+  findings: number
+  pages: number
+  file_path?: string | null
+}
+
+export interface ReportsResponse {
+  reports: ReportItem[]
+}
+
+export interface AssetResponseItem {
+  id: string
+  type: string
+  name: string
+  host_id?: string | null
+  host_name?: string | null
+  metadata?: Record<string, unknown>
+  created_at: string
+  updated_at: string
+  findings_count: number
+  tasks_count: number
+  reports_count: number
+}
+
+export interface AssetsResponse {
+  assets: AssetResponseItem[]
+}
+
+export interface GraphNode {
+  id: string
+  type: string
+  label: string
+  details?: Record<string, unknown>
+}
+
+export interface GraphLink {
+  source: string
+  target: string
+  type: string
+}
+
+export interface GraphResponse {
+  nodes: GraphNode[]
+  links: GraphLink[]
+}
+
+export interface AssetDetailsResponse {
+  id: string
+  type: string
+  name: string
+  host_id?: string | null
+  host_name?: string | null
+  metadata?: Record<string, unknown>
+  created_at: string
+  updated_at: string
+  findings: Record<string, unknown>[]
+  tasks: Record<string, unknown>[]
+  reports: Record<string, unknown>[]
+}
+
+export interface WorkflowsResponse {
+  workflows: Workflow[]
+  total: number
+}
+
+export interface TaskCancelResponse {
+  task_id: string
+  status: string
+  cancelled_at: string
+}
+
+export interface WorkflowRunResponse {
+  workflow_id: string
+  queued_tasks: string[]
+}
+
+export interface WorkflowDeleteResponse {
+  workflow_id: string
+  deleted: boolean
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController()
   const timeoutId = window.setTimeout(() => controller.abort(), 10000)
@@ -98,46 +322,65 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json()
 }
 
-export function getHealth() {
-  return request('/health')
+export function getHealth(): Promise<HealthResponse> {
+  return request<HealthResponse>('/health')
 }
 
-export function listPlugins() {
+export function listPlugins(): Promise<PluginListResponse> {
   return request<PluginListResponse>('/plugins')
 }
 
-export function getPluginSchema(id: string) {
+export function getPluginSchema(id: string): Promise<PluginSchemaResponse> {
   return request<PluginSchemaResponse>(`/plugin/${id}/schema`)
 }
 
-export function getDashboardSummary() {
-  return request('/dashboard/summary')
+export function getDashboardSummary(): Promise<DashboardSummaryResponse> {
+  return request<DashboardSummaryResponse>('/dashboard/summary')
 }
 
-
-export function getFindings() {
-  return request('/findings')
+export function getFindings(): Promise<FindingsResponse> {
+  return request<FindingsResponse>('/findings')
 }
 
-
-export function getReports() {
-  return request('/reports')
+export function getReports(): Promise<ReportsResponse> {
+  return request<ReportsResponse>('/reports')
 }
 
-export function getTasks(params?: URLSearchParams) {
+export function getAssets(): Promise<AssetsResponse> {
+  return request<AssetsResponse>('/assets')
+}
+
+export function getAssetsGraph(): Promise<GraphResponse> {
+  return request<GraphResponse>('/assets/graph')
+}
+
+export function getAssetDetails(assetId: string): Promise<AssetDetailsResponse> {
+  return request<AssetDetailsResponse>(`/asset/${assetId}`)
+}
+
+export function getFindingDetails(findingId: string): Promise<FindingDetailsResponse> {
+  return request<FindingDetailsResponse>(`/finding/${findingId}`)
+}
+
+export function getTasks(params?: URLSearchParams): Promise<TasksResponse> {
   const suffix = params ? `?${params.toString()}` : ''
-  return request(`/tasks${suffix}`)
+  return request<TasksResponse>(`/tasks${suffix}`)
 }
 
-export function getTaskStatus(taskId: string): Promise<any> {
-  return request<any>(`/task/${taskId}/status`)
+export function getTaskStatus(taskId: string): Promise<TaskStatusResponse> {
+  return request<TaskStatusResponse>(`/task/${taskId}/status`)
 }
 
-export function getTaskResult(taskId: string): Promise<any> {
-  return request<any>(`/task/${taskId}/result`)
+export function getTaskResult(taskId: string): Promise<TaskResult> {
+  return request<TaskResult>(`/task/${taskId}/result`)
 }
 
-export function startTask(plugin_id: string, inputs: Record<string, unknown>, consent_granted: boolean, preset?: string) {
+export function startTask(
+  plugin_id: string,
+  inputs: Record<string, unknown>,
+  consent_granted: boolean,
+  preset?: string
+): Promise<TaskStartResponse> {
   return request<TaskStartResponse>('/task/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -145,13 +388,13 @@ export function startTask(plugin_id: string, inputs: Record<string, unknown>, co
   })
 }
 
-export function deleteTask(taskId: string) {
+export function deleteTask(taskId: string): Promise<{ task_id: string; deleted: boolean }> {
   return request<{ task_id: string; deleted: boolean }>(`/task/${taskId}`, {
     method: 'DELETE',
   })
 }
 
-export function bulkDeleteTasks(taskIds: string[]) {
+export function bulkDeleteTasks(taskIds: string[]): Promise<{ deleted_count: number; success: boolean }> {
   return request<{ deleted_count: number; success: boolean }>('/tasks/bulk', {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
@@ -159,14 +402,14 @@ export function bulkDeleteTasks(taskIds: string[]) {
   })
 }
 
-export function clearAllTasks() {
+export function clearAllTasks(): Promise<{ cleared: boolean; message: string }> {
   return request<{ cleared: boolean; message: string }>('/tasks/clear', {
     method: 'DELETE',
   })
 }
 
-export function cancelTask(taskId: string) {
-  return request(`/task/${taskId}/cancel`, {
+export function cancelTask(taskId: string): Promise<TaskCancelResponse> {
+  return request<TaskCancelResponse>(`/task/${taskId}/cancel`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   })
@@ -179,6 +422,7 @@ export function streamTask(taskId: string, onEvent: (ev: MessageEvent) => void) 
   es.onerror = () => {}
   return es
 }
+
 export interface WorkflowStep {
   plugin_id: string
   inputs: Record<string, unknown>
@@ -210,7 +454,7 @@ export interface WorkflowUpdatePayload {
 }
 
 export function getWorkflows(): Promise<Workflow[]> {
-  return request<Workflow[]>('/workflows')
+  return request<WorkflowsResponse>('/workflows').then(r => r.workflows)
 }
 
 export function createWorkflow(data: WorkflowCreatePayload): Promise<Workflow> {
@@ -222,10 +466,10 @@ export function createWorkflow(data: WorkflowCreatePayload): Promise<Workflow> {
 }
 
 export function runWorkflow(workflowId: string): Promise<{ queued_task_ids: string[] }> {
-  return request<{ queued_task_ids: string[] }>(`/workflows/${workflowId}/run`, {
+  return request<WorkflowRunResponse>(`/workflows/${workflowId}/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-  })
+  }).then(r => ({ queued_task_ids: r.queued_tasks }))
 }
 
 export function updateWorkflow(workflowId: string, data: WorkflowUpdatePayload): Promise<Workflow> {
@@ -236,8 +480,8 @@ export function updateWorkflow(workflowId: string, data: WorkflowUpdatePayload):
   })
 }
 
-export function deleteWorkflow(workflowId: string): Promise<{ deleted: boolean }> {
-  return request<{ deleted: boolean }>(`/workflows/${workflowId}`, {
+export function deleteWorkflow(workflowId: string): Promise<WorkflowDeleteResponse> {
+  return request<WorkflowDeleteResponse>(`/workflows/${workflowId}`, {
     method: 'DELETE',
   })
 }

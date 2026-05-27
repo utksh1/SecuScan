@@ -43,7 +43,7 @@ function renderReports() {
 beforeEach(() => {
     localStorage.clear()
     vi.mocked(getReports).mockResolvedValue({ reports: [readyReport] })
-    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary as any)
 })
 
 describe('Reports — preferred export format', () => {

@@ -632,7 +632,11 @@ class TaskExecutor:
         """Persist derived findings and report records into SQLite."""
         parsed = self._parse_results(plugin, output)
         findings_data = parsed.get("findings", [])
-        
+
+        # Inject target into findings so they pass Pydantic validation when fetched
+        for finding in findings_data:
+            finding["target"] = target
+
         # Update task with structured results
         await db.execute(
             "UPDATE tasks SET structured_json = ? WHERE id = ?",
@@ -688,6 +692,7 @@ class TaskExecutor:
                 1,
             ),
         )
+        await self._update_assets_for_task(db, task_id)
 
     async def _upsert_findings_and_report_from_scanner(self, db, task_id: str, scanner: Any, plugin_id: str, target: str, status: str, result: Dict[str, Any]):
         """Persist modular scanner results into findings, and reports."""
@@ -743,6 +748,154 @@ class TaskExecutor:
                 2, # Professional reports are typically multi-page
             ),
         )
+        await self._update_assets_for_task(db, task_id)
+
+    async def _update_assets_for_task(self, db, task_id: str):
+        """Analyze task execution results and update the asset inventory with deduplication."""
+        task_row = await db.fetchone(
+            "SELECT target, plugin_id FROM tasks WHERE id = ?",
+            (task_id,)
+        )
+        if not task_row:
+            return
+
+        target = task_row["target"]
+        plugin_id = task_row["plugin_id"]
+
+        # Normalize target to extract host
+        host_name = target
+        if "://" in target:
+            host_name = target.split("://", 1)[1].split("/", 1)[0]
+        else:
+            host_name = target.split("/", 1)[0]
+
+        if host_name.startswith("[") and "]" in host_name:
+            host_name = host_name.split("]")[0][1:]
+        elif host_name.count(":") == 1:
+            parts = host_name.split(":")
+            if parts[1].isdigit():
+                host_name = parts[0]
+
+        host_name = host_name.strip()
+        if not host_name:
+            return
+
+        # Deduplicate and upsert host asset (race-safe)
+        host_asset_id = f"asset:host:{str(uuid.uuid4()).replace('-', '')[:16]}"
+        await db.execute(
+            """
+            INSERT OR IGNORE INTO assets (id, type, name, host_id, metadata_json, created_at, updated_at)
+            VALUES (?, 'host', ?, NULL, '{}', (datetime('now')), (datetime('now')))
+            """,
+            (host_asset_id, host_name)
+        )
+        host_row = await db.fetchone(
+            "SELECT id FROM assets WHERE type = 'host' AND name = ?",
+            (host_name,)
+        )
+        if host_row:
+            host_asset_id = host_row["id"]
+
+        # Link host to task and report
+        await db.execute(
+            "INSERT OR IGNORE INTO asset_tasks (asset_id, task_id) VALUES (?, ?)",
+            (host_asset_id, task_id)
+        )
+
+        # Fetch findings for this task
+        findings = await db.fetchall(
+            "SELECT id, title, category, severity, metadata_json FROM findings WHERE task_id = ?",
+            (task_id,)
+        )
+
+        for finding in findings:
+            finding_id = finding["id"]
+            category = finding["category"]
+            metadata = {}
+            if finding["metadata_json"]:
+                try:
+                    metadata = json.loads(finding["metadata_json"])
+                except Exception:
+                    pass
+
+            port = metadata.get("port")
+            protocol = metadata.get("protocol") or "tcp"
+
+            # Fallback parsing for Port Scanner category
+            if not port and category == "Network Service":
+                port_match = re.search(r"Open Port:\s*(\d+)/(\w+)", finding["title"])
+                if port_match:
+                    port = port_match.group(1)
+                    protocol = port_match.group(2)
+
+            if port:
+                service_name = f"{port}/{protocol}"
+                # Deduplicate service asset under host (race-safe)
+                service_asset_id = f"asset:service:{str(uuid.uuid4()).replace('-', '')[:16]}"
+                service_meta = {
+                    "port": str(port),
+                    "protocol": protocol,
+                    "service": metadata.get("service") or "unknown",
+                    "version": metadata.get("version") or ""
+                }
+                await db.execute(
+                    """
+                    INSERT OR IGNORE INTO assets (id, type, name, host_id, metadata_json, created_at, updated_at)
+                    VALUES (?, 'service', ?, ?, ?, (datetime('now')), (datetime('now')))
+                    """,
+                    (service_asset_id, service_name, host_asset_id, json.dumps(service_meta))
+                )
+                service_row = await db.fetchone(
+                    "SELECT id FROM assets WHERE type = 'service' AND name = ? AND host_id = ?",
+                    (service_name, host_asset_id)
+                )
+                if service_row:
+                    service_asset_id = service_row["id"]
+
+                # Link service asset
+                await db.execute(
+                    "INSERT OR IGNORE INTO asset_tasks (asset_id, task_id) VALUES (?, ?)",
+                    (service_asset_id, task_id)
+                )
+                await db.execute(
+                    "INSERT OR IGNORE INTO asset_findings (asset_id, finding_id) VALUES (?, ?)",
+                    (service_asset_id, finding_id)
+                )
+            else:
+                subdomain = metadata.get("subdomain")
+                if subdomain and isinstance(subdomain, str) and subdomain.strip():
+                    subdomain = subdomain.strip()
+                    # Deduplicate subdomain host (race-safe)
+                    sub_asset_id = f"asset:host:{str(uuid.uuid4()).replace('-', '')[:16]}"
+                    await db.execute(
+                        """
+                        INSERT OR IGNORE INTO assets (id, type, name, host_id, metadata_json, created_at, updated_at)
+                        VALUES (?, 'host', ?, NULL, '{}', (datetime('now')), (datetime('now')))
+                        """,
+                        (sub_asset_id, subdomain)
+                    )
+                    sub_row = await db.fetchone(
+                        "SELECT id FROM assets WHERE type = 'host' AND name = ?",
+                        (subdomain,)
+                    )
+                    if sub_row:
+                        sub_asset_id = sub_row["id"]
+
+                    # Link subdomain
+                    await db.execute(
+                        "INSERT OR IGNORE INTO asset_tasks (asset_id, task_id) VALUES (?, ?)",
+                        (sub_asset_id, task_id)
+                    )
+                    await db.execute(
+                        "INSERT OR IGNORE INTO asset_findings (asset_id, finding_id) VALUES (?, ?)",
+                        (sub_asset_id, finding_id)
+                    )
+                else:
+                    # Link directly to host
+                    await db.execute(
+                        "INSERT OR IGNORE INTO asset_findings (asset_id, finding_id) VALUES (?, ?)",
+                        (host_asset_id, finding_id)
+                    )
 
     def _parse_results(self, plugin, output: str) -> Dict[str, Any]:
         """Route to appropriate parser based on plugin metadata."""

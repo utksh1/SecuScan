@@ -33,10 +33,11 @@ class Database:
         """Establish database connection and ensure schema exists."""
         # Ensure data directory exists
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        
+
         conn = await aiosqlite.connect(self.db_path)
         self._connection = conn
         conn.row_factory = aiosqlite.Row
+        await conn.execute("PRAGMA foreign_keys = ON")
         await self._create_schema()
 
     async def disconnect(self):
@@ -120,6 +121,33 @@ class Database:
                 pages INTEGER NOT NULL DEFAULT 0,
                 file_path TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS assets (
+                id TEXT PRIMARY KEY,
+                type TEXT NOT NULL,
+                name TEXT NOT NULL,
+                host_id TEXT REFERENCES assets(id) ON DELETE CASCADE,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS asset_findings (
+                asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+                finding_id TEXT NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
+                PRIMARY KEY (asset_id, finding_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS asset_tasks (
+                asset_id TEXT NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+                task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+                PRIMARY KEY (asset_id, task_id)
+            );
+
+
+
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_assets_unique_host ON assets(name) WHERE type = 'host';
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_assets_unique_service ON assets(host_id, name) WHERE type = 'service';
 
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
@@ -206,7 +234,7 @@ class Database:
         # Migration logic: ensure latest columns exist in 'tasks' table
         tasks_columns = await self.fetchall("PRAGMA table_info(tasks)")
         existing_cols = {col["name"] for col in tasks_columns}
-        
+
         needed_cols = {
             "exit_code": "INTEGER",
             "structured_json": "TEXT",
@@ -238,6 +266,26 @@ class Database:
                 print("Added missing column 'proof' to findings table.")
             except Exception as e:
                 print(f"Failed to add 'proof' to findings: {e}")
+
+        # Backfill asset graph data for existing tasks if assets table is empty
+        assets_count = await self.fetchone("SELECT COUNT(*) as c FROM assets")
+        if assets_count and assets_count["c"] == 0:
+            tasks_count = await self.fetchone("SELECT COUNT(*) as c FROM tasks")
+            if tasks_count and tasks_count["c"] > 0:
+                print("Backfilling assets table from existing tasks and findings...")
+                try:
+                    from .executor import TaskExecutor
+                    # Mock execution to backfill
+                    executor = TaskExecutor()
+                    all_tasks = await self.fetchall("SELECT id FROM tasks")
+                    for t in all_tasks:
+                        await executor._update_assets_for_task(self, t["id"])
+                    print(f"Backfill complete for {len(all_tasks)} tasks.")
+                except Exception as e:
+                    print(f"Failed to backfill assets: {e}")
+
+        # Ensure any read transactions (like fetchone) are committed to release locks
+        await self.connection.commit()
 
     async def execute(self, query: str, params: tuple = ()):
         """Execute a write query."""

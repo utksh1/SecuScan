@@ -41,8 +41,13 @@ const failedReport = {
   findings: 0, assets: 0, pages: 0,
 }
 const emptySummary = {
-  total_findings: 0, total_assets: 0, critical_findings: 0,
-  high_findings: 0, total_attack_surface: 0,
+  total_findings: 0, critical_findings: 0, high_findings: 0,
+  medium_findings: 0, low_findings: 0, info_findings: 0,
+  last_scan_time: null,
+  recent_findings: [],
+  scan_activity: { total: 0, completed: 0, running: 0 },
+  running_tasks: [],
+  recent_tasks: [],
 }
 
 function renderReports() {
