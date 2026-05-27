@@ -14,79 +14,28 @@
    Design Tokens
    ============================================ */
 :root {
-  /* Core Palette - Premium SOC */
-  --bg-primary: #0a0b0d;
-  /* Deep Onyx */
-  --bg-secondary: #121418;
-  /* Charcoal Dark */
-  --bg-tertiary: #1a1d23;
-  /* Charcoal Light */
-  --bg-elevated: #242930;
-
-  /* Executive Silver Tokens */
-  --accent-silver: #c0c0c8;
-  --accent-silver-dim: #8e9196;
-  --accent-silver-bright: #f0f1f5;
-
-  /* Status Signals (Neo-Brutalist RAG) */
-  --rag-red: #ff3b3b;
-  --rag-amber: #ffb800;
-  --rag-green: #00ff94;
-  --rag-blue: #00d1ff;
-
-  /* Typography */
-  --font-serif: 'Playfair Display', serif;
-  /* For headers */
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
-
-  /* Text Color Tokens */
-  --text-primary: #f4f4f5;
-  /* silver-bright — headings, values */
-  --text-secondary: #a1a1aa;
-  /* silver — body text */
-  --text-muted: #858b99;
-  /* dim — hints, labels (raised for readability) */
-  --text-sm: 0.9375rem;
-  --text-xs: 0.8125rem;
-  --text-base: 1rem;
-  --text-lg: 1.125rem;
-  --text-xl: 1.25rem;
-  --text-2xl: 1.5rem;
-  --text-3xl: 1.875rem;
-
-  /* Spacing */
-  --space-unit: 4px;
-
-  /* Layout */
-  --sidebar-collapsed: 80px;
-  --sidebar-expanded: 280px;
+  ...
 }
 
-/* Base Overrides */
+/* ADD HERE */
+.theme-light {
+  --bg-primary: #f5f7fa;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #e9edf3;
+  --bg-elevated: #dfe5ec;
+
+  --text-primary: #111827;
+  --text-secondary: #374151;
+  --text-muted: #6b7280;
+
+  --accent-silver: #4b5563;
+  --accent-silver-dim: #6b7280;
+  --accent-silver-bright: #111827;
+}
+
+/* Existing body styles continue below */
 body {
   background-color: var(--bg-primary);
-  color: var(--accent-silver);
-  font-family: var(--font-sans);
-  text-rendering: optimizeLegibility;
-}
-
-@layer components {
-  .executive-border {
-    @apply border border-accent-silver/10 hover:border-accent-silver/30 transition-all duration-500;
-  }
-
-  .charcoal-gradient {
-    background: linear-gradient(145deg, var(--bg-secondary), var(--bg-primary));
-  }
-
-  .glow-red {
-    text-shadow: 0 0 15px rgba(255, 59, 59, 0.4);
-  }
-
-  .glow-green {
-    text-shadow: 0 0 15px rgba(0, 255, 148, 0.4);
-  }
 }
 
 /* ============================================
