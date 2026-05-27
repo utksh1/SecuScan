@@ -91,7 +91,6 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
     log_file: str = str(PROJECT_ROOT / "logs" / "secuscan.log")
-    
     model_config = ConfigDict(
         env_prefix="SECUSCAN_",
         case_sensitive=False,
