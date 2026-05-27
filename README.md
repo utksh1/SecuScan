@@ -185,6 +185,10 @@ Long-form product and planning material lives outside the main README so onboard
 
 - [SecuScan Product Specification](docs/PRODUCT_SPEC.md)
 - [Plugin Catalogue](PLUGINS.md)
+- [Architecture Guide](docs/ARCHITECTURE.md)
+- [Plugin Development Guide](docs/PLUGIN_DEVELOPMENT.md)
+- [API Guide](docs/API_GUIDE.md)
+- [Contributor Onboarding Guide](docs/CONTRIBUTOR_ONBOARDING.md)
 
 ## Tech Stack
 
