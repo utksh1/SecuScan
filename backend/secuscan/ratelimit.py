@@ -19,9 +19,7 @@ class RateLimiter:
         self.lock = asyncio.Lock()
 
     async def can_execute(
-        self,
-        plugin_id: str,
-        max_per_hour: int = 50
+        self, plugin_id: str, max_per_hour: int = 50
     ) -> Tuple[bool, str]:
         """
         Check if a task can be executed based on rate limits.
@@ -39,14 +37,16 @@ class RateLimiter:
 
             # Clean old entries
             self.task_history[plugin_id] = [
-                ts for ts in self.task_history[plugin_id]
-                if ts > hour_ago
+                ts for ts in self.task_history[plugin_id] if ts > hour_ago
             ]
 
             recent_count = len(self.task_history[plugin_id])
 
             if recent_count >= max_per_hour:
-                return False, f"Rate limit exceeded: {recent_count}/{max_per_hour} per hour"
+                return (
+                    False,
+                    f"Rate limit exceeded: {recent_count}/{max_per_hour} per hour",
+                )
 
             # Record this execution
             self.task_history[plugin_id].append(now)
@@ -81,7 +81,10 @@ class ConcurrentTaskLimiter:
         """
         async with self.lock:
             if len(self.running_tasks) >= self.max_concurrent:
-                return False, f"Maximum concurrent tasks ({self.max_concurrent}) reached"
+                return (
+                    False,
+                    f"Maximum concurrent tasks ({self.max_concurrent}) reached",
+                )
 
             self.running_tasks.append(task_id)
             return True, ""
@@ -149,6 +152,7 @@ class EndpointRateLimiter:
     """
     Sliding window rate limiter applied as a FastAPI dependency.
     """
+
     def __init__(self, bucket_name: str, limit: int, window_seconds: int):
         self.bucket_name = bucket_name
         self.limit = limit
@@ -164,7 +168,9 @@ class EndpointRateLimiter:
             cutoff = now - timedelta(seconds=self.window_seconds)
 
             # Filter history to keep only timestamps within the sliding window
-            self.history[identity] = [ts for ts in self.history[identity] if ts > cutoff]
+            self.history[identity] = [
+                ts for ts in self.history[identity] if ts > cutoff
+            ]
 
             recent_count = len(self.history[identity])
 
@@ -182,7 +188,7 @@ class EndpointRateLimiter:
                         "X-RateLimit-Limit": str(self.limit),
                         "X-RateLimit-Remaining": "0",
                         "X-RateLimit-Reset": str(retry_after),
-                    }
+                    },
                 )
 
             # Record the new request
@@ -191,7 +197,14 @@ class EndpointRateLimiter:
             # Set response headers
             remaining = self.limit - len(self.history[identity])
             first_ts = self.history[identity][0]
-            reset_in = max(1, int((first_ts + timedelta(seconds=self.window_seconds) - now).total_seconds()))
+            reset_in = max(
+                1,
+                int(
+                    (
+                        first_ts + timedelta(seconds=self.window_seconds) - now
+                    ).total_seconds()
+                ),
+            )
 
             response.headers["X-RateLimit-Limit"] = str(self.limit)
             response.headers["X-RateLimit-Remaining"] = str(remaining)
@@ -211,25 +224,25 @@ concurrent_limiter = ConcurrentTaskLimiter()
 task_start_limiter = EndpointRateLimiter(
     bucket_name="task_start",
     limit=settings.rate_limit_task_start_limit,
-    window_seconds=settings.rate_limit_task_start_window
+    window_seconds=settings.rate_limit_task_start_window,
 )
 
 vault_limiter = EndpointRateLimiter(
     bucket_name="vault",
     limit=settings.rate_limit_vault_limit,
-    window_seconds=settings.rate_limit_vault_window
+    window_seconds=settings.rate_limit_vault_window,
 )
 
 report_download_limiter = EndpointRateLimiter(
     bucket_name="report_download",
     limit=settings.rate_limit_report_download_limit,
-    window_seconds=settings.rate_limit_report_download_window
+    window_seconds=settings.rate_limit_report_download_window,
 )
 
 read_heavy_limiter = EndpointRateLimiter(
     bucket_name="read_heavy",
     limit=settings.rate_limit_read_heavy_limit,
-    window_seconds=settings.rate_limit_read_heavy_window
+    window_seconds=settings.rate_limit_read_heavy_window,
 )
 
 

@@ -26,14 +26,16 @@ class Database:
     def connection(self) -> aiosqlite.Connection:
         """Get the active database connection, raising an error if it's not connected."""
         if self._connection is None:
-            raise RuntimeError("Database not connected. Did you forget to await connect()?")
+            raise RuntimeError(
+                "Database not connected. Did you forget to await connect()?"
+            )
         return self._connection
 
     async def connect(self):
         """Establish database connection and ensure schema exists."""
         # Ensure data directory exists
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        
+
         conn = await aiosqlite.connect(self.db_path)
         self._connection = conn
         conn.row_factory = aiosqlite.Row
@@ -48,8 +50,7 @@ class Database:
 
     async def _create_schema(self):
         """Create the application schema using SQLite dialect and handle migrations."""
-        await self.connection.executescript(
-            """
+        await self.connection.executescript("""
             CREATE TABLE IF NOT EXISTS tasks (
                 id TEXT PRIMARY KEY,
                 plugin_id TEXT NOT NULL,
@@ -200,13 +201,12 @@ class Database:
 
             -- Workflows index (existing)
             CREATE INDEX IF NOT EXISTS idx_workflows_enabled ON workflows(enabled);
-            """
-        )
+            """)
 
         # Migration logic: ensure latest columns exist in 'tasks' table
         tasks_columns = await self.fetchall("PRAGMA table_info(tasks)")
         existing_cols = {col["name"] for col in tasks_columns}
-        
+
         needed_cols = {
             "exit_code": "INTEGER",
             "structured_json": "TEXT",
@@ -218,13 +218,15 @@ class Database:
             "memory_peak_mb": "REAL",
             "inputs_json": "TEXT NOT NULL DEFAULT '{}'",
             "preset": "TEXT",
-            "safe_mode": "BOOLEAN NOT NULL DEFAULT 1"
+            "safe_mode": "BOOLEAN NOT NULL DEFAULT 1",
         }
 
         for col_name, col_type in needed_cols.items():
             if col_name not in existing_cols:
                 try:
-                    await self.execute(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_type}")
+                    await self.execute(
+                        f"ALTER TABLE tasks ADD COLUMN {col_name} {col_type}"
+                    )
                     print(f"Added missing column {col_name} to tasks table.")
                 except Exception as e:
                     print(f"Failed to add column {col_name}: {e}")

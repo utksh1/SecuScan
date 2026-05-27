@@ -49,8 +49,20 @@ class Settings(BaseSettings):
         "http://localhost:4173",
         "http://127.0.0.1:4173",
     ]
-    cors_allowed_methods: List[str] = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-    cors_allowed_headers: List[str] = ["Content-Type", "Authorization", "Accept", "Origin"]
+    cors_allowed_methods: List[str] = [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "OPTIONS",
+    ]
+    cors_allowed_headers: List[str] = [
+        "Content-Type",
+        "Authorization",
+        "Accept",
+        "Origin",
+    ]
     cors_allow_credentials: bool = True
     plugin_signature_key: Optional[str] = None
     enforce_plugin_signatures: bool = False
@@ -83,9 +95,9 @@ class Settings(BaseSettings):
     sandbox_memory_mb: int = 512
 
     # Task-start payload limits (tunable via env vars)
-    task_start_max_body_bytes: int = 64_000       # 64 KB total JSON body
-    task_start_max_field_length: int = 1_000      # max chars per string input value
-    task_start_max_array_length: int = 50         # max items in any list/multiselect input
+    task_start_max_body_bytes: int = 64_000  # 64 KB total JSON body
+    task_start_max_field_length: int = 1_000  # max chars per string input value
+    task_start_max_array_length: int = 50  # max items in any list/multiselect input
 
     # Logging
     log_level: str = "INFO"
@@ -95,7 +107,13 @@ class Settings(BaseSettings):
         env_prefix = "SECUSCAN_"
         case_sensitive = False
 
-    @field_validator("cors_allowed_origins", "cors_allowed_methods", "cors_allowed_headers", "trusted_proxies", mode="before")
+    @field_validator(
+        "cors_allowed_origins",
+        "cors_allowed_methods",
+        "cors_allowed_headers",
+        "trusted_proxies",
+        mode="before",
+    )
     @classmethod
     def parse_csv_or_list(cls, value: Any) -> Any:
         """Allow comma-separated env values in addition to JSON arrays."""
@@ -122,7 +140,7 @@ class Settings(BaseSettings):
                 "SECUSCAN_VAULT_KEY is not set. "
                 "Set a strong random value in your environment or .env file before "
                 "starting the server. "
-                "Example: python -c \"import secrets; print(secrets.token_hex(32))\""
+                'Example: python -c "import secrets; print(secrets.token_hex(32))"'
             )
         digest = hashlib.sha256(seed.encode("utf-8")).digest()
         return base64.urlsafe_b64encode(digest)

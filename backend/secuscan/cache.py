@@ -30,13 +30,13 @@ class CacheClient:
         """Retrieve and parse JSON from memory, respecting TTL."""
         now = time.time()
         expiry = self._expires.get(key)
-        
+
         if expiry and now > expiry:
             # Clean up expired item
             self._data.pop(key, None)
             self._expires.pop(key, None)
             return None
-            
+
         return self._data.get(key)
 
     async def set_json(self, key: str, value: Any, ttl: Optional[int] = None):

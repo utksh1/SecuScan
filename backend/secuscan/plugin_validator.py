@@ -20,7 +20,16 @@ from typing import Any
 
 VALID_ENGINE_TYPES = {"cli", "python", "docker"}
 VALID_SAFETY_LEVELS = {"safe", "intrusive", "exploit"}
-VALID_FIELD_TYPES = {"string","integer","text", "number", "boolean", "select", "multiselect", "textarea"}
+VALID_FIELD_TYPES = {
+    "string",
+    "integer",
+    "text",
+    "number",
+    "boolean",
+    "select",
+    "multiselect",
+    "textarea",
+}
 VALID_PARSER_TYPES = {"json", "text", "custom", "none"}
 
 REQUIRED_TOP_LEVEL_FIELDS = [
@@ -268,7 +277,10 @@ class PluginMetadataValidator:
     def _check_checksum(self, data: dict, result: ValidationResult) -> None:
         checksum = data.get("checksum")
         if not checksum:
-            result.add("checksum", "Checksum is missing — run: python scripts/refresh_plugin_checksum.py --plugin <id>")
+            result.add(
+                "checksum",
+                "Checksum is missing — run: python scripts/refresh_plugin_checksum.py --plugin <id>",
+            )
             return
 
         if not isinstance(checksum, str) or len(checksum) != 64:

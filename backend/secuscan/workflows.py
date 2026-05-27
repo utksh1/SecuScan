@@ -47,25 +47,29 @@ class WorkflowScheduler:
 
     async def tick(self):
         db = await get_db()
-        rows = await db.fetchall(
-            """
+        rows = await db.fetchall("""
             SELECT id, name, schedule_seconds, last_run_at, steps_json
             FROM workflows
             WHERE enabled = 1 AND schedule_seconds IS NOT NULL AND schedule_seconds > 0
-            """
-        )
+            """)
 
         now = datetime.now(timezone.utc)
         for row in rows:
-            if not self._should_run(now, row.get("last_run_at"), int(row["schedule_seconds"])):
+            if not self._should_run(
+                now, row.get("last_run_at"), int(row["schedule_seconds"])
+            ):
                 continue
-            await self._run_workflow(row["id"], json.loads(row.get("steps_json") or "[]"))
+            await self._run_workflow(
+                row["id"], json.loads(row.get("steps_json") or "[]")
+            )
             await db.execute(
                 "UPDATE workflows SET last_run_at = datetime('now') WHERE id = ?",
                 (row["id"],),
             )
 
-    def _should_run(self, now: datetime, last_run_at: str | None, schedule_seconds: int) -> bool:
+    def _should_run(
+        self, now: datetime, last_run_at: str | None, schedule_seconds: int
+    ) -> bool:
         if not last_run_at:
             return True
         last = datetime.fromisoformat(last_run_at.replace("Z", "+00:00"))
@@ -79,7 +83,9 @@ class WorkflowScheduler:
             inputs = step.get("inputs") or {}
             if not plugin_id:
                 continue
-            task_id = await executor.create_task(plugin_id, inputs, preset=step.get("preset"), consent_granted=True)
+            task_id = await executor.create_task(
+                plugin_id, inputs, preset=step.get("preset"), consent_granted=True
+            )
             asyncio.create_task(executor.execute_task(task_id))
 
 

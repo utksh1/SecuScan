@@ -10,6 +10,7 @@ from enum import Enum
 
 class SafetyLevel(str, Enum):
     """Plugin safety level classification"""
+
     SAFE = "safe"
     INTRUSIVE = "intrusive"
     EXPLOIT = "exploit"
@@ -17,6 +18,7 @@ class SafetyLevel(str, Enum):
 
 class TaskStatus(str, Enum):
     """Task execution status"""
+
     QUEUED = "queued"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -26,6 +28,7 @@ class TaskStatus(str, Enum):
 
 class PluginFieldType(str, Enum):
     """Plugin field input types"""
+
     STRING = "string"
     TEXT = "text"
     INTEGER = "integer"
@@ -38,6 +41,7 @@ class PluginFieldType(str, Enum):
 
 class PluginField(BaseModel):
     """Plugin input field definition"""
+
     id: str
     label: str
     type: PluginFieldType
@@ -51,6 +55,7 @@ class PluginField(BaseModel):
 
 class PluginMetadata(BaseModel):
     """Plugin metadata schema"""
+
     id: str
     name: str
     version: str
@@ -60,12 +65,12 @@ class PluginMetadata(BaseModel):
     author: Optional[Dict[str, str]] = None
     license: Optional[str] = "MIT"
     icon: Optional[str] = "🔧"
-    
+
     engine: Dict[str, str]
     command_template: List[str]
     fields: List[PluginField]
     presets: Dict[str, Dict[str, Any]]
-    
+
     output: Dict[str, Any]
     safety: Dict[str, Any]
     learning: Optional[Dict[str, Any]] = None
@@ -78,6 +83,7 @@ class PluginMetadata(BaseModel):
 
 class TaskCreateRequest(BaseModel):
     """Request to create a new task"""
+
     plugin_id: str
     preset: Optional[str] = None
     inputs: Dict[str, Any]
@@ -86,6 +92,7 @@ class TaskCreateRequest(BaseModel):
 
 class TaskResponse(BaseModel):
     """Task information response"""
+
     task_id: str
     plugin_id: str
     tool: str
@@ -103,6 +110,7 @@ class TaskResponse(BaseModel):
 
 class Finding(BaseModel):
     """Structured security finding"""
+
     id: Optional[str] = None
     title: str
     category: str
@@ -119,6 +127,7 @@ class Finding(BaseModel):
 
 class TaskResult(BaseModel):
     """Task execution result"""
+
     task_id: str
     plugin_id: str
     tool: str
@@ -126,14 +135,14 @@ class TaskResult(BaseModel):
     timestamp: datetime
     duration_seconds: Optional[float]
     status: TaskStatus
-    
+
     summary: List[str] = []
     severity_counts: Dict[str, int] = Field(default_factory=dict)
     findings: List[Finding] = Field(default_factory=list)
     structured: Dict[str, Any] = Field(default_factory=dict)
     raw_output_path: Optional[str] = None
     raw_output_excerpt: Optional[str] = None
-    
+
     errors: List[Dict[str, Any]] = []
     error_message: Optional[str] = None
     exit_code: Optional[int] = None
@@ -142,6 +151,7 @@ class TaskResult(BaseModel):
 
 class HealthResponse(BaseModel):
     """Health check response"""
+
     status: str
     version: str
     uptime_seconds: Optional[int] = None
@@ -151,12 +161,14 @@ class HealthResponse(BaseModel):
 
 class PluginListResponse(BaseModel):
     """List of available plugins"""
+
     plugins: List[Dict[str, Any]]
     total: int
 
 
 class ErrorResponse(BaseModel):
     """Error response"""
+
     error: str
     message: str
     field: Optional[str] = None
