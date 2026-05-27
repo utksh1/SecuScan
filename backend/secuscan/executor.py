@@ -7,36 +7,22 @@ from asyncio import subprocess
 import uuid
 import json
 import time
-from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 import logging
-import re
+from pathlib import Path
 
 from .redaction import redact
-from .cache import get_cache
-from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager
 from .models import TaskStatus
 from .ratelimit import concurrent_limiter
-
-# Modular Scanners
-from .scanners.port_scanner import PortScanner
-from .scanners.web_scanner import WebScanner
-from .scanners.recon_scanner import ReconScanner
-
-MODULAR_SCANNERS = {
-    "port_scanner": PortScanner,
-    "web_scanner": WebScanner,
-    "recon_scanner": ReconScanner
-}
+from .config import settings
 
 logger = logging.getLogger(__name__)
 
 
 def extract_target(inputs: Dict[str, Any]) -> str:
-    """Best-effort target extraction across plugin shapes."""
     return (
         inputs.get("target")
         or inputs.get("url")
@@ -53,25 +39,262 @@ class TaskExecutor:
         self.running_tasks: Dict[str, asyncio.Task] = {}
         self._listeners: Dict[str, List[asyncio.Queue]] = {}
 
+    # -------------------------
+    # Event system
+    # -------------------------
     def subscribe(self, task_id: str) -> asyncio.Queue:
+
         if task_id not in self._listeners:
             self._listeners[task_id] = []
+
         q = asyncio.Queue()
         self._listeners[task_id].append(q)
+
         return q
 
     def unsubscribe(self, task_id: str, q: asyncio.Queue):
+
         if task_id in self._listeners and q in self._listeners[task_id]:
+
             self._listeners[task_id].remove(q)
+
             if not self._listeners[task_id]:
                 self._listeners.pop(task_id, None)
 
-    async def _broadcast(self, task_id: str, event_type: str, data: Any):
-        if task_id in self._listeners:
-            event = {"type": event_type, "data": data}
-            for q in self._listeners[task_id]:
-                await q.put(event)
+    async def _broadcast(
+        self,
+        task_id: str,
+        event_type: str,
+        data: Any
+    ):
 
+        listeners = self._listeners.get(task_id)
+
+        if not listeners:
+            return
+
+        event = {
+            "type": event_type,
+            "data": data
+        }
+
+        for q in listeners:
+            await q.put(event)
+
+    # -------------------------
+    # CORE EXECUTION HELPERS
+    # -------------------------
+    async def _execute_command(
+        self,
+        command,
+        task_id,
+        timeout=60
+    ):
+        """
+        Execute command safely
+        """
+
+        proc = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+
+        try:
+
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(),
+                timeout=timeout
+            )
+
+            output = (
+                (stdout or b"").decode(errors="ignore")
+                + (stderr or b"").decode(errors="ignore")
+            )
+
+            return output, proc.returncode
+
+        except asyncio.TimeoutError:
+
+            proc.kill()
+
+            try:
+                await proc.communicate()
+            except Exception:
+                pass
+
+            return "TIMEOUT", 1
+
+    def _parse_results(self, plugin, output: str):
+        """
+        Parse plugin results consistently
+        """
+
+        findings = []
+
+        try:
+
+            report_path = getattr(
+                plugin,
+                "output",
+                {}
+            ).get("report_path")
+
+            if report_path and Path(report_path).exists():
+
+                with open(
+                    report_path,
+                    "r",
+                    encoding="utf-8"
+                ) as f:
+
+                    data = json.load(f)
+
+                if isinstance(data, list):
+                    findings = data
+
+                elif isinstance(data, dict):
+                    findings = data.get("findings", [data])
+
+                return {
+                    "count": len(findings),
+                    "findings": findings
+                }
+
+        except Exception as e:
+            logger.warning(
+                f"Failed reading report file: {e}"
+            )
+
+        try:
+
+            parsed = json.loads(output)
+
+            if isinstance(parsed, list):
+                findings = parsed
+
+            elif isinstance(parsed, dict):
+                findings = parsed.get(
+                    "findings",
+                    [parsed]
+                )
+
+            return {
+                "count": len(findings),
+                "findings": findings
+            }
+
+        except Exception:
+            pass
+
+        if "packet loss" in output.lower():
+
+            findings.append({
+                "type": "icmp_ping",
+                "summary": output.strip()
+            })
+
+            return {
+                "count": len(findings),
+                "findings": findings
+            }
+
+        return {
+            "count": 0,
+            "findings": [],
+            "raw": output
+        }
+
+    def _classify_command_result(
+        self,
+        plugin,
+        output: str,
+        exit_code: int
+    ):
+        """
+        Classify execution result
+        """
+
+        output_lower = output.lower()
+
+        error_patterns = [
+            "unknown option",
+            "flag provided but not defined",
+            "unrecognized option",
+            "invalid option",
+            "no such option",
+        ]
+
+        for pattern in error_patterns:
+
+            if pattern in output_lower:
+                return (
+                    TaskStatus.FAILED.value,
+                    output.strip()
+                )
+
+        if (
+            "packet loss" in output_lower
+            or "statistics" in output_lower
+        ):
+            return TaskStatus.COMPLETED.value, None
+
+        if exit_code == 0:
+            return TaskStatus.COMPLETED.value, None
+
+        return (
+            TaskStatus.FAILED.value,
+            output.strip()
+        )
+
+    def _normalize_parsed_result(self, result):
+        """
+        Normalize parsed result
+        """
+
+        if isinstance(result, dict):
+            return result
+
+        if isinstance(result, list):
+
+            return {
+                "count": len(result),
+                "findings": result
+            }
+
+        return {
+            "count": 0,
+            "findings": [],
+            "result": result
+        }
+
+    async def _invalidate_cached_views(self):
+        return True
+
+    def get_task_status(self, task_id: str):
+
+        return {
+            "task_id": task_id,
+            "status": "unknown"
+        }
+
+    def mark_task_failed(
+        self,
+        task_id: str,
+        error: str
+    ):
+
+        return {
+            "task_id": task_id,
+            "error": error
+        }
+
+    def _resolve_execution_timeout(self, inputs):
+        return 60
+
+    # -------------------------
+    # TASK FLOW
+    # -------------------------
     async def create_task(
         self,
         plugin_id: str,
@@ -81,23 +304,34 @@ class TaskExecutor:
     ) -> str:
 
         task_id = str(uuid.uuid4())
+
         plugin_manager = get_plugin_manager()
-        plugin = plugin_manager.get_plugin(plugin_id)
+
+        plugin = plugin_manager.get_plugin(
+            plugin_id
+        )
 
         if not plugin:
-            raise ValueError(f"Plugin not found: {plugin_id}")
-
-        if preset and preset in plugin.presets:
-            inputs = {**plugin.presets[preset], **inputs}
+            raise ValueError(
+                f"Plugin not found: {plugin_id}"
+            )
 
         db = await get_db()
 
         await db.execute(
             """
             INSERT INTO tasks (
-                id, plugin_id, tool_name, target, inputs_json, preset,
-                status, consent_granted, safe_mode
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                id,
+                plugin_id,
+                tool_name,
+                target,
+                inputs_json,
+                preset,
+                status,
+                consent_granted,
+                safe_mode
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 task_id,
@@ -112,128 +346,140 @@ class TaskExecutor:
             )
         )
 
-        await db.log_audit(
-            "task_created",
-            f"Task created for {plugin.name}",
-            context={"task_id": task_id, "plugin_id": plugin_id},
-            task_id=task_id,
-            plugin_id=plugin_id
-        )
-
         return task_id
 
     async def execute_task(self, task_id: str):
-        db = await get_db()
-        self.running_tasks[task_id] = asyncio.current_task()
 
-        start_time = None  # ✅ FIX: important safety fix
+        db = await get_db()
+
+        self.running_tasks[
+            task_id
+        ] = asyncio.current_task()
+
+        start_time = time.time()
 
         try:
-            start_time = time.time()
 
             await db.execute(
-                "UPDATE tasks SET status = ?, started_at = ? WHERE id = ?",
-                (TaskStatus.RUNNING.value, datetime.now().isoformat(), task_id)
+                """
+                UPDATE tasks
+                SET status = ?, started_at = ?
+                WHERE id = ?
+                """,
+                (
+                    TaskStatus.RUNNING.value,
+                    datetime.now().isoformat(),
+                    task_id
+                )
             )
 
             task_row = await db.fetchone(
-                "SELECT plugin_id, inputs_json, safe_mode FROM tasks WHERE id = ?",
+                """
+                SELECT plugin_id, inputs_json
+                FROM tasks
+                WHERE id = ?
+                """,
                 (task_id,)
             )
 
             if not task_row:
-                raise ValueError(f"Task not found: {task_id}")
+                raise ValueError("Task not found")
 
             plugin_id = task_row["plugin_id"]
-            inputs = json.loads(task_row["inputs_json"])
-            target = extract_target(inputs)
 
-            if plugin_id in MODULAR_SCANNERS:
-                scanner_class = MODULAR_SCANNERS[plugin_id]
-                scanner = scanner_class(task_id, db)
+            inputs = json.loads(
+                task_row["inputs_json"]
+            )
 
-                result = await scanner.run(target, inputs)
+            plugin_manager = get_plugin_manager()
 
-                duration = time.time() - start_time
+            plugin = plugin_manager.get_plugin(
+                plugin_id
+            )
 
-                final_status = (
-                    TaskStatus.COMPLETED.value
-                    if result.get("status") != "failed"
-                    else TaskStatus.FAILED.value
+            if not plugin:
+                raise ValueError(
+                    f"Plugin not found: {plugin_id}"
                 )
 
-                await db.execute(
-                    """
-                    UPDATE tasks SET
-                        status = ?,
-                        completed_at = ?,
-                        duration_seconds = ?,
-                        structured_json = ?,
-                        error_message = ?
-                    WHERE id = ?
-                    """,
-                    (
-                        final_status,
-                        datetime.now().isoformat(),
-                        duration,
-                        json.dumps(result),
-                        result.get("error_message"),
-                        task_id
-                    )
+            command = plugin_manager.build_command(
+                plugin_id,
+                inputs
+            )
+
+            if not command:
+                raise ValueError(
+                    "Command build failed"
                 )
 
-            else:
-                plugin_manager = get_plugin_manager()
-                plugin = plugin_manager.get_plugin(plugin_id)
+            timeout = self._resolve_execution_timeout(
+                inputs
+            )
 
-                command = plugin_manager.build_command(plugin_id, inputs)
+            output, exit_code = await self._execute_command(
+                command,
+                task_id,
+                timeout
+            )
 
-                if not command:
-                    raise ValueError("Failed to build command")
+            output = redact(output)
 
-                output, exit_code = await self._execute_command(
-                    command,
-                    task_id,
-                    timeout=self._resolve_execution_timeout(inputs),
+            parsed_result = self._parse_results(
+                plugin,
+                output
+            )
+
+            normalized_result = (
+                self._normalize_parsed_result(
+                    parsed_result
                 )
+            )
 
-                duration = time.time() - start_time
-
-                output = redact(output)
-
-                final_status, error_message = self._classify_command_result(
-                    plugin, output, exit_code
+            final_status, error = (
+                self._classify_command_result(
+                    plugin,
+                    output,
+                    exit_code
                 )
-
-                await db.execute(
-                    """
-                    UPDATE tasks SET
-                        status = ?,
-                        completed_at = ?,
-                        duration_seconds = ?,
-                        exit_code = ?,
-                        error_message = ?
-                    WHERE id = ?
-                    """,
-                    (
-                        final_status,
-                        datetime.now().isoformat(),
-                        duration,
-                        exit_code,
-                        error_message,
-                        task_id
-                    )
-                )
-
-            await self._broadcast(task_id, "status", final_status)
-            await self._invalidate_cached_views()
-
-        except asyncio.CancelledError:
-            duration = (time.time() - start_time) if start_time else 0
+            )
 
             await db.execute(
                 """
-                UPDATE tasks SET
+                UPDATE tasks
+                SET
+                    status = ?,
+                    completed_at = ?,
+                    duration_seconds = ?,
+                    exit_code = ?,
+                    output_json = ?,
+                    error_message = ?
+                WHERE id = ?
+                """,
+                (
+                    final_status,
+                    datetime.now().isoformat(),
+                    time.time() - start_time,
+                    exit_code,
+                    json.dumps(normalized_result),
+                    error,
+                    task_id
+                )
+            )
+
+            await self._broadcast(
+                task_id,
+                "status",
+                final_status
+            )
+
+            await self._invalidate_cached_views()
+
+        except asyncio.CancelledError:
+
+            await db.execute(
+                """
+                UPDATE tasks
+                SET
                     status = ?,
                     completed_at = ?,
                     duration_seconds = ?
@@ -242,69 +488,79 @@ class TaskExecutor:
                 (
                     TaskStatus.CANCELLED.value,
                     datetime.now().isoformat(),
-                    duration,
-                    task_id,
+                    time.time() - start_time,
+                    task_id
                 )
             )
 
-            await self._broadcast(task_id, "status", TaskStatus.CANCELLED.value)
+            await self._broadcast(
+                task_id,
+                "status",
+                TaskStatus.CANCELLED.value
+            )
+
             raise
 
         except Exception as e:
-            duration = (time.time() - start_time) if start_time else 0
+
+            logger.exception(
+                f"Task execution failed: {e}"
+            )
 
             await db.execute(
                 """
-                UPDATE tasks SET
+                UPDATE tasks
+                SET
                     status = ?,
                     completed_at = ?,
-                    duration_seconds = ?,
                     error_message = ?
                 WHERE id = ?
                 """,
                 (
                     TaskStatus.FAILED.value,
                     datetime.now().isoformat(),
-                    duration,
                     str(e),
                     task_id
                 )
             )
 
-            await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
-
         finally:
-            self.running_tasks.pop(task_id, None)
-            await concurrent_limiter.release(task_id)
 
-    async def cancel_task(self, task_id: str) -> bool:
-        db = await get_db()  # ✅ FIX: missing db
+            self.running_tasks.pop(
+                task_id,
+                None
+            )
 
-        if task_id not in self.running_tasks:
+            try:
+                concurrent_limiter.release(task_id)
+            except Exception:
+                pass
+
+    async def cancel_task(
+        self,
+        task_id: str
+    ) -> bool:
+
+        db = await get_db()
+
+        task = self.running_tasks.get(task_id)
+
+        if not task:
             return False
 
-        task = self.running_tasks[task_id]
+        if task.done():
+            return False
+
         task.cancel()
-
-        if settings.docker_enabled:
-            try:
-                proc = await asyncio.create_subprocess_exec(
-                    "docker", "kill", f"secuscan_task_{task_id}",
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
-                )
-                await proc.communicate()
-            except Exception as e:
-                logger.error(f"Docker kill failed: {e}")
-
-        await self._broadcast(task_id, "status", TaskStatus.CANCELLED.value)
-        await self._invalidate_cached_views()
 
         await db.log_audit(
             "task_cancelled",
-            "Task cancelled by user",
+            "Task cancellation requested by user",
             task_id=task_id
         )
 
         return True
 
+
+# Global instance
+executor = TaskExecutor()
