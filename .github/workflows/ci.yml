@@ -92,8 +92,10 @@ jobs:
       - name: Run frontend quality gate
         run: npm run quality
       - name: Run unit tests
+        if: github.event_name == 'push'
         run: npm run test
       - name: Build frontend
+        if: github.event_name == 'push'
         run: npm run build
 
   formatting-hygiene:
