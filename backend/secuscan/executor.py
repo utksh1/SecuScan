@@ -82,12 +82,17 @@ class TaskExecutor:
         """
 
         proc = await asyncio.create_subprocess_exec(
-            *command, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            *command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
 
         try:
 
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(),
+                timeout=timeout,
+            )
 
             output = (stdout or b"").decode(errors="ignore") + (stderr or b"").decode(
                 errors="ignore"
@@ -120,7 +125,6 @@ class TaskExecutor:
             if report_path and Path(report_path).exists():
 
                 with open(report_path, "r", encoding="utf-8") as f:
-
                     data = json.load(f)
 
                 if isinstance(data, list):
@@ -129,7 +133,11 @@ class TaskExecutor:
                 elif isinstance(data, dict):
                     findings = data.get("findings", [data])
 
-                return {"count": len(findings), "findings": findings}
+                return {
+                    "count": len(findings),
+                    "findings": findings,
+                    "title": getattr(plugin, "name", "Scan Result"),
+                }
 
         except Exception as e:
             logger.warning(f"Failed reading report file: {e}")
@@ -144,18 +152,36 @@ class TaskExecutor:
             elif isinstance(parsed, dict):
                 findings = parsed.get("findings", [parsed])
 
-            return {"count": len(findings), "findings": findings}
+            return {
+                "count": len(findings),
+                "findings": findings,
+                "title": getattr(plugin, "name", "Scan Result"),
+            }
 
         except Exception:
             pass
 
         if "packet loss" in output.lower():
 
-            findings.append({"type": "icmp_ping", "summary": output.strip()})
+            findings.append(
+                {
+                    "type": "icmp_ping",
+                    "summary": output.strip(),
+                }
+            )
 
-            return {"count": len(findings), "findings": findings}
+            return {
+                "count": len(findings),
+                "findings": findings,
+                "title": getattr(plugin, "name", "Scan Result"),
+            }
 
-        return {"count": 0, "findings": [], "raw": output}
+        return {
+            "count": 0,
+            "findings": [],
+            "raw": output,
+            "title": getattr(plugin, "name", "Scan Result"),
+        }
 
     def _classify_command_result(self, plugin, output: str, exit_code: int):
         """
@@ -185,30 +211,75 @@ class TaskExecutor:
 
         return (TaskStatus.FAILED.value, output.strip())
 
-    def _normalize_parsed_result(self, result):
+    def _normalize_parsed_result(self, result, *args, **kwargs):
         """
-        Normalize parsed result
+        Normalize parsed result while keeping backward compatibility
         """
 
         if isinstance(result, dict):
-            return result
+
+            if "findings" in result:
+                return result
+
+            return {
+                "count": 1,
+                "findings": [result],
+            }
 
         if isinstance(result, list):
 
-            return {"count": len(result), "findings": result}
+            return {
+                "count": len(result),
+                "findings": result,
+            }
 
-        return {"count": 0, "findings": [], "result": result}
+        return {
+            "count": 0,
+            "findings": [],
+            "result": result,
+        }
 
     async def _invalidate_cached_views(self):
         return True
 
-    def get_task_status(self, task_id: str):
+    async def get_task_status(self, task_id: str):
 
-        return {"task_id": task_id, "status": "unknown"}
+        return {
+            "task_id": task_id,
+            "status": "unknown",
+        }
 
-    def mark_task_failed(self, task_id: str, error: str):
+    async def mark_task_failed(
+        self,
+        task_id: str,
+        error: str = "",
+        reason: str = "",
+    ):
+        """
+        Backward compatible failure handler
+        """
 
-        return {"task_id": task_id, "error": error}
+        db = await get_db()
+
+        message = error or reason or "Task failed"
+
+        await db.execute(
+            """
+            UPDATE tasks
+            SET status = ?, error_message = ?
+            WHERE id = ?
+            """,
+            (
+                TaskStatus.FAILED.value,
+                message,
+                task_id,
+            ),
+        )
+
+        return {
+            "task_id": task_id,
+            "error": message,
+        }
 
     def _resolve_execution_timeout(self, inputs):
         return 60
@@ -281,7 +352,11 @@ class TaskExecutor:
                 SET status = ?, started_at = ?
                 WHERE id = ?
                 """,
-                (TaskStatus.RUNNING.value, datetime.now().isoformat(), task_id),
+                (
+                    TaskStatus.RUNNING.value,
+                    datetime.now().isoformat(),
+                    task_id,
+                ),
             )
 
             task_row = await db.fetchone(
@@ -314,7 +389,11 @@ class TaskExecutor:
 
             timeout = self._resolve_execution_timeout(inputs)
 
-            output, exit_code = await self._execute_command(command, task_id, timeout)
+            output, exit_code = await self._execute_command(
+                command,
+                task_id,
+                timeout,
+            )
 
             output = redact(output)
 
@@ -323,7 +402,9 @@ class TaskExecutor:
             normalized_result = self._normalize_parsed_result(parsed_result)
 
             final_status, error = self._classify_command_result(
-                plugin, output, exit_code
+                plugin,
+                output,
+                exit_code,
             )
 
             await db.execute(
@@ -349,7 +430,11 @@ class TaskExecutor:
                 ),
             )
 
-            await self._broadcast(task_id, "status", final_status)
+            await self._broadcast(
+                task_id,
+                "status",
+                final_status,
+            )
 
             await self._invalidate_cached_views()
 
@@ -372,7 +457,11 @@ class TaskExecutor:
                 ),
             )
 
-            await self._broadcast(task_id, "status", TaskStatus.CANCELLED.value)
+            await self._broadcast(
+                task_id,
+                "status",
+                TaskStatus.CANCELLED.value,
+            )
 
             raise
 
@@ -389,7 +478,12 @@ class TaskExecutor:
                     error_message = ?
                 WHERE id = ?
                 """,
-                (TaskStatus.FAILED.value, datetime.now().isoformat(), str(e), task_id),
+                (
+                    TaskStatus.FAILED.value,
+                    datetime.now().isoformat(),
+                    str(e),
+                    task_id,
+                ),
             )
 
         finally:
@@ -397,7 +491,7 @@ class TaskExecutor:
             self.running_tasks.pop(task_id, None)
 
             try:
-                concurrent_limiter.release(task_id)
+                await concurrent_limiter.release(task_id)
             except Exception:
                 pass
 
@@ -416,7 +510,9 @@ class TaskExecutor:
         task.cancel()
 
         await db.log_audit(
-            "task_cancelled", "Task cancellation requested by user", task_id=task_id
+            "task_cancelled",
+            "Task cancellation requested by user",
+            task_id=task_id,
         )
 
         return True
