@@ -11,6 +11,8 @@ import logging
 import shutil
 import hashlib
 import hmac
+import tempfile
+import zipfile
 
 from .models import PluginMetadata
 from .config import settings
