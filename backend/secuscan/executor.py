@@ -68,7 +68,10 @@ class TaskExecutor:
         if not listeners:
             return
 
-        event = {"type": event_type, "data": data}
+        event = {
+            "type": event_type,
+            "data": data,
+        }
 
         for q in listeners:
             await q.put(event)
@@ -108,26 +111,82 @@ class TaskExecutor:
 
             return "TIMEOUT", 1
 
+    def _normalize_findings(self, findings):
+
+        normalized = []
+
+        for finding in findings:
+
+            if not isinstance(finding, dict):
+                finding = {
+                    "description": str(finding),
+                }
+
+            normalized.append(
+                {
+                    "title": finding.get(
+                        "title",
+                        "Security Finding",
+                    ),
+                    "severity": str(finding.get("severity", "info")).lower(),
+                    "category": finding.get(
+                        "category",
+                        "General",
+                    ),
+                    "description": finding.get(
+                        "description",
+                        finding.get("summary", ""),
+                    ),
+                    "remediation": finding.get(
+                        "remediation",
+                        "",
+                    ),
+                    "metadata": finding.get(
+                        "metadata",
+                        {},
+                    ),
+                }
+            )
+
+        return normalized
+
     def _parse_results(self, plugin, output: str):
 
         findings = []
 
-        title = getattr(plugin, "name", "Scan Result")
+        title = getattr(
+            plugin,
+            "name",
+            "Scan Result",
+        )
 
         try:
 
-            report_path = getattr(plugin, "output", {}).get("report_path")
+            report_path = getattr(
+                plugin,
+                "output",
+                {},
+            ).get("report_path")
 
             if report_path and Path(report_path).exists():
 
-                with open(report_path, "r", encoding="utf-8") as f:
+                with open(
+                    report_path,
+                    "r",
+                    encoding="utf-8",
+                ) as f:
                     data = json.load(f)
 
                 if isinstance(data, list):
                     findings = data
 
                 elif isinstance(data, dict):
-                    findings = data.get("findings", [data])
+                    findings = data.get(
+                        "findings",
+                        [data],
+                    )
+
+                findings = self._normalize_findings(findings)
 
                 return {
                     "title": title,
@@ -146,7 +205,12 @@ class TaskExecutor:
                 findings = parsed
 
             elif isinstance(parsed, dict):
-                findings = parsed.get("findings", [parsed])
+                findings = parsed.get(
+                    "findings",
+                    [parsed],
+                )
+
+            findings = self._normalize_findings(findings)
 
             return {
                 "title": title,
@@ -161,8 +225,12 @@ class TaskExecutor:
 
             findings.append(
                 {
-                    "type": "icmp_ping",
-                    "summary": output.strip(),
+                    "title": "ICMP Ping Result",
+                    "severity": "info",
+                    "category": "Network",
+                    "description": output.strip(),
+                    "remediation": "",
+                    "metadata": {},
                 }
             )
 
@@ -179,7 +247,12 @@ class TaskExecutor:
             "raw": output,
         }
 
-    def _classify_command_result(self, plugin, output: str, exit_code: int):
+    def _classify_command_result(
+        self,
+        plugin,
+        output: str,
+        exit_code: int,
+    ):
 
         output_lower = output.lower()
 
@@ -194,17 +267,34 @@ class TaskExecutor:
         for pattern in error_patterns:
 
             if pattern in output_lower:
-                return (TaskStatus.FAILED.value, output.strip())
+                return (
+                    TaskStatus.FAILED.value,
+                    output.strip(),
+                )
 
         if "packet loss" in output_lower or "statistics" in output_lower:
-            return TaskStatus.COMPLETED.value, None
+            return (
+                TaskStatus.COMPLETED.value,
+                None,
+            )
 
         if exit_code == 0:
-            return TaskStatus.COMPLETED.value, None
+            return (
+                TaskStatus.COMPLETED.value,
+                None,
+            )
 
-        return (TaskStatus.FAILED.value, output.strip())
+        return (
+            TaskStatus.FAILED.value,
+            output.strip(),
+        )
 
-    def _normalize_parsed_result(self, result, *args, **kwargs):
+    def _normalize_parsed_result(
+        self,
+        result,
+        *args,
+        **kwargs,
+    ):
 
         if isinstance(result, dict):
 
@@ -232,13 +322,16 @@ class TaskExecutor:
     async def _invalidate_cached_views(self):
         return True
 
-    async def get_task_status(self, task_id: str):
+    async def get_task_status(
+        self,
+        task_id: str,
+    ):
 
         db = await get_db()
 
         row = await db.fetchone(
             """
-            SELECT status
+            SELECT *
             FROM tasks
             WHERE id = ?
             """,
@@ -250,34 +343,42 @@ class TaskExecutor:
                 "task_id": task_id,
                 "status": "unknown",
                 "queue_position": None,
+                "pending_count": 0,
             }
 
         status = row["status"]
 
         queue_position = None
+        pending_count = 0
 
         if status == TaskStatus.QUEUED.value:
 
-            queue_row = await db.fetchone(
+            queued_tasks = await db.fetchall(
                 """
-                SELECT COUNT(*) as position
+                SELECT id
                 FROM tasks
                 WHERE status = ?
-                AND created_at <= (
-                    SELECT created_at
-                    FROM tasks
-                    WHERE id = ?
-                )
+                ORDER BY created_at ASC
                 """,
-                (TaskStatus.QUEUED.value, task_id),
+                (TaskStatus.QUEUED.value,),
             )
 
-            queue_position = queue_row["position"] if queue_row else None
+            pending_count = len(queued_tasks)
+
+            for index, task in enumerate(
+                queued_tasks,
+                start=1,
+            ):
+
+                if task["id"] == task_id:
+                    queue_position = index
+                    break
 
         return {
             "task_id": task_id,
             "status": status,
             "queue_position": queue_position,
+            "pending_count": pending_count,
         }
 
     async def mark_task_failed(
@@ -309,7 +410,10 @@ class TaskExecutor:
             "error": message,
         }
 
-    def _resolve_execution_timeout(self, inputs):
+    def _resolve_execution_timeout(
+        self,
+        inputs,
+    ):
         return 60
 
     # -------------------------
@@ -364,7 +468,10 @@ class TaskExecutor:
 
         return task_id
 
-    async def execute_task(self, task_id: str):
+    async def execute_task(
+        self,
+        task_id: str,
+    ):
 
         db = await get_db()
 
@@ -410,7 +517,10 @@ class TaskExecutor:
             if not plugin:
                 raise ValueError(f"Plugin not found: {plugin_id}")
 
-            command = plugin_manager.build_command(plugin_id, inputs)
+            command = plugin_manager.build_command(
+                plugin_id,
+                inputs,
+            )
 
             if not command:
                 raise ValueError("Command build failed")
@@ -425,7 +535,10 @@ class TaskExecutor:
 
             output = redact(output)
 
-            parsed_result = self._parse_results(plugin, output)
+            parsed_result = self._parse_results(
+                plugin,
+                output,
+            )
 
             normalized_result = self._normalize_parsed_result(parsed_result)
 
@@ -516,14 +629,20 @@ class TaskExecutor:
 
         finally:
 
-            self.running_tasks.pop(task_id, None)
+            self.running_tasks.pop(
+                task_id,
+                None,
+            )
 
             try:
                 await concurrent_limiter.release(task_id)
             except Exception:
                 pass
 
-    async def cancel_task(self, task_id: str) -> bool:
+    async def cancel_task(
+        self,
+        task_id: str,
+    ) -> bool:
 
         db = await get_db()
 
@@ -546,5 +665,4 @@ class TaskExecutor:
         return True
 
 
-# Global instance
 executor = TaskExecutor()
