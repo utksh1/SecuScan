@@ -20,7 +20,7 @@ from .database import get_db
 from .plugins import get_plugin_manager
 from .models import TaskStatus
 from .ratelimit import concurrent_limiter
-
+from .database import db
 # Modular Scanners
 from .scanners.port_scanner import PortScanner
 from .scanners.web_scanner import WebScanner
