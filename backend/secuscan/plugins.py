@@ -58,7 +58,9 @@ class PluginManager:
                 if await self._validate_plugin(plugin_meta, plugin_dir):
                     self.plugins[plugin_meta.id] = plugin_meta
                     loaded += 1
-                    logger.info(f"✓ Loaded plugin: {plugin_meta.name} v{plugin_meta.version}")
+                    logger.info(
+                        f"✓ Loaded plugin: {plugin_meta.name} v{plugin_meta.version}"
+                    )
                 else:
                     logger.error(f"✗ Failed to validate plugin: {plugin_meta.id}")
 
@@ -70,7 +72,7 @@ class PluginManager:
 
     async def _load_plugin_metadata(self, metadata_file: Path) -> PluginMetadata:
         """Load and parse plugin metadata JSON"""
-        with open(metadata_file, 'r') as f:
+        with open(metadata_file, "r") as f:
             data = json.load(f)
 
         return PluginMetadata(**data)
@@ -119,15 +121,24 @@ class PluginManager:
 
         return True
 
-    def _verify_plugin_integrity(self, plugin: PluginMetadata, plugin_dir: Path) -> bool:
+    def _verify_plugin_integrity(
+        self, plugin: PluginMetadata, plugin_dir: Path
+    ) -> bool:
         """Verify plugin checksum/signature when available."""
         metadata_file = plugin_dir / "metadata.json"
         parser_file = plugin_dir / "parser.py"
         has_checksum = bool(plugin.checksum)
         has_signature = bool(plugin.signature)
 
-        if not has_checksum and not has_signature and settings.enforce_plugin_signatures:
-            logger.error("Plugin %s missing checksum/signature while enforcement is enabled", plugin.id)
+        if (
+            not has_checksum
+            and not has_signature
+            and settings.enforce_plugin_signatures
+        ):
+            logger.error(
+                "Plugin %s missing checksum/signature while enforcement is enabled",
+                plugin.id,
+            )
             return False
 
         try:
@@ -143,9 +154,15 @@ class PluginManager:
         if has_signature:
             if not settings.plugin_signature_key:
                 if settings.enforce_plugin_signatures:
-                    logger.error("SECUSCAN_PLUGIN_SIGNATURE_KEY required for verifying %s", plugin.id)
+                    logger.error(
+                        "SECUSCAN_PLUGIN_SIGNATURE_KEY required for verifying %s",
+                        plugin.id,
+                    )
                     return False
-                logger.warning("Skipping signature verification for %s: key not configured", plugin.id)
+                logger.warning(
+                    "Skipping signature verification for %s: key not configured",
+                    plugin.id,
+                )
             else:
                 expected_sig = hmac.new(
                     settings.plugin_signature_key.encode("utf-8"),
@@ -173,7 +190,9 @@ class PluginManager:
             parser_bytes_normalized = parser_bytes.replace(b"\r\n", b"\n")
             parser_digest = hashlib.sha256(parser_bytes_normalized).hexdigest()
 
-        return hashlib.sha256(f"{metadata_digest}:{parser_digest}".encode("utf-8")).hexdigest()
+        return hashlib.sha256(
+            f"{metadata_digest}:{parser_digest}".encode("utf-8")
+        ).hexdigest()
 
     def get_plugin(self, plugin_id: str) -> Optional[PluginMetadata]:
         """Get plugin by ID"""
@@ -193,12 +212,16 @@ class PluginManager:
                     "safety_level": plugin.safety.get("level"),
                     "enabled": True,
                     "icon": plugin.icon,
-                    "requires_consent": bool(plugin.safety.get("requires_consent", False)),
+                    "requires_consent": bool(
+                        plugin.safety.get("requires_consent", False)
+                    ),
                     "consent_message": plugin.safety.get("consent_message"),
                     "availability": {
                         "runnable": len(missing_binaries) == 0,
                         "missing_binaries": missing_binaries,
-                        "status": "available" if len(missing_binaries) == 0 else "unavailable",
+                        "status": (
+                            "available" if len(missing_binaries) == 0 else "unavailable"
+                        ),
                         "guidance": (
                             None
                             if len(missing_binaries) == 0
@@ -239,7 +262,7 @@ class PluginManager:
                 "description": plugin.description,
                 "fields": [f.model_dump() for f in plugin.fields],
                 "presets": plugin.presets,
-                "safety": plugin.safety
+                "safety": plugin.safety,
             }
         else:
             return None
@@ -260,12 +283,16 @@ class PluginManager:
             if value is None or value == "":
                 return None
 
-            placeholder = "{" + var_name + (f":{default_value}" if default_value else "") + "}"
+            placeholder = (
+                "{" + var_name + (f":{default_value}" if default_value else "") + "}"
+            )
             rendered = rendered.replace(placeholder, str(value))
 
         return rendered
 
-    def _with_field_defaults(self, plugin: PluginMetadata, inputs: Dict[str, Any]) -> Dict[str, Any]:
+    def _with_field_defaults(
+        self, plugin: PluginMetadata, inputs: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Fill omitted inputs from plugin field defaults."""
         normalized = dict(inputs)
         for field in plugin.fields:
@@ -303,7 +330,9 @@ class PluginManager:
         elif "discovery/web-content/common.txt" in lowered:
             fallback_candidates.insert(0, wordlists_dir / "common.txt")
         elif "discovery/dns/subdomains-top1million-110000.txt" in lowered:
-            fallback_candidates.insert(0, wordlists_dir / "subdomains-top1million-110000.txt")
+            fallback_candidates.insert(
+                0, wordlists_dir / "subdomains-top1million-110000.txt"
+            )
 
         for fallback in fallback_candidates:
             if fallback.exists():
@@ -311,7 +340,9 @@ class PluginManager:
 
         return value
 
-    def _normalize_inputs(self, plugin: PluginMetadata, inputs: Dict[str, Any]) -> Dict[str, Any]:
+    def _normalize_inputs(
+        self, plugin: PluginMetadata, inputs: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Normalize plugin inputs before command rendering."""
         normalized = self._with_field_defaults(plugin, inputs)
         wordlist_value = normalized.get("wordlist")
@@ -350,7 +381,7 @@ class PluginManager:
                     try:
                         else_idx = parts.index("else")
                         then_parts = parts[3:else_idx]
-                        else_parts = parts[else_idx+1:]
+                        else_parts = parts[else_idx + 1 :]
                     except ValueError:
                         then_parts = parts[3:]
                         else_parts = []
