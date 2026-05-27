@@ -58,18 +58,22 @@ function setVisibility(state: 'visible' | 'hidden') {
   document.dispatchEvent(new Event('visibilitychange'));
 }
 
-// Advance timers by ms then drain all pending microtasks (promise callbacks)
-async function tickTime(ms: number) {
+// Drain pending microtasks — works with Vitest 2.1.x.
+async function flush() {
   await act(async () => {
-    vi.advanceTimersByTime(ms);
-    
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
   });
 }
 
-// Just drain microtasks without advancing time
-async function flush() {
+// Advance fake timers then drain microtasks so fetch callbacks settle.
+async function tickTime(ms: number) {
   await act(async () => {
-    
+    vi.advanceTimersByTime(ms);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
   });
 }
 
