@@ -11,6 +11,13 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
+from fastapi import HTTPException
+from .errors import (
+    http_exception_handler,
+    validation_exception_handler,
+    unhandled_exception_handler,
+)
 
 from .config import settings
 from .cache import init_cache, cache as global_cache
@@ -113,7 +120,10 @@ app.add_middleware(
     allow_methods=settings.cors_allowed_methods,
     allow_headers=settings.cors_allowed_headers,
 )
-
+# Register standardized error handlers
+app.add_exception_handler(HTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(Exception, unhandled_exception_handler)
 # Include API routes
 app.include_router(router)
 

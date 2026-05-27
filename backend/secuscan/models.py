@@ -156,8 +156,11 @@ class PluginListResponse(BaseModel):
 
 
 class ErrorResponse(BaseModel):
-    """Error response"""
-    error: str
+    """Standardized machine-readable error response (RFC 7807-style)."""
+    code: str
     message: str
+    status: int
+    request_id: str
     field: Optional[str] = None
-    details: Optional[Dict[str, Any]] = None
+    hint: Optional[str] = None
+    details: Optional[Any] = None
