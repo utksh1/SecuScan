@@ -629,7 +629,8 @@ async def get_dashboard_summary():
         recent_rows = await db.fetchall(
             """
             SELECT id, title, category, severity, target, description,
-                remediation, proof, cvss, cve, discovered_at, metadata_json
+                remediation, proof, cvss, cve, discovered_at,
+                risk_score, risk_factors_json, metadata_json
             FROM findings
             ORDER BY discovered_at DESC
             LIMIT 5
@@ -638,7 +639,7 @@ async def get_dashboard_summary():
         recent_findings: List[Dict] = parse_json_fields(recent_rows, ["metadata_json"])
 
         risk_scores = [
-            f.get("risk_score") for f in findings
+            f.get("risk_score") for f in recent_findings
             if isinstance(f.get("risk_score"), (int, float))
         ]
         avg_risk_score = round(sum(risk_scores) / len(risk_scores), 1) if risk_scores else None
