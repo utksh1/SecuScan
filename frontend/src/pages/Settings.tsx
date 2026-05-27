@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from '../components/ThemeContext'
 import { useToast } from '../components/ToastContext'
+import { NotificationSettings } from '../components/NotificationSettings'
 
 const itemVariants = {
   hidden: { opacity: 0, y: 20 },
@@ -306,6 +307,16 @@ export default function Settings() {
                                 checked={config.autoPurgeFailed}
                                 onChange={(val: boolean) => setConfig({...config, autoPurgeFailed: val})}
                             />
+                        </div>
+                    </section>
+
+                    <section className="space-y-8">
+                        <div className="flex items-center gap-4">
+                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Alerting_Workflows</h3>
+                            <div className="h-0.5 flex-1 bg-black/10"></div>
+                        </div>
+                        <div className="grid grid-cols-1 gap-8">
+                           <NotificationSettings />
                         </div>
                     </section>
 

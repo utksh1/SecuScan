@@ -65,7 +65,8 @@ logger = logging.getLogger(__name__)
 from .cache import get_cache
 from .models import (
     TaskCreateRequest, TaskResponse, TaskResult,
-    PluginListResponse, ErrorResponse
+    PluginListResponse, ErrorResponse,
+    NotificationRuleCreate, NotificationRuleResponse, NotificationHistoryResponse
 )
 from .config import settings
 from .database import get_db
@@ -946,6 +947,127 @@ async def delete_vault_secret(name: str):
     db = await get_db()
     await db.execute("DELETE FROM credential_vault WHERE name = ?", (name,))
     return {"name": name, "deleted": True}
+
+
+# Notification Rules Routes
+
+@router.get("/notifications/rules")
+async def list_notification_rules():
+    """List all notification rules"""
+    db = await get_db()
+    rows = await db.fetchall(
+        "SELECT * FROM notification_rules ORDER BY created_at DESC"
+    )
+    rules = [dict(row) for row in rows]
+    return {"rules": rules, "total": len(rules)}
+
+
+@router.post("/notifications/rules")
+async def create_notification_rule(rule: NotificationRuleCreate):
+    """Create a new notification rule"""
+    db = await get_db()
+    rule_id = str(uuid.uuid4())
+    
+    await db.execute(
+        """
+        INSERT INTO notification_rules (id, name, severity_threshold, channel_type, target_url_or_email, is_active, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, (datetime('now')), (datetime('now')))
+        """,
+        (rule_id, rule.name, rule.severity_threshold, rule.channel_type, rule.target_url_or_email, rule.is_active)
+    )
+    
+    await invalidate_view_cache()
+    
+    # Return the created rule
+    created = await db.fetchone("SELECT * FROM notification_rules WHERE id = ?", (rule_id,))
+    return dict(created)
+
+
+@router.get("/notifications/rules/{rule_id}")
+async def get_notification_rule(rule_id: str):
+    """Get a specific notification rule"""
+    db = await get_db()
+    rule = await db.fetchone("SELECT * FROM notification_rules WHERE id = ?", (rule_id,))
+    
+    if not rule:
+        raise HTTPException(status_code=404, detail="Notification rule not found")
+    
+    return dict(rule)
+
+
+@router.put("/notifications/rules/{rule_id}")
+async def update_notification_rule(rule_id: str, rule: NotificationRuleCreate):
+    """Update a notification rule"""
+    db = await get_db()
+    
+    # Check if rule exists
+    existing = await db.fetchone("SELECT id FROM notification_rules WHERE id = ?", (rule_id,))
+    if not existing:
+        raise HTTPException(status_code=404, detail="Notification rule not found")
+    
+    await db.execute(
+        """
+        UPDATE notification_rules
+        SET name = ?, severity_threshold = ?, channel_type = ?, target_url_or_email = ?, is_active = ?, updated_at = datetime('now')
+        WHERE id = ?
+        """,
+        (rule.name, rule.severity_threshold, rule.channel_type, rule.target_url_or_email, rule.is_active, rule_id)
+    )
+    
+    await invalidate_view_cache()
+    
+    # Return the updated rule
+    updated = await db.fetchone("SELECT * FROM notification_rules WHERE id = ?", (rule_id,))
+    return dict(updated)
+
+
+@router.delete("/notifications/rules/{rule_id}")
+async def delete_notification_rule(rule_id: str):
+    """Delete a notification rule"""
+    db = await get_db()
+    
+    # Check if rule exists
+    existing = await db.fetchone("SELECT id FROM notification_rules WHERE id = ?", (rule_id,))
+    if not existing:
+        raise HTTPException(status_code=404, detail="Notification rule not found")
+    
+    await db.execute("DELETE FROM notification_rules WHERE id = ?", (rule_id,))
+    await invalidate_view_cache()
+    
+    return {"rule_id": rule_id, "deleted": True}
+
+
+@router.get("/notifications/history")
+async def list_notification_history(
+    rule_id: Optional[str] = None,
+    finding_id: Optional[str] = None,
+    limit: int = 50
+):
+    """List notification history with optional filters"""
+    db = await get_db()
+    
+    query = "SELECT * FROM notification_history"
+    params = []
+    where_clauses = []
+    
+    if rule_id:
+        where_clauses.append("rule_id = ?")
+        params.append(rule_id)
+    
+    if finding_id:
+        where_clauses.append("finding_id = ?")
+        params.append(finding_id)
+    
+    if where_clauses:
+        query += " WHERE " + " AND ".join(where_clauses)
+    
+    query += " ORDER BY sent_at DESC LIMIT ?"
+    params.append(limit)
+    
+    rows = await db.fetchall(query, tuple(params))
+    history = [dict(row) for row in rows]
+    
+    return {"history": history, "total": len(history)}
 
 
 @router.get("/workflows")

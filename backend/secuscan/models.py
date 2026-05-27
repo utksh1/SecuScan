@@ -161,3 +161,34 @@ class ErrorResponse(BaseModel):
     message: str
     field: Optional[str] = None
     details: Optional[Dict[str, Any]] = None
+
+
+class NotificationRuleCreate(BaseModel):
+    """Request to create a notification rule"""
+    name: str
+    severity_threshold: str  # "critical", "high", "medium", "low", "info"
+    channel_type: str  # "webhook" or "email"
+    target_url_or_email: str
+    is_active: bool = True
+
+
+class NotificationRuleResponse(BaseModel):
+    """Notification rule response"""
+    id: str
+    name: str
+    severity_threshold: str
+    channel_type: str
+    target_url_or_email: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class NotificationHistoryResponse(BaseModel):
+    """Notification history response"""
+    id: str
+    rule_id: str
+    finding_id: str
+    status: str  # "success" or "failed"
+    error_message: Optional[str] = None
+    sent_at: datetime

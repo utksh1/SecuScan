@@ -20,6 +20,7 @@ from .database import get_db
 from .plugins import get_plugin_manager
 from .models import TaskStatus
 from .ratelimit import concurrent_limiter
+from .notifications import process_notifications
 
 # Modular Scanners
 from .scanners.port_scanner import PortScanner
@@ -640,6 +641,7 @@ class TaskExecutor:
         )
 
         # Insert findings
+        findings_with_ids = []
         for finding in findings_data:
             u_id = str(uuid.uuid4()).replace("-", "")
             finding_id = f"finding:{task_id}:{u_id[:8]}"
@@ -667,6 +669,17 @@ class TaskExecutor:
                     json.dumps(finding.get("metadata", {})),
                 ),
             )
+            # Store finding with ID for notification processing
+            finding_with_id = dict(finding)
+            finding_with_id["id"] = finding_id
+            findings_with_ids.append(finding_with_id)
+        
+        # Process notifications for high-risk findings
+        if findings_with_ids:
+            try:
+                await process_notifications(findings_with_ids)
+            except Exception as e:
+                logger.error(f"Failed to process notifications: {e}")
 
         await db.execute(
             """
@@ -694,6 +707,7 @@ class TaskExecutor:
         findings_data = result.get("findings", [])
         
         # Insert findings
+        findings_with_ids = []
         for finding in findings_data:
             u_id = str(uuid.uuid4()).replace("-", "")
             finding_id = f"finding:{task_id}:{u_id[:8]}"
@@ -721,6 +735,17 @@ class TaskExecutor:
                     json.dumps(finding.get("metadata", {})),
                 )
             )
+            # Store finding with ID for notification processing
+            finding_with_id = dict(finding)
+            finding_with_id["id"] = finding_id
+            findings_with_ids.append(finding_with_id)
+        
+        # Process notifications for high-risk findings
+        if findings_with_ids:
+            try:
+                await process_notifications(findings_with_ids)
+            except Exception as e:
+                logger.error(f"Failed to process notifications: {e}")
 
         # Create/Update report
         await db.execute(

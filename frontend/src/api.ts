@@ -241,3 +241,35 @@ export function deleteWorkflow(workflowId: string): Promise<{ deleted: boolean }
     method: 'DELETE',
   })
 }
+
+export interface NotificationRule {
+  id?: string
+  name: string
+  channel_type: 'webhook' | 'email'
+  target_url_or_email: string
+  severity_threshold: 'HIGH' | 'CRITICAL'
+  is_active: boolean
+}
+
+export interface NotificationRulesResponse {
+  rules: NotificationRule[]
+  total: number
+}
+
+export function getNotificationRules(): Promise<NotificationRulesResponse> {
+  return request<NotificationRulesResponse>('/notifications/rules')
+}
+
+export function createNotificationRule(rule: Omit<NotificationRule, 'id'>): Promise<NotificationRule> {
+  return request<NotificationRule>('/notifications/rules', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(rule),
+  })
+}
+
+export function deleteNotificationRule(ruleId: string): Promise<{ rule_id: string; deleted: boolean }> {
+  return request<{ rule_id: string; deleted: boolean }>(`/notifications/rules/${ruleId}`, {
+    method: 'DELETE',
+  })
+}
