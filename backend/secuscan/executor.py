@@ -77,9 +77,6 @@ class TaskExecutor:
     # CORE EXECUTION HELPERS
     # -------------------------
     async def _execute_command(self, command, task_id, timeout=60):
-        """
-        Execute command safely
-        """
 
         proc = await asyncio.create_subprocess_exec(
             *command,
@@ -112,11 +109,10 @@ class TaskExecutor:
             return "TIMEOUT", 1
 
     def _parse_results(self, plugin, output: str):
-        """
-        Parse plugin results consistently
-        """
 
         findings = []
+
+        title = getattr(plugin, "name", "Scan Result")
 
         try:
 
@@ -134,9 +130,9 @@ class TaskExecutor:
                     findings = data.get("findings", [data])
 
                 return {
+                    "title": title,
                     "count": len(findings),
                     "findings": findings,
-                    "title": getattr(plugin, "name", "Scan Result"),
                 }
 
         except Exception as e:
@@ -153,9 +149,9 @@ class TaskExecutor:
                 findings = parsed.get("findings", [parsed])
 
             return {
+                "title": title,
                 "count": len(findings),
                 "findings": findings,
-                "title": getattr(plugin, "name", "Scan Result"),
             }
 
         except Exception:
@@ -171,22 +167,19 @@ class TaskExecutor:
             )
 
             return {
+                "title": title,
                 "count": len(findings),
                 "findings": findings,
-                "title": getattr(plugin, "name", "Scan Result"),
             }
 
         return {
+            "title": title,
             "count": 0,
             "findings": [],
             "raw": output,
-            "title": getattr(plugin, "name", "Scan Result"),
         }
 
     def _classify_command_result(self, plugin, output: str, exit_code: int):
-        """
-        Classify execution result
-        """
 
         output_lower = output.lower()
 
@@ -212,9 +205,6 @@ class TaskExecutor:
         return (TaskStatus.FAILED.value, output.strip())
 
     def _normalize_parsed_result(self, result, *args, **kwargs):
-        """
-        Normalize parsed result while keeping backward compatibility
-        """
 
         if isinstance(result, dict):
 
@@ -244,9 +234,50 @@ class TaskExecutor:
 
     async def get_task_status(self, task_id: str):
 
+        db = await get_db()
+
+        row = await db.fetchone(
+            """
+            SELECT status
+            FROM tasks
+            WHERE id = ?
+            """,
+            (task_id,),
+        )
+
+        if not row:
+            return {
+                "task_id": task_id,
+                "status": "unknown",
+                "queue_position": None,
+            }
+
+        status = row["status"]
+
+        queue_position = None
+
+        if status == TaskStatus.QUEUED.value:
+
+            queue_row = await db.fetchone(
+                """
+                SELECT COUNT(*) as position
+                FROM tasks
+                WHERE status = ?
+                AND created_at <= (
+                    SELECT created_at
+                    FROM tasks
+                    WHERE id = ?
+                )
+                """,
+                (TaskStatus.QUEUED.value, task_id),
+            )
+
+            queue_position = queue_row["position"] if queue_row else None
+
         return {
             "task_id": task_id,
-            "status": "unknown",
+            "status": status,
+            "queue_position": queue_position,
         }
 
     async def mark_task_failed(
@@ -255,9 +286,6 @@ class TaskExecutor:
         error: str = "",
         reason: str = "",
     ):
-        """
-        Backward compatible failure handler
-        """
 
         db = await get_db()
 
