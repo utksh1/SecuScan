@@ -98,4 +98,4 @@ chmod +x setup.sh start.sh
 
 ## Python Version Issues
 
-Use Python 3.11 or newer.
+Use Python 3.11 or newer. 

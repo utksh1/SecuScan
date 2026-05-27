@@ -112,4 +112,4 @@ Potential future improvements include:
 - Better plugin sandboxing
 - Expanded reporting formats
 - Workflow automation
-- Enhanced scan scheduling
+- Enhanced scan scheduling 

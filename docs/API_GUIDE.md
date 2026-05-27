@@ -50,4 +50,4 @@ Typical API errors include:
 
 # Frontend Integration Notes
 
-Frontend components communicate with backend APIs using HTTP requests and render scan results dynamically.
+Frontend components communicate with backend APIs using HTTP requests and render scan results dynamically. 

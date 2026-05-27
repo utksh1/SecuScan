@@ -64,4 +64,4 @@ Recommended testing workflow:
 
 - Plugin templates
 - Plugin validation tooling
-- Sandbox execution support
+- Sandbox execution support 
