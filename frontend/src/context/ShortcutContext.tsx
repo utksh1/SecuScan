@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { routes } from "../routes";
 
 export interface ShortcutBinding {
   id: string;
@@ -14,7 +15,6 @@ const DEFAULT_SHORTCUTS: ShortcutBinding[] = [
   { id: "go_findings",   keys: "g f", description: "Go to Findings",       category: "Navigation" },
   { id: "go_toolkit",    keys: "g t", description: "Go to Toolkit",        category: "Navigation" },
   { id: "new_scan",      keys: "n",   description: "New scan dialog",      category: "Actions"    },
-  { id: "cancel_task",   keys: "Escape", description: "Cancel focused task", category: "Actions" },
   { id: "open_filters",  keys: "/",   description: "Focus filter input",   category: "UI"         },
   { id: "open_cheatsheet", keys: "?", description: "Toggle cheatsheet",    category: "UI"         },
 ];
@@ -49,8 +49,8 @@ export const ShortcutProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const [shortcuts, setShortcuts] = useState<ShortcutBinding[]>(loadShortcuts);
   const [cheatsheetOpen, setCheatsheetOpen] = useState(false);
-  const [pendingKeys, setPendingKeys] = useState<string[]>([]);
-  const [pendingTimer, setPendingTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const pendingKeysRef = useRef<string[]>([]);
+  const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const updateBinding = useCallback((id: string, newKeys: string) => {
     setShortcuts((prev) => {
@@ -71,10 +71,10 @@ export const ShortcutProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   const ROUTE_MAP: Record<string, string> = {
-    go_dashboard: "/",
-    go_scans:     "/scans",
-    go_findings:  "/findings",
-    go_toolkit:   "/toolkit",
+    go_dashboard: routes.dashboard,
+    go_scans:     routes.scans,
+    go_findings:  routes.findings,
+    go_toolkit:   routes.toolkit,
   };
 
   const executeShortcut = useCallback(
@@ -82,7 +82,7 @@ export const ShortcutProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (ROUTE_MAP[id]) { navigate(ROUTE_MAP[id]); return; }
       if (id === "open_cheatsheet") { setCheatsheetOpen((o) => !o); return; }
       if (id === "open_filters") {
-        const el = document.querySelector<HTMLInputElement>("input[type='search'], input[placeholder*='filter'], input[placeholder*='Filter']");
+        const el = document.querySelector<HTMLInputElement>("[data-shortcut-target='filter'], input[type='search']");
         el?.focus();
         return;
       }
@@ -99,9 +99,11 @@ export const ShortcutProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const handleKeyDown = (e: KeyboardEvent) => {
       if (isTyping(e) && e.key !== "Escape") return;
 
+      // Normalize key: for printable single chars, ignore Shift modifier
+      const isPrintableChar = e.key.length === 1 && !e.ctrlKey && !e.altKey;
       const mod = [
         e.ctrlKey  ? "Ctrl"  : "",
-        e.shiftKey ? "Shift" : "",
+        !isPrintableChar && e.shiftKey ? "Shift" : "",
         e.altKey   ? "Alt"   : "",
       ].filter(Boolean).join("+");
 
@@ -112,14 +114,14 @@ export const ShortcutProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (single) { e.preventDefault(); executeShortcut(single.id); return; }
 
       // Sequential key combo (e.g. "g d")
-      if (pendingTimer) clearTimeout(pendingTimer);
-      const next = [...pendingKeys, key];
+      if (pendingTimerRef.current) clearTimeout(pendingTimerRef.current);
+      const next = [...pendingKeysRef.current, key];
       const combo = next.join(" ");
 
       const match = shortcuts.find((s) => s.keys === combo);
       if (match) {
         e.preventDefault();
-        setPendingKeys([]);
+        pendingKeysRef.current = [];
         executeShortcut(match.id);
         return;
       }
@@ -127,17 +129,17 @@ export const ShortcutProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       // Check if any shortcut starts with the current sequence
       const partial = shortcuts.some((s) => s.keys.startsWith(combo + " "));
       if (partial) {
-        setPendingKeys(next);
-        const t = setTimeout(() => setPendingKeys([]), 1500);
-        setPendingTimer(t);
+        pendingKeysRef.current = next;
+        const t = setTimeout(() => { pendingKeysRef.current = []; }, 1500);
+        pendingTimerRef.current = t;
       } else {
-        setPendingKeys([]);
+        pendingKeysRef.current = [];
       }
     };
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [shortcuts, pendingKeys, pendingTimer, executeShortcut]);
+  }, [shortcuts, executeShortcut]);
 
   return (
     <ShortcutContext.Provider value={{ shortcuts, updateBinding, resetToDefaults, cheatsheetOpen, setCheatsheetOpen }}>

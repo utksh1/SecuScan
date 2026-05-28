@@ -30,6 +30,7 @@ export const ShortcutCheatsheet: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [capturedKeys, setCapturedKeys] = useState<string>("");
   const overlayRef = useRef<HTMLDivElement>(null);
+  const pendingKeysRef = useRef<string[]>([]);
 
   // Close on Escape (only when not editing)
   useEffect(() => {
@@ -37,11 +38,12 @@ export const ShortcutCheatsheet: React.FC = () => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !editingId) {
         e.preventDefault();
+        e.stopPropagation();
         setCheatsheetOpen(false);
       }
     };
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
+    document.addEventListener("keydown", handleKey, true);
+    return () => document.removeEventListener("keydown", handleKey, true);
   }, [cheatsheetOpen, editingId, setCheatsheetOpen]);
 
   // Trap focus inside overlay
@@ -51,20 +53,41 @@ export const ShortcutCheatsheet: React.FC = () => {
 
   const handleCapture = (e: React.KeyboardEvent) => {
     e.preventDefault();
-    if (e.key === "Escape") { setEditingId(null); setCapturedKeys(""); return; }
+    if (e.key === "Escape") { setEditingId(null); setCapturedKeys(""); pendingKeysRef.current = []; return; }
     if (e.key === "Enter" && capturedKeys && editingId) {
-      updateBinding(editingId, capturedKeys);
+      const final = pendingKeysRef.current.length > 0 
+        ? [...pendingKeysRef.current, capturedKeys].join(" ")
+        : capturedKeys;
+      updateBinding(editingId, final);
       setEditingId(null);
       setCapturedKeys("");
+      pendingKeysRef.current = [];
       return;
     }
+    
+    // Filter out modifier-only keys
+    const isModifierOnly = ["Shift", "Control", "Alt", "Meta"].includes(e.key);
+    if (isModifierOnly) return;
+    
+    // Normalize key: for printable single chars, ignore Shift modifier
+    const isPrintableChar = e.key.length === 1 && !e.ctrlKey && !e.altKey;
     const mod = [
       e.ctrlKey  ? "Ctrl"  : "",
-      e.shiftKey ? "Shift" : "",
+      !isPrintableChar && e.shiftKey ? "Shift" : "",
       e.altKey   ? "Alt"   : "",
     ].filter(Boolean).join("+");
     const key = mod ? `${mod}+${e.key}` : e.key;
-    setCapturedKeys(key);
+    
+    // For sequences, accumulate in ref; for single keys, just display
+    if (pendingKeysRef.current.length > 0) {
+      // Building a sequence like "g d"
+      pendingKeysRef.current.push(key);
+      setCapturedKeys(pendingKeysRef.current.join(" "));
+    } else {
+      // First key pressed
+      setCapturedKeys(key);
+      pendingKeysRef.current = [key];
+    }
   };
 
   if (!cheatsheetOpen) return null;
