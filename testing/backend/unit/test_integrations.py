@@ -3,8 +3,7 @@ from httpx import AsyncClient
 from backend.secuscan.models import Finding
 from typing import Dict, Any
 
-@pytest.mark.asyncio
-async def test_create_ticket_missing_provider(client: AsyncClient):
+def test_create_ticket_missing_provider(test_client):
     finding = {
         "id": "123",
         "task_id": "task-1",
@@ -16,7 +15,7 @@ async def test_create_ticket_missing_provider(client: AsyncClient):
         "target": "http://example.com"
     }
 
-    response = await client.post("/api/v1/integrations/ticket", json={
+    response = test_client.post("/api/v1/integrations/ticket", json={
         "provider": "unknown_provider",
         "finding": finding
     })
@@ -24,8 +23,7 @@ async def test_create_ticket_missing_provider(client: AsyncClient):
     assert response.status_code == 400
     assert "Unsupported provider" in response.text
 
-@pytest.mark.asyncio
-async def test_create_ticket_missing_credentials(client: AsyncClient):
+def test_create_ticket_missing_credentials(test_client):
     finding = {
         "id": "123",
         "task_id": "task-1",
@@ -37,7 +35,7 @@ async def test_create_ticket_missing_credentials(client: AsyncClient):
         "target": "http://example.com"
     }
 
-    response = await client.post("/api/v1/integrations/ticket", json={
+    response = test_client.post("/api/v1/integrations/ticket", json={
         "provider": "jira",
         "finding": finding
     })
