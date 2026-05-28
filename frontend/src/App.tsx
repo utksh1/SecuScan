@@ -10,6 +10,7 @@ import Settings from './pages/Settings'
 import Scans from './pages/Scans'
 import TaskDetails from './pages/TaskDetails'
 import Workflows from './pages/Workflows'
+import AuditLog from './pages/AuditLog'
 
 import { ThemeProvider } from './components/ThemeContext'
 import { ToastProvider, ToastContainer } from './components/ToastContext'
@@ -27,6 +28,7 @@ export function AppRoutes() {
       <Route path={routes.reports} element={<Reports />} />
       <Route path={routes.workflows} element={<Workflows />} />
       <Route path={routes.settings} element={<Settings />} />
+      <Route path="/audit" element={<AuditLog />} />
       <Route path={routes.task} element={<TaskDetails />} />
 
       <Route path="*" element={<Navigate to={routes.dashboard} replace />} />

@@ -292,3 +292,36 @@ export function deleteWorkflow(workflowId: string): Promise<{ deleted: boolean }
     method: 'DELETE',
   })
 }
+
+// ── Audit Log ─────────────────────────────────────────────────────────────────
+
+export interface AuditEntry {
+  id: number
+  timestamp: string
+  event_type: string
+  severity: string
+  message: string
+  context: Record<string, any>
+  task_id: string | null
+  plugin_id: string | null
+}
+
+export interface AuditLogResponse {
+  entries: AuditEntry[]
+  pagination: {
+    page: number
+    per_page: number
+    total_items: number
+    total_pages: number
+  }
+}
+
+export function getAuditLog(params?: URLSearchParams): Promise<AuditLogResponse> {
+  const suffix = params ? `?${params.toString()}` : ''
+  return request<AuditLogResponse>(`/audit${suffix}`)
+}
+
+export function exportAuditLog(format: 'json' | 'csv', params?: URLSearchParams): void {
+  const base = params ? `?${params.toString()}&format=${format}` : `?format=${format}`
+  window.open(`${API_BASE}/audit/export${base}`)
+}

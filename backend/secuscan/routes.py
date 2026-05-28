@@ -297,6 +297,15 @@ async def start_task(
     background_tasks.add_task(executor.execute_task, task_id)
     await invalidate_view_cache()
 
+    db = await get_db()
+    await db.log_audit(
+        "scan_created",
+        f"Scan task created for plugin {request.plugin_id} against {request.inputs.get('target', 'unknown')}",
+        context={"plugin_id": request.plugin_id, "preset": request.preset},
+        task_id=task_id,
+        plugin_id=request.plugin_id,
+    )
+
     return {
         "task_id": task_id,
         "status": "queued",
@@ -606,6 +615,13 @@ async def cancel_task(task_id: str):
 
     if not cancelled:
         raise HTTPException(status_code=404, detail="Task not found or not running")
+
+    db = await get_db()
+    await db.log_audit(
+        "scan_cancelled",
+        f"Task {task_id} was cancelled by user",
+        task_id=task_id,
+    )
 
     return {
         "task_id": task_id,
@@ -1221,6 +1237,155 @@ async def get_attack_surface():
 
     return {"entries": entries}
 
+
+# ── Audit Log ─────────────────────────────────────────────────────────────────
+
+@router.get("/audit")
+async def get_audit_log(
+    event_type: Optional[str] = None,
+    plugin_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    page: int = 1,
+    per_page: int = 50,
+):
+    """Return paginated audit log entries, filterable by event_type, plugin_id, and date range."""
+    db = await get_db()
+
+    where_clauses = []
+    params: List[Any] = []
+
+    if event_type:
+        where_clauses.append("event_type = ?")
+        params.append(event_type)
+    if plugin_id:
+        where_clauses.append("plugin_id = ?")
+        params.append(plugin_id)
+    if date_from:
+        where_clauses.append("timestamp >= ?")
+        params.append(date_from)
+    if date_to:
+        where_clauses.append("timestamp <= ?")
+        params.append(date_to)
+
+    where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+    count_row = await db.fetchone(
+        f"SELECT COUNT(*) as total FROM audit_log {where_sql}",
+        tuple(params),
+    )
+    total = int(count_row["total"]) if count_row else 0
+
+    rows = await db.fetchall(
+        f"""
+        SELECT id, timestamp, event_type, severity, message,
+               context_json, task_id, plugin_id
+        FROM audit_log {where_sql}
+        ORDER BY timestamp DESC
+        LIMIT ? OFFSET ?
+        """,
+        tuple(params + [per_page, (page - 1) * per_page]),
+    )
+
+    entries = []
+    for row in rows:
+        entry = dict(row)
+        if entry.get("context_json"):
+            try:
+                entry["context"] = json.loads(entry["context_json"])
+            except Exception:
+                entry["context"] = {}
+        else:
+            entry["context"] = {}
+        del entry["context_json"]
+        entries.append(entry)
+
+    total_pages = (total + per_page - 1) // per_page if per_page > 0 else 0
+
+    return {
+        "entries": entries,
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total_items": total,
+            "total_pages": total_pages,
+        },
+    }
+
+
+@router.get("/audit/export")
+async def export_audit_log(
+    format: str = "json",
+    event_type: Optional[str] = None,
+    plugin_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+):
+    """Export the full filtered audit log as JSON or CSV."""
+    db = await get_db()
+
+    where_clauses = []
+    params: List[Any] = []
+
+    if event_type:
+        where_clauses.append("event_type = ?")
+        params.append(event_type)
+    if plugin_id:
+        where_clauses.append("plugin_id = ?")
+        params.append(plugin_id)
+    if date_from:
+        where_clauses.append("timestamp >= ?")
+        params.append(date_from)
+    if date_to:
+        where_clauses.append("timestamp <= ?")
+        params.append(date_to)
+
+    where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+    rows = await db.fetchall(
+        f"""
+        SELECT id, timestamp, event_type, severity, message,
+               context_json, task_id, plugin_id
+        FROM audit_log {where_sql}
+        ORDER BY timestamp DESC
+        """,
+        tuple(params),
+    )
+
+    entries = []
+    for row in rows:
+        entry = dict(row)
+        if entry.get("context_json"):
+            try:
+                entry["context"] = json.loads(entry["context_json"])
+            except Exception:
+                entry["context"] = {}
+        else:
+            entry["context"] = {}
+        del entry["context_json"]
+        entries.append(entry)
+
+    if format == "csv":
+        import csv, io
+        output = io.StringIO()
+        writer = csv.DictWriter(
+            output,
+            fieldnames=["id", "timestamp", "event_type", "severity", "message", "task_id", "plugin_id"],
+            extrasaction="ignore",
+        )
+        writer.writeheader()
+        writer.writerows(entries)
+        return Response(
+            content=output.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": 'attachment; filename="secuscan_audit_log.csv"'},
+        )
+
+    return Response(
+        content=json.dumps({"entries": entries}, indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": 'attachment; filename="secuscan_audit_log.json"'},
+    )
 
 @router.get("/assets")
 async def get_assets():
