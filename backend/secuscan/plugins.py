@@ -173,6 +173,55 @@ class PluginManager:
 
         return hashlib.sha256(f"{metadata_digest}:{parser_digest}".encode("utf-8")).hexdigest()
 
+    def verify_parser_at_exec_time(
+        self, plugin: PluginMetadata, plugin_dir: Path
+    ) -> bool:
+        """Re-verify plugin digest immediately before executing parser.py.
+
+        This closes the TOCTOU window between startup integrity check and
+        actual code execution: the file could be replaced on disk after the
+        initial load-time validation.
+
+        Returns True when execution should proceed, False when it must be
+        blocked.
+        """
+        metadata_file = plugin_dir / "metadata.json"
+        parser_file = plugin_dir / "parser.py"
+
+        if not plugin.checksum:
+            if settings.enforce_plugin_signatures:
+                logger.error(
+                    "Refusing to execute parser for plugin %s: no checksum present "
+                    "and signature enforcement is enabled",
+                    plugin.id,
+                )
+                return False
+            logger.warning(
+                "Executing unverified parser for plugin %s: checksum not set",
+                plugin.id,
+            )
+            return True
+
+        try:
+            current_digest = self.compute_plugin_digest(metadata_file, parser_file)
+        except Exception as exc:
+            logger.error(
+                "Failed to compute digest for plugin %s at exec time: %s",
+                plugin.id,
+                exc,
+            )
+            return False
+
+        if not hmac.compare_digest(current_digest, plugin.checksum):
+            logger.error(
+                "SECURITY: Parser integrity check failed for plugin %s — "
+                "parser.py may have been tampered with after startup",
+                plugin.id,
+            )
+            return False
+
+        return True
+
     def get_plugin(self, plugin_id: str) -> Optional[PluginMetadata]:
         """Get plugin by ID"""
         return self.plugins.get(plugin_id)

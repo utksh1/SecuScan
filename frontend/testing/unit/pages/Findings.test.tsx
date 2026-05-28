@@ -476,3 +476,105 @@ describe('Findings — active filter summary', () => {
     expect(within(strip).getByText(/to: 2026-05-15/i)).toBeInTheDocument()
   })
 })
+
+// ── Risk score display ────────────────────────────────────────────────────────
+
+describe('Findings — risk score display', () => {
+  const riskFactors = [
+    { factor: 'severity', label: 'Severity', value: 'critical', score: 10.0, weight: 0.30, contribution: 3.0, detail: 'Severity is critical (10.0/10)' },
+    { factor: 'exploitability', label: 'Exploitability', value: 8.0, score: 8.0, weight: 0.25, contribution: 2.0, detail: 'Exploitability score is 8.0/10' },
+    { factor: 'asset_exposure', label: 'Asset Exposure', value: 'critical', score: 10.0, weight: 0.20, contribution: 2.0, detail: 'Asset exposure is critical (10.0/10)' },
+    { factor: 'recency', label: 'Recency', value: '2026-05-14T10:00:00Z', score: 10.0, weight: 0.15, contribution: 1.5, detail: 'Discovered today — maximum recency score' },
+    { factor: 'confidence', label: 'Confidence', value: 0.95, score: 9.5, weight: 0.10, contribution: 0.95, detail: 'Confidence is 95%' },
+  ]
+
+  const criticalFindingWithRisk = {
+    ...criticalFinding,
+    risk_score: 8.7,
+    risk_factors: riskFactors,
+  }
+
+  beforeEach(() => {
+    vi.mocked(getFindings).mockResolvedValue({ findings: [criticalFindingWithRisk, highFinding, mediumFinding] })
+  })
+
+  it('shows risk score in sidebar when available', async () => {
+    renderFindings()
+    await waitForLoad()
+
+    await waitFor(() => {
+      expect(screen.getByText('Risk Score')).toBeInTheDocument()
+    })
+    expect(screen.getByText('8.7')).toBeInTheDocument()
+  })
+
+  it('shows risk factor breakdown with labels and contributions', async () => {
+    renderFindings()
+    await waitForLoad()
+
+    await waitFor(() => {
+      expect(screen.getByText('Severity')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Exploitability')).toBeInTheDocument()
+    expect(screen.getByText('Asset Exposure')).toBeInTheDocument()
+    expect(screen.getByText('Recency')).toBeInTheDocument()
+    expect(screen.getByText('Confidence')).toBeInTheDocument()
+  })
+
+  it('shows weight percentages for each risk factor', async () => {
+    renderFindings()
+    await waitForLoad()
+
+    await waitFor(() => {
+      expect(screen.getByText('(30%)')).toBeInTheDocument()
+    })
+    expect(screen.getByText('(25%)')).toBeInTheDocument()
+    expect(screen.getByText('(20%)')).toBeInTheDocument()
+    expect(screen.getByText('(15%)')).toBeInTheDocument()
+    expect(screen.getByText('(10%)')).toBeInTheDocument()
+  })
+
+  it('shows risk score in red for high values (>= 7)', async () => {
+    renderFindings()
+    await waitForLoad()
+
+    await waitFor(() => {
+      const scoreEl = screen.getByText('8.7')
+      expect(scoreEl.className).toContain('text-rag-red')
+    })
+  })
+
+  it('shows risk score in amber for medium values (4-6.9)', async () => {
+    const mediumWithRisk = { ...mediumFinding, risk_score: 5.2, risk_factors: riskFactors.map(f => ({ ...f, score: 5 })) }
+    vi.mocked(getFindings).mockResolvedValue({ findings: [mediumWithRisk] })
+    renderFindings()
+
+    await waitFor(() => {
+      expect(screen.getByText('5.2')).toBeInTheDocument()
+    })
+    const scoreEl = screen.getByText('5.2')
+    expect(scoreEl.className).toContain('text-rag-amber')
+  })
+
+  it('shows risk score in blue for low values (< 4)', async () => {
+    const lowWithRisk = { ...mediumFinding, severity: 'low', risk_score: 2.1, risk_factors: riskFactors.map(f => ({ ...f, score: 2 })) }
+    vi.mocked(getFindings).mockResolvedValue({ findings: [lowWithRisk] })
+    renderFindings()
+
+    await waitFor(() => {
+      expect(screen.getByText('2.1')).toBeInTheDocument()
+    })
+    const scoreEl = screen.getByText('2.1')
+    expect(scoreEl.className).toContain('text-rag-blue')
+  })
+
+  it('does not show risk score section when finding has no risk_score', async () => {
+    vi.mocked(getFindings).mockResolvedValue({ findings: [highFinding, mediumFinding] })
+    renderFindings()
+
+    await waitFor(() => {
+      expect(screen.getByText(/Stored XSS in Comments/i)).toBeInTheDocument()
+    })
+    expect(screen.queryByText('Risk Score')).not.toBeInTheDocument()
+  })
+})
