@@ -1,5 +1,5 @@
 name: Docker Image Hardening & Vulnerability Scan
- 
+
 on:
   push:
     branches: [main]
@@ -21,11 +21,11 @@ on:
     # Run weekly on Monday at 06:00 UTC to catch new CVEs in pinned base images
     - cron: "0 6 * * 1"
   workflow_dispatch:
- 
+
 permissions:
   contents: read
   security-events: write   # required to upload SARIF to GitHub Security tab
- 
+
 jobs:
 
   # 1. Build both images
@@ -45,14 +45,14 @@ jobs:
             context: ./frontend
             dockerfile: ./frontend/Dockerfile
             image: secuscan-frontend
- 
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
- 
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
- 
+
       - name: Build ${{ matrix.service }} image
         uses: docker/build-push-action@v6
         with:
@@ -63,17 +63,17 @@ jobs:
           tags: ${{ matrix.image }}:ci
           cache-from: type=gha,scope=${{ matrix.service }}
           cache-to: type=gha,scope=${{ matrix.service }},mode=max
- 
+
       - name: Save image as tar
         run: docker save ${{ matrix.image }}:ci -o /tmp/${{ matrix.image }}.tar
- 
+
       - name: Upload image artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.image }}-tar
           path: /tmp/${{ matrix.image }}.tar
           retention-days: 1
- 
+
   # 2. Trivy vulnerability scan
 
   trivy-scan:
@@ -88,22 +88,22 @@ jobs:
             image: secuscan-backend
           - service: frontend
             image: secuscan-frontend
- 
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
- 
+
       - name: Download image artifact
         uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.image }}-tar
           path: /tmp
- 
+
       - name: Load image
         run: docker load -i /tmp/${{ matrix.image }}.tar
- 
+
       - name: Run Trivy – table output (human-readable)
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ matrix.image }}:ci
           format: table
@@ -111,9 +111,9 @@ jobs:
           ignore-unfixed: true
           vuln-type: os,library
           severity: CRITICAL,HIGH
- 
+
       - name: Run Trivy – SARIF report (upload to Security tab)
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ matrix.image }}:ci
           format: sarif
@@ -121,16 +121,16 @@ jobs:
           ignore-unfixed: true
           vuln-type: os,library
           severity: CRITICAL,HIGH
- 
+
       - name: Upload SARIF to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: trivy-${{ matrix.service }}.sarif
           category: trivy-${{ matrix.service }}
- 
+
       - name: Run Trivy – JSON report (artifact)
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ matrix.image }}:ci
           format: json
@@ -138,17 +138,17 @@ jobs:
           ignore-unfixed: true
           vuln-type: os,library
           severity: CRITICAL,HIGH
- 
+
       - name: Upload JSON vulnerability report
         uses: actions/upload-artifact@v4
         with:
           name: trivy-report-${{ matrix.service }}
           path: trivy-${{ matrix.service }}.json
           retention-days: 30
- 
+
       - name: Fail on CRITICAL vulnerabilities (policy gate)
         # Re-run with exit-code 1 so the job fails if there are unfixed CRITICALs
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ matrix.image }}:ci
           format: table
@@ -156,7 +156,7 @@ jobs:
           ignore-unfixed: true
           vuln-type: os,library
           severity: CRITICAL
- 
+
   # 3. Structural hardening checks
 
   hardening-check:
@@ -171,21 +171,21 @@ jobs:
             image: secuscan-backend
           - service: frontend
             image: secuscan-frontend
- 
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
- 
+
       - name: Download image artifact
         uses: actions/download-artifact@v4
         with:
           name: ${{ matrix.image }}-tar
           path: /tmp
- 
+
       - name: Load image
         run: docker load -i /tmp/${{ matrix.image }}.tar
- 
-      # Non-root user check 
+
+      # Non-root user check
       - name: Assert container does NOT run as root
         run: |
           WHOAMI=$(docker run --rm ${{ matrix.image }}:ci whoami 2>/dev/null || true)
@@ -197,8 +197,8 @@ jobs:
             exit 1
           fi
           echo "PASS: running as non-root user '${WHOAMI}' (UID=${UID_VAL})"
- 
-      # No SUID/SGID binaries 
+
+      # No SUID/SGID binaries
       - name: Check for unexpected SUID/SGID binaries
         run: |
           SUID_FILES=$(docker run --rm --entrypoint find ${{ matrix.image }}:ci \
@@ -210,24 +210,24 @@ jobs:
           else
             echo "PASS: No unexpected SUID/SGID binaries."
           fi
- 
-      # No secrets baked into image 
+
+      # No secrets baked into image
       - name: Scan image layers for secrets (Trivy secret scanner)
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ matrix.image }}:ci
           format: table
           exit-code: "1"
           scanners: secret
           severity: CRITICAL,HIGH,MEDIUM
- 
-      # Dockerfile lint (hadolint) 
+
+      # Dockerfile lint (hadolint)
       - name: Lint ${{ matrix.service }} Dockerfile with hadolint
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: ./${{ matrix.service }}/Dockerfile
           failure-threshold: error
- 
+
 
   # 4. Synthetic CVE baseline test
   #    Verifies the scan correctly fails when a
@@ -236,15 +236,15 @@ jobs:
   synthetic-cve-test:
     name: Synthetic CVE policy gate test
     runs-on: ubuntu-latest
- 
+
     steps:
       - name: Pull deliberately vulnerable image (python:3.8-slim – old, has known CVEs)
         run: docker pull python:3.8.20-slim-bullseye
- 
+
       - name: Trivy scan of vulnerable image – expect non-zero exit
         id: vuln_scan
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: python:3.8.20-slim-bullseye
           format: table
@@ -252,7 +252,7 @@ jobs:
           ignore-unfixed: false
           vuln-type: os,library
           severity: CRITICAL
- 
+
       - name: Assert scan correctly failed (policy gate works)
         run: |
           if [ "${{ steps.vuln_scan.outcome }}" = "failure" ]; then

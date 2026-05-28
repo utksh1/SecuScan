@@ -11,7 +11,7 @@ FROM nginx:1.27-alpine
 
 RUN apk upgrade --no-cache libcrypto3 libssl3
 
-# Non-root user 
+# Non-root user
 RUN chown -R nginx:nginx /var/cache/nginx /var/log/nginx /etc/nginx/conf.d \
     && touch /var/run/nginx.pid \
     && chown nginx:nginx /var/run/nginx.pid
