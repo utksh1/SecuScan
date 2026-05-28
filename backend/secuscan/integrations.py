@@ -15,7 +15,7 @@ async def create_jira_ticket(finding: Finding, config: Dict[str, str]) -> Dict[s
         raise ValueError("Missing Jira configuration parameters")
 
     api_url = f"{url}/rest/api/2/issue"
-    
+
     description = f"""
 *Target:* {finding.target}
 *Severity:* {finding.severity}
@@ -51,11 +51,11 @@ async def create_jira_ticket(finding: Finding, config: Dict[str, str]) -> Dict[s
             auth=(email, token),
             headers={"Content-Type": "application/json"}
         )
-        
+
         if response.status_code >= 400:
             logger.error(f"Jira API error: {response.text}")
             raise Exception(f"Failed to create Jira ticket: {response.status_code} {response.text}")
-            
+
         data = response.json()
         return {
             "ticket_id": data.get("key"),
@@ -71,7 +71,7 @@ async def create_github_issue(finding: Finding, config: Dict[str, str]) -> Dict[
         raise ValueError("Missing GitHub configuration parameters")
 
     api_url = f"https://api.github.com/repos/{repo}/issues"
-    
+
     body = f"""
 **Target:** `{finding.target}`
 **Severity:** {finding.severity.upper()}
@@ -103,11 +103,11 @@ async def create_github_issue(finding: Finding, config: Dict[str, str]) -> Dict[
                 "X-GitHub-Api-Version": "2022-11-28"
             }
         )
-        
+
         if response.status_code >= 400:
             logger.error(f"GitHub API error: {response.text}")
             raise Exception(f"Failed to create GitHub issue: {response.status_code} {response.text}")
-            
+
         data = response.json()
         return {
             "ticket_id": str(data.get("number")),

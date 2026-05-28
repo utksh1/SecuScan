@@ -15,12 +15,12 @@ async def test_create_ticket_missing_provider(client: AsyncClient):
         "category": "Injection",
         "target": "http://example.com"
     }
-    
+
     response = await client.post("/api/v1/integrations/ticket", json={
         "provider": "unknown_provider",
         "finding": finding
     })
-    
+
     assert response.status_code == 400
     assert "Unsupported provider" in response.text
 
@@ -36,11 +36,11 @@ async def test_create_ticket_missing_credentials(client: AsyncClient):
         "category": "Injection",
         "target": "http://example.com"
     }
-    
+
     response = await client.post("/api/v1/integrations/ticket", json={
         "provider": "jira",
         "finding": finding
     })
-    
+
     assert response.status_code == 400
     assert "Missing integration configuration" in response.text

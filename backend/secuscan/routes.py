@@ -1239,7 +1239,7 @@ async def create_ticket(request: TicketCreateRequest):
     """Create a ticket in an external issue tracker"""
     db = await get_db()
     crypto = VaultCrypto(settings.resolved_vault_key)
-    
+
     config = {}
     if request.provider == "jira":
         keys = ["jiraUrl", "jiraEmail", "jiraToken", "jiraProject"]

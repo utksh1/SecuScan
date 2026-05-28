@@ -3,6 +3,17 @@ import { motion } from 'framer-motion'
 import { getFindings, createTicket } from '../api'
 import { formatLocaleDate, parseDateSafe, getCurrentTimeZone } from '../utils/date'
 import { useToast } from '../components/ToastContext'
+
+export interface RiskFactor {
+  factor: string
+  label: string
+  value: string | number
+  score: number
+  weight: number
+  contribution: number
+  detail: string
+}
+
 type Finding = {
   id: string
   severity: string

@@ -24,7 +24,7 @@ describe('Export Flow', () => {
     await createTicket('jira', finding)
 
     expect(createTicket).toHaveBeenCalledWith('jira', finding)
-    // We expect it to be called with exactly 2 arguments (provider, finding), 
+    // We expect it to be called with exactly 2 arguments (provider, finding),
     // ensuring no credentials object is passed from the frontend.
     expect(createTicket).toHaveBeenCalledTimes(1)
   })

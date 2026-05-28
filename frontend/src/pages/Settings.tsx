@@ -6,8 +6,8 @@ import { useToast } from '../components/ToastContext'
 
 const itemVariants = {
   hidden: { opacity: 0, y: 20 },
-  visible: { 
-    opacity: 1, 
+  visible: {
+    opacity: 1,
     y: 0,
     transition: { type: 'spring', stiffness: 200, damping: 25 }
   }
@@ -41,7 +41,7 @@ const DEFAULT_CONFIG = {
 export default function Settings() {
     const { theme, setTheme } = useTheme()
     const { addToast } = useToast()
-    
+
     const [config, setConfig] = useState(() => {
         const saved = localStorage.getItem('secuscan-config')
         if (saved) {
@@ -116,7 +116,7 @@ export default function Settings() {
                 <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] block italic group-hover:text-rag-blue transition-colors">{label}</label>
                 <p className="text-[9px] text-silver/40 uppercase font-mono font-bold tracking-widest leading-relaxed">{description}</p>
             </div>
-            <input 
+            <input
                 type={type}
                 value={value}
                 onChange={(e) => onChange(type === 'number' ? parseInt(e.target.value) || 0 : e.target.value)}
@@ -132,7 +132,7 @@ export default function Settings() {
                 <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] block italic group-hover:text-rag-blue transition-colors">{label}</label>
                 <p className="text-[9px] text-silver/40 uppercase font-mono font-bold tracking-widest leading-relaxed">{description}</p>
             </div>
-            <select 
+            <select
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 className="w-full bg-black/40 border-4 border-black p-4 text-xs font-mono text-rag-blue font-bold focus:outline-none focus:border-rag-blue/50 transition-colors uppercase appearance-none"
@@ -145,7 +145,7 @@ export default function Settings() {
     )
 
     const Toggle = ({ checked, onChange, label, description }: any) => (
-        <button 
+        <button
             onClick={() => onChange(!checked)}
             className={`flex items-center justify-between p-8 bg-charcoal border-4 border-black transition-all group hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 ${
                 checked ? 'shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' : 'shadow-none'
@@ -163,7 +163,7 @@ export default function Settings() {
 
     return (
         <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
-            
+
             <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10 font-black">
                 <div className="space-y-4">
                   <div className="bg-rag-blue text-black px-4 py-1 text-xs uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-black">
@@ -187,15 +187,15 @@ export default function Settings() {
 
             <div className="grid grid-cols-1 xl:grid-cols-4 gap-12 pt-4">
                 <main className="xl:col-span-3 space-y-20">
-                    
+
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
                             <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Engine_Parameters</h3>
                             <div className="h-0.5 flex-1 bg-black/10"></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <SelectField 
-                                label="Scanner_Intensity" 
+                            <SelectField
+                                label="Scanner_Intensity"
                                 description="PACKET_DENSITY_PER_SECOND_THRESHOLD"
                                 value={config.scanIntensity}
                                 onChange={(val: string) => setConfig({...config, scanIntensity: val})}
@@ -205,8 +205,8 @@ export default function Settings() {
                                     { label: 'Aggressive (Intrusive)', value: 'aggressive' },
                                 ]}
                             />
-                            <SelectField 
-                                label="Retention_Cycle" 
+                            <SelectField
+                                label="Retention_Cycle"
                                 description="AUTOMATED_LOG_PURGE_STRATEGY"
                                 value={config.dataRetention}
                                 onChange={(val: number) => setConfig({...config, dataRetention: val})}
@@ -217,15 +217,15 @@ export default function Settings() {
                                     { label: 'Indefinite', value: 0 },
                                 ]}
                             />
-                            <InputField 
-                                label="Concurrent_Operations" 
+                            <InputField
+                                label="Concurrent_Operations"
                                 description="MAX_PARALLEL_TASK_EXECUTION"
                                 type="number"
                                 value={config.concurrentScans}
                                 onChange={(val: number) => setConfig({...config, concurrentScans: val})}
                             />
-                            <InputField 
-                                label="Execution_Timeout" 
+                            <InputField
+                                label="Execution_Timeout"
                                 description="THRESHOLD_IN_SECONDS_PER_NODE"
                                 type="number"
                                 value={config.scanTimeout}
@@ -240,8 +240,8 @@ export default function Settings() {
                             <div className="h-0.5 flex-1 bg-black/10"></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <SelectField 
-                                label="Temporal_Logic" 
+                            <SelectField
+                                label="Temporal_Logic"
                                 description="UI_CHRONOS_ALIGNMENT"
                                 value={config.timezone}
                                 onChange={(val: string) => setConfig({...config, timezone: val})}
@@ -251,8 +251,8 @@ export default function Settings() {
                                     { label: 'Fixed (ZULU)', value: 'GMT' },
                                 ]}
                             />
-                            <SelectField 
-                                label="Visual_Spectrum" 
+                            <SelectField
+                                label="Visual_Spectrum"
                                 description="OPERATIONAL_AESTHETIC_MODE"
                                 value={config.theme}
                                 onChange={(val: string) => setConfig({...config, theme: val})}
@@ -270,16 +270,16 @@ export default function Settings() {
                             <div className="h-0.5 flex-1 bg-black/10"></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <InputField 
-                                label="Shodan_Enclave" 
+                            <InputField
+                                label="Shodan_Enclave"
                                 description="RECON_TELEMETRY_STREAM_TOKEN"
                                 placeholder="SHODAN_SECRET"
                                 type="password"
                                 value={config.shodanKey}
                                 onChange={(val: string) => setConfig({...config, shodanKey: val})}
                             />
-                            <InputField 
-                                label="VirusTotal_Enclave" 
+                            <InputField
+                                label="VirusTotal_Enclave"
                                 description="MALWARE_INTEL_ACCESS_HASH"
                                 placeholder="VT_SECRET_HASH"
                                 type="password"
@@ -295,48 +295,48 @@ export default function Settings() {
                             <div className="h-0.5 flex-1 bg-black/10"></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <InputField 
-                                label="Jira_URL" 
+                            <InputField
+                                label="Jira_URL"
                                 description="JIRA_INSTANCE_ENDPOINT"
                                 placeholder="https://your-domain.atlassian.net"
                                 type="text"
                                 value={config.jiraUrl}
                                 onChange={(val: string) => setConfig({...config, jiraUrl: val})}
                             />
-                            <InputField 
-                                label="Jira_Email" 
+                            <InputField
+                                label="Jira_Email"
                                 description="JIRA_AUTH_EMAIL"
                                 placeholder="admin@example.com"
                                 type="text"
                                 value={config.jiraEmail}
                                 onChange={(val: string) => setConfig({...config, jiraEmail: val})}
                             />
-                            <InputField 
-                                label="Jira_API_Token" 
+                            <InputField
+                                label="Jira_API_Token"
                                 description="JIRA_ACCESS_TOKEN"
                                 placeholder="JIRA_API_TOKEN"
                                 type="password"
                                 value={config.jiraToken}
                                 onChange={(val: string) => setConfig({...config, jiraToken: val})}
                             />
-                            <InputField 
-                                label="Jira_Project_Key" 
+                            <InputField
+                                label="Jira_Project_Key"
                                 description="JIRA_TARGET_PROJECT"
                                 placeholder="SEC"
                                 type="text"
                                 value={config.jiraProject}
                                 onChange={(val: string) => setConfig({...config, jiraProject: val})}
                             />
-                            <InputField 
-                                label="GitHub_Token" 
+                            <InputField
+                                label="GitHub_Token"
                                 description="GH_PERSONAL_ACCESS_TOKEN"
                                 placeholder="github_pat_..."
                                 type="password"
                                 value={config.githubToken}
                                 onChange={(val: string) => setConfig({...config, githubToken: val})}
                             />
-                            <InputField 
-                                label="GitHub_Repository" 
+                            <InputField
+                                label="GitHub_Repository"
                                 description="GH_TARGET_REPO"
                                 placeholder="owner/repo"
                                 type="text"
@@ -356,7 +356,7 @@ export default function Settings() {
                                 <label className="text-[10px] font-black text-silver-bright uppercase tracking-widest block italic">Authorized_Ingress_Vectors</label>
                                 <p className="text-[10px] text-silver/40 uppercase font-bold italic mb-6 leading-relaxed">Line-delimited IP/CIDR whitelist for high-privilege access</p>
                             </div>
-                            <textarea 
+                            <textarea
                                 value={config.ipWhitelist}
                                 onChange={(e) => setConfig({...config, ipWhitelist: e.target.value})}
                                 rows={4}
@@ -371,20 +371,20 @@ export default function Settings() {
                             <div className="h-0.5 flex-1 bg-black/10"></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <Toggle 
-                                label="System_Signals" 
+                            <Toggle
+                                label="System_Signals"
                                 description="CRITICAL_RX_TELEMETRY"
                                 checked={config.notifications.systemAlerts}
                                 onChange={(val: boolean) => setConfig({...config, notifications: {...config.notifications, systemAlerts: val}})}
                             />
-                            <Toggle 
-                                label="Auto_Rescan" 
+                            <Toggle
+                                label="Auto_Rescan"
                                 description="TRIGGER_NEW_SCAN_ON_CRITICAL"
                                 checked={config.autoRescanCritical}
                                 onChange={(val: boolean) => setConfig({...config, autoRescanCritical: val})}
                             />
-                             <Toggle 
-                                label="Garbage_Collection" 
+                             <Toggle
+                                label="Garbage_Collection"
                                 description="AUTO_PURGE_FAILED_SESSIONS"
                                 checked={config.autoPurgeFailed}
                                 onChange={(val: boolean) => setConfig({...config, autoPurgeFailed: val})}
@@ -393,7 +393,7 @@ export default function Settings() {
                     </section>
 
                     <section className="pt-12">
-                        <button 
+                        <button
                             onClick={handleSave}
                             className="bg-rag-blue text-black px-12 py-6 text-xs font-black uppercase tracking-[0.3em] shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-4 italic group"
                         >
@@ -407,19 +407,19 @@ export default function Settings() {
                     <section className="bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
                         <h3 className="text-[11px] font-black text-silver-bright uppercase tracking-[0.5em] italic mb-8">Management_Tools</h3>
                         <div className="space-y-4">
-                            <button 
+                            <button
                                 onClick={handleExport}
                                 className="w-full py-4 bg-charcoal-dark border-4 border-black text-[10px] font-black text-silver/40 uppercase tracking-[0.3em] hover:bg-black hover:text-white transition-all italic"
                             >
                                 TELEMETRY_EXPORT
                             </button>
-                            <button 
+                            <button
                                 onClick={handleReset}
                                 className="w-full py-4 bg-rag-amber border-4 border-black text-[10px] font-black text-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all italic"
                             >
                                 ENGINE_RESET
                             </button>
-                            <button 
+                            <button
                                 className="w-full py-4 bg-rag-red border-4 border-black text-[10px] font-black text-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all italic"
                                 onClick={() => {
                                     if (window.confirm("CRITICAL: THIS WILL PURGE ALL HISTORY AND ASSETS. PROCEED?")) {
