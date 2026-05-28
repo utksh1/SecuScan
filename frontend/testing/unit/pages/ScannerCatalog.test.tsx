@@ -69,12 +69,14 @@ describe('Scanner catalog integration', () => {
       </MemoryRouter>,
     )
 
+    // Ensure tab elements are present in the DOM
     const reconTab = await screen.findByRole('tab', { name: /Recon Tools/i })
     const quickStartTab = screen.getByRole('tab', { name: /^Quick Start$/i })
 
     expect(reconTab).toBeInTheDocument()
     expect(quickStartTab).toBeInTheDocument()
 
+    // 1. Verify Recon Tools tab contents
     await user.click(reconTab)
     expect(await screen.findByRole('button', { name: /Subdomain Discovery, passive risk scanner/i })).toHaveAttribute(
       'aria-describedby',
@@ -82,6 +84,7 @@ describe('Scanner catalog integration', () => {
     )
     expect(screen.getByText(/Unavailable:/i)).toBeInTheDocument()
 
+    // 2. Verify Quick Start tab can be successfully focused and selected
     await user.click(quickStartTab)
 
     await vi.waitFor(() => {
