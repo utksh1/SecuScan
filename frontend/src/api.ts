@@ -83,26 +83,33 @@ export interface TaskStartResponse {
   stream_url: string
 }
 
-let _cachedApiKey: string | null = null
+const API_KEY_STORAGE_KEY = 'secuscan_api_key'
 
-async function fetchApiKey(): Promise<string | null> {
-  if (_cachedApiKey !== null) return _cachedApiKey
+export function getStoredApiKey(): string | null {
   try {
-    const res = await fetch(`${API_BASE}/auth/key`)
-    if (!res.ok) return null
-    const data = await res.json()
-    _cachedApiKey = data.api_key ?? null
+    return localStorage.getItem(API_KEY_STORAGE_KEY) || null
   } catch {
-    _cachedApiKey = null
+    return null
   }
-  return _cachedApiKey
+}
+
+export function setStoredApiKey(key: string): void {
+  try {
+    localStorage.setItem(API_KEY_STORAGE_KEY, key)
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function getApiKey(): string | null {
+  return getStoredApiKey()
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController()
   const timeoutId = window.setTimeout(() => controller.abort(), 10000)
 
-  const apiKey = await fetchApiKey()
+  const apiKey = getApiKey()
   const authHeaders: Record<string, string> = apiKey ? { 'X-Api-Key': apiKey } : {}
 
   const response = await fetch(`${API_BASE}${path}`, {
