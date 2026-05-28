@@ -63,7 +63,11 @@ describe('App route fallback', () => {
   it('renders the loaded dashboard summary', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
-        <AppRoutes />
+        <ThemeProvider>
+          <ToastProvider>
+            <AppRoutes />
+          </ToastProvider>
+        </ThemeProvider>
       </MemoryRouter>,
     )
 
@@ -74,7 +78,11 @@ describe('App route fallback', () => {
   it('renders the findings workspace', async () => {
     render(
       <MemoryRouter initialEntries={['/findings']}>
-        <AppRoutes />
+        <ThemeProvider>
+          <ToastProvider>
+            <AppRoutes />
+          </ToastProvider>
+        </ThemeProvider>
       </MemoryRouter>,
     )
 
