@@ -1267,4 +1267,3 @@ async def test_webhooks(config: WebhookConfig):
     except Exception as e:
         logger.error(f"Webhook test failed: {e}")
         raise HTTPException(status_code=400, detail=str(e))
-

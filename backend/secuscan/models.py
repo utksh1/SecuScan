@@ -175,4 +175,7 @@ class BulkDeleteRequest(RootModel[Annotated[List[str], Field(max_length=MAX_BULK
     pass
 
 class WebhookConfig(BaseModel):
-    " \Configuration for external webhook notifications\\n
+    """Configuration for external webhook notifications"""
+    slack_url: Optional[str] = None
+    discord_url: Optional[str] = None
+    custom_url: Optional[str] = None
