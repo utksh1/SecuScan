@@ -119,3 +119,23 @@ def test_generation_failure_does_not_create_audit_entry(test_client):
     assert response.status_code == 500
     entries = asyncio.run(get_audit_entries(task_id))
     assert len(entries) == 0
+
+def test_request_id_is_saved_in_audit_context(test_client):
+    task_id = "audit-request-id"
+    asyncio.run(insert_completed_task(task_id))
+
+    request_id = "test-request-123"
+
+    response = test_client.get(
+        f"/api/v1/task/{task_id}/report/csv",
+        headers={"X-Request-ID": request_id},
+    )
+
+    assert response.status_code == 200
+
+    entries = asyncio.run(get_audit_entries(task_id))
+    assert len(entries) == 1
+
+    ctx = json.loads(entries[0]["context_json"])
+
+    assert ctx["request_id"] == request_id
