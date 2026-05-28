@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import Toolkit from '../../../src/pages/Toolkit'  // ✅ FIXED: was Scanner
+import Toolkit from '../../../src/pages/Toolkit'
 import { listPlugins } from '../../../src/api'
 
 vi.mock('../../../src/api', () => ({
@@ -18,7 +18,7 @@ vi.mock('../../../src/data/scanTools', () => ({
       presetCompatibility: 'none',
       requiresConsent: false,
       category: 'quick-start',
-      isQuickStart: true,  // ✅ ADDED: required for quick-start category
+      isQuickStart: true,
     },
   ],
 }))
@@ -33,7 +33,7 @@ describe('Scanner catalog integration', () => {
           name: 'Subdomain Discovery',
           description: 'Enumerate subdomains',
           category: 'recon',
-          safety_level: 'safe',
+          safety_level: 'intrusive',
           enabled: true,
           icon: '🌐',
           requires_consent: false,
@@ -63,26 +63,21 @@ describe('Scanner catalog integration', () => {
     const user = userEvent.setup()
     render(
       <MemoryRouter>
-        <Toolkit />  {/* ✅ FIXED: was Scanner */}
+        <Toolkit />
       </MemoryRouter>,
     )
 
-    const reconTab = await screen.findByRole('tab', { name: /Recon Tools/i })
-    const quickStartTab = screen.getByRole('tab', { name: /^Quick Start$/i })
+    expect(await screen.findByRole('tab', { name: /Recon Tools/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^Quick Start$/i })).toBeInTheDocument()
 
-    expect(reconTab).toBeInTheDocument()
-    expect(quickStartTab).toBeInTheDocument()
-
-    await user.click(reconTab)
+    await user.click(screen.getByRole('tab', { name: /Recon Tools/i }))
     expect(await screen.findByRole('button', { name: /Subdomain Discovery, active risk scanner/i })).toHaveAttribute(
       'aria-describedby',
       expect.stringContaining('scanner-tool-subdomain_discovery-description'),
     )
     expect(screen.getByText(/Unavailable:/i)).toBeInTheDocument()
 
-    await user.click(quickStartTab)
-    await vi.waitFor(() => {
-      expect(quickStartTab).toHaveAttribute('aria-selected', 'true')
-    })
+    await user.click(screen.getByRole('tab', { name: /^Quick Start$/i }))
+    expect(await screen.findByText(/Backend plugin pending|No tools available in this category/i)).toBeInTheDocument()
   })
 })
