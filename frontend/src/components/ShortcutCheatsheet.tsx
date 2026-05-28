@@ -55,7 +55,7 @@ export const ShortcutCheatsheet: React.FC = () => {
     e.preventDefault();
     if (e.key === "Escape") { setEditingId(null); setCapturedKeys(""); pendingKeysRef.current = []; return; }
     if (e.key === "Enter" && capturedKeys && editingId) {
-      const final = pendingKeysRef.current.length > 0 
+      const final = pendingKeysRef.current.length > 0
         ? [...pendingKeysRef.current, capturedKeys].join(" ")
         : capturedKeys;
       updateBinding(editingId, final);
@@ -64,11 +64,11 @@ export const ShortcutCheatsheet: React.FC = () => {
       pendingKeysRef.current = [];
       return;
     }
-    
+
     // Filter out modifier-only keys
     const isModifierOnly = ["Shift", "Control", "Alt", "Meta"].includes(e.key);
     if (isModifierOnly) return;
-    
+
     // Normalize key: for printable single chars, ignore Shift modifier
     const isPrintableChar = e.key.length === 1 && !e.ctrlKey && !e.altKey;
     const mod = [
@@ -77,7 +77,7 @@ export const ShortcutCheatsheet: React.FC = () => {
       e.altKey   ? "Alt"   : "",
     ].filter(Boolean).join("+");
     const key = mod ? `${mod}+${e.key}` : e.key;
-    
+
     // For sequences, accumulate in ref; for single keys, just display
     if (pendingKeysRef.current.length > 0) {
       // Building a sequence like "g d"
