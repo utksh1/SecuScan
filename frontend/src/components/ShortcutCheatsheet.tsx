@@ -30,6 +30,7 @@ export const ShortcutCheatsheet: React.FC = () => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [capturedKeys, setCapturedKeys] = useState<string>("");
   const overlayRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
   const pendingKeysRef = useRef<string[]>([]);
 
   // Close on Escape (only when not editing)
@@ -46,9 +47,15 @@ export const ShortcutCheatsheet: React.FC = () => {
     return () => document.removeEventListener("keydown", handleKey, true);
   }, [cheatsheetOpen, editingId, setCheatsheetOpen]);
 
-  // Trap focus inside overlay
+  // Save focused element and restore focus on close
   useEffect(() => {
-    if (cheatsheetOpen) overlayRef.current?.focus();
+    if (cheatsheetOpen) {
+      triggerRef.current = document.activeElement as HTMLElement;
+      overlayRef.current?.focus();
+    } else {
+      triggerRef.current?.focus();
+      triggerRef.current = null;
+    }
   }, [cheatsheetOpen]);
 
   const handleCapture = (e: React.KeyboardEvent) => {
@@ -104,6 +111,9 @@ export const ShortcutCheatsheet: React.FC = () => {
       <div
         ref={overlayRef}
         tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Keyboard shortcuts cheatsheet"
         style={{
           background: "#111",
           border: "1px solid #333",

@@ -86,14 +86,25 @@ export const ShortcutProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         el?.focus();
         return;
       }
+      if (id === "new_scan") {
+        // Dispatch a custom event — the scan dialog listens for this
+        document.dispatchEvent(new CustomEvent("secuscan:new_scan"));
+        return;
+      }
     },
     [navigate]
   );
 
   useEffect(() => {
     const isTyping = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement).tagName;
-      return ["INPUT", "TEXTAREA", "SELECT"].includes(tag);
+      const el = e.target as HTMLElement;
+      const tag = el.tagName;
+      const isFormElement = ["INPUT", "TEXTAREA", "SELECT"].includes(tag);
+      const isContentEditable = el.isContentEditable;
+      const isInteractiveRole = ["textbox", "searchbox", "combobox"].includes(
+        el.getAttribute("role") ?? ""
+      );
+      return isFormElement || isContentEditable || isInteractiveRole;
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
