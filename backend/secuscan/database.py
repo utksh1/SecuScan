@@ -269,18 +269,34 @@ class Database:
         context: Optional[dict] = None,
         task_id: Optional[str] = None,
         plugin_id: Optional[str] = None,
+        request_id: Optional[str] = None,
     ):
         """Log an audit event."""
+
+        from .request_context import get_request_id
+
+        request_id = request_id or get_request_id()
+
+        context = context or {}
+        context["request_id"] = request_id
+
         await self.execute(
             """
-            INSERT INTO audit_log (event_type, severity, message, context_json, task_id, plugin_id)
+            INSERT INTO audit_log (
+                event_type,
+                severity,
+                message,
+                context_json,
+                task_id,
+                plugin_id
+            )
             VALUES (?, ?, ?, ?, ?, ?)
             """,
             (
                 event_type,
                 severity,
                 message,
-                json.dumps(context) if context else None,
+                json.dumps(context),
                 task_id,
                 plugin_id,
             ),
@@ -293,10 +309,12 @@ db: Optional[Database] = None
 async def init_db(db_path: Optional[str] = None) -> Database:
     """Initialize the global database connection."""
     global db
-    # Fallback to config path if not provided
+
     path = db_path or f"{settings.data_dir}/secuscan.db"
+
     db_instance = Database(path)
     await db_instance.connect()
+
     db = db_instance
     return db_instance
 
@@ -305,4 +323,5 @@ async def get_db() -> Database:
     """Get the global database instance."""
     if db is None:
         raise RuntimeError("Database not initialized")
+
     return db
