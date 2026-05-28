@@ -66,12 +66,12 @@ export default function Settings() {
 
     const handleSave = async () => {
         localStorage.setItem('secuscan-config', JSON.stringify(config))
+        if (config.theme !== theme) {
+            setTheme(config.theme)
+        }
         try {
             await updateWebhooks(webhookConfig)
             addToast("Operational parameters synchronized", "success")
-            if (config.theme !== theme) {
-                setTheme(config.theme)
-            }
         } catch (e) {
             addToast("Failed to sync webhook configuration", "error")
         }
