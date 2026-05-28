@@ -56,6 +56,10 @@ def test_client(setup_test_environment):
 
     asyncio.run(setup())
 
+
+    from backend.secuscan.auth import get_current_user
+    from backend.secuscan.models import User, UserRole
+    app.dependency_overrides[get_current_user] = lambda: User(username="test_admin", role=UserRole.ADMIN)
     with TestClient(app) as client:
         yield client
 

@@ -15,6 +15,7 @@ import { ThemeProvider } from './components/ThemeContext'
 import { ToastProvider, ToastContainer } from './components/ToastContext'
 import { I18nProvider } from './components/I18nContext'
 import { routes } from './routes'
+import Login from './pages/Login'
 
 export function AppRoutes() {
   return (
@@ -40,9 +41,15 @@ export default function App() {
       <I18nProvider>
         <ToastProvider>
           <Router>
-            <AppShell>
-              <AppRoutes />
-            </AppShell>
+            {localStorage.getItem('token') ? (
+              <AppShell>
+                <AppRoutes />
+              </AppShell>
+            ) : (
+              <Routes>
+                <Route path="*" element={<Login />} />
+              </Routes>
+            )}
           </Router>
         </ToastProvider>
       </I18nProvider>

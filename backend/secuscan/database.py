@@ -154,6 +154,13 @@ class Database:
                 UNIQUE(plugin_id, name)
             );
 
+            CREATE TABLE IF NOT EXISTS users (
+                username TEXT PRIMARY KEY,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+            );
+
             CREATE TABLE IF NOT EXISTS credential_vault (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL UNIQUE,
@@ -203,6 +210,17 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_workflows_enabled ON workflows(enabled);
             """
         )
+
+        # Seed default admin user if none exist
+        from .auth import get_password_hash
+        user_count = await self.fetchone("SELECT COUNT(*) as count FROM users")
+        
+        if user_count and user_count["count"] == 0:
+            default_hash = get_password_hash("admin")
+            await self.execute(
+                "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+                ("admin", default_hash, "admin")
+            )
 
         # Migration logic: ensure latest columns exist in 'tasks' table
         tasks_columns = await self.fetchall("PRAGMA table_info(tasks)")

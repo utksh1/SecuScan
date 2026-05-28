@@ -87,12 +87,23 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController()
   const timeoutId = window.setTimeout(() => controller.abort(), 10000)
 
+  const token = localStorage.getItem('token')
+  const headers = new Headers(init?.headers)
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`)
+  }
+
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
+    headers,
     signal: controller.signal,
   })
   window.clearTimeout(timeoutId)
   if (!response.ok) {
+    if (response.status === 401) {
+      localStorage.removeItem('token')
+      window.location.href = '/login'
+    }
     throw new Error(`Request failed: ${response.status}`)
   }
   return response.json()
