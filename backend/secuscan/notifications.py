@@ -10,7 +10,7 @@ async def _send_with_retry(url: str, payload: Dict[str, Any], headers: Dict[str,
     """Send an HTTP request with exponential backoff retry logic."""
     if not headers:
         headers = {"Content-Type": "application/json"}
-    
+
     async with httpx.AsyncClient() as client:
         for attempt in range(max_retries):
             try:
@@ -20,10 +20,10 @@ async def _send_with_retry(url: str, payload: Dict[str, Any], headers: Dict[str,
                 logger.warning(f"Webhook request to {url} failed with status {response.status_code}. Attempt {attempt+1}/{max_retries}")
             except httpx.RequestError as e:
                 logger.warning(f"Webhook request to {url} failed: {e}. Attempt {attempt+1}/{max_retries}")
-            
+
             if attempt < max_retries - 1:
                 await asyncio.sleep(2 ** attempt)
-        
+
         logger.error(f"Failed to send webhook to {url} after {max_retries} attempts.")
 
 async def send_slack_webhook(url: str, payload: Dict[str, Any]):
@@ -42,7 +42,7 @@ async def test_webhook_config(config: WebhookConfig):
         "content": "This is a test notification from SecuScan.",
         "message": "This is a test notification from SecuScan."
     }
-    
+
     tasks = []
     if config.slack_url:
         tasks.append(send_slack_webhook(config.slack_url, {"text": payload["text"]}))
@@ -50,7 +50,7 @@ async def test_webhook_config(config: WebhookConfig):
         tasks.append(send_discord_webhook(config.discord_url, {"content": payload["content"]}))
     if config.custom_url:
         tasks.append(send_custom_webhook(config.custom_url, payload))
-        
+
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
     else:
@@ -58,11 +58,11 @@ async def test_webhook_config(config: WebhookConfig):
 
 async def notify_scan_completion(task_id: str, target: str, status: str, duration: float, findings_summary: Dict[str, int], config: WebhookConfig):
     duration_str = f"{duration:.2f}s" if duration else "Unknown"
-    
+
     severity_text = ", ".join(f"{k}: {v}" for k, v in findings_summary.items() if v > 0)
     if not severity_text:
         severity_text = "No findings"
-        
+
     text_content = (
         f"🎯 *Scan Completed*\n"
         f"Target: `{target}`\n"
@@ -94,6 +94,6 @@ async def notify_scan_completion(task_id: str, target: str, status: str, duratio
         tasks.append(send_discord_webhook(config.discord_url, discord_payload))
     if config.custom_url:
         tasks.append(send_custom_webhook(config.custom_url, custom_payload))
-        
+
     if tasks:
         await asyncio.gather(*tasks, return_exceptions=True)
