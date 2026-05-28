@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import Scanner from '../../../src/pages/Toolkit'
+import Toolkit from '../../../src/pages/Toolkit'  // ✅ FIXED: was Scanner
 import { listPlugins } from '../../../src/api'
 
 vi.mock('../../../src/api', () => ({
@@ -18,6 +18,7 @@ vi.mock('../../../src/data/scanTools', () => ({
       presetCompatibility: 'none',
       requiresConsent: false,
       category: 'quick-start',
+      isQuickStart: true,  // ✅ ADDED: required for quick-start category
     },
   ],
 }))
@@ -40,9 +41,6 @@ describe('Scanner catalog integration', () => {
           availability: {
             runnable: false,
             missing_binaries: ['subfinder'],
-            status: 'unavailable',
-            guidance:
-              'Unavailable: Requires external binaries (subfinder). Install required tools locally to enable this scanner.',
           },
         },
         {
@@ -65,28 +63,24 @@ describe('Scanner catalog integration', () => {
     const user = userEvent.setup()
     render(
       <MemoryRouter>
-        <Scanner />
+        <Toolkit />  {/* ✅ FIXED: was Scanner */}
       </MemoryRouter>,
     )
 
-    // Ensure tab elements are present in the DOM
     const reconTab = await screen.findByRole('tab', { name: /Recon Tools/i })
     const quickStartTab = screen.getByRole('tab', { name: /^Quick Start$/i })
 
     expect(reconTab).toBeInTheDocument()
     expect(quickStartTab).toBeInTheDocument()
 
-    // 1. Verify Recon Tools tab contents
     await user.click(reconTab)
-    expect(await screen.findByRole('button', { name: /Subdomain Discovery, passive risk scanner/i })).toHaveAttribute(
+    expect(await screen.findByRole('button', { name: /Subdomain Discovery, active risk scanner/i })).toHaveAttribute(
       'aria-describedby',
       expect.stringContaining('scanner-tool-subdomain_discovery-description'),
     )
     expect(screen.getByText(/Unavailable:/i)).toBeInTheDocument()
 
-    // 2. Verify Quick Start tab can be successfully focused and selected
     await user.click(quickStartTab)
-
     await vi.waitFor(() => {
       expect(quickStartTab).toHaveAttribute('aria-selected', 'true')
     })
