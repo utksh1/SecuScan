@@ -96,7 +96,7 @@ function getToolAccessibilityLabel(tool: CatalogTool): string {
 
 function mapPluginCategoryToLegacyTab(category: string, pluginId?: string): UITab {
   const pinnedTool = scanTools.find(t => t.id === pluginId);
-  
+
   if (pinnedTool) {
     return pinnedTool.category as UITab;
   }
@@ -124,7 +124,7 @@ function mapPluginCategoryToLegacyTab(category: string, pluginId?: string): UITa
 function mapPluginToCatalogTool(plugin: PluginListItem): CatalogTool {
   const normalizedCategory = normalizeCategoryId(plugin.category)
   const pinnedTool = scanTools.find(t => t.id === plugin.id);
-  
+
   return {
     id: plugin.id,
     name: pinnedTool ? pinnedTool.name : plugin.name,
@@ -135,7 +135,7 @@ function mapPluginToCatalogTool(plugin: PluginListItem): CatalogTool {
     category: mapPluginCategoryToLegacyTab(normalizedCategory, plugin.id),
     disabled: false,
     isPlugin: true,
-    isQuickStart: pinnedTool?.isQuickStart ?? true, 
+    isQuickStart: pinnedTool?.isQuickStart ?? true,
     isProfessional: ['port_scanner', 'web_scanner', 'recon_scanner'].includes(plugin.id),
     availability: plugin.availability,
   }
@@ -181,7 +181,7 @@ export default function Scanner() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [catalogLoadAttempt, setCatalogLoadAttempt] = useState(0)
-  
+
   const [hoveredTool, setHoveredTool] = useState<string | null>(null)
   // New state tracker explicitly for the educational reference center selection
   const [selectedToolId, setSelectedToolId] = useState<string | null>(null)
@@ -215,7 +215,7 @@ export default function Scanner() {
       } catch (error) {
         if (!cancelled) {
           console.warn("Backend unavailable. Injecting high-fidelity simulator data to restore full UI function.")
-          
+
           const mockTools: CatalogTool[] = [
             {
               id: 'nmap',
@@ -253,7 +253,7 @@ export default function Scanner() {
               category: 'vulnerability',
               disabled: false,
               isPlugin: true,
-              isQuickStart: true, 
+              isQuickStart: true,
               isProfessional: true
             }
           ]
@@ -320,7 +320,7 @@ export default function Scanner() {
     if (tool.disabled) return
     trackRecentTool(tool.id)
     setSelectedToolId(tool.id)
-    // Optional: Only navigate if you want them to leave the page immediately, 
+    // Optional: Only navigate if you want them to leave the page immediately,
     // or keep them on the catalog panel to read the documentation first.
     navigate(routePath.scanTool(tool.id))
   }
@@ -330,7 +330,7 @@ export default function Scanner() {
 
   return (
     <div className="min-h-screen flex flex-row bg-charcoal-dark w-full overflow-x-hidden">
-      
+
       {/* Catalog Content Container */}
       <div className="flex-1 p-6 md:p-12 space-y-12 min-w-0">
         <header className="relative flex flex-col xl:flex-row justify-between items-start xl:items-end gap-8 pb-12 border-b-4 border-silver-bright/10 font-black">

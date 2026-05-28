@@ -264,7 +264,7 @@ export default function Dashboard() {
   return (
     /* CHANGED: Wrapped layout container in 'flex flex-row' so sidebar anchors flush right */
     <div className="min-h-screen flex flex-row bg-charcoal-dark selection:bg-silver-bright selection:text-charcoal-dark w-full overflow-x-hidden">
-      
+
       {/* LEFT CONTENT AREA: Contains the original dashboard layout */}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="w-full pt-8 pb-6 flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between border-b border-silver-bright/10 mb-8 px-8">
