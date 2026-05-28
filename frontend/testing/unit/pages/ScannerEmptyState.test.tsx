@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
-import Scanner from '../../../src/pages/Toolkit'
+import Toolkit from '../../../src/pages/Toolkit'
 import { listPlugins } from '../../../src/api'
 
 vi.mock('../../../src/api', () => ({
@@ -18,6 +18,7 @@ vi.mock('../../../src/data/scanTools', () => ({
       presetCompatibility: 'none',
       requiresConsent: false,
       category: 'quick-start',
+      isQuickStart: true,
     },
   ],
 }))
@@ -47,7 +48,7 @@ describe('Scanner empty-state UX', () => {
     const user = userEvent.setup()
     render(
       <MemoryRouter>
-        <Scanner />
+        <Toolkit />
       </MemoryRouter>,
     )
 
