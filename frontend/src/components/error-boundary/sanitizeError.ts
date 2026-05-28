@@ -10,15 +10,25 @@ export type SanitizedError = {
   stack?: string
 }
 
-export function sanitizeError(error: Error): SanitizedError {
-  let sanitizedStack = error.stack || ''
+function redactSensitiveData(value: string): string {
+  let sanitized = value
 
   SENSITIVE_PATTERNS.forEach((pattern) => {
-    sanitizedStack = sanitizedStack.replace(pattern, '[REDACTED]')
+    sanitized = sanitized.replace(pattern, '[REDACTED]')
   })
 
+  return sanitized
+}
+
+export function sanitizeError(error: Error): SanitizedError {
+  const sanitizedMessage = redactSensitiveData(
+    error.message || 'Unexpected error'
+  )
+
+  const sanitizedStack = redactSensitiveData(error.stack || '')
+
   return {
-    message: error.message,
+    message: sanitizedMessage,
     stack: sanitizedStack,
   }
 }
