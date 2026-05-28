@@ -266,6 +266,7 @@ class Database:
                 await self.connection.executescript(sql)
             except Exception as exc:
                 print(f"Migration {migration_file.name} failed: {exc}")
+        existing_finding_cols = {col["name"] for col in await self.fetchall("PRAGMA table_info(findings)")}
         risk_cols = {
             "exploitability": "REAL",
             "confidence": "REAL",
