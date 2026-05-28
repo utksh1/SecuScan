@@ -12,55 +12,43 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
-      # Define thresholds here so they are easily adjustable
       MAX_FILES: 50
       MAX_LINES: 1000
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Analyze PR Diffs and Artifacts
-        id: analyze
+      - name: Analyze PR Size and Artifacts
         run: |
           PR_NUMBER=${{ github.event.pull_request.number }}
-          
-          # Extract stats directly from GitHub event payload
+          CHANGED_FILES=${{ github.event.pull_request.changed_files }}
           ADDITIONS=${{ github.event.pull_request.additions }}
           DELETIONS=${{ github.event.pull_request.deletions }}
-          CHANGED_FILES=${{ github.event.pull_request.changed_files }}
           TOTAL_LINES=$((ADDITIONS + DELETIONS))
-          
-          echo "PR Stats: $CHANGED_FILES files changed, $ADDITIONS additions, $DELETIONS deletions."
 
-          # Fetch changed file paths via GitHub CLI
-          FILES=$(gh pr view $PR_NUMBER --json files --jq '.files[].path')
+          echo "PR Stats: $CHANGED_FILES files changed, $ADDITIONS additions, $DELETIONS deletions."
 
           WARNINGS=""
 
           # 1. Check for oversized diffs
           if [ "$CHANGED_FILES" -gt "$MAX_FILES" ] || [ "$TOTAL_LINES" -gt "$MAX_LINES" ]; then
             MSG="PR is unusually large ($CHANGED_FILES files, $TOTAL_LINES lines changed). The advisory threshold is $MAX_FILES files or $MAX_LINES lines."
-            echo "::warning title=Large PR Detected::$MSG Consider breaking this into smaller PRs to help reviewers."
+            echo "::warning title=Large PR Detected::$MSG Consider splitting this into smaller PRs."
             WARNINGS="${WARNINGS}- ⚠️ **Large PR Detected:** $MSG\n"
           fi
 
-          # 2. Check for generated artifact directories
-          # The regex specifically looks for paths containing these directory names
+          # 2. Check for generated artifact directories using gh cli
+          FILES=$(gh pr view $PR_NUMBER --repo ${{ github.repository }} --json files --jq '.files[].path')
+
           if echo "$FILES" | grep -q -E "playwright-report/|test-results/"; then
-            MSG="PR contains generated testing artifacts (e.g., 'playwright-report/' or 'test-results/')."
-            echo "::warning title=Generated Artifacts Included::$MSG Please remove them from your commits."
+            MSG="PR contains generated testing artifacts (playwright-report/ or test-results/). Please remove them from your commits."
+            echo "::warning title=Generated Artifacts Included::$MSG"
             WARNINGS="${WARNINGS}- 🚫 **Generated Artifacts Detected:** $MSG\n"
           fi
 
-          # 3. Output to GitHub Step Summary for easy visibility
+          # 3. Output to GitHub Step Summary
           if [ -n "$WARNINGS" ]; then
             echo "### ⚠️ PR Review Advisory" >> $GITHUB_STEP_SUMMARY
             echo -e "$WARNINGS" >> $GITHUB_STEP_SUMMARY
-            echo "> _This is an advisory warning to assist reviewers and will not fail your CI build._" >> $GITHUB_STEP_SUMMARY
+            echo "> _This is an advisory warning to assist reviewers. It will not fail your CI build._" >> $GITHUB_STEP_SUMMARY
           else
             echo "### ✅ PR Size and Content Check Passed" >> $GITHUB_STEP_SUMMARY
             echo "No unusually large diffs or accidentally committed artifacts detected." >> $GITHUB_STEP_SUMMARY
           fi
-          
-          # Force a successful exit (0) so the CI check always stays green (Advisory only)
-          exit 0
