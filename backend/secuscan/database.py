@@ -214,7 +214,7 @@ class Database:
         # Seed default admin user if none exist
         from .auth import get_password_hash
         user_count = await self.fetchone("SELECT COUNT(*) as count FROM users")
-        
+
         if user_count and user_count["count"] == 0:
             default_hash = get_password_hash("admin")
             await self.execute(

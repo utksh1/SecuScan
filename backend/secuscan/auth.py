@@ -45,12 +45,12 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
             raise credentials_exception
     except jwt.InvalidTokenError:
         raise credentials_exception
-        
+
     db = await get_db()
     user_row = await db.fetchone("SELECT username, role FROM users WHERE username = ?", (username,))
     if user_row is None:
         raise credentials_exception
-        
+
     return User(username=user_row["username"], role=UserRole(user_row["role"]))
 
 class RoleChecker:
