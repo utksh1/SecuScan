@@ -126,7 +126,7 @@ describe('Scanner quick access', () => {
 
     expect(await screen.findByRole('tab', { name: /^Quick Start$/i })).toBeInTheDocument()
     expect(screen.queryByText(/Quick Access/i)).not.toBeInTheDocument()
-    
+
     // ✅ FIX: Changed to queryByText and adjusted logic to match the updated UI layout parameters
     expect(screen.queryByText(/No tools available in this category/i)).not.toBeInTheDocument()
   })
