@@ -30,6 +30,32 @@ def parse_json_fields(rows: List[Dict], fields: List[str]) -> List[Dict]:
     return parsed
 
 
+def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
+    if isinstance(raw_steps, list):
+        return raw_steps
+    if not raw_steps:
+        return []
+    try:
+        parsed = json.loads(raw_steps)
+    except (TypeError, json.JSONDecodeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Return the workflow shape consumed by the frontend."""
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "schedule_seconds": row.get("schedule_seconds"),
+        "enabled": bool(row.get("enabled")),
+        "steps": _parse_workflow_steps(row.get("steps_json")),
+        "created_at": row.get("created_at"),
+        "last_run_at": row.get("last_run_at"),
+        "queued_task_ids": queued_task_ids or [],
+    }
+
+
 def is_filesystem_target(target: str) -> bool:
     """Best-effort detection for path-based targets that should bypass host validation."""
     if target.startswith(("/", "./", "../", "~")):
@@ -956,7 +982,8 @@ async def delete_vault_secret(name: str):
 async def list_workflows():
     db = await get_db()
     rows = await db.fetchall("SELECT * FROM workflows ORDER BY created_at DESC")
-    return {"workflows": parse_json_fields(rows, ["steps_json"]), "total": len(rows)}
+    workflows = [_serialize_workflow(row) for row in rows]
+    return {"workflows": workflows, "total": len(workflows)}
 
 
 @router.post("/workflows")
@@ -986,7 +1013,8 @@ async def create_workflow(payload: Dict[str, Any]):
             json.dumps(steps),
         ),
     )
-    return {"id": workflow_id, "created": True}
+    row = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
+    return _serialize_workflow(row) if row else {"id": workflow_id, "created": True}
 
 
 @router.post("/workflows/{workflow_id}/run")
@@ -1007,7 +1035,11 @@ async def run_workflow_once(workflow_id: str):
         asyncio.create_task(executor.execute_task(task_id))
         created_task_ids.append(task_id)
     await db.execute("UPDATE workflows SET last_run_at = datetime('now') WHERE id = ?", (workflow_id,))
-    return {"workflow_id": workflow_id, "queued_tasks": created_task_ids}
+    return {
+        "workflow_id": workflow_id,
+        "queued_task_ids": created_task_ids,
+        "queued_tasks": created_task_ids,
+    }
 
 
 @router.patch("/workflows/{workflow_id}")
@@ -1038,7 +1070,8 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
 
     params.append(workflow_id)
     await db.execute(f"UPDATE workflows SET {', '.join(updates)} WHERE id = ?", tuple(params))
-    return {"workflow_id": workflow_id, "updated": True}
+    updated = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
+    return _serialize_workflow(updated) if updated else {"workflow_id": workflow_id, "updated": True}
 
 
 @router.delete("/workflows/{workflow_id}")

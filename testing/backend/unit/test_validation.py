@@ -24,10 +24,17 @@ def test_validate_target():
 def test_validate_port():
     assert validate_port(80) == (True, "")
     assert validate_port(65535) == (True, "")
+    assert validate_port(1) == (True, "")
 
     assert validate_port(0)[0] is False
     assert validate_port(65536)[0] is False
     assert validate_port(-1)[0] is False
+
+    # Type guard: non-integer inputs must be rejected cleanly, not raise TypeError
+    assert validate_port("80")[0] is False       # string
+    assert validate_port(80.5)[0] is False       # float
+    assert validate_port(True)[0] is False       # bool (subclass of int)
+    assert validate_port(None)[0] is False       # None
 
 
 def test_validate_url():
@@ -44,10 +51,19 @@ def test_sanitize_input():
     # Regular input should be unchanged
     assert sanitize_input("nmap -sV -p 80") == "nmap -sV -p 80"
 
-    # Dangerous characters should be removed
+    # Dangerous shell metacharacters should be removed
     assert sanitize_input("127.0.0.1; rm -rf /") == "127.0.0.1 rm -rf /"
     assert sanitize_input("target.com | wget malicious.com") == "target.com  wget malicious.com"
     assert sanitize_input("test & echo hacked") == "test  echo hacked"
+
+    # Null byte: can truncate strings in C-backed tools (e.g. nmap)
+    assert "\x00" not in sanitize_input("target\x00evil")
+
+    # Tab: usable in argument injection in some shell contexts
+    assert "\t" not in sanitize_input("target\t--evil-flag")
+
+    # Output should be a plain string with no leading/trailing whitespace
+    assert sanitize_input("  192.168.1.1  ") == "192.168.1.1"
 
 
 def test_is_safe_path():
