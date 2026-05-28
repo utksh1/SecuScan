@@ -2,7 +2,7 @@
 API routes for SecuScan backend
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request, Depends
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request, Depends, Query
 from fastapi.responses import JSONResponse
 from typing import Any, Optional, List, Dict, Callable
 import json
@@ -12,6 +12,7 @@ import os
 import shutil
 import uuid
 import asyncio
+import base64
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -91,7 +92,7 @@ logger = logging.getLogger(__name__)
 from .cache import get_cache
 from .models import (
     TaskCreateRequest, TaskResponse, TaskResult,
-    PluginListResponse, ErrorResponse
+    PluginListResponse, ErrorResponse, FindingsResponse, ReportsResponse
 )
 from .config import settings
 from .database import get_db
@@ -694,28 +695,98 @@ async def get_dashboard_summary():
     return await get_or_set_cached("summary:dashboard", build)
 
 
-@router.get("/findings", dependencies=[Depends(read_heavy_limiter)])
-async def get_findings():
-    """Return vulnerability findings."""
+@router.get("/findings", dependencies=[Depends(read_heavy_limiter)], response_model=FindingsResponse)
+async def get_findings(limit: int = Query(50, ge=1, le=100), cursor: Optional[str] = None):
+    """Return vulnerability findings with cursor pagination."""
+    db = await get_db()
 
-    async def build():
-        db = await get_db()
-        rows = await db.fetchall("SELECT * FROM findings ORDER BY discovered_at DESC")
-        return {"findings": parse_json_fields(rows, ["metadata_json"])}
+    query = "SELECT * FROM findings"
+    params = []
 
-    return await get_or_set_cached("findings:list", build)
+    if cursor:
+        try:
+            decoded = base64.b64decode(cursor).decode('utf-8')
+            cursor_time, cursor_id = decoded.split('|', 1)
+            query += " WHERE (discovered_at < ?) OR (discovered_at = ? AND id < ?)"
+            params.extend([cursor_time, cursor_time, cursor_id])
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid cursor format")
+
+    query += " ORDER BY discovered_at DESC, id DESC LIMIT ?"
+    params.append(limit + 1)  # Fetch one extra to check if there are more
+
+    rows = await db.fetchall(query, tuple(params))
+
+    has_more = len(rows) > limit
+    if has_more:
+        rows = rows[:limit]
+
+    next_cursor = None
+    if rows:
+        last_row = rows[-1]
+        next_cursor_str = f"{last_row['discovered_at']}|{last_row['id']}"
+        next_cursor = base64.b64encode(next_cursor_str.encode('utf-8')).decode('utf-8')
+
+    count_row = await db.fetchone("SELECT COUNT(*) as total FROM findings")
+    total = count_row["total"] if count_row else 0
+
+    parsed_findings = parse_json_fields(rows, ["metadata_json"])
+
+    return {
+        "findings": parsed_findings,
+        "pagination": {
+            "next_cursor": next_cursor,
+            "has_more": has_more,
+            "total_count": total
+        }
+    }
 
 
-@router.get("/reports", dependencies=[Depends(read_heavy_limiter)])
-async def get_reports():
-    """Return generated reports."""
+@router.get("/reports", dependencies=[Depends(read_heavy_limiter)], response_model=ReportsResponse)
+async def get_reports(limit: int = Query(50, ge=1, le=100), cursor: Optional[str] = None):
+    """Return generated reports with cursor pagination."""
+    db = await get_db()
 
-    async def build():
-        db = await get_db()
-        rows = await db.fetchall("SELECT * FROM reports ORDER BY generated_at DESC")
-        return {"reports": parse_json_fields(rows, ["metadata_json"])}
+    query = "SELECT * FROM reports"
+    params = []
 
-    return await get_or_set_cached("reports:list", build)
+    if cursor:
+        try:
+            decoded = base64.b64decode(cursor).decode('utf-8')
+            cursor_time, cursor_id = decoded.split('|', 1)
+            query += " WHERE (generated_at < ?) OR (generated_at = ? AND id < ?)"
+            params.extend([cursor_time, cursor_time, cursor_id])
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid cursor format")
+
+    query += " ORDER BY generated_at DESC, id DESC LIMIT ?"
+    params.append(limit + 1)
+
+    rows = await db.fetchall(query, tuple(params))
+
+    has_more = len(rows) > limit
+    if has_more:
+        rows = rows[:limit]
+
+    next_cursor = None
+    if rows:
+        last_row = rows[-1]
+        next_cursor_str = f"{last_row['generated_at']}|{last_row['id']}"
+        next_cursor = base64.b64encode(next_cursor_str.encode('utf-8')).decode('utf-8')
+
+    count_row = await db.fetchone("SELECT COUNT(*) as total FROM reports")
+    total = count_row["total"] if count_row else 0
+
+    parsed_reports = parse_json_fields(rows, ["metadata_json"])
+
+    return {
+        "reports": parsed_reports,
+        "pagination": {
+            "next_cursor": next_cursor,
+            "has_more": has_more,
+            "total_count": total
+        }
+    }
 
 
 @router.get("/tasks", dependencies=[Depends(read_heavy_limiter)])
