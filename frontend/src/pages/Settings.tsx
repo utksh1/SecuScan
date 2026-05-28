@@ -19,6 +19,12 @@ const DEFAULT_CONFIG = {
     dataRetention: 30, // days
     shodanKey: '',
     virustotalKey: '',
+    jiraUrl: '',
+    jiraEmail: '',
+    jiraToken: '',
+    jiraProject: '',
+    githubToken: '',
+    githubRepo: '',
     ipWhitelist: '127.0.0.1\n10.0.0.0/8',
     autoPurgeFailed: false,
     autoRescanCritical: true,
@@ -259,6 +265,63 @@ export default function Settings() {
                                 type="password"
                                 value={config.virustotalKey}
                                 onChange={(val: string) => setConfig({...config, virustotalKey: val})}
+                            />
+                        </div>
+                    </section>
+
+                    <section className="space-y-8">
+                        <div className="flex items-center gap-4">
+                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">External_Integrations</h3>
+                            <div className="h-0.5 flex-1 bg-black/10"></div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <InputField 
+                                label="Jira_URL" 
+                                description="JIRA_INSTANCE_ENDPOINT"
+                                placeholder="https://your-domain.atlassian.net"
+                                type="text"
+                                value={config.jiraUrl}
+                                onChange={(val: string) => setConfig({...config, jiraUrl: val})}
+                            />
+                            <InputField 
+                                label="Jira_Email" 
+                                description="JIRA_AUTH_EMAIL"
+                                placeholder="admin@example.com"
+                                type="text"
+                                value={config.jiraEmail}
+                                onChange={(val: string) => setConfig({...config, jiraEmail: val})}
+                            />
+                            <InputField 
+                                label="Jira_API_Token" 
+                                description="JIRA_ACCESS_TOKEN"
+                                placeholder="JIRA_API_TOKEN"
+                                type="password"
+                                value={config.jiraToken}
+                                onChange={(val: string) => setConfig({...config, jiraToken: val})}
+                            />
+                            <InputField 
+                                label="Jira_Project_Key" 
+                                description="JIRA_TARGET_PROJECT"
+                                placeholder="SEC"
+                                type="text"
+                                value={config.jiraProject}
+                                onChange={(val: string) => setConfig({...config, jiraProject: val})}
+                            />
+                            <InputField 
+                                label="GitHub_Token" 
+                                description="GH_PERSONAL_ACCESS_TOKEN"
+                                placeholder="github_pat_..."
+                                type="password"
+                                value={config.githubToken}
+                                onChange={(val: string) => setConfig({...config, githubToken: val})}
+                            />
+                            <InputField 
+                                label="GitHub_Repository" 
+                                description="GH_TARGET_REPO"
+                                placeholder="owner/repo"
+                                type="text"
+                                value={config.githubRepo}
+                                onChange={(val: string) => setConfig({...config, githubRepo: val})}
                             />
                         </div>
                     </section>

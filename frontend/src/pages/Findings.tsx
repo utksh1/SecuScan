@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { getFindings } from '../api'
+import { getFindings, createTicket } from '../api'
 import { formatLocaleDate, parseDateSafe, getCurrentTimeZone } from '../utils/date'
+import { useToast } from '../components/ToastContext'
 type Finding = {
   id: string
   severity: string
@@ -91,6 +92,7 @@ const filterControlClass =
 type SortMode = 'severity' | 'newest' | 'oldest' | 'target'
 
 export default function Findings() {
+  const { addToast } = useToast()
   const [findings, setFindings] = useState<Finding[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -313,6 +315,20 @@ export default function Findings() {
       window.setTimeout(() => setCopiedFindingId((current) => (current === finding.id ? null : current)), 1600)
     } catch {
       setCopiedFindingId(null)
+    }
+  }
+
+  async function exportToTracker(finding: Finding & { status: FindingStatus }, provider: 'jira' | 'github') {
+    try {
+      const savedConfig = localStorage.getItem('secuscan-config')
+      const config = savedConfig ? JSON.parse(savedConfig) : {}
+
+      addToast(`Exporting to ${provider.toUpperCase()}...`, 'info')
+      const result = await createTicket(provider, finding, config)
+      addToast(`Successfully created ${provider.toUpperCase()} ticket: ${result.ticket_id}`, 'success')
+      window.open(result.ticket_url, '_blank', 'noopener,noreferrer')
+    } catch (error: any) {
+      addToast(`Failed to create ${provider.toUpperCase()} ticket: ${error.message}`, 'error')
     }
   }
 
@@ -723,6 +739,22 @@ export default function Findings() {
                         className="border border-rag-blue/25 bg-rag-blue/10 px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-rag-blue"
                       >
                         {copiedFindingId === selectedFinding.id ? 'Copied' : 'Copy Brief'}
+                      </button>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2 mt-2">
+                      <button
+                        type="button"
+                        onClick={() => exportToTracker(selectedFinding, 'jira')}
+                        className="border border-[#0052CC]/25 bg-[#0052CC]/10 px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-[#2684FF]"
+                      >
+                        Export to Jira
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => exportToTracker(selectedFinding, 'github')}
+                        className="border border-white/25 bg-white/10 px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-white"
+                      >
+                        Export to GitHub
                       </button>
                     </div>
                   </div>

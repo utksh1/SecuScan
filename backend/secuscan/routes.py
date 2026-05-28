@@ -65,7 +65,7 @@ logger = logging.getLogger(__name__)
 from .cache import get_cache
 from .models import (
     TaskCreateRequest, TaskResponse, TaskResult,
-    PluginListResponse, ErrorResponse
+    PluginListResponse, ErrorResponse, TicketCreateRequest, TicketResponse
 )
 from .config import settings
 from .database import get_db
@@ -80,6 +80,7 @@ from .validation import validate_target, validate_task_start_payload
 from .reporting import reporting
 from .vault import VaultCrypto
 from .workflows import scheduler
+from .integrations import create_jira_ticket, create_github_issue
 
 from sse_starlette.sse import EventSourceResponse
 
@@ -1147,3 +1148,20 @@ async def get_assets():
     rows = await db.fetchall("SELECT DISTINCT target FROM tasks UNION SELECT DISTINCT target FROM findings")
     assets = [{"id": str(uuid.uuid4()), "name": row["target"]} for row in rows]
     return {"assets": assets}
+
+
+@router.post("/integrations/ticket", response_model=TicketResponse)
+async def create_ticket(request: TicketCreateRequest):
+    """Create a ticket in an external issue tracker"""
+    try:
+        if request.provider == "jira":
+            result = await create_jira_ticket(request.finding, request.config)
+            return TicketResponse(**result)
+        elif request.provider == "github":
+            result = await create_github_issue(request.finding, request.config)
+            return TicketResponse(**result)
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported provider")
+    except Exception as e:
+        logger.exception("Ticket creation failed")
+        raise HTTPException(status_code=500, detail=str(e))

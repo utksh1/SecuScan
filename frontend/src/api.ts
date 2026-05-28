@@ -241,3 +241,11 @@ export function deleteWorkflow(workflowId: string): Promise<{ deleted: boolean }
     method: 'DELETE',
   })
 }
+
+export function createTicket(provider: string, finding: any, config: Record<string, string>): Promise<{ ticket_id: string; ticket_url: string }> {
+  return request<{ ticket_id: string; ticket_url: string }>('/integrations/ticket', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, finding, config }),
+  })
+}

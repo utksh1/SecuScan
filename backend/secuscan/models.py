@@ -161,3 +161,16 @@ class ErrorResponse(BaseModel):
     message: str
     field: Optional[str] = None
     details: Optional[Dict[str, Any]] = None
+
+
+class TicketCreateRequest(BaseModel):
+    """Request to create a ticket in an external integration"""
+    provider: str  # "jira" or "github"
+    finding: Finding
+    config: Dict[str, str]  # credentials and config for the integration
+
+
+class TicketResponse(BaseModel):
+    """Response after creating a ticket"""
+    ticket_id: str
+    ticket_url: str
