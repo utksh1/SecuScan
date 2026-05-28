@@ -110,7 +110,10 @@ After startup:
 
 ### Backend
 
+> **Python version:** `python3` in these commands must resolve to 3.11 or newer. If your system default is older, substitute the full path (e.g. `python3.11`, `python3.12`) or use `PYTHON=/path/to/python3.11 ./setup.sh` instead. Run `python3 --version` to check.
+
 ```bash
+cp .env.example .env
 python3 -m venv venv
 source venv/bin/activate
 pip install -r backend/requirements.txt
@@ -182,6 +185,7 @@ Long-form product and planning material lives outside the main README so onboard
 
 - [SecuScan Product Specification](docs/PRODUCT_SPEC.md)
 - [Plugin Catalogue](PLUGINS.md)
+- [Secure Deployment Guide](docs/SECURE_DEPLOYMENT.md)
 
 ## Tech Stack
 

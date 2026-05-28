@@ -17,18 +17,33 @@
   },
   "command_template": [
     "nikto",
+    "-nocheck",
+    "--if:update_plugins:then:-update",
+    "--if:dbcheck:then:-dbcheck",
     "-h",
     "{target}",
     "-nointeractive",
+    "--if:port:then:-port",
+    "--if:port:then:{port}",
     "--if:force_ssl:then:-ssl",
+    "--if:disable_ssl:then:-nossl",
     "--if:follow_redirects:then:-followredirects",
     "--if:no_dns_lookup:then:-nolookup",
+    "--if:no_cache:then:-nocache",
+    "--if:scan_until:then:-until",
+    "--if:scan_until:then:{scan_until}",
     "--if:virtual_host:then:-vhost",
     "--if:virtual_host:then:{virtual_host}",
+    "--if:proxy:then:-useproxy",
+    "--if:proxy:then:{proxy}",
+    "--if:config_file:then:-config",
+    "--if:config_file:then:{config_file}",
+    "--if:display_options:then:-Display",
+    "--if:display_options:then:{display_options}",
     "--if:user_agent:then:-useragent",
     "--if:user_agent:then:{user_agent}",
     "-Tuning",
-    "{tuning:1234}",
+    "{tuning:123b}",
     "-timeout",
     "{request_timeout:10}",
     "-maxtime",
@@ -41,42 +56,42 @@
   "fields": [
     {
       "id": "target",
-      "label": "Target URL",
+      "label": "Target Host / URL",
       "type": "string",
       "required": true,
-      "default": "http://127.0.0.1",
-      "placeholder": "https://app.example.com",
+      "default": "127.0.0.1",
+      "placeholder": "example.com or https://app.example.com",
       "validation": {
-        "pattern": "^https?://.+",
-        "message": "Enter a full HTTP or HTTPS URL."
+        "pattern": "^(https?://[^\\s]+|[A-Za-z0-9.-]+|\\d{1,3}(?:\\.\\d{1,3}){3})$",
+        "message": "Enter a hostname, IPv4 address, or full HTTP/HTTPS URL."
       },
-      "help": "Authorized web application URL to scan."
+      "help": "Nikto -h target. Accepts hostnames, IPv4 addresses, or full HTTP/HTTPS URLs."
+    },
+    {
+      "id": "port",
+      "label": "Port List / Range",
+      "type": "string",
+      "required": false,
+      "default": "",
+      "placeholder": "80,443 or 8000-8100",
+      "validation": {
+        "pattern": "^$|^[0-9,-]+$",
+        "message": "Use comma-separated ports or numeric ranges such as 80,443 or 8000-8100."
+      },
+      "help": "Nikto -port for single, multiple, or ranged ports."
     },
     {
       "id": "tuning",
-      "label": "Nikto Test Tuning",
-      "type": "select",
+      "label": "Nikto Tuning Codes",
+      "type": "string",
       "required": false,
-      "default": "1234",
-      "options": [
-        {
-          "value": "123b",
-          "label": "Passive Baseline"
-        },
-        {
-          "value": "1234",
-          "label": "Safe Web Checks"
-        },
-        {
-          "value": "1234567b",
-          "label": "Standard Audit"
-        },
-        {
-          "value": "1234567890abc",
-          "label": "Full Coverage"
-        }
-      ],
-      "help": "Nikto -Tuning code set. Higher coverage sends more active probes."
+      "default": "123b",
+      "placeholder": "123b or 09abc",
+      "validation": {
+        "pattern": "^[0-9abcx]*$",
+        "message": "Use only Nikto tuning codes 0-9, a, b, c, and x."
+      },
+      "help": "Nikto -Tuning string. 0 upload, 1 log file, 2 default file, 3 disclosure, 4 injection, 5 file retrieval in web root, 6 DoS, 7 server-wide file retrieval, 8 command execution, 9 SQLi, a auth bypass, b software ID, c remote source inclusion, x reverse selection."
     },
     {
       "id": "max_scan_time",
@@ -90,6 +105,15 @@
         "message": "Use a max scan time between 30 and 7200 seconds."
       },
       "help": "Maps to Nikto -maxtime and the SecuScan process timeout."
+    },
+    {
+      "id": "scan_until",
+      "label": "Run Until",
+      "type": "string",
+      "required": false,
+      "default": "",
+      "placeholder": "3600s or 2026-05-14 23:59:00",
+      "help": "Optional Nikto -until value. Use a relative duration or an absolute stop time supported by your Nikto install."
     },
     {
       "id": "request_timeout",
@@ -115,7 +139,7 @@
         "pattern": "^$|^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$",
         "message": "Enter a valid hostname or leave it blank."
       },
-      "help": "Optional Host header value for virtual-hosted targets."
+      "help": "Nikto -vhost Host header override for virtual-hosted targets."
     },
     {
       "id": "user_agent",
@@ -125,6 +149,37 @@
       "default": "",
       "placeholder": "SecuScan-Nikto/1.0",
       "help": "Optional User-Agent string sent by Nikto."
+    },
+    {
+      "id": "proxy",
+      "label": "Proxy Address",
+      "type": "string",
+      "required": false,
+      "default": "",
+      "placeholder": "http://127.0.0.1:8080",
+      "help": "Nikto -useproxy value for routing requests through an upstream proxy."
+    },
+    {
+      "id": "config_file",
+      "label": "Nikto Config File",
+      "type": "string",
+      "required": false,
+      "default": "",
+      "placeholder": "/etc/nikto.conf",
+      "help": "Nikto -config alternate configuration file path."
+    },
+    {
+      "id": "display_options",
+      "label": "Display Flags",
+      "type": "string",
+      "required": false,
+      "default": "EP",
+      "placeholder": "EPV or 1234D",
+      "validation": {
+        "pattern": "^[1234DEPV]*$",
+        "message": "Use only Nikto display codes 1,2,3,4,D,E,P,V."
+      },
+      "help": "Nikto -Display codes. 1 redirects, 2 cookies, 3 HTTP 200s, 4 auth URLs, D debug, E HTTP errors, P print progress, V verbose."
     },
     {
       "id": "safe_mode",
@@ -143,6 +198,14 @@
       "help": "Pass Nikto -ssl for hosts that need SSL forced by port or hostname."
     },
     {
+      "id": "disable_ssl",
+      "label": "Disable SSL",
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "help": "Pass Nikto -nossl to stop using SSL during the scan."
+    },
+    {
       "id": "follow_redirects",
       "label": "Follow Redirects",
       "type": "boolean",
@@ -157,6 +220,30 @@
       "required": false,
       "default": false,
       "help": "Pass Nikto -nolookup when DNS resolution is unnecessary or already controlled."
+    },
+    {
+      "id": "no_cache",
+      "label": "Disable Caching",
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "help": "Pass Nikto -nocache to disable scan response caching."
+    },
+    {
+      "id": "dbcheck",
+      "label": "Database Check",
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "help": "Pass Nikto -dbcheck before execution. Useful for validating local Nikto databases."
+    },
+    {
+      "id": "update_plugins",
+      "label": "Update Nikto Plugins",
+      "type": "boolean",
+      "required": false,
+      "default": false,
+      "help": "Pass Nikto -update before the task. This is a maintenance action and may ignore the scan target depending on Nikto behavior."
     }
   ],
   "presets": {
@@ -164,28 +251,55 @@
       "tuning": "123b",
       "max_scan_time": 300,
       "request_timeout": 10,
+      "display_options": "EP",
       "safe_mode": true,
+      "port": "",
+      "scan_until": "",
+      "proxy": "",
+      "config_file": "",
+      "dbcheck": false,
+      "disable_ssl": false,
       "force_ssl": false,
       "follow_redirects": true,
-      "no_dns_lookup": false
+      "no_dns_lookup": false,
+      "no_cache": false,
+      "update_plugins": false
     },
     "standard": {
-      "tuning": "1234",
+      "tuning": "1234567b",
       "max_scan_time": 600,
       "request_timeout": 10,
+      "display_options": "EPV",
       "safe_mode": true,
+      "port": "",
+      "scan_until": "",
+      "proxy": "",
+      "config_file": "",
+      "dbcheck": false,
+      "disable_ssl": false,
       "force_ssl": false,
       "follow_redirects": true,
-      "no_dns_lookup": false
+      "no_dns_lookup": false,
+      "no_cache": false,
+      "update_plugins": false
     },
     "active": {
       "tuning": "1234567890abc",
       "max_scan_time": 1800,
       "request_timeout": 15,
+      "display_options": "1234DEPV",
       "safe_mode": false,
+      "port": "",
+      "scan_until": "",
+      "proxy": "",
+      "config_file": "",
+      "dbcheck": false,
+      "disable_ssl": false,
       "force_ssl": false,
       "follow_redirects": true,
-      "no_dns_lookup": false
+      "no_dns_lookup": false,
+      "no_cache": true,
+      "update_plugins": false
     }
   },
   "output": {
@@ -219,5 +333,5 @@
     ]
   },
   "docker_image": "sullo/nikto",
-  "checksum": "3bda0b32d359908b728a699208cf7c650cd05f111df2beb7ee0d86ebb6ff8613"
+  "checksum": "0fb0bf4aa20a24934291e650701373b2501b2d44a1d1b0e9445ff9bf84857315"
 }

@@ -5,6 +5,7 @@ export const routes = {
   findings: '/findings',
   scans: '/scans',
   reports: '/reports',
+  workflows: '/workflows',
   settings: '/settings',
   task: '/task/:taskId',
 } as const

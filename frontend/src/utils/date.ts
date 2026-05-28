@@ -174,3 +174,13 @@ export function formatLocaleTime(dateStr: string | Date | null | undefined, opti
         ...options
     });
 }
+export type DateRange = 'all' | '24h' | '7d' | '30d'
+
+export function isWithinDateRange(dateStr: string, range: DateRange): boolean {
+  if (range === 'all') return true
+  const d = parseDateSafe(dateStr)
+  if (!d) return false
+  const msMap = { '24h': 86400000, '7d': 604800000, '30d': 2592000000 }
+  const diff = Date.now() - d.getTime()
+  return diff >= 0 && diff <= msMap[range]
+}

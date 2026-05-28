@@ -48,6 +48,8 @@ This starts:
 
 Backend:
 
+> **Python version:** `python3` below must resolve to 3.11 or newer. Run `python3 --version` to check. If your system default is older, substitute the full path (e.g. `python3.11`) or use `PYTHON=/path/to/python3.11 ./setup.sh` instead of the manual steps.
+
 ```bash
 python3 -m venv venv
 source venv/bin/activate
@@ -63,6 +65,78 @@ cd frontend
 npm install
 npm run dev -- --host 127.0.0.1 --port 5173
 ```
+
+## Backend Testing Quickstart
+
+This section explains how to run the backend test suite from a fresh checkout
+without touching the main development environment.
+
+### 1. Prerequisites
+
+Make sure your machine has Python 3.11 or newer before running any test commands.
+
+```bash
+python3 --version
+```
+
+If the version shown is older than 3.11, substitute the full path to a compatible
+interpreter (e.g. `python3.11`) wherever `python3` appears below.
+
+### 2. Run the Full Backend Test Suite
+
+From the repo root, run:
+
+```bash
+./testing/test_python.sh
+```
+
+This script handles everything automatically:
+
+- Creates an isolated virtual environment at `venv_tests/` (separate from your
+  dev environment)
+- Installs all required dependencies from `backend/requirements.txt` and
+  `backend/requirements-dev.txt`
+- Runs the full `testing/backend/` suite with pytest in quiet mode
+
+You do not need to activate any virtual environment manually for this command.
+
+### 3. Run a Single Test File
+
+When you want faster feedback on one specific file, activate the test virtual
+environment and call pytest directly. Run these commands from the repo root:
+
+```bash
+source venv_tests/bin/activate
+python -m pytest testing/backend/unit/test_models.py -v
+deactivate
+```
+
+Replace `test_models.py` with whichever file you want to target. All unit tests
+live under `testing/backend/unit/` and integration tests live under
+`testing/backend/integration/`.
+
+> **Note:** Run `./testing/test_python.sh` at least once before using this
+> shortcut so that `venv_tests/` exists and dependencies are installed.
+
+### 4. Where Requirements Files Live
+
+| File | Purpose |
+|---|---|
+| `backend/requirements.txt` | Core runtime dependencies |
+| `backend/requirements-dev.txt` | Test and development dependencies (pytest, etc.) |
+
+Both files must be installed for the test suite to run correctly. The
+`./testing/test_python.sh` script installs both automatically.
+
+### 5. Common Dependency Issues
+
+- **`ModuleNotFoundError` on any import** — the `venv_tests/` environment may
+  be outdated. Delete it and re-run `./testing/test_python.sh` to rebuild from
+  scratch.
+- **`python3` resolves to an older version** — check with `python3 --version`.
+  Use `python3.11` or `python3.12` explicitly if needed.
+- **Permission denied on `./testing/test_python.sh`** — make it executable
+  first with `chmod +x testing/test_python.sh`.
 
 ## Project Layout
 
@@ -107,6 +181,80 @@ Your PR should include:
 - Notes about documentation, migrations, environment variables, or breaking behavior when relevant
 
 Try to keep one pull request focused on one problem. If a change touches unrelated areas, split it into separate PRs when possible.
+
+## Contribution Scoring
+
+Every merged pull request can be scored for GSSoC using labels applied by the project admin or mentor. The scoring engine reads these labels after the PR is merged, so contributors should focus on clear scope, good implementation, and complete review notes rather than self-assigning score labels.
+
+### Labels the Admin Applies
+
+Each merged PR should have one difficulty label:
+
+- `level:beginner`
+- `level:intermediate`
+- `level:advanced`
+- `level:critical`
+
+Optional quality labels can increase the contributor score:
+
+- `quality:clean`
+- `quality:exceptional`
+
+Optional type bonus labels can describe the work category:
+
+- `type:docs`
+- `type:testing`
+- `type:accessibility`
+- `type:performance`
+- `type:security`
+- `type:design`
+- `type:refactor`
+- `type:devops`
+- `type:bug`
+- `type:feature`
+
+Validation labels are decided by the admin:
+
+- `gssoc:approved`
+- `gssoc:invalid`
+- `gssoc:spam`
+- `gssoc:ai-slop`
+
+Use `mentor:username` to credit the reviewing mentor with points for that PR.
+
+### Contributor Points per PR
+
+| Label | Points |
+| --- | ---: |
+| `level:beginner` | 20 pts |
+| `level:intermediate` | 35 pts |
+| `level:advanced` | 55 pts |
+| `level:critical` | 80 pts |
+| `quality:clean` | x 1.2 multiplier |
+| `quality:exceptional` | x 1.5 multiplier |
+
+Contributor score formula:
+
+```text
+((difficulty x quality) + type bonus)
+```
+
+### Mentor Points per Reviewed PR
+
+| Label | Points |
+| --- | ---: |
+| `level:beginner` | 10 pts |
+| `level:intermediate` | 20 pts |
+| `level:advanced` | 30 pts |
+| `level:critical` | 50 pts |
+| `quality:clean` | +5 pts bonus |
+| `quality:exceptional` | +10 pts bonus |
+
+Mentor score formula:
+
+```text
+(base points + quality bonus)
+```
 
 ## Commit Message Conventions
 
@@ -244,3 +392,16 @@ If a PR has been quiet for more than a week, a polite follow-up comment is compl
 - For security-sensitive reports, do not use public issues. Follow [SECURITY.md](SECURITY.md).
 
 Thank you for helping make SecuScan more useful, safer, and more welcoming to new contributors.
+## Frontend Generated Artifacts
+
+Never commit these auto-generated paths:
+- `frontend/dist/`
+- `frontend/playwright-report/`
+- `frontend/test-results/`
+- `frontend/.vite/`
+- `.vite/deps/`
+
+If CI fails, run:
+```bash
+git rm --cached <file>
+echo 'frontend/dist/' >> .gitignore

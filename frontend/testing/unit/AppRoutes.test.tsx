@@ -73,6 +73,5 @@ describe('App route fallback', () => {
     )
 
     expect(await screen.findByRole('heading', { name: /Findings/i })).toBeInTheDocument()
-    expect(screen.getByText(/Workflow Actions/i)).toBeInTheDocument()
   })
 })

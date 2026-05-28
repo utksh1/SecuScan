@@ -24,7 +24,7 @@
     "--if:severity:then:-s",
     "--if:severity:then:{severity}",
     "-nc",
-    "-json"
+    "-jsonl"
   ],
   "fields": [
     {
@@ -32,7 +32,11 @@
       "label": "Target URL/Host",
       "type": "string",
       "required": true,
-      "placeholder": "https://secuscan.in",
+      "placeholder": "https://secuscan.in or secuscan.in",
+      "validation": {
+        "pattern": "^(https?://)?[a-zA-Z0-9.-]+$",
+        "message": "Must be a valid URL or Hostname"
+      },
       "help": "URL or Hostname to scan"
     },
     {
@@ -126,5 +130,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "892aa6df642b64575308caf7e49182af2e2945e3536bf8d9a8341c92d7e04fca"
+  "checksum": "ecdacab5d26ebd95d07fe61cc781768e046ab004438a254f2ed80efd167c728d"
 }
