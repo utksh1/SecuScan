@@ -20,6 +20,7 @@ from .database import get_db
 from .plugins import get_plugin_manager
 from .models import TaskStatus
 from .ratelimit import concurrent_limiter
+from .telemetry import PluginTelemetry
 
 # Modular Scanners
 from .scanners.port_scanner import PortScanner
@@ -288,17 +289,35 @@ class TaskExecutor:
                 await self._broadcast(task_id, "status", TaskStatus.RUNNING.value)
 
                 # Execute command
+                execution_timeout = self._resolve_execution_timeout(inputs)
+                telemetry = PluginTelemetry(
+                    plugin_name=plugin.name,
+                    resource_hints={
+                        "memory_limit_mb": settings.sandbox_memory_mb,
+                        "cpu_quota": settings.sandbox_cpu_quota,
+                        "docker_enabled": settings.docker_enabled,
+                    },
+                )
                 start_time = time.time()
                 output, exit_code = await self._execute_command(
                     command,
                     task_id,
-                    timeout=self._resolve_execution_timeout(inputs),
+                    timeout=execution_timeout,
                 )
                 duration = time.time() - start_time
 
+                # Derive telemetry from existing 2-tuple — _execute_command unchanged
+                telemetry.duration_seconds = duration
+                telemetry.exit_code = exit_code
+                telemetry.timed_out = "Task timed out" in output
+                telemetry.timeout_reason = (
+                    f"Hard limit of {execution_timeout}s exceeded"
+                    if telemetry.timed_out else None
+                )
                 # Save raw output
                 raw_path = Path(settings.raw_output_dir) / f"{task_id}.txt"
                 output = redact(output)
+                telemetry.output_size_bytes = len(output.encode("utf-8", errors="replace"))
                 with open(raw_path, 'w') as f:
                     f.write(output)
 
@@ -334,16 +353,26 @@ class TaskExecutor:
                     )
                 )
 
-                # Upsert findings and report
-                await self._upsert_findings_and_report(
-                    db=db,
-                    task_id=task_id,
-                    plugin=plugin,
-                    plugin_id=plugin_id,
-                    target=target,
-                    status=final_status,
-                    output=output
-                )
+                # Upsert findings and report (timed for telemetry)
+                _parser_start = time.time()
+                _parser_error = None
+                try:
+                    await self._upsert_findings_and_report(
+                        db=db,
+                        task_id=task_id,
+                        plugin=plugin,
+                        plugin_id=plugin_id,
+                        target=target,
+                        status=final_status,
+                        output=output,
+                    )
+                except Exception as _pe:
+                    _parser_error = str(_pe)
+                    raise
+                finally:
+                    telemetry.parser_time_seconds = time.time() - _parser_start
+                    telemetry.parser_error = _parser_error
+                    telemetry.log(task_id)
 
             await self._broadcast(task_id, "status", final_status)
             await self._invalidate_cached_views()
