@@ -200,8 +200,8 @@ class TestExecutorParserGate:
 
         assert len(exec_called) == 0, "exec_module must not be called when integrity check fails"
 
-    def test_exec_module_called_when_integrity_passes(self, tmp_path, monkeypatch):
-        """When verify_parser_at_exec_time returns True, exec_module must run."""
+    def test_sandbox_called_when_integrity_passes(self, tmp_path, monkeypatch):
+        """When verify_parser_at_exec_time returns True, run_parser_in_sandbox must be called."""
         monkeypatch.setattr(settings, "enforce_plugin_signatures", False)
 
         parser_src = "def parse(output):\n    return {'findings': []}\n"
@@ -213,29 +213,18 @@ class TestExecutorParserGate:
         mgr.plugins_dir = tmp_path
         mgr.plugins[plugin.id] = plugin
 
-        exec_called = []
+        sandbox_called = []
 
-        def _fake_exec(module):
-            exec_called.append(True)
-            module.parse = lambda output: {"findings": []}
+        def _fake_sandbox(parser_path, plugin_id, parser_input, **kwargs):
+            sandbox_called.append(plugin_id)
+            return {"findings": []}
 
-        with patch("importlib.util.spec_from_file_location") as mock_spec:
-            mock_loader = MagicMock()
-            mock_loader.exec_module = MagicMock(side_effect=_fake_exec)
-            mock_spec_obj = MagicMock()
-            mock_spec_obj.loader = mock_loader
-            mock_spec.return_value = mock_spec_obj
+        from backend.secuscan import executor as executor_module
+        exec_instance = executor_module.TaskExecutor.__new__(executor_module.TaskExecutor)
 
-            fake_module = MagicMock()
-            fake_module.parse = lambda output: {"findings": []}
+        with patch("backend.secuscan.executor.get_plugin_manager", return_value=mgr), \
+             patch("backend.secuscan.executor.run_parser_in_sandbox", side_effect=_fake_sandbox):
+            result = exec_instance._parse_results(plugin, "raw output")
 
-            with patch("importlib.util.module_from_spec", return_value=fake_module):
-                from backend.secuscan import executor as executor_module
-                exec_instance = executor_module.TaskExecutor.__new__(executor_module.TaskExecutor)
-
-                with patch(
-                    "backend.secuscan.executor.get_plugin_manager", return_value=mgr
-                ):
-                    result = exec_instance._parse_results(plugin, "raw output")
-
-        assert len(exec_called) == 1, "exec_module must be called once when integrity check passes"
+        assert len(sandbox_called) == 1, "run_parser_in_sandbox must be called once when integrity check passes"
+        assert sandbox_called[0] == plugin.id

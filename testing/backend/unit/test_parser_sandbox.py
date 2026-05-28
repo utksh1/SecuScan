@@ -265,6 +265,37 @@ class TestOutputSizeLimit:
             run_parser_in_sandbox(p, "big_plugin", "data", max_output_bytes=100)
         assert "limit" in exc_info.value.reason
 
+    def test_oversized_output_process_killed_before_full_buffer(self, tmp_path):
+        """Regression: parser generating >limit bytes must be killed immediately.
+
+        The process is terminated as soon as the cap is hit, so it cannot force
+        the parent to buffer the full output in memory first.
+        """
+        # Parser streams 20 MB in a tight loop so it would fill memory fast if
+        # the parent waited for it to finish before checking size.
+        p = _write_parser(
+            tmp_path,
+            """\
+            import sys
+            def parse(output):
+                # Write 20 MB to stdout directly so the parent reader sees it.
+                chunk = b"x" * 65536
+                for _ in range(320):  # 320 * 64 KB = 20 MB
+                    sys.stdout.buffer.write(chunk)
+                    sys.stdout.buffer.flush()
+                return {}
+            """,
+        )
+        cap = 512 * 1024  # 512 KB cap
+        import time
+        start = time.monotonic()
+        with pytest.raises(ParserSandboxError) as exc_info:
+            run_parser_in_sandbox(p, "overflow_plugin", "data", max_output_bytes=cap)
+        elapsed = time.monotonic() - start
+        assert "limit" in exc_info.value.reason
+        # Must be killed well before it finishes writing 20 MB — should take < 10s
+        assert elapsed < 10, f"Overflow enforcement took too long: {elapsed:.1f}s"
+
 
 # ---------------------------------------------------------------------------
 # Missing parser file

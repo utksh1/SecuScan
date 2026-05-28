@@ -145,16 +145,74 @@ def run_parser_in_sandbox(
     envelope = json.dumps({"input": parser_input})
     stdin_bytes = envelope.encode("utf-8")
 
+    import threading
+    import time
+
+    stdout_chunks: list[bytes] = []
+    stdout_total = 0
+    overflow = False
+    stderr_chunks: list[bytes] = []
+
+    proc = subprocess.Popen(
+        [sys.executable, "-c", bootstrap],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=_sanitised_env(),
+    )
+
+    def _read_stdout() -> None:
+        nonlocal stdout_total, overflow
+        assert proc.stdout is not None
+        while True:
+            chunk = proc.stdout.read(65536)
+            if not chunk:
+                break
+            stdout_total += len(chunk)
+            if stdout_total > max_output_bytes:
+                overflow = True
+                proc.kill()
+                break
+            stdout_chunks.append(chunk)
+
+    def _read_stderr() -> None:
+        assert proc.stderr is not None
+        while True:
+            chunk = proc.stderr.read(4096)
+            if not chunk:
+                break
+            stderr_chunks.append(chunk)
+
+    t_out = threading.Thread(target=_read_stdout, daemon=True)
+    t_err = threading.Thread(target=_read_stderr, daemon=True)
+    t_out.start()
+    t_err.start()
+
     try:
-        result = subprocess.run(
-            [sys.executable, "-c", bootstrap],
-            input=stdin_bytes,
-            capture_output=True,
-            timeout=timeout_seconds,
-            env=_sanitised_env(),
+        proc.stdin.write(stdin_bytes)  # type: ignore[union-attr]
+        proc.stdin.close()  # type: ignore[union-attr]
+    except BrokenPipeError:
+        pass
+
+    timed_out = False
+    try:
+        proc.wait(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        proc.kill()
+
+    t_out.join(timeout=5)
+    t_err.join(timeout=5)
+
+    stderr_text = b"".join(stderr_chunks).decode("utf-8", errors="replace")
+
+    if overflow:
+        raise ParserSandboxError(
+            plugin_id,
+            f"output exceeded {max_output_bytes // (1024 * 1024)} MB limit",
         )
-    except subprocess.TimeoutExpired as exc:
-        stderr_text = (exc.stderr or b"").decode("utf-8", errors="replace")
+
+    if timed_out:
         logger.warning(
             "Parser sandbox timed out after %ds for plugin '%s'",
             timeout_seconds,
@@ -162,27 +220,20 @@ def run_parser_in_sandbox(
         )
         raise ParserSandboxError(plugin_id, f"timed out after {timeout_seconds}s", stderr_text)
 
-    stderr_text = result.stderr.decode("utf-8", errors="replace")
-
-    if result.returncode != 0:
+    if proc.returncode != 0:
         logger.error(
             "Parser sandbox exited with code %d for plugin '%s': %s",
-            result.returncode,
+            proc.returncode,
             plugin_id,
             stderr_text[:500],
         )
         raise ParserSandboxError(
             plugin_id,
-            f"subprocess exited with code {result.returncode}",
+            f"subprocess exited with code {proc.returncode}",
             stderr_text,
         )
 
-    stdout_bytes = result.stdout
-    if len(stdout_bytes) > max_output_bytes:
-        raise ParserSandboxError(
-            plugin_id,
-            f"output exceeded {max_output_bytes // (1024 * 1024)} MB limit",
-        )
+    stdout_bytes = b"".join(stdout_chunks)
 
     if not stdout_bytes.strip():
         logger.warning(
