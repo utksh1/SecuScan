@@ -40,7 +40,7 @@ class NetworkPolicy:
     reason: str                   # Why this rule exists
     created_at: datetime          # When rule was added
     expires_at: Optional[datetime] = None  # Optional expiration
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for logging"""
         return {
@@ -64,7 +64,7 @@ class AuditLogEntry:
     dest_hostname: Optional[str]
     policy_matched: str           # CIDR that caused decision
     reason: str
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON logging"""
         return {
@@ -83,22 +83,22 @@ class AuditLogEntry:
 class NetworkPolicyEngine:
     """
     Enforce network access policies for scanners.
-    
+
     Logic:
       1. Check explicit denylist (highest priority, fails fast)
       2. Check explicit allowlist (allows if matched)
       3. Default deny (no match = blocked)
     """
-    
+
     def __init__(self, audit_log_path: str = "/var/log/secuscan/network.audit.log"):
         self.allowlist: List[Tuple[ipaddress.ip_network, NetworkPolicy]] = []
         self.denylist: List[Tuple[ipaddress.ip_network, NetworkPolicy]] = []
         self.audit_log_path = audit_log_path
         self.audit_entries: List[AuditLogEntry] = []
-        
+
         # Create audit log file
         self._init_audit_log()
-    
+
     def _init_audit_log(self):
         """Initialize audit log file with header"""
         try:
@@ -110,7 +110,7 @@ class NetworkPolicyEngine:
                     f.write(f"# Started: {datetime.now().isoformat()}\n")
         except IOError as e:
             logger.error(f"Failed to initialize audit log: {e}")
-    
+
     def add_allow_rule(
         self,
         cidr: str,
@@ -119,7 +119,7 @@ class NetworkPolicyEngine:
     ) -> None:
         """
         Add a network to the allowlist.
-        
+
         Args:
             cidr: Network in CIDR notation (e.g., "10.0.0.0/8")
             reason: Human-readable reason for this rule
@@ -139,7 +139,7 @@ class NetworkPolicyEngine:
         except ValueError as e:
             logger.error(f"Invalid CIDR in allowlist: {cidr}: {e}")
             raise
-    
+
     def add_deny_rule(
         self,
         cidr: str,
@@ -148,7 +148,7 @@ class NetworkPolicyEngine:
     ) -> None:
         """
         Add a network to the denylist.
-        
+
         Args:
             cidr: Network in CIDR notation
             reason: Human-readable reason for this rule
@@ -168,7 +168,7 @@ class NetworkPolicyEngine:
         except ValueError as e:
             logger.error(f"Invalid CIDR in denylist: {cidr}: {e}")
             raise
-    
+
     def check_access(
         self,
         dest_ip: str,
@@ -179,14 +179,14 @@ class NetworkPolicyEngine:
     ) -> Tuple[bool, str, NetworkPolicy]:
         """
         Check if outbound connection is allowed.
-        
+
         Args:
             dest_ip: Destination IP address
             dest_port: Destination port (informational)
             plugin_id: Plugin making the connection
             task_id: Task ID for audit context
             dest_hostname: Optional resolved hostname
-        
+
         Returns:
             Tuple of (allowed: bool, decision_reason: str, matched_policy: NetworkPolicy)
         """
@@ -215,7 +215,7 @@ class NetworkPolicyEngine:
                 )
                 self._log_audit_entry(entry)
                 return False, reason, None
-        
+
         # ═ Step 1: Check denylist (highest priority) ═
         for net, policy in self.denylist:
             if self._is_expired(policy):
@@ -235,7 +235,7 @@ class NetworkPolicyEngine:
                 )
                 self._log_audit_entry(entry)
                 return False, reason, policy
-        
+
         # ═ Step 2: Check allowlist ═
         for net, policy in self.allowlist:
             if self._is_expired(policy):
@@ -255,7 +255,7 @@ class NetworkPolicyEngine:
                 )
                 self._log_audit_entry(entry)
                 return True, reason, policy
-        
+
         # ═ Step 3: Default deny ═
         reason = "Denied by default (no matching allow rule)"
         deny_policy = NetworkPolicy(
@@ -277,24 +277,24 @@ class NetworkPolicyEngine:
         )
         self._log_audit_entry(entry)
         return False, reason, deny_policy
-    
+
     def _is_expired(self, policy: NetworkPolicy) -> bool:
         """Check if a policy has expired"""
         if policy.expires_at is None:
             return False
         return datetime.now() > policy.expires_at
-    
+
     def _log_audit_entry(self, entry: AuditLogEntry) -> None:
         """Log audit entry to file and memory"""
         self.audit_entries.append(entry)
-        
+
         try:
             with open(self.audit_log_path, 'a') as f:
                 import json
                 f.write(json.dumps(entry.to_dict()) + "\n")
         except IOError as e:
             logger.error(f"Failed to write audit log: {e}")
-    
+
     def get_audit_entries(
         self,
         plugin_id: Optional[str] = None,
@@ -303,32 +303,32 @@ class NetworkPolicyEngine:
     ) -> List[AuditLogEntry]:
         """
         Retrieve audit log entries with optional filtering.
-        
+
         Args:
             plugin_id: Filter by plugin (optional)
             action: Filter by action (ALLOW or DENY)
             limit: Maximum number of entries to return
-        
+
         Returns:
             List of matching audit entries
         """
         entries = self.audit_entries
-        
+
         if plugin_id:
             entries = [e for e in entries if e.plugin_id == plugin_id]
-        
+
         if action:
             entries = [e for e in entries if e.action == action]
-        
+
         return entries[-limit:]  # Return most recent N
-    
+
     def export_audit_log(self, format: str = "json") -> str:
         """
         Export audit log in specified format.
-        
+
         Args:
             format: "json" or "csv"
-        
+
         Returns:
             Formatted audit log string
         """
@@ -368,21 +368,21 @@ def get_policy_engine() -> NetworkPolicyEngine:
 def _init_default_policies(engine: NetworkPolicyEngine) -> None:
     """Initialize default security policies"""
     from .config import settings
-    
+
     # Add operator-configured denylist
     for cidr in settings.network_denylist:
         try:
             engine.add_deny_rule(cidr, reason="Operator configured denylist")
         except ValueError:
             logger.warning(f"Skipping invalid denylist CIDR: {cidr}")
-    
+
     # Add operator-configured allowlist
     for cidr in settings.network_allowlist:
         try:
             engine.add_allow_rule(cidr, reason="Operator configured allowlist")
         except ValueError:
             logger.warning(f"Skipping invalid allowlist CIDR: {cidr}")
-    
+
     # Add system defaults (if allowlist is empty, add public internet)
     if not settings.network_allowlist:
         logger.warning(
@@ -408,7 +408,7 @@ class RestrictedSocket(_original_socket):
             if isinstance(address, tuple) and len(address) > 0:
                 dest_host = address[0]
                 dest_port = address[1] if len(address) > 1 else 0
-                
+
                 # Resolve hostname to IP safely using gethostbyname
                 try:
                     ipaddress.ip_address(dest_host)
@@ -420,7 +420,7 @@ class RestrictedSocket(_original_socket):
                         dest_ip = socket.gethostbyname(dest_host)
                     except Exception:
                         dest_ip = dest_host
-                
+
                 engine = get_policy_engine()
                 allowed, reason, policy = engine.check_access(
                     dest_ip=dest_ip,
@@ -443,7 +443,7 @@ class RestrictedSocket(_original_socket):
             if isinstance(address, tuple) and len(address) > 0:
                 dest_host = address[0]
                 dest_port = address[1] if len(address) > 1 else 0
-                
+
                 # Resolve hostname to IP safely using gethostbyname
                 try:
                     ipaddress.ip_address(dest_host)
@@ -455,7 +455,7 @@ class RestrictedSocket(_original_socket):
                         dest_ip = socket.gethostbyname(dest_host)
                     except Exception:
                         dest_ip = dest_host
-                
+
                 engine = get_policy_engine()
                 allowed, reason, policy = engine.check_access(
                     dest_ip=dest_ip,
