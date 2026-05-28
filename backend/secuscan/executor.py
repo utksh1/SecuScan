@@ -20,6 +20,7 @@ from .database import get_db
 from .plugins import get_plugin_manager
 from .models import TaskStatus
 from .ratelimit import concurrent_limiter
+from .sandbox_executor import SandboxConfig, SandboxViolation, run_sandboxed
 from .risk_scoring import compute_risk_score, compute_risk_factors
 
 
@@ -325,10 +326,19 @@ class TaskExecutor:
 
                 # Execute command
                 start_time = time.time()
+                # Build sandbox config — allow plugin metadata to override defaults
+                plugin_sandbox_meta = plugin.output.get("sandbox", {}) if isinstance(plugin.output, dict) else {}
+                sandbox_cfg = SandboxConfig(
+                    timeout_seconds=self._resolve_execution_timeout(inputs),
+                    max_memory_mb=int(plugin_sandbox_meta.get("max_memory_mb", settings.sandbox_memory_mb)),
+                    max_output_bytes=int(plugin_sandbox_meta.get("max_output_bytes", 5 * 1024 * 1024)),
+                    sigterm_grace_seconds=int(plugin_sandbox_meta.get("sigterm_grace_seconds", 3)),
+                )
                 output, exit_code = await self._execute_command(
                     command,
                     task_id,
-                    timeout=self._resolve_execution_timeout(inputs),
+                    timeout=sandbox_cfg.timeout_seconds,
+                    sandbox_config=sandbox_cfg,
                 )
                 duration = time.time() - start_time
 
@@ -465,63 +475,62 @@ class TaskExecutor:
         self,
         command: list,
         task_id: str,
-        timeout: int = 600
+        timeout: int = 600,
+        sandbox_config: Optional[SandboxConfig] = None,
     ) -> tuple:
         """
-        Execute command in subprocess and stream output.
+        Execute command in a sandboxed subprocess and stream output.
 
         Args:
-            command: Command as list
-            task_id: Task identifier for logging
-            timeout: Execution timeout in seconds
+            command:        Command as list
+            task_id:        Task identifier for logging and broadcast
+            timeout:        Execution timeout in seconds (overrides sandbox_config)
+            sandbox_config: Optional SandboxConfig; built from settings if not provided
 
         Returns:
             Tuple of (output, exit_code)
         """
+        config = sandbox_config or SandboxConfig(
+            timeout_seconds=timeout,
+            max_memory_mb=settings.sandbox_memory_mb,
+            max_output_bytes=5 * 1024 * 1024,
+            sigterm_grace_seconds=3,
+        )
+        # Always honour the caller-supplied timeout
+        config.timeout_seconds = timeout
+
         try:
-            process = await asyncio.create_subprocess_exec(
-                *command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT
+            output, exit_code = await run_sandboxed(
+                command=command,
+                task_id=task_id,
+                config=config,
+                broadcast_fn=self._broadcast,
             )
+            return output, exit_code
 
-            output_lines = []
+        except SandboxViolation as exc:
+            logger.warning(
+                "Sandbox violation for task %s — reason: %s", task_id, exc.reason
+            )
+            # Surface the termination reason in the task status broadcast
+            await self._broadcast(task_id, "status", f"terminated:{exc.reason}")
+            # Update DB with a structured error message
+            db = await get_db()
+            await db.execute(
+                "UPDATE tasks SET error_message = ? WHERE id = ?",
+                (f"[sandbox:{exc.reason}] {exc}", task_id),
+            )
+            await db.log_audit(
+                "sandbox_violation",
+                f"Task {task_id} terminated by sandbox: {exc.reason}",
+                severity="warning",
+                context={"task_id": task_id, "reason": exc.reason},
+                task_id=task_id,
+            )
+            return exc.output or f"[Sandbox terminated: {exc.reason}]", -1
 
-            async def read_stream():
-                stdout = process.stdout
-                if stdout is None:
-                    return
-                    
-                while not stdout.at_eof():
-                    line = await stdout.readline()
-                    if line:
-                        decoded_line = line.decode('utf-8', errors='replace')
-                        output_lines.append(decoded_line)
-                        await self._broadcast(task_id, "output", decoded_line)
-
-            try:
-                await asyncio.wait_for(read_stream(), timeout=timeout)
-                await process.wait()
-                return "".join(output_lines), process.returncode if process.returncode is not None else -1
-
-            except asyncio.TimeoutError:
-                process.kill()
-                await process.wait()
-                return "".join(output_lines) + "\nTask timed out", -1
-
-            except asyncio.CancelledError:
-                # Handle task cancellation by killing the subprocess
-                logger.warning(f"Task {task_id} cancelled. Killing process {process.pid}")
-                try:
-                    process.kill()
-                    await process.wait()
-                except Exception as e:
-                    logger.error(f"Error killing process for cancelled task {task_id}: {e}")
-                raise
-
-        except Exception as e:
-            logger.error(f"Failed to execute command: {e}")
-            return f"Execution error: {str(e)}", -1
+        except asyncio.CancelledError:
+            raise
 
     def _resolve_execution_timeout(self, inputs: Dict[str, Any]) -> int:
         """Resolve per-task process timeout from plugin inputs."""
