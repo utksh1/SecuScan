@@ -39,6 +39,24 @@ class Settings(BaseSettings):
     require_consent: bool = True
     allow_loopback_scans: bool = True
     allowed_networks: List[str] = ["127.0.0.1", "192.168.*.*", "10.*.*.*", "172.16.*.*"]
+    
+    # Network policy settings for target validation
+    allow_private_ips: bool = False  # Disable private IPs by default in permissive mode
+    allow_loopback: bool = True      # Allow 127.0.0.1 for local debugging
+
+    # Configurable allowlist/denylist as CIDR notation
+    network_allowlist: List[str] = []  # e.g., ["192.168.1.0/24", "10.0.0.0/8"]
+    network_denylist: List[str] = []   # e.g., ["169.254.169.254/32"]
+
+    # Hostname resolution behavior
+    dns_timeout_seconds: int = 2
+    max_redirect_hops: int = 5
+    resolve_hostname_before_scan: bool = True
+
+    # Audit/logging
+    log_blocked_targets: bool = True
+    blocked_target_log_file: str = str(PROJECT_ROOT / "logs" / "blocked_targets.log")
+
     cors_allowed_origins: List[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
@@ -95,7 +113,7 @@ class Settings(BaseSettings):
         env_prefix = "SECUSCAN_"
         case_sensitive = False
 
-    @field_validator("cors_allowed_origins", "cors_allowed_methods", "cors_allowed_headers", "trusted_proxies", mode="before")
+    @field_validator("cors_allowed_origins", "cors_allowed_methods", "cors_allowed_headers", "trusted_proxies", "network_allowlist", "network_denylist", mode="before")
     @classmethod
     def parse_csv_or_list(cls, value: Any) -> Any:
         """Allow comma-separated env values in addition to JSON arrays."""

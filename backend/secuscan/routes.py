@@ -231,7 +231,7 @@ async def start_task(
         should_validate_target = plugin.category != "code" and not is_filesystem_target(target_str)
 
         if should_validate_target:
-            is_valid, error_msg = validate_target(target_str, safe_mode)
+            is_valid, error_msg = await validate_target(target_str, safe_mode)
 
             if not is_valid:
                 logger.warning(f"Task start failed: Target validation failed for '{target}': {error_msg}")

@@ -5,20 +5,21 @@ from backend.secuscan.validation import (
 )
 
 
-def test_validate_target():
+@pytest.mark.asyncio
+async def test_validate_target():
     # Valid IP target
-    assert validate_target("192.168.1.1", safe_mode=True) == (True, "")
+    assert await validate_target("192.168.1.1", safe_mode=True) == (True, "")
 
     # Valid hostname target
-    assert validate_target("example.com", safe_mode=False) == (True, "")
+    assert await validate_target("example.com", safe_mode=False) == (True, "")
 
     # Safe mode restrictions
-    assert validate_target("8.8.8.8", safe_mode=True)[0] is False  # Public IP blocked in safe mode
-    assert validate_target("military.mil", safe_mode=True)[0] is False  # Blocked TLD
+    assert (await validate_target("8.8.8.8", safe_mode=True))[0] is False  # Public IP blocked in safe mode
+    assert (await validate_target("military.mil", safe_mode=True))[0] is False  # Blocked TLD
 
     # Invalid targets
-    assert validate_target("10.0.0.0/24")[0] is True  # Private CIDR ranges are allowed in safe mode
-    assert validate_target("not!a!valid!hostname")[0] is False
+    assert (await validate_target("10.0.0.0/24"))[0] is True  # Private CIDR ranges are allowed in safe mode
+    assert (await validate_target("not!a!valid!hostname"))[0] is False
 
 
 def test_validate_port():

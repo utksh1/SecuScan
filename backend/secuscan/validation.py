@@ -4,42 +4,177 @@ Input validation and security checks
 
 import re
 import ipaddress
-from typing import Any, Dict, Tuple
+import logging
+import asyncio
+from typing import Any, Dict, Tuple, List, Optional
 from fnmatch import fnmatch
 
 from .config import settings
 
+logger = logging.getLogger(__name__)
 
-# Blocked network ranges
+# Blocked network ranges (RFC 5735, RFC 6890, RFC 1122, RFC 3927)
 BLOCKED_NETWORKS = [
-    ipaddress.ip_network("0.0.0.0/8"),       # Broadcast
-    ipaddress.ip_network("169.254.0.0/16"),  # Link-local
-    ipaddress.ip_network("224.0.0.0/4"),     # Multicast
+    ipaddress.ip_network("0.0.0.0/8"),           # This network
+    ipaddress.ip_network("169.254.0.0/16"),      # Link-local IPv4
+    ipaddress.ip_network("192.0.2.0/24"),        # TEST-NET-1
+    ipaddress.ip_network("198.18.0.0/15"),       # Benchmarking
+    ipaddress.ip_network("198.51.100.0/24"),     # TEST-NET-2
+    ipaddress.ip_network("203.0.113.0/24"),      # TEST-NET-3
+    ipaddress.ip_network("224.0.0.0/4"),         # Multicast
+    ipaddress.ip_network("240.0.0.0/4"),         # Reserved
+    ipaddress.ip_network("255.255.255.255/32"),  # Limited Broadcast
+    # IPv6 Special-Use Ranges (RFC 5156, RFC 4291)
+    ipaddress.ip_network("fe80::/10"),           # Link-local IPv6
+    ipaddress.ip_network("ff00::/8"),            # Multicast IPv6
 ]
 
-# Allowed private IP ranges
+# Allowed private IP ranges (RFC 1918)
 ALLOWED_PRIVATE = [
     ipaddress.ip_network("10.0.0.0/8"),
     ipaddress.ip_network("172.16.0.0/12"),
     ipaddress.ip_network("192.168.0.0/16"),
     ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("::1/128"),  # IPv6 loopback
 ]
 
 # Blocked TLDs in safe mode
 BLOCKED_TLDS = [".mil", ".gov"]
 
 
-def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
-    """
-    Validate scan target address (IP, Hostname, URL, or CIDR).
+def _parse_network(cidr: str) -> Optional[ipaddress.IPv4Network | ipaddress.IPv6Network]:
+    """Helper to parse a CIDR string safely without strict boundaries."""
+    try:
+        return ipaddress.ip_network(cidr.strip(), strict=False)
+    except ValueError:
+        return None
+
+
+def _validate_ip_network(net: ipaddress.IPv4Network | ipaddress.IPv6Network, safe_mode: bool) -> Tuple[bool, str]:
+    """Validate a network range (or single IP) against all active policies."""
+    # Check loopback (IPv4/IPv6 loopback)
+    is_loopback = net.is_loopback or net.overlaps(ipaddress.ip_network("127.0.0.0/8")) or net.overlaps(ipaddress.ip_network("::1/128"))
+
+    # Check private networks
+    is_private = any(
+        (net.version == pvt.version and (net.subnet_of(pvt) or net.overlaps(pvt)))
+        for pvt in ALLOWED_PRIVATE
+    )
+
+    # Safe mode check: public IPs/networks are never allowed under safe mode, even if in allowlist!
+    if safe_mode and not is_private and not is_loopback:
+        return False, "Public IPs/networks not allowed in safe mode (SecuScan Guardrail)"
+
+    # 1. Check explicit denylist first (highest priority)
+    denied_cidrs = [_parse_network(c) for c in settings.network_denylist if c]
+    for denied in denied_cidrs:
+        if denied and net.overlaps(denied):
+            return False, "Target overlaps with denied network range"
+
+    # 2. Check explicit allowlist
+    allowed_cidrs = [_parse_network(c) for c in settings.network_allowlist if c]
+    for allowed in allowed_cidrs:
+        if allowed and net.subnet_of(allowed):
+            return True, ""
+
+    # 3. Check loopback setting
+    if is_loopback:
+        allow_lb = settings.allow_loopback and settings.allow_loopback_scans
+        if not allow_lb:
+            return False, "Loopback scans are disabled in global settings"
+        return True, ""
+
+    # 4. Check system blocked networks
+    for blocked in BLOCKED_NETWORKS:
+        if net.overlaps(blocked):
+            return False, "Target overlaps with blocked network range"
+
+    # 5. Check private networks permission
+    if is_private:
+        if safe_mode:
+            return True, ""
+        else:
+            if settings.allow_private_ips:
+                return True, ""
+            else:
+                return False, "Private IP ranges are blocked in permissive mode unless explicitly allowed"
+
+    return True, ""
+
+
+async def resolve_hostname(hostname: str, timeout: int = 2) -> List[str]:
+    """Resolve a hostname to IP addresses with timeout protection."""
+    import dns.resolver
     
-    Args:
-        target: IP address, hostname, or network range to validate
-        safe_mode: Whether to enforce safe mode restrictions
+    ips = []
+    loop = asyncio.get_event_loop()
     
-    Returns:
-        Tuple of (is_valid, error_message)
+    for record_type in ('A', 'AAAA'):
+        try:
+            resolver = dns.resolver.Resolver()
+            resolver.timeout = float(timeout)
+            resolver.lifetime = float(timeout)
+            
+            answer = await loop.run_in_executor(None, resolver.resolve, hostname, record_type)
+            ips.extend([str(rdata) for rdata in answer])
+        except Exception:
+            pass
+            
+    return list(set(ips))
+
+
+def _log_blocked_target(target: str, reason: str) -> None:
+    """Log a blocked target to the audit log."""
+    if not settings.log_blocked_targets:
+        return
+        
+    import json
+    from datetime import datetime
+    import os
+    
+    log_file = settings.blocked_target_log_file
+    try:
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+        log_entry = {
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "target": target,
+            "reason": reason
+        }
+        with open(log_file, "a") as f:
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception as e:
+        logger.error(f"Failed to write to blocked targets log: {e}")
+
+
+async def validate_target(
+    target: str,
+    safe_mode: bool = True,
+    resolve_dns: bool = True,
+    follow_redirects: bool = True,
+    allowed_networks: Optional[List[str]] = None,
+    denied_networks: Optional[List[str]] = None,
+    _redirect_depth: int = 0
+) -> Tuple[bool, str]:
     """
+    Validate scan target address (IP, Hostname, URL, or CIDR) asynchronously.
+    """
+    is_valid, reason = await _validate_target_internal(
+        target, safe_mode, resolve_dns, follow_redirects, allowed_networks, denied_networks, _redirect_depth
+    )
+    if not is_valid and _redirect_depth == 0:
+        _log_blocked_target(target, reason)
+    return is_valid, reason
+
+
+async def _validate_target_internal(
+    target: str,
+    safe_mode: bool,
+    resolve_dns: bool,
+    follow_redirects: bool,
+    allowed_networks: Optional[List[str]],
+    denied_networks: Optional[List[str]],
+    _redirect_depth: int
+) -> Tuple[bool, str]:
     target = target.strip()
     if not target:
         return False, "Target cannot be empty"
@@ -47,37 +182,16 @@ def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
     # Try parsing as IP network (handles single IP and CIDR)
     try:
         net = ipaddress.ip_network(target, strict=False)
-        
-        # Check blocked networks (Broadcast, Link-local, Multicast)
-        if any(net.overlaps(blocked) for blocked in BLOCKED_NETWORKS):
-            return False, "Target overlaps with blocked network range"
-
-        # Check for loopback even in non-safe mode if desired (usually allowed for local debugging)
-        if net.is_loopback and not settings.allow_loopback_scans:
-            return False, "Loopback scans are disabled in global settings"
-
-        # Safe mode: only allow private IPs
-        if safe_mode:
-            is_private = any(
-                (net.version == allowed.version and (net.subnet_of(allowed) or net.overlaps(allowed)))
-                for allowed in ALLOWED_PRIVATE
-            )
-            if not is_private:
-                return False, "Public IPs/networks not allowed in safe mode (SecuScan Guardrail)"
-
-        return True, ""
-
+        return _validate_ip_network(net, safe_mode)
     except ValueError:
-        # Not an IP address or network, treat as hostname/URL
+        # Not a direct IP address or network, treat as hostname or URL
         pass
 
-    # Handle URLs
+    # Extract hostname
     hostname_to_validate = target
     if target.startswith(("http://", "https://")):
-        # Extract host:port or host (handle IPv6 literals in brackets)
         host_part = target.split("://", 1)[1].split("/", 1)[0]
         if host_part.startswith("["):
-            # IPv6 literal like [::1]:8080 or [::1] for ipv6
             hostname_to_validate = host_part.split("]")[0][1:]
         else:
             hostname_to_validate = host_part.split(":", 1)[0]
@@ -92,7 +206,73 @@ def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
             if hostname_to_validate.lower().endswith(tld):
                 return False, f"Domains ending in {tld} are blocked in safe mode"
 
+    # Check if the extracted hostname is actually a literal IP address!
+    is_literal_ip = False
+    try:
+        ip_net = ipaddress.ip_network(hostname_to_validate, strict=False)
+        is_literal_ip = True
+        is_valid, reason = _validate_ip_network(ip_net, safe_mode)
+        if not is_valid:
+            return False, reason
+    except ValueError:
+        pass
+
+    # DNS Resolution Check (only if not a literal IP)
+    if not is_literal_ip and resolve_dns and settings.resolve_hostname_before_scan:
+        try:
+            resolved_ips = await resolve_hostname(hostname_to_validate, timeout=settings.dns_timeout_seconds)
+            if resolved_ips:
+                for ip_str in resolved_ips:
+                    try:
+                        ip_net = ipaddress.ip_network(ip_str, strict=False)
+                        is_valid, reason = _validate_ip_network(ip_net, safe_mode)
+                        if not is_valid:
+                            return False, f"Hostname '{hostname_to_validate}' resolves to blocked IP {ip_str}: {reason}"
+                    except ValueError:
+                        continue
+            else:
+                # No IPs returned
+                if safe_mode:
+                    return False, f"Failed to resolve hostname '{hostname_to_validate}'"
+        except Exception as e:
+            if safe_mode:
+                return False, f"Failed to resolve hostname '{hostname_to_validate}': {e}"
+            else:
+                logger.warning(f"DNS resolution failed for {hostname_to_validate}: {e}")
+
+    # Follow redirects if target is URL
+    if target.startswith(("http://", "https://")) and follow_redirects:
+        max_hops = settings.max_redirect_hops
+        if _redirect_depth >= max_hops:
+            return False, f"Redirect chain exceeded maximum of {max_hops} hops"
+            
+        try:
+            import httpx
+            from urllib.parse import urljoin
+            
+            # HEAD request with manual redirect following
+            async with httpx.AsyncClient(follow_redirects=False, timeout=3.0) as client:
+                response = await client.head(target)
+                if response.status_code in (301, 302, 303, 307, 308):
+                    location = response.headers.get("location")
+                    if location:
+                        redirect_url = urljoin(target, location)
+                        # Recursively validate the redirect URL
+                        return await validate_target(
+                            redirect_url,
+                            safe_mode=safe_mode,
+                            resolve_dns=resolve_dns,
+                            follow_redirects=follow_redirects,
+                            allowed_networks=allowed_networks,
+                            denied_networks=denied_networks,
+                            _redirect_depth=_redirect_depth + 1
+                        )
+        except Exception as e:
+            # Failed to follow redirect, log and continue as original target was valid
+            logger.warning(f"Failed to follow redirect for {target}: {e}")
+
     return True, ""
+
 
 
 def validate_port(port: int) -> Tuple[bool, str]:
