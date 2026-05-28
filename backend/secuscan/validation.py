@@ -31,24 +31,29 @@ ALLOWED_PRIVATE = [
 BLOCKED_TLDS = [".mil", ".gov"]
 
 
-async def resolve_hostname_to_ips(hostname: str) -> List[str]:
+async def resolve_hostname_to_ips(hostname: str, timeout: float = 5.0) -> List[str]:
     """
-    Resolve a hostname to its IP address(es) using DNS.
+    Resolve a hostname to its IP address(es) using DNS with timeout.
 
     Args:
         hostname: Hostname to resolve
+        timeout: DNS resolution timeout in seconds (default: 5.0)
 
     Returns:
         List of IP addresses (as strings)
 
     Raises:
         socket.gaierror: If hostname cannot be resolved
+        asyncio.TimeoutError: If DNS resolution times out
     """
     loop = asyncio.get_event_loop()
     # getaddrinfo returns [(family, type, proto, canonname, sockaddr), ...]
     # sockaddr is (ip, port) for IPv4 or (ip, port, flow, scope) for IPv6
-    infos = await loop.run_in_executor(
-        None, socket.getaddrinfo, hostname, None, 0, 0, socket.IPPROTO_TCP
+    infos = await asyncio.wait_for(
+        loop.run_in_executor(
+            None, socket.getaddrinfo, hostname, None, 0, 0, socket.IPPROTO_TCP
+        ),
+        timeout=timeout
     )
 
     # Extract unique IP addresses
@@ -177,6 +182,8 @@ async def validate_target_async(target: str, safe_mode: bool = True) -> Tuple[bo
 
         return True, ""
 
+    except asyncio.TimeoutError:
+        return False, "DNS resolution timed out"
     except socket.gaierror:
         return False, "Hostname could not be resolved"
     except Exception:

@@ -226,7 +226,8 @@ async def start_task(
         raise HTTPException(status_code=404, detail=f"Plugin not found: {request.plugin_id}")
 
     if target := request.inputs.get("target"):
-        safe_mode = request.inputs.get("safe_mode", settings.safe_mode_default)
+        # SECURITY: safe_mode is determined by server settings only, not user input
+        safe_mode = settings.safe_mode_default
         target_str = str(target)
         should_validate_target = plugin.category != "code" and not is_filesystem_target(target_str)
 
