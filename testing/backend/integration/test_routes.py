@@ -55,7 +55,7 @@ def test_plugin_summary(test_client):
 def test_start_task(test_client):
     """Test starting a task with a mocked executor."""
     with patch("backend.secuscan.executor.TaskExecutor._execute_command") as mock_exec:
-        mock_exec.return_value = ("Mocked successful output", 0)
+        mock_exec.return_value = ("Mocked successful output", 0, None)
 
         payload = {
             "plugin_id": "http_inspector",
