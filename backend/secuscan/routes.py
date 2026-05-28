@@ -48,6 +48,7 @@ def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]
         "id": row["id"],
         "name": row["name"],
         "schedule_seconds": row.get("schedule_seconds"),
+        "cron_expression": row.get("cron_expression"),
         "enabled": bool(row.get("enabled")),
         "steps": _parse_workflow_steps(row.get("steps_json")),
         "created_at": row.get("created_at"),
@@ -1032,17 +1033,21 @@ async def create_workflow(payload: Dict[str, Any]):
 
     workflow_id = str(uuid.uuid4())
     schedule_seconds = payload.get("schedule_seconds")
+    cron_expression = payload.get("cron_expression")
+    if cron_expression:
+        cron_expression = str(cron_expression).strip()
     enabled = bool(payload.get("enabled", True))
     db = await get_db()
     await db.execute(
         """
-        INSERT INTO workflows (id, name, schedule_seconds, enabled, steps_json)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO workflows (id, name, schedule_seconds, cron_expression, enabled, steps_json)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
         (
             workflow_id,
             name,
             int(schedule_seconds) if schedule_seconds else None,
+            cron_expression if cron_expression else None,
             1 if enabled else 0,
             json.dumps(steps),
         ),
@@ -1095,6 +1100,10 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
         val = payload["schedule_seconds"]
         updates.append("schedule_seconds = ?")
         params.append(int(val) if val else None)
+    if "cron_expression" in payload:
+        cval = payload["cron_expression"]
+        updates.append("cron_expression = ?")
+        params.append(str(cval).strip() if cval else None)
     if "enabled" in payload:
         updates.append("enabled = ?")
         params.append(1 if payload["enabled"] else 0)

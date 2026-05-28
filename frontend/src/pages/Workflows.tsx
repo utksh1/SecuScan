@@ -34,7 +34,8 @@ function timeAgo(iso?: string | null) {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-function formatSchedule(scheduleSeconds?: number | null) {
+function formatSchedule(scheduleSeconds?: number | null, cronExpression?: string | null) {
+  if (cronExpression) return `Cron: ${cronExpression}`
   if (!scheduleSeconds || scheduleSeconds <= 0) return 'Manual'
   if (scheduleSeconds < 60) return `Every ${scheduleSeconds}s`
 
@@ -101,7 +102,9 @@ interface CreateSheetProps {
 
 function CreateSheet({ onClose, onCreated }: CreateSheetProps) {
   const [name, setName] = useState('')
+  const [scheduleType, setScheduleType] = useState<'interval' | 'cron'>('interval')
   const [scheduleSeconds, setScheduleSeconds] = useState('3600')
+  const [cronExpression, setCronExpression] = useState('0 0 * * *')
   const [enabled, setEnabled] = useState(true)
   const [stepsJson, setStepsJson] = useState(JSON.stringify(emptySteps, null, 2))
   const [jsonError, setJsonError] = useState<string | null>(null)
@@ -123,17 +126,26 @@ function CreateSheet({ onClose, onCreated }: CreateSheetProps) {
 
     const trimmedSchedule = scheduleSeconds.trim()
     const parsedSchedule = trimmedSchedule === '' ? null : Number(trimmedSchedule)
-    if (
-      parsedSchedule !== null &&
-      (!Number.isInteger(parsedSchedule) || parsedSchedule <= 0)
-    ) {
+    if (scheduleType === 'interval' && parsedSchedule !== null && (!Number.isInteger(parsedSchedule) || parsedSchedule <= 0)) {
       setError('Schedule must be a positive whole number of seconds')
+      return
+    }
+
+    const trimmedCron = cronExpression.trim()
+    if (scheduleType === 'cron' && trimmedCron === '') {
+      setError('Cron expression cannot be empty')
       return
     }
 
     setLoading(true)
     try {
-      const payload: WorkflowCreatePayload = { name, schedule_seconds: parsedSchedule, enabled, steps }
+      const payload: WorkflowCreatePayload = { 
+        name, 
+        schedule_seconds: scheduleType === 'interval' ? parsedSchedule : null, 
+        cron_expression: scheduleType === 'cron' ? trimmedCron : null,
+        enabled, 
+        steps 
+      }
       const created = await createWorkflow(payload)
       onCreated(created)
     } catch {
@@ -165,15 +177,57 @@ function CreateSheet({ onClose, onCreated }: CreateSheetProps) {
             />
           </div>
 
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em]">Schedule (seconds)</label>
-            <input
-              value={scheduleSeconds}
-              onChange={e => setScheduleSeconds(e.target.value)}
-              placeholder="3600"
-              inputMode="numeric"
-              className="w-full bg-charcoal-dark border-4 border-black px-4 py-3 text-sm text-silver-bright font-mono placeholder:text-silver/30 focus:outline-none focus:border-rag-red transition-colors"
-            />
+          <div className="space-y-4 border-t-4 border-black/10 pt-6">
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="scheduleType"
+                  value="interval"
+                  checked={scheduleType === 'interval'}
+                  onChange={() => setScheduleType('interval')}
+                  className="accent-rag-red"
+                />
+                <span className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em]">Interval</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="scheduleType"
+                  value="cron"
+                  checked={scheduleType === 'cron'}
+                  onChange={() => setScheduleType('cron')}
+                  className="accent-rag-red"
+                />
+                <span className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em]">Cron Expression</span>
+              </label>
+            </div>
+
+            {scheduleType === 'interval' ? (
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em]">Schedule (seconds)</label>
+                <input
+                  value={scheduleSeconds}
+                  onChange={e => setScheduleSeconds(e.target.value)}
+                  placeholder="3600"
+                  inputMode="numeric"
+                  className="w-full bg-charcoal-dark border-4 border-black px-4 py-3 text-sm text-silver-bright font-mono placeholder:text-silver/30 focus:outline-none focus:border-rag-red transition-colors"
+                />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em]">Cron Expression</label>
+                <input
+                  value={cronExpression}
+                  onChange={e => setCronExpression(e.target.value)}
+                  placeholder="0 0 * * *"
+                  className="w-full bg-charcoal-dark border-4 border-black px-4 py-3 text-sm text-silver-bright font-mono placeholder:text-silver/30 focus:outline-none focus:border-rag-red transition-colors"
+                />
+                <p className="text-[9px] font-mono text-silver/40 uppercase tracking-widest mt-1">
+                  e.g., "0 0 * * *" (daily at midnight), "0 * * * *" (hourly)
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-between">
@@ -243,7 +297,7 @@ function WorkflowCard({ workflow, onToggle, onRun, onDelete, running, toggling }
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1 min-w-0">
             <h3 className="text-xl font-black text-silver-bright uppercase tracking-tight truncate">{workflow.name}</h3>
-            <p className="text-[10px] font-mono text-silver/40 uppercase tracking-widest">{formatSchedule(workflow.schedule_seconds)}</p>
+            <p className="text-[10px] font-mono text-silver/40 uppercase tracking-widest">{formatSchedule(workflow.schedule_seconds, workflow.cron_expression)}</p>
           </div>
           <span className={`shrink-0 px-2 py-1 text-[9px] font-black uppercase tracking-widest border-2 border-black ${workflow.enabled ? 'bg-rag-green text-black' : 'bg-charcoal-dark text-silver/40'}`}>
             {workflow.enabled ? 'Enabled' : 'Disabled'}
