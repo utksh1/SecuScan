@@ -292,3 +292,29 @@ export function deleteWorkflow(workflowId: string): Promise<{ deleted: boolean }
     method: 'DELETE',
   })
 }
+
+export interface WebhookConfig {
+  slack_url?: string;
+  discord_url?: string;
+  custom_url?: string;
+}
+
+export async function getWebhooks(): Promise<WebhookConfig> {
+  return request<WebhookConfig>('/settings/webhooks')
+}
+
+export async function updateWebhooks(data: WebhookConfig): Promise<WebhookConfig> {
+  return request<WebhookConfig>('/settings/webhooks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+}
+
+export async function testWebhooks(data: WebhookConfig): Promise<{ status: string; message: string }> {
+  return request<{ status: string; message: string }>('/settings/webhooks/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+}

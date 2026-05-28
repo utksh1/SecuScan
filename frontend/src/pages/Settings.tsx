@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from '../components/ThemeContext'
 import { useToast } from '../components/ToastContext'
+import { getWebhooks, updateWebhooks, testWebhooks, WebhookConfig } from '../api'
 
 const itemVariants = {
   hidden: { opacity: 0, y: 20 },
@@ -48,6 +49,8 @@ export default function Settings() {
     })
 
     const [systemTimezone, setSystemTimezone] = useState('Detecting...')
+    const [webhookConfig, setWebhookConfig] = useState<WebhookConfig>({})
+    const [testingWebhook, setTestingWebhook] = useState(false)
 
     useEffect(() => {
         try {
@@ -55,13 +58,34 @@ export default function Settings() {
         } catch (e) {
             setSystemTimezone('UTC')
         }
+        
+        getWebhooks()
+            .then(data => setWebhookConfig(data))
+            .catch(e => console.error("Failed to fetch webhooks:", e))
     }, [])
 
-    const handleSave = () => {
+    const handleSave = async () => {
         localStorage.setItem('secuscan-config', JSON.stringify(config))
-        addToast("Operational parameters synchronized", "success")
-        if (config.theme !== theme) {
-            setTheme(config.theme)
+        try {
+            await updateWebhooks(webhookConfig)
+            addToast("Operational parameters synchronized", "success")
+            if (config.theme !== theme) {
+                setTheme(config.theme)
+            }
+        } catch (e) {
+            addToast("Failed to sync webhook configuration", "error")
+        }
+    }
+
+    const handleTestWebhook = async () => {
+        setTestingWebhook(true)
+        try {
+            await testWebhooks(webhookConfig)
+            addToast("Test webhook payload transmitted", "success")
+        } catch (e) {
+            addToast("Failed to transmit test webhook", "error")
+        } finally {
+            setTestingWebhook(false)
         }
     }
 
@@ -260,6 +284,50 @@ export default function Settings() {
                                 value={config.virustotalKey}
                                 onChange={(val: string) => setConfig({...config, virustotalKey: val})}
                             />
+                        </div>
+                    </section>
+
+                    <section className="space-y-8">
+                        <div className="flex items-center gap-4">
+                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Webhook_Endpoints</h3>
+                            <div className="h-0.5 flex-1 bg-black/10"></div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <InputField 
+                                label="Slack_Webhook" 
+                                description="SLACK_NOTIFICATIONS_ENDPOINT"
+                                placeholder="https://hooks.slack.com/..."
+                                type="url"
+                                value={webhookConfig.slack_url || ''}
+                                onChange={(val: string) => setWebhookConfig({...webhookConfig, slack_url: val})}
+                            />
+                            <InputField 
+                                label="Discord_Webhook" 
+                                description="DISCORD_NOTIFICATIONS_ENDPOINT"
+                                placeholder="https://discord.com/api/webhooks/..."
+                                type="url"
+                                value={webhookConfig.discord_url || ''}
+                                onChange={(val: string) => setWebhookConfig({...webhookConfig, discord_url: val})}
+                            />
+                            <div className="md:col-span-2 flex gap-8 items-end">
+                                <div className="flex-1">
+                                    <InputField 
+                                        label="Custom_Webhook" 
+                                        description="GENERIC_JSON_ENDPOINT"
+                                        placeholder="https://your-server.com/webhook"
+                                        type="url"
+                                        value={webhookConfig.custom_url || ''}
+                                        onChange={(val: string) => setWebhookConfig({...webhookConfig, custom_url: val})}
+                                    />
+                                </div>
+                                <button 
+                                    onClick={handleTestWebhook}
+                                    disabled={testingWebhook || (!webhookConfig.slack_url && !webhookConfig.discord_url && !webhookConfig.custom_url)}
+                                    className="mb-8 bg-charcoal border-4 border-black px-8 py-4 text-[10px] font-black text-silver-bright uppercase tracking-[0.3em] hover:bg-rag-blue hover:text-black hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all italic disabled:opacity-50 disabled:pointer-events-none"
+                                >
+                                    {testingWebhook ? 'TRANSMITTING...' : 'TEST_ENDPOINTS'}
+                                </button>
+                            </div>
                         </div>
                     </section>
 

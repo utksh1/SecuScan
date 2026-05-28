@@ -384,6 +384,32 @@ class TaskExecutor:
             await self._broadcast(task_id, "status", final_status)
             await self._invalidate_cached_views()
 
+            # Trigger Webhook Notifications
+            try:
+                webhook_rows = await db.fetchall("SELECT key, value FROM settings WHERE type = 'webhook'")
+                if webhook_rows:
+                    from .models import WebhookConfig
+                    from .notifications import notify_scan_completion
+                    webhook_config_dict = {row["key"]: row["value"] for row in webhook_rows}
+                    webhook_config = WebhookConfig(**webhook_config_dict)
+                    
+                    if any([webhook_config.slack_url, webhook_config.discord_url, webhook_config.custom_url]):
+                        findings_rows = await db.fetchall("SELECT severity, count(*) as count FROM findings WHERE task_id = ? GROUP BY severity", (task_id,))
+                        findings_summary = {row["severity"]: row["count"] for row in findings_rows}
+                        
+                        asyncio.create_task(
+                            notify_scan_completion(
+                                task_id=task_id,
+                                target=target,
+                                status=final_status,
+                                duration=duration,
+                                findings_summary=findings_summary,
+                                config=webhook_config
+                            )
+                        )
+            except Exception as e:
+                logger.error(f"Failed to trigger webhooks for task {task_id}: {e}")
+
             # Log completion
             await db.log_audit(
                 "task_completed",

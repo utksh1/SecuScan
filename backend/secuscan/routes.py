@@ -91,7 +91,7 @@ logger = logging.getLogger(__name__)
 from .cache import get_cache
 from .models import (
     TaskCreateRequest, TaskResponse, TaskResult,
-    PluginListResponse, ErrorResponse, BulkDeleteRequest
+    PluginListResponse, ErrorResponse, WebhookConfig, BulkDeleteRequest
 )
 from .config import settings
 from .database import get_db
@@ -106,6 +106,7 @@ from .validation import validate_target, validate_task_start_payload
 from .reporting import reporting
 from .vault import VaultCrypto
 from .workflows import scheduler
+from .notifications import test_webhook_config
 
 from sse_starlette.sse import EventSourceResponse
 
@@ -1230,3 +1231,40 @@ async def get_assets():
     rows = await db.fetchall("SELECT DISTINCT target FROM tasks UNION SELECT DISTINCT target FROM findings")
     assets = [{"id": str(uuid.uuid4()), "name": row["target"]} for row in rows]
     return {"assets": assets}
+
+
+@router.get("/settings/webhooks", response_model=WebhookConfig)
+async def get_webhooks():
+    db = await get_db()
+    rows = await db.fetchall("SELECT key, value FROM settings WHERE type = 'webhook'")
+    config = {}
+    for r in rows:
+        config[r["key"]] = r["value"]
+    return WebhookConfig(**config)
+
+
+@router.post("/settings/webhooks", response_model=WebhookConfig)
+async def update_webhooks(config: WebhookConfig):
+    db = await get_db()
+    data = config.model_dump(exclude_unset=True)
+    for k, v in data.items():
+        if v is not None:
+            await db.execute(
+                "INSERT INTO settings (key, value, type) VALUES (?, ?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=datetime('now')",
+                (k, v, "webhook")
+            )
+        else:
+            await db.execute("DELETE FROM settings WHERE key = ? AND type = 'webhook'", (k,))
+    return await get_webhooks()
+
+
+@router.post("/settings/webhooks/test")
+async def test_webhooks(config: WebhookConfig):
+    try:
+        await test_webhook_config(config)
+        return {"status": "success", "message": "Test payload sent"}
+    except Exception as e:
+        logger.error(f"Webhook test failed: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
