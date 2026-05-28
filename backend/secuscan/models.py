@@ -2,11 +2,13 @@
 Pydantic models for API requests and responses
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Annotated
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, RootModel
 from enum import Enum
 
+
+MAX_BULK_DELETE = 500
 
 class SafetyLevel(str, Enum):
     """Plugin safety level classification"""
@@ -115,6 +117,11 @@ class Finding(BaseModel):
     proof: Optional[str] = None
     discovered_at: Optional[datetime] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    exploitability: Optional[float] = None
+    confidence: Optional[float] = None
+    asset_exposure: Optional[str] = None
+    risk_score: Optional[float] = None
+    risk_factors: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class TaskResult(BaseModel):

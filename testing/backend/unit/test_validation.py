@@ -39,10 +39,15 @@ def test_validate_port():
 
 def test_validate_url():
     assert validate_url("http://localhost:8080")[0] is True
-    assert validate_url("https://example.com/path?param=value")[0] is True
-    assert validate_url("http://192.168.1.1")[0] is True
+    assert validate_url("https://localhost/path?param=value")[0] is True
+    assert validate_url("http://192.168.1.1:8080/path")[0] is True
+    assert validate_url("https://127.0.0.1/secure?x=1")[0] is True
 
     assert validate_url("ftp://example.com")[0] is False
+    assert validate_url("http:///path")[0] is False
+    assert validate_url("http://example.com /path")[0] is False
+    assert validate_url("http://localhost:99999")[0] is False
+    assert validate_url("http://example.com:port")[0] is False
     assert validate_url("not_a_url")[0] is False
     assert validate_url("http://")[0] is False
 
