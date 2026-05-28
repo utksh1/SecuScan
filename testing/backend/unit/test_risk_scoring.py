@@ -1,5 +1,7 @@
 """Tests for the risk scoring module."""
 
+import json
+import pytest
 from datetime import datetime, timezone, timedelta
 from backend.secuscan.risk_scoring import (
     compute_risk_score,
@@ -280,3 +282,73 @@ class TestParseDiscoveredAt:
         factors = compute_risk_factors("medium", discovered_at=datetime(2026, 5, 20, tzinfo=timezone.utc))
         recency = [f for f in factors if f["factor"] == "recency"][0]
         assert "2026-05-20" in recency["value"]
+
+
+class TestBackfillRiskScores:
+    """Tests for backfilling risk scores on existing findings."""
+
+    @pytest.mark.asyncio
+    async def test_backfill_sets_risk_score_on_null_findings(self, setup_test_environment):
+        """Findings with NULL risk_score get a computed score after backfill."""
+        from backend.secuscan.config import settings
+        from backend.secuscan.database import init_db, get_db
+
+        await init_db(settings.database_path)
+        db = await get_db()
+
+        finding_id = "test-finding-001"
+        await db.execute(
+            """
+            INSERT INTO findings (
+                id, task_id, plugin_id, title, category, severity,
+                target, description, discovered_at,
+                exploitability, confidence, asset_exposure,
+                risk_score, risk_factors_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '[]')
+            """,
+            (finding_id, "task-1", "test", "Test Finding", "test",
+             "critical", "example.com", "XSS vulnerability",
+             "2026-05-20T12:00:00", 8.0, 0.9, "critical"),
+        )
+
+        row = await db.fetchone("SELECT risk_score FROM findings WHERE id = ?", (finding_id,))
+        assert row["risk_score"] is None
+
+        await db._backfill_risk_scores()
+
+        row = await db.fetchone(
+            "SELECT risk_score, risk_factors_json FROM findings WHERE id = ?",
+            (finding_id,),
+        )
+        assert row["risk_score"] is not None
+        assert isinstance(row["risk_score"], (int, float))
+        assert row["risk_score"] > 0
+        factors = json.loads(row["risk_factors_json"])
+        assert len(factors) == 5
+
+    @pytest.mark.asyncio
+    async def test_backfill_idempotent(self, setup_test_environment):
+        """Backfill does not modify findings that already have a risk_score."""
+        from backend.secuscan.config import settings
+        from backend.secuscan.database import init_db, get_db
+
+        await init_db(settings.database_path)
+        db = await get_db()
+
+        finding_id = "test-finding-002"
+        await db.execute(
+            """
+            INSERT INTO findings (
+                id, task_id, plugin_id, title, category, severity,
+                target, description, discovered_at, risk_score, risk_factors_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (finding_id, "task-2", "test", "Already Scored", "test",
+             "high", "example.com", "Old finding",
+             "2026-01-01T00:00:00", 5.0, '[{"factor":"severity","score":5}]'),
+        )
+
+        await db._backfill_risk_scores()
+
+        row = await db.fetchone("SELECT risk_score FROM findings WHERE id = ?", (finding_id,))
+        assert row["risk_score"] == 5.0

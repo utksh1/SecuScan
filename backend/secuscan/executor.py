@@ -709,7 +709,7 @@ class TaskExecutor:
                     metadata_json, discovered_at,
                     exploitability, confidence, asset_exposure,
                     risk_score, risk_factors_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (datetime('now')),
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                           ?, ?, ?, ?, ?)
                 """,
                 (
@@ -726,6 +726,7 @@ class TaskExecutor:
                     finding.get("cvss"),
                     finding.get("cve"),
                     json.dumps(finding.get("metadata", {})),
+                    discovered.isoformat() if discovered else datetime.now(timezone.utc).isoformat(),
                     exploitability,
                     confidence,
                     asset_exposure,
@@ -793,7 +794,7 @@ class TaskExecutor:
                     metadata_json, discovered_at,
                     exploitability, confidence, asset_exposure,
                     risk_score, risk_factors_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (datetime('now')),
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                           ?, ?, ?, ?, ?)
                 """,
                 (
@@ -810,6 +811,7 @@ class TaskExecutor:
                     finding.get("cvss"),
                     finding.get("cve"),
                     json.dumps(finding.get("metadata", {})),
+                    discovered.isoformat() if discovered else datetime.now(timezone.utc).isoformat(),
                     exploitability,
                     confidence,
                     asset_exposure,
