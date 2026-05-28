@@ -1164,4 +1164,4 @@ async def create_ticket(request: TicketCreateRequest):
             raise HTTPException(status_code=400, detail="Unsupported provider")
     except Exception as e:
         logger.exception("Ticket creation failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e))
