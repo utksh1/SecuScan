@@ -55,6 +55,7 @@ class Settings(BaseSettings):
     plugin_signature_key: Optional[str] = None
     enforce_plugin_signatures: bool = False
     vault_key: Optional[str] = None
+    denied_capabilities: List[str] = []
 
     # Rate Limiting
     max_concurrent_tasks: int = 3

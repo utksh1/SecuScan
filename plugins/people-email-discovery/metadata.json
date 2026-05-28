@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd0e",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
     "binary": "theHarvester"
@@ -53,5 +53,8 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "0f0889733638a60dc134a94a668c6683cbdb435560d60f61e7735d47114334c6"
+  "checksum": "0f0889733638a60dc134a94a668c6683cbdb435560d60f61e7735d47114334c6",
+  "capabilities": [
+    "network"
+  ]
 }

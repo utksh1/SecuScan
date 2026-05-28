@@ -79,6 +79,7 @@ class PluginMetadata(BaseModel):
     
     output: Dict[str, Any]
     safety: Dict[str, Any]
+    capabilities: Optional[List[str]] = None
     learning: Optional[Dict[str, Any]] = None
     dependencies: Optional[Dict[str, List[str]]] = None
     docker_image: Optional[str] = None

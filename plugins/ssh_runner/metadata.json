@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udda5\ufe0f",
+  "icon": "🖥️",
   "engine": {
     "type": "cli",
     "binary": "ssh"
@@ -88,5 +88,10 @@
     ]
   },
   "docker_image": "alpine:latest",
-  "checksum": "6d4495f58635dedb184e763e0e4467adf17dc3754a6b1ed7c2dca0d6b30a88ec"
+  "checksum": "6d4495f58635dedb184e763e0e4467adf17dc3754a6b1ed7c2dca0d6b30a88ec",
+  "capabilities": [
+    "network",
+    "intrusive",
+    "credentials"
+  ]
 }

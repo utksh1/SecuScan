@@ -12,8 +12,9 @@ import shutil
 import hashlib
 import hmac
 
-from .models import PluginMetadata
+from .models import PluginMetadata, PluginFieldType
 from .config import settings
+from .capabilities import validate_capability_list, ALL_CAPABILITIES
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,14 @@ class PluginManager:
         if safety_level not in ["safe", "intrusive", "exploit"]:
             logger.error(f"Invalid safety level: {safety_level}")
             return False
+
+        # Validate declared capabilities against the known set
+        if plugin.capabilities is not None:
+            try:
+                validate_capability_list(plugin.capabilities, plugin.id)
+            except ValueError as exc:
+                logger.error("Invalid capabilities in plugin %s: %s", plugin.id, exc)
+                return False
 
         if not self._verify_plugin_integrity(plugin, plugin_dir):
             return False
@@ -242,6 +251,7 @@ class PluginManager:
                     "icon": plugin.icon,
                     "requires_consent": bool(plugin.safety.get("requires_consent", False)),
                     "consent_message": plugin.safety.get("consent_message"),
+                    "capabilities": plugin.capabilities or [],
                     "availability": {
                         "runnable": len(missing_binaries) == 0,
                         "missing_binaries": missing_binaries,
