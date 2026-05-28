@@ -183,7 +183,6 @@ export default function Scanner() {
   const [catalogLoadAttempt, setCatalogLoadAttempt] = useState(0)
 
   const [hoveredTool, setHoveredTool] = useState<string | null>(null)
-  // New state tracker explicitly for the educational reference center selection
   const [selectedToolId, setSelectedToolId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -215,6 +214,7 @@ export default function Scanner() {
       } catch (error) {
         if (!cancelled) {
           console.warn("Backend unavailable. Injecting high-fidelity simulator data to restore full UI function.")
+          setLoadError(error instanceof Error ? error.message : 'Failed to fetch catalog profiles.')
 
           const mockTools: CatalogTool[] = [
             {
@@ -260,7 +260,6 @@ export default function Scanner() {
 
           setTools(mockTools)
           setTabOrder([...LEGACY_TAB_ORDER])
-          setLoadError(null)
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -278,13 +277,6 @@ export default function Scanner() {
       setActiveTab(tabOrder[0])
     }
   }, [tabOrder, activeTab])
-
-  // Automatically select the first visible tool when tabs change to give beginners immediate feedback
-  useEffect(() => {
-    if (filteredTools.length > 0) {
-      setSelectedToolId(filteredTools[0].id)
-    }
-  }, [activeTab])
 
   const categoryToolsCount = useMemo(
     () => tools.filter((tool) => {
@@ -304,6 +296,15 @@ export default function Scanner() {
     })
   }, [tools, activeTab, searchQuery])
 
+  // ✅ FIX: Defensive auto-selection mechanism to satisfy edge case empty state assertions
+  useEffect(() => {
+    if (filteredTools && filteredTools.length > 0) {
+      setSelectedToolId(filteredTools[0].id)
+    } else {
+      setSelectedToolId(null)
+    }
+  }, [activeTab, searchQuery, tools])
+
   const trackRecentTool = (toolId: string) => {
     setRecentToolIds((prev) => {
       const next = [toolId, ...prev.filter((id) => id !== toolId)].slice(0, RECENT_TOOLS_LIMIT)
@@ -320,12 +321,9 @@ export default function Scanner() {
     if (tool.disabled) return
     trackRecentTool(tool.id)
     setSelectedToolId(tool.id)
-    // Optional: Only navigate if you want them to leave the page immediately,
-    // or keep them on the catalog panel to read the documentation first.
     navigate(routePath.scanTool(tool.id))
   }
 
-  // Fallbacks prioritize current live mouse-hover, then active card select clicks
   const dynamicSidebarTool = hoveredTool || selectedToolId || ''
 
   return (
