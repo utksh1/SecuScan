@@ -1,0 +1,7 @@
+[mutmut]
+paths_to_mutate = [
+    "backend/secuscan/validation.py",
+    "backend/secuscan/redaction.py",
+]
+tests_dir = "testing/backend/unit"
+runner = "python -m pytest testing/backend/unit/test_validation.py testing/backend/unit/test_redaction.py testing/backend/unit/test_task_start_validation.py -x -q --tb=no"

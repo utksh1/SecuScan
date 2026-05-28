@@ -111,22 +111,19 @@ class Settings(BaseSettings):
     @property
     def resolved_vault_key(self) -> bytes:
         """Return a deterministic 32-byte key for credential vault encryption.
-
-        Raises RuntimeError when neither SECUSCAN_VAULT_KEY nor
-        SECUSCAN_PLUGIN_SIGNATURE_KEY is set, rather than falling back to the
-        insecure hardcoded string that was present in earlier versions.
+    
+        Raises ValueError at startup if SECUSCAN_VAULT_KEY is not explicitly
+        configured — prevents silent fallback to a publicly known default key.
         """
-        seed = self.vault_key or self.plugin_signature_key
-        if not seed:
-            raise RuntimeError(
+        key = self.vault_key or self.plugin_signature_key
+        if not key:
+            raise ValueError(
                 "SECUSCAN_VAULT_KEY is not set. "
-                "Set a strong random value in your environment or .env file before "
-                "starting the server. "
-                "Example: python -c \"import secrets; print(secrets.token_hex(32))\""
+                "Set a strong random key in your environment before starting the server. "
+                "Example: export SECUSCAN_VAULT_KEY=$(openssl rand -hex 32)"
             )
-        digest = hashlib.sha256(seed.encode("utf-8")).digest()
-        return base64.urlsafe_b64encode(digest)
-
+        return hashlib.sha256(key.encode()).digest()
+    
     def ensure_directories(self) -> None:
         """Create necessary directories if they don't exist"""
         for directory in [
