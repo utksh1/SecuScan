@@ -58,7 +58,7 @@ type FindingStatus = 'new' | 'reviewed' | 'suppressed'
 type ReviewState = Record<string, FindingStatus>
 
 const severityOrder = ['critical', 'high', 'medium', 'low', 'info'] as const
-const severityConfig: Record<string, { label: string; accent: string; chip: string; rail: string }> = {
+export const severityConfig: Record<string, { label: string; accent: string; chip: string; rail: string }> = {
   critical: {
     label: 'Critical',
     accent: 'text-rag-red',

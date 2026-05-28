@@ -1,7 +1,37 @@
+import json
+import sqlite3
 import time
+import uuid
 from unittest.mock import patch
 
+from backend.secuscan.config import settings
 from backend.secuscan.models import TaskStatus
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _insert_task(task_id: str, target: str, structured_json: dict | None = None) -> None:
+    """Insert a minimal completed task row directly into the test DB via sqlite3."""
+    with sqlite3.connect(settings.database_path, timeout=10) as conn:
+        conn.execute(
+            """
+            INSERT INTO tasks (
+                id, plugin_id, tool_name, target, inputs_json,
+                status, consent_granted, safe_mode, structured_json
+            ) VALUES (?, ?, ?, ?, '{}', ?, 1, 1, ?)
+            """,
+            (
+                task_id,
+                "test_plugin",
+                "test_tool",
+                target,
+                TaskStatus.COMPLETED.value,
+                json.dumps(structured_json) if structured_json is not None else None,
+            ),
+        )
+
 
 def test_health_check(test_client):
     """Test health check endpoint."""
@@ -243,3 +273,61 @@ class TestSafeModeCIDRBypass:
                 assert "safe mode" not in detail.lower() and "Public IP" not in detail, (
                     f"Filesystem path was incorrectly rejected by network validation: {detail!r}"
                 )
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/scans/diff — route-level integration tests
+# ---------------------------------------------------------------------------
+
+def test_diff_same_scan_returns_400(test_client):
+    """Passing the same scan ID for both scan_a and scan_b must return 400."""
+    task_id = str(uuid.uuid4())
+    _insert_task(task_id, "example.com")
+
+    response = test_client.get(f"/api/v1/scans/diff?scan_a={task_id}&scan_b={task_id}")
+
+    assert response.status_code == 400
+
+
+def test_diff_different_targets_returns_400(test_client):
+    """Two completed scans against different targets must return 400."""
+    id_a = str(uuid.uuid4())
+    id_b = str(uuid.uuid4())
+    _insert_task(id_a, "host-a.example.com")
+    _insert_task(id_b, "host-b.example.com")
+
+    response = test_client.get(f"/api/v1/scans/diff?scan_a={id_a}&scan_b={id_b}")
+
+    assert response.status_code == 400
+
+
+def test_diff_missing_scan_returns_404(test_client):
+    """Non-existent scan IDs must return 404."""
+    response = test_client.get("/api/v1/scans/diff?scan_a=doesnotexist&scan_b=alsofake")
+
+    assert response.status_code == 404
+
+
+def test_diff_valid_scans_returns_200(test_client):
+    """Two completed scans on the same target must return 200 with the expected shape."""
+    id_a = str(uuid.uuid4())
+    id_b = str(uuid.uuid4())
+
+    finding_base = {
+        "title": "XSS Vulnerability",
+        "category": "web",
+        "target": "app.example.com",
+        "description": "Reflected cross-site scripting",
+        "metadata": {},
+    }
+    _insert_task(id_a, "app.example.com", {"findings": [{**finding_base, "severity": "high"}]})
+    _insert_task(id_b, "app.example.com", {"findings": [{**finding_base, "severity": "critical"}]})
+
+    response = test_client.get(f"/api/v1/scans/diff?scan_a={id_a}&scan_b={id_b}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "scan_a" in data
+    assert "scan_b" in data
+    assert "diff" in data
+    assert "summary" in data
