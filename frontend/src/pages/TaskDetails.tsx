@@ -46,6 +46,16 @@ interface Task {
     pending_count?: number
 }
 
+interface RiskFactor {
+    factor: string
+    label: string
+    value: string | number
+    score: number
+    weight: number
+    contribution: number
+    detail: string
+}
+
 interface Finding {
     id?: string
     title: string
@@ -59,6 +69,11 @@ interface Finding {
     proof?: string
     discovered_at?: string
     metadata?: Record<string, any>
+    risk_score?: number
+    risk_factors?: RiskFactor[]
+    exploitability?: number
+    confidence?: number
+    asset_exposure?: string
 }
 
 interface TaskResult {
@@ -229,6 +244,14 @@ export default function TaskDetails() {
                                 </p>
                             </div>
                         )}
+                        {finding.risk_score !== undefined && finding.risk_score !== null && (
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Risk Score</h3>
+                                <p className={`text-sm font-black italic ${finding.risk_score >= 7 ? 'text-rag-red' : finding.risk_score >= 4 ? 'text-rag-amber' : 'text-rag-blue'}`}>
+                                    {finding.risk_score.toFixed(1)}
+                                </p>
+                            </div>
+                        )}
                         {finding.cve && (
                             <div className="space-y-4">
                                 <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">CVE Identifiers</h3>
@@ -242,6 +265,28 @@ export default function TaskDetails() {
                             </p>
                         </div>
                     </div>
+
+                    {finding.risk_factors && finding.risk_factors.length > 0 && (
+                        <div className="space-y-4">
+                            <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Risk Factor Breakdown</h3>
+                            <div className="space-y-2">
+                                {finding.risk_factors.map((rf) => (
+                                    <div key={rf.factor} className="flex items-center justify-between text-[11px] border-b border-white/[0.03] pb-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-silver/40 uppercase tracking-wider">{rf.label}</span>
+                                            <span className="text-silver/25 text-[9px]">({(rf.weight * 100).toFixed(0)}%)</span>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-silver/70 font-mono">{rf.score.toFixed(1)}</span>
+                                            <span className={`text-[10px] font-mono ${rf.contribution >= 2 ? 'text-rag-red' : rf.contribution >= 1 ? 'text-rag-amber' : 'text-silver/40'}`}>
+                                                +{rf.contribution.toFixed(1)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {Object.keys(finding.metadata || {}).length > 0 && (
                         <div className="space-y-4">
