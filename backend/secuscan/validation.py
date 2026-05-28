@@ -248,10 +248,9 @@ async def _validate_target_internal(
             return False, f"Redirect chain exceeded maximum of {max_hops} hops"
 
         try:
-            # pyrefly: ignore [missing-import]
             import httpx
             from urllib.parse import urljoin
-            
+
             # HEAD request with manual redirect following
             async with httpx.AsyncClient(follow_redirects=False, timeout=3.0) as client:
                 response = await client.head(target)
