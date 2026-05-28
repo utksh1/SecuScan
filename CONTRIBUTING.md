@@ -4,298 +4,528 @@ Thank you for contributing to SecuScan. This project is open to first-time contr
 
 SecuScan is built for learning, defensive security workflows, and ethical testing. Please keep all contributions aligned with authorized, consent-based use.
 
-## Before You Start
+---
 
-- Start with a small, reviewable task if this is your first contribution.
-- Read [README.md](README.md), [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and [SECURITY.md](SECURITY.md) before opening a pull request.
-- Read the repository [LICENSE](LICENSE) so you understand how contributions are distributed.
-- If you want to work on a larger feature, open or comment on an issue first so effort does not overlap.
-- If you are contributing through GSSoC, mention that in the issue or pull request so maintainers can guide scope and review expectations.
+# Before You Start
 
-## Good First Contribution Areas
+* Start with a small, reviewable task if this is your first contribution.
+* Read `README.md`, `CODE_OF_CONDUCT.md`, and `SECURITY.md` before opening a pull request.
+* Read the repository `LICENSE` so you understand how contributions are distributed.
+* If you want to work on a larger feature, open or comment on an issue first so effort does not overlap.
+* If you are contributing through GSSoC, mention that in the issue or pull request so maintainers can guide scope and review expectations.
 
-- Documentation fixes, setup clarification, and onboarding polish
-- Frontend UX improvements in `frontend/src`
-- Backend validation, test coverage, and API consistency in `backend/secuscan`
-- Plugin metadata cleanup and parser improvements in `plugins`
-- CI, test reliability, and developer experience
+---
 
-When issue labels are available, look for tags such as `good first issue`, `documentation`, `frontend`, `backend`, `plugin`, `help wanted`, or `gssoc`.
+# Good First Contribution Areas
 
-## Local Setup
+* Documentation fixes, setup clarification, and onboarding polish
+* Frontend UX improvements in `frontend/src`
+* Backend validation, test coverage, and API consistency in `backend/secuscan`
+* Plugin metadata cleanup and parser improvements in `plugins`
+* CI, test reliability, and developer experience
 
-### Prerequisites
+When issue labels are available, look for tags such as:
 
-- Python `3.11+`
-- Node.js `20+` recommended
-- `npm`
-- Docker optional for plugins that depend on containerized tooling
+* `good first issue`
+* `documentation`
+* `frontend`
+* `backend`
+* `plugin`
+* `help wanted`
+* `gssoc`
 
-### Recommended Setup
+---
+
+# Local Setup
+
+## Prerequisites
+
+* Python `3.11+`
+* Node.js `20+` recommended
+* `npm`
+* Docker (optional for plugins that depend on containerized tooling)
+
+---
+
+## Recommended Setup
 
 ```bash
 ./setup.sh
 ./start.sh
+```
+
 This starts:
-Backend: http://127.0.0.1:8000
-Frontend: http://127.0.0.1:5173
-API docs: http://127.0.0.1:8000/docs
-Manual Setup
-Backend:
-Python version: python3 below must resolve to 3.11 or newer. Run python3 --version to check. If your system default is older, substitute the full path (e.g. python3.11) or use PYTHON=/path/to/python3.11 ./setup.sh instead of the manual steps.
-code
-Bash
+
+* Backend: `http://127.0.0.1:8000`
+* Frontend: `http://127.0.0.1:5173`
+* API Docs: `http://127.0.0.1:8000/docs`
+
+---
+
+# Manual Setup
+
+## Backend
+
+Python version: `python3` below must resolve to `3.11+`.
+
+Check version:
+
+```bash
+python3 --version
+```
+
+If your system default is older, substitute the full path (e.g. `python3.11`) or use:
+
+```bash
+PYTHON=/path/to/python3.11 ./setup.sh
+```
+
+### Setup Commands
+
+```bash
 python3 -m venv venv
 source venv/bin/activate
+
 pip install -r backend/requirements.txt
 pip install -r backend/requirements-dev.txt
-python3 -m uvicorn backend.secuscan.main:app --reload --host 127.0.0.1 --port 8000
-Frontend:
-code
-Bash
+
+python3 -m uvicorn backend.secuscan.main:app \
+  --reload \
+  --host 127.0.0.1 \
+  --port 8000
+```
+
+---
+
+## Frontend
+
+```bash
 cd frontend
+
 npm install
 npm run dev -- --host 127.0.0.1 --port 5173
-Backend Testing Quickstart
-This section explains how to run the backend test suite from a fresh checkout
-without touching the main development environment.
-1. Prerequisites
-Make sure your machine has Python 3.11 or newer before running any test commands.
-code
-Bash
+```
+
+---
+
+# Backend Testing Quickstart
+
+This section explains how to run the backend test suite from a fresh checkout without touching the main development environment.
+
+---
+
+## 1. Prerequisites
+
+Make sure your machine has Python `3.11+`.
+
+```bash
 python3 --version
-If the version shown is older than 3.11, substitute the full path to a compatible
-interpreter (e.g. python3.11) wherever python3 appears below.
-2. Run the Full Backend Test Suite
-From the repo root, run:
-code
-Bash
+```
+
+If the version shown is older than `3.11`, substitute the full path to a compatible interpreter (e.g. `python3.11`) wherever `python3` appears below.
+
+---
+
+## 2. Run the Full Backend Test Suite
+
+From the repo root:
+
+```bash
 ./testing/test_python.sh
-This script handles everything automatically:
-Creates an isolated virtual environment at venv_tests/ (separate from your
-dev environment)
-Installs all required dependencies from backend/requirements.txt and
-backend/requirements-dev.txt
-Runs the full testing/backend/ suite with pytest in quiet mode
-You do not need to activate any virtual environment manually for this command.
-3. Run a Single Test File
-When you want faster feedback on one specific file, activate the test virtual
-environment and call pytest directly. Run these commands from the repo root:
-code
-Bash
+```
+
+This script automatically:
+
+* Creates an isolated virtual environment at `venv_tests/`
+* Installs dependencies from:
+
+  * `backend/requirements.txt`
+  * `backend/requirements-dev.txt`
+* Runs the full `testing/backend/` suite with `pytest`
+
+You do not need to activate any virtual environment manually.
+
+---
+
+## 3. Run a Single Test File
+
+```bash
 source venv_tests/bin/activate
+
 python -m pytest testing/backend/unit/test_models.py -v
+
 deactivate
-Replace test_models.py with whichever file you want to target. All unit tests
-live under testing/backend/unit/ and integration tests live under
-testing/backend/integration/.
-Note: Run ./testing/test_python.sh at least once before using this
-shortcut so that venv_tests/ exists and dependencies are installed.
-4. Where Requirements Files Live
-File	Purpose
-backend/requirements.txt	Core runtime dependencies
-backend/requirements-dev.txt	Test and development dependencies (pytest, etc.)
-Both files must be installed for the test suite to run correctly. The
-./testing/test_python.sh script installs both automatically.
-5. Common Dependency Issues
-ModuleNotFoundError on any import — the venv_tests/ environment may
-be outdated. Delete it and re-run ./testing/test_python.sh to rebuild from
-scratch.
-python3 resolves to an older version — check with python3 --version.
-Use python3.11 or python3.12 explicitly if needed.
-Permission denied on ./testing/test_python.sh — make it executable
-first with chmod +x testing/test_python.sh.
-Project Layout
-backend/secuscan: FastAPI routes, execution logic, workflows, validation, vault, and reporting
-frontend/src: React pages, app shell, scan flows, settings, and tests
-plugins: plugin metadata, parser code, and tool-specific helpers
-testing/backend: backend unit and integration coverage
-frontend/testing: frontend unit and Playwright coverage
-.github: issue templates, PR template, and CI workflow
-Development Workflow
-Fork the repository and create a branch from main.
-Pick an issue or open one before starting large work.
-Keep the change focused. Small PRs get reviewed much faster than broad rewrites.
-Mind your PR size. We recommend keeping PRs under 50 changed files and 1,000 lines of total changes (additions + deletions). An automated GitHub Action will warn you if your PR exceeds this threshold.
-Update tests and docs when behavior changes.
-Open a pull request with a clear description, linked issue, and screenshots for UI changes.
-Branch names can be simple and descriptive, such as:
+```
+
+Replace `test_models.py` with whichever file you want to target.
+
+* Unit tests: `testing/backend/unit/`
+* Integration tests: `testing/backend/integration/`
+
+> Run `./testing/test_python.sh` at least once before using this shortcut.
+
+---
+
+## 4. Requirements Files
+
+| File                           | Purpose                           |
+| ------------------------------ | --------------------------------- |
+| `backend/requirements.txt`     | Core runtime dependencies         |
+| `backend/requirements-dev.txt` | Test and development dependencies |
+
+Both files must be installed for the test suite to run correctly.
+
+---
+
+## 5. Common Dependency Issues
+
+### `ModuleNotFoundError`
+
+The `venv_tests/` environment may be outdated.
+
+Fix:
+
+```bash
+rm -rf venv_tests
+./testing/test_python.sh
+```
+
+---
+
+### `python3` Resolves to an Older Version
+
+Check:
+
+```bash
+python3 --version
+```
+
+Use `python3.11` or `python3.12` explicitly if needed.
+
+---
+
+### Permission Denied on Test Script
+
+```bash
+chmod +x testing/test_python.sh
+```
+
+---
+
+# Project Layout
+
+| Path               | Purpose                                          |
+| ------------------ | ------------------------------------------------ |
+| `backend/secuscan` | FastAPI routes, workflows, validation, reporting |
+| `frontend/src`     | React pages, scan flows, settings, tests         |
+| `plugins`          | Plugin metadata and parser helpers               |
+| `testing/backend`  | Backend unit and integration coverage            |
+| `frontend/testing` | Frontend unit and Playwright coverage            |
+| `.github`          | Templates and CI workflows                       |
+
+---
+
+# Development Workflow
+
+1. Fork the repository and create a branch from `main`
+2. Pick an issue or open one before starting large work
+3. Keep changes focused and reviewable
+4. Update tests and docs when behavior changes
+5. Open a PR with:
+
+   * Clear description
+   * Linked issue
+   * Screenshots for UI changes
+
+### Example Branch Names
+
+```text
 docs/improve-contributing-guide
 fix/task-status-api
 feat/plugin-validation
-Pull Request Format
-Please follow the repository PR template and keep the submission easy to review.
+```
+
+---
+
+# Pull Request Format
+
 Recommended PR title format:
+
+```text
 docs: improve contributing guide
 fix(api): validate task status input
 feat(frontend): add scan empty state
+```
+
 Your PR should include:
-A short description of the problem being solved
-A summary of the approach you took
-Linked issue references such as Closes #123 or Related to #123
-A clear list of tests you ran
-Screenshots or short recordings for visible UI changes
-Notes about documentation, migrations, environment variables, or breaking behavior when relevant
-Try to keep one pull request focused on one problem. If a change touches unrelated areas, split it into separate PRs when possible.
-Contribution Scoring
-Every merged pull request can be scored for GSSoC using labels applied by the project admin or mentor. The scoring engine reads these labels after the PR is merged, so contributors should focus on clear scope, good implementation, and complete review notes rather than self-assigning score labels.
-Labels the Admin Applies
-Each merged PR should have one difficulty label:
-level:beginner
-level:intermediate
-level:advanced
-level:critical
-Optional quality labels can increase the contributor score:
-quality:clean
-quality:exceptional
-Optional type bonus labels can describe the work category:
-type:docs
-type:testing
-type:accessibility
-type:performance
-type:security
-type:design
-type:refactor
-type:devops
-type:bug
-type:feature
-Validation labels are decided by the admin:
-gssoc:approved
-gssoc:invalid
-gssoc:spam
-gssoc:ai-slop
-Use mentor:username to credit the reviewing mentor with points for that PR.
-Contributor Points per PR
-Label	Points
-level:beginner	20 pts
-level:intermediate	35 pts
-level:advanced	55 pts
-level:critical	80 pts
-quality:clean	x 1.2 multiplier
-quality:exceptional	x 1.5 multiplier
-Contributor score formula:
-code
-Text
-((difficulty x quality) + type bonus)
-Mentor Points per Reviewed PR
-Label	Points
-level:beginner	10 pts
-level:intermediate	20 pts
-level:advanced	30 pts
-level:critical	50 pts
-quality:clean	+5 pts bonus
-quality:exceptional	+10 pts bonus
-Mentor score formula:
-code
-Text
+
+* Problem being solved
+* Summary of approach
+* Linked issue references
+* Tests you ran
+* Screenshots/recordings for UI changes
+* Notes about docs, migrations, env vars, or breaking behavior
+
+Try to keep one PR focused on one problem.
+
+---
+
+# Contribution Scoring
+
+Every merged PR can be scored for GSSoC using labels applied by maintainers.
+
+---
+
+## Difficulty Labels
+
+* `level:beginner`
+* `level:intermediate`
+* `level:advanced`
+* `level:critical`
+
+---
+
+## Quality Labels
+
+* `quality:clean`
+* `quality:exceptional`
+
+---
+
+## Type Bonus Labels
+
+* `type:docs`
+* `type:testing`
+* `type:accessibility`
+* `type:performance`
+* `type:security`
+* `type:design`
+* `type:refactor`
+* `type:devops`
+* `type:bug`
+* `type:feature`
+
+---
+
+## Validation Labels
+
+* `gssoc:approved`
+* `gssoc:invalid`
+* `gssoc:spam`
+* `gssoc:ai-slop`
+
+---
+
+## Contributor Score Formula
+
+```text
+((difficulty × quality) + type bonus)
+```
+
+---
+
+## Mentor Score Formula
+
+```text
 (base points + quality bonus)
-Commit Message Conventions
-Use clear, imperative commit messages. Keep the first line short and descriptive.
+```
+
+---
+
+# Commit Message Conventions
+
 Preferred format:
-code
-Text
+
+```text
 type(scope): short summary
-Examples:
+```
+
+### Examples
+
+```text
 feat(frontend): add task result empty state
 fix(backend): reject invalid workflow payloads
 docs(readme): clarify local setup steps
-Recommended commit types:
-feat
-fix
-docs
-test
-refactor
-chore
-Guidelines:
-Use the imperative mood, such as add, fix, update, or remove
-Keep the subject line around 72 characters or fewer
-Reference the issue number in the commit body when useful
-Avoid vague messages like changes, update code, or fix stuff
-Licensing Expectations
+```
+
+### Recommended Commit Types
+
+* `feat`
+* `fix`
+* `docs`
+* `test`
+* `refactor`
+* `chore`
+
+### Guidelines
+
+* Use imperative mood (`add`, `fix`, `update`)
+* Keep subject line under ~72 characters
+* Avoid vague messages like:
+
+  * `changes`
+  * `update code`
+  * `fix stuff`
+
+---
+
+# Licensing Expectations
+
 By submitting a contribution, you agree that your changes can be distributed under the repository's MIT License.
+
 Please avoid:
-Copying code from sources with incompatible licenses
-Adding assets, snippets, or templates without checking reuse permissions
-Introducing third-party dependencies without confirming their license is acceptable for this project
-If you are unsure about a dependency or asset license, ask in the issue or pull request before merging it into the project.
-Test Expectations
-Run the smallest relevant test set for your change, then broaden if needed.
-Backend tests:
-code
-Bash
+
+* Copying incompatible licensed code
+* Adding unverified assets/snippets/templates
+* Introducing dependencies without checking license compatibility
+
+If unsure, ask in the issue or PR before merging.
+
+---
+
+# Test Expectations
+
+Run the smallest relevant test set for your change.
+
+---
+
+## Backend Tests
+
+```bash
 ./testing/test_python.sh
-Frontend unit tests:
-code
-Bash
+```
+
+---
+
+## Frontend Unit Tests
+
+```bash
 cd frontend
 npm run test
-Frontend production build:
-code
-Bash
+```
+
+---
+
+## Frontend Production Build
+
+```bash
 cd frontend
 npm run build
-Backend API smoke tests with the server running:
-code
-Bash
+```
+
+---
+
+## Backend API Smoke Tests
+
+```bash
 ./testing/test_backend.sh
-Optional frontend E2E:
-code
-Bash
+```
+
+---
+
+## Optional Frontend E2E
+
+```bash
 cd frontend
 npm run e2e
-What we expect before review:
-Backend changes should run ./testing/test_python.sh
-Frontend changes should run npm run test and npm run build in frontend/
-API or behavior changes should include either automated coverage or a short manual verification note
-Docs-only changes usually do not need full test runs, but please say that clearly in the PR
-If you could not run a recommended test, mention what you skipped and why
-Code Style
-Please match the conventions already used in the repo instead of introducing a new style.
-Python:
-Follow PEP 8 and prefer explicit, readable code
-Use type hints where they improve clarity
-Keep validation close to request and model boundaries
-Prefer small functions over large, multi-purpose blocks
-Frontend:
-Use TypeScript and functional React components
-Keep component logic readable and avoid unnecessary abstraction
-Reuse shared UI patterns when they already exist
-Include accessible labels, states, and error handling for form changes
-Tests:
-Add or update tests when behavior changes
-Keep fixtures focused and easy to understand
-Docs:
-Update contributor-facing docs when setup, workflow, or commands change
-Prefer concrete examples over generic instructions
-Review Timeline
-Reviews are handled on a best-effort basis.
+```
+
+---
+
+# Code Style
+
+## Python
+
+* Follow PEP 8
+* Prefer explicit, readable code
+* Use type hints where useful
+* Prefer small focused functions
+
+---
+
+## Frontend
+
+* Use TypeScript and functional React components
+* Keep logic readable
+* Reuse shared UI patterns
+* Include accessible labels and error handling
+
+---
+
+## Tests
+
+* Add/update tests when behavior changes
+* Keep fixtures focused and understandable
+
+---
+
+## Docs
+
+* Update contributor-facing docs when setup/workflow changes
+* Prefer concrete examples over generic instructions
+
+---
+
+# Review Timeline
+
 Typical expectations:
-Initial maintainer response: within 3 business days for small, clearly scoped PRs
-Follow-up review after updates: usually within 2 to 4 business days
-Large PRs, release periods, or security-sensitive work may take longer
-If a PR has been quiet for more than a week, a polite follow-up comment is completely fine.
-Review Etiquette
-Be kind, specific, and technical in review comments.
-Assume good intent and focus feedback on the code, docs, or behavior.
-If a maintainer asks for changes, update the PR instead of opening a new one unless requested.
-If you become inactive on a claimed issue, maintainers may reassign it so progress continues.
-Need Help?
-Use GitHub issues for bugs, enhancements, and scoped task discussion.
-Use pull request comments for implementation-specific review discussion.
-For security-sensitive reports, do not use public issues. Follow SECURITY.md.
-Thank you for helping make SecuScan more useful, safer, and more welcoming to new contributors.
-PR Size & Generated Artifacts
-To maintain a clean commit history and make reviews manageable, we use a lightweight, advisory GitHub Actions workflow on all Pull Requests. This workflow will log a warning in the Actions tab but will not fail your CI build.
-Never commit these auto-generated paths:
+
+* Initial maintainer response: within 3 business days
+* Follow-up review: within 2–4 business days
+
+Large or security-sensitive PRs may take longer.
+
+If a PR has been inactive for more than a week, a polite follow-up comment is acceptable.
+
+---
+
+# Review Etiquette
+
+* Be kind, specific, and technical
+* Focus feedback on code/docs/behavior
+* Update the same PR when changes are requested
+* Inactive claimed issues may be reassigned
+
+---
+
+# Need Help?
+
+* Use GitHub Issues for:
+
+  * Bugs
+  * Enhancements
+  * Task discussion
+
+* Use PR comments for implementation-specific review discussion
+
+For security-sensitive reports, follow `SECURITY.md`.
+
+---
+
+# PR Size & Generated Artifacts
+
+We use an advisory GitHub Actions workflow to help maintain manageable PR sizes.
+
+Never commit these generated paths:
+
+```text
 frontend/dist/
 frontend/playwright-report/
 frontend/test-results/
 frontend/.vite/
 .vite/deps/
-If the CI workflow flags your PR for containing these folders, you can remove them from your Git history and ensure they are ignored by running:
-code
-Bash
+```
+
+If CI flags these folders, remove them using:
+
+```bash
 git rm -r --cached frontend/playwright-report/ frontend/test-results/ frontend/dist/
+
 echo 'frontend/dist/' >> .gitignore
 echo 'frontend/playwright-report/' >> .gitignore
 echo 'frontend/test-results/' >> .gitignore
+```
+
+---
+
+Thank you for helping make SecuScan more useful, safer, and more welcoming to contributors.
