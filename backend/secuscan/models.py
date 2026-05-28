@@ -170,11 +170,15 @@ class ErrorResponse(BaseModel):
     details: Optional[Dict[str, Any]] = None
 
 
+class BulkDeleteRequest(RootModel[Annotated[List[str], Field(max_length=MAX_BULK_DELETE)]]):
+    """Accepts a JSON array of task IDs directly. Max 500 per request."""
+    pass
+
+
 class TicketCreateRequest(BaseModel):
     """Request to create a ticket in an external integration"""
     provider: str  # "jira" or "github"
     finding: Finding
-    config: Dict[str, str]  # credentials and config for the integration
 
 
 class TicketResponse(BaseModel):

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { upsertVaultSecret } from '../api'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from '../components/ThemeContext'
 import { useToast } from '../components/ToastContext'
@@ -63,11 +64,30 @@ export default function Settings() {
         }
     }, [])
 
-    const handleSave = () => {
-        localStorage.setItem('secuscan-config', JSON.stringify(config))
-        addToast("Operational parameters synchronized", "success")
-        if (config.theme !== theme) {
-            setTheme(config.theme)
+    const handleSave = async () => {
+        try {
+            // Save integration secrets to backend vault
+            const secrets = ['shodanKey', 'virustotalKey', 'jiraToken', 'jiraUrl', 'jiraEmail', 'jiraProject', 'githubToken', 'githubRepo']
+            for (const key of secrets) {
+                const val = config[key as keyof typeof config] as string
+                if (val && val !== '********') {
+                    await upsertVaultSecret(key, { payload: val })
+                }
+            }
+
+            // Remove secrets from local storage config
+            const localConfig = { ...config }
+            for (const key of secrets) {
+                localConfig[key as keyof typeof config] = (localConfig[key as keyof typeof config] ? '********' : '') as never
+            }
+
+            localStorage.setItem('secuscan-config', JSON.stringify(localConfig))
+            addToast("Operational parameters synchronized", "success")
+            if (config.theme !== theme) {
+                setTheme(config.theme)
+            }
+        } catch (e: any) {
+            addToast(`Failed to synchronize parameters: ${e.message}`, "error")
         }
     }
 

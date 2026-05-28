@@ -325,11 +325,8 @@ export default function Findings() {
 
   async function exportToTracker(finding: Finding & { status: FindingStatus }, provider: 'jira' | 'github') {
     try {
-      const savedConfig = localStorage.getItem('secuscan-config')
-      const config = savedConfig ? JSON.parse(savedConfig) : {}
-
       addToast(`Exporting to ${provider.toUpperCase()}...`, 'info')
-      const result = await createTicket(provider, finding, config)
+      const result = await createTicket(provider, finding)
       addToast(`Successfully created ${provider.toUpperCase()} ticket: ${result.ticket_id}`, 'success')
       window.open(result.ticket_url, '_blank', 'noopener,noreferrer')
     } catch (error: any) {
