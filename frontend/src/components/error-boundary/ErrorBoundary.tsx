@@ -10,6 +10,7 @@ type Props = {
 type State = {
   hasError: boolean
   error?: Error
+  sanitizedMessage?: string
 }
 
 class ErrorBoundary extends React.Component<Props, State> {
@@ -18,21 +19,29 @@ class ErrorBoundary extends React.Component<Props, State> {
   }
 
   static getDerivedStateFromError(error: Error): State {
+    const sanitized = sanitizeError(error)
+
     return {
       hasError: true,
       error,
+      sanitizedMessage: sanitized.message,
     }
   }
 
-  componentDidCatch(error: Error) {
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
     const sanitized = sanitizeError(error)
-    captureError(sanitized)
+
+    captureError({
+      ...sanitized,
+      componentStack: info.componentStack,
+    })
   }
 
   resetBoundary = () => {
     this.setState({
       hasError: false,
       error: undefined,
+      sanitizedMessage: undefined,
     })
   }
 
@@ -40,7 +49,7 @@ class ErrorBoundary extends React.Component<Props, State> {
     if (this.state.hasError) {
       return (
         <ErrorFallback
-          error={this.state.error}
+          errorMessage={this.state.sanitizedMessage}
           onRetry={this.resetBoundary}
         />
       )
