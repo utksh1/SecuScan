@@ -104,7 +104,6 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | Binary Signature Scan | `yara_scan` | `forensics` | `intrusive` | `yara` | Binary and file-system signature matching with YARA rules. |
 | DAST Web Proxy (ZAP) | `zap_scanner` | `vulnerability` | `exploit` | `python3` | Dynamic proxy spidering and payload injection. |
 
- 
 ## Examples for common field types in metadata.json
 
 1. **string** - Single-line text
