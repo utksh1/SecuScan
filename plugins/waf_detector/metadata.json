@@ -1,52 +1,14 @@
 {
-  "id": "waf_detector",
-  "name": "WAF Detection Scanner",
-  "version": "1.0.0",
-  "description": "Automatically identify Web Application Firewalls protecting targets.",
-  "long_description": "Automatically identify Web Application Firewalls protecting targets.",
-  "category": "robots",
   "author": {
-    "name": "SecuScan Contributors",
-    "email": "dev@secuscan.local"
+    "email": "dev@secuscan.local",
+    "name": "SecuScan Contributors"
   },
-  "license": "MIT",
-  "icon": "🛠️",
-  "engine": {
-    "type": "cli",
-    "binary": "wafw00f"
-  },
+  "category": "robots",
+  "checksum": "510412b642b93adaaf5bb782d3d86c4e3bf987e92adaf58bfede7224e5ec7af3",
   "command_template": [
     "wafw00f",
     "{target}"
   ],
-  "fields": [
-    {
-      "id": "target",
-      "label": "Target URL",
-      "type": "string",
-      "required": true,
-      "placeholder": "https://secuscan.in",
-      "validation": {
-        "pattern": "^https?://",
-        "message": "Must be a valid HTTP(S) URL"
-      }
-    }
-  ],
-  "presets": {
-    "default": {}
-  },
-  "output": {
-    "format": "text",
-    "parser": "custom"
-  },
-  "safety": {
-    "level": "safe",
-    "requires_consent": false,
-    "rate_limit": {
-      "max_per_hour": 20,
-      "max_concurrent": 1
-    }
-  },
   "dependencies": {
     "binaries": [
       "wafw00f"
@@ -54,8 +16,43 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "60b54af15ff7bad498a02cdbf08ee8611622e117944a3a65301cb3cae1582bb2",
-  "capabilities": [
-    "network"
-  ]
+  "description": "Automatically identify Web Application Firewalls protecting targets.",
+  "engine": {
+    "binary": "wafw00f",
+    "type": "cli"
+  },
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target URL",
+      "placeholder": "https://secuscan.in",
+      "required": true,
+      "type": "string",
+      "validation": {
+        "message": "Must be a valid HTTP(S) URL",
+        "pattern": "^https?://"
+      }
+    }
+  ],
+  "icon": "\ud83d\udee0\ufe0f",
+  "id": "waf_detector",
+  "license": "MIT",
+  "long_description": "Automatically identify Web Application Firewalls protecting targets.",
+  "name": "WAF Detector (wafw00f)",
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "presets": {
+    "default": {}
+  },
+  "safety": {
+    "level": "safe",
+    "rate_limit": {
+      "max_concurrent": 1,
+      "max_per_hour": 20
+    },
+    "requires_consent": false
+  },
+  "version": "1.0.0"
 }

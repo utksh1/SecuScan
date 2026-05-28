@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "GPLv2",
-  "icon": "💉",
+  "icon": "\ud83d\udc89",
   "engine": {
     "type": "cli",
     "binary": "sqlmap"
@@ -124,10 +124,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "7312d73eb00289dfe5bc1c2cdb6491054a3a348f198a65b36f69f125c9ae3d50",
-  "capabilities": [
-    "network",
-    "intrusive",
-    "exploit"
-  ]
+  "checksum": "7312d73eb00289dfe5bc1c2cdb6491054a3a348f198a65b36f69f125c9ae3d50"
 }

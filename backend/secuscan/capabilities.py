@@ -14,6 +14,29 @@ docker        - plugin requires the Docker daemon at runtime
 credentials   - plugin pulls secrets from the credential vault
 intrusive     - plugin performs active probing that may affect target systems
 exploit       - plugin attempts to exploit vulnerabilities (highest risk, opt-in only)
+
+Backward compatibility / migration
+-----------------------------------
+Plugins that do **not** declare a ``capabilities`` list (i.e. all plugins that
+pre-date this feature) are **not broken**.  Instead, an implied capability set is
+derived from their ``safety.level`` field:
+
+  safe      → ["network"]
+  intrusive → ["network", "intrusive"]
+  exploit   → ["network", "intrusive", "exploit"]
+
+This means:
+
+* Existing plugins without a ``capabilities`` field continue to load and execute
+  normally.  No plugin metadata files need to be updated for the enforcement
+  system to become active.
+* Operators can still deny capabilities (e.g. ``SECUSCAN_DENIED_CAPABILITIES=exploit``)
+  and all exploit-level plugins will be blocked even if they lack an explicit
+  ``capabilities`` declaration.
+* Plugin authors are encouraged to add an explicit ``capabilities`` list to their
+  metadata.json so operators have fine-grained visibility.  After adding or
+  changing the ``capabilities`` field the plugin checksum must be regenerated
+  (run ``python -m backend.secuscan.plugins_validate --refresh <plugin-id>``).
 """
 
 from __future__ import annotations

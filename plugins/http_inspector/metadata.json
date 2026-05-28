@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "🌐",
+  "icon": "\ud83c\udf10",
   "engine": {
     "type": "python",
     "entrypoint": "python3 -m httpx"
@@ -92,8 +92,5 @@
     "system_packages": []
   },
   "docker_image": "curlimages/curl",
-  "checksum": "435436b8dbde27b30f545c3f5701089db880794a8a3f3a47e08cf2e6dbffa447",
-  "capabilities": [
-    "network"
-  ]
+  "checksum": "435436b8dbde27b30f545c3f5701089db880794a8a3f3a47e08cf2e6dbffa447"
 }

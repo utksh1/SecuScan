@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "🔎",
+  "icon": "\ud83d\udd0e",
   "engine": {
     "type": "cli",
     "binary": "nikto"
@@ -333,9 +333,5 @@
     ]
   },
   "docker_image": "sullo/nikto",
-  "checksum": "0fb0bf4aa20a24934291e650701373b2501b2d44a1d1b0e9445ff9bf84857315",
-  "capabilities": [
-    "network",
-    "intrusive"
-  ]
+  "checksum": "0fb0bf4aa20a24934291e650701373b2501b2d44a1d1b0e9445ff9bf84857315"
 }
