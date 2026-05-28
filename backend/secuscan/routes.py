@@ -1147,3 +1147,94 @@ async def get_assets():
     rows = await db.fetchall("SELECT DISTINCT target FROM tasks UNION SELECT DISTINCT target FROM findings")
     assets = [{"id": str(uuid.uuid4()), "name": row["target"]} for row in rows]
     return {"assets": assets}
+
+
+# ── Network Policy Management Endpoints ─────────────────────────────────────
+
+from .network_policy import get_policy_engine, PolicyAction
+from dataclasses import asdict
+
+
+@router.get("/admin/network-policy")
+async def get_network_policy():
+    """Get current network policy configuration"""
+    engine = get_policy_engine()
+    
+    return {
+        "allowlist": [asdict(p) for net, p in engine.allowlist],
+        "denylist": [asdict(p) for net, p in engine.denylist],
+        "audit_entries_count": len(engine.audit_entries),
+    }
+
+
+@router.post("/admin/network-policy/allow")
+async def add_allow_rule(request: dict):
+    """Add network to allowlist"""
+    engine = get_policy_engine()
+    
+    try:
+        engine.add_allow_rule(
+            cidr=request["cidr"],
+            reason=request.get("reason", "Operator added"),
+        )
+        return {"status": "success", "cidr": request["cidr"]}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/admin/network-policy/deny")
+async def add_deny_rule(request: dict):
+    """Add network to denylist"""
+    engine = get_policy_engine()
+    
+    try:
+        engine.add_deny_rule(
+            cidr=request["cidr"],
+            reason=request.get("reason", "Operator added"),
+        )
+        return {"status": "success", "cidr": request["cidr"]}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/admin/network-audit-log")
+async def get_audit_log(
+    plugin_id: Optional[str] = None,
+    action: Optional[str] = None,
+    limit: int = 100
+):
+    """Retrieve network audit log entries"""
+    engine = get_policy_engine()
+    
+    policy_action = None
+    if action and action.upper() in ["ALLOW", "DENY"]:
+        policy_action = PolicyAction[action.upper()]
+    
+    entries = engine.get_audit_entries(
+        plugin_id=plugin_id,
+        action=policy_action,
+        limit=limit
+    )
+    
+    return {
+        "entries": [asdict(e) for e in entries],
+        "total": len(entries),
+    }
+
+
+@router.get("/admin/network-audit-log/export")
+async def export_audit_log(format: str = "json"):
+    """Export audit log in specified format"""
+    engine = get_policy_engine()
+    
+    if format not in ["json", "csv"]:
+        raise HTTPException(status_code=400, detail="Format must be 'json' or 'csv'")
+    
+    content = engine.export_audit_log(format)
+    
+    mime_type = "application/json" if format == "json" else "text/csv"
+    return Response(
+        content=content,
+        media_type=mime_type,
+        headers={"Content-Disposition": f"attachment; filename=network-audit.{format}"}
+    )

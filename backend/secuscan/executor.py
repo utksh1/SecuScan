@@ -184,6 +184,7 @@ class TaskExecutor:
         db = await get_db()
         self.running_tasks[task_id] = asyncio.current_task()
 
+        token = None
         try:
             # Update status to running
             await db.execute(
@@ -205,6 +206,12 @@ class TaskExecutor:
             inputs = json.loads(task_row["inputs_json"])
             safe_mode = bool(task_row["safe_mode"])
             target = extract_target(inputs)
+
+            from .network_policy import network_context
+            token = network_context.set({
+                "plugin_id": plugin_id,
+                "task_id": task_id
+            })
 
             # Check if this is a modular scanner or a standard plugin
             if plugin_id in MODULAR_SCANNERS:
@@ -280,6 +287,8 @@ class TaskExecutor:
                         f"{settings.sandbox_memory_mb}m",
                         "--cpus",
                         str(settings.sandbox_cpu_quota),
+                        "--cap-drop", "NET_RAW",
+                        "--network", "restricted",
                         docker_image,
                     ]
                     command = docker_cmd + command
@@ -423,6 +432,9 @@ class TaskExecutor:
             # Always runs regardless of success, failure, or cancellation.
             # Remove from in-memory registry and release the concurrency slot
             # so future tasks are not permanently blocked.
+            if token is not None:
+                from .network_policy import network_context
+                network_context.reset(token)
             self.running_tasks.pop(task_id, None)
             await concurrent_limiter.release(task_id)
     

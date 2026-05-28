@@ -56,6 +56,18 @@ class Settings(BaseSettings):
     enforce_plugin_signatures: bool = False
     vault_key: Optional[str] = None
 
+    # Network Policy Configuration
+    network_allowlist: List[str] = []  # IPs/networks to allow (CIDR)
+    network_denylist: List[str] = [    # IPs/networks to deny (CIDR)
+        "169.254.169.254/32",          # AWS metadata
+        "169.254.0.0/16",              # Reserved/metadata
+        "127.0.0.0/8",                 # Loopback (for remote execution)
+    ]
+    network_audit_log_file: str = str(PROJECT_ROOT / "logs" / "network.audit.log")
+    network_audit_retention_days: int = 90
+    enforce_network_policy: bool = True
+    network_policy_failure_mode: str = "block"  # "block" or "log_only"
+
     # Rate Limiting
     max_concurrent_tasks: int = 3
     max_tasks_per_hour: int = 50
@@ -95,7 +107,15 @@ class Settings(BaseSettings):
         env_prefix = "SECUSCAN_"
         case_sensitive = False
 
-    @field_validator("cors_allowed_origins", "cors_allowed_methods", "cors_allowed_headers", "trusted_proxies", mode="before")
+    @field_validator(
+        "cors_allowed_origins",
+        "cors_allowed_methods",
+        "cors_allowed_headers",
+        "trusted_proxies",
+        "network_allowlist",
+        "network_denylist",
+        mode="before",
+    )
     @classmethod
     def parse_csv_or_list(cls, value: Any) -> Any:
         """Allow comma-separated env values in addition to JSON arrays."""
