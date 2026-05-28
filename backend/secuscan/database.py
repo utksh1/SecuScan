@@ -33,11 +33,12 @@ class Database:
         """Establish database connection and ensure schema exists."""
         # Ensure data directory exists
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        
+
         conn = await aiosqlite.connect(self.db_path)
         self._connection = conn
         conn.row_factory = aiosqlite.Row
         await self._create_schema()
+        await self._run_migrations()
 
     async def disconnect(self):
         """Close the current database connection."""
@@ -214,6 +215,32 @@ class Database:
                 print("Added missing column 'proof' to findings table.")
             except Exception as e:
                 print(f"Failed to add 'proof' to findings: {e}")
+
+    async def _run_migrations(self):
+        """Apply any pending SQL migration files from the migrations directory.
+
+        Migration files are plain .sql scripts named NNN_description.sql.
+        They are applied in lexicographic order and are idempotent — every
+        statement uses CREATE TABLE/INDEX IF NOT EXISTS so re-running is safe.
+
+        For an in-memory database (db_path == ":memory:") the migrations
+        directory is resolved relative to this source file so tests work
+        without a real filesystem path.
+        """
+        if self.db_path == ":memory:":
+            migrations_dir = Path(__file__).parent / "migrations"
+        else:
+            migrations_dir = Path(self.db_path).parent.parent / "secuscan" / "migrations"
+
+        if not migrations_dir.exists():
+            return
+
+        for migration_file in sorted(migrations_dir.glob("*.sql")):
+            sql = migration_file.read_text(encoding="utf-8")
+            try:
+                await self.connection.executescript(sql)
+            except Exception as exc:
+                print(f"Migration {migration_file.name} failed: {exc}")
 
     async def execute(self, query: str, params: tuple = ()):
         """Execute a write query."""
