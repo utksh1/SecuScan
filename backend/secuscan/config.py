@@ -4,7 +4,9 @@ Configuration management for SecuScan backend
 
 from pathlib import Path
 from typing import Any, List, Optional
+# pyrefly: ignore [missing-import]
 from pydantic import field_validator
+# pyrefly: ignore [missing-import]
 from pydantic_settings import BaseSettings
 import base64
 import hashlib
@@ -39,7 +41,7 @@ class Settings(BaseSettings):
     require_consent: bool = True
     allow_loopback_scans: bool = True
     allowed_networks: List[str] = ["127.0.0.1", "192.168.*.*", "10.*.*.*", "172.16.*.*"]
-    
+
     # Network policy settings for target validation
     allow_private_ips: bool = False  # Disable private IPs by default in permissive mode
     allow_loopback: bool = True      # Allow 127.0.0.1 for local debugging

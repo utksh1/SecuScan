@@ -104,22 +104,23 @@ def _validate_ip_network(net: ipaddress.IPv4Network | ipaddress.IPv6Network, saf
 
 async def resolve_hostname(hostname: str, timeout: int = 2) -> List[str]:
     """Resolve a hostname to IP addresses with timeout protection."""
+    # pyrefly: ignore [missing-import]
     import dns.resolver
-    
+
     ips = []
     loop = asyncio.get_event_loop()
-    
+
     for record_type in ('A', 'AAAA'):
         try:
             resolver = dns.resolver.Resolver()
             resolver.timeout = float(timeout)
             resolver.lifetime = float(timeout)
-            
+
             answer = await loop.run_in_executor(None, resolver.resolve, hostname, record_type)
             ips.extend([str(rdata) for rdata in answer])
         except Exception:
             pass
-            
+
     return list(set(ips))
 
 
@@ -127,7 +128,7 @@ def _log_blocked_target(target: str, reason: str) -> None:
     """Log a blocked target to the audit log."""
     if not settings.log_blocked_targets:
         return
-        
+
     import json
     from datetime import datetime
     import os
@@ -233,10 +234,10 @@ async def _validate_target_internal(
             else:
                 # No IPs returned
                 if safe_mode:
-                    return False, f"Failed to resolve hostname '{hostname_to_validate}'"
+                    return False, "Failed to resolve hostname"
         except Exception as e:
             if safe_mode:
-                return False, f"Failed to resolve hostname '{hostname_to_validate}': {e}"
+                return False, "Failed to resolve hostname"
             else:
                 logger.warning(f"DNS resolution failed for {hostname_to_validate}: {e}")
 
@@ -245,8 +246,9 @@ async def _validate_target_internal(
         max_hops = settings.max_redirect_hops
         if _redirect_depth >= max_hops:
             return False, f"Redirect chain exceeded maximum of {max_hops} hops"
-            
+
         try:
+            # pyrefly: ignore [missing-import]
             import httpx
             from urllib.parse import urljoin
             

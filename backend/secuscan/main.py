@@ -7,10 +7,14 @@ import sys
 import shutil
 from pathlib import Path
 from contextlib import asynccontextmanager
+# pyrefly: ignore [missing-import]
 from .request_middleware import RequestIDMiddleware
 
+# pyrefly: ignore [missing-import]
 from fastapi import FastAPI
+# pyrefly: ignore [missing-import]
 from fastapi.middleware.cors import CORSMiddleware
+# pyrefly: ignore [missing-import]
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
@@ -92,16 +96,19 @@ app = FastAPI(
 
 @app.get("/api/docs", include_in_schema=False)
 async def redirect_api_docs():
+    # pyrefly: ignore [missing-import]
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/docs")
 
 @app.get("/api/redoc", include_in_schema=False)
 async def redirect_api_redoc():
+    # pyrefly: ignore [missing-import]
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/redoc")
 
 @app.get("/api/openapi.json", include_in_schema=False)
 async def redirect_api_openapi():
+    # pyrefly: ignore [missing-import]
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/openapi.json")
 
@@ -159,6 +166,7 @@ async def root():
 
 def main():
     """Main entry point"""
+    # pyrefly: ignore [missing-import]
     import uvicorn
     
     logger.info("""

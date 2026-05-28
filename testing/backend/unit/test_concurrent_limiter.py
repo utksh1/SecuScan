@@ -10,6 +10,7 @@ Covers:
 """
 
 import asyncio
+# pyrefly: ignore [missing-import]
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 

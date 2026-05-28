@@ -88,7 +88,7 @@ def test_all_scantools_have_backend_plugins(test_client):
 
 def test_subdomain_discovery(test_client):
     mock_out = "admin.example.com\ndev.example.com\napi.example.com"
-    result = run_plugin_test(test_client, "subdomain_discovery", {"target": "example.com"}, mock_out)
+    result = run_plugin_test(test_client, "subdomain_discovery", {"target": "example.com", "safe_mode": False}, mock_out)
     assert len(result["structured"]["findings"]) > 0
     assert "admin.example.com" in result["raw_output_excerpt"]
 
@@ -135,11 +135,11 @@ def test_ssh_runner(test_client):
 
 def test_whois_lookup(test_client):
     mock_out = "Registrar: SafeNames Ltd.\nRegistry Expiry Date: 2026-01-01\nName Server: NS1.EXAMPLE.COM"
-    result = run_plugin_test(test_client, "whois_lookup", {"target": "example.com"}, mock_out)
+    result = run_plugin_test(test_client, "whois_lookup", {"target": "example.com", "safe_mode": False}, mock_out)
     assert result["structured"]["detail"]["registrar"] == "SafeNames Ltd."
 
 def test_dns_enum(test_client):
     mock_out = "[*] A example.com 93.184.216.34\n[*] MX mail.example.com 10"
-    result = run_plugin_test(test_client, "dns_enum", {"target": "example.com"}, mock_out)
+    result = run_plugin_test(test_client, "dns_enum", {"target": "example.com", "safe_mode": False}, mock_out)
     assert result["structured"]["count"] >= 2
     assert any(r["type"] == "MX" for r in result["structured"]["records"])

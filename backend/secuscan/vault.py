@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import os
 
+# pyrefly: ignore [missing-import]
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 

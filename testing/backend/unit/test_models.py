@@ -1,4 +1,6 @@
+# pyrefly: ignore [missing-import]
 import pytest
+# pyrefly: ignore [missing-import]
 from pydantic import ValidationError
 from backend.secuscan.models import TaskCreateRequest, PluginField, PluginFieldType
 

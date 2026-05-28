@@ -2,7 +2,9 @@
 API routes for SecuScan backend
 """
 
+# pyrefly: ignore [missing-import]
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request, Depends
+# pyrefly: ignore [missing-import]
 from fastapi.responses import JSONResponse
 from typing import Any, Optional, List, Dict, Callable
 import json
@@ -81,6 +83,7 @@ from .reporting import reporting
 from .vault import VaultCrypto
 from .workflows import scheduler
 
+# pyrefly: ignore [missing-import]
 from sse_starlette.sse import EventSourceResponse
 
 router = APIRouter(prefix="/api/v1")

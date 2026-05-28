@@ -1,5 +1,6 @@
 import sys
 from unittest.mock import patch, MagicMock, AsyncMock
+# pyrefly: ignore [missing-import]
 import pytest
 from backend.secuscan.cli import run_scan, main
 

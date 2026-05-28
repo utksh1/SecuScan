@@ -9,7 +9,9 @@ from datetime import datetime
 from functools import lru_cache
 from typing import Any, Dict, List
 
+# pyrefly: ignore [missing-import]
 from PIL import Image, ImageDraw
+# pyrefly: ignore [missing-import]
 from xhtml2pdf import pisa
 
 

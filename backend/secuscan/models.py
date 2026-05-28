@@ -4,6 +4,7 @@ Pydantic models for API requests and responses
 
 from typing import Optional, Dict, Any, List
 from datetime import datetime
+# pyrefly: ignore [missing-import]
 from pydantic import BaseModel, Field
 from enum import Enum
 

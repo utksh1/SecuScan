@@ -70,7 +70,7 @@ def test_wpscan(test_client):
     result = run_plugin_test(
         test_client,
         "wpscan",
-        {"target": "https://wp.lab", "enumerate": "vp"},
+        {"target": "https://wp.lab", "enumerate": "vp", "safe_mode": False},
         mock_out,
     )
     assert any("WordPress Plugin Vulnerability" in f["title"] for f in result["structured"]["findings"])
@@ -78,13 +78,13 @@ def test_wpscan(test_client):
 
 def test_joomscan(test_client):
     mock_out = "[+] Vulnerable to: CVE-2015-8562\n[+] Joomla! version: 3.4.5"
-    result = run_plugin_test(test_client, "joomscan", {"target": "https://joomla.lab"}, mock_out)
+    result = run_plugin_test(test_client, "joomscan", {"target": "https://joomla.lab", "safe_mode": False}, mock_out)
     assert any("Joomla Vulnerability" in f["title"] for f in result["structured"]["findings"])
 
 
 def test_droopescan(test_client):
     mock_out = '{"vulnerabilities":[{"description":"CVE-2025-0001"}],"interesting urls":[{"description":"/admin"}]}'
-    result = run_plugin_test(test_client, "droopescan", {"target": "https://drupal.lab"}, mock_out)
+    result = run_plugin_test(test_client, "droopescan", {"target": "https://drupal.lab", "safe_mode": False}, mock_out)
     assert any("DroopeScan vulnerabilities" in f["title"] for f in result["structured"]["findings"])
 
 
@@ -141,7 +141,7 @@ def test_sqli_checker(test_client):
     result = run_plugin_test(
         test_client,
         "sqli_checker",
-        {"target": "https://api.lab/user?id=1", "level": 1, "risk": 1, "technique": "BEUSTQ"},
+        {"target": "https://api.lab/user?id=1", "level": 1, "risk": 1, "technique": "BEUSTQ", "safe_mode": False},
         mock_out,
     )
     findings = result["structured"]["findings"]

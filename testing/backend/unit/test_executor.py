@@ -2,6 +2,7 @@ import asyncio
 import json
 import uuid
 
+# pyrefly: ignore [missing-import]
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 

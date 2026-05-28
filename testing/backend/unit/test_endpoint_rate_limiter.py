@@ -1,7 +1,10 @@
 import asyncio
 from datetime import datetime, timedelta
+# pyrefly: ignore [missing-import]
 import pytest
+# pyrefly: ignore [missing-import]
 from fastapi import Request, Response, HTTPException
+# pyrefly: ignore [missing-import]
 from fastapi.testclient import TestClient
 
 from backend.secuscan.config import settings
