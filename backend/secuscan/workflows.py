@@ -67,7 +67,7 @@ class WorkflowScheduler:
         # Treat any naive timestamp from the DB as UTC.
         if last.tzinfo is None:
             last = last.replace(tzinfo=timezone.utc)
-            
+
         # 1. Cron logic (takes precedence if valid)
         if cron_expression:
             try:
@@ -80,12 +80,12 @@ class WorkflowScheduler:
             except Exception as e:
                 logger.error(f"Invalid cron expression '{cron_expression}': {e}")
                 # Fallback to schedule_seconds if cron is invalid, else return False
-        
+
         # 2. Interval logic
         if schedule_seconds and schedule_seconds > 0:
             elapsed = (now - last).total_seconds()
             return elapsed >= schedule_seconds
-            
+
         return False
     async def _run_workflow(self, workflow_id: str, steps: List[Dict[str, Any]]):
         logger.info("Running workflow %s with %d step(s)", workflow_id, len(steps))

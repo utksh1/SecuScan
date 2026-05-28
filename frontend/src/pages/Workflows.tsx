@@ -139,12 +139,12 @@ function CreateSheet({ onClose, onCreated }: CreateSheetProps) {
 
     setLoading(true)
     try {
-      const payload: WorkflowCreatePayload = { 
-        name, 
-        schedule_seconds: scheduleType === 'interval' ? parsedSchedule : null, 
+      const payload: WorkflowCreatePayload = {
+        name,
+        schedule_seconds: scheduleType === 'interval' ? parsedSchedule : null,
         cron_expression: scheduleType === 'cron' ? trimmedCron : null,
-        enabled, 
-        steps 
+        enabled,
+        steps
       }
       const created = await createWorkflow(payload)
       onCreated(created)

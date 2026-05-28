@@ -255,7 +255,7 @@ class Database:
                     print(f"Added missing column '{col_name}' to findings table.")
                 except Exception as e:
                     print(f"Failed to add '{col_name}' to findings: {e}")
-                    
+
         # Workflows table migration
         workflows_columns = await self.fetchall("PRAGMA table_info(workflows)")
         existing_wf_cols = {col["name"] for col in workflows_columns}
