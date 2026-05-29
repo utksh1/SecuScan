@@ -10,12 +10,27 @@ import {
 } from "../utils/date";
 import Pagination from "../components/Pagination";
 
+type Severity =
+  | 'critical'
+  | 'high'
+  | 'medium'
+  | 'low'
+  | 'informational';
+
+type ScanStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+
+type ExpectedFeatures = {
+  // best-effort: backend returns findings summary; exact shape depends on plugin parsers.
+  // keep loose typing for forward compatibility.
+  [key: string]: unknown;
+};
+
 interface Task {
   task_id: string;
   plugin_id: string;
   tool: string;
   target: string;
-  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  status: ScanStatus;
   created_at: string;
   started_at?: string;
   completed_at?: string;
@@ -24,7 +39,13 @@ interface Task {
   preset?: string;
   queue_position?: number;
   pending_count?: number;
+
+  // Filtering fields (optional; may be missing in older backend data)
+  severity?: Severity;
+  plugin_type?: string;
+  expected_features?: ExpectedFeatures | null;
 }
+
 
 const statusFilters = [
   { value: "all", label: "ALL_OPERATIONS" },
