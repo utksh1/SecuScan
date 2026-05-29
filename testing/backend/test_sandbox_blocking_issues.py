@@ -37,6 +37,7 @@ async def test_timeout_enforcement_with_default():
     # Test with explicit timeout
     output, exit_code, violation = await exec_._execute_command(
         [sys.executable, "-c", "import time; time.sleep(60)"],
+        "test-legacy-timeout",
         timeout=2,
     )
     assert violation == "timeout", f"Expected timeout, got {violation}"
@@ -46,6 +47,7 @@ async def test_timeout_enforcement_with_default():
     # Test with None (should use default 600s)
     output2, exit_code2, violation2 = await exec_._execute_command(
         [sys.executable, "-c", "print('done')"],
+        "test-legacy-none",
         timeout=None,
     )
     assert violation2 is None, f"Expected no violation, got {violation2}"
@@ -190,7 +192,8 @@ async def test_legacy_timeout_none_uses_default():
     # Call without timeout (None)
     output, exit_code, violation = await exec_._execute_command(
         [sys.executable, "-c", "print('hello world')"],
-        # timeout not specified - should default to global settings
+        "test-legacy-none2",
+        timeout=None,
     )
     
     assert exit_code == 0
