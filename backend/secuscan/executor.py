@@ -291,6 +291,8 @@ class TaskExecutor:
                 start_time = time.time()
                 output, exit_code, violation_reason = await self._execute_command(
                     command,
+                    task_id,
+                    timeout=self._resolve_execution_timeout(inputs),
                 )
                 duration = time.time() - start_time
 
@@ -432,17 +434,18 @@ class TaskExecutor:
     
     async def _execute_command(
         self,
-        cmd: list,
-        timeout: Optional[int] = None,
+        command: list,
+        task_id: str,
+        timeout: int = 600,
     ) -> tuple:
         config = SandboxConfig(
-            timeout_seconds=timeout if timeout is not None else settings.sandbox_timeout_seconds,
+            timeout_seconds=timeout,
             max_memory_mb=settings.sandbox_max_memory_mb,
             max_output_bytes=settings.sandbox_max_output_bytes,
             allow_network=settings.sandbox_allow_network,
         )
         try:
-            stdout, stderr, exit_code, violation_reason = await sandbox_execute(cmd, config)
+            stdout, stderr, exit_code, violation_reason = await sandbox_execute(command, config)
             return stdout, exit_code, violation_reason
         except asyncio.CancelledError:
             raise
