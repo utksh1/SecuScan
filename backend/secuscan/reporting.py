@@ -366,7 +366,7 @@ class ReportGenerator:
         """Generate conservative HTML/CSS that xhtml2pdf can paginate reliably."""
         payload = cls._build_report_payload(task, result)
         severity_counts = payload["severity_counts"]
-        
+
         icons = {
             "shield": cls._icon_data_uri("shield", "1e3a5f"),
             "target": cls._icon_data_uri("target", "2563eb"),
@@ -375,19 +375,18 @@ class ReportGenerator:
             "rows": cls._icon_data_uri("rows", "2563eb"),
             "clock": cls._icon_data_uri("clock", "475569")
         }
-        
+
         target_html = cls._escape_html_with_breaks(payload["target"], " ")
         summary_markup = "".join(f"<li>{cls._escape_html(line)}</li>" for line in payload["summary"])
         parameter_markup = "".join(
             f"<tr><td><label>{cls._escape_html(item['label'])}</label><strong>{cls._escape_html(item['value'])}</strong></td></tr>"
             for item in payload["scan_parameters"]
         )
-        
+
         finding_markup = "".join(
-            cls._build_pdf_finding_markup(finding, payload['target'], icons['critical']) 
+            cls._build_pdf_finding_markup(finding, payload['target'], icons['critical'])
             for finding in payload["findings"]
         )
-
         if not finding_markup:
             finding_markup = """
             <div class="finding">
@@ -641,12 +640,12 @@ class ReportGenerator:
 </body>
 </html>"""
 
-    @classmethod
+@classmethod
     def generate_html_report(cls, task: Dict[str, Any], result: Dict[str, Any]) -> str:
         """Generate a modern HTML report suitable for direct download."""
         payload = cls._build_report_payload(task, result)
         severity_counts = payload["severity_counts"]
-        
+
         icons = {
             "shield": cls._icon_data_uri("shield", "1e3a5f"),
             "target": cls._icon_data_uri("target", "2563eb"),
@@ -655,19 +654,18 @@ class ReportGenerator:
             "rows": cls._icon_data_uri("rows", "2563eb"),
             "clock": cls._icon_data_uri("clock", "475569")
         }
-        
+
         target_html = cls._escape_html_with_breaks(payload["target"])
         summary_markup = "".join(f"<li>{cls._escape_html(line)}</li>" for line in payload["summary"])
         parameter_markup = "".join(
             f"<div class=\"meta-card\"><label>{cls._escape_html(item['label'])}</label><strong>{cls._escape_html(item['value'])}</strong></div>"
             for item in payload["scan_parameters"]
         )
-        
+
         finding_markup = "".join(
-            cls._build_web_finding_markup(finding, payload['target'], icons['critical']) 
+            cls._build_web_finding_markup(finding, payload['target'], icons['critical'])
             for finding in payload["findings"]
         )
-
         if not finding_markup:
             finding_markup = """
             <article class="finding-card empty-state">
@@ -1062,12 +1060,12 @@ class ReportGenerator:
     def generate_sarif_report(cls, task: Dict[str, Any], result: Dict[str, Any]) -> str:
         """Generate a SARIF v2.1.0 report for GitHub Code Scanning."""
         payload = cls._build_report_payload(task, result)
-        
+
         severity_map = {
             "CRITICAL": "error", "HIGH": "error", "MEDIUM": "warning",
             "LOW": "note", "INFO": "note"
         }
-        
+
         rules = []
         rule_indices = {}
         results = []
@@ -1088,7 +1086,7 @@ class ReportGenerator:
 
             target = finding.get("target") or payload["target"]
             locations = []
-            
+
             if target:
                 is_url = "://" in target or target.startswith(("http://", "https://"))
                 location = {"physicalLocation": {"artifactLocation": {"uri": target}}}
