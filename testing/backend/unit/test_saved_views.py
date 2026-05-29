@@ -7,7 +7,6 @@ from httpx import AsyncClient, ASGITransport
 
 from fastapi import FastAPI
 from backend.secuscan.saved_views import saved_views_router
-from backend.secuscan.database import Database
 from backend.secuscan.database import Database, get_db
 import backend.secuscan.database as _db_module
 
@@ -314,3 +313,23 @@ async def test_filter_json_with_null_values_rejected(app_client: AsyncClient):
     bad_preset = {**VALID_PRESET, "severity": None}
     res = await app_client.post("/api/v1/saved-views", json=make_body("Null Sev", bad_preset))
     assert res.status_code == 422
+
+@pytest.mark.asyncio
+async def test_saved_views_migration_runs_for_file_db(tmp_path):
+    db_file = tmp_path / "secuscan.db"
+
+    db = Database(str(db_file))
+    await db.connect()
+
+    row = await db.fetchone(
+        """
+        SELECT name
+        FROM sqlite_master
+        WHERE type='table'
+        AND name='saved_views'
+        """
+    )
+
+    assert row is not None
+
+    await db.disconnect()

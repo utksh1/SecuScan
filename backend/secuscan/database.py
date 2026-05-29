@@ -266,20 +266,21 @@ class Database:
         directory is resolved relative to this source file so tests work
         without a real filesystem path.
         """
-        if self.db_path == ":memory:":
-            migrations_dir = Path(__file__).parent / "migrations"
-        else:
-            migrations_dir = Path(self.db_path).parent.parent / "secuscan" / "migrations"
+        migrations_dir = Path(__file__).resolve().parent / "migrations"
 
         if not migrations_dir.exists():
-            return
+            raise RuntimeError(
+                f"Migration directory not found: {migrations_dir}"
+            )
 
         for migration_file in sorted(migrations_dir.glob("*.sql")):
             sql = migration_file.read_text(encoding="utf-8")
             try:
                 await self.connection.executescript(sql)
             except Exception as exc:
-                print(f"Migration {migration_file.name} failed: {exc}")
+                raise RuntimeError(
+                    f"Migration {migration_file.name} failed"
+                ) from exc
 
         await self._backfill_risk_scores()
 
