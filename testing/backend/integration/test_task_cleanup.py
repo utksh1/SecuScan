@@ -5,6 +5,7 @@ Issue #30 — Add backend tests for task cancellation and cleanup endpoints.
 Test file location: testing/backend/integration/test_task_cleanup.py
 """
 
+import json
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -246,6 +247,40 @@ async def test_delete_task_removes_raw_output_file(app_client, tmp_path):
     assert resp.status_code == 200, resp.text
 
     assert not raw_file.exists(), "raw_output_path file should have been deleted from disk"
+
+
+@pytest.mark.asyncio
+async def test_completed_task_stream_replays_raw_output_in_chunks(app_client, tmp_path):
+    """Completed-task SSE must not read and send the full raw output in one event."""
+    from backend.secuscan.routes import SSE_RAW_OUTPUT_CHUNK_SIZE
+
+    raw_output = "a" * SSE_RAW_OUTPUT_CHUNK_SIZE + "tail"
+    raw_file = tmp_path / "large_scan_output.txt"
+    raw_file.write_text(raw_output)
+
+    task_id = await insert_task(
+        app_client._db,
+        status="completed",
+        raw_output_path=str(raw_file),
+    )
+    app_client._mock_executor.get_task_status = AsyncMock(
+        return_value={"status": "completed"}
+    )
+
+    resp = await app_client.get(f"/api/v1/task/{task_id}/stream")
+
+    assert resp.status_code == 200, resp.text
+    event_name = None
+    output_chunks = []
+    for line in resp.text.splitlines():
+        if line.startswith("event: "):
+            event_name = line.removeprefix("event: ")
+        elif line.startswith("data: ") and event_name == "output":
+            output_chunks.append(json.loads(line.removeprefix("data: "))["chunk"])
+
+    assert len(output_chunks) == 2
+    assert all(len(chunk) <= SSE_RAW_OUTPUT_CHUNK_SIZE for chunk in output_chunks)
+    assert "".join(output_chunks) == raw_output
 
 
 # ---------------------------------------------------------------------------
