@@ -8,6 +8,7 @@ allowlist/denylist policies. Supports both IPv4 and IPv6.
 import ipaddress
 import logging
 import asyncio
+import socket
 from typing import List, Tuple, Optional, Dict, Any
 from enum import Enum
 from dataclasses import dataclass, asdict
