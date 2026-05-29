@@ -42,7 +42,7 @@ describe('API offline integration', () => {
       const api = await getApi()
 
       await expect(
-        api.createWorkflow({ name: 'test', schedule_interval: 'manual', enabled: true, steps: [] }),
+        api.createWorkflow({ name: 'test', enabled: true, steps: [] }),
       ).rejects.toThrow(OfflineQueueError)
 
       expect(offlineQueue.getQueue()).toHaveLength(1)
