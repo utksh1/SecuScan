@@ -111,6 +111,7 @@ from .workflows import scheduler
 from sse_starlette.sse import EventSourceResponse
 
 router = APIRouter(prefix="/api/v1")
+SSE_RAW_OUTPUT_CHUNK_SIZE = 64 * 1024
 
 
 async def get_or_set_cached(key: str, builder):
@@ -130,6 +131,16 @@ async def invalidate_view_cache():
     cache = await get_cache()
     for prefix in ["summary:", "findings:", "reports:", "tasks:"]:
         await cache.delete_prefix(prefix)
+
+
+def iter_raw_output_chunks(path: str, chunk_size: int = SSE_RAW_OUTPUT_CHUNK_SIZE):
+    """Yield raw output in bounded chunks for completed-task SSE replay."""
+    with open(path, "r", encoding="utf-8", errors="replace") as output_file:
+        while True:
+            chunk = output_file.read(chunk_size)
+            if not chunk:
+                break
+            yield chunk
 
 
 def _report_generation_error_response(task_id: str, report_format: str) -> JSONResponse:
@@ -325,10 +336,10 @@ async def stream_task_output(task_id: str):
         raise HTTPException(status_code=404, detail="Task not found")
 
     async def event_generator():
-        # First, send the initial status
+        # First, send the initial status and phase
         yield {
             "event": "status",
-            "data": json.dumps({"status": status["status"]})
+            "data": json.dumps({"status": status["status"], "scan_phase": status.get("scan_phase")})
         }
 
         # If it's already completed/failed, we just return the raw output if any and close
@@ -337,13 +348,13 @@ async def stream_task_output(task_id: str):
                 db = await get_db()
                 task_row = await db.fetchone("SELECT raw_output_path FROM tasks WHERE id = ?", (task_id,))
                 if task_row and task_row["raw_output_path"]:
-                    with open(task_row["raw_output_path"], "r") as f:
+                    for chunk in iter_raw_output_chunks(task_row["raw_output_path"]):
                         yield {
                             "event": "output",
-                            "data": json.dumps({"chunk": f.read()})
+                            "data": json.dumps({"chunk": chunk})
                         }
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to replay raw output for task %s: %s", task_id, exc)
             return
 
         # Otherwise, subscribe to the live task events
@@ -360,6 +371,11 @@ async def stream_task_output(task_id: str):
                     }
                     if event["data"] in ["completed", "failed", "cancelled"]:
                         break
+                elif event["type"] == "phase":
+                    yield {
+                        "event": "phase",
+                        "data": json.dumps({"scan_phase": event["data"]})
+                    }
                 elif event["type"] == "output":
                     yield {
                         "event": "output",
