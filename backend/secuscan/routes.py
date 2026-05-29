@@ -91,8 +91,10 @@ logger = logging.getLogger(__name__)
 from .cache import get_cache
 from .models import (
     TaskCreateRequest, TaskResponse, TaskResult,
-    PluginListResponse, ErrorResponse, BulkDeleteRequest
+    PluginListResponse, ErrorResponse, BulkDeleteRequest,
+    TicketCreateRequest, TicketResponse
 )
+from .integrations import create_jira_ticket, create_github_issue
 from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager, init_plugins
@@ -1251,3 +1253,35 @@ async def get_assets():
     rows = await db.fetchall("SELECT DISTINCT target FROM tasks UNION SELECT DISTINCT target FROM findings")
     assets = [{"id": str(uuid.uuid4()), "name": row["target"]} for row in rows]
     return {"assets": assets}
+
+
+@router.post("/integrations/ticket", response_model=TicketResponse)
+async def create_ticket(request: TicketCreateRequest):
+    """Create a ticket in an external issue tracker"""
+    db = await get_db()
+    crypto = VaultCrypto(settings.resolved_vault_key)
+
+    config = {}
+    if request.provider == "jira":
+        keys = ["jiraUrl", "jiraEmail", "jiraToken", "jiraProject"]
+    elif request.provider == "github":
+        keys = ["githubToken", "githubRepo"]
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported provider")
+
+    for key in keys:
+        row = await db.fetchone("SELECT encrypted_value FROM credential_vault WHERE name = ?", (key,))
+        if not row:
+            raise HTTPException(status_code=400, detail=f"Missing integration configuration: {key}")
+        config[key] = crypto.decrypt(row["encrypted_value"])
+
+    try:
+        if request.provider == "jira":
+            result = await create_jira_ticket(request.finding, config)
+            return TicketResponse(**result)
+        elif request.provider == "github":
+            result = await create_github_issue(request.finding, config)
+            return TicketResponse(**result)
+    except Exception as e:
+        logger.exception("Ticket creation failed")
+        raise HTTPException(status_code=500, detail=str(e))

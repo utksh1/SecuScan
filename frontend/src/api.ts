@@ -294,3 +294,19 @@ export function deleteWorkflow(workflowId: string): Promise<{ deleted: boolean }
     method: 'DELETE',
   })
 }
+
+export function createTicket(provider: string, finding: any): Promise<{ ticket_id: string; ticket_url: string }> {
+  return request<{ ticket_id: string; ticket_url: string }>('/integrations/ticket', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, finding }),
+  })
+}
+
+export function upsertVaultSecret(name: string, payload: Record<string, string>) {
+  return request(`/vault/${name}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}

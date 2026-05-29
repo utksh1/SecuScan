@@ -1,5 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
+import { ThemeProvider } from '../../src/components/ThemeContext'
+import { ToastProvider } from '../../src/components/ToastContext'
 import { AppRoutes } from '../../src/App'
 
 vi.mock('../../src/api', () => ({
@@ -44,8 +46,12 @@ describe('App route fallback', () => {
   it('redirects unknown routes to dashboard', async () => {
     render(
       <MemoryRouter initialEntries={['/not-a-real-route']}>
-        <AppRoutes />
-        <PathProbe />
+        <ThemeProvider>
+          <ToastProvider>
+            <AppRoutes />
+            <PathProbe />
+          </ToastProvider>
+        </ThemeProvider>
       </MemoryRouter>,
     )
 
@@ -57,7 +63,11 @@ describe('App route fallback', () => {
   it('renders the loaded dashboard summary', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
-        <AppRoutes />
+        <ThemeProvider>
+          <ToastProvider>
+            <AppRoutes />
+          </ToastProvider>
+        </ThemeProvider>
       </MemoryRouter>,
     )
 
@@ -68,7 +78,11 @@ describe('App route fallback', () => {
   it('renders the findings workspace', async () => {
     render(
       <MemoryRouter initialEntries={['/findings']}>
-        <AppRoutes />
+        <ThemeProvider>
+          <ToastProvider>
+            <AppRoutes />
+          </ToastProvider>
+        </ThemeProvider>
       </MemoryRouter>,
     )
 

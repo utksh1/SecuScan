@@ -55,11 +55,15 @@ const allFindings = [criticalFinding, highFinding, mediumFinding]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+import { ToastProvider } from '../../../src/components/ToastContext'
+
 function renderFindings() {
   return render(
-    <MemoryRouter>
-      <Findings />
-    </MemoryRouter>,
+    <ToastProvider>
+      <MemoryRouter>
+        <Findings />
+      </MemoryRouter>
+    </ToastProvider>,
   )
 }
 
