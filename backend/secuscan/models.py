@@ -182,3 +182,21 @@ class ErrorResponse(BaseModel):
 class BulkDeleteRequest(RootModel[Annotated[List[str], Field(max_length=MAX_BULK_DELETE)]]):
     """Accepts a JSON array of task IDs directly. Max 500 per request."""
     pass
+
+
+class UserRole(str, Enum):
+    ADMIN = "admin"
+    VIEWER = "viewer"
+
+class User(BaseModel):
+    username: str
+    role: UserRole
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+class WebhookConfig(BaseModel):
+    slack_url: Optional[str] = None
+    discord_url: Optional[str] = None
+    custom_url: Optional[str] = None

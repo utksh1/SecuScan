@@ -17,7 +17,7 @@ from .config import settings
 from .cache import init_cache, cache as global_cache
 from .database import init_db, db as global_db
 from .plugins import init_plugins
-from .routes import router
+from .routes import router, auth_router
 from .workflows import scheduler
 
 
@@ -124,6 +124,7 @@ app.add_middleware(
 app.add_middleware(RequestIDMiddleware)
 
 # Include API routes
+app.include_router(auth_router)
 app.include_router(router)
 
 # Health check endpoint

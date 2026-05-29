@@ -111,8 +111,23 @@ from .workflows import scheduler
 
 from sse_starlette.sse import EventSourceResponse
 
-router = APIRouter(prefix="/api/v1")
-SSE_RAW_OUTPUT_CHUNK_SIZE = 64 * 1024
+from fastapi.security import OAuth2PasswordRequestForm
+from .auth import get_current_user, RoleChecker, create_access_token, verify_password
+from .models import Token, UserRole, User
+
+router = APIRouter(prefix="/api/v1", dependencies=[Depends(get_current_user)])
+
+auth_router = APIRouter(prefix="/api/v1/auth")
+
+@auth_router.post("/login", response_model=Token)
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    db = await get_db()
+    user_row = await db.fetchone("SELECT username, password_hash, role FROM users WHERE username = ?", (form_data.username,))
+    if not user_row or not verify_password(form_data.password, user_row["password_hash"]):
+        raise HTTPException(status_code=400, detail="Incorrect username or password")
+    access_token = create_access_token(data={"sub": user_row["username"], "role": user_row["role"]})
+    return Token(access_token=access_token, token_type="bearer")
+
 
 
 async def get_or_set_cached(key: str, builder):
