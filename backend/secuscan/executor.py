@@ -118,7 +118,7 @@ class TaskExecutor:
             "UPDATE tasks SET scan_phase = ? WHERE id = ?",
             (phase, task_id)
         )
-    
+
     async def create_task(
         self,
         plugin_id: str,
@@ -641,7 +641,7 @@ class TaskExecutor:
         db = await get_db()
         task_row = await db.fetchone(
             """
-            SELECT id, plugin_id, tool_name, target, status, scan_phase, created_at, started_at, completed_at, 
+            SELECT id, plugin_id, tool_name, target, status, scan_phase, created_at, started_at, completed_at,
                    duration_seconds, exit_code, error_message, preset, inputs_json
             FROM tasks WHERE id = ?
             """,
