@@ -16,6 +16,7 @@ interface Task {
   tool: string;
   target: string;
   status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  scan_phase?: string;
   created_at: string;
   started_at?: string;
   completed_at?: string;
@@ -472,6 +473,11 @@ export default function Scans() {
                                       {task.plugin_id}
                                     </span>
                                   </p>
+                                  {task.status === 'running' && task.scan_phase && (
+                                    <p className="text-[10px] font-mono text-rag-blue/80 uppercase tracking-widest">
+                                      PHASE: {task.scan_phase.replace(/_/g, ' ')}
+                                    </p>
+                                  )}
                                   <p className="text-[10px] font-mono text-silver/40">
                                     SESSION:{" "}
                                     <span className="text-silver-bright uppercase">

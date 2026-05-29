@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from backend.secuscan.config import settings
 from backend.secuscan.database import get_db, init_db
-from backend.secuscan.executor import TaskExecutor
+from backend.secuscan.executor import STREAM_LISTENER_QUEUE_MAXSIZE, TaskExecutor
 from backend.secuscan.models import TaskStatus
 from backend.secuscan.plugins import get_plugin_manager, init_plugins
 
@@ -18,6 +18,45 @@ def _ensure_plugins_loaded():
     except RuntimeError:
         asyncio.run(init_plugins(settings.plugins_dir))
         return get_plugin_manager()
+
+
+@pytest.mark.asyncio
+async def test_stream_listener_queue_is_bounded_for_slow_consumers():
+    executor = TaskExecutor()
+    queue = executor.subscribe("task-1")
+
+    for index in range(STREAM_LISTENER_QUEUE_MAXSIZE + 5):
+        await executor._broadcast("task-1", "output", f"line-{index}")
+
+    assert queue.maxsize == STREAM_LISTENER_QUEUE_MAXSIZE
+    assert queue.qsize() == STREAM_LISTENER_QUEUE_MAXSIZE
+
+    events = []
+    while not queue.empty():
+        events.append(queue.get_nowait())
+
+    assert events[0]["data"] == "line-5"
+    assert events[-1]["data"] == f"line-{STREAM_LISTENER_QUEUE_MAXSIZE + 4}"
+
+
+@pytest.mark.asyncio
+async def test_stream_listener_keeps_latest_status_when_queue_is_full():
+    executor = TaskExecutor()
+    queue = executor.subscribe("task-1")
+
+    for index in range(STREAM_LISTENER_QUEUE_MAXSIZE):
+        await executor._broadcast("task-1", "output", f"line-{index}")
+    await executor._broadcast("task-1", "status", TaskStatus.COMPLETED.value)
+
+    events = []
+    while not queue.empty():
+        events.append(queue.get_nowait())
+
+    assert len(events) == STREAM_LISTENER_QUEUE_MAXSIZE
+    assert events[-1] == {
+        "type": "status",
+        "data": TaskStatus.COMPLETED.value,
+    }
 
 
 def test_parse_results_prefers_report_path_when_available(setup_test_environment, tmp_path):
@@ -276,3 +315,201 @@ def test_cancelled_error_is_not_subclass_of_exception():
     in execute_task() needs revisiting.
     """
     assert not issubclass(asyncio.CancelledError, Exception)
+
+# ---------------------------------------------------------------------------
+# Executor-level network policy enforcement tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_execute_task_blocked_by_network_policy(setup_test_environment):
+    """
+    When the network policy denies the task's target, execute_task() must:
+      - mark the task FAILED in the DB
+      - broadcast FAILED status
+      - never invoke the plugin/scanner
+    """
+    await init_db(settings.database_path)
+    db = await get_db()
+
+    task_id = str(uuid.uuid4())
+    await db.execute(
+        """
+        INSERT INTO tasks (id, plugin_id, tool_name, target, inputs_json,
+                           status, consent_granted, safe_mode)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (task_id, "nmap", "nmap", "10.0.0.1", '{"target":"10.0.0.1"}',
+         TaskStatus.QUEUED.value, 1, 1)
+    )
+
+    executor = TaskExecutor()
+
+    # Policy engine that always denies
+    mock_engine = MagicMock()
+    mock_engine.check_access.return_value = (False, "Blocked by denylist rule: test", None)
+
+    with patch("backend.secuscan.executor.settings") as mock_settings, \
+         patch("backend.secuscan.executor.get_policy_engine", return_value=mock_engine), \
+         patch("backend.secuscan.executor.concurrent_limiter") as mock_limiter, \
+         patch("backend.secuscan.executor.get_plugin_manager") as mock_pm:
+
+        mock_settings.enforce_network_policy = True
+        mock_settings.docker_enabled = False
+        mock_settings.raw_output_dir = settings.raw_output_dir
+        mock_settings.sandbox_timeout = 600
+
+        mock_limiter.release = AsyncMock()
+        mock_pm.return_value.get_plugin.return_value = MagicMock(name="nmap", presets={})
+        mock_pm.return_value.build_command.return_value = ["nmap", "10.0.0.1"]
+
+        await executor.execute_task(task_id)
+
+    row = await db.fetchone("SELECT status, error_message FROM tasks WHERE id = ?", (task_id,))
+    assert row["status"] == TaskStatus.FAILED.value, (
+        f"Expected FAILED, got {row['status']}"
+    )
+    assert "Network policy denied" in (row["error_message"] or ""), (
+        f"Expected denial reason in error_message, got: {row['error_message']}"
+    )
+    # Plugin execution must not have been attempted
+    mock_pm.return_value.build_command.assert_not_called()
+    mock_limiter.release.assert_called_once_with(task_id)
+    await db.disconnect()
+
+@pytest.mark.asyncio
+async def test_execute_task_allowed_by_network_policy(setup_test_environment):
+    """
+    When the network policy allows the task's target, the plugin must execute normally.
+    """
+    await init_db(settings.database_path)
+    db = await get_db()
+
+    task_id = str(uuid.uuid4())
+    await db.execute(
+        """
+        INSERT INTO tasks (id, plugin_id, tool_name, target, inputs_json,
+                           status, consent_granted, safe_mode)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (task_id, "nmap", "nmap", "8.8.8.8", '{"target":"8.8.8.8"}',
+         TaskStatus.QUEUED.value, 1, 1)
+    )
+
+    executor = TaskExecutor()
+
+    mock_engine = MagicMock()
+    mock_engine.check_access.return_value = (True, "Allowed by allowlist rule: test", None)
+
+    async def fake_command(*args, **kwargs):
+        return "80/tcp open http", 0
+
+    with patch("backend.secuscan.executor.settings") as mock_settings, \
+         patch("backend.secuscan.executor.get_policy_engine", return_value=mock_engine), \
+         patch.object(executor, "_execute_command", side_effect=fake_command), \
+         patch("backend.secuscan.executor.concurrent_limiter") as mock_limiter, \
+         patch("backend.secuscan.executor.get_plugin_manager") as mock_pm:
+
+        mock_settings.enforce_network_policy = True
+        mock_settings.docker_enabled = False
+        mock_settings.raw_output_dir = settings.raw_output_dir
+        mock_settings.sandbox_timeout = 600
+
+        mock_limiter.release = AsyncMock()
+
+        mock_plugin = MagicMock()
+        mock_plugin.name = "nmap"
+        mock_plugin.presets = {}
+        mock_plugin.docker_image = None
+        mock_plugin.output = {"parser": "builtin_nmap", "format": "text"}
+        mock_plugin.category = "Network"
+        mock_plugin.id = "nmap"
+        mock_pm.return_value.get_plugin.return_value = mock_plugin
+        mock_pm.return_value.build_command.return_value = ["nmap", "8.8.8.8"]
+        mock_pm.return_value.plugins_dir = MagicMock()
+        mock_pm.return_value.plugins_dir.__truediv__ = MagicMock(
+            return_value=MagicMock(
+                __truediv__=MagicMock(return_value=MagicMock(exists=lambda: False))
+            )
+        )
+
+        await executor.execute_task(task_id)
+
+    row = await db.fetchone("SELECT status FROM tasks WHERE id = ?", (task_id,))
+    assert row["status"] == TaskStatus.COMPLETED.value, (
+        f"Expected COMPLETED, got {row['status']}"
+    )
+    mock_engine.check_access.assert_called_once()
+    mock_limiter.release.assert_called_once_with(task_id)
+    await db.disconnect()
+
+@pytest.mark.asyncio
+async def test_execute_task_fails_when_docker_network_missing(setup_test_environment):
+    """
+    When docker_enabled=True and the named Docker network does not exist,
+    execute_task() must raise RuntimeError and mark the task FAILED.
+    """
+    await init_db(settings.database_path)
+    db = await get_db()
+
+    task_id = str(uuid.uuid4())
+    await db.execute(
+        """
+        INSERT INTO tasks (id, plugin_id, tool_name, target, inputs_json,
+                           status, consent_granted, safe_mode)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (task_id, "nmap", "nmap", "8.8.8.8", '{"target":"8.8.8.8"}',
+         TaskStatus.QUEUED.value, 1, 1)
+    )
+
+    executor = TaskExecutor()
+
+    # Policy allows the target so we reach the Docker block
+    mock_engine = MagicMock()
+    mock_engine.check_access.return_value = (True, "Allowed", None)
+
+    # Simulate `docker network inspect restricted` returning non-zero (network absent)
+    async def fake_create_subprocess(*args, **kwargs):
+        proc = MagicMock()
+        proc.returncode = 1
+
+        async def _wait():
+            return 1
+        proc.wait = _wait
+        return proc
+
+    with patch("backend.secuscan.executor.settings") as mock_settings, \
+         patch("backend.secuscan.executor.get_policy_engine", return_value=mock_engine), \
+         patch("backend.secuscan.executor.asyncio.create_subprocess_exec",
+               side_effect=fake_create_subprocess), \
+         patch("backend.secuscan.executor.concurrent_limiter") as mock_limiter, \
+         patch("backend.secuscan.executor.get_plugin_manager") as mock_pm:
+
+        mock_settings.enforce_network_policy = True
+        mock_settings.docker_enabled = True
+        mock_settings.docker_network = "restricted"
+        mock_settings.sandbox_memory_mb = 512
+        mock_settings.sandbox_cpu_quota = 0.5
+        mock_settings.sandbox_timeout = 600
+        mock_settings.raw_output_dir = settings.raw_output_dir
+
+        mock_limiter.release = AsyncMock()
+
+        mock_plugin = MagicMock()
+        mock_plugin.name = "nmap"
+        mock_plugin.presets = {}
+        mock_plugin.docker_image = None
+        mock_pm.return_value.get_plugin.return_value = mock_plugin
+        mock_pm.return_value.build_command.return_value = ["nmap", "8.8.8.8"]
+
+        await executor.execute_task(task_id)
+
+    row = await db.fetchone("SELECT status, error_message FROM tasks WHERE id = ?", (task_id,))
+    assert row["status"] == TaskStatus.FAILED.value, (
+        f"Expected FAILED, got {row['status']}"
+    )
+    assert "does not exist" in (row["error_message"] or ""), (
+        f"Expected network-missing message, got: {row['error_message']}"
+    )
+    mock_limiter.release.assert_called_once_with(task_id)
+    await db.disconnect()

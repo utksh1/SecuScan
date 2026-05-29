@@ -8,8 +8,6 @@ allowlist/denylist policies. Supports both IPv4 and IPv6.
 import ipaddress
 import logging
 import asyncio
-import socket
-import contextvars
 from typing import List, Tuple, Optional, Dict, Any
 from enum import Enum
 from dataclasses import dataclass, asdict
@@ -19,18 +17,10 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Task-safe context variable to hold the active scanning context
-# Context contains: {"plugin_id": str, "task_id": str}
-network_context: contextvars.ContextVar[Optional[Dict[str, Any]]] = contextvars.ContextVar(
-    "network_context", default=None
-)
-
-
 class PolicyAction(Enum):
     """Network policy decision outcome"""
     ALLOW = "allow"
     DENY = "deny"
-
 
 @dataclass
 class NetworkPolicy:
@@ -50,7 +40,6 @@ class NetworkPolicy:
             "created_at": self.created_at.isoformat(),
             "expires_at": self.expires_at.isoformat() if self.expires_at else None,
         }
-
 
 @dataclass
 class AuditLogEntry:
@@ -78,7 +67,6 @@ class AuditLogEntry:
             "policy_matched": self.policy_matched,
             "reason": self.reason,
         }
-
 
 class NetworkPolicyEngine:
     """
@@ -348,10 +336,8 @@ class NetworkPolicyEngine:
             import json
             return json.dumps([e.to_dict() for e in self.audit_entries], indent=2)
 
-
 # Global policy engine instance
 _policy_engine: Optional[NetworkPolicyEngine] = None
-
 
 def get_policy_engine() -> NetworkPolicyEngine:
     """Get or create global policy engine singleton"""
@@ -363,7 +349,6 @@ def get_policy_engine() -> NetworkPolicyEngine:
         )
         _init_default_policies(_policy_engine)
     return _policy_engine
-
 
 def _init_default_policies(engine: NetworkPolicyEngine) -> None:
     """Initialize default security policies"""
@@ -391,86 +376,3 @@ def _init_default_policies(engine: NetworkPolicyEngine) -> None:
         )
         engine.add_allow_rule("0.0.0.0/0", reason="Default allow all (configure SECUSCAN_NETWORK_ALLOWLIST)")
         engine.add_allow_rule("::/0", reason="Default allow all IPv6")
-
-
-# ── Socket Monkey Patch Interception ─────────────────────────────────
-
-_original_socket = socket.socket
-
-
-class RestrictedSocket(_original_socket):
-    """Subclass of socket to intercept connect and connect_ex based on active task context"""
-
-    def connect(self, address):
-        ctx = network_context.get()
-        from .config import settings
-        if ctx and settings.enforce_network_policy:
-            if isinstance(address, tuple) and len(address) > 0:
-                dest_host = address[0]
-                dest_port = address[1] if len(address) > 1 else 0
-
-                # Resolve hostname to IP safely using gethostbyname
-                try:
-                    ipaddress.ip_address(dest_host)
-                    dest_ip = dest_host
-                    dest_hostname = None
-                except ValueError:
-                    dest_hostname = dest_host
-                    try:
-                        dest_ip = socket.gethostbyname(dest_host)
-                    except Exception:
-                        dest_ip = dest_host
-
-                engine = get_policy_engine()
-                allowed, reason, policy = engine.check_access(
-                    dest_ip=dest_ip,
-                    dest_port=dest_port,
-                    plugin_id=ctx.get("plugin_id", "unknown"),
-                    task_id=ctx.get("task_id", "unknown"),
-                    dest_hostname=dest_hostname,
-                )
-                if not allowed:
-                    if settings.network_policy_failure_mode == "block":
-                        raise PermissionError(f"Network access denied: {reason}")
-                    else:
-                        logger.warning(f"Network access denied (log only): {reason}")
-        return super().connect(address)
-
-    def connect_ex(self, address):
-        ctx = network_context.get()
-        from .config import settings
-        if ctx and settings.enforce_network_policy:
-            if isinstance(address, tuple) and len(address) > 0:
-                dest_host = address[0]
-                dest_port = address[1] if len(address) > 1 else 0
-
-                # Resolve hostname to IP safely using gethostbyname
-                try:
-                    ipaddress.ip_address(dest_host)
-                    dest_ip = dest_host
-                    dest_hostname = None
-                except ValueError:
-                    dest_hostname = dest_host
-                    try:
-                        dest_ip = socket.gethostbyname(dest_host)
-                    except Exception:
-                        dest_ip = dest_host
-
-                engine = get_policy_engine()
-                allowed, reason, policy = engine.check_access(
-                    dest_ip=dest_ip,
-                    dest_port=dest_port,
-                    plugin_id=ctx.get("plugin_id", "unknown"),
-                    task_id=ctx.get("task_id", "unknown"),
-                    dest_hostname=dest_hostname,
-                )
-                if not allowed:
-                    if settings.network_policy_failure_mode == "block":
-                        raise PermissionError(f"Network access denied: {reason}")
-                    else:
-                        logger.warning(f"Network access denied (log only): {reason}")
-        return super().connect_ex(address)
-
-
-# Global socket monkey patch
-socket.socket = RestrictedSocket

@@ -93,6 +93,7 @@ class Settings(BaseSettings):
     sandbox_timeout: int = 600  # seconds
     sandbox_cpu_quota: float = 0.5
     sandbox_memory_mb: int = 512
+    docker_network: str = "restricted"  # Docker network name for sandboxed containers
 
     # Task-start payload limits (tunable via env vars)
     task_start_max_body_bytes: int = 64_000       # 64 KB total JSON body

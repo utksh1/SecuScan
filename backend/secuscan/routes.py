@@ -29,6 +29,29 @@ def parse_json_fields(rows: List[Dict], fields: List[str]) -> List[Dict]:
         parsed.append(item)
     return parsed
 
+def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
+    if isinstance(raw_steps, list):
+        return raw_steps
+    if not raw_steps:
+        return []
+    try:
+        parsed = json.loads(raw_steps)
+    except (TypeError, json.JSONDecodeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Return the workflow shape consumed by the frontend."""
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "schedule_seconds": row.get("schedule_seconds"),
+        "enabled": bool(row.get("enabled")),
+        "steps": _parse_workflow_steps(row.get("steps_json")),
+        "created_at": row.get("created_at"),
+        "last_run_at": row.get("last_run_at"),
+        "queued_task_ids": queued_task_ids or [],
+    }
 
 def is_filesystem_target(target: str) -> bool:
     """Best-effort detection for path-based targets that should bypass host validation."""
@@ -40,11 +63,9 @@ def is_filesystem_target(target: str) -> bool:
         return True
     return False
 
-
 def _slugify_filename_part(value: str, fallback: str) -> str:
     cleaned = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
     return cleaned or fallback
-
 
 def build_report_filename(task: Dict[str, Any], extension: str) -> str:
     tool = _slugify_filename_part(str(task.get("tool_name") or task.get("plugin_id") or "scan"), "scan")
@@ -65,16 +86,18 @@ logger = logging.getLogger(__name__)
 from .cache import get_cache
 from .models import (
     TaskCreateRequest, TaskResponse, TaskResult,
-    PluginListResponse, ErrorResponse
+    PluginListResponse, ErrorResponse, BulkDeleteRequest
 )
 from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager, init_plugins
 from .executor import executor
+from .redaction import redact_inputs
 from .ratelimit import (
     rate_limiter, concurrent_limiter,
     task_start_limiter, vault_limiter,
-    report_download_limiter, read_heavy_limiter
+    report_download_limiter, read_heavy_limiter,
+    resolve_client_identity,
 )
 from .validation import validate_target, validate_task_start_payload
 from .reporting import reporting
@@ -84,7 +107,7 @@ from .workflows import scheduler
 from sse_starlette.sse import EventSourceResponse
 
 router = APIRouter(prefix="/api/v1")
-
+SSE_RAW_OUTPUT_CHUNK_SIZE = 64 * 1024
 
 async def get_or_set_cached(key: str, builder):
     """Read from cache, or build and cache a JSON response."""
@@ -97,13 +120,20 @@ async def get_or_set_cached(key: str, builder):
     await cache.set_json(key, value)
     return value
 
-
 async def invalidate_view_cache():
     """Clear aggregate caches after writes."""
     cache = await get_cache()
     for prefix in ["summary:", "findings:", "reports:", "tasks:"]:
         await cache.delete_prefix(prefix)
 
+def iter_raw_output_chunks(path: str, chunk_size: int = SSE_RAW_OUTPUT_CHUNK_SIZE):
+    """Yield raw output in bounded chunks for completed-task SSE replay."""
+    with open(path, "r", encoding="utf-8", errors="replace") as output_file:
+        while True:
+            chunk = output_file.read(chunk_size)
+            if not chunk:
+                break
+            yield chunk
 
 def _report_generation_error_response(task_id: str, report_format: str) -> JSONResponse:
     logger.exception("Report generation failed for task_id=%s format=%s", task_id, report_format)
@@ -119,7 +149,6 @@ def _report_generation_error_response(task_id: str, report_format: str) -> JSONR
         },
     )
 
-
 async def get_plugin_manager_for_request():
     """
     In debug mode, refresh plugin metadata from disk on demand so frontend catalog
@@ -128,7 +157,6 @@ async def get_plugin_manager_for_request():
     if settings.debug:
         return await init_plugins(settings.plugins_dir)
     return get_plugin_manager()
-
 
 @router.get("/plugins", response_model=PluginListResponse)
 async def list_plugins():
@@ -183,7 +211,6 @@ async def get_plugin_schema(plugin_id: str):
     else:
         raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
 
-
 @router.get("/presets")
 async def get_all_presets():
     """Get all plugin presets"""
@@ -192,7 +219,6 @@ async def get_all_presets():
         plugin_id: plugin.presets
         for plugin_id, plugin in plugin_manager.plugins.items()
     }
-
 
 @router.post("/task/start", dependencies=[Depends(task_start_limiter)])
 async def start_task(
@@ -237,10 +263,13 @@ async def start_task(
                 logger.warning(f"Task start failed: Target validation failed for '{target}': {error_msg}")
                 raise HTTPException(status_code=400, detail=error_msg)
 
-    # Check rate limits
+    # Check rate limits per (client, plugin) so one client cannot exhaust
+    # the quota for all other users of the same plugin.
+    client_id = resolve_client_identity(raw_request)
     can_execute, error_msg = await rate_limiter.can_execute(
         request.plugin_id,
-        plugin.safety.get("rate_limit", {}).get("max_per_hour", settings.max_tasks_per_hour)
+        plugin.safety.get("rate_limit", {}).get("max_per_hour", settings.max_tasks_per_hour),
+        client_id=client_id,
     )
 
     if not can_execute:
@@ -298,10 +327,10 @@ async def stream_task_output(task_id: str):
         raise HTTPException(status_code=404, detail="Task not found")
 
     async def event_generator():
-        # First, send the initial status
+        # First, send the initial status and phase
         yield {
             "event": "status",
-            "data": json.dumps({"status": status["status"]})
+            "data": json.dumps({"status": status["status"], "scan_phase": status.get("scan_phase")})
         }
 
         # If it's already completed/failed, we just return the raw output if any and close
@@ -310,13 +339,13 @@ async def stream_task_output(task_id: str):
                 db = await get_db()
                 task_row = await db.fetchone("SELECT raw_output_path FROM tasks WHERE id = ?", (task_id,))
                 if task_row and task_row["raw_output_path"]:
-                    with open(task_row["raw_output_path"], "r") as f:
+                    for chunk in iter_raw_output_chunks(task_row["raw_output_path"]):
                         yield {
                             "event": "output",
-                            "data": json.dumps({"chunk": f.read()})
+                            "data": json.dumps({"chunk": chunk})
                         }
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to replay raw output for task %s: %s", task_id, exc)
             return
 
         # Otherwise, subscribe to the live task events
@@ -333,6 +362,11 @@ async def stream_task_output(task_id: str):
                     }
                     if event["data"] in ["completed", "failed", "cancelled"]:
                         break
+                elif event["type"] == "phase":
+                    yield {
+                        "event": "phase",
+                        "data": json.dumps({"scan_phase": event["data"]})
+                    }
                 elif event["type"] == "output":
                     yield {
                         "event": "output",
@@ -450,7 +484,6 @@ async def download_pdf_report(task_id: str):
         headers={"Content-Disposition": f'attachment; filename="{build_report_filename(dict(task_row), "pdf")}"'}
     )
 
-
 @router.get("/task/{task_id}/report/sarif", dependencies=[Depends(report_download_limiter)])
 async def download_sarif_report(task_id: str):
     """Download task results as a SARIF report."""
@@ -485,7 +518,6 @@ async def download_sarif_report(task_id: str):
         media_type="application/sarif+json",
         headers={"Content-Disposition": f'attachment; filename="{build_report_filename(dict(task_row), "sarif")}"'}
     )
-
 
 @router.get("/task/{task_id}/result")
 async def get_task_result(task_id: str):
@@ -557,7 +589,7 @@ async def get_task_result(task_id: str):
         "duration_seconds": task_row["duration_seconds"],
         "status": task_row["status"],
         "preset": task_row["preset"],
-        "inputs": json.loads(task_row["inputs_json"] or "{}"),
+        "inputs": redact_inputs(json.loads(task_row["inputs_json"] or "{}")),
         "summary": summary,
         "severity_counts": severity_counts,
         "findings": findings,
@@ -572,7 +604,6 @@ async def get_task_result(task_id: str):
         "metadata": {}
     }
 
-
 @router.post("/task/{task_id}/cancel")
 async def cancel_task(task_id: str):
     """Cancel a running task"""
@@ -586,7 +617,6 @@ async def cancel_task(task_id: str):
         "status": "cancelled",
         "cancelled_at": "now"
     }
-
 
 @router.get("/dashboard/summary", dependencies=[Depends(read_heavy_limiter)])
 async def get_dashboard_summary():
@@ -629,13 +659,20 @@ async def get_dashboard_summary():
         recent_rows = await db.fetchall(
             """
             SELECT id, title, category, severity, target, description,
-                remediation, proof, cvss, cve, discovered_at, metadata_json
+                remediation, proof, cvss, cve, discovered_at,
+                risk_score, risk_factors_json, metadata_json
             FROM findings
             ORDER BY discovered_at DESC
             LIMIT 5
             """
         )
         recent_findings: List[Dict] = parse_json_fields(recent_rows, ["metadata_json"])
+
+        risk_scores = [
+            f.get("risk_score") for f in recent_findings
+            if isinstance(f.get("risk_score"), (int, float))
+        ]
+        avg_risk_score = round(sum(risk_scores) / len(risk_scores), 1) if risk_scores else None
 
         return {
             "total_findings": total_findings,
@@ -644,6 +681,7 @@ async def get_dashboard_summary():
             "medium_findings": medium_findings,
             "low_findings": low_findings,
             "info_findings": info_findings,
+            "avg_risk_score": avg_risk_score,
             "last_scan_time": recent_findings[0].get("discovered_at") if recent_findings else None,
             "recent_findings": recent_findings,
             "scan_activity": {
@@ -667,7 +705,6 @@ async def get_dashboard_summary():
 
     return await get_or_set_cached("summary:dashboard", build)
 
-
 @router.get("/findings", dependencies=[Depends(read_heavy_limiter)])
 async def get_findings():
     """Return vulnerability findings."""
@@ -675,10 +712,13 @@ async def get_findings():
     async def build():
         db = await get_db()
         rows = await db.fetchall("SELECT * FROM findings ORDER BY discovered_at DESC")
-        return {"findings": parse_json_fields(rows, ["metadata_json"])}
+        findings = parse_json_fields(rows, ["metadata_json", "risk_factors_json"])
+        for f in findings:
+            if "risk_factors_json" in f:
+                f["risk_factors"] = f.pop("risk_factors_json")
+        return {"findings": findings}
 
     return await get_or_set_cached("findings:list", build)
-
 
 @router.get("/reports", dependencies=[Depends(read_heavy_limiter)])
 async def get_reports():
@@ -690,7 +730,6 @@ async def get_reports():
         return {"reports": parse_json_fields(rows, ["metadata_json"])}
 
     return await get_or_set_cached("reports:list", build)
-
 
 @router.get("/tasks", dependencies=[Depends(read_heavy_limiter)])
 async def list_tasks(
@@ -735,7 +774,7 @@ async def list_tasks(
     for t in tasks_list:
         if "id" in t:
             t["task_id"] = t.pop("id")
-        t["inputs"] = t.pop("inputs_json", {})
+        t["inputs"] = redact_inputs(t.pop("inputs_json", {}) or {})
 
     total_pages = (total + per_page - 1) // per_page if per_page > 0 else 0
 
@@ -763,28 +802,46 @@ async def list_tasks(
             "per_page": per_page,
             "total_pages": total_pages,
             "total_items": total,
-            "next": build_page_url(next_page),      # ← NEW
-            "previous": build_page_url(prev_page)    # ← NEW
+            "next": build_page_url(next_page),
+            "previous": build_page_url(prev_page)
         }
     }
 
+SQLITE_CHUNK_SIZE = 500  # safely under SQLITE_LIMIT_VARIABLE_NUMBER = 999
 
 async def delete_task_records(task_ids: List[str]):
-    """Helper to delete database records and files for multiple tasks."""
+    """Helper to delete database records and files for multiple tasks.
+
+    Processes IDs in chunks of SQLITE_CHUNK_SIZE to stay under
+    SQLite's SQLITE_LIMIT_VARIABLE_NUMBER = 999 limit.
+    """
+    if not task_ids:
+        return
+
     db = await get_db()
 
-    # Get raw output paths for file cleanup
-    placeholders = ",".join(["?"] * len(task_ids))
-    task_rows = await db.fetchall(f"SELECT raw_output_path FROM tasks WHERE id IN ({placeholders})", tuple(task_ids))
+    # Collect all raw_output_paths across chunks for file cleanup
+    all_task_rows = []
+    for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
+        chunk = task_ids[i : i + SQLITE_CHUNK_SIZE]
+        placeholders = ",".join(["?"] * len(chunk))
+        rows = await db.fetchall(
+            f"SELECT raw_output_path FROM tasks WHERE id IN ({placeholders})",
+            tuple(chunk)
+        )
+        all_task_rows.extend(rows)
 
-    # Delete associated data
-    await db.execute(f"DELETE FROM findings WHERE task_id IN ({placeholders})", tuple(task_ids))
-    await db.execute(f"DELETE FROM reports WHERE task_id IN ({placeholders})", tuple(task_ids))
-    await db.execute(f"DELETE FROM audit_log WHERE task_id IN ({placeholders})", tuple(task_ids))
-    await db.execute(f"DELETE FROM tasks WHERE id IN ({placeholders})", tuple(task_ids))
+    # Delete associated records in chunks
+    for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
+        chunk = task_ids[i : i + SQLITE_CHUNK_SIZE]
+        placeholders = ",".join(["?"] * len(chunk))
+        await db.execute(f"DELETE FROM findings   WHERE task_id IN ({placeholders})", tuple(chunk))
+        await db.execute(f"DELETE FROM reports    WHERE task_id IN ({placeholders})", tuple(chunk))
+        await db.execute(f"DELETE FROM audit_log  WHERE task_id IN ({placeholders})", tuple(chunk))
+        await db.execute(f"DELETE FROM tasks      WHERE id       IN ({placeholders})", tuple(chunk))
 
     # Cleanup files on disk
-    for row in task_rows:
+    for row in all_task_rows:
         if row and row["raw_output_path"]:
             try:
                 path = Path(row["raw_output_path"])
@@ -811,15 +868,22 @@ async def delete_task(task_id: str):
         "deleted": True
     }
 
-
 @router.delete("/tasks/bulk")
-async def bulk_delete_tasks(task_ids: List[str]):
-    """Delete multiple tasks at once"""
+async def bulk_delete_tasks(request: BulkDeleteRequest):
+    """Delete multiple tasks at once (max 500 IDs per request)"""
+    task_ids = request.root  # RootModel exposes data via .root
     db = await get_db()
 
-    # Check if any tasks are running
+    # Empty list — return early cleanly (test requires 200, not 422)
+    if not task_ids:
+        return {"deleted_count": 0, "success": True}
+
+    # Check running tasks — safe: len(task_ids) <= 500 guaranteed by Pydantic
     placeholders = ",".join(["?"] * len(task_ids))
-    running_tasks = await db.fetchone(f"SELECT id FROM tasks WHERE id IN ({placeholders}) AND status = 'running' LIMIT 1", tuple(task_ids))
+    running_tasks = await db.fetchone(
+        f"SELECT id FROM tasks WHERE id IN ({placeholders}) AND status = 'running' LIMIT 1",
+        tuple(task_ids)
+    )
     if running_tasks:
         raise HTTPException(status_code=400, detail="Cannot delete running tasks. Abort them first.")
 
@@ -830,7 +894,6 @@ async def bulk_delete_tasks(task_ids: List[str]):
         "deleted_count": len(task_ids),
         "success": True
     }
-
 
 @router.delete("/tasks/clear")
 async def clear_all_tasks():
@@ -871,7 +934,6 @@ async def clear_all_tasks():
         "message": "All scan history and associated data has been purged."
     }
 
-
 @router.get("/settings")
 async def get_settings():
     """Get current settings"""
@@ -896,7 +958,6 @@ async def get_settings():
         }
     }
 
-
 @router.get("/vault", dependencies=[Depends(vault_limiter)])
 async def list_vault_secrets():
     db = await get_db()
@@ -904,7 +965,6 @@ async def list_vault_secrets():
         "SELECT id, name, created_at, updated_at FROM credential_vault ORDER BY name ASC"
     )
     return {"items": rows, "total": len(rows)}
-
 
 @router.put("/vault/{name}", dependencies=[Depends(vault_limiter)])
 async def upsert_vault_secret(name: str, payload: Dict[str, str]):
@@ -930,7 +990,6 @@ async def upsert_vault_secret(name: str, payload: Dict[str, str]):
         )
     return {"name": name, "stored": True}
 
-
 @router.get("/vault/{name}", dependencies=[Depends(vault_limiter)])
 async def get_vault_secret(name: str):
     db = await get_db()
@@ -940,20 +999,18 @@ async def get_vault_secret(name: str):
     crypto = VaultCrypto(settings.resolved_vault_key)
     return {"name": name, "value": crypto.decrypt(row["encrypted_value"])}
 
-
 @router.delete("/vault/{name}", dependencies=[Depends(vault_limiter)])
 async def delete_vault_secret(name: str):
     db = await get_db()
     await db.execute("DELETE FROM credential_vault WHERE name = ?", (name,))
     return {"name": name, "deleted": True}
 
-
 @router.get("/workflows")
 async def list_workflows():
     db = await get_db()
     rows = await db.fetchall("SELECT * FROM workflows ORDER BY created_at DESC")
-    return {"workflows": parse_json_fields(rows, ["steps_json"]), "total": len(rows)}
-
+    workflows = [_serialize_workflow(row) for row in rows]
+    return {"workflows": workflows, "total": len(workflows)}
 
 @router.post("/workflows")
 async def create_workflow(payload: Dict[str, Any]):
@@ -982,8 +1039,8 @@ async def create_workflow(payload: Dict[str, Any]):
             json.dumps(steps),
         ),
     )
-    return {"id": workflow_id, "created": True}
-
+    row = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
+    return _serialize_workflow(row) if row else {"id": workflow_id, "created": True}
 
 @router.post("/workflows/{workflow_id}/run")
 async def run_workflow_once(workflow_id: str):
@@ -1003,8 +1060,11 @@ async def run_workflow_once(workflow_id: str):
         asyncio.create_task(executor.execute_task(task_id))
         created_task_ids.append(task_id)
     await db.execute("UPDATE workflows SET last_run_at = datetime('now') WHERE id = ?", (workflow_id,))
-    return {"workflow_id": workflow_id, "queued_tasks": created_task_ids}
-
+    return {
+        "workflow_id": workflow_id,
+        "queued_task_ids": created_task_ids,
+        "queued_tasks": created_task_ids,
+    }
 
 @router.patch("/workflows/{workflow_id}")
 async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
@@ -1034,8 +1094,8 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
 
     params.append(workflow_id)
     await db.execute(f"UPDATE workflows SET {', '.join(updates)} WHERE id = ?", tuple(params))
-    return {"workflow_id": workflow_id, "updated": True}
-
+    updated = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
+    return _serialize_workflow(updated) if updated else {"workflow_id": workflow_id, "updated": True}
 
 @router.delete("/workflows/{workflow_id}")
 async def delete_workflow(workflow_id: str):
@@ -1043,12 +1103,10 @@ async def delete_workflow(workflow_id: str):
     await db.execute("DELETE FROM workflows WHERE id = ?", (workflow_id,))
     return {"workflow_id": workflow_id, "deleted": True}
 
-
 @router.post("/workflows/scheduler/tick")
 async def trigger_workflow_tick():
     await scheduler.tick()
     return {"tick": "ok"}
-
 
 @router.get("/finding/{finding_id}")
 async def get_finding_details(finding_id: str):
@@ -1075,6 +1133,13 @@ async def get_finding_details(finding_id: str):
         except json.JSONDecodeError:
             metadata = {}
 
+    risk_factors = []
+    if finding_row.get("risk_factors_json"):
+        try:
+            risk_factors = json.loads(finding_row["risk_factors_json"])
+        except (json.JSONDecodeError, TypeError):
+            risk_factors = []
+
     return {
         "id": finding_row["id"],
         "task_id": finding_row["task_id"],
@@ -1090,9 +1155,13 @@ async def get_finding_details(finding_id: str):
         "cvss": finding_row["cvss"],
         "cve": finding_row["cve"],
         "discovered_at": finding_row["discovered_at"],
-        "metadata": metadata
+        "metadata": metadata,
+        "exploitability": finding_row.get("exploitability"),
+        "confidence": finding_row.get("confidence"),
+        "asset_exposure": finding_row.get("asset_exposure"),
+        "risk_score": finding_row.get("risk_score"),
+        "risk_factors": risk_factors,
     }
-
 
 @router.get("/attack-surface")
 async def get_attack_surface():
@@ -1138,7 +1207,6 @@ async def get_attack_surface():
 
     return {"entries": entries}
 
-
 @router.get("/assets")
 async def get_assets():
     """Return a list of tracked assets."""
@@ -1147,94 +1215,3 @@ async def get_assets():
     rows = await db.fetchall("SELECT DISTINCT target FROM tasks UNION SELECT DISTINCT target FROM findings")
     assets = [{"id": str(uuid.uuid4()), "name": row["target"]} for row in rows]
     return {"assets": assets}
-
-
-# ── Network Policy Management Endpoints ─────────────────────────────────────
-
-from .network_policy import get_policy_engine, PolicyAction
-from dataclasses import asdict
-
-
-@router.get("/admin/network-policy")
-async def get_network_policy():
-    """Get current network policy configuration"""
-    engine = get_policy_engine()
-
-    return {
-        "allowlist": [asdict(p) for net, p in engine.allowlist],
-        "denylist": [asdict(p) for net, p in engine.denylist],
-        "audit_entries_count": len(engine.audit_entries),
-    }
-
-
-@router.post("/admin/network-policy/allow")
-async def add_allow_rule(request: dict):
-    """Add network to allowlist"""
-    engine = get_policy_engine()
-
-    try:
-        engine.add_allow_rule(
-            cidr=request["cidr"],
-            reason=request.get("reason", "Operator added"),
-        )
-        return {"status": "success", "cidr": request["cidr"]}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.post("/admin/network-policy/deny")
-async def add_deny_rule(request: dict):
-    """Add network to denylist"""
-    engine = get_policy_engine()
-
-    try:
-        engine.add_deny_rule(
-            cidr=request["cidr"],
-            reason=request.get("reason", "Operator added"),
-        )
-        return {"status": "success", "cidr": request["cidr"]}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.get("/admin/network-audit-log")
-async def get_audit_log(
-    plugin_id: Optional[str] = None,
-    action: Optional[str] = None,
-    limit: int = 100
-):
-    """Retrieve network audit log entries"""
-    engine = get_policy_engine()
-
-    policy_action = None
-    if action and action.upper() in ["ALLOW", "DENY"]:
-        policy_action = PolicyAction[action.upper()]
-
-    entries = engine.get_audit_entries(
-        plugin_id=plugin_id,
-        action=policy_action,
-        limit=limit
-    )
-
-    return {
-        "entries": [asdict(e) for e in entries],
-        "total": len(entries),
-    }
-
-
-@router.get("/admin/network-audit-log/export")
-async def export_audit_log(format: str = "json"):
-    """Export audit log in specified format"""
-    engine = get_policy_engine()
-
-    if format not in ["json", "csv"]:
-        raise HTTPException(status_code=400, detail="Format must be 'json' or 'csv'")
-
-    content = engine.export_audit_log(format)
-
-    mime_type = "application/json" if format == "json" else "text/csv"
-    return Response(
-        content=content,
-        media_type=mime_type,
-        headers={"Content-Disposition": f"attachment; filename=network-audit.{format}"}
-    )

@@ -1,6 +1,5 @@
 import pytest
 import ipaddress
-import socket
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -8,7 +7,7 @@ from unittest.mock import patch, MagicMock
 
 from backend.secuscan.network_policy import (
     NetworkPolicyEngine, NetworkPolicy, PolicyAction, AuditLogEntry,
-    network_context, get_policy_engine
+    get_policy_engine
 )
 from backend.secuscan.config import settings
 
@@ -194,7 +193,6 @@ class TestAuditLogging:
         assert "8.8.8.8" in content
         assert "allow" in content
 
-
 class TestPolicyExpiration:
     """Test temporary policies"""
 
@@ -222,7 +220,6 @@ class TestPolicyExpiration:
         allowed, _, _ = engine.check_access("10.1.1.1", plugin_id="test")
         assert allowed
 
-
 class TestInvalidInput:
     """Test error handling"""
 
@@ -246,7 +243,6 @@ class TestInvalidInput:
 
         assert not allowed
         assert "invalid" in reason.lower()
-
 
 class TestAuditLogFiltering:
     """Test audit log queries"""
@@ -275,47 +271,3 @@ class TestAuditLogFiltering:
         allow_entries = engine.get_audit_entries(action=PolicyAction.ALLOW)
         assert len(allow_entries) == 1
         assert allow_entries[0].action == PolicyAction.ALLOW
-
-
-class TestSocketInterception:
-    """Test context-safe socket interception"""
-
-    def test_socket_connect_with_active_context_blocks_egress(self, tmp_path):
-        """Socket connect in active scan context should check policy and block when not allowed"""
-        audit_log = tmp_path / "audit.log"
-
-        # Get global policy engine and configure it with an empty allowlist
-        engine = get_policy_engine()
-        engine.audit_log_path = str(audit_log)
-        engine.allowlist.clear()
-        engine.denylist.clear()
-
-        token = network_context.set({
-            "plugin_id": "test_intercept",
-            "task_id": "task_int_1"
-        })
-        try:
-            with patch.object(settings, "enforce_network_policy", True), \
-                 patch.object(settings, "network_policy_failure_mode", "block"):
-
-                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-                with pytest.raises(PermissionError) as exc_info:
-                    sock.connect(("8.8.8.8", 80))
-
-                assert "Network access denied" in str(exc_info.value)
-        finally:
-            network_context.reset(token)
-
-    def test_socket_connect_no_context_is_bypassed(self, tmp_path):
-        """Socket connect with no active context should bypass policy engine completely"""
-        # Ensure context is empty
-        assert network_context.get() is None
-
-        # Mock actual socket connect to not perform real outbound connection
-        with patch("socket.socket.connect") as mock_connect:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.connect(("8.8.8.8", 80))
-
-            # Should have called original connect since it was bypassed
-            mock_connect.assert_called_once_with(("8.8.8.8", 80))
