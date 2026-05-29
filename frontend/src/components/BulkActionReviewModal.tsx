@@ -26,7 +26,7 @@ export default function BulkActionReviewModal({
     if (e.key === "Escape") onClose();
     if (e.key === "Tab") {
       const focusable = modalRef.current?.querySelectorAll<HTMLElement>(
-        'button, [href], input, [tabindex]:not([tabindex="-1"])'
+        'button, [href], input, [tabindex]:not([tabindex="-1"])',
       );
       if (!focusable || focusable.length === 0) return;
       const first = focusable[0];

@@ -88,7 +88,7 @@ export default function Scans() {
       if (document.visibilityState === "hidden") {
         stopPolling();
       } else {
-        loadTasks();   // immediate refresh when tab comes back
+        loadTasks(); // immediate refresh when tab comes back
         startPolling();
       }
     }
@@ -199,7 +199,9 @@ export default function Scans() {
       setSelectedIds([]);
     } catch (err) {
       console.error("Bulk delete failed:", err);
-      alert("Failed to delete some tasks. Ensure they are not currently running.");
+      alert(
+        "Failed to delete some tasks. Ensure they are not currently running.",
+      );
     }
   }
 
@@ -648,7 +650,7 @@ export default function Scans() {
           ))}
         </div>
       </footer>
-    <BulkActionReviewModal
+      <BulkActionReviewModal
         isOpen={showBulkModal}
         onClose={() => setShowBulkModal(false)}
         onConfirm={confirmBulkDelete}
@@ -658,5 +660,3 @@ export default function Scans() {
     </div>
   );
 }
-
-
