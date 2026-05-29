@@ -34,6 +34,7 @@ interface Task {
     tool: string
     target: string
     status: string
+    scan_phase?: string
     created_at: string
     started_at?: string
     completed_at?: string
@@ -107,6 +108,57 @@ function defaultValueForField(field: PluginFieldSchema): unknown {
 }
 
 
+const PHASE_LABELS: Record<string, string> = {
+    queued: 'QUEUED',
+    running_command: 'RUNNING_SCAN',
+    parsing: 'PARSING_RESULTS',
+    reporting: 'GENERATING_REPORT',
+    finished: 'FINALIZING',
+}
+
+const PHASE_MESSAGES: Record<string, string> = {
+    queued: 'Awaiting execution slot...',
+    running_command: 'Executing security scan...',
+    parsing: 'Parsing scan results...',
+    reporting: 'Generating reports...',
+    finished: 'Finalizing...',
+}
+
+function PhaseLabel({ phase }: { phase?: string }) {
+    const label = phase ? PHASE_LABELS[phase] : null
+    const message = phase ? PHASE_MESSAGES[phase] : 'Decrypting_Briefing...'
+    return (
+        <p className="text-xs font-black text-silver-bright uppercase tracking-[0.5em] italic">
+            {label || 'DECRYPTING_BRIEFING...'}
+        </p>
+    )
+}
+
+function PhaseProgress({ phase }: { phase?: string }) {
+    if (!phase || phase === 'finished') return null
+    const phases = ['queued', 'running_command', 'parsing', 'reporting']
+    const currentIdx = phases.indexOf(phase)
+    if (currentIdx === -1) return null
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center gap-2">
+                {phases.map((p, i) => (
+                    <React.Fragment key={p}>
+                        <div className={`w-3 h-3 border-2 ${i <= currentIdx ? 'bg-rag-blue border-rag-blue shadow-[0_0_8px_rgba(0,112,243,0.5)]' : 'bg-charcoal-dark border-silver/20'} transition-all duration-500`} />
+                        {i < phases.length - 1 && (
+                            <div className={`h-0.5 flex-1 ${i < currentIdx ? 'bg-rag-blue' : 'bg-silver/10'} transition-all duration-500`} />
+                        )}
+                    </React.Fragment>
+                ))}
+            </div>
+            <p className="text-[10px] font-mono text-rag-blue/80 uppercase tracking-[0.3em] italic">
+                {PHASE_MESSAGES[phase] || 'Processing...'}
+            </p>
+        </div>
+    )
+}
+
 function formatToolLabel(tool?: string, pluginId?: string) {
     const normalized = (tool || '').trim()
     if (!normalized || normalized.toLowerCase() === 'history') {
@@ -151,6 +203,7 @@ export default function TaskDetails() {
     const [rawOutput, setRawOutput] = useState<string>('')
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [scanPhase, setScanPhase] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<'summary' | 'results' | 'parameters' | 'raw'>('summary')
     const [expandedFindingRows, setExpandedFindingRows] = useState<Record<number, boolean>>({})
     const [expandedDiscoveryRows, setExpandedDiscoveryRows] = useState<Record<number, boolean>>({})
@@ -315,12 +368,24 @@ export default function TaskDetails() {
             try {
                 const data = JSON.parse(e.data)
                 setTask((prev: Task | null) => prev ? { ...prev, status: data.status } : null)
+                if (data.scan_phase) {
+                    setScanPhase(data.scan_phase)
+                }
                 if (['completed', 'failed', 'cancelled'].includes(data.status)) {
                     es.close()
                     loadTask()
                 }
             } catch (err) {
                 console.error("Status stream error", err)
+            }
+        })
+
+        es.addEventListener('phase', (e) => {
+            try {
+                const data = JSON.parse(e.data)
+                setScanPhase(data.scan_phase)
+            } catch (err) {
+                console.error("Phase stream error", err)
             }
         })
 
@@ -349,6 +414,9 @@ export default function TaskDetails() {
                 getTaskResult(taskId!).catch(() => null) as Promise<TaskResult | null>
             ])
             setTask(statusData)
+            if (statusData.scan_phase) {
+                setScanPhase(statusData.scan_phase)
+            }
             getPluginSchema(statusData.plugin_id).then(setSchema).catch(() => setSchema(null))
 
             if (resultData) {
@@ -424,7 +492,7 @@ export default function TaskDetails() {
             <div className="min-h-screen bg-charcoal-dark flex items-center justify-center p-12">
                 <div className="space-y-4 text-center">
                     <div className="w-20 h-20 border-8 border-silver-bright/10 border-t-rag-blue animate-spin mx-auto shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"></div>
-                    <p className="text-xs font-black text-silver-bright uppercase tracking-[0.5em] italic">Decrypting_Briefing...</p>
+                    <PhaseLabel phase={scanPhase || undefined} />
                 </div>
             </div>
         )
@@ -712,7 +780,11 @@ export default function TaskDetails() {
                 </div>
             </header>
 
-
+            {!isTerminal && scanPhase && (
+                <section className="border border-rag-blue/20 bg-charcoal p-6">
+                    <PhaseProgress phase={scanPhase} />
+                </section>
+            )}
 
             <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                 <DetailCard
