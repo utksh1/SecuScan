@@ -202,6 +202,62 @@ def redact_dict(data: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+# Keys whose values are unconditionally redacted in task inputs regardless of
+# value format.  Matched case-insensitively against the full key name.
+_SENSITIVE_INPUT_KEYS: frozenset[str] = frozenset({
+    "api_key",
+    "apikey",
+    "api_secret",
+    "secret",
+    "secret_key",
+    "password",
+    "passwd",
+    "pass",
+    "pwd",
+    "token",
+    "access_token",
+    "refresh_token",
+    "auth",
+    "auth_token",
+    "authorization",
+    "credentials",
+    "private_key",
+    "client_secret",
+    "webhook_secret",
+    "signing_key",
+    "encryption_key",
+})
+
+
+def redact_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
+    """
+    Redact sensitive values from a task inputs dict before it is included in
+    any API response.
+
+    Keys whose names appear in ``_SENSITIVE_INPUT_KEYS`` (case-insensitive) have
+    their value replaced with ``[REDACTED]``.  All other string values are also
+    passed through the pattern-based ``redact()`` function so that accidentally
+    embedded secrets (e.g. a token pasted into a ``target`` field) are caught as
+    well.  Non-string values are left untouched.
+
+    Args:
+        inputs: Parsed task inputs dict (from ``inputs_json`` column).
+
+    Returns:
+        A new dict with sensitive values replaced by ``[REDACTED]``.
+    """
+    if not isinstance(inputs, dict):
+        return inputs
+
+    result: dict[str, Any] = {}
+    for key, value in inputs.items():
+        if key.lower() in _SENSITIVE_INPUT_KEYS:
+            result[key] = REDACTED
+        else:
+            result[key] = _redact_value(value)
+    return result
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
