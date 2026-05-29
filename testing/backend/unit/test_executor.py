@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from backend.secuscan.config import settings
 from backend.secuscan.database import get_db, init_db
-from backend.secuscan.executor import TaskExecutor
+from backend.secuscan.executor import STREAM_LISTENER_QUEUE_MAXSIZE, TaskExecutor
 from backend.secuscan.models import TaskStatus
 from backend.secuscan.plugins import get_plugin_manager, init_plugins
 
@@ -18,6 +18,45 @@ def _ensure_plugins_loaded():
     except RuntimeError:
         asyncio.run(init_plugins(settings.plugins_dir))
         return get_plugin_manager()
+
+
+@pytest.mark.asyncio
+async def test_stream_listener_queue_is_bounded_for_slow_consumers():
+    executor = TaskExecutor()
+    queue = executor.subscribe("task-1")
+
+    for index in range(STREAM_LISTENER_QUEUE_MAXSIZE + 5):
+        await executor._broadcast("task-1", "output", f"line-{index}")
+
+    assert queue.maxsize == STREAM_LISTENER_QUEUE_MAXSIZE
+    assert queue.qsize() == STREAM_LISTENER_QUEUE_MAXSIZE
+
+    events = []
+    while not queue.empty():
+        events.append(queue.get_nowait())
+
+    assert events[0]["data"] == "line-5"
+    assert events[-1]["data"] == f"line-{STREAM_LISTENER_QUEUE_MAXSIZE + 4}"
+
+
+@pytest.mark.asyncio
+async def test_stream_listener_keeps_latest_status_when_queue_is_full():
+    executor = TaskExecutor()
+    queue = executor.subscribe("task-1")
+
+    for index in range(STREAM_LISTENER_QUEUE_MAXSIZE):
+        await executor._broadcast("task-1", "output", f"line-{index}")
+    await executor._broadcast("task-1", "status", TaskStatus.COMPLETED.value)
+
+    events = []
+    while not queue.empty():
+        events.append(queue.get_nowait())
+
+    assert len(events) == STREAM_LISTENER_QUEUE_MAXSIZE
+    assert events[-1] == {
+        "type": "status",
+        "data": TaskStatus.COMPLETED.value,
+    }
 
 
 def test_parse_results_prefers_report_path_when_available(setup_test_environment, tmp_path):

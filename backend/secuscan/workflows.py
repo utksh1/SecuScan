@@ -59,6 +59,12 @@ class WorkflowScheduler:
         if not last_run_at:
             return True
         last = datetime.fromisoformat(last_run_at.replace("Z", "+00:00"))
+        # SQLite's datetime('now') produces "2026-05-25 08:02:28" — no Z and
+        # no +00:00 suffix — so fromisoformat() returns a naive datetime.
+        # Subtracting a naive datetime from an aware one raises TypeError.
+        # Treat any naive timestamp from the DB as UTC.
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
         elapsed = (now - last).total_seconds()
         return elapsed >= schedule_seconds
     async def _run_workflow(self, workflow_id: str, steps: List[Dict[str, Any]]):

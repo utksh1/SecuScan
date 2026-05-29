@@ -10,6 +10,7 @@ from typing import Any, Optional, List, Dict
 
 import aiosqlite
 from .config import settings
+from .risk_scoring import compute_risk_score, compute_risk_factors
 
 
 class Database:
@@ -209,6 +210,7 @@ class Database:
         
         needed_cols = {
             "exit_code": "INTEGER",
+            "scan_phase": "TEXT",
             "structured_json": "TEXT",
             "raw_output_path": "TEXT",
             "command_used": "TEXT",
@@ -238,6 +240,59 @@ class Database:
                 print("Added missing column 'proof' to findings table.")
             except Exception as e:
                 print(f"Failed to add 'proof' to findings: {e}")
+
+        risk_cols = {
+            "exploitability": "REAL",
+            "confidence": "REAL",
+            "asset_exposure": "TEXT",
+            "risk_score": "REAL",
+            "risk_factors_json": "TEXT NOT NULL DEFAULT '[]'",
+        }
+        for col_name, col_type in risk_cols.items():
+            if col_name not in existing_finding_cols:
+                try:
+                    await self.execute(f"ALTER TABLE findings ADD COLUMN {col_name} {col_type}")
+                    print(f"Added missing column {col_name} to findings table.")
+                except Exception as e:
+                    print(f"Failed to add column {col_name}: {e}")
+
+        await self._backfill_risk_scores()
+
+    async def _backfill_risk_scores(self):
+        """Compute risk scores for existing findings that have none."""
+        from datetime import datetime, timezone
+        rows = await self.fetchall(
+            "SELECT id, severity, exploitability, confidence, asset_exposure, discovered_at, risk_score FROM findings WHERE risk_score IS NULL"
+        )
+        if not rows:
+            return
+        for row in rows:
+            discovered = None
+            if row.get("discovered_at"):
+                try:
+                    discovered = datetime.fromisoformat(row["discovered_at"])
+                except (ValueError, TypeError):
+                    discovered = datetime.now(timezone.utc)
+            score = compute_risk_score(
+                severity=row["severity"],
+                exploitability=row.get("exploitability"),
+                asset_exposure=row.get("asset_exposure"),
+                discovered_at=discovered,
+                confidence=row.get("confidence"),
+            )
+            factors = compute_risk_factors(
+                severity=row["severity"],
+                exploitability=row.get("exploitability"),
+                asset_exposure=row.get("asset_exposure"),
+                discovered_at=discovered,
+                confidence=row.get("confidence"),
+                risk_score=score,
+            )
+            await self.execute(
+                "UPDATE findings SET risk_score = ?, risk_factors_json = ? WHERE id = ?",
+                (score, json.dumps(factors), row["id"]),
+            )
+        print(f"Backfilled risk scores for {len(rows)} existing finding(s).")
 
     async def execute(self, query: str, params: tuple = ()):
         """Execute a write query."""
