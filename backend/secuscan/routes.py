@@ -97,10 +97,12 @@ from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager, init_plugins
 from .executor import executor
+from .redaction import redact_inputs
 from .ratelimit import (
     rate_limiter, concurrent_limiter,
     task_start_limiter, vault_limiter,
-    report_download_limiter, read_heavy_limiter
+    report_download_limiter, read_heavy_limiter,
+    resolve_client_identity,
 )
 from .validation import validate_target, validate_task_start_payload
 from .reporting import reporting
@@ -110,6 +112,7 @@ from .workflows import scheduler
 from sse_starlette.sse import EventSourceResponse
 
 router = APIRouter(prefix="/api/v1")
+SSE_RAW_OUTPUT_CHUNK_SIZE = 64 * 1024
 
 
 async def get_or_set_cached(key: str, builder):
@@ -129,6 +132,16 @@ async def invalidate_view_cache():
     cache = await get_cache()
     for prefix in ["summary:", "findings:", "reports:", "tasks:"]:
         await cache.delete_prefix(prefix)
+
+
+def iter_raw_output_chunks(path: str, chunk_size: int = SSE_RAW_OUTPUT_CHUNK_SIZE):
+    """Yield raw output in bounded chunks for completed-task SSE replay."""
+    with open(path, "r", encoding="utf-8", errors="replace") as output_file:
+        while True:
+            chunk = output_file.read(chunk_size)
+            if not chunk:
+                break
+            yield chunk
 
 
 def _report_generation_error_response(task_id: str, report_format: str) -> JSONResponse:
@@ -263,10 +276,13 @@ async def start_task(
                 logger.warning(f"Task start failed: Target validation failed for '{target}': {error_msg}")
                 raise HTTPException(status_code=400, detail=error_msg)
 
-    # Check rate limits
+    # Check rate limits per (client, plugin) so one client cannot exhaust
+    # the quota for all other users of the same plugin.
+    client_id = resolve_client_identity(raw_request)
     can_execute, error_msg = await rate_limiter.can_execute(
         request.plugin_id,
-        plugin.safety.get("rate_limit", {}).get("max_per_hour", settings.max_tasks_per_hour)
+        plugin.safety.get("rate_limit", {}).get("max_per_hour", settings.max_tasks_per_hour),
+        client_id=client_id,
     )
 
     if not can_execute:
@@ -324,10 +340,10 @@ async def stream_task_output(task_id: str):
         raise HTTPException(status_code=404, detail="Task not found")
 
     async def event_generator():
-        # First, send the initial status
+        # First, send the initial status and phase
         yield {
             "event": "status",
-            "data": json.dumps({"status": status["status"]})
+            "data": json.dumps({"status": status["status"], "scan_phase": status.get("scan_phase")})
         }
 
         # If it's already completed/failed, we just return the raw output if any and close
@@ -336,13 +352,13 @@ async def stream_task_output(task_id: str):
                 db = await get_db()
                 task_row = await db.fetchone("SELECT raw_output_path FROM tasks WHERE id = ?", (task_id,))
                 if task_row and task_row["raw_output_path"]:
-                    with open(task_row["raw_output_path"], "r") as f:
+                    for chunk in iter_raw_output_chunks(task_row["raw_output_path"]):
                         yield {
                             "event": "output",
-                            "data": json.dumps({"chunk": f.read()})
+                            "data": json.dumps({"chunk": chunk})
                         }
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to replay raw output for task %s: %s", task_id, exc)
             return
 
         # Otherwise, subscribe to the live task events
@@ -359,6 +375,11 @@ async def stream_task_output(task_id: str):
                     }
                     if event["data"] in ["completed", "failed", "cancelled"]:
                         break
+                elif event["type"] == "phase":
+                    yield {
+                        "event": "phase",
+                        "data": json.dumps({"scan_phase": event["data"]})
+                    }
                 elif event["type"] == "output":
                     yield {
                         "event": "output",
@@ -583,7 +604,7 @@ async def get_task_result(task_id: str):
         "duration_seconds": task_row["duration_seconds"],
         "status": task_row["status"],
         "preset": task_row["preset"],
-        "inputs": json.loads(task_row["inputs_json"] or "{}"),
+        "inputs": redact_inputs(json.loads(task_row["inputs_json"] or "{}")),
         "summary": summary,
         "severity_counts": severity_counts,
         "findings": findings,
@@ -773,7 +794,7 @@ async def list_tasks(
     for t in tasks_list:
         if "id" in t:
             t["task_id"] = t.pop("id")
-        t["inputs"] = t.pop("inputs_json", {})
+        t["inputs"] = redact_inputs(t.pop("inputs_json", {}) or {})
 
     total_pages = (total + per_page - 1) // per_page if per_page > 0 else 0
 
