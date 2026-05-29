@@ -240,6 +240,20 @@ class Database:
                 print("Added missing column 'proof' to findings table.")
             except Exception as e:
                 print(f"Failed to add 'proof' to findings: {e}")
+        risk_cols = {
+            "exploitability": "REAL",
+            "confidence": "REAL",
+            "asset_exposure": "TEXT",
+            "risk_score": "REAL",
+            "risk_factors_json": "TEXT NOT NULL DEFAULT '[]'",
+        }
+        for col_name, col_type in risk_cols.items():
+            if col_name not in existing_finding_cols:
+                try:
+                    await self.execute(f"ALTER TABLE findings ADD COLUMN {col_name} {col_type}")
+                    print(f"Added missing column {col_name} to findings table.")
+                except Exception as e:
+                    print(f"Failed to add column {col_name}: {e}")
 
     async def _run_migrations(self):
         """Apply any pending SQL migration files from the migrations directory.
@@ -266,21 +280,6 @@ class Database:
                 await self.connection.executescript(sql)
             except Exception as exc:
                 print(f"Migration {migration_file.name} failed: {exc}")
-        existing_finding_cols = {col["name"] for col in await self.fetchall("PRAGMA table_info(findings)")}
-        risk_cols = {
-            "exploitability": "REAL",
-            "confidence": "REAL",
-            "asset_exposure": "TEXT",
-            "risk_score": "REAL",
-            "risk_factors_json": "TEXT NOT NULL DEFAULT '[]'",
-        }
-        for col_name, col_type in risk_cols.items():
-            if col_name not in existing_finding_cols:
-                try:
-                    await self.execute(f"ALTER TABLE findings ADD COLUMN {col_name} {col_type}")
-                    print(f"Added missing column {col_name} to findings table.")
-                except Exception as e:
-                    print(f"Failed to add column {col_name}: {e}")
 
         await self._backfill_risk_scores()
 
@@ -327,13 +326,13 @@ class Database:
 
     async def fetchone(self, query: str, params: tuple = ()) -> Optional[Dict]:
         """Fetch one row."""
-        async with self.connection.execute(query, params) as cursor:
+        async with await self.connection.execute(query, params) as cursor:
             row = await cursor.fetchone()
             return dict(row) if row else None
 
     async def fetchall(self, query: str, params: tuple = ()) -> List[Dict]:
         """Fetch all rows."""
-        async with self.connection.execute(query, params) as cursor:
+        async with await self.connection.execute(query, params) as cursor:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
 
