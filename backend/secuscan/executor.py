@@ -24,8 +24,9 @@ from .cache import get_cache
 from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager
-from .models import NotificationDeliveryStatus, TaskStatus, ScanPhase
+from .models import NotificationDeliveryStatus, TaskStatus, ScanPhase, SandboxConfig
 from .ratelimit import concurrent_limiter
+from .sandbox_executor import sandbox_execute
 from .risk_scoring import compute_risk_score, compute_risk_factors
 from .capabilities import CapabilityEnforcer, CapabilityDeniedError, build_enforcer_from_settings
 from .parser_sandbox import run_parser_in_sandbox, ParserSandboxError
@@ -593,28 +594,31 @@ class TaskExecutor:
                 await self._broadcast(task_id, "status", TaskStatus.RUNNING.value)
                 await self._broadcast_phase(task_id, ScanPhase.RUNNING_COMMAND.value)
 
-                # Execute command
                 start_time = time.time()
-                output, exit_code = await self._execute_command(
+                output, exit_code, violation_reason = await self._execute_command(
                     command,
-                    task_id,
-                    timeout=self._resolve_execution_timeout(inputs),
                 )
                 duration = time.time() - start_time
 
-                # Save raw output
                 raw_path = Path(settings.raw_output_dir) / f"{task_id}.txt"
                 output = redact(output)
                 with open(raw_path, 'w') as f:
                     f.write(output)
 
-                # Some CLI tools use non-zero exit codes for "no result" states while still
-                # producing a complete, parseable report. Let plugin metadata opt into that.
-                final_status, error_message = self._classify_command_result(
-                    plugin=plugin,
-                    output=output,
-                    exit_code=exit_code,
-                )
+                if violation_reason:
+                    status_map = {
+                        "timeout": TaskStatus.TERMINATED_TIMEOUT.value,
+                        "memory_limit": TaskStatus.TERMINATED_MEMORY.value,
+                        "output_limit": TaskStatus.TERMINATED_OUTPUT.value,
+                    }
+                    final_status = status_map.get(violation_reason, TaskStatus.FAILED.value)
+                    error_message = f"Sandbox violation: {violation_reason}"
+                else:
+                    final_status, error_message = self._classify_command_result(
+                        plugin=plugin,
+                        output=output,
+                        exit_code=exit_code,
+                    )
 
                 await db.execute(
                     """
@@ -787,69 +791,36 @@ class TaskExecutor:
             timeout: Execution timeout in seconds
 
         Returns:
-            Tuple of (output, exit_code)
+            Tuple of (output, exit_code, violation_reason)
         """
+        if timeout is None:
+            timeout = settings.sandbox_timeout
+        config = SandboxConfig(
+            timeout_seconds=0,
+            max_memory_mb=settings.sandbox_memory_mb,
+            max_output_bytes=settings.sandbox_max_output_bytes,
+            allow_network=settings.sandbox_allow_network,
+        )
+
+        async def _on_chunk(data: bytes, stream_name: str):
+            text = data.decode("utf-8", errors="replace")
+            await self._broadcast(task_id, "output", text)
+
         try:
-            process = await asyncio.create_subprocess_exec(
-                *command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                start_new_session=True,
+            stdout, stderr, exit_code, violation_reason = await asyncio.wait_for(
+                sandbox_execute(command, config, broadcast_callback=_on_chunk),
+                timeout=timeout,
             )
-            self._process_pids[task_id] = process.pid
-
-            output_lines = []
-
-            async def read_stream():
-                stdout = process.stdout
-                if stdout is None:
-                    return
-                while not stdout.at_eof():
-                    line = await stdout.readline()
-                    if line:
-                        decoded_line = line.decode("utf-8", errors="replace")
-                        output_lines.append(decoded_line)
-                        await self._broadcast(task_id, "output", decoded_line)
-
-            try:
-                await asyncio.wait_for(read_stream(), timeout=timeout)
-                await process.wait()
-                self._process_pids.pop(task_id, None)
-                return "".join(output_lines), process.returncode if process.returncode is not None else -1
-
-            except asyncio.TimeoutError:
-                logger.warning(
-                    "Task %s timed out after %ds — terminating process group (pid=%d)",
-                    task_id, timeout, process.pid,
-                )
-                await _terminate_process_group(process.pid, task_id)
-                try:
-                    await asyncio.wait_for(process.wait(), timeout=3)
-                except asyncio.TimeoutError:
-                    pass
-                self._process_pids.pop(task_id, None)
-                return "".join(output_lines) + "\nTask timed out", -1
-
-            except asyncio.CancelledError:
-                logger.warning(
-                    "Task %s cancelled — terminating process group (pid=%d)",
-                    task_id, process.pid,
-                )
-                await _terminate_process_group(process.pid, task_id)
-                try:
-                    await asyncio.wait_for(process.wait(), timeout=3)
-                except asyncio.TimeoutError:
-                    pass
-                self._process_pids.pop(task_id, None)
-                raise
-
+            if stderr:
+                stdout = stdout + "\n" + stderr if stdout else stderr
+            return stdout, exit_code, violation_reason
+        except asyncio.TimeoutError:
+            return "", -1, "timeout"
         except asyncio.CancelledError:
-            self._process_pids.pop(task_id, None)
             raise
         except Exception as e:
-            self._process_pids.pop(task_id, None)
             logger.error(f"Failed to execute command: {e}")
-            return f"Execution error: {str(e)}", -1
+            return f"Execution error: {str(e)}", -1, None
 
     def _resolve_execution_timeout(self, inputs: Dict[str, Any]) -> int:
         """Resolve per-task process timeout from plugin inputs.

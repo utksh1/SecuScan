@@ -24,6 +24,17 @@ class TaskStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    TERMINATED_TIMEOUT = "terminated:timeout"
+    TERMINATED_MEMORY = "terminated:memory_limit"
+    TERMINATED_OUTPUT = "terminated:output_limit"
+
+
+class SandboxConfig(BaseModel):
+    """Resource constraints applied to every plugin subprocess execution"""
+    timeout_seconds: int = Field(default=120, description="Max wall-clock seconds before SIGTERM")
+    max_memory_mb: int = Field(default=512, description="Max virtual memory in MB (RLIMIT_AS on Linux)")
+    max_output_bytes: int = Field(default=5_242_880, description="Max bytes captured from stdout/stderr")
+    allow_network: bool = Field(default=True, description="Whether subprocess can make network calls")
 
 
 class ScanPhase(str, Enum):
@@ -151,6 +162,8 @@ class PluginMetadata(BaseModel):
     dependencies: Optional[Dict[str, List[str]]] = None
     docker_image: Optional[str] = None
 
+    sandbox: Optional[SandboxConfig] = None
+
     checksum: Optional[str] = None
     signature: Optional[str] = None
 
@@ -261,6 +274,14 @@ class PluginListResponse(BaseModel):
     """List of available plugins"""
     plugins: List[Dict[str, Any]]
     total: int
+
+
+class SandboxViolation(Exception):
+    """Raised when sandbox constraints are violated."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
 
 
 class ErrorResponse(BaseModel):
