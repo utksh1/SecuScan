@@ -196,10 +196,24 @@ export default function Sidebar() {
 }
 
 function OfflineQueueIndicator({ isExpanded }: { isExpanded: boolean }) {
-  const { isOnline, pendingCount, queue, retryAll, remove } = useOfflineQueue()
+  const { isOnline, pendingCount, queue, retry, retryAll, remove } = useOfflineQueue()
   const [showDropdown, setShowDropdown] = useState(false)
 
   if (isOnline && pendingCount === 0) return null
+
+  const handleRetryAll = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (window.confirm(`Replay ${pendingCount} pending action(s)? This may create duplicate tasks or workflows.`)) {
+      retryAll()
+    }
+  }
+
+  const handleRetry = (e: React.MouseEvent, id: string, label?: string) => {
+    e.stopPropagation()
+    if (window.confirm(`Replay "${label || 'action'}"? This may create a duplicate task or workflow.`)) {
+      retry(id)
+    }
+  }
 
   return (
     <div className="relative mb-2">
@@ -245,19 +259,29 @@ function OfflineQueueIndicator({ isExpanded }: { isExpanded: boolean }) {
             {queue.map((action) => (
               <div key={action.id} className="flex items-center justify-between gap-2 px-2 py-1 text-[10px] text-silver/80">
                 <span className="truncate flex-1">{action.label || action.url}</span>
-                <button
-                  type="button"
-                  onClick={() => remove(action.id)}
-                  className="text-silver/40 hover:text-rag-red"
-                  aria-label={`Remove ${action.label || 'action'} from queue`}
-                >
-                  <span className="material-symbols-outlined text-[14px]">close</span>
-                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={(e) => handleRetry(e, action.id, action.label)}
+                    className="text-rag-blue/60 hover:text-rag-blue"
+                    aria-label={`Replay ${action.label || 'action'}`}
+                  >
+                    <span className="material-symbols-outlined text-[14px]">replay</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); remove(action.id) }}
+                    className="text-silver/40 hover:text-rag-red"
+                    aria-label={`Remove ${action.label || 'action'} from queue`}
+                  >
+                    <span className="material-symbols-outlined text-[14px]">close</span>
+                  </button>
+                </div>
               </div>
             ))}
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); retryAll() }}
+              onClick={handleRetryAll}
               className="w-full mt-1 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider bg-rag-blue/20 text-rag-blue hover:bg-rag-blue/30 rounded"
             >
               Retry All

@@ -280,8 +280,18 @@ describe('offlineQueue', () => {
     })
   })
 
-  describe('setAutoReplay', () => {
-    it('toggles autoReplayEnabled', () => {
+  describe('auto-replay is disabled', () => {
+    it('does not auto-replay on reconnect (default is false)', () => {
+      const retryAllSpy = vi.spyOn(offlineQueue, 'retryAll')
+      offlineQueue.enqueue({ url: '/a', method: 'POST', maxRetries: 3 })
+
+      window.dispatchEvent(new Event('online'))
+
+      expect(retryAllSpy).not.toHaveBeenCalled()
+      retryAllSpy.mockRestore()
+    })
+
+    it('setAutoReplay is preserved for backward compat', () => {
       expect(() => offlineQueue.setAutoReplay(false)).not.toThrow()
       expect(() => offlineQueue.setAutoReplay(true)).not.toThrow()
     })

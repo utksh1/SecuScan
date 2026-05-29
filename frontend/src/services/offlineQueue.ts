@@ -16,7 +16,7 @@ type Listener = () => void
 
 let queue: QueuedAction[] = []
 let listeners: Set<Listener> = new Set()
-let autoReplayEnabled = true
+let autoReplayEnabled = false
 
 function load(): QueuedAction[] {
   try {
@@ -132,16 +132,6 @@ function replayAction(action: QueuedAction): Promise<ReplayResult> {
       return 'fail' as const
     })
     .catch(() => 'fail' as const)
-}
-
-function onReconnect(): void {
-  if (autoReplayEnabled && getQueue().length > 0) {
-    retryAll()
-  }
-}
-
-if (typeof window !== 'undefined') {
-  window.addEventListener('online', onReconnect)
 }
 
 queue = load()
