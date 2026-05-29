@@ -1,7 +1,7 @@
 import type { SanitizedError } from './sanitizeError'
 
 export type TelemetryPayload = SanitizedError & {
-  componentStack?: string
+  componentStack?: string | null
   route?: string
 }
 
