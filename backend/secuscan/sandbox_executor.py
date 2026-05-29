@@ -72,37 +72,56 @@ async def _terminate_process(process):
         await process.wait()
 
 
-async def _read_stream(stream, buffer, state):
+async def _read_stream(stream, buffer, state, broadcast_callback=None, stream_name=""):
     """Read from a stream in 64KB chunks, respecting max_output_bytes limit."""
     while True:
         chunk = await stream.read(CHUNK_SIZE)
         if not chunk:
             break
-        if state["limit_hit"]:
-            break
-        remaining = state["max_bytes"] - state["total_bytes"]
-        if remaining <= 0:
-            state["limit_hit"] = True
-            break
-        if len(chunk) > remaining:
-            chunk = chunk[:remaining]
-            state["limit_hit"] = True
-        buffer.extend(chunk)
-        state["total_bytes"] += len(chunk)
+        async with state["lock"]:
+            if state["limit_hit"]:
+                return
+            remaining = state["max_bytes"] - state["total_bytes"]
+            if remaining <= 0:
+                state["limit_hit"] = True
+                return
+            if len(chunk) > remaining:
+                chunk = chunk[:remaining]
+                state["limit_hit"] = True
+            buffer.extend(chunk)
+            state["total_bytes"] += len(chunk)
+        if broadcast_callback:
+            await broadcast_callback(chunk, stream_name)
 
 
 async def sandbox_execute(
     cmd: List[str],
     config: SandboxConfig,
+    broadcast_callback=None,
 ) -> Tuple[str, str, int, Optional[str]]:
     """
     Execute a subprocess under sandbox resource constraints.
+
+    Args:
+        cmd: Command list to execute.
+        config: SandboxConfig with timeout, memory, output limits.
+            When timeout_seconds is 0 or None, no wall-clock timeout is
+            applied internally (the caller handles it externally).
+        broadcast_callback: Optional async callable(chunk: bytes, stream_name: str)
+            invoked for each output chunk to enable live streaming.
 
     Returns (stdout_str, stderr_str, exit_code, violation_reason).
     violation_reason is None on success, or one of
     "timeout", "memory_limit", "output_limit".
     """
     preexec_fn = _build_preexec_fn(config) if IS_LINUX else None
+
+    rss_before = 0
+    try:
+        import resource
+        rss_before = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+    except (ImportError, AttributeError):
+        pass
 
     process = await asyncio.create_subprocess_exec(
         *cmd,
@@ -118,30 +137,39 @@ async def sandbox_execute(
         "total_bytes": 0,
         "max_bytes": config.max_output_bytes,
         "limit_hit": False,
+        "lock": asyncio.Lock(),
     }
 
     violation_reason = None
 
     reader_task = asyncio.gather(
-        _read_stream(process.stdout, stdout_buffer, state),
-        _read_stream(process.stderr, stderr_buffer, state),
+        _read_stream(process.stdout, stdout_buffer, state, broadcast_callback, "stdout"),
+        _read_stream(process.stderr, stderr_buffer, state, broadcast_callback, "stderr"),
     )
 
     try:
-        try:
-            await asyncio.wait_for(reader_task, timeout=config.timeout_seconds)
-        except asyncio.TimeoutError:
-            if state["limit_hit"]:
-                violation_reason = "output_limit"
-            else:
-                violation_reason = "timeout"
-            reader_task.cancel()
+        if config.timeout_seconds:
             try:
-                await reader_task
-            except (asyncio.CancelledError, asyncio.TimeoutError):
-                pass
-            await _terminate_process(process)
+                await asyncio.wait_for(reader_task, timeout=config.timeout_seconds)
+            except asyncio.TimeoutError:
+                if state["limit_hit"]:
+                    violation_reason = "output_limit"
+                else:
+                    violation_reason = "timeout"
+                reader_task.cancel()
+                try:
+                    await reader_task
+                except (asyncio.CancelledError, asyncio.TimeoutError):
+                    pass
+                await _terminate_process(process)
+            else:
+                if state["limit_hit"]:
+                    violation_reason = "output_limit"
+                    await _terminate_process(process)
+                else:
+                    await process.wait()
         else:
+            await reader_task
             if state["limit_hit"]:
                 violation_reason = "output_limit"
                 await _terminate_process(process)
@@ -165,16 +193,18 @@ async def sandbox_execute(
     exit_code = process.returncode if process.returncode is not None else -1
 
     if violation_reason is None and exit_code != 0:
-        rss_bytes = 0
+        rss_delta = 0
         try:
             import resource
-            usage = resource.getrusage(resource.RUSAGE_CHILDREN)
-            if IS_LINUX:
-                rss_bytes = usage.ru_maxrss * 1024
-            else:
-                rss_bytes = usage.ru_maxrss
+            rss_after = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+            rss_delta = rss_after - rss_before
         except (ImportError, AttributeError):
             pass
+
+        if IS_LINUX:
+            rss_bytes = rss_delta * 1024
+        else:
+            rss_bytes = rss_delta
 
         limit_bytes = config.max_memory_mb * 1024 * 1024
 
