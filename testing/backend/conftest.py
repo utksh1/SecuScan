@@ -34,12 +34,17 @@ def setup_test_environment(monkeypatch):
     monkeypatch.setattr(settings, "plugins_dir", str(repo_root / "plugins"))
     monkeypatch.setattr(settings, "database_path", f"{temp_path}/test_secuscan.db")
     monkeypatch.setattr(settings, "vault_key", "test-vault-key-for-unit-tests-only")
+    # Disable network policy enforcement in tests: integration tests mock
+    # _execute_command but the policy check runs before that mock fires.
+    # Tests that specifically test policy behaviour override this themselves.
+    monkeypatch.setattr(settings, "enforce_network_policy", False)
 
     settings.ensure_directories()
 
     yield temp_path
 
     temp_dir.cleanup()
+
 
 
 @pytest.fixture
