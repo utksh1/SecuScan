@@ -8,7 +8,7 @@ import uuid
 import json
 import time
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 import logging
 import re
@@ -20,7 +20,42 @@ from .database import get_db
 from .plugins import get_plugin_manager
 from .models import TaskStatus
 from .ratelimit import concurrent_limiter
-from .ratelimit import concurrent_limiter
+from .risk_scoring import compute_risk_score, compute_risk_factors
+
+
+def _parse_discovered_at(finding: dict) -> Optional[datetime]:
+    """Extract and parse discovered_at from a finding dict, or return current UTC time."""
+    raw = finding.get("discovered_at")
+    if raw:
+        try:
+            if isinstance(raw, str):
+                return datetime.fromisoformat(raw)
+            if isinstance(raw, datetime):
+                return raw
+        except (ValueError, TypeError):
+            pass
+    return datetime.now(timezone.utc)
+
+
+def _validate_risk_fields(finding: dict) -> None:
+    """Validate exploitability, confidence, and asset_exposure bounds in-place."""
+    exp = finding.get("exploitability")
+    if exp is not None:
+        if not isinstance(exp, (int, float)):
+            raise ValueError(f"exploitability must be numeric, got {type(exp).__name__}")
+        if exp < 0 or exp > 10:
+            raise ValueError(f"exploitability must be in [0, 10], got {exp}")
+
+    conf = finding.get("confidence")
+    if conf is not None:
+        if not isinstance(conf, (int, float)):
+            raise ValueError(f"confidence must be numeric, got {type(conf).__name__}")
+        if conf < 0 or conf > 1:
+            raise ValueError(f"confidence must be in [0, 1], got {conf}")
+
+    ae = finding.get("asset_exposure")
+    if ae is not None and ae.lower() not in ("critical", "high", "medium", "low"):
+        raise ValueError(f"asset_exposure must be one of critical/high/medium/low, got {ae}")
 
 # Modular Scanners
 from .scanners.port_scanner import PortScanner
@@ -643,13 +678,38 @@ class TaskExecutor:
         for finding in findings_data:
             u_id = str(uuid.uuid4()).replace("-", "")
             finding_id = f"finding:{task_id}:{u_id[:8]}"
+
+            _validate_risk_fields(finding)
+            exploitability = finding.get("exploitability")
+            confidence = finding.get("confidence")
+            asset_exposure = finding.get("asset_exposure")
+            discovered = _parse_discovered_at(finding)
+            risk_score = compute_risk_score(
+                severity=finding["severity"],
+                exploitability=exploitability,
+                asset_exposure=asset_exposure,
+                discovered_at=discovered,
+                confidence=confidence,
+            )
+            risk_factors = compute_risk_factors(
+                severity=finding["severity"],
+                exploitability=exploitability,
+                asset_exposure=asset_exposure,
+                discovered_at=discovered,
+                confidence=confidence,
+                risk_score=risk_score,
+            )
+
             await db.execute(
                 """
                 INSERT INTO findings (
                     id, task_id, plugin_id, title, category, severity,
                     target, description, remediation, proof, cvss, cve,
-                    metadata_json, discovered_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (datetime('now')))
+                    metadata_json, discovered_at,
+                    exploitability, confidence, asset_exposure,
+                    risk_score, risk_factors_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                          ?, ?, ?, ?, ?)
                 """,
                 (
                     finding_id,
@@ -665,6 +725,12 @@ class TaskExecutor:
                     finding.get("cvss"),
                     finding.get("cve"),
                     json.dumps(finding.get("metadata", {})),
+                    discovered.isoformat() if discovered else datetime.now(timezone.utc).isoformat(),
+                    exploitability,
+                    confidence,
+                    asset_exposure,
+                    risk_score,
+                    json.dumps(risk_factors),
                 ),
             )
 
@@ -697,13 +763,38 @@ class TaskExecutor:
         for finding in findings_data:
             u_id = str(uuid.uuid4()).replace("-", "")
             finding_id = f"finding:{task_id}:{u_id[:8]}"
+
+            _validate_risk_fields(finding)
+            exploitability = finding.get("exploitability")
+            confidence = finding.get("confidence")
+            asset_exposure = finding.get("asset_exposure")
+            discovered = _parse_discovered_at(finding)
+            risk_score = compute_risk_score(
+                severity=finding["severity"],
+                exploitability=exploitability,
+                asset_exposure=asset_exposure,
+                discovered_at=discovered,
+                confidence=confidence,
+            )
+            risk_factors = compute_risk_factors(
+                severity=finding["severity"],
+                exploitability=exploitability,
+                asset_exposure=asset_exposure,
+                discovered_at=discovered,
+                confidence=confidence,
+                risk_score=risk_score,
+            )
+
             await db.execute(
                 """
                 INSERT INTO findings (
                     id, task_id, plugin_id, title, category, severity,
                     target, description, remediation, proof, cvss, cve,
-                    metadata_json, discovered_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (datetime('now')))
+                    metadata_json, discovered_at,
+                    exploitability, confidence, asset_exposure,
+                    risk_score, risk_factors_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                          ?, ?, ?, ?, ?)
                 """,
                 (
                     finding_id,
@@ -719,6 +810,12 @@ class TaskExecutor:
                     finding.get("cvss"),
                     finding.get("cve"),
                     json.dumps(finding.get("metadata", {})),
+                    discovered.isoformat() if discovered else datetime.now(timezone.utc).isoformat(),
+                    exploitability,
+                    confidence,
+                    asset_exposure,
+                    risk_score,
+                    json.dumps(risk_factors),
                 )
             )
 
@@ -755,6 +852,12 @@ class TaskExecutor:
         parser_path = plugin_dir / "parser.py"
         
         if parser_path.exists():
+            if not plugin_manager.verify_parser_at_exec_time(plugin, plugin_dir):
+                raise ValueError(
+                    f"Security error: parser.py integrity check failed for plugin {plugin.id!r}; "
+                    "the file may have been tampered with. Rotate the plugin checksum or "
+                    "reinstall the plugin before retrying."
+                )
             try:
                 import importlib.util
                 spec = importlib.util.spec_from_file_location(f"parser_{plugin.id}", parser_path)
@@ -769,6 +872,8 @@ class TaskExecutor:
                             return self._normalize_parsed_result(plugin, parser_input, parsed)
                         else:
                             logger.warning(f"Custom parser {parser_path} missing 'parse' function")
+            except ValueError:
+                raise
             except Exception as e:
                 logger.error(f"Error executing custom parser for {plugin.id}: {e}")
 

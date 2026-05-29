@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { API_BASE, deleteTask, clearAllTasks, bulkDeleteTasks } from "../api";
@@ -65,10 +65,40 @@ export default function Scans() {
   const [total, setTotal] = useState(0);
   const PAGE_LIMIT = 10;
 
+  // Ref so the visibilitychange handler always sees the current interval id
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function startPolling() {
+    stopPolling();
+    intervalRef.current = setInterval(loadTasks, 5000);
+  }
+
+  function stopPolling() {
+    if (intervalRef.current !== null) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }
+
   useEffect(() => {
     loadTasks();
-    const interval = setInterval(loadTasks, 5000);
-    return () => clearInterval(interval);
+    startPolling();
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "hidden") {
+        stopPolling();
+      } else {
+        loadTasks();   // immediate refresh when tab comes back
+        startPolling();
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      stopPolling();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [filter, page]);
 
   async function loadTasks() {
@@ -90,6 +120,7 @@ export default function Scans() {
       setLoading(false);
     }
   }
+
   function handleFilterChange(value: string) {
     setFilter(value);
     setPage(1);

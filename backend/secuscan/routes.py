@@ -2,7 +2,7 @@
 API routes for SecuScan backend
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request, Depends
 from fastapi.responses import JSONResponse
 from typing import Any, Optional, List, Dict, Callable
 import json
@@ -28,6 +28,32 @@ def parse_json_fields(rows: List[Dict], fields: List[str]) -> List[Dict]:
                     pass
         parsed.append(item)
     return parsed
+
+
+def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
+    if isinstance(raw_steps, list):
+        return raw_steps
+    if not raw_steps:
+        return []
+    try:
+        parsed = json.loads(raw_steps)
+    except (TypeError, json.JSONDecodeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Return the workflow shape consumed by the frontend."""
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "schedule_seconds": row.get("schedule_seconds"),
+        "enabled": bool(row.get("enabled")),
+        "steps": _parse_workflow_steps(row.get("steps_json")),
+        "created_at": row.get("created_at"),
+        "last_run_at": row.get("last_run_at"),
+        "queued_task_ids": queued_task_ids or [],
+    }
 
 
 def is_filesystem_target(target: str) -> bool:
@@ -65,13 +91,17 @@ logger = logging.getLogger(__name__)
 from .cache import get_cache
 from .models import (
     TaskCreateRequest, TaskResponse, TaskResult,
-    PluginListResponse, ErrorResponse
+    PluginListResponse, ErrorResponse, BulkDeleteRequest
 )
 from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager, init_plugins
 from .executor import executor
-from .ratelimit import rate_limiter, concurrent_limiter
+from .ratelimit import (
+    rate_limiter, concurrent_limiter,
+    task_start_limiter, vault_limiter,
+    report_download_limiter, read_heavy_limiter
+)
 from .validation import validate_target, validate_task_start_payload
 from .reporting import reporting
 from .vault import VaultCrypto
@@ -190,7 +220,7 @@ async def get_all_presets():
     }
 
 
-@router.post("/task/start")
+@router.post("/task/start", dependencies=[Depends(task_start_limiter)])
 async def start_task(
     request: TaskCreateRequest,
     background_tasks: BackgroundTasks,
@@ -341,7 +371,7 @@ async def stream_task_output(task_id: str):
 
     return EventSourceResponse(event_generator())
 
-@router.get("/task/{task_id}/report/csv")
+@router.get("/task/{task_id}/report/csv", dependencies=[Depends(report_download_limiter)])
 async def download_csv_report(task_id: str):
     """Download task results as a CSV report."""
     db = await get_db()
@@ -376,7 +406,7 @@ async def download_csv_report(task_id: str):
         headers={"Content-Disposition": f'attachment; filename="{build_report_filename(dict(task_row), "csv")}"'}
     )
 
-@router.get("/task/{task_id}/report/html")
+@router.get("/task/{task_id}/report/html", dependencies=[Depends(report_download_limiter)])
 async def download_html_report(task_id: str):
     """Download task results as an HTML report."""
     db = await get_db()
@@ -411,7 +441,7 @@ async def download_html_report(task_id: str):
         headers={"Content-Disposition": f'attachment; filename="{build_report_filename(dict(task_row), "html")}"'}
     )
 
-@router.get("/task/{task_id}/report/pdf")
+@router.get("/task/{task_id}/report/pdf", dependencies=[Depends(report_download_limiter)])
 async def download_pdf_report(task_id: str):
     """Download task results as a PDF report."""
     db = await get_db()
@@ -447,7 +477,7 @@ async def download_pdf_report(task_id: str):
     )
 
 
-@router.get("/task/{task_id}/report/sarif")
+@router.get("/task/{task_id}/report/sarif", dependencies=[Depends(report_download_limiter)])
 async def download_sarif_report(task_id: str):
     """Download task results as a SARIF report."""
     db = await get_db()
@@ -584,7 +614,7 @@ async def cancel_task(task_id: str):
     }
 
 
-@router.get("/dashboard/summary")
+@router.get("/dashboard/summary", dependencies=[Depends(read_heavy_limiter)])
 async def get_dashboard_summary():
     """Return aggregate dashboard data from the primary store, cached in Redis."""
 
@@ -592,8 +622,15 @@ async def get_dashboard_summary():
         db = await get_db()
 
         # Get data
-        raw_findings = await db.fetchall("SELECT * FROM findings ORDER BY discovered_at DESC")
-        findings = parse_json_fields(raw_findings, ["metadata_json"])
+        # Push severity aggregation to DB — avoids full table scan in Python
+        severity_rows = await db.fetchall(
+            """
+            SELECT severity, COUNT(*) AS cnt
+            FROM findings
+            GROUP BY severity
+            """
+        )
+        severity_counts = {row["severity"]: row["cnt"] for row in severity_rows}
 
         task_stats = await db.fetchone(
             """
@@ -605,27 +642,43 @@ async def get_dashboard_summary():
             """
         )
 
-        critical_findings: int = sum(bool(item.get("severity") == "critical")
-                                 for item in findings)
-        high_findings: int = sum(bool(item.get("severity") == "high")
-                             for item in findings)
-        medium_findings: int = sum(bool(item.get("severity") == "medium")
-                               for item in findings)
-        low_findings: int = sum(bool(item.get("severity") == "low")
-                            for item in findings)
-        info_findings: int = sum(bool(item.get("severity") == "info")
-                             for item in findings)
+        total_findings_row = await db.fetchone("SELECT COUNT(*) AS total FROM findings")
+        total_findings = total_findings_row["total"] if total_findings_row else 0
 
-        recent_findings: List[Dict] = findings[:5]
+        critical_findings: int = severity_counts.get("critical", 0)
+        high_findings: int = severity_counts.get("high", 0)
+        medium_findings: int = severity_counts.get("medium", 0)
+        low_findings: int = severity_counts.get("low", 0)
+        info_findings: int = severity_counts.get("info", 0)
+
+        # Fetch only the 5 most recent findings — not the entire table
+        recent_rows = await db.fetchall(
+            """
+            SELECT id, title, category, severity, target, description,
+                remediation, proof, cvss, cve, discovered_at,
+                risk_score, risk_factors_json, metadata_json
+            FROM findings
+            ORDER BY discovered_at DESC
+            LIMIT 5
+            """
+        )
+        recent_findings: List[Dict] = parse_json_fields(recent_rows, ["metadata_json"])
+
+        risk_scores = [
+            f.get("risk_score") for f in recent_findings
+            if isinstance(f.get("risk_score"), (int, float))
+        ]
+        avg_risk_score = round(sum(risk_scores) / len(risk_scores), 1) if risk_scores else None
 
         return {
-            "total_findings": len(findings),
+            "total_findings": total_findings,
             "critical_findings": critical_findings,
             "high_findings": high_findings,
             "medium_findings": medium_findings,
             "low_findings": low_findings,
             "info_findings": info_findings,
-            "last_scan_time": findings[0].get("discovered_at") if findings else None,
+            "avg_risk_score": avg_risk_score,
+            "last_scan_time": recent_findings[0].get("discovered_at") if recent_findings else None,
             "recent_findings": recent_findings,
             "scan_activity": {
                 "total": int(task_stats["total"]) if task_stats and task_stats.get("total") is not None else 0,
@@ -649,19 +702,23 @@ async def get_dashboard_summary():
     return await get_or_set_cached("summary:dashboard", build)
 
 
-@router.get("/findings")
+@router.get("/findings", dependencies=[Depends(read_heavy_limiter)])
 async def get_findings():
     """Return vulnerability findings."""
 
     async def build():
         db = await get_db()
         rows = await db.fetchall("SELECT * FROM findings ORDER BY discovered_at DESC")
-        return {"findings": parse_json_fields(rows, ["metadata_json"])}
+        findings = parse_json_fields(rows, ["metadata_json", "risk_factors_json"])
+        for f in findings:
+            if "risk_factors_json" in f:
+                f["risk_factors"] = f.pop("risk_factors_json")
+        return {"findings": findings}
 
     return await get_or_set_cached("findings:list", build)
 
 
-@router.get("/reports")
+@router.get("/reports", dependencies=[Depends(read_heavy_limiter)])
 async def get_reports():
     """Return generated reports."""
 
@@ -673,7 +730,7 @@ async def get_reports():
     return await get_or_set_cached("reports:list", build)
 
 
-@router.get("/tasks")
+@router.get("/tasks", dependencies=[Depends(read_heavy_limiter)])
 async def list_tasks(
     page: int = 1,
     per_page: int = 25,
@@ -744,28 +801,47 @@ async def list_tasks(
             "per_page": per_page,
             "total_pages": total_pages,
             "total_items": total,
-            "next": build_page_url(next_page),      # ← NEW
-            "previous": build_page_url(prev_page)    # ← NEW
+            "next": build_page_url(next_page),
+            "previous": build_page_url(prev_page)
         }
     }
 
 
+SQLITE_CHUNK_SIZE = 500  # safely under SQLITE_LIMIT_VARIABLE_NUMBER = 999
+
 async def delete_task_records(task_ids: List[str]):
-    """Helper to delete database records and files for multiple tasks."""
+    """Helper to delete database records and files for multiple tasks.
+
+    Processes IDs in chunks of SQLITE_CHUNK_SIZE to stay under
+    SQLite's SQLITE_LIMIT_VARIABLE_NUMBER = 999 limit.
+    """
+    if not task_ids:
+        return
+
     db = await get_db()
 
-    # Get raw output paths for file cleanup
-    placeholders = ",".join(["?"] * len(task_ids))
-    task_rows = await db.fetchall(f"SELECT raw_output_path FROM tasks WHERE id IN ({placeholders})", tuple(task_ids))
+    # Collect all raw_output_paths across chunks for file cleanup
+    all_task_rows = []
+    for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
+        chunk = task_ids[i : i + SQLITE_CHUNK_SIZE]
+        placeholders = ",".join(["?"] * len(chunk))
+        rows = await db.fetchall(
+            f"SELECT raw_output_path FROM tasks WHERE id IN ({placeholders})",
+            tuple(chunk)
+        )
+        all_task_rows.extend(rows)
 
-    # Delete associated data
-    await db.execute(f"DELETE FROM findings WHERE task_id IN ({placeholders})", tuple(task_ids))
-    await db.execute(f"DELETE FROM reports WHERE task_id IN ({placeholders})", tuple(task_ids))
-    await db.execute(f"DELETE FROM audit_log WHERE task_id IN ({placeholders})", tuple(task_ids))
-    await db.execute(f"DELETE FROM tasks WHERE id IN ({placeholders})", tuple(task_ids))
+    # Delete associated records in chunks
+    for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
+        chunk = task_ids[i : i + SQLITE_CHUNK_SIZE]
+        placeholders = ",".join(["?"] * len(chunk))
+        await db.execute(f"DELETE FROM findings   WHERE task_id IN ({placeholders})", tuple(chunk))
+        await db.execute(f"DELETE FROM reports    WHERE task_id IN ({placeholders})", tuple(chunk))
+        await db.execute(f"DELETE FROM audit_log  WHERE task_id IN ({placeholders})", tuple(chunk))
+        await db.execute(f"DELETE FROM tasks      WHERE id       IN ({placeholders})", tuple(chunk))
 
     # Cleanup files on disk
-    for row in task_rows:
+    for row in all_task_rows:
         if row and row["raw_output_path"]:
             try:
                 path = Path(row["raw_output_path"])
@@ -794,13 +870,21 @@ async def delete_task(task_id: str):
 
 
 @router.delete("/tasks/bulk")
-async def bulk_delete_tasks(task_ids: List[str]):
-    """Delete multiple tasks at once"""
+async def bulk_delete_tasks(request: BulkDeleteRequest):
+    """Delete multiple tasks at once (max 500 IDs per request)"""
+    task_ids = request.root  # RootModel exposes data via .root
     db = await get_db()
 
-    # Check if any tasks are running
+    # Empty list — return early cleanly (test requires 200, not 422)
+    if not task_ids:
+        return {"deleted_count": 0, "success": True}
+
+    # Check running tasks — safe: len(task_ids) <= 500 guaranteed by Pydantic
     placeholders = ",".join(["?"] * len(task_ids))
-    running_tasks = await db.fetchone(f"SELECT id FROM tasks WHERE id IN ({placeholders}) AND status = 'running' LIMIT 1", tuple(task_ids))
+    running_tasks = await db.fetchone(
+        f"SELECT id FROM tasks WHERE id IN ({placeholders}) AND status = 'running' LIMIT 1",
+        tuple(task_ids)
+    )
     if running_tasks:
         raise HTTPException(status_code=400, detail="Cannot delete running tasks. Abort them first.")
 
@@ -811,7 +895,6 @@ async def bulk_delete_tasks(task_ids: List[str]):
         "deleted_count": len(task_ids),
         "success": True
     }
-
 
 @router.delete("/tasks/clear")
 async def clear_all_tasks():
@@ -878,7 +961,7 @@ async def get_settings():
     }
 
 
-@router.get("/vault")
+@router.get("/vault", dependencies=[Depends(vault_limiter)])
 async def list_vault_secrets():
     db = await get_db()
     rows = await db.fetchall(
@@ -887,7 +970,7 @@ async def list_vault_secrets():
     return {"items": rows, "total": len(rows)}
 
 
-@router.put("/vault/{name}")
+@router.put("/vault/{name}", dependencies=[Depends(vault_limiter)])
 async def upsert_vault_secret(name: str, payload: Dict[str, str]):
     value = str(payload.get("value", ""))
     if not value:
@@ -912,7 +995,7 @@ async def upsert_vault_secret(name: str, payload: Dict[str, str]):
     return {"name": name, "stored": True}
 
 
-@router.get("/vault/{name}")
+@router.get("/vault/{name}", dependencies=[Depends(vault_limiter)])
 async def get_vault_secret(name: str):
     db = await get_db()
     row = await db.fetchone("SELECT encrypted_value FROM credential_vault WHERE name = ?", (name,))
@@ -922,7 +1005,7 @@ async def get_vault_secret(name: str):
     return {"name": name, "value": crypto.decrypt(row["encrypted_value"])}
 
 
-@router.delete("/vault/{name}")
+@router.delete("/vault/{name}", dependencies=[Depends(vault_limiter)])
 async def delete_vault_secret(name: str):
     db = await get_db()
     await db.execute("DELETE FROM credential_vault WHERE name = ?", (name,))
@@ -933,7 +1016,8 @@ async def delete_vault_secret(name: str):
 async def list_workflows():
     db = await get_db()
     rows = await db.fetchall("SELECT * FROM workflows ORDER BY created_at DESC")
-    return {"workflows": parse_json_fields(rows, ["steps_json"]), "total": len(rows)}
+    workflows = [_serialize_workflow(row) for row in rows]
+    return {"workflows": workflows, "total": len(workflows)}
 
 
 @router.post("/workflows")
@@ -963,7 +1047,8 @@ async def create_workflow(payload: Dict[str, Any]):
             json.dumps(steps),
         ),
     )
-    return {"id": workflow_id, "created": True}
+    row = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
+    return _serialize_workflow(row) if row else {"id": workflow_id, "created": True}
 
 
 @router.post("/workflows/{workflow_id}/run")
@@ -984,7 +1069,11 @@ async def run_workflow_once(workflow_id: str):
         asyncio.create_task(executor.execute_task(task_id))
         created_task_ids.append(task_id)
     await db.execute("UPDATE workflows SET last_run_at = datetime('now') WHERE id = ?", (workflow_id,))
-    return {"workflow_id": workflow_id, "queued_tasks": created_task_ids}
+    return {
+        "workflow_id": workflow_id,
+        "queued_task_ids": created_task_ids,
+        "queued_tasks": created_task_ids,
+    }
 
 
 @router.patch("/workflows/{workflow_id}")
@@ -1015,7 +1104,8 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
 
     params.append(workflow_id)
     await db.execute(f"UPDATE workflows SET {', '.join(updates)} WHERE id = ?", tuple(params))
-    return {"workflow_id": workflow_id, "updated": True}
+    updated = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
+    return _serialize_workflow(updated) if updated else {"workflow_id": workflow_id, "updated": True}
 
 
 @router.delete("/workflows/{workflow_id}")
@@ -1056,6 +1146,13 @@ async def get_finding_details(finding_id: str):
         except json.JSONDecodeError:
             metadata = {}
 
+    risk_factors = []
+    if finding_row.get("risk_factors_json"):
+        try:
+            risk_factors = json.loads(finding_row["risk_factors_json"])
+        except (json.JSONDecodeError, TypeError):
+            risk_factors = []
+
     return {
         "id": finding_row["id"],
         "task_id": finding_row["task_id"],
@@ -1071,7 +1168,12 @@ async def get_finding_details(finding_id: str):
         "cvss": finding_row["cvss"],
         "cve": finding_row["cve"],
         "discovered_at": finding_row["discovered_at"],
-        "metadata": metadata
+        "metadata": metadata,
+        "exploitability": finding_row.get("exploitability"),
+        "confidence": finding_row.get("confidence"),
+        "asset_exposure": finding_row.get("asset_exposure"),
+        "risk_score": finding_row.get("risk_score"),
+        "risk_factors": risk_factors,
     }
 
 
