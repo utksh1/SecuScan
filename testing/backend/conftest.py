@@ -5,6 +5,11 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
 # Add repo root to sys.path so package imports work (backend.*)
 repo_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(repo_root))
@@ -20,7 +25,7 @@ from backend.secuscan.ratelimit import concurrent_limiter, rate_limiter
 @pytest.fixture(autouse=True)
 def setup_test_environment(monkeypatch):
     """Override settings for tests to ensure isolated execution."""
-    temp_dir = tempfile.TemporaryDirectory()
+    temp_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
     temp_path = temp_dir.name
 
     monkeypatch.setattr(settings, "data_dir", temp_path)
