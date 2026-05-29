@@ -84,6 +84,10 @@ export default function Scans() {
   const [total, setTotal] = useState(0);
   const PAGE_LIMIT = 10;
 
+  const [severityFilter, setSeverityFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [pluginFilter, setPluginFilter] = useState("");
+
   // Ref so the visibilitychange handler always sees the current interval id
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -139,6 +143,14 @@ export default function Scans() {
       setLoading(false);
     }
   }
+
+  const filteredScans = tasks.filter((scan) => {
+    return (
+      (severityFilter ? scan.severity === severityFilter : true) &&
+      (statusFilter ? scan.status === statusFilter : true) &&
+      (pluginFilter ? scan.plugin_type === pluginFilter : true)
+    );
+  });
 
   function handleFilterChange(value: string) {
     setFilter(value);
@@ -343,19 +355,59 @@ export default function Scans() {
       </section>
 
       {/* Timeline Operations Feed */}
-      <section className="relative">
-        {/* Vertical Timeline Cable */}
-        <div className="absolute left-[39px] top-0 bottom-0 w-1 bg-silver-bright/5 hidden md:block"></div>
+        <section className="relative">
+          {/* Vertical Timeline Cable */}
+          <div className="absolute left-[39px] top-0 bottom-0 w-1 bg-silver-bright/5 hidden md:block"></div>
+
+          <div className="flex gap-4 mb-4">
+            <select
+              value={severityFilter}
+              onChange={(e) => setSeverityFilter(e.target.value)}
+              className="bg-charcoal-dark text-silver border-2 border-black px-4 py-2 text-[10px] font-black uppercase tracking-widest"
+            >
+            <option value="">All Severity</option>
+            <option value="critical">Critical</option>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+            <option value="informational">Informational</option>
+          </select>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="bg-charcoal-dark text-silver border-2 border-black px-4 py-2 text-[10px] font-black uppercase tracking-widest"
+          >
+            <option value="">All Status</option>
+            <option value="completed">Completed</option>
+            <option value="running">Running</option>
+            <option value="failed">Failed</option>
+            <option value="queued">Queued</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+
+          <select
+            value={pluginFilter}
+            onChange={(e) => setPluginFilter(e.target.value)}
+            className="bg-charcoal-dark text-silver border-2 border-black px-4 py-2 text-[10px] font-black uppercase tracking-widest"
+          >
+            <option value="">All Plugin Types</option>
+            <option value="amass">amass</option>
+            <option value="nmap">nmap</option>
+            <option value="nikto">nikto</option>
+            <option value="nuclei">nuclei</option>
+          </select>
+        </div>
 
         <AnimatePresence mode="popLayout">
-          {tasks.length > 0 ? (
+          {filteredScans.length > 0 ? (
             <motion.div
               variants={containerVariants}
               initial="hidden"
               animate="visible"
               className="space-y-8"
             >
-              {tasks.map((task) => {
+              {filteredScans.map((task) => {
                 const createDate = parseDateSafe(task.created_at);
                 const startDate = task.started_at
                   ? parseDateSafe(task.started_at)
