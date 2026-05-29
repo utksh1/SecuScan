@@ -28,6 +28,7 @@ async def test_legacy_timeout_compatibility():
     exec_ = TaskExecutor()
     output, exit_code, violation_reason = await exec_._execute_command(
         [sys.executable, "-c", "import time; time.sleep(30)"],
+        "test-legacy-timeout",
         timeout=1,
     )
     assert violation_reason == "timeout"

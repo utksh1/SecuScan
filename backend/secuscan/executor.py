@@ -597,6 +597,8 @@ class TaskExecutor:
                 start_time = time.time()
                 output, exit_code, violation_reason = await self._execute_command(
                     command,
+                    task_id,
+                    timeout=self._resolve_execution_timeout(inputs),
                 )
                 duration = time.time() - start_time
 
