@@ -18,8 +18,8 @@ def resolve_sandbox_config(plugin_sandbox: Optional[SandboxConfig] = None) -> Sa
     """Merge global settings with optional per-plugin sandbox overrides."""
     from .config import settings
     base = SandboxConfig(
-        timeout_seconds=settings.sandbox_timeout_seconds,
-        max_memory_mb=settings.sandbox_max_memory_mb,
+        timeout_seconds=settings.sandbox_timeout,
+        max_memory_mb=settings.sandbox_memory_mb,
         max_output_bytes=settings.sandbox_max_output_bytes,
         allow_network=settings.sandbox_allow_network,
     )

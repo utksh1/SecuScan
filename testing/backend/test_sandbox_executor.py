@@ -208,11 +208,11 @@ def test_sandbox_violation_exception():
 async def test_resolve_sandbox_config_global_defaults(monkeypatch):
     from backend.secuscan.sandbox_executor import resolve_sandbox_config
     monkeypatch.setattr(
-        "backend.secuscan.config.settings.sandbox_timeout_seconds",
+        "backend.secuscan.config.settings.sandbox_timeout",
         42,
     )
     monkeypatch.setattr(
-        "backend.secuscan.config.settings.sandbox_max_memory_mb",
+        "backend.secuscan.config.settings.sandbox_memory_mb",
         256,
     )
     resolved = resolve_sandbox_config(None)

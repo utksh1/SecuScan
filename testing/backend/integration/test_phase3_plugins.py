@@ -35,7 +35,7 @@ def _create_target_policy(test_client, **overrides):
 def run_plugin_test(test_client, plugin_id, inputs, mock_output, execution_context=None):
     """Helper to run a plugin test with mocked execution."""
     with patch("backend.secuscan.executor.TaskExecutor._execute_command") as mock_exec:
-        mock_exec.return_value = (mock_output, 0)
+        mock_exec.return_value = (mock_output, 0, None)
 
         payload = {
             "plugin_id": plugin_id,

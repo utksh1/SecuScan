@@ -309,7 +309,7 @@ async def test_execute_task_releases_limiter_on_normal_completion(setup_test_env
     executor = TaskExecutor()
 
     async def fake_command(*args, **kwargs):
-        return "80/tcp open http", 0
+        return "80/tcp open http", 0, None
 
     with patch.object(executor, "_execute_command", side_effect=fake_command), \
          patch("backend.secuscan.executor.concurrent_limiter") as mock_limiter, \
