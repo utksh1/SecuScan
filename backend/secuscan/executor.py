@@ -69,6 +69,7 @@ MODULAR_SCANNERS = {
 }
 
 logger = logging.getLogger(__name__)
+STREAM_LISTENER_QUEUE_MAXSIZE = 100
 
 
 def extract_target(inputs: Dict[str, Any]) -> str:
@@ -92,7 +93,7 @@ class TaskExecutor:
         """Subscribe to a task's real-time events."""
         if task_id not in self._listeners:
             self._listeners[task_id] = []
-        q = asyncio.Queue()
+        q = asyncio.Queue(maxsize=STREAM_LISTENER_QUEUE_MAXSIZE)
         self._listeners[task_id].append(q)
         return q
 
@@ -107,8 +108,24 @@ class TaskExecutor:
         """Broadcast an event to all active listeners of a task."""
         if task_id in self._listeners:
             event = {"type": event_type, "data": data}
-            for q in self._listeners[task_id]:
-                await q.put(event)
+            for q in list(self._listeners[task_id]):
+                self._enqueue_listener_event(task_id, q, event)
+
+    def _enqueue_listener_event(self, task_id: str, q: asyncio.Queue, event: Dict[str, Any]):
+        """Add an event to a bounded listener queue without unbounded memory growth."""
+        try:
+            q.put_nowait(event)
+            return
+        except asyncio.QueueFull:
+            try:
+                q.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+
+        try:
+            q.put_nowait(event)
+        except asyncio.QueueFull:
+            logger.warning("Dropping stream event for slow listener on task %s", task_id)
     
     async def create_task(
         self,
