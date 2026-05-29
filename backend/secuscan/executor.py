@@ -693,7 +693,6 @@ class TaskExecutor:
             "exit_code": task_row["exit_code"],
             "error_message": task_row["error_message"],
             "preset": task_row["preset"],
-            "inputs": json.loads(task_row["inputs_json"] or "{}"),
             "queue_position": queue_position,
             "pending_count": pending_count,
         }

@@ -97,10 +97,12 @@ from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager, init_plugins
 from .executor import executor
+from .redaction import redact_inputs
 from .ratelimit import (
     rate_limiter, concurrent_limiter,
     task_start_limiter, vault_limiter,
-    report_download_limiter, read_heavy_limiter
+    report_download_limiter, read_heavy_limiter,
+    resolve_client_identity,
 )
 from .validation import validate_target, validate_task_start_payload
 from .reporting import reporting
@@ -274,10 +276,13 @@ async def start_task(
                 logger.warning(f"Task start failed: Target validation failed for '{target}': {error_msg}")
                 raise HTTPException(status_code=400, detail=error_msg)
 
-    # Check rate limits
+    # Check rate limits per (client, plugin) so one client cannot exhaust
+    # the quota for all other users of the same plugin.
+    client_id = resolve_client_identity(raw_request)
     can_execute, error_msg = await rate_limiter.can_execute(
         request.plugin_id,
-        plugin.safety.get("rate_limit", {}).get("max_per_hour", settings.max_tasks_per_hour)
+        plugin.safety.get("rate_limit", {}).get("max_per_hour", settings.max_tasks_per_hour),
+        client_id=client_id,
     )
 
     if not can_execute:
@@ -599,7 +604,7 @@ async def get_task_result(task_id: str):
         "duration_seconds": task_row["duration_seconds"],
         "status": task_row["status"],
         "preset": task_row["preset"],
-        "inputs": json.loads(task_row["inputs_json"] or "{}"),
+        "inputs": redact_inputs(json.loads(task_row["inputs_json"] or "{}")),
         "summary": summary,
         "severity_counts": severity_counts,
         "findings": findings,
@@ -789,7 +794,7 @@ async def list_tasks(
     for t in tasks_list:
         if "id" in t:
             t["task_id"] = t.pop("id")
-        t["inputs"] = t.pop("inputs_json", {})
+        t["inputs"] = redact_inputs(t.pop("inputs_json", {}) or {})
 
     total_pages = (total + per_page - 1) // per_page if per_page > 0 else 0
 

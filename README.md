@@ -106,6 +106,119 @@ After startup:
 - Frontend: `http://127.0.0.1:5173`
 - Backend API: `http://127.0.0.1:8081`
 
+### Troubleshooting / Common Issues
+
+#### Python version issues
+
+This project requires Python 3.11 or newer.
+
+Check your Python version:
+
+```bash
+python --version
+```
+
+or:
+
+```bash
+python3 --version
+```
+
+Install Python 3.11+ if your current version is older.
+
+Python downloads: https://www.python.org/downloads/
+
+#### Virtual environment activation issues
+
+Create a virtual environment:
+
+```bash
+python -m venv venv
+```
+
+Activate it:
+
+**Windows PowerShell**
+
+```powershell
+venv\Scripts\Activate.ps1
+```
+
+**Windows Git Bash**
+
+```bash
+source venv/Scripts/activate
+```
+
+**Linux/macOS**
+
+```bash
+source venv/bin/activate
+```
+
+If PowerShell blocks activation, run:
+
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+Then reopen the terminal and activate the virtual environment again.
+
+#### Node.js version issues
+
+This project requires Node.js 20 or newer.
+
+Check your Node.js version:
+
+```bash
+node -v
+```
+
+Install Node.js 20+ if your current version is older.
+
+Node.js downloads: https://nodejs.org/
+
+#### Dependency installation issues
+
+If dependency installation fails, try reinstalling dependencies:
+
+```bash
+npm install
+```
+
+If installation still fails, try clearing the npm cache:
+
+```bash
+npm cache clean --force
+```
+
+Then reinstall dependencies again:
+
+```bash
+npm install
+```
+
+For complete contributor workflow and coding guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+#### Environment variable issues
+
+If the app fails because environment variables are missing, copy the example environment file if available:
+
+```bash
+cp .env.example .env
+```
+
+Then update the required values before starting the project.
+
+#### Still stuck?
+
+Before opening a setup issue, check:
+
+* Python 3.11+
+* Node.js 20+
+* virtual environment is activated
+* required `.env` files exist
+
 ## Manual Development Commands
 
 ### Backend
