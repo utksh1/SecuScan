@@ -2,7 +2,8 @@
 API routes for SecuScan backend
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Response
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request, Depends
+from fastapi.responses import JSONResponse
 from typing import Any, Optional, List, Dict, Callable
 import json
 import logging
@@ -27,6 +28,32 @@ def parse_json_fields(rows: List[Dict], fields: List[str]) -> List[Dict]:
                     pass
         parsed.append(item)
     return parsed
+
+
+def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
+    if isinstance(raw_steps, list):
+        return raw_steps
+    if not raw_steps:
+        return []
+    try:
+        parsed = json.loads(raw_steps)
+    except (TypeError, json.JSONDecodeError):
+        return []
+    return parsed if isinstance(parsed, list) else []
+
+
+def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Return the workflow shape consumed by the frontend."""
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "schedule_seconds": row.get("schedule_seconds"),
+        "enabled": bool(row.get("enabled")),
+        "steps": _parse_workflow_steps(row.get("steps_json")),
+        "created_at": row.get("created_at"),
+        "last_run_at": row.get("last_run_at"),
+        "queued_task_ids": queued_task_ids or [],
+    }
 
 
 def is_filesystem_target(target: str) -> bool:
@@ -64,14 +91,18 @@ logger = logging.getLogger(__name__)
 from .cache import get_cache
 from .models import (
     TaskCreateRequest, TaskResponse, TaskResult,
-    PluginListResponse, ErrorResponse
+    PluginListResponse, ErrorResponse, BulkDeleteRequest
 )
 from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager, init_plugins
 from .executor import executor
-from .ratelimit import rate_limiter, concurrent_limiter
-from .validation import validate_target
+from .ratelimit import (
+    rate_limiter, concurrent_limiter,
+    task_start_limiter, vault_limiter,
+    report_download_limiter, read_heavy_limiter
+)
+from .validation import validate_target, validate_task_start_payload
 from .reporting import reporting
 from .vault import VaultCrypto
 from .workflows import scheduler
@@ -100,6 +131,21 @@ async def invalidate_view_cache():
         await cache.delete_prefix(prefix)
 
 
+def _report_generation_error_response(task_id: str, report_format: str) -> JSONResponse:
+    logger.exception("Report generation failed for task_id=%s format=%s", task_id, report_format)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "report_generation_failed",
+            "message": f"Failed to generate {report_format.upper()} report",
+            "details": {
+                "task_id": task_id,
+                "format": report_format,
+            },
+        },
+    )
+
+
 async def get_plugin_manager_for_request():
     """
     In debug mode, refresh plugin metadata from disk on demand so frontend catalog
@@ -115,12 +161,44 @@ async def list_plugins():
     """List all available plugins"""
     plugin_manager = await get_plugin_manager_for_request()
     plugins = plugin_manager.list_plugins()
-    
+
     return PluginListResponse(
         plugins=plugins,
         total=len(plugins)
     )
 
+@router.get("/plugins/summary")
+async def get_plugins_summary():
+    """Return plugin summary statistics"""
+
+    plugin_manager = await get_plugin_manager_for_request()
+    plugins = plugin_manager.list_plugins()
+
+    total_plugins = len(plugins)
+    runnable_count = 0
+    unavailable_count = 0
+    category_counts: Dict[str, int] = {}
+
+    for plugin in plugins:
+        category = getattr(plugin, "category", "unknown")
+
+        category_counts[category] = (
+            category_counts.get(category, 0) + 1
+        )
+
+        availability = plugin.get("availability", {})
+        runnable = availability.get("runnable", False)
+
+        if runnable:
+            runnable_count += 1
+        else:
+            unavailable_count += 1
+    return {
+        "total_plugins": total_plugins,
+        "runnable_count": runnable_count,
+        "unavailable_count": unavailable_count,
+        "category_counts": dict(sorted(category_counts.items()))
+    }
 
 @router.get("/plugin/{plugin_id}/schema")
 async def get_plugin_schema(plugin_id: str):
@@ -142,14 +220,21 @@ async def get_all_presets():
     }
 
 
-@router.post("/task/start")
+@router.post("/task/start", dependencies=[Depends(task_start_limiter)])
 async def start_task(
     request: TaskCreateRequest,
-    background_tasks: BackgroundTasks
+    background_tasks: BackgroundTasks,
+    raw_request: Request,
 ):
     """
-    Start a new scan task
+    Start a new scan task.
     """
+    # ── Payload size / field-length guard ─────────────────────────────────
+    raw_body = await raw_request.body()
+    ok, status_code, error_msg = validate_task_start_payload(raw_body, request.inputs)
+    if not ok:
+        raise HTTPException(status_code=status_code, detail=error_msg)
+
     # Validate consent
     if settings.require_consent and not request.consent_granted:
         logger.warning(f"Task start failed: Consent not granted. Request: {request}")
@@ -187,13 +272,7 @@ async def start_task(
     if not can_execute:
         raise HTTPException(status_code=429, detail=error_msg)
 
-    # Check concurrent task limit
-    can_acquire, error_msg = await concurrent_limiter.acquire("temp")
-    if not can_acquire:
-        raise HTTPException(status_code=503, detail=error_msg)
-    await concurrent_limiter.release("temp")
-
-    # Create task
+    # Create task record first so we have a real task_id for the limiter
     try:
         task_id = await executor.create_task(
             request.plugin_id,
@@ -201,21 +280,29 @@ async def start_task(
             request.preset,
             request.consent_granted
         )
-
-        # Execute task in background
-        background_tasks.add_task(executor.execute_task, task_id)
-        await invalidate_view_cache()
-
-        return {
-            "task_id": task_id,
-            "status": "queued",
-            "created_at": "now",
-            "stream_url": f"/api/v1/task/{task_id}/stream"
-        }
-
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
+    # Atomically acquire a concurrency slot using the real task_id.
+    # acquire() is lock-protected internally, so the check and register
+    # happen in a single operation — no TOCTOU window between requests.
+    can_acquire, error_msg = await concurrent_limiter.acquire(task_id)
+    if not can_acquire:
+        # Roll back: mark the DB row failed so it isn't left orphaned
+        await executor.mark_task_failed(task_id, reason="Concurrency limit reached; task was not started")
+        raise HTTPException(status_code=503, detail=error_msg)
+
+    # Slot is held — schedule execution.
+    # execute_task releases the slot in its finally block on every exit path.
+    background_tasks.add_task(executor.execute_task, task_id)
+    await invalidate_view_cache()
+
+    return {
+        "task_id": task_id,
+        "status": "queued",
+        "created_at": "now",
+        "stream_url": f"/api/v1/task/{task_id}/stream"
+    }
 
 @router.get("/task/{task_id}/status")
 async def get_task_status(task_id: str):
@@ -284,12 +371,12 @@ async def stream_task_output(task_id: str):
 
     return EventSourceResponse(event_generator())
 
-@router.get("/task/{task_id}/report/csv")
+@router.get("/task/{task_id}/report/csv", dependencies=[Depends(report_download_limiter)])
 async def download_csv_report(task_id: str):
     """Download task results as a CSV report."""
     db = await get_db()
     task_row = await db.fetchone(
-        "SELECT id, plugin_id, tool_name, target, status, created_at, structured_json FROM tasks WHERE id = ?",
+        "SELECT id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
         (task_id,)
     )
 
@@ -299,21 +386,32 @@ async def download_csv_report(task_id: str):
     if task_row["status"] not in ["completed", "failed"]:
         raise HTTPException(status_code=400, detail="Task is not finished yet")
 
-    structured_data = json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
-    csv_data = reporting.generate_csv_report(dict(task_row), {"structured": structured_data})
+    try:
+        structured_data = json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
+        csv_data = reporting.generate_csv_report(dict(task_row), {"structured": structured_data})
+    except Exception:
+        return _report_generation_error_response(task_id, "csv")
+
+    await db.log_audit(
+        "report_downloaded",
+        f"CSV report downloaded for task {task_id}",
+        context={"format": "csv", "task_id": task_id, "plugin_id": task_row["plugin_id"]},
+        task_id=task_id,
+        plugin_id=task_row["plugin_id"],
+    )
 
     return Response(
         content=csv_data,
         media_type="text/csv",
-        headers={"Content-Disposition": f"attachment; filename={build_report_filename(dict(task_row), 'csv')}"}
+        headers={"Content-Disposition": f'attachment; filename="{build_report_filename(dict(task_row), "csv")}"'}
     )
 
-@router.get("/task/{task_id}/report/html")
+@router.get("/task/{task_id}/report/html", dependencies=[Depends(report_download_limiter)])
 async def download_html_report(task_id: str):
     """Download task results as an HTML report."""
     db = await get_db()
     task_row = await db.fetchone(
-        "SELECT id, plugin_id, tool_name, target, status, created_at, structured_json FROM tasks WHERE id = ?",
+        "SELECT id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
         (task_id,)
     )
 
@@ -323,21 +421,32 @@ async def download_html_report(task_id: str):
     if task_row["status"] not in ["completed", "failed"]:
         raise HTTPException(status_code=400, detail="Task is not finished yet")
 
-    structured_data = json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
-    html_content = reporting.generate_html_report(dict(task_row), {"structured": structured_data})
+    try:
+        structured_data = json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
+        html_content = reporting.generate_html_report(dict(task_row), {"structured": structured_data})
+    except Exception:
+        return _report_generation_error_response(task_id, "html")
+
+    await db.log_audit(
+        "report_downloaded",
+        f"HTML report downloaded for task {task_id}",
+        context={"format": "html", "task_id": task_id, "plugin_id": task_row["plugin_id"]},
+        task_id=task_id,
+        plugin_id=task_row["plugin_id"],
+    )
 
     return Response(
         content=html_content,
         media_type="text/html",
-        headers={"Content-Disposition": f"attachment; filename={build_report_filename(dict(task_row), 'html')}"}
+        headers={"Content-Disposition": f'attachment; filename="{build_report_filename(dict(task_row), "html")}"'}
     )
 
-@router.get("/task/{task_id}/report/pdf")
+@router.get("/task/{task_id}/report/pdf", dependencies=[Depends(report_download_limiter)])
 async def download_pdf_report(task_id: str):
     """Download task results as a PDF report."""
     db = await get_db()
     task_row = await db.fetchone(
-        "SELECT id, plugin_id, tool_name, target, status, created_at, structured_json FROM tasks WHERE id = ?",
+        "SELECT id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
         (task_id,)
     )
 
@@ -347,13 +456,60 @@ async def download_pdf_report(task_id: str):
     if task_row["status"] not in ["completed", "failed"]:
         raise HTTPException(status_code=400, detail="Task is not finished yet")
 
-    structured_data = json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
-    pdf_bytes = bytes(reporting.generate_pdf_report(dict(task_row), {"structured": structured_data}))
+    try:
+        structured_data = json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
+        pdf_bytes = bytes(reporting.generate_pdf_report(dict(task_row), {"structured": structured_data}))
+    except Exception:
+        return _report_generation_error_response(task_id, "pdf")
+
+    await db.log_audit(
+        "report_downloaded",
+        f"PDF report downloaded for task {task_id}",
+        context={"format": "pdf", "task_id": task_id, "plugin_id": task_row["plugin_id"]},
+        task_id=task_id,
+        plugin_id=task_row["plugin_id"],
+    )
 
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename={build_report_filename(dict(task_row), 'pdf')}"}
+        headers={"Content-Disposition": f'attachment; filename="{build_report_filename(dict(task_row), "pdf")}"'}
+    )
+
+
+@router.get("/task/{task_id}/report/sarif", dependencies=[Depends(report_download_limiter)])
+async def download_sarif_report(task_id: str):
+    """Download task results as a SARIF report."""
+    db = await get_db()
+    task_row = await db.fetchone(
+        "SELECT id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
+        (task_id,)
+    )
+
+    if not task_row:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if task_row["status"] not in ["completed", "failed"]:
+        raise HTTPException(status_code=400, detail="Task is not finished yet")
+
+    try:
+        structured_data = json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
+        sarif_data = reporting.generate_sarif_report(dict(task_row), {"structured": structured_data})
+    except Exception:
+        return _report_generation_error_response(task_id, "sarif")
+
+    await db.log_audit(
+        "report_downloaded",
+        f"SARIF report downloaded for task {task_id}",
+        context={"format": "sarif", "task_id": task_id, "plugin_id": task_row["plugin_id"]},
+        task_id=task_id,
+        plugin_id=task_row["plugin_id"],
+    )
+
+    return Response(
+        content=sarif_data,
+        media_type="application/sarif+json",
+        headers={"Content-Disposition": f'attachment; filename="{build_report_filename(dict(task_row), "sarif")}"'}
     )
 
 
@@ -365,7 +521,7 @@ async def get_task_result(task_id: str):
     task_row = await db.fetchone(
         """
         SELECT id, plugin_id, tool_name, target, status,
-               created_at, duration_seconds, structured_json,
+               created_at, duration_seconds, structured_json, preset, inputs_json,
                raw_output_path, command_used, error_message, exit_code
         FROM tasks WHERE id = ?
         """,
@@ -388,20 +544,24 @@ async def get_task_result(task_id: str):
         severity = str(finding.get("severity", "info")).lower()
         severity_counts[severity] = severity_counts.get(severity, 0) + 1
 
-    summary: List[str] = []
+    structured_summary = structured.get("summary") if isinstance(structured, dict) else None
+    summary: List[str] = [
+        str(item) for item in structured_summary
+        if isinstance(item, (str, int, float)) and str(item).strip()
+    ] if isinstance(structured_summary, list) else []
     total_findings = len(findings)
-    if total_findings > 0:
+    if not summary and total_findings > 0:
         critical_high = severity_counts.get("critical", 0) + severity_counts.get("high", 0)
         if critical_high > 0:
             summary.append(f"Assessment identified {total_findings} security risks, including {critical_high} high-priority items requiring remediation.")
         else:
             summary.append(f"Assessment identified {total_findings} minor observations; no critical or high-severity threats were found.")
-    else:
+    elif not summary:
         summary.append("Security analysis revealed no significant vulnerabilities or exposed risks.")
 
     if ports := structured.get("open_ports"):
         summary.append(f"Perimeter analysis confirmed {len(ports)} active network entry points.")
-    
+
     if techs := structured.get("technologies"):
         summary.append(f"Fingerprinting identified {len(techs)} unique technologies powering the target infrastructure.")
 
@@ -422,6 +582,8 @@ async def get_task_result(task_id: str):
         "timestamp": task_row["created_at"],
         "duration_seconds": task_row["duration_seconds"],
         "status": task_row["status"],
+        "preset": task_row["preset"],
+        "inputs": json.loads(task_row["inputs_json"] or "{}"),
         "summary": summary,
         "severity_counts": severity_counts,
         "findings": findings,
@@ -441,10 +603,10 @@ async def get_task_result(task_id: str):
 async def cancel_task(task_id: str):
     """Cancel a running task"""
     cancelled = await executor.cancel_task(task_id)
-    
+
     if not cancelled:
         raise HTTPException(status_code=404, detail="Task not found or not running")
-    
+
     return {
         "task_id": task_id,
         "status": "cancelled",
@@ -452,17 +614,24 @@ async def cancel_task(task_id: str):
     }
 
 
-@router.get("/dashboard/summary")
+@router.get("/dashboard/summary", dependencies=[Depends(read_heavy_limiter)])
 async def get_dashboard_summary():
     """Return aggregate dashboard data from the primary store, cached in Redis."""
 
     async def build():
         db = await get_db()
-        
+
         # Get data
-        raw_findings = await db.fetchall("SELECT * FROM findings ORDER BY discovered_at DESC")
-        findings = parse_json_fields(raw_findings, ["metadata_json"])
-        
+        # Push severity aggregation to DB — avoids full table scan in Python
+        severity_rows = await db.fetchall(
+            """
+            SELECT severity, COUNT(*) AS cnt
+            FROM findings
+            GROUP BY severity
+            """
+        )
+        severity_counts = {row["severity"]: row["cnt"] for row in severity_rows}
+
         task_stats = await db.fetchone(
             """
             SELECT
@@ -473,27 +642,43 @@ async def get_dashboard_summary():
             """
         )
 
-        critical_findings: int = sum(bool(item.get("severity") == "critical")
-                                 for item in findings)
-        high_findings: int = sum(bool(item.get("severity") == "high")
-                             for item in findings)
-        medium_findings: int = sum(bool(item.get("severity") == "medium")
-                               for item in findings)
-        low_findings: int = sum(bool(item.get("severity") == "low")
-                            for item in findings)
-        info_findings: int = sum(bool(item.get("severity") == "info")
-                             for item in findings)
+        total_findings_row = await db.fetchone("SELECT COUNT(*) AS total FROM findings")
+        total_findings = total_findings_row["total"] if total_findings_row else 0
 
-        recent_findings: List[Dict] = findings[:5]
+        critical_findings: int = severity_counts.get("critical", 0)
+        high_findings: int = severity_counts.get("high", 0)
+        medium_findings: int = severity_counts.get("medium", 0)
+        low_findings: int = severity_counts.get("low", 0)
+        info_findings: int = severity_counts.get("info", 0)
+
+        # Fetch only the 5 most recent findings — not the entire table
+        recent_rows = await db.fetchall(
+            """
+            SELECT id, title, category, severity, target, description,
+                remediation, proof, cvss, cve, discovered_at,
+                risk_score, risk_factors_json, metadata_json
+            FROM findings
+            ORDER BY discovered_at DESC
+            LIMIT 5
+            """
+        )
+        recent_findings: List[Dict] = parse_json_fields(recent_rows, ["metadata_json"])
+
+        risk_scores = [
+            f.get("risk_score") for f in recent_findings
+            if isinstance(f.get("risk_score"), (int, float))
+        ]
+        avg_risk_score = round(sum(risk_scores) / len(risk_scores), 1) if risk_scores else None
 
         return {
-            "total_findings": len(findings),
+            "total_findings": total_findings,
             "critical_findings": critical_findings,
             "high_findings": high_findings,
             "medium_findings": medium_findings,
             "low_findings": low_findings,
             "info_findings": info_findings,
-            "last_scan_time": findings[0].get("discovered_at") if findings else None,
+            "avg_risk_score": avg_risk_score,
+            "last_scan_time": recent_findings[0].get("discovered_at") if recent_findings else None,
             "recent_findings": recent_findings,
             "scan_activity": {
                 "total": int(task_stats["total"]) if task_stats and task_stats.get("total") is not None else 0,
@@ -514,22 +699,26 @@ async def get_dashboard_summary():
             )
         }
 
-    return await build()
+    return await get_or_set_cached("summary:dashboard", build)
 
 
-@router.get("/findings")
+@router.get("/findings", dependencies=[Depends(read_heavy_limiter)])
 async def get_findings():
     """Return vulnerability findings."""
 
     async def build():
         db = await get_db()
         rows = await db.fetchall("SELECT * FROM findings ORDER BY discovered_at DESC")
-        return {"findings": parse_json_fields(rows, ["metadata_json"])}
+        findings = parse_json_fields(rows, ["metadata_json", "risk_factors_json"])
+        for f in findings:
+            if "risk_factors_json" in f:
+                f["risk_factors"] = f.pop("risk_factors_json")
+        return {"findings": findings}
 
     return await get_or_set_cached("findings:list", build)
 
 
-@router.get("/reports")
+@router.get("/reports", dependencies=[Depends(read_heavy_limiter)])
 async def get_reports():
     """Return generated reports."""
 
@@ -541,7 +730,7 @@ async def get_reports():
     return await get_or_set_cached("reports:list", build)
 
 
-@router.get("/tasks")
+@router.get("/tasks", dependencies=[Depends(read_heavy_limiter)])
 async def list_tasks(
     page: int = 1,
     per_page: int = 25,
@@ -587,33 +776,72 @@ async def list_tasks(
         t["inputs"] = t.pop("inputs_json", {})
 
     total_pages = (total + per_page - 1) // per_page if per_page > 0 else 0
+
+    # Calculate next and previous page numbers
+    next_page = page + 1 if page < total_pages else None
+    prev_page = page - 1 if page > 1 else None
+
+    # Function to build URL with all query parameters
+    def build_page_url(page_num):
+        if page_num is None:
+            return None
+        # Start with page and per_page
+        params_list = [f"page={page_num}", f"per_page={per_page}"]
+        # Add filters if they exist
+        if plugin_id:
+            params_list.append(f"plugin_id={plugin_id}")
+        if status:
+            params_list.append(f"status={status}")
+        # Join with & and return
+        return f"/api/v1/tasks?{'&'.join(params_list)}"
     return {
         "tasks": tasks_list,
         "pagination": {
             "page": page,
             "per_page": per_page,
             "total_pages": total_pages,
-            "total_items": total
+            "total_items": total,
+            "next": build_page_url(next_page),
+            "previous": build_page_url(prev_page)
         }
     }
 
 
+SQLITE_CHUNK_SIZE = 500  # safely under SQLITE_LIMIT_VARIABLE_NUMBER = 999
+
 async def delete_task_records(task_ids: List[str]):
-    """Helper to delete database records and files for multiple tasks."""
+    """Helper to delete database records and files for multiple tasks.
+
+    Processes IDs in chunks of SQLITE_CHUNK_SIZE to stay under
+    SQLite's SQLITE_LIMIT_VARIABLE_NUMBER = 999 limit.
+    """
+    if not task_ids:
+        return
+
     db = await get_db()
-    
-    # Get raw output paths for file cleanup
-    placeholders = ",".join(["?"] * len(task_ids))
-    task_rows = await db.fetchall(f"SELECT raw_output_path FROM tasks WHERE id IN ({placeholders})", tuple(task_ids))
-    
-    # Delete associated data
-    await db.execute(f"DELETE FROM findings WHERE task_id IN ({placeholders})", tuple(task_ids))
-    await db.execute(f"DELETE FROM reports WHERE task_id IN ({placeholders})", tuple(task_ids))
-    await db.execute(f"DELETE FROM audit_log WHERE task_id IN ({placeholders})", tuple(task_ids))
-    await db.execute(f"DELETE FROM tasks WHERE id IN ({placeholders})", tuple(task_ids))
-    
+
+    # Collect all raw_output_paths across chunks for file cleanup
+    all_task_rows = []
+    for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
+        chunk = task_ids[i : i + SQLITE_CHUNK_SIZE]
+        placeholders = ",".join(["?"] * len(chunk))
+        rows = await db.fetchall(
+            f"SELECT raw_output_path FROM tasks WHERE id IN ({placeholders})",
+            tuple(chunk)
+        )
+        all_task_rows.extend(rows)
+
+    # Delete associated records in chunks
+    for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
+        chunk = task_ids[i : i + SQLITE_CHUNK_SIZE]
+        placeholders = ",".join(["?"] * len(chunk))
+        await db.execute(f"DELETE FROM findings   WHERE task_id IN ({placeholders})", tuple(chunk))
+        await db.execute(f"DELETE FROM reports    WHERE task_id IN ({placeholders})", tuple(chunk))
+        await db.execute(f"DELETE FROM audit_log  WHERE task_id IN ({placeholders})", tuple(chunk))
+        await db.execute(f"DELETE FROM tasks      WHERE id       IN ({placeholders})", tuple(chunk))
+
     # Cleanup files on disk
-    for row in task_rows:
+    for row in all_task_rows:
         if row and row["raw_output_path"]:
             try:
                 path = Path(row["raw_output_path"])
@@ -626,7 +854,7 @@ async def delete_task_records(task_ids: List[str]):
 async def delete_task(task_id: str):
     """Delete a task and its associated data (findings, reports, audit logs, and files)"""
     db = await get_db()
-    
+
     # Check if task is running
     status = await executor.get_task_status(task_id)
     if status and status.get("status") == "running":
@@ -634,7 +862,7 @@ async def delete_task(task_id: str):
 
     await delete_task_records([task_id])
     await invalidate_view_cache()
-    
+
     return {
         "task_id": task_id,
         "deleted": True
@@ -642,30 +870,37 @@ async def delete_task(task_id: str):
 
 
 @router.delete("/tasks/bulk")
-async def bulk_delete_tasks(task_ids: List[str]):
-    """Delete multiple tasks at once"""
+async def bulk_delete_tasks(request: BulkDeleteRequest):
+    """Delete multiple tasks at once (max 500 IDs per request)"""
+    task_ids = request.root  # RootModel exposes data via .root
     db = await get_db()
-    
-    # Check if any tasks are running
+
+    # Empty list — return early cleanly (test requires 200, not 422)
+    if not task_ids:
+        return {"deleted_count": 0, "success": True}
+
+    # Check running tasks — safe: len(task_ids) <= 500 guaranteed by Pydantic
     placeholders = ",".join(["?"] * len(task_ids))
-    running_tasks = await db.fetchone(f"SELECT id FROM tasks WHERE id IN ({placeholders}) AND status = 'running' LIMIT 1", tuple(task_ids))
+    running_tasks = await db.fetchone(
+        f"SELECT id FROM tasks WHERE id IN ({placeholders}) AND status = 'running' LIMIT 1",
+        tuple(task_ids)
+    )
     if running_tasks:
         raise HTTPException(status_code=400, detail="Cannot delete running tasks. Abort them first.")
 
     await delete_task_records(task_ids)
     await invalidate_view_cache()
-    
+
     return {
         "deleted_count": len(task_ids),
         "success": True
     }
 
-
 @router.delete("/tasks/clear")
 async def clear_all_tasks():
     """Wipe all scan history and associated data (findings, reports, assets, attack surface)"""
     db = await get_db()
-    
+
     # Prevent clearing if any tasks are running
     running_tasks = await db.fetchone("SELECT id FROM tasks WHERE status = 'running' LIMIT 1")
     if running_tasks:
@@ -679,7 +914,7 @@ async def clear_all_tasks():
 
     # Purge other tables
     await db.execute("DELETE FROM findings")
-    
+
     # Fallback cleanup for any orphaned files in data directories
     for subdir in ["raw", "reports"]:
         dir_path = Path(settings.data_dir) / subdir
@@ -694,7 +929,7 @@ async def clear_all_tasks():
                     logger.error(f"Failed to cleanup {item}: {e}")
 
     await invalidate_view_cache()
-    
+
     return {
         "cleared": True,
         "message": "All scan history and associated data has been purged."
@@ -726,7 +961,7 @@ async def get_settings():
     }
 
 
-@router.get("/vault")
+@router.get("/vault", dependencies=[Depends(vault_limiter)])
 async def list_vault_secrets():
     db = await get_db()
     rows = await db.fetchall(
@@ -735,7 +970,7 @@ async def list_vault_secrets():
     return {"items": rows, "total": len(rows)}
 
 
-@router.put("/vault/{name}")
+@router.put("/vault/{name}", dependencies=[Depends(vault_limiter)])
 async def upsert_vault_secret(name: str, payload: Dict[str, str]):
     value = str(payload.get("value", ""))
     if not value:
@@ -760,7 +995,7 @@ async def upsert_vault_secret(name: str, payload: Dict[str, str]):
     return {"name": name, "stored": True}
 
 
-@router.get("/vault/{name}")
+@router.get("/vault/{name}", dependencies=[Depends(vault_limiter)])
 async def get_vault_secret(name: str):
     db = await get_db()
     row = await db.fetchone("SELECT encrypted_value FROM credential_vault WHERE name = ?", (name,))
@@ -770,7 +1005,7 @@ async def get_vault_secret(name: str):
     return {"name": name, "value": crypto.decrypt(row["encrypted_value"])}
 
 
-@router.delete("/vault/{name}")
+@router.delete("/vault/{name}", dependencies=[Depends(vault_limiter)])
 async def delete_vault_secret(name: str):
     db = await get_db()
     await db.execute("DELETE FROM credential_vault WHERE name = ?", (name,))
@@ -781,7 +1016,8 @@ async def delete_vault_secret(name: str):
 async def list_workflows():
     db = await get_db()
     rows = await db.fetchall("SELECT * FROM workflows ORDER BY created_at DESC")
-    return {"workflows": parse_json_fields(rows, ["steps_json"]), "total": len(rows)}
+    workflows = [_serialize_workflow(row) for row in rows]
+    return {"workflows": workflows, "total": len(workflows)}
 
 
 @router.post("/workflows")
@@ -811,7 +1047,8 @@ async def create_workflow(payload: Dict[str, Any]):
             json.dumps(steps),
         ),
     )
-    return {"id": workflow_id, "created": True}
+    row = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
+    return _serialize_workflow(row) if row else {"id": workflow_id, "created": True}
 
 
 @router.post("/workflows/{workflow_id}/run")
@@ -832,7 +1069,11 @@ async def run_workflow_once(workflow_id: str):
         asyncio.create_task(executor.execute_task(task_id))
         created_task_ids.append(task_id)
     await db.execute("UPDATE workflows SET last_run_at = datetime('now') WHERE id = ?", (workflow_id,))
-    return {"workflow_id": workflow_id, "queued_tasks": created_task_ids}
+    return {
+        "workflow_id": workflow_id,
+        "queued_task_ids": created_task_ids,
+        "queued_tasks": created_task_ids,
+    }
 
 
 @router.patch("/workflows/{workflow_id}")
@@ -863,7 +1104,8 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
 
     params.append(workflow_id)
     await db.execute(f"UPDATE workflows SET {', '.join(updates)} WHERE id = ?", tuple(params))
-    return {"workflow_id": workflow_id, "updated": True}
+    updated = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
+    return _serialize_workflow(updated) if updated else {"workflow_id": workflow_id, "updated": True}
 
 
 @router.delete("/workflows/{workflow_id}")
@@ -883,7 +1125,7 @@ async def trigger_workflow_tick():
 async def get_finding_details(finding_id: str):
     """Get detailed information for a specific finding"""
     db = await get_db()
-    
+
     finding_row = await db.fetchone(
         """
         SELECT f.*, t.tool_name, t.target as task_target
@@ -893,17 +1135,24 @@ async def get_finding_details(finding_id: str):
         """,
         (finding_id,)
     )
-    
+
     if not finding_row:
         raise HTTPException(status_code=404, detail="Finding not found")
-        
+
     metadata = {}
     if finding_row["metadata_json"]:
         try:
             metadata = json.loads(finding_row["metadata_json"])
         except json.JSONDecodeError:
             metadata = {}
-            
+
+    risk_factors = []
+    if finding_row.get("risk_factors_json"):
+        try:
+            risk_factors = json.loads(finding_row["risk_factors_json"])
+        except (json.JSONDecodeError, TypeError):
+            risk_factors = []
+
     return {
         "id": finding_row["id"],
         "task_id": finding_row["task_id"],
@@ -919,7 +1168,12 @@ async def get_finding_details(finding_id: str):
         "cvss": finding_row["cvss"],
         "cve": finding_row["cve"],
         "discovered_at": finding_row["discovered_at"],
-        "metadata": metadata
+        "metadata": metadata,
+        "exploitability": finding_row.get("exploitability"),
+        "confidence": finding_row.get("confidence"),
+        "asset_exposure": finding_row.get("asset_exposure"),
+        "risk_score": finding_row.get("risk_score"),
+        "risk_factors": risk_factors,
     }
 
 
@@ -927,14 +1181,14 @@ async def get_finding_details(finding_id: str):
 async def get_attack_surface():
     """Return an aggregated view of the monitored attack surface."""
     db = await get_db()
-    
+
     # We aggregate unique targets from tasks and findings
     tasks = await db.fetchall("SELECT DISTINCT target, tool_name, created_at FROM tasks ORDER BY created_at DESC")
     findings = await db.fetchall("SELECT DISTINCT target, category, severity, discovered_at FROM findings ORDER BY discovered_at DESC")
-    
+
     entries = []
     seen_targets = set()
-    
+
     # Add findings as high-priority surface entries
     for f in findings:
         target = f["target"]
@@ -949,7 +1203,7 @@ async def get_attack_surface():
                 "last_seen": f["discovered_at"]
             })
             seen_targets.add(target)
-            
+
     # Add other scanned targets
     for t in tasks:
         target = t["target"]
@@ -964,7 +1218,7 @@ async def get_attack_surface():
                 "last_seen": t["created_at"]
             })
             seen_targets.add(target)
-            
+
     return {"entries": entries}
 
 

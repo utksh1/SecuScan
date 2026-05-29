@@ -4,6 +4,15 @@ import { getFindings } from '../api'
 import { formatLocaleDate, parseDateSafe, getCurrentTimeZone } from '../utils/date'
 import SavedViewsPanel from '../components/SavedViewsPanel'
 import { useSavedViews, FilterPreset } from '../hooks/useSavedViews'
+type RiskFactor = {
+  factor: string
+  label: string
+  value: string | number
+  score: number
+  weight: number
+  contribution: number
+  detail: string
+}
 
 type Finding = {
   id: string
@@ -17,6 +26,11 @@ type Finding = {
   cvss?: number
   cve?: string
   plugin_id?: string
+  risk_score?: number
+  risk_factors?: RiskFactor[]
+  exploitability?: number
+  confidence?: number
+  asset_exposure?: string
 }
 
 type FindingStatus = 'new' | 'reviewed' | 'suppressed'
@@ -292,6 +306,29 @@ export default function Findings() {
     [enrichedFindings, filteredFindings, countsBySeverity],
   )
 
+  // Derives a flat list of active filter chips from non-default filter state.
+  const activeFilters = useMemo(() => {
+    const chips: { key: string; label: string }[] = []
+    if (searchQuery.trim())      chips.push({ key: 'search',  label: `Search: "${searchQuery.trim()}"` })
+    if (filterTarget !== 'all')  chips.push({ key: 'target',  label: `Target: ${filterTarget}` })
+    if (filterScanner !== 'all') chips.push({ key: 'scanner', label: `Scanner: ${filterScanner}` })
+    if (sortMode !== 'severity') chips.push({ key: 'sort',    label: `Sort: ${sortMode}` })
+    if (dateFrom)                chips.push({ key: 'from',    label: `From: ${dateFrom}` })
+    if (dateTo)                  chips.push({ key: 'to',      label: `To: ${dateTo}` })
+    return chips
+  }, [searchQuery, filterTarget, filterScanner, sortMode, dateFrom, dateTo])
+
+
+  function resetAllFilters() {
+    setFilterSeverity('all')
+    setFilterTarget('all')
+    setFilterScanner('all')
+    setSortMode('severity')
+    setDateFrom('')
+    setDateTo('')
+    setSearchQuery('')
+  }
+
   function updateFindingStatus(id: string, status: FindingStatus) {
     setReviewState((current) => ({ ...current, [id]: status }))
   }
@@ -374,7 +411,7 @@ export default function Findings() {
               </div>
             ) : null}
 
-            <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-silver-bright' : 'text-silver/30'}`}>
+            <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-silver-bright' : 'text-silver/30'}`} aria-hidden="true">
               east
             </span>
           </div>
@@ -422,16 +459,36 @@ export default function Findings() {
         <section className="border-2 border-black bg-charcoal/95 p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] backdrop-blur lg:sticky lg:top-4 lg:z-20">
           <div className="grid gap-4">
             <div className="grid gap-4 2xl:grid-cols-[minmax(320px,1fr)_auto] 2xl:items-end">
-              <div className="space-y-2">
-                <label className={filterLabelClass}>Search</label>
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  placeholder="Title, target, CVE, remediation..."
-                  className={`${filterControlClass} px-4 placeholder:text-silver/20`}
-                />
-              </div>
+             <div className="space-y-2">
+  <label className={filterLabelClass}>Search</label>
+
+  <div className="relative">
+    <input
+      type="text"
+      value={searchQuery}
+      onChange={(event) => setSearchQuery(event.target.value)}
+      placeholder="Title, target, CVE, remediation..."
+      className={`${filterControlClass} px-4 pr-12 placeholder:text-silver/20`}
+    />
+
+    {searchQuery.trim() && (
+      <button
+        type="button"
+        aria-label="Clear search"
+        onClick={() => setSearchQuery('')}
+        className="
+          absolute right-3 top-1/2
+          -translate-y-1/2
+          text-silver/50
+          hover:text-silver-bright
+          transition
+        "
+      >
+        ✕
+      </button>
+    )}
+  </div>
+</div>
 
               <div className="flex flex-wrap gap-2 pb-2 sm:pb-0 2xl:max-w-[760px] 2xl:justify-end">
                 <button
@@ -553,6 +610,27 @@ export default function Findings() {
           </div>
         </section>
 
+        {/* ── Active filter summary strip ────────────────────────────────────────
+            Hidden when all filters are at their default values.    */}
+        {activeFilters.length > 0 && (
+          <div
+            aria-label="active filters"
+            className="flex flex-wrap items-center gap-2 border border-silver-bright/10 bg-charcoal/60 px-4 py-3"
+          >
+            <span className="mr-1 text-[10px] font-black uppercase tracking-[0.2em] text-silver/40">
+              Active Filters
+            </span>
+            {activeFilters.map(({ key, label }) => (
+              <span
+                key={key}
+                className="border border-rag-red/30 bg-rag-red/10 px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-rag-red"
+              >
+                {label}
+              </span>
+            ))}
+          </div>
+        )}
+
         <div className="grid gap-8 xl:grid-cols-[minmax(0,1.2fr)_420px]">
           <motion.section variants={sectionVariants} initial="hidden" animate="visible" className="space-y-5">
             {loading ? (
@@ -648,12 +726,47 @@ export default function Findings() {
                         </p>
                       </div>
                       <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
-                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Severity Score</p>
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">CVSS</p>
                         <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">
                           {typeof selectedFinding.cvss === 'number' ? selectedFinding.cvss.toFixed(1) : 'N/A'}
                         </p>
                       </div>
                     </div>
+
+                    {typeof selectedFinding.risk_score === 'number' && (
+                      <div className="border-2 border-black bg-charcoal-dark p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Risk Score</p>
+                          <p className={`text-2xl font-black italic ${
+                            selectedFinding.risk_score >= 7 ? 'text-rag-red' :
+                            selectedFinding.risk_score >= 4 ? 'text-rag-amber' : 'text-rag-blue'
+                          }`}>
+                            {selectedFinding.risk_score.toFixed(1)}
+                          </p>
+                        </div>
+                        {selectedFinding.risk_factors && selectedFinding.risk_factors.length > 0 && (
+                          <div className="mt-3 space-y-1.5 border-t border-silver-bright/8 pt-3">
+                            {selectedFinding.risk_factors.map((rf) => (
+                              <div key={rf.factor} className="flex items-center justify-between text-[10px]">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="font-black uppercase tracking-[0.15em] text-silver/45">{rf.label}</span>
+                                  <span className="text-silver/30 text-[9px] font-mono">({(rf.weight * 100).toFixed(0)}%)</span>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className="font-mono text-silver-bright">{rf.score.toFixed(1)}</span>
+                                  <span className={`text-[9px] font-mono ${
+                                    rf.contribution >= 2 ? 'text-rag-red' :
+                                    rf.contribution >= 1 ? 'text-rag-amber' : 'text-silver/40'
+                                  }`}>
+                                    +{rf.contribution.toFixed(1)}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-5">

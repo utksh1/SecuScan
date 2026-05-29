@@ -8,16 +8,54 @@ import uuid
 import json
 import time
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 import logging
 import re
 
+from .redaction import redact
 from .cache import get_cache
 from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager
 from .models import TaskStatus
+from .ratelimit import concurrent_limiter
+from .risk_scoring import compute_risk_score, compute_risk_factors
+
+
+def _parse_discovered_at(finding: dict) -> Optional[datetime]:
+    """Extract and parse discovered_at from a finding dict, or return current UTC time."""
+    raw = finding.get("discovered_at")
+    if raw:
+        try:
+            if isinstance(raw, str):
+                return datetime.fromisoformat(raw)
+            if isinstance(raw, datetime):
+                return raw
+        except (ValueError, TypeError):
+            pass
+    return datetime.now(timezone.utc)
+
+
+def _validate_risk_fields(finding: dict) -> None:
+    """Validate exploitability, confidence, and asset_exposure bounds in-place."""
+    exp = finding.get("exploitability")
+    if exp is not None:
+        if not isinstance(exp, (int, float)):
+            raise ValueError(f"exploitability must be numeric, got {type(exp).__name__}")
+        if exp < 0 or exp > 10:
+            raise ValueError(f"exploitability must be in [0, 10], got {exp}")
+
+    conf = finding.get("confidence")
+    if conf is not None:
+        if not isinstance(conf, (int, float)):
+            raise ValueError(f"confidence must be numeric, got {type(conf).__name__}")
+        if conf < 0 or conf > 1:
+            raise ValueError(f"confidence must be in [0, 1], got {conf}")
+
+    ae = finding.get("asset_exposure")
+    if ae is not None and ae.lower() not in ("critical", "high", "medium", "low"):
+        raise ValueError(f"asset_exposure must be one of critical/high/medium/low, got {ae}")
 
 # Modular Scanners
 from .scanners.port_scanner import PortScanner
@@ -42,8 +80,6 @@ def extract_target(inputs: Dict[str, Any]) -> str:
         or inputs.get("domain")
         or ""
     )
-
-
 class TaskExecutor:
     """Executes security scanning tasks in isolated environments"""
 
@@ -139,6 +175,41 @@ class TaskExecutor:
         
         return task_id
     
+    async def mark_task_failed(self, task_id: str, reason: str) -> None:
+        """
+        Mark a task as failed without running it.
+        Used to roll back a created-but-unscheduled task record.
+
+        Args:
+            task_id: Task identifier
+            reason: Human-readable failure reason stored as error_message
+        """
+        db = await get_db()
+        await db.execute(
+            """
+            UPDATE tasks SET
+                status = ?,
+                completed_at = ?,
+                duration_seconds = ?,
+                error_message = ?
+            WHERE id = ?
+            """,
+            (
+                TaskStatus.FAILED.value,
+                datetime.now().isoformat(),
+                0,
+                reason,
+                task_id,
+            )
+        )
+        await db.log_audit(
+            "task_failed",
+            f"Task rejected before execution: {reason}",
+            severity="warning",
+            context={"task_id": task_id, "reason": reason},
+            task_id=task_id,
+        )
+
     async def execute_task(self, task_id: str):
         """
         Execute a task asynchronously.
@@ -155,6 +226,7 @@ class TaskExecutor:
                 "UPDATE tasks SET status = ?, started_at = ? WHERE id = ?",
                 (TaskStatus.RUNNING.value, datetime.now().isoformat(), task_id)
             )
+            await self._invalidate_cached_views()
 
             # Get task details
             task_row = await db.fetchone(
@@ -262,6 +334,7 @@ class TaskExecutor:
 
                 # Save raw output
                 raw_path = Path(settings.raw_output_dir) / f"{task_id}.txt"
+                output = redact(output)
                 with open(raw_path, 'w') as f:
                     f.write(output)
 
@@ -322,6 +395,33 @@ class TaskExecutor:
 
             logger.info(f"Task {task_id} completed in {duration:.2f}s")
 
+        except asyncio.CancelledError:
+            # CancelledError inherits from BaseException, not Exception —
+            # it bypasses the broad except below, so we handle it explicitly.
+            # Task.cancelled() returns False while the finally block is still
+            # executing, so this is the only reliable place to write the
+            # cancellation status to the DB.
+            duration = (time.time() - start_time) if 'start_time' in locals() else 0
+            await db.execute(
+                """
+                UPDATE tasks SET
+                    status = ?,
+                    completed_at = ?,
+                    duration_seconds = ?
+                WHERE id = ? AND status = ?
+                """,
+                (
+                    TaskStatus.CANCELLED.value,
+                    datetime.now().isoformat(),
+                    duration,
+                    task_id,
+                    TaskStatus.RUNNING.value,
+                )
+            )
+            await self._broadcast(task_id, "status", TaskStatus.CANCELLED.value)
+            await self._invalidate_cached_views()
+            raise  # let asyncio complete the cancellation
+
         except Exception as e:
             logger.error(f"Task {task_id} failed: {e}", exc_info=True)
 
@@ -356,15 +456,10 @@ class TaskExecutor:
                 task_id=task_id
             )
         finally:
-            # Cleanup: remove from running tasks and update DB if cancelled
+            # Always clean up: remove from the in-memory registry and
+            # release the concurrency slot regardless of how the task ended.
             self.running_tasks.pop(task_id, None)
-            
-            # Check if task was cancelled
-            if asyncio.current_task().cancelled():
-                await db.execute(
-                    "UPDATE tasks SET status = ?, completed_at = ? WHERE id = ? AND status = ?",
-                    (TaskStatus.CANCELLED.value, datetime.now().isoformat(), task_id, TaskStatus.RUNNING.value)
-                )
+            await concurrent_limiter.release(task_id)
     
     async def _execute_command(
         self,
@@ -442,6 +537,14 @@ class TaskExecutor:
 
     def _classify_command_result(self, plugin, output: str, exit_code: int) -> tuple[str, Optional[str]]:
         """Map raw process exit codes into task status with plugin-specific tolerances."""
+        normalized_output = output.lower()
+
+        if "unknown option:" in normalized_output or "flag provided but not defined:" in normalized_output:
+            return (
+                TaskStatus.FAILED.value,
+                output or "Tool rejected one or more generated CLI options. Check the final command and raw output for details.",
+            )
+
         if exit_code == 0:
             return TaskStatus.COMPLETED.value, None
 
@@ -454,7 +557,6 @@ class TaskExecutor:
         except (TypeError, ValueError):
             tolerated = set()
 
-        normalized_output = output.lower()
         matched_success_pattern = any(
             isinstance(pattern, str) and pattern.lower() in normalized_output
             for pattern in success_patterns
@@ -472,7 +574,7 @@ class TaskExecutor:
             TaskStatus.FAILED.value,
             f"Tool returned non-zero exit code {exit_code}. Check raw output for details.",
         )
-    
+
     async def cancel_task(self, task_id: str) -> bool:
         """
         Cancel a running task.
@@ -523,14 +625,26 @@ class TaskExecutor:
         task_row = await db.fetchone(
             """
             SELECT id, plugin_id, tool_name, target, status, created_at, started_at, completed_at, 
-                   duration_seconds, exit_code, error_message, preset
+                   duration_seconds, exit_code, error_message, preset, inputs_json
             FROM tasks WHERE id = ?
             """,
             (task_id,)
         )
         if not task_row:
             return None
-            
+
+        queue_position = None
+        pending_count = None
+
+        if task_row["status"] == TaskStatus.QUEUED.value:
+            queued_rows = await db.fetchall(
+                "SELECT id FROM tasks WHERE status = ? ORDER BY created_at ASC",
+                (TaskStatus.QUEUED.value,)
+            )
+            ids = [r["id"] for r in queued_rows]
+            pending_count = len(ids)
+            queue_position = (ids.index(task_id) + 1) if task_id in ids else None
+
         return {
             "task_id": task_row["id"],
             "plugin_id": task_row["plugin_id"],
@@ -543,7 +657,10 @@ class TaskExecutor:
             "duration_seconds": task_row["duration_seconds"],
             "exit_code": task_row["exit_code"],
             "error_message": task_row["error_message"],
-            "preset": task_row["preset"]
+            "preset": task_row["preset"],
+            "inputs": json.loads(task_row["inputs_json"] or "{}"),
+            "queue_position": queue_position,
+            "pending_count": pending_count,
         }
 
     async def _upsert_findings_and_report(self, db, task_id: str, plugin, plugin_id: str, target: str, status: str, output: str = ""):
@@ -561,13 +678,38 @@ class TaskExecutor:
         for finding in findings_data:
             u_id = str(uuid.uuid4()).replace("-", "")
             finding_id = f"finding:{task_id}:{u_id[:8]}"
+
+            _validate_risk_fields(finding)
+            exploitability = finding.get("exploitability")
+            confidence = finding.get("confidence")
+            asset_exposure = finding.get("asset_exposure")
+            discovered = _parse_discovered_at(finding)
+            risk_score = compute_risk_score(
+                severity=finding["severity"],
+                exploitability=exploitability,
+                asset_exposure=asset_exposure,
+                discovered_at=discovered,
+                confidence=confidence,
+            )
+            risk_factors = compute_risk_factors(
+                severity=finding["severity"],
+                exploitability=exploitability,
+                asset_exposure=asset_exposure,
+                discovered_at=discovered,
+                confidence=confidence,
+                risk_score=risk_score,
+            )
+
             await db.execute(
                 """
                 INSERT INTO findings (
                     id, task_id, plugin_id, title, category, severity,
                     target, description, remediation, proof, cvss, cve,
-                    metadata_json, discovered_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (datetime('now')))
+                    metadata_json, discovered_at,
+                    exploitability, confidence, asset_exposure,
+                    risk_score, risk_factors_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                          ?, ?, ?, ?, ?)
                 """,
                 (
                     finding_id,
@@ -583,6 +725,12 @@ class TaskExecutor:
                     finding.get("cvss"),
                     finding.get("cve"),
                     json.dumps(finding.get("metadata", {})),
+                    discovered.isoformat() if discovered else datetime.now(timezone.utc).isoformat(),
+                    exploitability,
+                    confidence,
+                    asset_exposure,
+                    risk_score,
+                    json.dumps(risk_factors),
                 ),
             )
 
@@ -615,13 +763,38 @@ class TaskExecutor:
         for finding in findings_data:
             u_id = str(uuid.uuid4()).replace("-", "")
             finding_id = f"finding:{task_id}:{u_id[:8]}"
+
+            _validate_risk_fields(finding)
+            exploitability = finding.get("exploitability")
+            confidence = finding.get("confidence")
+            asset_exposure = finding.get("asset_exposure")
+            discovered = _parse_discovered_at(finding)
+            risk_score = compute_risk_score(
+                severity=finding["severity"],
+                exploitability=exploitability,
+                asset_exposure=asset_exposure,
+                discovered_at=discovered,
+                confidence=confidence,
+            )
+            risk_factors = compute_risk_factors(
+                severity=finding["severity"],
+                exploitability=exploitability,
+                asset_exposure=asset_exposure,
+                discovered_at=discovered,
+                confidence=confidence,
+                risk_score=risk_score,
+            )
+
             await db.execute(
                 """
                 INSERT INTO findings (
                     id, task_id, plugin_id, title, category, severity,
                     target, description, remediation, proof, cvss, cve,
-                    metadata_json, discovered_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (datetime('now')))
+                    metadata_json, discovered_at,
+                    exploitability, confidence, asset_exposure,
+                    risk_score, risk_factors_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                          ?, ?, ?, ?, ?)
                 """,
                 (
                     finding_id,
@@ -637,6 +810,12 @@ class TaskExecutor:
                     finding.get("cvss"),
                     finding.get("cve"),
                     json.dumps(finding.get("metadata", {})),
+                    discovered.isoformat() if discovered else datetime.now(timezone.utc).isoformat(),
+                    exploitability,
+                    confidence,
+                    asset_exposure,
+                    risk_score,
+                    json.dumps(risk_factors),
                 )
             )
 
@@ -673,6 +852,12 @@ class TaskExecutor:
         parser_path = plugin_dir / "parser.py"
         
         if parser_path.exists():
+            if not plugin_manager.verify_parser_at_exec_time(plugin, plugin_dir):
+                raise ValueError(
+                    f"Security error: parser.py integrity check failed for plugin {plugin.id!r}; "
+                    "the file may have been tampered with. Rotate the plugin checksum or "
+                    "reinstall the plugin before retrying."
+                )
             try:
                 import importlib.util
                 spec = importlib.util.spec_from_file_location(f"parser_{plugin.id}", parser_path)
@@ -687,6 +872,8 @@ class TaskExecutor:
                             return self._normalize_parsed_result(plugin, parser_input, parsed)
                         else:
                             logger.warning(f"Custom parser {parser_path} missing 'parse' function")
+            except ValueError:
+                raise
             except Exception as e:
                 logger.error(f"Error executing custom parser for {plugin.id}: {e}")
 

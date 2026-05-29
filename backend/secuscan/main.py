@@ -7,6 +7,7 @@ import sys
 import shutil
 from pathlib import Path
 from contextlib import asynccontextmanager
+from .request_middleware import RequestIDMiddleware
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,15 +21,22 @@ from .routes import router
 from .workflows import scheduler
 
 
-# Configure logging
 logging.basicConfig(
     level=getattr(logging, settings.log_level),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler(settings.log_file) if Path(settings.log_file).parent.exists() else logging.NullHandler()
+        logging.FileHandler(settings.log_file)
+        if Path(settings.log_file).parent.exists()
+        else logging.NullHandler()
     ]
 )
+
+from .logging_utils import RequestIDFilter, JSONFormatter
+
+for handler in logging.getLogger().handlers:
+    handler.addFilter(RequestIDFilter())
+    handler.setFormatter(JSONFormatter())
+
 
 logger = logging.getLogger(__name__)
 
@@ -113,10 +121,10 @@ app.add_middleware(
     allow_methods=settings.cors_allowed_methods,
     allow_headers=settings.cors_allowed_headers,
 )
+app.add_middleware(RequestIDMiddleware)
 
 # Include API routes
 app.include_router(router)
-
 
 # Health check endpoint
 @app.get("/api/v1/health")
