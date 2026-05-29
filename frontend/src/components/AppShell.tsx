@@ -46,6 +46,7 @@ export default function AppShell({ children }: AppShellProps) {
         { to: routes.reports, icon: 'summarize', label: 'Reports' },
         { to: routes.workflows, icon: 'account_tree', label: 'Workflows' },
         { to: routes.toolkit, icon: 'add_circle', label: 'Toolkit' },
+    { to: routes.analytics, icon: 'analytics', label: 'Analytics' },
     ]
     const mobileDrawerNav = [
         { to: routes.dashboard, label: 'Dashboard' },
@@ -55,6 +56,7 @@ export default function AppShell({ children }: AppShellProps) {
         { to: routes.workflows, label: 'Workflows' },
         { to: routes.toolkit, label: 'Toolkit' },
         { to: routes.settings, label: 'Settings' },
+  { to: routes.analytics, label: 'Analytics' },
     ]
 
 
@@ -111,22 +113,22 @@ export default function AppShell({ children }: AppShellProps) {
                     {children}
                 </main>
 
-                <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 h-16 bg-secondary border-t border-accent-silver/10 grid grid-cols-5">
-                    {mobilePrimaryNav.map((item) => (
-                        <NavLink
-                            key={item.to}
-                            to={item.to}
-                            className={({ isActive }) =>
-                                `flex flex-col items-center justify-center gap-1 text-[9px] font-bold uppercase tracking-[0.08em] ${
-                                    isActive ? 'text-rag-red bg-rag-red/10' : 'text-silver/70'
-                                }`
-                            }
-                        >
-                            <span className="material-symbols-outlined text-[18px]">{item.icon}</span>
-                            <span>{item.label}</span>
-                        </NavLink>
-                    ))}
-                </nav>
+             <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 h-16 bg-secondary border-t border-accent-silver/10 grid grid-cols-6">
+  {mobilePrimaryNav.map((item) => (
+    <NavLink
+      key={item.to}
+      to={item.to}
+      className={({ isActive }) =>
+        `flex flex-col items-center justify-center gap-1 text-[9px] font-bold uppercase tracking-[0.08em] ${
+          isActive ? 'text-rag-red bg-rag-red/10' : 'text-silver/70'
+        }`
+      }
+    >
+      <span className="material-symbols-outlined text-[18px]">{item.icon}</span>
+      <span>{item.label}</span>
+    </NavLink>
+  ))}
+</nav>
             </div>
         </>
     )
