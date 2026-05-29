@@ -3,7 +3,7 @@ Tests for versioned plugin metadata schema and migration helpers.
 """
 
 import pytest
-from secuscan.plugin_schema import (
+from backend.secuscan.plugin_schema import (
     detect_schema_version,
     validate_by_version,
     validate_v1,

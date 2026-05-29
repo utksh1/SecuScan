@@ -110,14 +110,22 @@ class PluginMetadataValidator:
 
         self._check_required_fields(data, result)
         self._check_schema_version(data, result)
-        def _check_schema_version(self, data: dict, result: ValidationResult) -> None:
+        self._check_engine(data, result)
+        self._check_command_template(data, result)
+        self._check_fields(data, result)
+        self._check_output(data, result)
+        self._check_safety(data, result)
+        self._check_validation_block(data, result)
+        self._check_checksum(data, result)
+        self._check_dependencies(data, result)
+        self._check_custom_parser(data, result)
+
+        return result
+
+    def _check_schema_version(self, data: dict, result: ValidationResult) -> None:
         version = data.get("schema_version")
         if version is None:
-            result.add(
-                "schema_version",
-                "Missing 'schema_version'. Legacy plugins are v1. "
-                "Run migration helper to upgrade to v2.",
-            )
+            return  # Legacy v1 plugins — schema_version is optional
         elif not isinstance(version, int) or version < 1:
             result.add("schema_version", f"'schema_version' must be a positive integer, got {version!r}")
         elif version > CURRENT_SCHEMA_VERSION:
