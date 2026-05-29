@@ -21,42 +21,55 @@ class RateLimiter:
     async def can_execute(
         self,
         plugin_id: str,
-        max_per_hour: int = 50
+        max_per_hour: int = 50,
+        client_id: str = "global",
     ) -> Tuple[bool, str]:
         """
         Check if a task can be executed based on rate limits.
 
+        Each (client_id, plugin_id) pair has its own independent quota so
+        one client exhausting their limit does not block other clients from
+        running the same plugin.
+
         Args:
             plugin_id: Plugin identifier
-            max_per_hour: Maximum tasks per hour for this plugin
+            max_per_hour: Maximum tasks per hour for this (client, plugin) pair
+            client_id: Opaque client identifier (IP, API key, user ID, etc.).
+                       Defaults to ``"global"`` for backwards-compatible callers
+                       that do not supply a client identity.
 
         Returns:
             Tuple of (allowed, error_message)
         """
+        bucket = f"{client_id}:{plugin_id}"
+
         async with self.lock:
             now = datetime.now()
             hour_ago = now - timedelta(hours=1)
 
-            # Clean old entries
-            self.task_history[plugin_id] = [
-                ts for ts in self.task_history[plugin_id]
+            # Clean old entries for this bucket
+            self.task_history[bucket] = [
+                ts for ts in self.task_history[bucket]
                 if ts > hour_ago
             ]
 
-            recent_count = len(self.task_history[plugin_id])
+            recent_count = len(self.task_history[bucket])
 
             if recent_count >= max_per_hour:
                 return False, f"Rate limit exceeded: {recent_count}/{max_per_hour} per hour"
 
             # Record this execution
-            self.task_history[plugin_id].append(now)
+            self.task_history[bucket].append(now)
             return True, ""
 
     async def reset(self, plugin_id: str = None):
-        """Reset rate limits for a plugin or all plugins"""
+        """Reset rate limits for a plugin (all clients) or all buckets"""
         async with self.lock:
             if plugin_id:
-                self.task_history[plugin_id] = []
+                # Remove every bucket that ends with :<plugin_id>
+                keys_to_clear = [k for k in self.task_history if k.endswith(f":{plugin_id}")]
+                for k in keys_to_clear:
+                    self.task_history[k] = []
             else:
                 self.task_history.clear()
 
