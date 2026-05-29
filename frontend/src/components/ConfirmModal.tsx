@@ -57,11 +57,11 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
         const focusableElements = modalRef.current?.querySelectorAll(
           'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
         );
-        
+
         if (focusableElements && focusableElements.length > 0) {
           const firstElement = focusableElements[0] as HTMLElement;
           const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
-          
+
           if (e.shiftKey && document.activeElement === firstElement) {
             e.preventDefault();
             lastElement.focus();
@@ -77,12 +77,12 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-      
+
       // Restore background
       if (mainContent) {
         mainContent.setAttribute('aria-hidden', 'false');
       }
-      
+
       // Restore focus
       previousFocusRef.current?.focus();
     };
@@ -101,12 +101,12 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   return (
     <>
       {/* Backdrop */}
-      <div 
+      <div
         className="fixed inset-0 bg-black/60 z-40"
         onClick={onCancel}
         aria-hidden="true"
       />
-      
+
       {/* Modal - Neo-brutalist style */}
       <div
         ref={modalRef}
@@ -123,14 +123,14 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
               {title}
             </h2>
           </div>
-          
+
           {/* Body */}
           <div className="p-6">
             <p id="modal-description" className="text-sm font-mono text-silver-bright/70 leading-relaxed">
               {message}
             </p>
           </div>
-          
+
           {/* Footer */}
           <div className="border-t-4 border-black p-6 flex justify-end gap-4">
             <button

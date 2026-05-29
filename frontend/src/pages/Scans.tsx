@@ -64,7 +64,7 @@ export default function Scans() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const PAGE_LIMIT = 10;
-  
+
   // Modal state for confirm dialogs
   const [modalState, setModalState] = useState<{
     isOpen: boolean;

@@ -26,15 +26,15 @@ describe('ConfirmModal Accessibility', () => {
   it('traps Tab key focus within modal', async () => {
     const user = userEvent.setup();
     render(<ConfirmModal {...defaultProps} />);
-    
+
     const confirmButton = screen.getByText('Confirm');
     const cancelButton = screen.getByText('Cancel');
-    
+
     expect(confirmButton).toHaveFocus();
-    
+
     await user.tab();
     expect(cancelButton).toHaveFocus();
-    
+
     await user.tab();
     expect(confirmButton).toHaveFocus();
   });
@@ -56,11 +56,11 @@ describe('ConfirmModal Accessibility', () => {
   it('does not confirm with Enter when focus is on a button', async () => {
     const user = userEvent.setup();
     render(<ConfirmModal {...defaultProps} />);
-    
+
     const cancelButton = screen.getByText('Cancel');
     await user.tab();
     expect(cancelButton).toHaveFocus();
-    
+
     fireEvent.keyDown(cancelButton, { key: 'Enter' });
     expect(defaultProps.onConfirm).not.toHaveBeenCalled();
   });
