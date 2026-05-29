@@ -26,6 +26,15 @@ class TaskStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class ScanPhase(str, Enum):
+    """Granular scan phase for progress display"""
+    QUEUED = "queued"
+    RUNNING_COMMAND = "running_command"
+    PARSING = "parsing"
+    REPORTING = "reporting"
+    FINISHED = "finished"
+
+
 class PluginFieldType(str, Enum):
     """Plugin field input types"""
     STRING = "string"

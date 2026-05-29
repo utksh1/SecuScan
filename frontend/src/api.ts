@@ -129,6 +129,8 @@ export function getTasks(params?: URLSearchParams) {
   return request(`/tasks${suffix}`)
 }
 
+export type ScanPhase = 'queued' | 'running_command' | 'parsing' | 'reporting' | 'finished'
+
 export function getTaskStatus(taskId: string): Promise<any> {
   return request<any>(`/task/${taskId}/status`)
 }
