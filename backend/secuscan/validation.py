@@ -192,7 +192,17 @@ def validate_url(url: str) -> Tuple[bool, str]:
         r'(?:/?|[/?]\S+)$', re.IGNORECASE
     )
 
-    return (True, "") if url_pattern.match(url) else (False, "Invalid URL format")
+    if not url_pattern.match(url):
+        return False, "Invalid URL format"
+
+    # Validate optional port range if provided
+    port_match = re.search(r':(\d+)(?:/|\?|$)', url.split('://', 1)[1])
+    if port_match:
+        port = int(port_match.group(1))
+        if port < 1 or port > 65535:
+            return False, "Invalid URL format"
+
+    return True, ""
 
 
 def sanitize_input(value: str) -> str:

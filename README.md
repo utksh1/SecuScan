@@ -185,6 +185,7 @@ Long-form product and planning material lives outside the main README so onboard
 
 - [SecuScan Product Specification](docs/PRODUCT_SPEC.md)
 - [Plugin Catalogue](PLUGINS.md)
+- [Secure Deployment Guide](docs/SECURE_DEPLOYMENT.md)
 
 ## Tech Stack
 
