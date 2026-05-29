@@ -335,10 +335,10 @@ async def stream_task_output(task_id: str):
         raise HTTPException(status_code=404, detail="Task not found")
 
     async def event_generator():
-        # First, send the initial status
+        # First, send the initial status and phase
         yield {
             "event": "status",
-            "data": json.dumps({"status": status["status"]})
+            "data": json.dumps({"status": status["status"], "scan_phase": status.get("scan_phase")})
         }
 
         # If it's already completed/failed, we just return the raw output if any and close
@@ -370,6 +370,11 @@ async def stream_task_output(task_id: str):
                     }
                     if event["data"] in ["completed", "failed", "cancelled"]:
                         break
+                elif event["type"] == "phase":
+                    yield {
+                        "event": "phase",
+                        "data": json.dumps({"scan_phase": event["data"]})
+                    }
                 elif event["type"] == "output":
                     yield {
                         "event": "output",
