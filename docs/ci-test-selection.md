@@ -8,13 +8,13 @@ This document explains the changed-file scoped CI test selection implemented in 
 
 **CRITICAL:** This implementation is safe for use with GitHub branch protection because:
 
-1. **Pull Requests Always Run Full Suite**  
+1. **Pull Requests Always Run Full Suite**
    - All PR changes ALWAYS trigger the full test suite (backend + frontend)
    - This ensures required checks configured in branch protection never get marked as "skipped"
    - A skipped required check would incorrectly block the PR merge
    - Example: A docs-only PR still runs all tests to satisfy required checks
 
-2. **Push Events Use Selective Skipping**  
+2. **Push Events Use Selective Skipping**
    - Only push events (commits to main/develop) use selective skipping
    - Push events are informational and don't block merges
    - Selective skipping saves CI time on post-merge verification
@@ -53,18 +53,18 @@ The script classifies changed files into these categories:
 
 ## Why This is Safe
 
-1. **Conservative Fallbacks**  
+1. **Conservative Fallbacks**
    - When in doubt, we run the full suite
    - Docs-only + shared config → full suite
    - Backend + frontend → full suite
    - Mixed categories → full suite
 
-2. **Branch Protection Guaranteed**  
+2. **Branch Protection Guaranteed**
    - PRs cannot skip required checks (always full suite)
    - Developers cannot accidentally merge untested code
    - Required checks will pass/fail, never be skipped
 
-3. **Deterministic Classification**  
+3. **Deterministic Classification**
    - File paths are mapped consistently
    - No heuristics or guessing
    - Can be verified locally
@@ -108,4 +108,3 @@ This allows:
 - ✅ Docs-only PR → required checks (formatting) run, optional checks (tests) run full suite
 - ✅ Backend-only PR → full suite runs, satisfying all required checks
 - ✅ Docs-only push → tests skip safely (push checks are not required)
-

@@ -39,7 +39,7 @@ def get_event_name():
 def classify_file(filepath):
     """
     Classifies a file path into a logical CI category.
-    
+
     Categories:
     - DOCS: Documentation files (.md) - safe to skip for selective testing
     - FRONTEND: Frontend code and tests
@@ -87,21 +87,21 @@ def classify_file(filepath):
 def select_tests(files, event_name="push"):
     """
     Decides which test suites to run based on changed files and event type.
-    
+
     Args:
         files: List of changed file paths
         event_name: GitHub event type ('pull_request' or 'push')
-    
+
     Returns:
         Tuple of (run_backend: bool, run_frontend: bool)
-    
+
     Logic:
     ------
     For PULL REQUESTS (PR checks are required for merge):
         - Always run full suite to ensure required checks pass
         - This prevents required checks from being marked "skipped" in branch protection
         - PR must be thoroughly tested before merge
-    
+
     For PUSH events (push checks are informational):
         - Use selective skipping to save CI time on main/develop
         - Skip tests for docs-only changes
