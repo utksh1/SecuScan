@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { routes } from '../routes'
+import ThemeToggle from './ThemeToggle'
 
 interface NavItemProps {
     to: string;
@@ -171,19 +172,22 @@ export default function Sidebar() {
             </div>
 
             {/* Bottom Actions */}
-            <div className="p-4 mt-auto border-t border-accent-silver/5 bg-bg-primary/30 backdrop-blur-md">
+            <div className="p-4 mt-auto border-t border-accent-silver/5 bg-bg-primary/30 backdrop-blur-md space-y-3">
                 <NavItem to={routes.settings} icon="settings" label="Settings" isExpanded={isExpanded} />
-                <button 
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        setIsExpanded(!isExpanded);
-                    }}
-                    className="w-full mt-4 py-2 flex items-center justify-center text-muted hover:text-primary transition-colors"
-                >
-                    <span className="material-symbols-outlined text-[18px]">
-                        {isExpanded ? 'keyboard_double_arrow_left' : 'keyboard_double_arrow_right'}
-                    </span>
-                </button>
+                <div className="flex items-center gap-2">
+                    <ThemeToggle size="sm" />
+                    <button 
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setIsExpanded(!isExpanded);
+                        }}
+                        className="flex-1 py-2 flex items-center justify-center text-muted hover:text-primary transition-colors"
+                    >
+                        <span className="material-symbols-outlined text-[18px]">
+                            {isExpanded ? 'keyboard_double_arrow_left' : 'keyboard_double_arrow_right'}
+                        </span>
+                    </button>
+                </div>
             </div>
         </motion.aside>
     )
