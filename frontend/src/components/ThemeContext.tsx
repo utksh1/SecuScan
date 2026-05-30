@@ -12,16 +12,14 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {
-    // Check local storage first
     const saved = localStorage.getItem('secuscan-theme');
     if (saved === 'light' || saved === 'dark') {
       return saved;
     }
-    // Check system preference
     if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
       return 'light';
     }
-    return 'dark'; // Default
+    return 'dark';
   });
 
   useEffect(() => {

@@ -1,5 +1,11 @@
 import React from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Navigate,
+} from 'react-router-dom'
+
 import AppShell from './components/AppShell'
 import Dashboard from './pages/Dashboard'
 import Toolkit from './pages/Toolkit'
@@ -11,25 +17,73 @@ import Scans from './pages/Scans'
 import TaskDetails from './pages/TaskDetails'
 import Workflows from './pages/Workflows'
 
+import ErrorBoundary from './components/error-boundary/ErrorBoundary'
+
 import { ThemeProvider } from './components/ThemeContext'
-import { ToastProvider, ToastContainer } from './components/ToastContext'
+import { ToastProvider } from './components/ToastContext'
 import { I18nProvider } from './components/I18nContext'
 import { routes } from './routes'
+
+function withErrorBoundary(component: React.ReactNode) {
+  return (
+    <ErrorBoundary>
+      {component}
+    </ErrorBoundary>
+  )
+}
 
 export function AppRoutes() {
   return (
     <Routes>
-      <Route path={routes.dashboard} element={<Dashboard />} />
-      <Route path={routes.toolkit} element={<Toolkit />} />
-      <Route path={routes.scanTool} element={<ToolConfig />} />
-      <Route path={routes.findings} element={<Findings />} />
-      <Route path={routes.scans} element={<Scans />} />
-      <Route path={routes.reports} element={<Reports />} />
-      <Route path={routes.workflows} element={<Workflows />} />
-      <Route path={routes.settings} element={<Settings />} />
-      <Route path={routes.task} element={<TaskDetails />} />
+      <Route
+        path={routes.dashboard}
+        element={withErrorBoundary(<Dashboard />)}
+      />
 
-      <Route path="*" element={<Navigate to={routes.dashboard} replace />} />
+      <Route
+        path={routes.toolkit}
+        element={withErrorBoundary(<Toolkit />)}
+      />
+
+      <Route
+        path={routes.scanTool}
+        element={withErrorBoundary(<ToolConfig />)}
+      />
+
+      <Route
+        path={routes.findings}
+        element={withErrorBoundary(<Findings />)}
+      />
+
+      <Route
+        path={routes.scans}
+        element={withErrorBoundary(<Scans />)}
+      />
+
+      <Route
+        path={routes.reports}
+        element={withErrorBoundary(<Reports />)}
+      />
+
+      <Route
+        path={routes.workflows}
+        element={withErrorBoundary(<Workflows />)}
+      />
+
+      <Route
+        path={routes.settings}
+        element={withErrorBoundary(<Settings />)}
+      />
+
+      <Route
+        path={routes.task}
+        element={withErrorBoundary(<TaskDetails />)}
+      />
+
+      <Route
+        path="*"
+        element={<Navigate to={routes.dashboard} replace />}
+      />
     </Routes>
   )
 }
