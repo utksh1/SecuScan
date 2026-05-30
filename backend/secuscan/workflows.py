@@ -5,7 +5,8 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
+from croniter import croniter
 from .database import get_db
 from .executor import executor
 logger = logging.getLogger(__name__)
@@ -39,23 +40,24 @@ class WorkflowScheduler:
             await asyncio.sleep(5)
     async def tick(self):
         db = await get_db()
+        # Fetch workflows that have EITHER a schedule_seconds OR a cron_expression
         rows = await db.fetchall(
             """
-            SELECT id, name, schedule_seconds, last_run_at, steps_json
+            SELECT id, name, schedule_seconds, cron_expression, last_run_at, steps_json
             FROM workflows
-            WHERE enabled = 1 AND schedule_seconds IS NOT NULL AND schedule_seconds > 0
+            WHERE enabled = 1 AND ((schedule_seconds IS NOT NULL AND schedule_seconds > 0) OR cron_expression IS NOT NULL)
             """
         )
         now = datetime.now(timezone.utc)
         for row in rows:
-            if not self._should_run(now, row.get("last_run_at"), int(row["schedule_seconds"])):
+            if not self._should_run(now, row.get("last_run_at"), row.get("schedule_seconds"), row.get("cron_expression")):
                 continue
             await self._run_workflow(row["id"], json.loads(row.get("steps_json") or "[]"))
             await db.execute(
                 "UPDATE workflows SET last_run_at = datetime('now') WHERE id = ?",
                 (row["id"],),
             )
-    def _should_run(self, now: datetime, last_run_at: str | None, schedule_seconds: int) -> bool:
+    def _should_run(self, now: datetime, last_run_at: str | None, schedule_seconds: Optional[int], cron_expression: Optional[str]) -> bool:
         if not last_run_at:
             return True
         last = datetime.fromisoformat(last_run_at.replace("Z", "+00:00"))
@@ -65,8 +67,26 @@ class WorkflowScheduler:
         # Treat any naive timestamp from the DB as UTC.
         if last.tzinfo is None:
             last = last.replace(tzinfo=timezone.utc)
-        elapsed = (now - last).total_seconds()
-        return elapsed >= schedule_seconds
+
+        # 1. Cron logic (takes precedence if valid)
+        if cron_expression:
+            try:
+                # croniter computes the next valid time after the last_run_at time
+                cron = croniter(cron_expression, last)
+                next_run = cron.get_next(datetime)
+                if next_run.tzinfo is None:
+                    next_run = next_run.replace(tzinfo=timezone.utc)
+                return now >= next_run
+            except Exception as e:
+                logger.error(f"Invalid cron expression '{cron_expression}': {e}")
+                # Fallback to schedule_seconds if cron is invalid, else return False
+
+        # 2. Interval logic
+        if schedule_seconds and schedule_seconds > 0:
+            elapsed = (now - last).total_seconds()
+            return elapsed >= schedule_seconds
+
+        return False
     async def _run_workflow(self, workflow_id: str, steps: List[Dict[str, Any]]):
         logger.info("Running workflow %s with %d step(s)", workflow_id, len(steps))
         for step in steps:

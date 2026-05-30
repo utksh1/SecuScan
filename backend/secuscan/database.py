@@ -166,6 +166,7 @@ class Database:
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL UNIQUE,
                 schedule_seconds INTEGER,
+                cron_expression TEXT,
                 enabled BOOLEAN NOT NULL DEFAULT 1,
                 steps_json TEXT NOT NULL DEFAULT '[]',
                 created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
@@ -277,9 +278,20 @@ class Database:
             if col_name not in existing_finding_cols:
                 try:
                     await self.execute(f"ALTER TABLE findings ADD COLUMN {col_name} {col_type}")
-                    print(f"Added missing column {col_name} to findings table.")
+                    print(f"Added missing column '{col_name}' to findings table.")
                 except Exception as e:
-                    print(f"Failed to add column {col_name}: {e}")
+                    print(f"Failed to add '{col_name}' to findings: {e}")
+
+        # Workflows table migration
+        workflows_columns = await self.fetchall("PRAGMA table_info(workflows)")
+        existing_wf_cols = {col["name"] for col in workflows_columns}
+        if "cron_expression" not in existing_wf_cols:
+            try:
+                await self.execute("ALTER TABLE workflows ADD COLUMN cron_expression TEXT")
+                print("Added missing column 'cron_expression' to workflows table.")
+            except Exception as e:
+                print(f"Failed to add 'cron_expression' to workflows: {e}")
+
 
         await self._backfill_risk_scores()
 

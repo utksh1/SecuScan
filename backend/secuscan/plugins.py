@@ -68,7 +68,7 @@ class PluginManager:
 
     async def _load_plugin_metadata(self, metadata_file: Path) -> PluginMetadata:
         """Load and parse plugin metadata JSON"""
-        with open(metadata_file, 'r') as f:
+        with open(metadata_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
 
         return PluginMetadata(**data)

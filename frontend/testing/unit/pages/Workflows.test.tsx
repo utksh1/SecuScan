@@ -129,6 +129,7 @@ describe('Workflows — create action', () => {
     expect(vi.mocked(createWorkflow)).toHaveBeenCalledWith({
       name: 'Nightly Scan',
       schedule_seconds: 7200,
+      cron_expression: null,
       enabled: true,
       steps: [{ plugin_id: '', inputs: {} }],
     })

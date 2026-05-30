@@ -35,6 +35,7 @@ describe('workflow API helpers', () => {
         id: 'wf-001',
         name: 'Nightly Scan',
         schedule_seconds: 3600,
+        cron_expression: null,
         enabled: true,
         steps: [{ plugin_id: 'nmap', inputs: {} }],
         last_run_at: null,
