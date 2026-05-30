@@ -12,8 +12,23 @@ import shutil
 import hashlib
 import hmac
 
-from .models import PluginMetadata
+from .models import PluginMetadata, PluginFieldType
 from .config import settings
+
+# Port specifications: one or more comma-separated port numbers or port ranges.
+# Valid: "22", "80,443", "1-1000", "22,80,1000-2000"
+# Invalid: "--", "1--2", ",,", "-80"
+_PORT_SPEC_PATTERN = re.compile(r"^\d+(-\d+)?(,\d+(-\d+)?)*$")
+
+# Internal control fields injected by the executor/routes layer that are not
+# declared in individual plugin schemas.  Strip these before schema validation
+# so plugins that don't declare them don't raise "Unknown field" errors.
+_INTERNAL_CONTROL_FIELDS: frozenset = frozenset({
+    "safe_mode",
+    "consent_granted",
+    "dry_run",
+    "debug_mode",
+})
 
 logger = logging.getLogger(__name__)
 
@@ -366,6 +381,93 @@ class PluginManager:
             normalized["wordlist"] = self._resolve_wordlist_path(wordlist_value.strip())
         return normalized
 
+    def _reject_injected_args(self, field_id: str, value: str) -> None:
+        """Raise ValueError if value looks like a flag injection attempt.
+
+        Port fields are exempt from the leading-dash check but must match the
+        numeric port-specification grammar.  All other string fields must not
+        begin with a '-' character.
+        """
+        if field_id in ("ports", "port"):
+            if value and not _PORT_SPEC_PATTERN.match(value):
+                raise ValueError(
+                    f"Invalid port specification {value!r}: "
+                    "must be a number (80), range (1-1000), or comma-separated list (22,80,443)"
+                )
+            return
+        if value.lstrip().startswith("-"):
+            raise ValueError(
+                f"Field '{field_id}' value must not begin with '-': {value!r}"
+            )
+
+    def _validate_inputs_against_schema(
+        self, plugin: PluginMetadata, inputs: Dict[str, Any]
+    ) -> None:
+        """Validate caller-supplied inputs against the plugin's declared field schema.
+
+        Internal control fields (safe_mode, consent_granted, etc.) are stripped
+        before validation because they are injected by the executor layer and are
+        never declared in individual plugin schemas.
+
+        Raises ValueError with a descriptive message for the first violation found.
+        """
+        field_map = {f.id: f for f in plugin.fields}
+
+        for field_id, raw_value in inputs.items():
+            # Strip internal control fields — they are not part of the plugin schema
+            if field_id in _INTERNAL_CONTROL_FIELDS:
+                continue
+
+            field = field_map.get(field_id)
+            if field is None:
+                raise ValueError(
+                    f"Unknown field {field_id!r} is not declared in plugin {plugin.id!r} schema"
+                )
+
+            # Skip None / empty values — defaults will be applied later by _with_field_defaults
+            if raw_value is None or raw_value == "":
+                continue
+
+            if field.type == PluginFieldType.INTEGER:
+                try:
+                    int(raw_value)
+                except (TypeError, ValueError):
+                    raise ValueError(
+                        f"Field '{field_id}' expects an integer; got {raw_value!r}"
+                    )
+                continue
+
+            if field.type == PluginFieldType.BOOLEAN:
+                if isinstance(raw_value, bool):
+                    continue
+                if isinstance(raw_value, str) and raw_value.lower() in ("true", "false", "1", "0"):
+                    continue
+                raise ValueError(
+                    f"Field '{field_id}' expects a boolean; got {raw_value!r}"
+                )
+
+            if field.type == PluginFieldType.SELECT:
+                allowed = [opt.get("value") for opt in (field.options or [])]
+                if raw_value not in allowed:
+                    raise ValueError(
+                        f"Field '{field_id}' value {raw_value!r} is not in allowed "
+                        f"values {allowed}"
+                    )
+                continue
+
+            if field.type in (PluginFieldType.STRING, PluginFieldType.TEXT):
+                value_str = str(raw_value)
+
+                # Pattern validation from field metadata
+                validation = field.validation or {}
+                pattern = validation.get("pattern")
+                if pattern and not re.match(pattern, value_str):
+                    msg = validation.get("message", f"Value does not match pattern {pattern!r}")
+                    raise ValueError(f"Field '{field_id}': {msg}")
+
+                # Reject argv-level flag injection
+                self._reject_injected_args(field_id, value_str)
+
     def build_command(self, plugin_id: str, inputs: Dict) -> Optional[List[str]]:
         """
         Build command from plugin template and user inputs.
@@ -381,6 +483,8 @@ class PluginManager:
         if not plugin:
             return None
 
+        # Validate before normalisation so SELECT checks run against raw user values
+        self._validate_inputs_against_schema(plugin, inputs)
         inputs = self._normalize_inputs(plugin, inputs)
         command = []
 
