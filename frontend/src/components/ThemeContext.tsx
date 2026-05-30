@@ -17,7 +17,7 @@ interface ThemeContextType {
   resetToSystem: () => void
 }
 
-const STORAGE_KEY = 'secuscan:theme'
+const STORAGE_KEY = 'secuscan-theme'
 
 function getSystemTheme(): Theme {
   if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
