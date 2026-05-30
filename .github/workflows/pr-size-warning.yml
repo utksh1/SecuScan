@@ -36,9 +36,7 @@ jobs:
           # Check for oversized PRs
           if [ "$CHANGED_FILES" -gt "$MAX_FILES" ] || [ "$TOTAL_LINES" -gt "$MAX_LINES" ]; then
             MSG="PR is unusually large ($CHANGED_FILES files, $TOTAL_LINES lines changed). Advisory threshold: $MAX_FILES files or $MAX_LINES lines."
-
             echo "::warning title=Large PR Detected::$MSG"
-
             WARNINGS="${WARNINGS}
           - ⚠️ **Large PR Detected**
             - $MSG
@@ -54,9 +52,7 @@ jobs:
 
           if echo "$FILES" | grep -qE 'playwright-report/|test-results/'; then
             MSG="Generated testing artifacts detected (playwright-report/ or test-results/). Please remove them from commits."
-
             echo "::warning title=Generated Artifacts Included::$MSG"
-
             WARNINGS="${WARNINGS}
           - 🚫 **Generated Artifacts Detected**
             - $MSG
