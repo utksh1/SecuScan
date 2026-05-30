@@ -20,6 +20,16 @@ from .config import settings
 # Invalid: "--", "1--2", ",,", "-80"
 _PORT_SPEC_PATTERN = re.compile(r"^\d+(-\d+)?(,\d+(-\d+)?)*$")
 
+# Internal control fields injected by the executor/routes layer that are not
+# declared in individual plugin schemas.  Strip these before schema validation
+# so plugins that don't declare them don't raise "Unknown field" errors.
+_INTERNAL_CONTROL_FIELDS: frozenset = frozenset({
+    "safe_mode",
+    "consent_granted",
+    "dry_run",
+    "debug_mode",
+})
+
 logger = logging.getLogger(__name__)
 
 
@@ -395,11 +405,19 @@ class PluginManager:
     ) -> None:
         """Validate caller-supplied inputs against the plugin's declared field schema.
 
+        Internal control fields (safe_mode, consent_granted, etc.) are stripped
+        before validation because they are injected by the executor layer and are
+        never declared in individual plugin schemas.
+
         Raises ValueError with a descriptive message for the first violation found.
         """
         field_map = {f.id: f for f in plugin.fields}
 
         for field_id, raw_value in inputs.items():
+            # Strip internal control fields — they are not part of the plugin schema
+            if field_id in _INTERNAL_CONTROL_FIELDS:
+                continue
+
             field = field_map.get(field_id)
             if field is None:
                 raise ValueError(

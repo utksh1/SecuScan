@@ -287,3 +287,114 @@ class TestPortSpecPattern:
     ])
     def test_pattern(self, value, should_match):
         assert bool(_PORT_SPEC_PATTERN.match(value)) == should_match
+
+
+# ---------------------------------------------------------------------------
+# Internal control field regression (safe_mode and friends must not be
+# rejected as "unknown field" even when the plugin schema does not declare them)
+# ---------------------------------------------------------------------------
+
+class TestInternalControlFields:
+    """Regression: internal fields injected by the executor must pass through
+    schema validation without raising ValueError, regardless of whether the
+    plugin schema declares them."""
+
+    def _make_nmap_like_plugin(self) -> PluginMetadata:
+        return _make_plugin(
+            fields=[
+                PluginField(
+                    id="target",
+                    label="Target",
+                    type=PluginFieldType.STRING,
+                    required=True,
+                ),
+                PluginField(
+                    id="scan_type",
+                    label="Scan Type",
+                    type=PluginFieldType.SELECT,
+                    required=False,
+                    options=[{"value": "S", "label": "SYN"}, {"value": "T", "label": "TCP"}],
+                ),
+                PluginField(
+                    id="ports",
+                    label="Ports",
+                    type=PluginFieldType.STRING,
+                    required=False,
+                ),
+            ],
+        )
+
+    def _pm(self):
+        pm = PluginManager.__new__(PluginManager)
+        return pm
+
+    def test_safe_mode_does_not_raise(self):
+        pm = self._pm()
+        plugin = self._make_nmap_like_plugin()
+        # Must not raise even though 'safe_mode' is not in the plugin schema
+        pm._validate_inputs_against_schema(
+            plugin,
+            {"target": "127.0.0.1", "scan_type": "S", "safe_mode": True},
+        )
+
+    def test_consent_granted_does_not_raise(self):
+        pm = self._pm()
+        plugin = self._make_nmap_like_plugin()
+        pm._validate_inputs_against_schema(
+            plugin,
+            {"target": "127.0.0.1", "consent_granted": True},
+        )
+
+    def test_dry_run_does_not_raise(self):
+        pm = self._pm()
+        plugin = self._make_nmap_like_plugin()
+        pm._validate_inputs_against_schema(
+            plugin,
+            {"target": "127.0.0.1", "dry_run": True},
+        )
+
+    def test_debug_mode_does_not_raise(self):
+        pm = self._pm()
+        plugin = self._make_nmap_like_plugin()
+        pm._validate_inputs_against_schema(
+            plugin,
+            {"target": "127.0.0.1", "debug_mode": True},
+        )
+
+    def test_multiple_internal_fields_at_once(self):
+        pm = self._pm()
+        plugin = self._make_nmap_like_plugin()
+        pm._validate_inputs_against_schema(
+            plugin,
+            {
+                "target": "127.0.0.1",
+                "ports": "22,80,443",
+                "safe_mode": True,
+                "consent_granted": True,
+                "dry_run": False,
+            },
+        )
+
+    def test_genuinely_unknown_field_still_raises(self):
+        """Only _INTERNAL_CONTROL_FIELDS are exempt; arbitrary unknown fields must still error."""
+        pm = self._pm()
+        plugin = self._make_nmap_like_plugin()
+        with pytest.raises(ValueError, match="Unknown field"):
+            pm._validate_inputs_against_schema(
+                plugin,
+                {"target": "127.0.0.1", "evil_unknown_field": "--script=vuln"},
+            )
+
+    def test_injection_in_schema_field_still_rejected_with_internal_fields(self):
+        """Presence of internal control fields must not suppress injection checks on real fields."""
+        pm = self._pm()
+        plugin = self._make_nmap_like_plugin()
+        with pytest.raises(ValueError, match="not begin with"):
+            pm._validate_inputs_against_schema(
+                plugin,
+                {
+                    "target": "--script=evil",
+                    "safe_mode": True,
+                    "consent_granted": True,
+                },
+            )
