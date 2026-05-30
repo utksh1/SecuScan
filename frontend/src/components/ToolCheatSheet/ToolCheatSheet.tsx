@@ -29,7 +29,7 @@ export function ToolCheatSheet({ activeToolId }: ToolCheatSheetProps) {
         <span className={styles.triggerIcon} aria-hidden="true">
           {isOpen ? "✕" : "?"}
         </span>
-        {!isOpen && <span className={styles.triggerLabel}>Learning Center</span>}
+        {isOpen && <span className={styles.triggerLabel}>Learning Center</span>}
       </button>
 
       {isOpen && (
