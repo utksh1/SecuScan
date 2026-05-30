@@ -1,6 +1,6 @@
 import { useState } from "react";
 import toolCheatSheets, { type CheatSheet } from "../../data/toolCheatSheets";
-import styles from "./ToolCheatSheet.module.css"; 
+import styles from "./ToolCheatSheet.module.css";
 
 interface ToolCheatSheetProps {
   activeToolId: string;
