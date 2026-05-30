@@ -179,7 +179,6 @@ class ErrorResponse(BaseModel):
     details: Optional[Dict[str, Any]] = None
 
 
- feat/254-notification-schema-pr1
 class NotificationChannelType(str, Enum):
     """Supported notification delivery channels."""
     WEBHOOK = "webhook"
@@ -231,7 +230,7 @@ class NotificationHistoryResponse(BaseModel):
     error_message: Optional[str] = None
     sent_at: datetime
 
+
 class BulkDeleteRequest(RootModel[Annotated[List[str], Field(max_length=MAX_BULK_DELETE)]]):
     """Accepts a JSON array of task IDs directly. Max 500 per request."""
     pass
- main

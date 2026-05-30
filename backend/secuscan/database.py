@@ -172,7 +172,6 @@ class Database:
                 last_run_at TIMESTAMP
             );
 
- feat/254-notification-schema-pr1
             CREATE TABLE IF NOT EXISTS notification_rules (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -193,9 +192,7 @@ class Database:
                 sent_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
             );
 
-
             -- Tasks indexes (existing)
- main
             CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at);
             CREATE INDEX IF NOT EXISTS idx_tasks_target ON tasks(target);
             CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
