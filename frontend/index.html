@@ -11,8 +11,8 @@
       // Prevent flash of wrong theme on initial load
       (function() {
         const saved = localStorage.getItem('secuscan:theme');
-        const theme = saved === 'light' || saved === 'dark' 
-          ? saved 
+        const theme = saved === 'light' || saved === 'dark'
+          ? saved
           : (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
         const root = document.documentElement;
         if (theme === 'dark') {

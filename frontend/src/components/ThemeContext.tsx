@@ -20,7 +20,9 @@ interface ThemeContextType {
 const STORAGE_KEY = 'secuscan:theme'
 
 function getSystemTheme(): Theme {
-  if (window.matchMedia('(prefers-color-scheme: light)').matches) return 'light'
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+  }
   return 'dark'
 }
 
@@ -57,6 +59,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   // Listen for OS preference changes — only auto-follow if no manual override
   useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
     const handler = (e: MediaQueryListEvent) => {
       if (!localStorage.getItem(STORAGE_KEY)) {
