@@ -66,7 +66,12 @@ async def test_run_scan_successful_execution():
 
         result = await run_scan("127.0.0.1", "http_inspector", "console")
         assert result == 0
-        mock_executor.create_task.assert_called_once_with("http_inspector", {"target": "127.0.0.1"}, consent_granted=True)
+        mock_executor.create_task.assert_called_once_with(
+            "http_inspector",
+            {"target": "127.0.0.1", "safe_mode": True},
+            safe_mode=True,
+            consent_granted=True,
+        )
 
 
 def test_cli_help_menu():
