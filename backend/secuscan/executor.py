@@ -638,7 +638,6 @@ class TaskExecutor:
 
         db = await get_db()
         
-
         await db.log_audit(
             "task_cancelled",
             "Task cancelled by user",
@@ -653,7 +652,7 @@ class TaskExecutor:
         task_row = await db.fetchone(
             """
             SELECT id, plugin_id, tool_name, target, status, scan_phase, created_at, started_at, completed_at,
-                   duration_seconds, exit_code, error_message, preset, inputs_json
+            duration_seconds, exit_code, error_message, preset, inputs_json
             FROM tasks WHERE id = ?
             """,
             (task_id,)
@@ -822,7 +821,7 @@ class TaskExecutor:
                     exploitability, confidence, asset_exposure,
                     risk_score, risk_factors_json
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                          ?, ?, ?, ?, ?)
+                    ?, ?, ?, ?, ?)
                 """,
                 (
                     finding_id,
