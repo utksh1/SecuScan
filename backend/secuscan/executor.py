@@ -18,7 +18,7 @@ from .cache import get_cache
 from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager
-from .models import TaskStatus
+from .models import TaskStatus, ScanPhase
 from .ratelimit import concurrent_limiter
 from .risk_scoring import compute_risk_score, compute_risk_factors
 
@@ -69,6 +69,7 @@ MODULAR_SCANNERS = {
 }
 
 logger = logging.getLogger(__name__)
+STREAM_LISTENER_QUEUE_MAXSIZE = 100
 
 
 def extract_target(inputs: Dict[str, Any]) -> str:
@@ -92,7 +93,7 @@ class TaskExecutor:
         """Subscribe to a task's real-time events."""
         if task_id not in self._listeners:
             self._listeners[task_id] = []
-        q = asyncio.Queue()
+        q = asyncio.Queue(maxsize=STREAM_LISTENER_QUEUE_MAXSIZE)
         self._listeners[task_id].append(q)
         return q
 
@@ -107,9 +108,34 @@ class TaskExecutor:
         """Broadcast an event to all active listeners of a task."""
         if task_id in self._listeners:
             event = {"type": event_type, "data": data}
-            for q in self._listeners[task_id]:
-                await q.put(event)
+            for q in list(self._listeners[task_id]):
+                self._enqueue_listener_event(task_id, q, event)
+
+    def _enqueue_listener_event(self, task_id: str, q: asyncio.Queue, event: Dict[str, Any]):
+        """Add an event to a bounded listener queue without unbounded memory growth."""
+        try:
+            q.put_nowait(event)
+            return
+        except asyncio.QueueFull:
+            try:
+                q.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+
+        try:
+            q.put_nowait(event)
+        except asyncio.QueueFull:
+            logger.warning("Dropping stream event for slow listener on task %s", task_id)
     
+    async def _broadcast_phase(self, task_id: str, phase: str):
+        """Broadcast a scan phase transition and persist it to the database."""
+        await self._broadcast(task_id, "phase", phase)
+        db = await get_db()
+        await db.execute(
+            "UPDATE tasks SET scan_phase = ? WHERE id = ?",
+            (phase, task_id)
+        )
+
     async def create_task(
         self,
         plugin_id: str,
@@ -148,8 +174,8 @@ class TaskExecutor:
             """
             INSERT INTO tasks (
                 id, plugin_id, tool_name, target, inputs_json, preset,
-                status, consent_granted, safe_mode
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                status, scan_phase, consent_granted, safe_mode
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 task_id,
@@ -159,6 +185,7 @@ class TaskExecutor:
                 json.dumps(inputs),
                 preset,
                 TaskStatus.QUEUED.value,
+                ScanPhase.QUEUED.value,
                 consent_granted,
                 inputs.get("safe_mode", True)
             )
@@ -249,6 +276,7 @@ class TaskExecutor:
                 
                 logger.info(f"Executing modular scanner {plugin_id} for task {task_id}")
                 await self._broadcast(task_id, "status", TaskStatus.RUNNING.value)
+                await self._broadcast_phase(task_id, ScanPhase.RUNNING_COMMAND.value)
                 
                 start_time = time.time()
                 # Run the scanner
@@ -279,6 +307,7 @@ class TaskExecutor:
                 )
 
                 # Upsert findings and report using the scanner's result
+                await self._broadcast_phase(task_id, ScanPhase.PARSING.value)
                 await self._upsert_findings_and_report_from_scanner(
                     db=db,
                     task_id=task_id,
@@ -288,6 +317,7 @@ class TaskExecutor:
                     status=final_status,
                     result=result
                 )
+                await self._broadcast_phase(task_id, ScanPhase.REPORTING.value)
 
             else:
                 # Standard Plugin Execution
@@ -322,6 +352,7 @@ class TaskExecutor:
 
                 logger.info(f"Executing task {task_id}: {' '.join(command)}")
                 await self._broadcast(task_id, "status", TaskStatus.RUNNING.value)
+                await self._broadcast_phase(task_id, ScanPhase.RUNNING_COMMAND.value)
 
                 # Execute command
                 start_time = time.time()
@@ -371,6 +402,7 @@ class TaskExecutor:
                 )
 
                 # Upsert findings and report
+                await self._broadcast_phase(task_id, ScanPhase.PARSING.value)
                 await self._upsert_findings_and_report(
                     db=db,
                     task_id=task_id,
@@ -380,7 +412,9 @@ class TaskExecutor:
                     status=final_status,
                     output=output
                 )
+                await self._broadcast_phase(task_id, ScanPhase.REPORTING.value)
 
+            await self._broadcast_phase(task_id, ScanPhase.FINISHED.value)
             await self._broadcast(task_id, "status", final_status)
             await self._invalidate_cached_views()
 
@@ -624,7 +658,7 @@ class TaskExecutor:
         db = await get_db()
         task_row = await db.fetchone(
             """
-            SELECT id, plugin_id, tool_name, target, status, created_at, started_at, completed_at, 
+            SELECT id, plugin_id, tool_name, target, status, scan_phase, created_at, started_at, completed_at,
                    duration_seconds, exit_code, error_message, preset, inputs_json
             FROM tasks WHERE id = ?
             """,
@@ -651,6 +685,7 @@ class TaskExecutor:
             "tool": task_row["tool_name"],
             "target": task_row["target"],
             "status": task_row["status"],
+            "scan_phase": task_row.get("scan_phase"),
             "created_at": task_row["created_at"],
             "started_at": task_row["started_at"],
             "completed_at": task_row["completed_at"],
@@ -658,7 +693,6 @@ class TaskExecutor:
             "exit_code": task_row["exit_code"],
             "error_message": task_row["error_message"],
             "preset": task_row["preset"],
-            "inputs": json.loads(task_row["inputs_json"] or "{}"),
             "queue_position": queue_position,
             "pending_count": pending_count,
         }

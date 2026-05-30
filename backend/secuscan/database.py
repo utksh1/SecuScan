@@ -210,6 +210,7 @@ class Database:
         
         needed_cols = {
             "exit_code": "INTEGER",
+            "scan_phase": "TEXT",
             "structured_json": "TEXT",
             "raw_output_path": "TEXT",
             "command_used": "TEXT",

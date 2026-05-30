@@ -8,7 +8,7 @@ or directly:
 """
 
 import pytest
-from backend.secuscan.redaction import redact, redact_dict, REDACTED
+from backend.secuscan.redaction import redact, redact_dict, redact_inputs, REDACTED
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -272,3 +272,86 @@ class TestMultipleSecretsOnOneLine:
         result = redact(text)
         assert_redacted(result, "abc123def456")
         assert_redacted(result, "hunter2secret")
+
+
+# ── redact_inputs ─────────────────────────────────────────────────────────────
+
+
+class TestRedactInputs:
+    """Tests for redact_inputs(), which redacts sensitive keys in task input dicts."""
+
+    def test_api_key_is_redacted(self):
+        inputs = {"api_key": "supersecretkey123456", "target": "example.com"}
+        result = redact_inputs(inputs)
+        assert result["api_key"] == REDACTED
+        assert result["target"] == "example.com"
+
+    def test_token_is_redacted(self):
+        inputs = {"token": "ghp_16C7e42F292c6912E7710c838347Ae178B4a", "url": "http://example.com"}
+        result = redact_inputs(inputs)
+        assert result["token"] == REDACTED
+        assert result["url"] == "http://example.com"
+
+    def test_password_is_redacted(self):
+        inputs = {"password": "hunter2verysecure", "username": "admin"}
+        result = redact_inputs(inputs)
+        assert result["password"] == REDACTED
+        assert result["username"] == "admin"
+
+    def test_private_key_is_redacted(self):
+        inputs = {"private_key": "-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----"}
+        result = redact_inputs(inputs)
+        assert result["private_key"] == REDACTED
+
+    def test_multiple_sensitive_keys_all_redacted(self):
+        inputs = {
+            "api_key": "key_abc123",
+            "password": "p@ssw0rd99",
+            "token": "tok_xyz789",
+            "private_key": "pk_value",
+            "target": "192.168.1.1",
+        }
+        result = redact_inputs(inputs)
+        assert result["api_key"] == REDACTED
+        assert result["password"] == REDACTED
+        assert result["token"] == REDACTED
+        assert result["private_key"] == REDACTED
+        assert result["target"] == "192.168.1.1"
+
+    def test_key_matching_is_case_insensitive(self):
+        inputs = {"API_KEY": "secretvalue", "Token": "another_secret"}
+        result = redact_inputs(inputs)
+        assert result["API_KEY"] == REDACTED
+        assert result["Token"] == REDACTED
+
+    def test_non_sensitive_string_passes_through_pattern_redaction(self):
+        """Non-sensitive string values are still run through the pattern redactor."""
+        inputs = {"description": "api_key=leaked123456789 found in output"}
+        result = redact_inputs(inputs)
+        assert "leaked123456789" not in result["description"]
+        assert REDACTED in result["description"]
+
+    def test_non_string_values_are_untouched(self):
+        inputs = {"count": 5, "enabled": True, "score": 9.8, "target": "host.example.com"}
+        result = redact_inputs(inputs)
+        assert result["count"] == 5
+        assert result["enabled"] is True
+        assert result["score"] == 9.8
+        assert result["target"] == "host.example.com"
+
+    def test_empty_dict_returns_empty_dict(self):
+        assert redact_inputs({}) == {}
+
+    def test_non_dict_input_is_returned_unchanged(self):
+        assert redact_inputs("not-a-dict") == "not-a-dict"  # type: ignore[arg-type]
+
+    def test_access_token_key_is_redacted(self):
+        inputs = {"access_token": "ya29.a0AfH6SMB", "scope": "read"}
+        result = redact_inputs(inputs)
+        assert result["access_token"] == REDACTED
+        assert result["scope"] == "read"
+
+    def test_secret_key_is_redacted(self):
+        inputs = {"secret_key": "aws_secret_abc123456789012345678901234567890"}
+        result = redact_inputs(inputs)
+        assert result["secret_key"] == REDACTED
