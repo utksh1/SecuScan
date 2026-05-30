@@ -98,26 +98,34 @@ def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
 def validate_port(port: int) -> Tuple[bool, str]:
     """
     Validate port number.
-    
+
     Args:
         port: Port number to validate
-    
+
     Returns:
         Tuple of (is_valid, error_message)
     """
+    if not isinstance(port, int) or isinstance(port, bool):
+        return False, "Port must be an integer"
     if port < 1 or port > 65535:
         return False, "Port must be between 1 and 65535"
-    
     return True, ""
 
 
 def validate_port_range(port_range: str) -> Tuple[bool, str]:
     """
     Validate port range specification.
-    
+
+    Supports three formats:
+      - Single port:              "80"
+      - Hyphen range:             "1-1000"
+      - Comma-separated (mixed):  "22,80,443-8080"
+
+    Mixed comma+range specs (nmap-style) are fully supported.
+
     Args:
-        port_range: Port range string (e.g., "80,443" or "1-1000")
-    
+        port_range: Port range string
+
     Returns:
         Tuple of (is_valid, error_message)
     """
@@ -184,7 +192,17 @@ def validate_url(url: str) -> Tuple[bool, str]:
         r'(?:/?|[/?]\S+)$', re.IGNORECASE
     )
 
-    return (True, "") if url_pattern.match(url) else (False, "Invalid URL format")
+    if not url_pattern.match(url):
+        return False, "Invalid URL format"
+
+    # Validate optional port range if provided
+    port_match = re.search(r':(\d+)(?:/|\?|$)', url.split('://', 1)[1])
+    if port_match:
+        port = int(port_match.group(1))
+        if port < 1 or port > 65535:
+            return False, "Invalid URL format"
+
+    return True, ""
 
 
 def sanitize_input(value: str) -> str:
@@ -197,8 +215,8 @@ def sanitize_input(value: str) -> str:
     Returns:
         Sanitized value
     """
-    # Remove shell metacharacters
-    dangerous_chars = [';', '|', '&', '$', '`', '(', ')', '<', '>', '\n', '\r']
+    # Remove shell metacharacters and non-printable control characters
+    dangerous_chars = [';', '|', '&', '$', '`', '(', ')', '<', '>', '\n', '\r', "'", '"', '\\', '!', '{', '}', '\t', '\x00']
     for char in dangerous_chars:
         value = value.replace(char, '')
     
