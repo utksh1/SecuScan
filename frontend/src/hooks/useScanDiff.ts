@@ -16,7 +16,7 @@ export function useScanDiff() {
     setIsLoading(true)
     setError(null)
     try {
-      const result = await getScanDiff(scanAId, scanBId)
+      const result = await getScanDiff(scanAId, scanBId, controller.signal)
       if (!controller.signal.aborted) {
         setData(result)
       }

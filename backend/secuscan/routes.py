@@ -920,6 +920,12 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
 @router.get("/scans/diff")
 async def get_scan_diff(scan_a: str, scan_b: str) -> ScanDiffResponse:
     """Diff two completed scans of the same target. 404 if either missing, 400 if targets differ."""
+    if scan_a == scan_b:
+        raise HTTPException(
+            status_code=400,
+            detail="scan_a and scan_b must be different scan IDs",
+        )
+
     db = await get_db()
 
     task_row_a = await db.fetchone(
@@ -935,12 +941,6 @@ async def get_scan_diff(scan_a: str, scan_b: str) -> ScanDiffResponse:
     )
     if not task_row_b:
         raise HTTPException(status_code=404, detail=f"Scan not found: {scan_b}")
-
-    if scan_a == scan_b:
-        raise HTTPException(
-            status_code=400,
-            detail="scan_a and scan_b must be different scan IDs",
-        )
 
     if task_row_a["target"] != task_row_b["target"]:
         raise HTTPException(

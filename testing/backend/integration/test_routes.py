@@ -308,6 +308,26 @@ def test_diff_missing_scan_returns_404(test_client):
     assert response.status_code == 404
 
 
+def test_diff_scan_a_missing_returns_404(test_client):
+    """scan_a missing, scan_b exists → 404."""
+    real_id = str(uuid.uuid4())
+    _insert_task(real_id, "example.com")
+
+    response = test_client.get(f"/api/v1/scans/diff?scan_a=doesnotexist&scan_b={real_id}")
+
+    assert response.status_code == 404
+
+
+def test_diff_scan_b_missing_returns_404(test_client):
+    """scan_a exists, scan_b missing → 404."""
+    real_id = str(uuid.uuid4())
+    _insert_task(real_id, "example.com")
+
+    response = test_client.get(f"/api/v1/scans/diff?scan_a={real_id}&scan_b=doesnotexist")
+
+    assert response.status_code == 404
+
+
 def test_diff_valid_scans_returns_200(test_client):
     """Two completed scans on the same target must return 200 with the expected shape."""
     id_a = str(uuid.uuid4())
@@ -331,3 +351,6 @@ def test_diff_valid_scans_returns_200(test_client):
     assert "scan_b" in data
     assert "diff" in data
     assert "summary" in data
+    assert data["summary"]["total_severity_changed"] == 1
+    assert data["summary"]["total_unchanged"] == 0
+    assert len(data["diff"]["severity_changed"]) == 1

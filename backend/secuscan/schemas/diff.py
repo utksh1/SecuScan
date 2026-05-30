@@ -22,7 +22,7 @@ class FindingSchema(BaseModel):
     severity: str
     target: str
     description: str
-    remediation: Optional[str] = ""
+    remediation: Optional[str] = None
     cvss: Optional[float] = None
     cve: Optional[str] = None
     proof: Optional[str] = None

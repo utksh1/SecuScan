@@ -739,8 +739,13 @@ export interface ScanDiffResponse {
   summary: DiffSummary
 }
 
-export function getScanDiff(scanA: string, scanB: string): Promise<ScanDiffResponse> {
+export function getScanDiff(
+  scanA: string,
+  scanB: string,
+  signal?: AbortSignal,
+): Promise<ScanDiffResponse> {
   return request<ScanDiffResponse>(
-    `/scans/diff?scan_a=${encodeURIComponent(scanA)}&scan_b=${encodeURIComponent(scanB)}`
+    `/scans/diff?scan_a=${encodeURIComponent(scanA)}&scan_b=${encodeURIComponent(scanB)}`,
+    signal ? { signal } : undefined,
   )
 }
