@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { routes } from '../routes'
 import ThemeToggle from './ThemeToggle'
+import { NotificationBell } from './NotificationContext'
 
 interface NavItemProps {
     to: string;
@@ -176,6 +177,7 @@ export default function Sidebar() {
                 <NavItem to={routes.settings} icon="settings" label="Settings" isExpanded={isExpanded} />
                 <div className="flex items-center gap-2">
                     <ThemeToggle size="sm" />
+                    <NotificationBell />
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
