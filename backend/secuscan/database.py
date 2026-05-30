@@ -171,11 +171,36 @@ class Database:
                 last_run_at TIMESTAMP
             );
 
+            CREATE TABLE IF NOT EXISTS notification_rules (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                severity_threshold TEXT NOT NULL,
+                channel_type TEXT NOT NULL,
+                target_url_or_email TEXT NOT NULL,
+                is_active BOOLEAN NOT NULL DEFAULT 1,
+                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS notification_history (
+                id TEXT PRIMARY KEY,
+                rule_id TEXT NOT NULL REFERENCES notification_rules(id) ON DELETE CASCADE,
+                finding_id TEXT NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
+                status TEXT NOT NULL,
+                error_message TEXT,
+                sent_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+            );
+
             CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at);
             CREATE INDEX IF NOT EXISTS idx_tasks_target ON tasks(target);
             CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
             CREATE INDEX IF NOT EXISTS idx_tasks_plugin ON tasks(plugin_id);
             CREATE INDEX IF NOT EXISTS idx_workflows_enabled ON workflows(enabled);
+            CREATE INDEX IF NOT EXISTS idx_notification_rules_active ON notification_rules(is_active);
+            CREATE INDEX IF NOT EXISTS idx_notification_rules_severity ON notification_rules(severity_threshold);
+            CREATE INDEX IF NOT EXISTS idx_notification_history_rule_id ON notification_history(rule_id);
+            CREATE INDEX IF NOT EXISTS idx_notification_history_finding_id ON notification_history(finding_id);
+            CREATE INDEX IF NOT EXISTS idx_notification_history_sent_at ON notification_history(sent_at DESC);
             """
         )
 
