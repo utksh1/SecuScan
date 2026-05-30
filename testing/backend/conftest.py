@@ -77,3 +77,24 @@ def test_client(setup_test_environment):
             await database_module.db.disconnect()
 
     asyncio.run(teardown())
+
+import json
+import os
+from pathlib import Path
+
+DOCS_DIR = Path(__file__).resolve().parents[2] / "docs" / "api_examples"
+
+@pytest.fixture
+def validate_contract():
+    def _validate(endpoint_name, response):
+        os.makedirs(DOCS_DIR, exist_ok=True)
+        file_path = DOCS_DIR / f"{endpoint_name}_{response.status_code}.json"
+        actual_data = response.json()
+        if file_path.exists():
+            with open(file_path, "r") as f:
+                expected_data = json.load(f)
+            assert actual_data.keys() == expected_data.keys(), f"API docs mismatch for {endpoint_name}!"
+        else:
+            with open(file_path, "w") as f:
+                json.dump(actual_data, f, indent=2)
+    return _validate

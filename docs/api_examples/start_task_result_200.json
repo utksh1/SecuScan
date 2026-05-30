@@ -1,0 +1,99 @@
+{
+  "task_id": "00000000-0000-0000-0000-000000000000",
+  "plugin_id": "http_inspector",
+  "tool": "HTTP Inspector",
+  "target": "http://example.com",
+  "timestamp": "2026-05-24 10:32:54",
+  "duration_seconds": 1.0,
+  "status": "completed",
+  "preset": "quick",
+  "inputs": {
+    "follow_redirects": false,
+    "timeout": 5,
+    "url": "http://127.0.0.1:8000"
+  },
+  "summary": [
+    "Assessment identified 4 minor observations; no critical or high-severity threats were found."
+  ],
+  "severity_counts": {
+    "medium": 4
+  },
+  "findings": [
+    {
+      "title": "Missing X-Frame-Options Header",
+      "category": "Security Headers",
+      "severity": "medium",
+      "description": "The lack of X-Frame-Options makes the site vulnerable to clickjacking.",
+      "remediation": "Implement the x-frame-options header in the web server configuration.",
+      "metadata": {}
+    },
+    {
+      "title": "Missing X-Content-Type-Options Header",
+      "category": "Security Headers",
+      "severity": "medium",
+      "description": "Without this header set to 'nosniff', the browser may try to MIME-sniff the content, potentially executing malicious code.",
+      "remediation": "Implement the x-content-type-options header in the web server configuration.",
+      "metadata": {}
+    },
+    {
+      "title": "Missing Content-Security-Policy Header",
+      "category": "Security Headers",
+      "severity": "medium",
+      "description": "CSP helps mitigate XSS and other injection attacks. It is currently missing.",
+      "remediation": "Implement the content-security-policy header in the web server configuration.",
+      "metadata": {}
+    },
+    {
+      "title": "Missing Strict-Transport-Security Header",
+      "category": "Security Headers",
+      "severity": "medium",
+      "description": "HSTS should be enabled to force HTTPS connections.",
+      "remediation": "Implement the strict-transport-security header in the web server configuration.",
+      "metadata": {}
+    }
+  ],
+  "structured": {
+    "findings": [
+      {
+        "title": "Missing X-Frame-Options Header",
+        "category": "Security Headers",
+        "severity": "medium",
+        "description": "The lack of X-Frame-Options makes the site vulnerable to clickjacking.",
+        "remediation": "Implement the x-frame-options header in the web server configuration.",
+        "metadata": {}
+      },
+      {
+        "title": "Missing X-Content-Type-Options Header",
+        "category": "Security Headers",
+        "severity": "medium",
+        "description": "Without this header set to 'nosniff', the browser may try to MIME-sniff the content, potentially executing malicious code.",
+        "remediation": "Implement the x-content-type-options header in the web server configuration.",
+        "metadata": {}
+      },
+      {
+        "title": "Missing Content-Security-Policy Header",
+        "category": "Security Headers",
+        "severity": "medium",
+        "description": "CSP helps mitigate XSS and other injection attacks. It is currently missing.",
+        "remediation": "Implement the content-security-policy header in the web server configuration.",
+        "metadata": {}
+      },
+      {
+        "title": "Missing Strict-Transport-Security Header",
+        "category": "Security Headers",
+        "severity": "medium",
+        "description": "HSTS should be enabled to force HTTPS connections.",
+        "remediation": "Implement the strict-transport-security header in the web server configuration.",
+        "metadata": {}
+      }
+    ],
+    "technologies": [],
+    "headers": {},
+    "count": 4
+  },
+  "raw_output_excerpt": "Mocked successful output",
+  "raw_output": "Mocked successful output",
+  "errors": [],
+  "error_message": null,
+  "exit_code": 0
+}
