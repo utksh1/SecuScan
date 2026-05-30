@@ -637,7 +637,6 @@ class TaskExecutor:
                 logger.error(f"Failed to kill docker container for {task_id}: {e}")
 
         db = await get_db()
-        
         await db.log_audit(
             "task_cancelled",
             "Task cancelled by user",
