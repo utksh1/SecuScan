@@ -152,9 +152,8 @@ Both files must be installed for the test suite to run correctly. The
 1. Fork the repository and create a branch from `main`.
 2. Pick an issue or open one before starting large work.
 3. Keep the change focused. Small PRs get reviewed much faster than broad rewrites.
-4. **Mind your PR size.** We recommend keeping PRs under **50 changed files** and **1,000 lines of total changes**. An automated GitHub Action will warn you if your PR exceeds this.
-5. Update tests and docs when behavior changes.
-6. Open a pull request with a clear description, linked issue, and screenshots for UI changes.
+4. Update tests and docs when behavior changes.
+5. Open a pull request with a clear description, linked issue, and screenshots for UI changes.
 
 Branch names can be simple and descriptive, such as:
 
@@ -182,6 +181,12 @@ Your PR should include:
 - Notes about documentation, migrations, environment variables, or breaking behavior when relevant
 
 Try to keep one pull request focused on one problem. If a change touches unrelated areas, split it into separate PRs when possible.
+
+### PR Size and Generated Artifacts
+
+To keep reviews manageable, an automated workflow will post an advisory warning if a PR exceeds **50 changed files** or **1,000 total lines**. We encourage splitting unusually large changes into smaller, focused pull requests.
+
+Additionally, please ensure you never commit auto-generated artifacts (such as `playwright-report/`, `test-results/`, `dist/`, or `.vite/`). The workflow will flag these if they are accidentally included. If this happens, remove them using `git rm --cached -r <path>`.
 
 ## Contribution Scoring
 
@@ -394,7 +399,6 @@ If a PR has been quiet for more than a week, a polite follow-up comment is compl
 
 Thank you for helping make SecuScan more useful, safer, and more welcoming to new contributors.
 ## Frontend Generated Artifacts
-A lightweight GitHub Action will warn you if your PR contains generated folders. This is advisory and will not fail your CI build.
 
 Never commit these auto-generated paths:
 - `frontend/dist/`
@@ -407,4 +411,3 @@ If CI fails, run:
 ```bash
 git rm --cached <file>
 echo 'frontend/dist/' >> .gitignore
-```
