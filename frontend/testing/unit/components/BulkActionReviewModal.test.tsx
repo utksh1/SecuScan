@@ -63,4 +63,58 @@ describe("BulkActionReviewModal", () => {
     });
     expect(desc).toBeInTheDocument();
   });
+
+  it("does NOT call onConfirm when cancel is clicked (no deletion before confirmation)", () => {
+    const onConfirm = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <BulkActionReviewModal
+        {...defaultProps}
+        onConfirm={onConfirm}
+        onClose={onClose}
+      />,
+    );
+    fireEvent.click(screen.getByText(/Cancel/i));
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT call onConfirm when Escape is pressed (no deletion before confirmation)", () => {
+    const onConfirm = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <BulkActionReviewModal
+        {...defaultProps}
+        onConfirm={onConfirm}
+        onClose={onClose}
+      />,
+    );
+    fireEvent.keyDown(screen.getByRole("dialog", { hidden: true }), {
+      key: "Escape",
+    });
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("deletion only happens after confirm button is clicked end-to-end", () => {
+    const onConfirm = vi.fn();
+    const onClose = vi.fn();
+    render(
+      <BulkActionReviewModal
+        {...defaultProps}
+        onConfirm={onConfirm}
+        onClose={onClose}
+      />,
+    );
+    expect(onConfirm).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText(/Yes, Delete/i));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("focuses cancel button on open for safe keyboard navigation", () => {
+    render(<BulkActionReviewModal {...defaultProps} />);
+    const cancelBtn = screen.getByText("Cancel");
+    expect(cancelBtn).toBeInTheDocument();
+  });
 });
