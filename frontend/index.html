@@ -10,7 +10,7 @@
     <script>
       // Prevent flash of wrong theme on initial load
       (function() {
-        const saved = localStorage.getItem('secuscan:theme');
+        const saved = localStorage.getItem('secuscan-theme');
         const theme = saved === 'light' || saved === 'dark'
           ? saved
           : (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
@@ -30,4 +30,3 @@
     <script type="module" src="/src/main.tsx"></script>
   </body>
   </html>
-

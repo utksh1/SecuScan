@@ -29,6 +29,7 @@ export default function ThemeToggle({ size = 'md' }: ThemeToggleProps) {
         flex-shrink-0
       `}
       aria-label={`Toggle to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+      aria-pressed={theme === 'dark'}
       title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
     >
       <span className={`material-symbols-outlined ${iconSize}`}>

@@ -65,7 +65,7 @@ export default function Settings() {
     }, [])
 
     const handleSave = () => {
-       localStorage.setItem('secuscan-config', JSON.stringify(config))
+        localStorage.setItem('secuscan-config', JSON.stringify(config))
         addToast("Operational parameters synchronized", "success")
         setTheme(config.theme as 'dark' | 'light')
     }
@@ -237,7 +237,7 @@ export default function Settings() {
                                 </div>
                                 <div className="space-y-3">
                                     <select
-                                        value={theme}
+                                        value={config.theme}
                                         onChange={(e) => setConfig({ ...config, theme: e.target.value })}
                                         className="w-full bg-black/40 border-4 border-black p-4 text-xs font-mono text-silver-bright focus:outline-none focus:ring-2 focus:ring-rag-blue"
                                     >
