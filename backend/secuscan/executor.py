@@ -637,13 +637,7 @@ class TaskExecutor:
                 logger.error(f"Failed to kill docker container for {task_id}: {e}")
 
         db = await get_db()
-        await db.execute(
-            "UPDATE tasks SET status = ?, completed_at = ? WHERE id = ?",
-            (TaskStatus.CANCELLED.value, datetime.now().isoformat(), task_id)
-        )
-
-        await self._broadcast(task_id, "status", TaskStatus.CANCELLED.value)
-        await self._invalidate_cached_views()
+        
 
         await db.log_audit(
             "task_cancelled",
