@@ -11,9 +11,13 @@ class VaultCrypto:
     """Symmetric encryption helper using AES-256-GCM."""
 
     def __init__(self, key: bytes):
-        if len(key) < 16:
-            raise ValueError("Vault key must be at least 16 bytes")
-        self.key = hashlib.sha256(key).digest()
+        try:
+            decoded = base64.urlsafe_b64decode(key + b"==")
+        except Exception:
+            raise ValueError("Vault key is not valid base64")
+        if len(decoded) < 32:
+            raise ValueError("Vault key must be at least 32 bytes when decoded")
+        self.key = hashlib.sha256(decoded).digest()
 
     def encrypt(self, plaintext: str) -> str:
         raw = plaintext.encode("utf-8")
