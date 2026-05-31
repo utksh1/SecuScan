@@ -141,6 +141,7 @@ class TaskExecutor:
         self,
         plugin_id: str,
         inputs: Dict[str, Any],
+        safe_mode: bool,
         preset: Optional[str] = None,
         consent_granted: bool = False
     ) -> str:
@@ -188,7 +189,7 @@ class TaskExecutor:
                 TaskStatus.QUEUED.value,
                 ScanPhase.QUEUED.value,
                 consent_granted,
-                inputs.get("safe_mode", True)
+                bool(safe_mode)
             )
         )
         

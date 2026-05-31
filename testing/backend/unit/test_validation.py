@@ -1,4 +1,5 @@
 import pytest
+import socket
 from backend.secuscan.validation import (
     validate_target, validate_port, validate_port_range, validate_url,
     sanitize_input, is_safe_path, match_pattern
@@ -19,6 +20,46 @@ def test_validate_target():
     # Invalid targets
     assert validate_target("10.0.0.0/24")[0] is True  # Private CIDR ranges are allowed in safe mode
     assert validate_target("not!a!valid!hostname")[0] is False
+
+
+def test_validate_target_safe_mode_blocks_public_hostname(monkeypatch):
+    def fake_getaddrinfo(_host, *_args, **_kwargs):
+        return [(socket.AF_INET, None, None, None, ("8.8.8.8", 0))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    assert validate_target("example.com", safe_mode=True)[0] is False
+
+
+def test_validate_target_safe_mode_blocks_multi_record_when_any_public(monkeypatch):
+    """If any A/AAAA record is public, safe-mode must fail closed."""
+    def fake_getaddrinfo(_host, *_args, **_kwargs):
+        return [
+            (socket.AF_INET, None, None, None, ("192.168.1.10", 0)),
+            (socket.AF_INET, None, None, None, ("8.8.8.8", 0)),
+        ]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    assert validate_target("multirecord.example", safe_mode=True)[0] is False
+
+
+def test_validate_target_safe_mode_blocks_dns_rebinding_union(monkeypatch):
+    """Rebinding/round-robin: validate_target resolves twice and validates the union."""
+    calls = {"n": 0}
+
+    def fake_getaddrinfo(_host, *_args, **_kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return [(socket.AF_INET, None, None, None, ("192.168.1.10", 0))]
+        return [(socket.AF_INET, None, None, None, ("8.8.8.8", 0))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    ok, _msg = validate_target("rebind.example", safe_mode=True)
+    assert ok is False
+    assert calls["n"] >= 2
+
+
+def test_validate_target_safe_mode_blocks_url_ip_literal():
+    assert validate_target("http://8.8.8.8", safe_mode=True)[0] is False
 
 
 def test_validate_port():
