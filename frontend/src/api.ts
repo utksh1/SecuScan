@@ -88,6 +88,7 @@ export interface TaskStartResponse {
 interface RequestOptions extends RequestInit {
   retryable?: boolean
   label?: string
+  actionType?: offlineQueue.ActionType
 }
 
 async function request<T>(path: string, init?: RequestOptions): Promise<T> {
@@ -102,6 +103,7 @@ async function request<T>(path: string, init?: RequestOptions): Promise<T> {
       body: init?.body as string | undefined,
       maxRetries: 3,
       label: init?.label || `${method} ${path}`,
+      actionType: init?.actionType,
     })
     throw new OfflineQueueError(`Queued for replay when online: ${method} ${path}`)
   }
@@ -179,6 +181,7 @@ export function startTask(plugin_id: string, inputs: Record<string, unknown>, co
     body: JSON.stringify({ plugin_id, inputs, consent_granted, preset }),
     retryable: true,
     label: 'Start Scan',
+    actionType: 'startTask',
   })
 }
 
@@ -303,6 +306,7 @@ export async function createWorkflow(data: WorkflowCreatePayload): Promise<Workf
     body: JSON.stringify(data),
     retryable: true,
     label: 'Create Workflow',
+    actionType: 'createWorkflow',
   })
   return normalizeWorkflow(workflow)
 }
@@ -329,6 +333,7 @@ export async function updateWorkflow(workflowId: string, data: WorkflowUpdatePay
     body: JSON.stringify(data),
     retryable: true,
     label: 'Update Workflow',
+    actionType: 'updateWorkflow',
   })
   return normalizeWorkflow(workflow)
 }

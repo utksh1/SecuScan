@@ -280,6 +280,155 @@ describe('offlineQueue', () => {
     })
   })
 
+  describe('conflict checks', () => {
+    it('removes updateWorkflow when resource is gone (GET 404)', async () => {
+      let callCount = 0
+      global.fetch = vi.fn().mockImplementation(() => {
+        callCount++
+        if (callCount === 1) return Promise.resolve({ ok: false, status: 404 })
+        return Promise.resolve({ ok: true })
+      })
+
+      const action = offlineQueue.enqueue({
+        url: '/api/v1/workflows/wf-1',
+        method: 'PATCH',
+        body: '{"name":"new"}',
+        maxRetries: 3,
+        actionType: 'updateWorkflow',
+      })
+
+      const ok = await offlineQueue.retry(action.id)
+      expect(ok).toBe(false)
+      expect(offlineQueue.getQueue()).toHaveLength(0)
+      expect(callCount).toBe(1)
+    })
+
+    it('removes createWorkflow when workflow name already exists (conflict)', async () => {
+      let callCount = 0
+      global.fetch = vi.fn().mockImplementation(() => {
+        callCount++
+        if (callCount === 1) return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            workflows: [{ name: 'test' }],
+            total: 1,
+          }),
+        })
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+      })
+
+      const action = offlineQueue.enqueue({
+        url: '/api/v1/workflows',
+        method: 'POST',
+        body: JSON.stringify({ name: 'test', enabled: true, steps: [] }),
+        maxRetries: 3,
+        actionType: 'createWorkflow',
+      })
+
+      const ok = await offlineQueue.retry(action.id)
+      expect(ok).toBe(false)
+      expect(offlineQueue.getQueue()).toHaveLength(0)
+      expect(callCount).toBe(1)
+    })
+
+    it('proceeds with createWorkflow when workflow name is unique (no conflict)', async () => {
+      let callCount = 0
+      global.fetch = vi.fn().mockImplementation(() => {
+        callCount++
+        if (callCount === 1) return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            workflows: [{ name: 'other' }],
+            total: 1,
+          }),
+        })
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ id: 'wf-2' }) })
+      })
+
+      const action = offlineQueue.enqueue({
+        url: '/api/v1/workflows',
+        method: 'POST',
+        body: JSON.stringify({ name: 'new-workflow', enabled: true, steps: [] }),
+        maxRetries: 3,
+        actionType: 'createWorkflow',
+      })
+
+      const ok = await offlineQueue.retry(action.id)
+      expect(ok).toBe(true)
+      expect(offlineQueue.getQueue()).toHaveLength(0)
+      expect(callCount).toBe(2)
+    })
+
+    it('removes startTask when similar task is already running (conflict)', async () => {
+      let callCount = 0
+      global.fetch = vi.fn().mockImplementation(() => {
+        callCount++
+        if (callCount === 1) return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            tasks: [{ plugin_id: 'test_plugin', status: 'running' }],
+          }),
+        })
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+      })
+
+      const action = offlineQueue.enqueue({
+        url: '/api/v1/task/start',
+        method: 'POST',
+        body: JSON.stringify({ plugin_id: 'test_plugin', inputs: {} }),
+        maxRetries: 3,
+        actionType: 'startTask',
+      })
+
+      const ok = await offlineQueue.retry(action.id)
+      expect(ok).toBe(false)
+      expect(offlineQueue.getQueue()).toHaveLength(0)
+      expect(callCount).toBe(1)
+    })
+
+    it('proceeds with startTask when no similar task is running (no conflict)', async () => {
+      let callCount = 0
+      global.fetch = vi.fn().mockImplementation(() => {
+        callCount++
+        if (callCount === 1) return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            tasks: [{ plugin_id: 'other_plugin', status: 'completed' }],
+          }),
+        })
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ task_id: 'task-1' }) })
+      })
+
+      const action = offlineQueue.enqueue({
+        url: '/api/v1/task/start',
+        method: 'POST',
+        body: JSON.stringify({ plugin_id: 'test_plugin', inputs: {} }),
+        maxRetries: 3,
+        actionType: 'startTask',
+      })
+
+      const ok = await offlineQueue.retry(action.id)
+      expect(ok).toBe(true)
+      expect(offlineQueue.getQueue()).toHaveLength(0)
+      expect(callCount).toBe(2)
+    })
+
+    it('skips conflict check when actionType is not set (backward compat)', async () => {
+      global.fetch = vi.fn().mockResolvedValue({ ok: true })
+
+      const action = offlineQueue.enqueue({
+        url: '/api/v1/task/start',
+        method: 'POST',
+        body: '{}',
+        maxRetries: 3,
+      })
+
+      const ok = await offlineQueue.retry(action.id)
+      expect(ok).toBe(true)
+      expect(global.fetch).toHaveBeenCalledTimes(1)
+    })
+  })
+
   describe('auto-replay is disabled', () => {
     it('does not auto-replay on reconnect (default is false)', () => {
       const retryAllSpy = vi.spyOn(offlineQueue, 'retryAll')

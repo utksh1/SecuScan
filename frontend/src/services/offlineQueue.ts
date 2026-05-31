@@ -1,5 +1,7 @@
 const STORAGE_KEY = 'offline-queue'
 
+export type ActionType = 'startTask' | 'createWorkflow' | 'updateWorkflow'
+
 export interface QueuedAction {
   id: string
   url: string
@@ -10,6 +12,7 @@ export interface QueuedAction {
   retryCount: number
   maxRetries: number
   label?: string
+  actionType?: ActionType
 }
 
 type Listener = () => void
@@ -68,7 +71,7 @@ export function clear(): void {
   notify()
 }
 
-type ReplayResult = 'ok' | 'gone' | 'fail'
+type ReplayResult = 'ok' | 'gone' | 'fail' | 'conflict'
 
 export function retry(id: string): Promise<boolean> {
   const idx = queue.findIndex((a) => a.id === id)
@@ -79,7 +82,7 @@ export function retry(id: string): Promise<boolean> {
       remove(id)
       return true
     }
-    if (result === 'gone' || action.retryCount >= action.maxRetries) {
+    if (result === 'gone' || result === 'conflict' || action.retryCount >= action.maxRetries) {
       remove(id)
       return false
     }
@@ -119,7 +122,59 @@ export function isOnline(): boolean {
   return typeof navigator !== 'undefined' ? navigator.onLine : true
 }
 
+async function conflictCheck(action: QueuedAction): Promise<'no-conflict' | 'conflict' | 'gone'> {
+  if (!action.actionType) return 'no-conflict'
+
+  try {
+    switch (action.actionType) {
+      case 'updateWorkflow': {
+        const res = await fetch(action.url, { method: 'GET' })
+        if (res.status === 404 || res.status === 410) return 'gone'
+        return 'no-conflict'
+      }
+      case 'createWorkflow': {
+        const listUrl = action.url.replace(/\/workflows(\/.*)?$/, '/workflows')
+        const res = await fetch(listUrl, { method: 'GET' })
+        if (!res.ok) return 'no-conflict'
+        const body = action.body ? JSON.parse(action.body) : null
+        if (!body?.name) return 'no-conflict'
+        const data = await res.json()
+        const workflows = Array.isArray(data) ? data : data.workflows
+        const exists = Array.isArray(workflows) && workflows.some((w: any) => w.name === body.name)
+        return exists ? 'conflict' : 'no-conflict'
+      }
+      case 'startTask': {
+        const tasksUrl = action.url.replace('/task/start', '/tasks')
+        const res = await fetch(tasksUrl, { method: 'GET' })
+        if (!res.ok) return 'no-conflict'
+        const body = action.body ? JSON.parse(action.body) : null
+        if (!body?.plugin_id) return 'no-conflict'
+        const data = await res.json()
+        const tasks = Array.isArray(data) ? data : data.tasks
+        const running = Array.isArray(tasks) && tasks.some((t: any) =>
+          t.plugin_id === body.plugin_id && (t.status === 'running' || t.status === 'queued')
+        )
+        return running ? 'conflict' : 'no-conflict'
+      }
+      default:
+        return 'no-conflict'
+    }
+  } catch {
+    return 'no-conflict'
+  }
+}
+
 function replayAction(action: QueuedAction): Promise<ReplayResult> {
+  if (action.actionType) {
+    return conflictCheck(action).then((check) => {
+      if (check !== 'no-conflict') return check
+      return doFetch(action)
+    })
+  }
+  return doFetch(action)
+}
+
+function doFetch(action: QueuedAction): Promise<ReplayResult> {
   const { url, method, headers, body } = action
   return fetch(url, {
     method,
