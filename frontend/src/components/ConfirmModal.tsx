@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -23,7 +24,6 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 }) => {
   const modalRef = useRef<HTMLDivElement>(null);
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
-  const cancelButtonRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -35,25 +35,17 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
     // Focus the confirm button
     confirmButtonRef.current?.focus();
 
-    // Hide background from screen readers
-    const mainContent = document.getElementById('root');
-    if (mainContent) {
-      mainContent.setAttribute('aria-hidden', 'true');
-    }
-
     // Handle keyboard events
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onCancel();
       } else if (e.key === 'Enter' && !e.shiftKey) {
-        // Only confirm if focus is not on a button (to avoid double trigger)
         const activeElement = document.activeElement;
         if (activeElement?.tagName !== 'BUTTON') {
           e.preventDefault();
           onConfirm();
         }
       } else if (e.key === 'Tab') {
-        // Trap focus within modal
         const focusableElements = modalRef.current?.querySelectorAll(
           'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
         );
@@ -77,13 +69,6 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-
-      // Restore background
-      if (mainContent) {
-        mainContent.setAttribute('aria-hidden', 'false');
-      }
-
-      // Restore focus
       previousFocusRef.current?.focus();
     };
   }, [isOpen, onConfirm, onCancel]);
@@ -98,7 +83,8 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
     }
   };
 
-  return (
+  // Render modal using Portal - goes OUTSIDE #root
+  return createPortal(
     <>
       {/* Backdrop */}
       <div
@@ -134,7 +120,6 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           {/* Footer */}
           <div className="border-t-4 border-black p-6 flex justify-end gap-4">
             <button
-              ref={cancelButtonRef}
               onClick={onCancel}
               className="px-6 py-3 bg-charcoal-dark border-2 border-black text-xs font-black uppercase tracking-wider text-silver-bright/60 hover:text-silver-bright hover:border-silver-bright/30 transition-all"
             >
@@ -150,6 +135,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 };
