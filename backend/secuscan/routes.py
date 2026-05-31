@@ -202,7 +202,7 @@ async def get_plugins_summary():
     category_counts: Dict[str, int] = {}
 
     for plugin in plugins:
-        category = getattr(plugin, "category", "unknown")
+        category = plugin.get("category", "unknown")
 
         category_counts[category] = (
             category_counts.get(category, 0) + 1
@@ -281,6 +281,20 @@ async def start_task(
     if "safe_mode" in effective_inputs:
         effective_inputs.pop("safe_mode", None)
     effective_inputs["safe_mode"] = safe_mode
+
+    # Validate numeric timeout inputs at request time to prevent unsafe values
+    for tkey in ("timeout", "max_scan_time"):
+        # Only enforce bounds if the plugin declares the field in its schema
+        declared = any(getattr(f, "id", None) == tkey for f in (plugin.fields or []))
+        if not declared:
+            continue
+        if tkey in effective_inputs and effective_inputs[tkey] not in (None, ""):
+            try:
+                tval = int(effective_inputs[tkey])
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail=f"Invalid value for {tkey}: must be an integer")
+            if tval <= 0 or tval > settings.sandbox_timeout:
+                raise HTTPException(status_code=400, detail=f"{tkey} must be between 1 and {settings.sandbox_timeout} seconds")
 
     if target := effective_inputs.get("target"):
         target_str = str(target)
