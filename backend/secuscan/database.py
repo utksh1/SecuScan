@@ -282,19 +282,13 @@ class Database:
                     print(f"Failed to add column {col_name}: {e}")
 
     async def _run_migrations(self):
-        """Apply any pending SQL migration files from the migrations directory.
-
-        Migration files are plain .sql scripts named NNN_description.sql.
-        They are applied in lexicographic order and are idempotent — every
-        statement uses CREATE TABLE/INDEX IF NOT EXISTS so re-running is safe.
-
-        The migrations directory is always resolved relative to this source
-        file so it works correctly regardless of where the database file lives.
-        """
         migrations_dir = Path(__file__).parent / "migrations"
 
         if not migrations_dir.exists():
-            return
+            raise RuntimeError(
+            f"Migrations directory not found at {migrations_dir} — "
+            "ensure the backend package is installed correctly."
+        )
 
         for migration_file in sorted(migrations_dir.glob("*.sql")):
             sql = migration_file.read_text(encoding="utf-8")

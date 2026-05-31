@@ -346,20 +346,19 @@ async def test_saved_views_migration_runs_for_file_db(tmp_path):
 @pytest.mark.asyncio
 async def test_migration_failure_raises_runtime_error(tmp_path):
     """A corrupted migration file must abort startup with RuntimeError."""
-    import shutil
     from pathlib import Path
-
-    # Find the real migrations directory next to database.py
     import backend.secuscan.database as _db_mod
-    migrations_dir = Path(_db_mod.__file__).parent / "migrations"
 
-    # Write a broken SQL file
+    migrations_dir = Path(_db_mod.__file__).parent / "migrations"
     broken = migrations_dir / "999_broken_test.sql"
     broken.write_text("THIS IS NOT VALID SQL !!!")
 
+    db = None
     try:
         db = Database(str(tmp_path / "test_fail.db"))
         with pytest.raises(RuntimeError, match="startup aborted"):
             await db.connect()
     finally:
+        if db and db._connection:
+            await db.disconnect()
         broken.unlink(missing_ok=True)
