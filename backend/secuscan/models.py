@@ -2,11 +2,13 @@
 Pydantic models for API requests and responses
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Annotated
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, RootModel
 from enum import Enum
 
+
+MAX_BULK_DELETE = 500
 
 class SafetyLevel(str, Enum):
     """Plugin safety level classification"""
@@ -22,6 +24,15 @@ class TaskStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+
+class ScanPhase(str, Enum):
+    """Granular scan phase for progress display"""
+    QUEUED = "queued"
+    RUNNING_COMMAND = "running_command"
+    PARSING = "parsing"
+    REPORTING = "reporting"
+    FINISHED = "finished"
 
 
 class PluginFieldType(str, Enum):
@@ -115,6 +126,11 @@ class Finding(BaseModel):
     proof: Optional[str] = None
     discovered_at: Optional[datetime] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    exploitability: Optional[float] = None
+    confidence: Optional[float] = None
+    asset_exposure: Optional[str] = None
+    risk_score: Optional[float] = None
+    risk_factors: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class TaskResult(BaseModel):
@@ -161,3 +177,60 @@ class ErrorResponse(BaseModel):
     message: str
     field: Optional[str] = None
     details: Optional[Dict[str, Any]] = None
+
+
+class NotificationChannelType(str, Enum):
+    """Supported notification delivery channels."""
+    WEBHOOK = "webhook"
+    EMAIL = "email"
+
+
+class NotificationSeverityThreshold(str, Enum):
+    """Minimum finding severity that can trigger a notification rule."""
+    CRITICAL = "critical"
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    INFO = "info"
+
+
+class NotificationDeliveryStatus(str, Enum):
+    """Outcome of a notification delivery attempt."""
+    SUCCESS = "success"
+    FAILED = "failed"
+
+
+class NotificationRuleCreate(BaseModel):
+    """Request payload for creating or updating a notification rule."""
+    name: str
+    severity_threshold: NotificationSeverityThreshold
+    channel_type: NotificationChannelType
+    target_url_or_email: str
+    is_active: bool = True
+
+
+class NotificationRuleResponse(BaseModel):
+    """Stored notification rule returned by the API."""
+    id: str
+    name: str
+    severity_threshold: str
+    channel_type: str
+    target_url_or_email: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class NotificationHistoryResponse(BaseModel):
+    """Record of a single notification delivery attempt."""
+    id: str
+    rule_id: str
+    finding_id: str
+    status: str
+    error_message: Optional[str] = None
+    sent_at: datetime
+
+
+class BulkDeleteRequest(RootModel[Annotated[List[str], Field(max_length=MAX_BULK_DELETE)]]):
+    """Accepts a JSON array of task IDs directly. Max 500 per request."""
+    pass

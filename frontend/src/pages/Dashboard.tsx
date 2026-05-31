@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { getDashboardSummary, getHealth, cancelTask } from '../api'
 import { ExecutiveStatsBar } from '../components/ExecutiveStatsBar'
 import { routePath, routes } from '../routes'
-import { parseDateSafe, formatBriefingDate, formatTaskInit, formatLocaleDate } from '../utils/date'
+import { formatBriefingDate, formatTaskInit, formatLocaleDate, formatLocaleTime } from '../utils/date'
 
 type Finding = {
   id: string
@@ -180,8 +180,14 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [backendConnected, setBackendConnected] = useState<boolean | null>(null)
-  const [lastSync, setLastSync] = useState<string | null>(() => new Date().toISOString())
+  const [lastSync, setLastSync] = useState<string | null>(null)
   const navigate = useNavigate()
+
+  const applySummary = (data: Partial<Summary>) => {
+    setSummary(normalizeSummary(data))
+    setLastSync(new Date().toISOString())
+    setError(null)
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -202,9 +208,7 @@ export default function Dashboard() {
       getDashboardSummary()
         .then((data) => {
           if (cancelled) return
-          setSummary(normalizeSummary(data as Partial<Summary>))
-          setLastSync(new Date().toISOString())
-          setError(null)
+          applySummary(data as Partial<Summary>)
         })
         .catch((err) => {
           if (cancelled) return
@@ -229,7 +233,7 @@ export default function Dashboard() {
       await cancelTask(taskId)
       // Refresh summary immediately
       const data = await getDashboardSummary() as Summary
-      setSummary(normalizeSummary(data))
+      applySummary(data)
     } catch (err) {
       console.error('Failed to abort task:', err)
     }
@@ -237,11 +241,11 @@ export default function Dashboard() {
 
   const risk = getRiskProfile(summary)
   const criticalHigh = summary.critical_findings + summary.high_findings
-  
+
   const progressWidth = summary.scan_activity.total > 0
     ? Math.max(8, Math.min(100, (summary.scan_activity.completed / summary.scan_activity.total) * 100))
     : 0
-  
+
   const statusBadgeClasses = backendConnected === null
     ? 'border-accent-silver/10 bg-silver/5 text-silver-bright'
     : backendConnected
@@ -279,29 +283,38 @@ export default function Dashboard() {
           transition={{ delay: 0.2, duration: 0.8, ease: [0.19, 1, 0.22, 1] }}
           className="flex flex-col md:flex-row items-start md:items-center gap-8 md:gap-10"
         >
-          {/* Integrity Metric - High Visibility */}
-          <div className="flex items-center gap-6 px-6 py-4 bg-charcoal border-4 border-black shadow-[8px_8px_0px_0px_rgba(31,31,31,1)] group transition-all">
-            <div className="flex flex-col items-end text-right">
-              <span className="text-[11px] font-black text-silver-bright/90 uppercase tracking-[0.4em] italic mb-1">
+          {/* Integrity Metric - Live Status Panel */}
+          <div className="relative flex items-center gap-5 px-6 py-4 bg-charcoal/80 border border-rag-blue/20 backdrop-blur-sm rounded-sm group transition-all hover:border-rag-blue/40 hover:bg-charcoal/90">
+            {/* Subtle top glow */}
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-rag-blue/30 to-transparent opacity-50"></div>
+
+            <div className="flex flex-col items-end text-right flex-1">
+              <span className="text-[10px] font-black text-silver-bright/80 uppercase tracking-[0.35em] italic mb-2 leading-tight">
                 SYSTEM_STATUS_SYNC
               </span>
-               <div className="flex items-baseline gap-6">
-                <div className="flex items-baseline gap-3">
+              <div className="flex items-baseline gap-5 mb-1">
+                <div className="flex items-baseline gap-2.5">
                   <span className="text-2xl font-mono text-silver-bright font-black tracking-tighter italic leading-none">
-                    {(formatBriefingDate(lastSync).split(',')[0]?.trim().toUpperCase()) || 'INITIALIZING'}
+                    {lastSync ? (formatBriefingDate(lastSync).split(',')[0]?.trim().toUpperCase()) : 'INITIALIZING'}
                   </span>
-                  <span className="text-base font-mono text-rag-blue/90 font-black italic leading-none">
-                    {(formatBriefingDate(lastSync).split(',')[1]?.trim().toUpperCase()) || '---'}
+                  <span className="text-sm font-mono text-rag-blue/90 font-black italic leading-none">
+                    {lastSync ? (formatBriefingDate(lastSync).split(',')[1]?.trim().toUpperCase()) : '---'}
                   </span>
                 </div>
-                <div className="h-5 w-px bg-silver/20 self-center mx-1"></div>
+                <div className="h-4 w-px bg-gradient-to-b from-rag-blue/40 via-rag-blue/20 to-transparent self-center mx-0.5"></div>
                 <span className="text-lg font-mono text-rag-blue font-black italic leading-none">
-                  {(formatBriefingDate(lastSync).split(',')[2]?.trim().toUpperCase()) || '00:00'}
+                  {lastSync ? (formatBriefingDate(lastSync).split(',')[2]?.trim().toUpperCase()) : '00:00'}
                 </span>
               </div>
+              {lastSync ? (
+                <p className="text-[9px] font-mono text-silver/50 uppercase tracking-[0.2em] whitespace-nowrap">
+                  Last updated: <time dateTime={lastSync} className="text-rag-blue/70">{formatLocaleTime(lastSync)}</time>
+                </p>
+              ) : null}
             </div>
-            <div className="w-14 h-14 bg-charcoal-dark border-4 border-black flex items-center justify-center text-rag-blue shadow-inner group-hover:bg-rag-blue group-hover:text-black transition-all">
-              <span className="material-symbols-outlined text-2xl font-black" aria-hidden="true">terminal</span>
+
+            <div className="flex items-center justify-center w-12 h-12 bg-charcoal-dark/60 border border-rag-blue/30 rounded-sm text-rag-blue/80 group-hover:text-rag-blue group-hover:bg-charcoal-dark group-hover:border-rag-blue/60 group-hover:shadow-[0_0_12px_rgba(59,130,246,0.3)] transition-all duration-300">
+              <span className="material-symbols-outlined text-xl font-black">terminal</span>
             </div>
           </div>
 
@@ -332,7 +345,7 @@ export default function Dashboard() {
               animate={{ opacity: 1 }}
               className="mt-12 py-16 flex flex-col items-center justify-center bg-charcoal border border-rag-red/30 rounded-md max-w-3xl mx-auto shadow-lg">
               <div className="w-12 h-12 rounded-full bg-rag-red/10 flex items-center justify-center mb-4">
-                <span className="material-symbols-outlined text-rag-red text-2xl" aria-hidden="true">warning</span>
+                <span className="material-symbols-outlined text-rag-red text-2xl">warning</span>
               </div>
               <h3 className="text-rag-red text-lg font-bold tracking-widest uppercase mb-2">
                 System Offline
@@ -525,7 +538,7 @@ export default function Dashboard() {
                                     onClick={() => handleAbort(task.id)}
                                     className="text-[10px] font-bold text-silver/40 hover:text-rag-red uppercase tracking-widest transition-colors flex items-center gap-2"
                                   >
-                                    <span className="material-symbols-outlined text-[14px]" aria-hidden="true">cancel</span>
+                                    <span className="material-symbols-outlined text-[14px]">cancel</span>
                                     Abort
                                   </button>
                                 </>
@@ -578,7 +591,7 @@ export default function Dashboard() {
                       Recent Audit Findings
                     </h3>
                   </header>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                       {summary.recent_findings.length === 0 ? (
                           <div className="col-span-full bg-charcoal/30 p-12 text-center border border-accent-silver/5">
