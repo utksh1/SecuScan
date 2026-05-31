@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { HugeiconsIcon } from '@hugeicons/react'
@@ -26,6 +26,7 @@ import {
     YAxis,
     CartesianGrid
 } from 'recharts'
+import { useToast } from '../components/ToastContext'
 
 interface Task {
     task_id: string
@@ -33,6 +34,7 @@ interface Task {
     tool: string
     target: string
     status: string
+    scan_phase?: string
     created_at: string
     started_at?: string
     completed_at?: string
@@ -41,6 +43,18 @@ interface Task {
     error_message?: string
     inputs?: Record<string, any>
     preset?: string
+    queue_position?: number
+    pending_count?: number
+}
+
+interface RiskFactor {
+    factor: string
+    label: string
+    value: string | number
+    score: number
+    weight: number
+    contribution: number
+    detail: string
 }
 
 interface Finding {
@@ -56,6 +70,11 @@ interface Finding {
     proof?: string
     discovered_at?: string
     metadata?: Record<string, any>
+    risk_score?: number
+    risk_factors?: RiskFactor[]
+    exploitability?: number
+    confidence?: number
+    asset_exposure?: string
 }
 
 interface TaskResult {
@@ -88,6 +107,57 @@ function defaultValueForField(field: PluginFieldSchema): unknown {
     return ''
 }
 
+
+const PHASE_LABELS: Record<string, string> = {
+    queued: 'QUEUED',
+    running_command: 'RUNNING_SCAN',
+    parsing: 'PARSING_RESULTS',
+    reporting: 'GENERATING_REPORT',
+    finished: 'FINALIZING',
+}
+
+const PHASE_MESSAGES: Record<string, string> = {
+    queued: 'Awaiting execution slot...',
+    running_command: 'Executing security scan...',
+    parsing: 'Parsing scan results...',
+    reporting: 'Generating reports...',
+    finished: 'Finalizing...',
+}
+
+function PhaseLabel({ phase }: { phase?: string }) {
+    const label = phase ? PHASE_LABELS[phase] : null
+    const message = phase ? PHASE_MESSAGES[phase] : 'Decrypting_Briefing...'
+    return (
+        <p className="text-xs font-black text-silver-bright uppercase tracking-[0.5em] italic">
+            {label || 'DECRYPTING_BRIEFING...'}
+        </p>
+    )
+}
+
+function PhaseProgress({ phase }: { phase?: string }) {
+    if (!phase || phase === 'finished') return null
+    const phases = ['queued', 'running_command', 'parsing', 'reporting']
+    const currentIdx = phases.indexOf(phase)
+    if (currentIdx === -1) return null
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center gap-2">
+                {phases.map((p, i) => (
+                    <React.Fragment key={p}>
+                        <div className={`w-3 h-3 border-2 ${i <= currentIdx ? 'bg-rag-blue border-rag-blue shadow-[0_0_8px_rgba(0,112,243,0.5)]' : 'bg-charcoal-dark border-silver/20'} transition-all duration-500`} />
+                        {i < phases.length - 1 && (
+                            <div className={`h-0.5 flex-1 ${i < currentIdx ? 'bg-rag-blue' : 'bg-silver/10'} transition-all duration-500`} />
+                        )}
+                    </React.Fragment>
+                ))}
+            </div>
+            <p className="text-[10px] font-mono text-rag-blue/80 uppercase tracking-[0.3em] italic">
+                {PHASE_MESSAGES[phase] || 'Processing...'}
+            </p>
+        </div>
+    )
+}
 
 function formatToolLabel(tool?: string, pluginId?: string) {
     const normalized = (tool || '').trim()
@@ -125,6 +195,7 @@ function DetailIcon({
 export default function TaskDetails() {
     const { taskId } = useParams()
     const navigate = useNavigate()
+    const { addToast } = useToast()
 
     const [task, setTask] = useState<Task | null>(null)
     const [result, setResult] = useState<TaskResult | null>(null)
@@ -132,6 +203,7 @@ export default function TaskDetails() {
     const [rawOutput, setRawOutput] = useState<string>('')
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [scanPhase, setScanPhase] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<'summary' | 'results' | 'parameters' | 'raw'>('summary')
     const [expandedFindingRows, setExpandedFindingRows] = useState<Record<number, boolean>>({})
     const [expandedDiscoveryRows, setExpandedDiscoveryRows] = useState<Record<number, boolean>>({})
@@ -141,11 +213,30 @@ export default function TaskDetails() {
     const [copiedRawOutput, setCopiedRawOutput] = useState(false)
 
     const FindingDrawer = ({ finding, onClose }: { finding: Finding, onClose: () => void }) => {
+        const drawerRef = useRef<HTMLDivElement>(null)
+
+        useEffect(() => {
+            drawerRef.current?.focus()
+
+            const handleKeyDown = (event: KeyboardEvent) => {
+                if (event.key === 'Escape') onClose()
+            }
+
+            window.addEventListener('keydown', handleKeyDown)
+            return () => window.removeEventListener('keydown', handleKeyDown)
+        }, [onClose])
+
         if (!finding) return null
         const severityColor = severityTone(finding.severity).split(' ')[0]
-        
+        const drawerTitleId = `finding-drawer-title-${finding.id ?? finding.title.replace(/\s+/g, '-').toLowerCase()}`
+
         return (
             <motion.div
+                ref={drawerRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby={drawerTitleId}
+                tabIndex={-1}
                 initial={{ x: '100%' }}
                 animate={{ x: 0 }}
                 exit={{ x: '100%' }}
@@ -157,13 +248,15 @@ export default function TaskDetails() {
                         <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-2 py-0.5 border ${severityTone(finding.severity)}`}>
                             {finding.severity}
                         </span>
-                        <h2 className="text-xl font-black text-silver-bright italic uppercase tracking-tight">{finding.title}</h2>
+                        <h2 id={drawerTitleId} className="text-xl font-black text-silver-bright italic uppercase tracking-tight">{finding.title}</h2>
                     </div>
-                    <button 
+                    <button
+                        type="button"
                         onClick={onClose}
+                        aria-label="Close finding details"
                         className="p-2 hover:bg-white/5 transition-colors text-silver/40 hover:text-silver-bright"
                     >
-                        <DetailIcon icon={Cancel02Icon} />
+                        <DetailIcon icon={Cancel02Icon} className="pointer-events-none" />
                     </button>
                 </div>
 
@@ -204,6 +297,14 @@ export default function TaskDetails() {
                                 </p>
                             </div>
                         )}
+                        {finding.risk_score !== undefined && finding.risk_score !== null && (
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Risk Score</h3>
+                                <p className={`text-sm font-black italic ${finding.risk_score >= 7 ? 'text-rag-red' : finding.risk_score >= 4 ? 'text-rag-amber' : 'text-rag-blue'}`}>
+                                    {finding.risk_score.toFixed(1)}
+                                </p>
+                            </div>
+                        )}
                         {finding.cve && (
                             <div className="space-y-4">
                                 <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">CVE Identifiers</h3>
@@ -217,6 +318,28 @@ export default function TaskDetails() {
                             </p>
                         </div>
                     </div>
+
+                    {finding.risk_factors && finding.risk_factors.length > 0 && (
+                        <div className="space-y-4">
+                            <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Risk Factor Breakdown</h3>
+                            <div className="space-y-2">
+                                {finding.risk_factors.map((rf) => (
+                                    <div key={rf.factor} className="flex items-center justify-between text-[11px] border-b border-white/[0.03] pb-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-silver/40 uppercase tracking-wider">{rf.label}</span>
+                                            <span className="text-silver/25 text-[9px]">({(rf.weight * 100).toFixed(0)}%)</span>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-silver/70 font-mono">{rf.score.toFixed(1)}</span>
+                                            <span className={`text-[10px] font-mono ${rf.contribution >= 2 ? 'text-rag-red' : rf.contribution >= 1 ? 'text-rag-amber' : 'text-silver/40'}`}>
+                                                +{rf.contribution.toFixed(1)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {Object.keys(finding.metadata || {}).length > 0 && (
                         <div className="space-y-4">
@@ -245,12 +368,24 @@ export default function TaskDetails() {
             try {
                 const data = JSON.parse(e.data)
                 setTask((prev: Task | null) => prev ? { ...prev, status: data.status } : null)
+                if (data.scan_phase) {
+                    setScanPhase(data.scan_phase)
+                }
                 if (['completed', 'failed', 'cancelled'].includes(data.status)) {
                     es.close()
                     loadTask()
                 }
             } catch (err) {
                 console.error("Status stream error", err)
+            }
+        })
+
+        es.addEventListener('phase', (e) => {
+            try {
+                const data = JSON.parse(e.data)
+                setScanPhase(data.scan_phase)
+            } catch (err) {
+                console.error("Phase stream error", err)
             }
         })
 
@@ -279,6 +414,9 @@ export default function TaskDetails() {
                 getTaskResult(taskId!).catch(() => null) as Promise<TaskResult | null>
             ])
             setTask(statusData)
+            if (statusData.scan_phase) {
+                setScanPhase(statusData.scan_phase)
+            }
             getPluginSchema(statusData.plugin_id).then(setSchema).catch(() => setSchema(null))
 
             if (resultData) {
@@ -297,6 +435,19 @@ export default function TaskDetails() {
         }
     }
 
+    const copyTaskId = async () => {
+        if (!taskId) {
+            addToast('No Task ID available', 'warning')
+            return
+        }
+        try {
+            await navigator.clipboard.writeText(taskId || '')
+            addToast('Task ID copied successfully', 'success')
+        } catch (err) {
+            console.error('Failed to copy task ID:', err)
+            addToast('Unable to copy Task ID', 'error')
+        }
+    }
     const handleRescan = async () => {
         if (!task) return
         try {
@@ -341,7 +492,7 @@ export default function TaskDetails() {
             <div className="min-h-screen bg-charcoal-dark flex items-center justify-center p-12">
                 <div className="space-y-4 text-center">
                     <div className="w-20 h-20 border-8 border-silver-bright/10 border-t-rag-blue animate-spin mx-auto shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"></div>
-                    <p className="text-xs font-black text-silver-bright uppercase tracking-[0.5em] italic">Decrypting_Briefing...</p>
+                    <PhaseLabel phase={scanPhase || undefined} />
                 </div>
             </div>
         )
@@ -360,7 +511,7 @@ export default function TaskDetails() {
         : '--:--'
     const isTerminal = ['completed', 'failed', 'cancelled'].includes(task.status)
     const durationLabel = isTerminal
-        ? (task.duration_seconds 
+        ? (task.duration_seconds
             ? `${Math.floor(task.duration_seconds / 60)}M ${Math.floor(task.duration_seconds % 60)}S`
             : (task.status === 'completed' ? '0M 0S' : 'TERMINATED'))
         : 'ACTIVE'
@@ -527,6 +678,7 @@ export default function TaskDetails() {
         }
     }
 
+
     const DetailCard = ({ label, value, subValue }: { label: string, value: string, subValue?: string }) => (
         <div className="bg-charcoal border border-white/5 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] min-h-[118px] flex flex-col justify-between">
             <div className="space-y-3">
@@ -549,17 +701,31 @@ export default function TaskDetails() {
             <header className="border-b border-white/8 pb-6">
                 <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
                     <div className="flex items-start gap-5">
-                    <button 
-                        onClick={() => navigate(routes.scans)}
+                        <button
+                            onClick={() => navigate(routes.scans)}
                             className="bg-charcoal border border-white/10 p-3 text-silver-bright transition-colors hover:bg-white/[0.04]"
-                    >
-                        <DetailIcon icon={ArrowLeft01Icon} />
-                    </button>
+                        >
+                            <DetailIcon icon={ArrowLeft01Icon} />
+                        </button>
                         <div className="space-y-3">
                             <div className="flex flex-wrap items-center gap-3">
                                 <span className="bg-rag-blue text-black px-3 py-1 text-[10px] uppercase tracking-[0.3em] inline-block font-black">
                                     Mission_Dossier_SIG#{taskId?.split('-')[0].toUpperCase()}
                                 </span>
+                                <button
+                                    type="button"
+                                    onClick={copyTaskId}
+                                    aria-label="Copy task ID"
+                                    title="Copy Task ID"
+                                    disabled={!taskId}
+                                    className="flex items-center gap-1 border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-black text-silver-bright hover:bg-white/[0.04] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                    <span className="material-symbols-outlined text-sm">
+                                        content_copy
+                                    </span>
+
+                                    Copy ID
+                                </button>
                                 <span className={`px-3 py-1 text-[10px] uppercase tracking-[0.3em] border ${statusTone}`}>
                                     {task.status}
                                 </span>
@@ -601,20 +767,24 @@ export default function TaskDetails() {
                                     <DetailIcon icon={Download01Icon} size={16} />
                                     Csv_Export
                                 </button>
-                            <button
-                                onClick={() => window.open(`${API_BASE}/task/${taskId}/report/pdf`)}
+                                <button
+                                    onClick={() => window.open(`${API_BASE}/task/${taskId}/report/pdf`)}
                                     className="bg-silver-bright px-5 py-3 text-black text-[10px] font-black uppercase tracking-[0.26em] italic transition-colors hover:brightness-95 flex items-center gap-2"
-                            >
-                                <DetailIcon icon={Pdf02Icon} size={16} />
+                                >
+                                    <DetailIcon icon={Pdf02Icon} size={16} />
                                     Pdf_Report
-                            </button>
-                        </>
-                    )}
-                </div>
+                                </button>
+                            </>
+                        )}
+                    </div>
                 </div>
             </header>
 
-
+            {!isTerminal && scanPhase && (
+                <section className="border border-rag-blue/20 bg-charcoal p-6">
+                    <PhaseProgress phase={scanPhase} />
+                </section>
+            )}
 
             <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                 <DetailCard
@@ -624,8 +794,10 @@ export default function TaskDetails() {
                 />
                 <DetailCard
                     label="MISSION_START"
-                    value={startedTime}
-                    subValue={task.started_at ? formatDateLong(task.started_at) : 'PENDING'}
+                    value={task.status === 'queued' && task.queue_position ? `QUEUE #${task.queue_position}` : startedTime}
+                    subValue={task.status === 'queued' && task.pending_count
+                        ? `${task.pending_count} SCAN${task.pending_count > 1 ? 'S' : ''} PENDING`
+                        : task.started_at ? formatDateLong(task.started_at) : 'PENDING'}
                 />
                 <DetailCard
                     label="SCAN_DURATION"
@@ -641,7 +813,7 @@ export default function TaskDetails() {
 
             <AnimatePresence>
                 {task.status === 'failed' && task.error_message && (
-                    <motion.div 
+                    <motion.div
                         initial={{ opacity: 0, height: 0 }}
                         animate={{ opacity: 1, height: 'auto' }}
                         className="bg-rag-red/10 border-l-4 border-rag-red p-6 space-y-3"
@@ -654,7 +826,7 @@ export default function TaskDetails() {
                             {task.error_message}
                         </p>
                         <div className="pt-2">
-                             <span className="text-[9px] font-black text-silver/30 uppercase tracking-[0.2em] italic">Diagnostic_Code::EXEC_FAIL_{task.exit_code || 'ERR'}</span>
+                            <span className="text-[9px] font-black text-silver/30 uppercase tracking-[0.2em] italic">Diagnostic_Code::EXEC_FAIL_{task.exit_code || 'ERR'}</span>
                         </div>
                     </motion.div>
                 )}
@@ -666,11 +838,10 @@ export default function TaskDetails() {
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
-                            className={`px-4 py-3 text-[10px] uppercase tracking-[0.28em] font-black transition-colors border-b-2 ${
-                                activeTab === tab.id
-                                    ? 'text-silver-bright border-rag-blue'
-                                    : 'text-silver/40 border-transparent hover:text-silver/75'
-                            }`}
+                            className={`px-4 py-3 text-[10px] uppercase tracking-[0.28em] font-black transition-colors border-b-2 ${activeTab === tab.id
+                                ? 'text-silver-bright border-rag-blue'
+                                : 'text-silver/40 border-transparent hover:text-silver/75'
+                                }`}
                         >
                             {tab.label}
                         </button>
@@ -698,32 +869,32 @@ export default function TaskDetails() {
                                         </div>
                                         <div className="h-[300px] w-full mt-4">
                                             <ResponsiveContainer width="100%" height="100%">
-                                                <BarChart 
-                                                    data={orderedSeverities.map(s => ({ 
-                                                        name: s.toUpperCase(), 
+                                                <BarChart
+                                                    data={orderedSeverities.map(s => ({
+                                                        name: s.toUpperCase(),
                                                         count: severityCounts[s] || 0,
                                                         color: s === 'critical' ? '#ff3e3e' : s === 'high' ? '#ff9500' : s === 'medium' ? '#0070f3' : s === 'low' ? '#00d1b2' : '#888888'
                                                     }))}
                                                     margin={{ top: 20, right: 30, left: 0, bottom: 0 }}
                                                 >
                                                     <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
-                                                    <XAxis 
-                                                        dataKey="name" 
-                                                        axisLine={false} 
-                                                        tickLine={false} 
-                                                        tick={{ fill: '#ffffff40', fontSize: 10, fontWeight: 900 }} 
+                                                    <XAxis
+                                                        dataKey="name"
+                                                        axisLine={false}
+                                                        tickLine={false}
+                                                        tick={{ fill: '#ffffff40', fontSize: 10, fontWeight: 900 }}
                                                         dy={10}
                                                     />
                                                     <YAxis hide />
-                                                    <RechartsTooltip 
+                                                    <RechartsTooltip
                                                         cursor={{ fill: 'white', opacity: 0.05 }}
                                                         contentStyle={{ backgroundColor: '#111', border: '1px solid #333', borderRadius: 0 }}
                                                     />
                                                     <Bar dataKey="count" radius={[2, 2, 0, 0]}>
                                                         {orderedSeverities.map((s, index) => (
-                                                            <Cell 
-                                                                key={`cell-${index}`} 
-                                                                fill={s === 'critical' ? '#ff3e3e' : s === 'high' ? '#ff9500' : s === 'medium' ? '#0070f3' : s === 'low' ? '#00d1b2' : '#888888'} 
+                                                            <Cell
+                                                                key={`cell-${index}`}
+                                                                fill={s === 'critical' ? '#ff3e3e' : s === 'high' ? '#ff9500' : s === 'medium' ? '#0070f3' : s === 'low' ? '#00d1b2' : '#888888'}
                                                                 fillOpacity={0.8}
                                                             />
                                                         ))}
@@ -751,13 +922,13 @@ export default function TaskDetails() {
                                                         dataKey="value"
                                                     >
                                                         {orderedSeverities.map((s, index) => (
-                                                            <Cell 
-                                                                key={`cell-${index}`} 
-                                                                fill={s === 'critical' ? '#ff3e3e' : s === 'high' ? '#ff9500' : s === 'medium' ? '#0070f3' : s === 'low' ? '#00d1b2' : '#888888'} 
+                                                            <Cell
+                                                                key={`cell-${index}`}
+                                                                fill={s === 'critical' ? '#ff3e3e' : s === 'high' ? '#ff9500' : s === 'medium' ? '#0070f3' : s === 'low' ? '#00d1b2' : '#888888'}
                                                             />
                                                         ))}
                                                     </Pie>
-                                                    <RechartsTooltip/>
+                                                    <RechartsTooltip />
                                                 </PieChart>
                                             </ResponsiveContainer>
                                         </div>
@@ -773,14 +944,13 @@ export default function TaskDetails() {
                                     {previewFindings.length > 0 ? (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             {previewFindings.map((f: any, idx: number) => (
-                                                <div 
-                                                    key={idx} 
+                                                <div
+                                                    key={idx}
                                                     onClick={() => setSelectedFinding(f)}
                                                     className="border border-white/6 bg-black/20 p-5 hover:bg-white/[0.04] cursor-pointer transition-all group relative overflow-hidden"
                                                 >
-                                                    <div className={`absolute top-0 left-0 w-1 h-full ${
-                                                        f.severity === 'critical' ? 'bg-rag-red' : f.severity === 'high' ? 'bg-rag-amber' : 'bg-rag-blue'
-                                                    }`} />
+                                                    <div className={`absolute top-0 left-0 w-1 h-full ${f.severity === 'critical' ? 'bg-rag-red' : f.severity === 'high' ? 'bg-rag-amber' : 'bg-rag-blue'
+                                                        }`} />
                                                     <div className="flex justify-between items-start mb-3">
                                                         <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border ${severityTone(f.severity)}`}>
                                                             {f.severity}
@@ -872,7 +1042,7 @@ export default function TaskDetails() {
                                                 <tbody>
                                                     {findings.map((f: Finding, idx: number) => {
                                                         const description = stripAnsi(f.description) || 'No description provided.';
-                                                        
+
                                                         return (
                                                             <tr
                                                                 key={idx}
@@ -946,23 +1116,21 @@ export default function TaskDetails() {
                                                     <p className="text-[10px] font-black text-silver/30 uppercase tracking-[0.22em]">
                                                         {entry.label}
                                                     </p>
-                                                    <span className={`text-[9px] font-black uppercase tracking-[0.18em] ${
-                                                        entry.source === 'INPUT'
-                                                            ? 'text-rag-green'
-                                                            : entry.source === 'PRESET'
-                                                                ? 'text-rag-blue'
-                                                                : 'text-rag-amber'
-                                                    }`}>
+                                                    <span className={`text-[9px] font-black uppercase tracking-[0.18em] ${entry.source === 'INPUT'
+                                                        ? 'text-rag-green'
+                                                        : entry.source === 'PRESET'
+                                                            ? 'text-rag-blue'
+                                                            : 'text-rag-amber'
+                                                        }`}>
                                                         {entry.source}
                                                     </span>
                                                 </div>
-                                                <p className={`text-sm font-black uppercase break-words leading-6 ${
-                                                    entry.value === 'ON' || entry.value === 'TRUE'
-                                                        ? 'text-rag-green'
-                                                        : entry.value === 'OFF' || entry.value === 'FALSE'
-                                                            ? 'text-rag-red'
-                                                            : 'text-silver-bright'
-                                                }`}>
+                                                <p className={`text-sm font-black uppercase break-words leading-6 ${entry.value === 'ON' || entry.value === 'TRUE'
+                                                    ? 'text-rag-green'
+                                                    : entry.value === 'OFF' || entry.value === 'FALSE'
+                                                        ? 'text-rag-red'
+                                                        : 'text-silver-bright'
+                                                    }`}>
                                                     {entry.value}
                                                 </p>
                                                 {entry.help && (
@@ -1096,18 +1264,19 @@ export default function TaskDetails() {
                     CLASSIFIED_EXECUTIVE_SUMMARY // CORE_DAEMON_LOG_ID::{taskId?.split('-')[0].toUpperCase()}
                 </div>
                 <div className="flex gap-4">
-                    {[1,2,3,4].map(i => <div key={i} className="w-20 h-1 bg-silver/20"></div>)}
+                    {[1, 2, 3, 4].map(i => <div key={i} className="w-20 h-1 bg-silver/20"></div>)}
                 </div>
             </footer>
 
             <AnimatePresence>
                 {selectedFinding && (
                     <>
-                        <motion.div 
+                        <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             onClick={() => setSelectedFinding(null)}
+                            aria-hidden="true"
                             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[90]"
                         />
                         <FindingDrawer finding={selectedFinding as Finding} onClose={() => setSelectedFinding(null)} />

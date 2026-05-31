@@ -129,6 +129,8 @@ export function getTasks(params?: URLSearchParams) {
   return request(`/tasks${suffix}`)
 }
 
+export type ScanPhase = 'queued' | 'running_command' | 'parsing' | 'reporting' | 'finished'
+
 export function getTaskStatus(taskId: string): Promise<any> {
   return request<any>(`/task/${taskId}/status`)
 }
@@ -178,4 +180,117 @@ export function streamTask(taskId: string, onEvent: (ev: MessageEvent) => void) 
   es.onmessage = onEvent
   es.onerror = () => {}
   return es
+}
+export interface WorkflowStep {
+  plugin_id: string
+  inputs: Record<string, unknown>
+}
+
+export interface Workflow {
+  id: string
+  name: string
+  schedule_seconds: number | null
+  enabled: boolean
+  steps: WorkflowStep[]
+  last_run_at?: string | null
+  queued_task_ids?: string[]
+  created_at?: string
+}
+
+export interface WorkflowCreatePayload {
+  name: string
+  schedule_seconds?: number | null
+  enabled: boolean
+  steps: WorkflowStep[]
+}
+
+export interface WorkflowUpdatePayload {
+  name?: string
+  schedule_seconds?: number | null
+  enabled?: boolean
+  steps?: WorkflowStep[]
+}
+
+interface WorkflowListResponse {
+  workflows: unknown[]
+  total: number
+}
+
+function parseWorkflowSteps(value: unknown): WorkflowStep[] {
+  if (Array.isArray(value)) return value as WorkflowStep[]
+  if (typeof value !== 'string' || value.trim() === '') return []
+
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed as WorkflowStep[] : []
+  } catch {
+    return []
+  }
+}
+
+function parseScheduleSeconds(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function normalizeWorkflow(raw: any): Workflow {
+  return {
+    id: String(raw.id),
+    name: String(raw.name ?? ''),
+    schedule_seconds: parseScheduleSeconds(raw.schedule_seconds),
+    enabled: Boolean(raw.enabled),
+    steps: parseWorkflowSteps(raw.steps ?? raw.steps_json),
+    last_run_at: raw.last_run_at ?? null,
+    queued_task_ids: Array.isArray(raw.queued_task_ids)
+      ? raw.queued_task_ids
+      : Array.isArray(raw.queued_tasks)
+        ? raw.queued_tasks
+        : [],
+    created_at: raw.created_at,
+  }
+}
+
+export async function getWorkflows(): Promise<Workflow[]> {
+  const data = await request<WorkflowListResponse | unknown[]>('/workflows')
+  const workflows = Array.isArray(data) ? data : data.workflows
+  return Array.isArray(workflows) ? workflows.map(normalizeWorkflow) : []
+}
+
+export async function createWorkflow(data: WorkflowCreatePayload): Promise<Workflow> {
+  const workflow = await request<unknown>('/workflows', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  return normalizeWorkflow(workflow)
+}
+
+export async function runWorkflow(workflowId: string): Promise<{ queued_task_ids: string[] }> {
+  const result: any = await request(`/workflows/${workflowId}/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+  return {
+    queued_task_ids: Array.isArray(result.queued_task_ids)
+      ? result.queued_task_ids
+      : Array.isArray(result.queued_tasks)
+        ? result.queued_tasks
+        : [],
+  }
+}
+
+export async function updateWorkflow(workflowId: string, data: WorkflowUpdatePayload): Promise<Workflow> {
+  const workflow = await request<unknown>(`/workflows/${workflowId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  return normalizeWorkflow(workflow)
+}
+
+export function deleteWorkflow(workflowId: string): Promise<{ deleted: boolean }> {
+  return request<{ deleted: boolean }>(`/workflows/${workflowId}`, {
+    method: 'DELETE',
+  })
 }
