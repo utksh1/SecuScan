@@ -56,7 +56,7 @@ export default function Settings() {
     })
 
     const [systemTimezone, setSystemTimezone] = useState('Detecting...')
-    
+
     // Modal state for confirm dialogs
     const [modalState, setModalState] = useState<{
         isOpen: boolean;
