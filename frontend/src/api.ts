@@ -110,6 +110,10 @@ export function getPluginSchema(id: string) {
   return request<PluginSchemaResponse>(`/plugin/${id}/schema`)
 }
 
+export function getSettings() {
+  return request<any>(`/settings`)
+}
+
 export function getDashboardSummary() {
   return request('/dashboard/summary')
 }
