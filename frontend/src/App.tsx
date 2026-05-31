@@ -6,7 +6,6 @@ import Toolkit from './pages/Toolkit'
 import ToolConfig from './pages/ToolConfig'
 import Findings from './pages/Findings'
 import Reports from './pages/Reports'
-import Analytics from './pages/Analytics'
 import Settings from './pages/Settings'
 import Scans from './pages/Scans'
 import TaskDetails from './pages/TaskDetails'
@@ -26,7 +25,6 @@ export function AppRoutes() {
       <Route path={routes.findings} element={<Findings />} />
       <Route path={routes.scans} element={<Scans />} />
       <Route path={routes.reports} element={<Reports />} />
-      <Route path={routes.analytics} element={<Analytics />} />
       <Route path={routes.workflows} element={<Workflows />} />
       <Route path={routes.settings} element={<Settings />} />
       <Route path={routes.task} element={<TaskDetails />} />

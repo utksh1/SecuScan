@@ -46,9 +46,7 @@ export default function AppShell({ children }: AppShellProps) {
         { to: routes.reports, icon: 'summarize', label: 'Reports' },
         { to: routes.workflows, icon: 'account_tree', label: 'Workflows' },
         { to: routes.toolkit, icon: 'add_circle', label: 'Toolkit' },
-    { to: routes.analytics, icon: 'analytics', label: 'Analytics' },
-    ]
-    const mobileDrawerNav = [
+     ]; const mobileDrawerNav = [
         { to: routes.dashboard, label: 'Dashboard' },
         { to: routes.scans, label: 'Scans' },
         { to: routes.findings, label: 'Findings' },
@@ -56,7 +54,6 @@ export default function AppShell({ children }: AppShellProps) {
         { to: routes.workflows, label: 'Workflows' },
         { to: routes.toolkit, label: 'Toolkit' },
         { to: routes.settings, label: 'Settings' },
-  { to: routes.analytics, label: 'Analytics' },
     ]
 
 
