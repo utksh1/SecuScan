@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     plugin_signature_key: Optional[str] = None
     enforce_plugin_signatures: bool = False
     vault_key: Optional[str] = None
+    admin_api_key: Optional[str] = None
 
     # Network Policy Configuration
     network_allowlist: List[str] = []  # IPs/networks to allow (CIDR)

@@ -62,6 +62,32 @@ async def lifespan(app: FastAPI):
     await init_plugins(settings.plugins_dir)
     logger.info("✓ Plugins loaded")
 
+    # If docker is enabled, verify and auto-create the restricted docker network
+    if settings.docker_enabled:
+        if shutil.which("docker"):
+            logger.info(f"Docker is enabled. Verifying network '{settings.docker_network}'...")
+            try:
+                import subprocess
+                res = subprocess.run(
+                    ["docker", "network", "inspect", settings.docker_network],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                if res.returncode != 0:
+                    logger.info(f"Docker network '{settings.docker_network}' not found. Creating bridge network...")
+                    subprocess.run(
+                        ["docker", "network", "create", "--driver", "bridge", settings.docker_network],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    logger.info(f"✓ Docker network '{settings.docker_network}' created")
+                else:
+                    logger.info(f"✓ Docker network '{settings.docker_network}' verified")
+            except Exception as e:
+                logger.warning(f"Failed to check/create Docker network '{settings.docker_network}': {e}")
+        else:
+            logger.warning("Docker sandboxing is enabled but 'docker' executable is not in PATH.")
+
     await scheduler.start()
     logger.info("✓ Workflow scheduler started")
     

@@ -352,8 +352,7 @@ class TaskExecutor:
                 # Apply Docker Sandboxing if enabled
                 if settings.docker_enabled:
                     # Validate the named Docker network exists before using it.
-                    # If missing, fail loudly rather than letting docker-run fail
-                    # with a cryptic error deep inside the subprocess.
+                    # If missing, attempt to create it automatically rather than failing.
                     _net_check = await asyncio.create_subprocess_exec(
                         "docker", "network", "inspect", settings.docker_network,
                         stdout=asyncio.subprocess.DEVNULL,
@@ -361,11 +360,18 @@ class TaskExecutor:
                     )
                     await _net_check.wait()
                     if _net_check.returncode != 0:
-                        raise RuntimeError(
-                            f"Docker network '{settings.docker_network}' does not exist. "
-                            f"Create it with: "
-                            f"docker network create --driver bridge {settings.docker_network}"
+                        logger.info(f"Docker network '{settings.docker_network}' not found. Attempting to create it...")
+                        _net_create = await asyncio.create_subprocess_exec(
+                            "docker", "network", "create", "--driver", "bridge", settings.docker_network,
+                            stdout=asyncio.subprocess.DEVNULL,
+                            stderr=asyncio.subprocess.DEVNULL,
                         )
+                        await _net_create.wait()
+                        if _net_create.returncode != 0:
+                            raise RuntimeError(
+                                f"Docker network '{settings.docker_network}' does not exist and could not be created automatically."
+                            )
+                        logger.info(f"Successfully created Docker network '{settings.docker_network}'")
 
                     docker_image = plugin.docker_image or "alpine:latest"
                     docker_cmd = [
