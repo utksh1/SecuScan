@@ -3,7 +3,6 @@ from unittest.mock import patch
 
 from backend.secuscan.models import TaskStatus
 
-
 def test_health_check(test_client):
     """Test health check endpoint."""
     response = test_client.get("/api/v1/health")
@@ -11,7 +10,6 @@ def test_health_check(test_client):
     data = response.json()
     assert data["status"] == "operational"
     assert "version" in data
-
 
 def test_list_plugins(test_client):
     """Test plugins list endpoint."""
@@ -51,7 +49,6 @@ def test_plugin_summary(test_client):
     data["unavailable_count"]
     ) == data["total_plugins"]
 
-
 def test_start_task(test_client):
     """Test starting a task with a mocked executor."""
     with patch("backend.secuscan.executor.TaskExecutor._execute_command") as mock_exec:
@@ -83,7 +80,6 @@ def test_start_task(test_client):
         result_data = result_response.json()
         assert "Mocked successful output" in result_data["raw_output_excerpt"]
 
-
 def test_missing_consent(test_client):
     """Test starting a task without consent."""
     payload = {
@@ -95,7 +91,6 @@ def test_missing_consent(test_client):
     response = test_client.post("/api/v1/task/start", json=payload)
     assert response.status_code == 400
     assert "Consent required" in response.json()["detail"]
-
 
 def test_get_settings(test_client):
     """Test settings endpoint."""
@@ -241,4 +236,3 @@ class TestSafeModeCIDRBypass:
                 assert "safe mode" not in detail.lower() and "Public IP" not in detail, (
                     f"Filesystem path was incorrectly rejected by network validation: {detail!r}"
                 )
-
