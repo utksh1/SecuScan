@@ -133,14 +133,15 @@ export default function Findings() {
   }, [])
 
   useEffect(() => {
-    if (!activeTaskId) return
-    getTaskResult(activeTaskId)
-      .then((data: any) => {
-        const nextFindings = data.findings || []
-        setFindings(nextFindings)
-      })
-      .catch(console.error)
-  }, [activeTaskId])
+  if (!activeTaskId) return
+  getTaskResult(activeTaskId)
+    .then((data: any) => {
+      const nextFindings = data.findings || []
+      setFindings(nextFindings)
+      setSelectedFindingId(nextFindings[0]?.id ?? null) // reset to first finding of new scan
+    })
+    .catch(console.error)
+}, [activeTaskId])
 
   useEffect(() => {
     try {
