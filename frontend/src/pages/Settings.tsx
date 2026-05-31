@@ -4,6 +4,13 @@ import { useTheme } from '../components/ThemeContext'
 import { useToast } from '../components/ToastContext'
 import { ConfirmModal } from '../components/ConfirmModal'
 
+function getSystemThemeForSettings(): string {
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
+  }
+  return 'dark'
+}
+
 const itemVariants = {
   hidden: { opacity: 0, y: 20 },
   visible: {
@@ -33,7 +40,7 @@ const DEFAULT_CONFIG = {
 }
 
 export default function Settings() {
-    const { theme, setTheme } = useTheme()
+    const { theme, setTheme, resetToSystem, isSystemControlled } = useTheme()
     const { addToast } = useToast()
 
     const [config, setConfig] = useState(() => {
@@ -76,9 +83,7 @@ export default function Settings() {
     const handleSave = () => {
         localStorage.setItem('secuscan-config', JSON.stringify(config))
         addToast("Operational parameters synchronized", "success")
-        if (config.theme !== theme) {
-            setTheme(config.theme)
-        }
+        setTheme(config.theme as 'dark' | 'light')
     }
 
     const handleReset = () => {
@@ -121,7 +126,6 @@ export default function Settings() {
         addToast("Encryption export successful", "success")
     }
 
-    // Rest of the component remains the same...
     const InputField = ({ label, description, type = "text", value, onChange, placeholder }: any) => (
         <div className="bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] transition-all group">
             <div className="space-y-2 mb-6">
@@ -258,16 +262,32 @@ export default function Settings() {
                                     { label: 'Fixed (ZULU)', value: 'GMT' },
                                 ]}
                             />
-                            <SelectField
-                                label="Visual_Spectrum"
-                                description="OPERATIONAL_AESTHETIC_MODE"
-                                value={config.theme}
-                                onChange={(val: string) => setConfig({...config, theme: val})}
-                                options={[
-                                    { label: 'Dark (Obsidian)', value: 'dark' },
-                                    { label: 'Light (Paper)', value: 'light' },
-                                ]}
-                            />
+                            <div className="bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] transition-all group">
+                                <div className="space-y-2 mb-6">
+                                    <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] block italic group-hover:text-rag-blue transition-colors">Visual_Spectrum</label>
+                                    <p className="text-[9px] text-silver/40 uppercase font-mono font-bold tracking-widest leading-relaxed">OPERATIONAL_AESTHETIC_MODE</p>
+                                </div>
+                                <div className="space-y-3">
+                                    <select
+                                        value={config.theme}
+                                        onChange={(e) => setConfig({ ...config, theme: e.target.value })}
+                                        className="w-full bg-black/40 border-4 border-black p-4 text-xs font-mono text-silver-bright focus:outline-none focus:ring-2 focus:ring-rag-blue"
+                                    >
+                                        <option value="dark" className="bg-charcoal text-silver-bright">Dark (Obsidian)</option>
+                                        <option value="light" className="bg-charcoal text-silver-bright">Light (Paper)</option>
+                                    </select>
+                                    {isSystemControlled && (
+                                        <p className="text-[9px] text-rag-blue/70 italic">↳ Following system preference: {getSystemThemeForSettings()}</p>
+                                    )}
+                                    <button
+                                        onClick={resetToSystem}
+                                        disabled={isSystemControlled}
+                                        className="w-full py-2 text-[9px] font-bold text-silver-bright uppercase tracking-widest bg-black/30 hover:bg-black/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all border border-silver/20"
+                                    >
+                                        Reset to System Default
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </section>
                     <section className="space-y-8">
@@ -413,4 +433,3 @@ export default function Settings() {
         </div>
     )
 }
-
