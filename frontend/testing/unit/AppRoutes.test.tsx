@@ -3,6 +3,8 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 import { AppRoutes } from '../../src/App'
 
 vi.mock('../../src/api', () => ({
+  getTasks: vi.fn(() => Promise.resolve({ tasks: [] })),
+  getTaskResult: vi.fn(() => Promise.resolve({ findings: [] })),
   getHealth: vi.fn().mockResolvedValue({ status: 'operational' }),
   getDashboardSummary: vi.fn().mockResolvedValue({
     total_findings: 0,

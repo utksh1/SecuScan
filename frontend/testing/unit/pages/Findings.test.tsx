@@ -6,6 +6,8 @@ import { getFindings } from '../../../src/api'
 import * as dateUtils from '../../../src/utils/date'
 
 vi.mock('../../../src/api', () => ({
+  getTasks: vi.fn(() => Promise.resolve({ tasks: [] })),
+  getTaskResult: vi.fn(() => Promise.resolve({ findings: [] })),
   getFindings: vi.fn(),
   API_BASE: 'http://127.0.0.1:8000',
 }))
