@@ -2,7 +2,7 @@
 API routes for SecuScan backend
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request, Depends
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request, Depends, Body
 from fastapi.responses import JSONResponse
 from typing import Any, Optional, List, Dict, Callable
 import json
@@ -97,10 +97,12 @@ from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager, init_plugins
 from .executor import executor
+from .redaction import redact_inputs
 from .ratelimit import (
     rate_limiter, concurrent_limiter,
     task_start_limiter, vault_limiter,
-    report_download_limiter, read_heavy_limiter
+    report_download_limiter, read_heavy_limiter,
+    resolve_client_identity,
 )
 from .validation import validate_target, validate_task_start_payload
 from .reporting import reporting
@@ -110,6 +112,7 @@ from .workflows import scheduler
 from sse_starlette.sse import EventSourceResponse
 
 router = APIRouter(prefix="/api/v1")
+SSE_RAW_OUTPUT_CHUNK_SIZE = 64 * 1024
 
 
 async def get_or_set_cached(key: str, builder):
@@ -129,6 +132,16 @@ async def invalidate_view_cache():
     cache = await get_cache()
     for prefix in ["summary:", "findings:", "reports:", "tasks:"]:
         await cache.delete_prefix(prefix)
+
+
+def iter_raw_output_chunks(path: str, chunk_size: int = SSE_RAW_OUTPUT_CHUNK_SIZE):
+    """Yield raw output in bounded chunks for completed-task SSE replay."""
+    with open(path, "r", encoding="utf-8", errors="replace") as output_file:
+        while True:
+            chunk = output_file.read(chunk_size)
+            if not chunk:
+                break
+            yield chunk
 
 
 def _report_generation_error_response(task_id: str, report_format: str) -> JSONResponse:
@@ -251,22 +264,43 @@ async def start_task(
         logger.warning(f"Task start failed: Plugin not found: {request.plugin_id}")
         raise HTTPException(status_code=404, detail=f"Plugin not found: {request.plugin_id}")
 
-    if target := request.inputs.get("target"):
-        safe_mode = request.inputs.get("safe_mode", settings.safe_mode_default)
+    # Server-controlled safe mode: never trust client-supplied `inputs.safe_mode`.
+    safe_mode = bool(settings.safe_mode_default)
+
+    # Ensure downstream scanners/plugins see the effective safe-mode, but prevent client override.
+    effective_inputs = dict(request.inputs or {})
+    if "safe_mode" in effective_inputs:
+        effective_inputs.pop("safe_mode", None)
+    effective_inputs["safe_mode"] = safe_mode
+
+    if target := effective_inputs.get("target"):
         target_str = str(target)
         should_validate_target = plugin.category != "code" and not is_filesystem_target(target_str)
 
         if should_validate_target:
-            is_valid, error_msg = validate_target(target_str, safe_mode)
+            try:
+                is_valid, error_msg = await asyncio.wait_for(
+                    asyncio.to_thread(validate_target, target_str, safe_mode),
+                    timeout=float(settings.dns_resolution_timeout_seconds),
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Task start failed: Target validation timed out for '%s'", target_str)
+                raise HTTPException(
+                    status_code=400,
+                    detail="Target validation timed out in safe mode (SecuScan Guardrail)",
+                )
 
             if not is_valid:
                 logger.warning(f"Task start failed: Target validation failed for '{target}': {error_msg}")
                 raise HTTPException(status_code=400, detail=error_msg)
 
-    # Check rate limits
+    # Check rate limits per (client, plugin) so one client cannot exhaust
+    # the quota for all other users of the same plugin.
+    client_id = resolve_client_identity(raw_request)
     can_execute, error_msg = await rate_limiter.can_execute(
         request.plugin_id,
-        plugin.safety.get("rate_limit", {}).get("max_per_hour", settings.max_tasks_per_hour)
+        plugin.safety.get("rate_limit", {}).get("max_per_hour", settings.max_tasks_per_hour),
+        client_id=client_id,
     )
 
     if not can_execute:
@@ -276,9 +310,10 @@ async def start_task(
     try:
         task_id = await executor.create_task(
             request.plugin_id,
-            request.inputs,
-            request.preset,
-            request.consent_granted
+            effective_inputs,
+            safe_mode=safe_mode,
+            preset=request.preset,
+            consent_granted=request.consent_granted,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -294,6 +329,10 @@ async def start_task(
 
     # Slot is held — schedule execution.
     # execute_task releases the slot in its finally block on every exit path.
+    #
+    # Use BackgroundTasks so the response can be sent without waiting in real
+    # ASGI servers, while tests using TestClient still execute the task to keep
+    # contract tests deterministic.
     background_tasks.add_task(executor.execute_task, task_id)
     await invalidate_view_cache()
 
@@ -324,10 +363,10 @@ async def stream_task_output(task_id: str):
         raise HTTPException(status_code=404, detail="Task not found")
 
     async def event_generator():
-        # First, send the initial status
+        # First, send the initial status and phase
         yield {
             "event": "status",
-            "data": json.dumps({"status": status["status"]})
+            "data": json.dumps({"status": status["status"], "scan_phase": status.get("scan_phase")})
         }
 
         # If it's already completed/failed, we just return the raw output if any and close
@@ -336,13 +375,13 @@ async def stream_task_output(task_id: str):
                 db = await get_db()
                 task_row = await db.fetchone("SELECT raw_output_path FROM tasks WHERE id = ?", (task_id,))
                 if task_row and task_row["raw_output_path"]:
-                    with open(task_row["raw_output_path"], "r") as f:
+                    for chunk in iter_raw_output_chunks(task_row["raw_output_path"]):
                         yield {
                             "event": "output",
-                            "data": json.dumps({"chunk": f.read()})
+                            "data": json.dumps({"chunk": chunk})
                         }
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Failed to replay raw output for task %s: %s", task_id, exc)
             return
 
         # Otherwise, subscribe to the live task events
@@ -359,6 +398,11 @@ async def stream_task_output(task_id: str):
                     }
                     if event["data"] in ["completed", "failed", "cancelled"]:
                         break
+                elif event["type"] == "phase":
+                    yield {
+                        "event": "phase",
+                        "data": json.dumps({"scan_phase": event["data"]})
+                    }
                 elif event["type"] == "output":
                     yield {
                         "event": "output",
@@ -583,7 +627,7 @@ async def get_task_result(task_id: str):
         "duration_seconds": task_row["duration_seconds"],
         "status": task_row["status"],
         "preset": task_row["preset"],
-        "inputs": json.loads(task_row["inputs_json"] or "{}"),
+        "inputs": redact_inputs(json.loads(task_row["inputs_json"] or "{}")),
         "summary": summary,
         "severity_counts": severity_counts,
         "findings": findings,
@@ -773,7 +817,7 @@ async def list_tasks(
     for t in tasks_list:
         if "id" in t:
             t["task_id"] = t.pop("id")
-        t["inputs"] = t.pop("inputs_json", {})
+        t["inputs"] = redact_inputs(t.pop("inputs_json", {}) or {})
 
     total_pages = (total + per_page - 1) // per_page if per_page > 0 else 0
 
@@ -886,6 +930,10 @@ async def bulk_delete_tasks(request: BulkDeleteRequest):
         tuple(task_ids)
     )
     if running_tasks:
+        raise HTTPException(status_code=400, detail="Cannot delete running tasks. Abort them first.")
+
+    # If the task is currently executing but the DB hasn't been updated yet, fail closed.
+    if any(tid in executor.running_tasks for tid in task_ids):
         raise HTTPException(status_code=400, detail="Cannot delete running tasks. Abort them first.")
 
     await delete_task_records(task_ids)
@@ -1060,10 +1108,15 @@ async def run_workflow_once(workflow_id: str):
     steps = json.loads(row["steps_json"] or "[]")
     created_task_ids: List[str] = []
     for step in steps:
+        safe_mode = bool(settings.safe_mode_default)
+        effective_inputs = dict(step.get("inputs", {}) or {})
+        effective_inputs.pop("safe_mode", None)
+        effective_inputs["safe_mode"] = safe_mode
         task_id = await executor.create_task(
             step.get("plugin_id"),
-            step.get("inputs", {}),
-            step.get("preset"),
+            effective_inputs,
+            safe_mode=safe_mode,
+            preset=step.get("preset"),
             consent_granted=True,
         )
         asyncio.create_task(executor.execute_task(task_id))
