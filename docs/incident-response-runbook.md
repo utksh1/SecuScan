@@ -25,7 +25,7 @@ grep "SECUSCAN_VAULT_KEY" .env
 python -m uvicorn backend.secuscan.main:app --reload
 
 # Run vault-related tests
-pytest tests/ -k "vault" -v
+pytest testing/backend/unit -k "vault" -v
 ```
 
 ## 2. Compromised Plugins
@@ -33,7 +33,7 @@ pytest tests/ -k "vault" -v
 ### Detection
 
 - Review plugin execution logs for anomalous behavior
-- Check plugin files in `backend/secuscan/plugins/` for unexpected changes
+  Check plugin definitions in backend/secuscan/plugins.py and backend/secuscan/scanners/ for unexpected changes
 
 ### Response Steps
 
@@ -46,22 +46,22 @@ pytest tests/ -k "vault" -v
 
 ```bash
 # List plugin files
-ls backend/secuscan/plugins/
+ls backend/secuscan/scanners/
 
 # Disable compromised plugin by removing it
-rm backend/secuscan/plugins/<plugin-name>.py
+rm backend/secuscan/scanners/<plugin-name>.py
 
 # Restore clean plugin from git
-git checkout main -- backend/secuscan/plugins/<plugin-name>.py
+git checkout main -- backend/secuscan/scanners/<plugin-name>.py
 
 # Run plugin tests
-pytest tests/ -k "plugin" -v
+pytest testing/backend/unit -k "plugin" -v
 ```
 
 ## 3. Restoring Clean State
 
 1. Stop all running scans
 2. Rotate all credentials in `.env`
-3. Re-validate plugin files: `git diff main -- backend/secuscan/plugins/`
-4. Run full test suite: `pytest tests/`
+3. git diff main -- backend/secuscan/plugins.py backend/secuscan/scanners/
+4. Run full test suite: pytest testing/backend/unit
 5. Confirm system health before resuming operations
