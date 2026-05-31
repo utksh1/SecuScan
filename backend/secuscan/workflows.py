@@ -7,6 +7,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 from .database import get_db
+from .config import settings
 from .executor import executor
 logger = logging.getLogger(__name__)
 class WorkflowScheduler:
@@ -75,14 +76,24 @@ class WorkflowScheduler:
             if not plugin_id:
                 continue
             request_id = get_request_id()
+            safe_mode = bool(settings.safe_mode_default)
+            effective_inputs = dict(inputs)
+            effective_inputs.pop("safe_mode", None)
+            effective_inputs["safe_mode"] = safe_mode
+
             task_id = await executor.create_task(
                 plugin_id,
-                inputs,
+                effective_inputs,
+                safe_mode=safe_mode,
                 preset=step.get("preset"),
-                consent_granted=True
+                consent_granted=True,
             )
-            async def run_task():
+
+            async def run_task(task_id: str) -> None:
                 set_request_id(request_id)
                 await executor.execute_task(task_id)
-            asyncio.create_task(run_task())
+
+            asyncio.create_task(run_task(task_id))
+
+
 scheduler = WorkflowScheduler()
