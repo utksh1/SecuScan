@@ -29,7 +29,6 @@ def parse_json_fields(rows: List[Dict], fields: List[str]) -> List[Dict]:
         parsed.append(item)
     return parsed
 
-
 def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
     if isinstance(raw_steps, list):
         return raw_steps
@@ -40,7 +39,6 @@ def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
     except (TypeError, json.JSONDecodeError):
         return []
     return parsed if isinstance(parsed, list) else []
-
 
 def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]] = None) -> Dict[str, Any]:
     """Return the workflow shape consumed by the frontend."""
@@ -55,22 +53,34 @@ def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]
         "queued_task_ids": queued_task_ids or [],
     }
 
-
 def is_filesystem_target(target: str) -> bool:
-    """Best-effort detection for path-based targets that should bypass host validation."""
-    if target.startswith(("/", "./", "../", "~")):
+    """
+    Return True only for genuine local filesystem paths.
+
+    Explicit roots accepted:
+      - Unix absolute paths:   /home/user/repo
+      - Unix relative paths:   ./src, ../lib
+      - Home-relative paths:   ~/projects
+      - Windows paths:         C:\\Users\\repo, D:/work
+
+    Anything else — including CIDR notation (8.8.8.8/32, 192.168.1.0/24),
+    bare hostnames, URLs, and domain paths — returns False and will be
+    subject to the full validate_target() check including safe-mode enforcement.
+
+    CIDR notation is handled correctly by ipaddress.ip_network() inside
+    validate_target() and does NOT need special-casing here.
+    """
+    # Unix absolute, relative, and home-relative paths
+    if target.startswith(("/", "./", "../", "~/")):
         return True
+    # Windows paths: C:\ or C:/
     if re.match(r"^[A-Za-z]:[\\/]", target):
         return True
-    if "/" in target and not target.startswith(("http://", "https://")):
-        return True
     return False
-
 
 def _slugify_filename_part(value: str, fallback: str) -> str:
     cleaned = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
     return cleaned or fallback
-
 
 def build_report_filename(task: Dict[str, Any], extension: str) -> str:
     tool = _slugify_filename_part(str(task.get("tool_name") or task.get("plugin_id") or "scan"), "scan")
@@ -125,7 +135,6 @@ async def get_or_set_cached(key: str, builder):
     value = await builder()
     await cache.set_json(key, value)
     return value
-
 
 async def invalidate_view_cache():
     """Clear aggregate caches after writes."""
