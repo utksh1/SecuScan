@@ -21,11 +21,10 @@ export default function LiveLogViewer({ lines, isLive, onCopy, copied }: LiveLog
 
   // Auto-scroll when new lines arrive unless paused
   useEffect(() => {
-    if (!paused && bottomRef.current) {
+    if (!paused && bottomRef.current && typeof bottomRef.current.scrollIntoView === 'function') {
       bottomRef.current.scrollIntoView({ behavior: 'smooth' })
     }
   }, [lines, paused])
-
   const filteredLines = filter
     ? lines.filter(l => l.line.toLowerCase().includes(filter.toLowerCase()))
     : lines
