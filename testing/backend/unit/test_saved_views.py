@@ -324,22 +324,22 @@ async def test_saved_views_migration_runs_for_file_db(tmp_path):
     """
     db_file = tmp_path / "secuscan.db"
     db = Database(str(db_file))
-    
+
     try:
         await db.connect()
 
         row = await db.fetchone(
             """
-            SELECT name 
-            FROM sqlite_master 
-            WHERE type='table' 
+            SELECT name
+            FROM sqlite_master
+            WHERE type='table'
             AND name='saved_views'
             """
         )
 
         assert row is not None
         assert row["name"] == "saved_views"
-        
+
     finally:
         await db.disconnect()
 
