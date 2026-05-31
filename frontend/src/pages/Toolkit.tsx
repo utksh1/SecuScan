@@ -230,31 +230,57 @@ export default function Scanner() {
     }
   }, [tabOrder, activeTab])
 
-  const categoryToolsCount = useMemo(
-    () => tools.filter((tool) => {
-      if (activeTab === 'quick-start') return tool.isQuickStart
-      return tool.category === activeTab
-    }).length,
-    [tools, activeTab],
-  )
+  const toolsByCategory = useMemo(() => {
+    const groups: Record<string, CatalogTool[]> = {}
+    const quickStart: CatalogTool[] = []
+    for (const tool of tools) {
+      if (tool.isQuickStart) {
+        quickStart.push(tool)
+      }
+      const cat = tool.category
+      if (!groups[cat]) {
+        groups[cat] = []
+      }
+      groups[cat].push(tool)
+    }
+    return { groups, quickStart }
+  }, [tools])
+
+  const toolsById = useMemo(() => {
+    return new Map(tools.map((tool) => [tool.id, tool]))
+  }, [tools])
+
+  const categoryToolsCount = useMemo(() => {
+    if (activeTab === 'quick-start') return toolsByCategory.quickStart.length
+    return toolsByCategory.groups[activeTab]?.length || 0
+  }, [toolsByCategory, activeTab])
 
   const filteredTools = useMemo(() => {
     const query = searchQuery.toLowerCase().trim()
-    return tools.filter((tool) => {
-      const matchesCategory = activeTab === 'quick-start' ? tool.isQuickStart : tool.category === activeTab
-      if (!matchesCategory) return false
-      if (!query) return true
-      return tool.name.toLowerCase().includes(query) || tool.purpose.toLowerCase().includes(query)
-    })
-  }, [tools, activeTab, searchQuery])
+    const toolsInTab = activeTab === 'quick-start'
+      ? toolsByCategory.quickStart
+      : (toolsByCategory.groups[activeTab] || [])
+
+    if (!query) return toolsInTab
+
+    return toolsInTab.filter(
+      (tool) =>
+        tool.name.toLowerCase().includes(query) ||
+        tool.purpose.toLowerCase().includes(query)
+    )
+  }, [toolsByCategory, activeTab, searchQuery])
 
   const quickAccessTools = useMemo(() => {
-    const byId = new Map(tools.map((tool) => [tool.id, tool]))
     return recentToolIds
-      .map((id) => byId.get(id))
+      .map((id) => toolsById.get(id))
       .filter((tool): tool is CatalogTool => Boolean(tool))
       .slice(0, RECENT_TOOLS_LIMIT)
-  }, [tools, recentToolIds])
+  }, [toolsById, recentToolIds])
+
+  const placeholders = useMemo(() => {
+    const count = loading || filteredTools.length === 0 ? 0 : Math.max(0, 4 - (filteredTools.length % 4 || 4))
+    return Array.from({ length: count })
+  }, [loading, filteredTools.length])
 
   const trackRecentTool = (toolId: string) => {
     setRecentToolIds((prev) => {
@@ -484,7 +510,7 @@ export default function Scanner() {
 
             {!loading &&
               filteredTools.length > 0 &&
-              Array.from({ length: Math.max(0, 4 - (filteredTools.length % 4 || 4)) }).map((_, index) => (
+              placeholders.map((_, index) => (
                 <div key={index} className="bg-charcoal/30 border-4 border-black/5 border-dashed flex items-center justify-center opacity-10 p-10">
                   <span className="material-symbols-outlined text-4xl" aria-hidden="true">add_box</span>
                 </div>

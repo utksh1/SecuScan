@@ -66,6 +66,8 @@ export default function Scans() {
 
   // Ref so the visibilitychange handler always sees the current interval id
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const requestSeqRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
 
   function startPolling() {
     stopPolling();
@@ -96,27 +98,45 @@ export default function Scans() {
 
     return () => {
       stopPolling();
+      abortRef.current?.abort();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [filter, page]);
 
   async function loadTasks() {
+    const requestSeq = requestSeqRef.current + 1;
+    requestSeqRef.current = requestSeq;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       const params = new URLSearchParams();
       if (filter !== "all") params.set("status", filter);
       params.set("page", String(page));
       params.set("per_page", String(PAGE_LIMIT));
 
-      const res = await fetch(`${API_BASE}/tasks?${params.toString()}`);
+      const res = await fetch(`${API_BASE}/tasks?${params.toString()}`, {
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to load tasks: ${res.status}`);
+      }
       const data = await res.json();
+      if (requestSeq !== requestSeqRef.current) return;
+
       setTasks(data.tasks || []);
       if (data.pagination?.total_items !== undefined) {
         setTotal(data.pagination.total_items);
       }
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       console.error("Failed to load tasks:", err);
     } finally {
-      setLoading(false);
+      if (requestSeq === requestSeqRef.current) {
+        abortRef.current = null;
+        setLoading(false);
+      }
     }
   }
 
