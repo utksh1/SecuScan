@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from pathlib import Path
 
 import pytest
@@ -116,6 +117,7 @@ def test_resolve_wordlist_path_rejects_absolute_unix_path(setup_test_environment
         manager._resolve_wordlist_path("/etc/passwd")
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows absolute path detection is OS-specific")
 def test_resolve_wordlist_path_rejects_absolute_windows_path(setup_test_environment, monkeypatch, tmp_path):
     wordlists_dir = tmp_path / "wordlists"
     wordlists_dir.mkdir()
