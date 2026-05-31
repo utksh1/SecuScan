@@ -202,7 +202,7 @@ async def get_plugins_summary():
     category_counts: Dict[str, int] = {}
 
     for plugin in plugins:
-        category = getattr(plugin, "category", "unknown")
+        category = plugin.get("category", "unknown")
 
         category_counts[category] = (
             category_counts.get(category, 0) + 1
