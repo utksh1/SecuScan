@@ -435,6 +435,16 @@ class PluginManager:
                     raise ValueError(
                         f"Field '{field_id}' expects an integer; got {raw_value!r}"
                     )
+                # Enforce safe timeout bounds for declared timeout-like fields
+                if field_id in ("timeout", "max_scan_time"):
+                    try:
+                        iv = int(raw_value)
+                    except Exception:
+                        raise ValueError(f"Field '{field_id}' expects an integer; got {raw_value!r}")
+                    if iv <= 0 or iv > settings.sandbox_timeout:
+                        raise ValueError(
+                            f"Field '{field_id}' must be between 1 and {settings.sandbox_timeout} seconds"
+                        )
                 continue
 
             if field.type == PluginFieldType.BOOLEAN:
