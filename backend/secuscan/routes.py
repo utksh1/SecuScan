@@ -1288,7 +1288,7 @@ def verify_admin_access(
 async def get_network_policy():
     """Get current network policy configuration"""
     engine = get_policy_engine()
-    
+
     return {
         "allowlist": [asdict(p) for net, p in engine.allowlist],
         "denylist": [asdict(p) for net, p in engine.denylist],
@@ -1299,7 +1299,7 @@ async def get_network_policy():
 async def add_allow_rule(request: dict):
     """Add network to allowlist"""
     engine = get_policy_engine()
-    
+
     try:
         engine.add_allow_rule(
             cidr=request["cidr"],
@@ -1313,7 +1313,7 @@ async def add_allow_rule(request: dict):
 async def add_deny_rule(request: dict):
     """Add network to denylist"""
     engine = get_policy_engine()
-    
+
     try:
         engine.add_deny_rule(
             cidr=request["cidr"],
@@ -1331,17 +1331,17 @@ async def get_audit_log(
 ):
     """Retrieve network audit log entries"""
     engine = get_policy_engine()
-    
+
     policy_action = None
     if action and action.upper() in ["ALLOW", "DENY"]:
         policy_action = PolicyAction[action.upper()]
-    
+
     entries = engine.get_audit_entries(
         plugin_id=plugin_id,
         action=policy_action,
         limit=limit
     )
-    
+
     return {
         "entries": [asdict(e) for e in entries],
         "total": len(entries),
@@ -1351,12 +1351,12 @@ async def get_audit_log(
 async def export_audit_log(format: str = "json"):
     """Export audit log in specified format"""
     engine = get_policy_engine()
-    
+
     if format not in ["json", "csv"]:
         raise HTTPException(status_code=400, detail="Format must be 'json' or 'csv'")
-    
+
     content = engine.export_audit_log(format)
-    
+
     mime_type = "application/json" if format == "json" else "text/csv"
     return Response(
         content=content,
