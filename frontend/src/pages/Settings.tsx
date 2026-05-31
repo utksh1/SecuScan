@@ -16,8 +16,8 @@ const itemVariants = {
 const DEFAULT_CONFIG = {
     concurrentScans: 8,
     scanTimeout: 3600,
-    scanIntensity: 'standard', // 'low', 'standard', 'aggressive'
-    dataRetention: 30, // days
+    scanIntensity: 'standard',
+    dataRetention: 30,
     shodanKey: '',
     virustotalKey: '',
     ipWhitelist: '127.0.0.1\n10.0.0.0/8',
@@ -49,7 +49,7 @@ export default function Settings() {
     })
 
     const [systemTimezone, setSystemTimezone] = useState('Detecting...')
-
+    
     // Modal state for confirm dialogs
     const [modalState, setModalState] = useState<{
         isOpen: boolean;
@@ -121,6 +121,7 @@ export default function Settings() {
         addToast("Encryption export successful", "success")
     }
 
+    // Rest of the component remains the same...
     const InputField = ({ label, description, type = "text", value, onChange, placeholder }: any) => (
         <div className="bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] transition-all group">
             <div className="space-y-2 mb-6">
@@ -174,7 +175,6 @@ export default function Settings() {
 
     return (
         <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
-
             <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10 font-black">
                 <div className="space-y-4">
                   <div className="bg-rag-blue text-black px-4 py-1 text-xs uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-black">
@@ -187,7 +187,6 @@ export default function Settings() {
                     HARDWARE_TUNING // AUDIT_STRATEGY // SECTOR_ISOLATION
                   </p>
                 </div>
-
                 <div className="flex flex-col items-end gap-4">
                    <div className="bg-charcoal border-4 border-black px-8 py-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
                         <span className="text-[10px] font-black text-silver/20 uppercase tracking-[0.4em] block mb-1 italic">SYSTEM_TIMEZONE_SYNC</span>
@@ -195,10 +194,8 @@ export default function Settings() {
                     </div>
                 </div>
             </header>
-
             <div className="grid grid-cols-1 xl:grid-cols-4 gap-12 pt-4">
                 <main className="xl:col-span-3 space-y-20">
-
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
                             <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Engine_Parameters</h3>
@@ -244,7 +241,6 @@ export default function Settings() {
                             />
                         </div>
                     </section>
-
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
                             <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Security_Interface</h3>
@@ -274,7 +270,6 @@ export default function Settings() {
                             />
                         </div>
                     </section>
-
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
                             <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Intelligence_API_Link</h3>
@@ -299,7 +294,6 @@ export default function Settings() {
                             />
                         </div>
                     </section>
-
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
                             <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Access_Perimeters</h3>
@@ -318,7 +312,6 @@ export default function Settings() {
                             />
                         </div>
                     </section>
-
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
                             <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Audit_Logic_Toggles</h3>
@@ -345,7 +338,6 @@ export default function Settings() {
                             />
                         </div>
                     </section>
-
                     <section className="pt-12">
                         <button
                             onClick={handleSave}
@@ -356,7 +348,6 @@ export default function Settings() {
                         </button>
                     </section>
                 </main>
-
                 <aside className="xl:col-span-1 space-y-12">
                     <section className="bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
                         <h3 className="text-[11px] font-black text-silver-bright uppercase tracking-[0.5em] italic mb-8">Management_Tools</h3>
@@ -381,7 +372,6 @@ export default function Settings() {
                             </button>
                         </div>
                     </section>
-
                     <section className="bg-charcoal-dark border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
                         <div className="space-y-4">
                             <h3 className="text-[11px] font-black text-silver-bright uppercase tracking-[0.5em] italic border-b-4 border-black pb-4">Engine_Status</h3>
@@ -403,7 +393,6 @@ export default function Settings() {
                     </section>
                 </aside>
             </div>
-
             <footer className="pt-24 border-t-4 border-black/5 flex flex-col md:flex-row justify-between items-center gap-8 text-[9px] font-black uppercase tracking-[0.5em] italic opacity-20">
                 <div className="flex items-center gap-6">
                     <div className="w-12 h-1 bg-silver/20"></div>
@@ -413,8 +402,6 @@ export default function Settings() {
                     {[1,2,3,4,5,6,7,8].map(i => <div key={i} className="w-2 h-2 bg-silver/20 rounded-full"></div>)}
                 </div>
             </footer>
-
-            {/* Confirm Modal */}
             <ConfirmModal
                 isOpen={modalState.isOpen}
                 title={modalState.title}
