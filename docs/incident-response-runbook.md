@@ -62,6 +62,6 @@ pytest testing/backend/unit -k "plugin" -v
 
 1. Stop all running scans
 2. Rotate all credentials in `.env`
-   3.git diff main -- plugins/
-3. Run full test suite: pytest testing/backend/unit
-4. Confirm system health before resuming operations
+3. git diff main -- plugins/
+4. Run full test suite: pytest testing/backend/unit
+5. Confirm system health before resuming operations
