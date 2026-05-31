@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+import subprocess
 import sys
 
 
@@ -70,3 +71,30 @@ def test_format_markdown_contains_plugin_details():
     assert "demo_plugin" in markdown
     assert "network" in markdown
     assert "Yes" in markdown
+
+
+def test_cli_output_path_creates_parent_directories_and_writes_file(tmp_path):
+    output_path = tmp_path / "nested" / "reports" / "plugin_health_report.json"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/plugin_health_dashboard.py",
+            "--format",
+            "json",
+            "--output",
+            str(output_path),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout == ""
+    assert output_path.exists()
+
+    report = json.loads(output_path.read_text(encoding="utf-8"))
+    assert "summary" in report
+    assert "plugins" in report
+    assert "categories" in report

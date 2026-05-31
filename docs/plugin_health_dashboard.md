@@ -41,4 +41,3 @@ python scripts/plugin_health_dashboard.py --format json --output plugin_health_r
 ## Notes
 
 The script does not write generated reports by default. Reports are printed to stdout unless an explicit `--output` path is provided.
-```
