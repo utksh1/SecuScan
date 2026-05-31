@@ -1053,9 +1053,13 @@ async def rotate_vault_keys():
     # Require previous key to be configured; we intentionally avoid accepting
     # the previous key in the request body to reduce accidental leakage.
     if not settings.resolved_vault_key_previous:
-        raise HTTPException(status_code=400, detail="Previous vault key not configured (set SECUSCAN_VAULT_KEY_PREVIOUS)")
+        raise HTTPException(
+            status_code=400,
+            detail="Previous vault key not configured (set SECUSCAN_VAULT_KEY_PREVIOUS)",
+        )
 
     db = await get_db()
+
 
     current_key = settings.resolved_vault_key
     prev_key = settings.resolved_vault_key_previous
