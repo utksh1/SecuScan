@@ -34,6 +34,9 @@ def setup_test_environment(monkeypatch):
     monkeypatch.setattr(settings, "plugins_dir", str(repo_root / "plugins"))
     monkeypatch.setattr(settings, "database_path", f"{temp_path}/test_secuscan.db")
     monkeypatch.setattr(settings, "vault_key", "test-vault-key-for-unit-tests-only")
+    monkeypatch.setattr(settings, "api_key", "test-api-key-for-unit-tests-only")
+    from backend.secuscan.auth import _get_active_key
+    _get_active_key.cache_clear()
 
     settings.ensure_directories()
 
