@@ -9,6 +9,7 @@ import {
   formatLocaleTime,
 } from "../utils/date";
 import Pagination from "../components/Pagination";
+import BulkActionReviewModal from "../components/BulkActionReviewModal";
 
 interface Task {
   task_id: string;
@@ -60,6 +61,7 @@ export default function Scans() {
   const [filter, setFilter] = useState("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [showBulkModal, setShowBulkModal] = useState(false);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const PAGE_LIMIT = 10;
@@ -87,7 +89,7 @@ export default function Scans() {
       if (document.visibilityState === "hidden") {
         stopPolling();
       } else {
-        loadTasks();   // immediate refresh when tab comes back
+        loadTasks(); // immediate refresh when tab comes back
         startPolling();
       }
     }
@@ -187,14 +189,11 @@ export default function Scans() {
 
   async function handleBulkDelete() {
     if (selectedIds.length === 0) return;
-    if (
-      !window.confirm(
-        `Are you sure you want to delete ${selectedIds.length} selected scan records?`,
-      )
-    ) {
-      return;
-    }
+    setShowBulkModal(true);
+  }
 
+  async function confirmBulkDelete() {
+    setShowBulkModal(false);
     try {
       await bulkDeleteTasks(selectedIds);
       setTasks((prev) => prev.filter((t) => !selectedIds.includes(t.task_id)));
@@ -657,6 +656,13 @@ export default function Scans() {
           ))}
         </div>
       </footer>
+      <BulkActionReviewModal
+        isOpen={showBulkModal}
+        onClose={() => setShowBulkModal(false)}
+        onConfirm={confirmBulkDelete}
+        actionLabel="Delete"
+        selectedCount={selectedIds.length}
+      />
     </div>
   );
 }
