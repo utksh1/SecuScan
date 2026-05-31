@@ -314,22 +314,45 @@ async def test_filter_json_with_null_values_rejected(app_client: AsyncClient):
     res = await app_client.post("/api/v1/saved-views", json=make_body("Null Sev", bad_preset))
     assert res.status_code == 422
 
+# ── File-backed DB migration path ─────────────────────────────────────────────
+
 @pytest.mark.asyncio
-async def test_saved_views_migration_runs_for_file_db(tmp_path):
-    db_file = tmp_path / "secuscan.db"
+async def test_saved_views_table_created_for_file_backed_db(tmp_path):
+    """Migration runner resolves correctly for a real file-backed database."""
+    import backend.secuscan.database as _db_mod
 
-    db = Database(str(db_file))
-    await db.connect()
+    db_path = str(tmp_path / "test.db")
+    test_db = Database(db_path)
+    await test_db.connect()
+    _db_mod.db = test_db
 
-    row = await db.fetchone(
-        """
-        SELECT name
-        FROM sqlite_master
-        WHERE type='table'
-        AND name='saved_views'
-        """
+    # saved_views table must exist after connect()
+    rows = await test_db.fetchall(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='saved_views'"
     )
+    assert rows[0]["name"] == "saved_views", "saved_views table was not created by migration"
 
-    assert row is not None
 
-    await db.disconnect()
+    await test_db.disconnect()
+    _db_mod.db = None
+
+@pytest.mark.asyncio
+async def test_migration_failure_raises_runtime_error(tmp_path):
+    """A corrupted migration file must abort startup with RuntimeError."""
+    import shutil
+    from pathlib import Path
+
+    # Find the real migrations directory next to database.py
+    import backend.secuscan.database as _db_mod
+    migrations_dir = Path(_db_mod.__file__).parent / "migrations"
+
+    # Write a broken SQL file
+    broken = migrations_dir / "999_broken_test.sql"
+    broken.write_text("THIS IS NOT VALID SQL !!!")
+
+    try:
+        db = Database(str(tmp_path / "test_fail.db"))
+        with pytest.raises(RuntimeError, match="startup aborted"):
+            await db.connect()
+    finally:
+        broken.unlink(missing_ok=True)

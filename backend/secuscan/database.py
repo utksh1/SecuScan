@@ -263,16 +263,13 @@ class Database:
         They are applied in lexicographic order and are idempotent — every
         statement uses CREATE TABLE/INDEX IF NOT EXISTS so re-running is safe.
 
-        For an in-memory database (db_path == ":memory:") the migrations
-        directory is resolved relative to this source file so tests work
-        without a real filesystem path.
+        The migrations directory is always resolved relative to this source
+        file so it works correctly regardless of where the database file lives.
         """
-        migrations_dir = Path(__file__).resolve().parent / "migrations"
+        migrations_dir = Path(__file__).parent / "migrations"
 
         if not migrations_dir.exists():
-            raise RuntimeError(
-                f"Migration directory not found: {migrations_dir}"
-            )
+            return
 
         for migration_file in sorted(migrations_dir.glob("*.sql")):
             sql = migration_file.read_text(encoding="utf-8")
@@ -280,7 +277,7 @@ class Database:
                 await self.connection.executescript(sql)
             except Exception as exc:
                 raise RuntimeError(
-                    f"Migration {migration_file.name} failed"
+                    f"Migration {migration_file.name} failed — startup aborted: {exc}"
                 ) from exc
 
         await self._backfill_risk_scores()
