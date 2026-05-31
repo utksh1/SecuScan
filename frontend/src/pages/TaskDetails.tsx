@@ -27,6 +27,7 @@ import {
     CartesianGrid
 } from 'recharts'
 import { useToast } from '../components/ToastContext'
+import LiveLogViewer, { LogLine } from '../components/LiveLogViewer'
 
 interface Task {
     task_id: string
@@ -201,6 +202,9 @@ export default function TaskDetails() {
     const [result, setResult] = useState<TaskResult | null>(null)
     const [schema, setSchema] = useState<PluginSchemaResponse | null>(null)
     const [rawOutput, setRawOutput] = useState<string>('')
+    const [logLines, setLogLines] = useState<LogLine[]>([])
+    const [isStreaming, setIsStreaming] = useState(false)
+    const [copiedLog, setCopiedLog] = useState(false)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const [scanPhase, setScanPhase] = useState<string | null>(null)
@@ -363,6 +367,7 @@ export default function TaskDetails() {
         loadTask()
 
         const es = new EventSource(`${API_BASE}/task/${taskId}/stream`)
+        setIsStreaming(true)
 
         es.addEventListener('status', (e) => {
             try {
@@ -371,12 +376,22 @@ export default function TaskDetails() {
                 if (data.scan_phase) {
                     setScanPhase(data.scan_phase)
                 }
+
+                // Surface sandbox violation as a distinct status label
+                if (data.termination_reason) {
+                    setTask((prev: Task | null) => prev
+                        ? { ...prev, status: `terminated:${data.termination_reason}` }
+                        : null
+                    )
+                }
+
                 if (['completed', 'failed', 'cancelled'].includes(data.status)) {
                     es.close()
+                    setIsStreaming(false)
                     loadTask()
                 }
             } catch (err) {
-                console.error("Status stream error", err)
+                console.error('Status stream error', err)
             }
         })
 
@@ -392,18 +407,41 @@ export default function TaskDetails() {
         es.addEventListener('output', (e) => {
             try {
                 const data = JSON.parse(e.data)
-                setRawOutput(prev => prev + data.chunk)
+                // Support both legacy chunk format and structured line format
+                const line: string = data.line ?? data.chunk ?? ''
+                const stream: 'stdout' | 'stderr' = data.stream === 'stderr' ? 'stderr' : 'stdout'
+                const ts: number = data.ts ?? Date.now()
+
+                if (line) {
+                    setLogLines(prev => [...prev, { line, stream, ts }])
+                    // Keep rawOutput in sync for the existing copy/filter logic
+                    setRawOutput(prev => prev + line + '\n')
+                }
             } catch (err) {
-                console.error("Output stream error", err)
+                console.error('Output stream error', err)
             }
         })
 
-        es.onerror = (err) => {
-            console.error("EventSource error:", err)
+        es.addEventListener('done', () => {
             es.close()
+            setIsStreaming(false)
+            loadTask()
+        })
+
+        es.addEventListener('error_event', () => {
+            es.close()
+            setIsStreaming(false)
+        })
+
+        es.onerror = () => {
+            es.close()
+            setIsStreaming(false)
         }
 
-        return () => es.close()
+        return () => {
+            es.close()
+            setIsStreaming(false)
+        }
     }, [taskId])
 
     async function loadTask() {
@@ -675,6 +713,17 @@ export default function TaskDetails() {
             window.setTimeout(() => setCopiedRawOutput(false), 1500)
         } catch (err) {
             console.error('Failed to copy raw output:', err)
+        }
+    }
+
+    const copyLog = async () => {
+        try {
+            const text = logLines.map(l => l.line).join('\n') || rawOutput || result?.raw_output || ''
+            await navigator.clipboard.writeText(text)
+            setCopiedLog(true)
+            window.setTimeout(() => setCopiedLog(false), 1500)
+        } catch (err) {
+            console.error('Failed to copy log', err)
         }
     }
 
@@ -1155,46 +1204,60 @@ export default function TaskDetails() {
                                 className="space-y-6"
                             >
                                 <motion.div variants={itemVariants} className="border border-white/8 bg-charcoal p-6">
-                                    <div className="flex flex-col gap-4 mb-5">
-                                        <div className="flex items-center gap-4">
-                                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Raw Output</h3>
-                                            <div className="h-px flex-1 bg-white/8" />
-                                        </div>
-                                        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                                            <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-                                                <input
-                                                    value={rawSearch}
-                                                    onChange={(e) => setRawSearch(e.target.value)}
-                                                    placeholder="Filter raw output"
-                                                    className="bg-black/30 border border-white/10 px-3 py-2 text-sm text-silver-bright outline-none min-w-[240px]"
-                                                />
-                                                <span className="text-[10px] uppercase tracking-[0.2em] text-silver/40">
-                                                    {filteredRawLines.length} lines
-                                                </span>
-                                            </div>
-                                            <div className="flex gap-3">
-                                                <button
-                                                    onClick={() => setWrapRawOutput(prev => !prev)}
-                                                    className="border border-white/10 px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-silver/75 font-black"
-                                                >
-                                                    {wrapRawOutput ? 'Disable Wrap' : 'Enable Wrap'}
-                                                </button>
-                                                <button
-                                                    onClick={copyRaw}
-                                                    className="border border-white/10 px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-silver/75 font-black"
-                                                >
-                                                    {copiedRawOutput ? 'Copied' : 'Copy Output'}
-                                                </button>
-                                            </div>
-                                        </div>
+                                    <div className="flex items-center gap-4 mb-5">
+                                        <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">
+                                            Raw Output
+                                        </h3>
+                                        <div className="h-px flex-1 bg-white/8" />
                                     </div>
-                                    <div className="border border-white/6 bg-black/30 p-4 max-h-[720px] overflow-auto">
-                                        <pre className={`${wrapRawOutput ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'} text-[11px] leading-6 font-mono text-silver/75`}>
-                                            {filteredRawLines.length > 0
-                                                ? filteredRawLines.join('\n')
-                                                : 'No matching raw output lines.'}
-                                        </pre>
-                                    </div>
+
+                                    {/* Live log viewer — shown when streaming or log lines exist */}
+                                    {(isStreaming || logLines.length > 0) ? (
+                                        <LiveLogViewer
+                                            lines={logLines}
+                                            isLive={isStreaming}
+                                            onCopy={copyLog}
+                                            copied={copiedLog}
+                                        />
+                                    ) : (
+                                        /* Fallback static viewer for completed tasks loaded from result */
+                                        <div className="space-y-3">
+                                            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                                                <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+                                                    <input
+                                                        value={rawSearch}
+                                                        onChange={(e) => setRawSearch(e.target.value)}
+                                                        placeholder="Filter raw output"
+                                                        className="bg-black/30 border border-white/10 px-3 py-2 text-sm text-silver-bright outline-none min-w-[240px]"
+                                                    />
+                                                    <span className="text-[10px] uppercase tracking-[0.2em] text-silver/40">
+                                                        {filteredRawLines.length} lines
+                                                    </span>
+                                                </div>
+                                                <div className="flex gap-3">
+                                                    <button
+                                                        onClick={() => setWrapRawOutput(prev => !prev)}
+                                                        className="border border-white/10 px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-silver/75 font-black"
+                                                    >
+                                                        {wrapRawOutput ? 'Disable Wrap' : 'Enable Wrap'}
+                                                    </button>
+                                                    <button
+                                                        onClick={copyRaw}
+                                                        className="border border-white/10 px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-silver/75 font-black"
+                                                    >
+                                                        {copiedRawOutput ? 'Copied' : 'Copy Output'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div className="border border-white/6 bg-black/30 p-4 max-h-[720px] overflow-auto">
+                                                <pre className={`${wrapRawOutput ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'} text-[11px] leading-6 font-mono text-silver/75`}>
+                                                    {filteredRawLines.length > 0
+                                                        ? filteredRawLines.join('\n')
+                                                        : 'No matching raw output lines.'}
+                                                </pre>
+                                            </div>
+                                        </div>
+                                    )}
                                 </motion.div>
                             </motion.section>
                         )}
