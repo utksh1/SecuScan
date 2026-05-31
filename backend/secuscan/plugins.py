@@ -358,9 +358,15 @@ class PluginManager:
 
     def _resolve_wordlist_path(self, value: str) -> str:
         """Resolve plugin wordlist aliases and Linux-centric defaults to local project assets."""
+        candidate = Path(os.path.expanduser(value))
+
+        if candidate.is_absolute() or os.path.isabs(value):
+            raise ValueError(
+                f"Wordlist path must be relative, got absolute path: {value!r}"
+            )
+
         self._reject_path_traversal(value)
 
-        candidate = Path(os.path.expanduser(value))
         if candidate.exists():
             resolved = candidate.resolve()
             if not self._is_path_in_wordlists_dir(resolved):
@@ -372,6 +378,8 @@ class PluginManager:
             return str(candidate)
 
         wordlists_dir = Path(settings.wordlists_dir)
+        wordlists_resolved = wordlists_dir.resolve()
+
         alias_map = {
             "small": wordlists_dir / "small.txt",
             "medium": wordlists_dir / "medium.txt",
@@ -398,7 +406,17 @@ class PluginManager:
 
         for fallback in fallback_candidates:
             if fallback.exists():
+                resolved = fallback.resolve()
+                if wordlists_resolved not in resolved.parents and resolved != wordlists_resolved:
+                    continue
                 return str(fallback)
+
+        # Before returning the raw value, verify it doesn't escape
+        resolved_value = (wordlists_dir / value).resolve()
+        if wordlists_resolved not in resolved_value.parents and resolved_value != wordlists_resolved:
+            raise ValueError(
+                f"Wordlist path {value!r} escapes the wordlists directory"
+            )
 
         return value
 
