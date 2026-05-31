@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
-import LiveLogViewer, { LogLine } from '../components/LiveLogViewer'
+import LiveLogViewer, { LogLine } from '../../../src/components/LiveLogViewer'
 
 const stdoutLines: LogLine[] = [
   { line: 'Starting scan...', stream: 'stdout', ts: 1000 },
