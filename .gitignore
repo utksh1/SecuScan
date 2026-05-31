@@ -108,5 +108,3 @@ backend/data/reports/*
 frontend/playwright-report/
 frontend/test-results/
 frontend/.vite/
-# Backend lock files
-backend/package-lock.json
