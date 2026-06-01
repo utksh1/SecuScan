@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 
-// Defining an explicit type interface for the component props
 interface CopyToClipboardProps {
   textToCopy: string;
 }
@@ -23,13 +22,12 @@ const CopyToClipboard: React.FC<CopyToClipboardProps> = ({ textToCopy }) => {
     <button
       onClick={handleCopy}
       type="button"
+      title="Copy to clipboard"
       className={`flex items-center gap-1.5 border px-3 py-2 text-[10px] uppercase tracking-[0.2em] font-medium transition-all duration-200 ${
         isCopied
           ? 'bg-green-900/30 border-green-500 text-green-400'
           : 'bg-black/30 border-white/10 text-silver hover:bg-white/5 hover:text-white'
       }`}
-      title="Copy to clipboard"
-      title="Copy to clipboard"
     >
       {isCopied ? (
         <>
