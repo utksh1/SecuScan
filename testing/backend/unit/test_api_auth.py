@@ -42,6 +42,20 @@ class TestApiKeyInit:
         mode = (tmp_path / ".api_key").stat().st_mode & 0o777
         assert mode == 0o600
 
+    def test_secuscan_api_key_file_env_var(self, tmp_path, monkeypatch):
+        custom_path = tmp_path / "secrets" / "my_api_key"
+        monkeypatch.setenv("SECUSCAN_API_KEY_FILE", str(custom_path))
+        key = auth_module.init_api_key(str(tmp_path))
+        assert custom_path.exists()
+        assert custom_path.read_text().strip() == key
+
+    def test_secuscan_api_key_file_loads_existing(self, tmp_path, monkeypatch):
+        custom_path = tmp_path / "my_key"
+        custom_path.write_text("preset-key-abc123")
+        monkeypatch.setenv("SECUSCAN_API_KEY_FILE", str(custom_path))
+        key = auth_module.init_api_key(str(tmp_path))
+        assert key == "preset-key-abc123"
+
 
 class TestAuthDependency:
     def test_no_credentials_returns_401(self, client_with_key):

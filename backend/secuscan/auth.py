@@ -7,6 +7,7 @@ Clients must supply it via:
   - X-Api-Key: <key>
 """
 
+import os
 import secrets
 from pathlib import Path
 
@@ -27,7 +28,9 @@ def init_api_key(data_dir: str) -> str:
     the module-level ``_api_key`` variable so the FastAPI dependency can reach it.
     """
     global _api_key
-    key_file = Path(data_dir) / ".api_key"
+    # Allow operators to redirect the key file via env var (e.g. Docker secrets).
+    custom_path = os.environ.get("SECUSCAN_API_KEY_FILE", "").strip()
+    key_file = Path(custom_path) if custom_path else Path(data_dir) / ".api_key"
     if key_file.exists():
         _api_key = key_file.read_text().strip()
     else:
