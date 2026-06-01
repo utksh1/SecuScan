@@ -91,6 +91,10 @@ class Settings(BaseSettings):
     task_start_max_field_length: int = 1_000      # max chars per string input value
     task_start_max_array_length: int = 50         # max items in any list/multiselect input
 
+    # Parser sandbox limits
+    parser_sandbox_timeout_seconds: int = 30
+    parser_sandbox_max_output_bytes: int = 8 * 1024 * 1024  # 8 MB
+
     # Logging
     log_level: str = "INFO"
     log_file: str = str(PROJECT_ROOT / "logs" / "secuscan.log")

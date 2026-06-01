@@ -22,6 +22,7 @@ from .models import TaskStatus, ScanPhase
 from .ratelimit import concurrent_limiter
 from .risk_scoring import compute_risk_score, compute_risk_factors
 from .capabilities import CapabilityEnforcer, CapabilityDeniedError, build_enforcer_from_settings
+from .parser_sandbox import run_parser_in_sandbox, ParserSandboxError
 
 
 def _parse_discovered_at(finding: dict) -> Optional[datetime]:
@@ -935,25 +936,29 @@ class TaskExecutor:
                     "reinstall the plugin before retrying."
                 )
             try:
-                import importlib.util
-                spec = importlib.util.spec_from_file_location(f"parser_{plugin.id}", parser_path)
-                if spec is not None:
-                    loader = spec.loader
-                    if loader is not None:
-                        module = importlib.util.module_from_spec(spec)
-                        loader.exec_module(module)
-                        if hasattr(module, "parse"):
-                            logger.info(f"Using custom parser for {plugin.id}")
-                            parsed = module.parse(parser_input)
-                            return self._normalize_parsed_result(plugin, parser_input, parsed)
-                        else:
-                            logger.warning(f"Custom parser {parser_path} missing 'parse' function")
-            except ValueError:
-                raise
-            except Exception as e:
-                logger.error(f"Error executing custom parser for {plugin.id}: {e}")
+                parsed = run_parser_in_sandbox(
+                    parser_path=parser_path,
+                    plugin_id=plugin.id,
+                    parser_input=parser_input,
+                    timeout_seconds=settings.parser_sandbox_timeout_seconds,
+                    max_output_bytes=settings.parser_sandbox_max_output_bytes,
+                )
+                return self._normalize_parsed_result(plugin, parser_input, parsed)
+            except ParserSandboxError as exc:
+                logger.error("Parser sandbox error for plugin '%s': %s", plugin.id, exc)
+                # For plugins that declared a custom parser, sandbox failure is a hard
+                # error — do NOT fall through to built-in parsers, which would produce
+                # empty or misleading results unrelated to the custom parser's logic.
+                raise RuntimeError(
+                    f"Custom parser failed for plugin '{plugin.id}': {exc.reason}"
+                ) from exc
+            except Exception as exc:
+                logger.error("Unexpected error running parser sandbox for '%s': %s", plugin.id, exc)
+                raise RuntimeError(
+                    f"Custom parser encountered an unexpected error for plugin '{plugin.id}': {exc}"
+                ) from exc
 
-        # 2. Fallback to legacy built-in parsers
+        # 2. Fallback to legacy built-in parsers (only reached when no parser.py exists)
         if parser_type == "builtin_nmap":
             return self._normalize_parsed_result(plugin, parser_input, self._parse_nmap_output(parser_input))
         elif parser_type == "builtin_http":
