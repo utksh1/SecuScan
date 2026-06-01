@@ -12,6 +12,7 @@ import {
     Refresh01Icon,
 } from '@hugeicons/core-free-icons'
 import { API_BASE, getPluginSchema, getTaskResult, getTaskStatus, PluginFieldSchema, PluginSchemaResponse, startTask } from '../api'
+import { useTaskSubscription } from '../hooks/useTaskSubscription'
 import { routes, routePath } from '../routes'
 import { parseDateSafe, formatDateLong, formatLocaleTime } from '../utils/date'
 import {
@@ -361,50 +362,23 @@ export default function TaskDetails() {
 
     useEffect(() => {
         loadTask()
-
-        const es = new EventSource(`${API_BASE}/task/${taskId}/stream`)
-
-        es.addEventListener('status', (e) => {
-            try {
-                const data = JSON.parse(e.data)
-                setTask((prev: Task | null) => prev ? { ...prev, status: data.status } : null)
-                if (data.scan_phase) {
-                    setScanPhase(data.scan_phase)
-                }
-                if (['completed', 'failed', 'cancelled'].includes(data.status)) {
-                    es.close()
-                    loadTask()
-                }
-            } catch (err) {
-                console.error("Status stream error", err)
-            }
-        })
-
-        es.addEventListener('phase', (e) => {
-            try {
-                const data = JSON.parse(e.data)
-                setScanPhase(data.scan_phase)
-            } catch (err) {
-                console.error("Phase stream error", err)
-            }
-        })
-
-        es.addEventListener('output', (e) => {
-            try {
-                const data = JSON.parse(e.data)
-                setRawOutput(prev => prev + data.chunk)
-            } catch (err) {
-                console.error("Output stream error", err)
-            }
-        })
-
-        es.onerror = (err) => {
-            console.error("EventSource error:", err)
-            es.close()
-        }
-
-        return () => es.close()
     }, [taskId])
+
+    useTaskSubscription({
+        taskId: taskId!,
+        onStatus: (status) => {
+            setTask((prev: Task | null) => prev ? { ...prev, status } : null)
+            if (['completed', 'failed', 'cancelled'].includes(status)) {
+                loadTask()
+            }
+        },
+        onPhase: (phase) => {
+            setScanPhase(phase)
+        },
+        onOutput: (chunk) => {
+            setRawOutput((prev) => prev + chunk)
+        },
+    })
 
     async function loadTask() {
         try {
