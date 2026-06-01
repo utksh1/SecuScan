@@ -60,6 +60,20 @@ class TestTasksPagination:
         assert pagination["per_page"] == 10
         print(f"✅ Custom per_page=10 works")
 
+    @pytest.mark.parametrize(
+        "qs",
+        [
+            "page=0",
+            "page=-1",
+            "per_page=0",
+            "per_page=-5",
+            "per_page=101",
+        ],
+    )
+    def test_invalid_pagination_is_rejected(self, qs):
+        response = client.get(f"/api/v1/tasks?{qs}")
+        assert response.status_code == 422
+
     def test_first_page_previous_is_null(self):
         """Test that previous is None on first page"""
         response = client.get("/api/v1/tasks?page=1&per_page=10")
