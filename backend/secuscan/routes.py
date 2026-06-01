@@ -2,7 +2,7 @@
 API routes for SecuScan backend
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request, Depends, Body
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request, Depends, Body, Query
 from fastapi.responses import JSONResponse
 from typing import Any, Optional, List, Dict, Callable
 import json
@@ -844,8 +844,8 @@ async def get_reports():
 
 @router.get("/tasks", dependencies=[Depends(read_heavy_limiter)])
 async def list_tasks(
-    page: int = 1,
-    per_page: int = 25,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(25, ge=1, le=100),
     plugin_id: Optional[str] = None,
     status: Optional[str] = None
 ):
