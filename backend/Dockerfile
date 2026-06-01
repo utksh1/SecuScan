@@ -1,4 +1,4 @@
-# Base image policy: see docs/BASE_IMAGE_UPDATE_POLICY.md
+# Base image policy: see docs/base_image_update_policy.md
 FROM python:3.11-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1
@@ -30,11 +30,8 @@ RUN groupadd --gid 1001 secuscan \
 
 USER secuscan
 
-EXPOSE 8081
-
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8081/api/v1/health')" || exit 1
-
 
 EXPOSE 8081
 

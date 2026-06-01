@@ -123,6 +123,16 @@ jobs:
           sarif_file: trivy-${{ matrix.service }}.sarif
           category: trivy-${{ matrix.service }}
 
+      - name: Run Trivy - JSON report
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ matrix.image }}:ci
+          format: json
+          output: trivy-${{ matrix.service }}.json
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+
       - name: Upload JSON vulnerability report
         uses: actions/upload-artifact@v4
         with:
