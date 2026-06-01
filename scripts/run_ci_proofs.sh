@@ -20,7 +20,7 @@ run_proof() {
     local description="$1"
     local files="$2"
     local event_name="$3"
-    
+
     echo "----------------------------------------------------------------------" >> "$OUTPUT_FILE"
     echo "SCENARIO: $description" >> "$OUTPUT_FILE"
     echo "EVENT: $event_name" >> "$OUTPUT_FILE"

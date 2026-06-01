@@ -118,4 +118,3 @@ OUTPUT:
 Event type: push
 run_backend=true
 run_frontend=true
-
