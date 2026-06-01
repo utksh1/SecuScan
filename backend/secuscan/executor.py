@@ -21,6 +21,7 @@ from .plugins import get_plugin_manager
 from .models import TaskStatus, ScanPhase
 from .ratelimit import concurrent_limiter
 from .risk_scoring import compute_risk_score, compute_risk_factors
+from .capabilities import CapabilityEnforcer, CapabilityDeniedError, build_enforcer_from_settings
 from .parser_sandbox import run_parser_in_sandbox, ParserSandboxError
 
 
@@ -89,6 +90,7 @@ class TaskExecutor:
         self.running_tasks: Dict[str, asyncio.Task] = {}
         # PubSub: Map of task_id to list of active async queues listening for output/status updates
         self._listeners: Dict[str, List[asyncio.Queue]] = {}
+        self._capability_enforcer: CapabilityEnforcer = build_enforcer_from_settings()
 
     def subscribe(self, task_id: str) -> asyncio.Queue:
         """Subscribe to a task's real-time events."""
@@ -328,8 +330,13 @@ class TaskExecutor:
                 if not plugin:
                     raise ValueError(f"Plugin not found: {plugin_id}")
 
-                # Pending records for assets removed
-                
+                # Enforce capability policy before any command is built or process spawned
+                self._capability_enforcer.check(
+                    plugin_id=plugin.id,
+                    declared=plugin.capabilities,
+                    safety_level=plugin.safety.get("level", "safe"),
+                )
+
                 command = plugin_manager.build_command(plugin_id, inputs)
 
                 if not command:
@@ -457,6 +464,40 @@ class TaskExecutor:
             await self._broadcast(task_id, "status", TaskStatus.CANCELLED.value)
             await self._invalidate_cached_views()
             raise  # let asyncio complete the cancellation
+
+        except CapabilityDeniedError as e:
+            logger.warning("Task %s blocked by capability policy: %s", task_id, e)
+            duration = (time.time() - start_time) if "start_time" in locals() else 0
+            await db.execute(
+                """
+                UPDATE tasks SET
+                    status = ?,
+                    completed_at = ?,
+                    duration_seconds = ?,
+                    error_message = ?
+                WHERE id = ?
+                """,
+                (
+                    TaskStatus.FAILED.value,
+                    datetime.now().isoformat(),
+                    duration,
+                    str(e),
+                    task_id,
+                ),
+            )
+            await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
+            await self._invalidate_cached_views()
+            await db.log_audit(
+                "task_capability_denied",
+                f"Task blocked by capability policy: {str(e)}",
+                severity="warning",
+                context={
+                    "task_id": task_id,
+                    "denied_capabilities": sorted(e.denied_capabilities),
+                    "plugin_id": plugin_id,
+                },
+                task_id=task_id,
+            )
 
         except Exception as e:
             logger.error(f"Task {task_id} failed: {e}", exc_info=True)
