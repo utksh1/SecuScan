@@ -267,7 +267,7 @@ def test_validate_command_network_egress_log_only(monkeypatch):
 
     # Command containing a blocked destination (e.g. 10.0.0.1)
     command = ["curl", "http://10.0.0.1/"]
-    
+
     # Under 'log_only' mode, egress violation is logged as a warning but allowed
     ok, err = validate_command_network_egress(command, safe_mode=False, plugin_id="test", task_id="test-task")
     assert ok is True
