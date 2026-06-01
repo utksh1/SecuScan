@@ -1,3 +1,4 @@
+import CopyToClipboard from '../components/CopyToClipboard';
 import React, { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -1179,12 +1180,7 @@ export default function TaskDetails() {
                                                 >
                                                     {wrapRawOutput ? 'Disable Wrap' : 'Enable Wrap'}
                                                 </button>
-                                                <button
-                                                    onClick={copyRaw}
-                                                    className="border border-white/10 px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-silver/75 font-black"
-                                                >
-                                                    {copiedRawOutput ? 'Copied' : 'Copy Output'}
-                                                </button>
+                                                <CopyToClipboard textToCopy={rawOutput || result?.raw_output || ''} />
                                             </div>
                                         </div>
                                     </div>
