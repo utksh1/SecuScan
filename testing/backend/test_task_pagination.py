@@ -44,6 +44,21 @@ class TestTasksPagination:
         assert pagination["per_page"] == 10
 
     def test_first_page_previous_is_null(self, test_client):
+    @pytest.mark.parametrize(
+        "qs",
+        [
+            "page=0",
+            "page=-1",
+            "per_page=0",
+            "per_page=-5",
+            "per_page=101",
+        ],
+    )
+    def test_invalid_pagination_is_rejected(self, qs):
+        response = client.get(f"/api/v1/tasks?{qs}")
+        assert response.status_code == 422
+
+    def test_first_page_previous_is_null(self):
         """Test that previous is None on first page"""
         response = test_client.get("/api/v1/tasks?page=1&per_page=10")
         assert response.status_code == 200
@@ -65,3 +80,7 @@ class TestTasksPagination:
             assert "per_page=5" in next_url
             assert "status=completed" in next_url
             assert "plugin_id=nmap" in next_url
+            assert "plugin_id=nmap" in next_url
+            print(f"✅ Next URL preserves filters: {next_url}")
+        else:
+            print("ℹ️ No next page (database might be empty)")
