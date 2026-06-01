@@ -23,7 +23,20 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks(id) {
             if (id.includes('node_modules')) {
-              return 'vendor'
+              // Group React and React-DOM
+              if (id.includes('react/') || id.includes('react-dom/')) {
+                return 'vendor-react'
+              }
+              // Group React Router
+              if (id.includes('react-router')) {
+                return 'vendor-router'
+              }
+              // Group Framer Motion
+              if (id.includes('framer-motion')) {
+                return 'vendor-framer'
+              }
+              // Catch-all for remaining dependencies
+              return 'vendor-core'
             }
           }
         }
