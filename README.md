@@ -333,38 +333,55 @@ This project is released under the [MIT License](LICENSE).
 
 ---
 
-## 🛠️ Troubleshooting & Local Setup Failsafe
+## Troubleshooting & Local Setup Failsafe
 
-If your local environment glitches or throws errors during installation or launch, find your fast, actionable solution below.
+Use these checks when local installation or launch fails.
 
 ### 1. Stale Local Vite Module Cache
-**Symptoms:** Changes in your frontend components don't update in the browser, or Vite throws internal parsing/bundling syntax errors.
+
+**Symptoms:** Frontend changes do not appear in the browser, or Vite reports internal parsing or bundling errors.
+
 **Fix:** Force Vite to ignore its stale cache and run a fresh reload:
+
 ```bash
 cd frontend
 npm run dev -- --force
+```
 
 ### 2. Node Dependency Resolution Loops (`npm i` hanging/failing)
-**Symptoms:** `npm install` throws severe dependency tree conflicts, peer dependency errors, or hangs indefinitely.
-**Fix:** Force an override of strict package-lock rules using the legacy peer flags:
+
+**Symptoms:** `npm install` reports dependency tree conflicts, peer dependency errors, or hangs indefinitely.
+
+**Fix:** Retry with the legacy peer dependency resolver:
+
 ```bash
 npm install --legacy-peer-deps
+```
 
-###3. Missing or Mismatched Environment Variables
-**Symptoms**: The frontend loads, but API requests return undefined network targets, or authentication/scans fail to connect.
-**Fix**: Verify you have your local .env setup active. Run this in your root layout:
+### 3. Missing or Mismatched Environment Variables
+
+**Symptoms:** The frontend loads, but API requests fail or scans cannot connect to the backend.
+
+**Fix:** Create a local `.env` file from the example file:
+
 ```bash
 cp .env.example .env
+```
 
+### 4. Port 5173 Already in Use
 
-###4. Port 5173 Already in Use Error
-**Symptoms**: Terminal displays Port 5173 is already in use, using port 5174 instead.
-**Fix**: Kill the hidden background ghost process running on that port:
+**Symptoms:** Vite reports that port `5173` is already in use and switches to another port.
 
-```Windows (Command Prompt / PowerShell):
-```PowerShell
+**Fix:** Stop the process using that port.
+
+Windows PowerShell:
+
+```powershell
 Stop-Process -Id (Get-NetTCPConnection -LocalPort 5173).OwningProcess -Force
+```
 
-```Linux / macOS:
-```Bash
-kill -9 $(lsof -t -i:5173)
+Linux or macOS:
+
+```bash
+kill "$(lsof -t -i:5173)"
+```
