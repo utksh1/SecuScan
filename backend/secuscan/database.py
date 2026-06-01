@@ -34,11 +34,12 @@ class Database:
         """Establish database connection and ensure schema exists."""
         # Ensure data directory exists
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        
+
         conn = await aiosqlite.connect(self.db_path)
         self._connection = conn
         conn.row_factory = aiosqlite.Row
         await self._create_schema()
+        await self._run_migrations()
 
     async def disconnect(self):
         """Close the current database connection."""
@@ -265,7 +266,6 @@ class Database:
                 print("Added missing column 'proof' to findings table.")
             except Exception as e:
                 print(f"Failed to add 'proof' to findings: {e}")
-
         risk_cols = {
             "exploitability": "REAL",
             "confidence": "REAL",
@@ -280,6 +280,24 @@ class Database:
                     print(f"Added missing column {col_name} to findings table.")
                 except Exception as e:
                     print(f"Failed to add column {col_name}: {e}")
+
+    async def _run_migrations(self):
+        migrations_dir = Path(__file__).parent / "migrations"
+
+        if not migrations_dir.exists():
+            raise RuntimeError(
+            f"Migrations directory not found at {migrations_dir} — "
+            "ensure the backend package is installed correctly."
+        )
+
+        for migration_file in sorted(migrations_dir.glob("*.sql")):
+            sql = migration_file.read_text(encoding="utf-8")
+            try:
+                await self.connection.executescript(sql)
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Migration {migration_file.name} failed — startup aborted: {exc}"
+                ) from exc
 
         await self._backfill_risk_scores()
 
@@ -326,13 +344,13 @@ class Database:
 
     async def fetchone(self, query: str, params: tuple = ()) -> Optional[Dict]:
         """Fetch one row."""
-        async with self.connection.execute(query, params) as cursor:
+        async with await self.connection.execute(query, params) as cursor:
             row = await cursor.fetchone()
             return dict(row) if row else None
 
     async def fetchall(self, query: str, params: tuple = ()) -> List[Dict]:
         """Fetch all rows."""
-        async with self.connection.execute(query, params) as cursor:
+        async with await self.connection.execute(query, params) as cursor:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
 

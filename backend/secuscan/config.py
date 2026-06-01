@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     plugin_signature_key: Optional[str] = None
     enforce_plugin_signatures: bool = False
     vault_key: Optional[str] = None
+    denied_capabilities: List[str] = []
 
     # Rate Limiting
     max_concurrent_tasks: int = 3
@@ -89,6 +90,10 @@ class Settings(BaseSettings):
     task_start_max_body_bytes: int = 64_000       # 64 KB total JSON body
     task_start_max_field_length: int = 1_000      # max chars per string input value
     task_start_max_array_length: int = 50         # max items in any list/multiselect input
+
+    # Parser sandbox limits
+    parser_sandbox_timeout_seconds: int = 30
+    parser_sandbox_max_output_bytes: int = 8 * 1024 * 1024  # 8 MB
 
     # Logging
     log_level: str = "INFO"
