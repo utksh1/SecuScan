@@ -8,7 +8,44 @@ permissions:
   contents: read
 
 jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      run_backend: ${{ steps.filter.outputs.run_backend }}
+      run_frontend: ${{ steps.filter.outputs.run_frontend }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Fetch base branch for diff
+        if: github.event_name == 'pull_request'
+        run: git fetch origin "${{ github.base_ref }}" --depth=1
+      - name: Determine test selection
+        id: filter
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+        run: python3 scripts/select_tests.py
+
+  formatting-hygiene:
+    needs: detect-changes
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check formatting hygiene on changed files
+        run: |
+          git fetch origin "${{ github.base_ref }}" --depth=1
+          git diff --check "origin/${{ github.base_ref }}"...HEAD
+
   backend-lint:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.run_backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,6 +62,12 @@ jobs:
         run: ruff check backend testing/backend
 
   backend-tests:
+    needs: [detect-changes, backend-lint, formatting-hygiene]
+    if: |
+      always() &&
+      needs.detect-changes.outputs.run_backend == 'true' &&
+      (needs.backend-lint.result == 'success' || needs.backend-lint.result == 'skipped') &&
+      (needs.formatting-hygiene.result == 'success' || needs.formatting-hygiene.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -69,6 +112,11 @@ jobs:
           echo "::warning::Performance benchmark thresholds exceeded or benchmarks failed to run. Check the job logs for details."
 
   frontend-checks:
+    needs: [detect-changes, formatting-hygiene]
+    if: |
+      always() &&
+      needs.detect-changes.outputs.run_frontend == 'true' &&
+      (needs.formatting-hygiene.result == 'success' || needs.formatting-hygiene.result == 'skipped')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -94,15 +142,3 @@ jobs:
         run: npm run test
       - name: Build frontend
         run: npm run build
-
-  formatting-hygiene:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Check formatting hygiene on changed files
-        run: |
-          git fetch origin "${{ github.base_ref }}" --depth=1
-          git diff --check "origin/${{ github.base_ref }}"...HEAD

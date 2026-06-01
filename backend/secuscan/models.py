@@ -79,6 +79,7 @@ class PluginMetadata(BaseModel):
     
     output: Dict[str, Any]
     safety: Dict[str, Any]
+    capabilities: Optional[List[str]] = None
     learning: Optional[Dict[str, Any]] = None
     dependencies: Optional[Dict[str, List[str]]] = None
     docker_image: Optional[str] = None
@@ -207,6 +208,15 @@ class NotificationRuleCreate(BaseModel):
     channel_type: NotificationChannelType
     target_url_or_email: str
     is_active: bool = True
+
+
+class NotificationRuleUpdate(BaseModel):
+    """Partial update payload for a notification rule."""
+    name: Optional[str] = None
+    severity_threshold: Optional[NotificationSeverityThreshold] = None
+    channel_type: Optional[NotificationChannelType] = None
+    target_url_or_email: Optional[str] = None
+    is_active: Optional[bool] = None
 
 
 class NotificationRuleResponse(BaseModel):
