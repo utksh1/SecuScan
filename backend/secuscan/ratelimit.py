@@ -245,6 +245,11 @@ read_heavy_limiter = EndpointRateLimiter(
     window_seconds=settings.rate_limit_read_heavy_window
 )
 
+admin_limiter = EndpointRateLimiter(
+    bucket_name="admin",
+    limit=30,
+    window_seconds=60
+)
 
 async def reset_all_endpoint_limiters():
     """Reset rate limiting history for all route-specific buckets."""
@@ -252,3 +257,4 @@ async def reset_all_endpoint_limiters():
     await vault_limiter.reset()
     await report_download_limiter.reset()
     await read_heavy_limiter.reset()
+    await admin_limiter.reset()

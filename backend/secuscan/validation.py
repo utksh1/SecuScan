@@ -501,3 +501,88 @@ def _check_field(key: str, value: Any) -> Tuple[bool, int, str]:
                 )
 
     return True, 0, ""
+
+def _is_filesystem_target(target: str) -> bool:
+    """Best-effort detection for path-based targets that should bypass host validation."""
+    if target.startswith(("/", "./", "../", "~")):
+        return True
+    if re.match(r"^[A-Za-z]:[\\/]", target):
+        return True
+    if "/" in target and not target.startswith(("http://", "https://")):
+        return True
+    return False
+
+def validate_command_network_egress(command: list[str], safe_mode: bool, plugin_id: str, task_id: str) -> Tuple[bool, str]:
+    """
+    Inspect all command arguments. If any argument represents an outbound network
+    destination (IP, hostname, URL), validate it against both Safe Mode and Network Policy.
+    """
+    from .network_policy import get_policy_engine
+
+    for arg in command:
+        arg_str = str(arg).strip()
+        if not arg_str:
+            continue
+        if arg_str.startswith("-"):
+            continue  # Ignore flags
+        if _is_filesystem_target(arg_str):
+            continue  # Ignore local paths
+
+        # Check if it looks like a URL
+        is_url = False
+        hostname = None
+        if "://" in arg_str:
+            try:
+                parsed = urlparse(arg_str)
+                if parsed.scheme in ("http", "https", "ws", "wss"):
+                    is_url = True
+                    hostname = parsed.hostname
+            except Exception:
+                pass
+
+        # If it's a URL, validate the hostname. If not, check if it could be a hostname or IP.
+        candidate = hostname if is_url else arg_str
+        if not candidate:
+            continue
+
+        # Clean port suffix if present (e.g. "example.com:80" or "10.0.0.1:8080")
+        if ":" in candidate and not candidate.startswith("["):
+            parts = candidate.rsplit(":", 1)
+            if parts[1].isdigit():
+                candidate = parts[0]
+
+        is_ip = False
+        try:
+            # Try to parse as IP/CIDR (handles single IP and subnet validation)
+            ipaddress.ip_network(candidate, strict=False)
+            is_ip = True
+        except ValueError:
+            pass
+
+        is_host = False
+        if not is_ip:
+            # Basic hostname check (with dots and valid characters, or 'localhost')
+            if candidate.lower() == "localhost" or re.match(
+                r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)+$',
+                candidate
+            ):
+                is_host = True
+
+        if is_ip or is_host:
+            # Validate against safe mode
+            is_valid, err = validate_target(candidate, safe_mode=safe_mode)
+            if not is_valid:
+                return False, f"Command argument '{arg_str}' violates safe mode: {err}"
+
+            # Validate against network policy
+            if settings.enforce_network_policy:
+                engine = get_policy_engine()
+                allowed, reason, _ = engine.check_access(
+                    dest_ip=candidate,
+                    plugin_id=plugin_id,
+                    task_id=task_id,
+                )
+                if not allowed:
+                    return False, f"Command argument '{arg_str}' violates network policy: {reason}"
+
+    return True, ""

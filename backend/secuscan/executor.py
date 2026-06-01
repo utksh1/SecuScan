@@ -268,7 +268,44 @@ class TaskExecutor:
             safe_mode = bool(task_row["safe_mode"])
             target = extract_target(inputs)
 
-            # ── Network policy enforcement ──────────────────────────────────
+            # ── Safe Mode & Network policy enforcement ───────────────────────
+            # Enforce Safe Mode target validation inside TaskExecutor to guarantee
+            # that all execution paths (manual API, workflows, scheduled tasks) are protected.
+            if target:
+                plugin_manager = get_plugin_manager()
+                plugin = plugin_manager.get_plugin(plugin_id)
+                should_validate = True
+                if plugin and plugin.category == "code":
+                    should_validate = False
+                
+                # Check for filesystem targets using the same best-effort detection
+                is_fs = target.startswith(("/", "./", "../", "~")) or \
+                        bool(re.match(r"^[A-Za-z]:[\\/]", target)) or \
+                        ("/" in target and not target.startswith(("http://", "https://")))
+                
+                if should_validate and not is_fs:
+                    from .validation import validate_target
+                    try:
+                        # Enforce safe mode validation of target address in a thread pool
+                        is_valid, error_msg = await asyncio.wait_for(
+                            asyncio.to_thread(validate_target, target, safe_mode),
+                            timeout=float(settings.dns_resolution_timeout_seconds),
+                        )
+                        if not is_valid:
+                            await self.mark_task_failed(
+                                task_id,
+                                f"Safe mode target validation failed: {error_msg}",
+                            )
+                            await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
+                            return
+                    except asyncio.TimeoutError:
+                        await self.mark_task_failed(
+                            task_id,
+                            "Target validation timed out (SecuScan Guardrail)",
+                        )
+                        await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
+                        return
+
             # Check before launching any scanner or subprocess.  check_access()
             # writes an audit entry on every path, so no extra logging needed.
             if target and settings.enforce_network_policy:
@@ -289,7 +326,7 @@ class TaskExecutor:
             # Check if this is a modular scanner or a standard plugin
             if plugin_id in MODULAR_SCANNERS:
                 scanner_class = MODULAR_SCANNERS[plugin_id]
-                scanner = scanner_class(task_id, db)
+                scanner = scanner_class(task_id, db, safe_mode=safe_mode)
 
                 logger.info(f"Executing modular scanner {plugin_id} for task {task_id}")
                 await self._broadcast(task_id, "status", TaskStatus.RUNNING.value)
@@ -360,18 +397,31 @@ class TaskExecutor:
                     )
                     await _net_check.wait()
                     if _net_check.returncode != 0:
-                        logger.info(f"Docker network '{settings.docker_network}' not found. Attempting to create it...")
+                        logger.info(f"Docker network '{settings.docker_network}' not found. Creating isolated bridge network (ICC disabled)...")
                         _net_create = await asyncio.create_subprocess_exec(
-                            "docker", "network", "create", "--driver", "bridge", settings.docker_network,
+                            "docker", "network", "create",
+                            "--driver", "bridge",
+                            "--opt", "com.docker.network.bridge.enable_icc=false",
+                            settings.docker_network,
                             stdout=asyncio.subprocess.DEVNULL,
                             stderr=asyncio.subprocess.DEVNULL,
                         )
                         await _net_create.wait()
                         if _net_create.returncode != 0:
-                            raise RuntimeError(
-                                f"Docker network '{settings.docker_network}' does not exist and could not be created automatically."
+                            logger.warning("Failed to create isolated bridge network with ICC disabled. Falling back to standard bridge...")
+                            _net_create_fallback = await asyncio.create_subprocess_exec(
+                                "docker", "network", "create", "--driver", "bridge", settings.docker_network,
+                                stdout=asyncio.subprocess.DEVNULL,
+                                stderr=asyncio.subprocess.DEVNULL,
                             )
-                        logger.info(f"Successfully created Docker network '{settings.docker_network}'")
+                            await _net_create_fallback.wait()
+                            if _net_create_fallback.returncode != 0:
+                                raise RuntimeError(
+                                    f"Docker network '{settings.docker_network}' does not exist and could not be created automatically."
+                                )
+                            logger.info(f"Successfully created Docker network '{settings.docker_network}' (fallback)")
+                        else:
+                            logger.info(f"Successfully created Docker network '{settings.docker_network}' with ICC disabled")
 
                     docker_image = plugin.docker_image or "alpine:latest"
                     docker_cmd = [
@@ -552,6 +602,17 @@ class TaskExecutor:
         Returns:
             Tuple of (output, exit_code)
         """
+        db = await get_db()
+        task_row = await db.fetchone("SELECT plugin_id, safe_mode FROM tasks WHERE id = ?", (task_id,))
+        safe_mode = bool(task_row["safe_mode"]) if task_row else True
+        plugin_id = task_row["plugin_id"] if task_row else "unknown"
+
+        from .validation import validate_command_network_egress
+        ok, err = validate_command_network_egress(command, safe_mode, plugin_id, task_id)
+        if not ok:
+            logger.error(f"Egress boundary check blocked command: {err}")
+            return f"Execution blocked by egress boundary check: {err}", -1
+
         try:
             process = await asyncio.create_subprocess_exec(
                 *command,

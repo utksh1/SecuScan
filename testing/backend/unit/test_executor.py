@@ -392,7 +392,7 @@ async def test_execute_task_allowed_by_network_policy(setup_test_environment):
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (task_id, "nmap", "nmap", "8.8.8.8", '{"target":"8.8.8.8"}',
-         TaskStatus.QUEUED.value, 1, 1)
+         TaskStatus.QUEUED.value, 1, 0)
     )
 
     executor = TaskExecutor()
@@ -459,7 +459,7 @@ async def test_execute_task_fails_when_docker_network_missing(setup_test_environ
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (task_id, "nmap", "nmap", "8.8.8.8", '{"target":"8.8.8.8"}',
-         TaskStatus.QUEUED.value, 1, 1)
+         TaskStatus.QUEUED.value, 1, 0)
     )
 
     executor = TaskExecutor()

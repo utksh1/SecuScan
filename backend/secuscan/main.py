@@ -20,7 +20,6 @@ from .plugins import init_plugins
 from .routes import router
 from .workflows import scheduler
 
-
 logging.basicConfig(
     level=getattr(logging, settings.log_level),
     handlers=[
@@ -37,9 +36,7 @@ for handler in logging.getLogger().handlers:
     handler.addFilter(RequestIDFilter())
     handler.setFormatter(JSONFormatter())
 
-
 logger = logging.getLogger(__name__)
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -74,13 +71,27 @@ async def lifespan(app: FastAPI):
                     stderr=subprocess.DEVNULL,
                 )
                 if res.returncode != 0:
-                    logger.info(f"Docker network '{settings.docker_network}' not found. Creating bridge network...")
-                    subprocess.run(
-                        ["docker", "network", "create", "--driver", "bridge", settings.docker_network],
+                    logger.info(f"Docker network '{settings.docker_network}' not found. Creating isolated bridge network (ICC disabled)...")
+                    creation_res = subprocess.run(
+                        [
+                            "docker", "network", "create",
+                            "--driver", "bridge",
+                            "--opt", "com.docker.network.bridge.enable_icc=false",
+                            settings.docker_network
+                        ],
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
                     )
-                    logger.info(f"✓ Docker network '{settings.docker_network}' created")
+                    if creation_res.returncode != 0:
+                        logger.warning("Failed to create isolated bridge network with ICC disabled. Falling back to standard bridge...")
+                        subprocess.run(
+                            ["docker", "network", "create", "--driver", "bridge", settings.docker_network],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
+                        logger.info(f"✓ Docker network '{settings.docker_network}' created (fallback)")
+                    else:
+                        logger.info(f"✓ Docker network '{settings.docker_network}' created with ICC disabled")
                 else:
                     logger.info(f"✓ Docker network '{settings.docker_network}' verified")
             except Exception as e:
@@ -103,7 +114,6 @@ async def lifespan(app: FastAPI):
         await global_cache.disconnect()
     await scheduler.stop()
     logger.info("✓ Shutdown complete")
-
 
 # Create FastAPI application
 app = FastAPI(
@@ -130,7 +140,6 @@ async def redirect_api_redoc():
 async def redirect_api_openapi():
     from fastapi.responses import RedirectResponse
     return RedirectResponse(url="/openapi.json")
-
 
 # CORS middleware
 cors_allow_all = "*" in settings.cors_allowed_origins
@@ -169,7 +178,6 @@ async def health_check():
         }
     }
 
-
 # Root endpoint
 @app.get("/")
 async def root():
@@ -181,7 +189,6 @@ async def root():
         "api_docs": f"{settings.base_url}/api/docs" if settings.debug else None,
         "legal_notice": "For authorized testing only. Unauthorized scanning may be illegal."
     }
-
 
 def main():
     """Main entry point"""
@@ -205,7 +212,6 @@ def main():
         reload=settings.debug,
         log_level=settings.log_level.lower()
     )
-
 
 if __name__ == "__main__":
     main()

@@ -112,7 +112,7 @@ from .ratelimit import (
     rate_limiter, concurrent_limiter,
     task_start_limiter, vault_limiter,
     report_download_limiter, read_heavy_limiter,
-    resolve_client_identity,
+    admin_limiter, resolve_client_identity,
 )
 from .validation import validate_target, validate_task_start_payload
 from .reporting import reporting
@@ -1291,6 +1291,7 @@ def verify_admin_access(
     request: Request = None,
 ) -> Optional[str]:
     """Verify admin API key is provided and valid."""
+    import hmac
     if not api_key and request:
         auth_header = request.headers.get("authorization")
         if auth_header:
@@ -1306,14 +1307,21 @@ def verify_admin_access(
             detail="Admin API Key is not configured on the server. Please set SECUSCAN_ADMIN_API_KEY."
         )
 
-    if api_key != settings.admin_api_key:
+    # Entropy check: enforce a strong API key
+    if len(settings.admin_api_key) < 16:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Admin API Key is too weak. It must be at least 16 characters long."
+        )
+
+    if not hmac.compare_digest(api_key or "", settings.admin_api_key):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing Admin API Key"
         )
     return api_key
 
-@router.get("/admin/network-policy", dependencies=[Depends(verify_admin_access)])
+@router.get("/admin/network-policy", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
 async def get_network_policy():
     """Get current network policy configuration"""
     engine = get_policy_engine()
@@ -1324,7 +1332,7 @@ async def get_network_policy():
         "audit_entries_count": len(engine.audit_entries),
     }
 
-@router.post("/admin/network-policy/allow", dependencies=[Depends(verify_admin_access)])
+@router.post("/admin/network-policy/allow", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
 async def add_allow_rule(request: dict):
     """Add network to allowlist"""
     engine = get_policy_engine()
@@ -1338,7 +1346,7 @@ async def add_allow_rule(request: dict):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.post("/admin/network-policy/deny", dependencies=[Depends(verify_admin_access)])
+@router.post("/admin/network-policy/deny", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
 async def add_deny_rule(request: dict):
     """Add network to denylist"""
     engine = get_policy_engine()
@@ -1352,7 +1360,7 @@ async def add_deny_rule(request: dict):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.get("/admin/network-audit-log", dependencies=[Depends(verify_admin_access)])
+@router.get("/admin/network-audit-log", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
 async def get_audit_log(
     plugin_id: Optional[str] = None,
     action: Optional[str] = None,
@@ -1376,7 +1384,7 @@ async def get_audit_log(
         "total": len(entries),
     }
 
-@router.get("/admin/network-audit-log/export", dependencies=[Depends(verify_admin_access)])
+@router.get("/admin/network-audit-log/export", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
 async def export_audit_log(format: str = "json"):
     """Export audit log in specified format"""
     engine = get_policy_engine()
