@@ -105,6 +105,9 @@ function getApiKey(): string | null {
   return getStoredApiKey()
 }
 
+/** Fired on the window when any API request receives HTTP 401. */
+export const AUTH_REQUIRED_EVENT = 'secuscan:auth-required'
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController()
   const timeoutId = window.setTimeout(() => controller.abort(), 10000)
@@ -121,6 +124,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     signal: controller.signal,
   })
   window.clearTimeout(timeoutId)
+
+  if (response.status === 401) {
+    // Notify the app so it can show the API-key setup UI without every
+    // caller needing to handle auth independently.
+    window.dispatchEvent(new CustomEvent(AUTH_REQUIRED_EVENT))
+    throw new Error('AUTH_REQUIRED')
+  }
+
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`)
   }
