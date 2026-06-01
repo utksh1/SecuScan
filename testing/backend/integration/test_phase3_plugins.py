@@ -2,6 +2,7 @@ import time
 from unittest.mock import patch
 
 from backend.secuscan.models import TaskStatus
+from backend.secuscan.config import settings
 
 PHASE3_PLUGIN_IDS = {
     "wpscan",
@@ -65,7 +66,8 @@ def test_phase3_plugins_discoverable_and_schema_accessible(test_client):
         assert schema.status_code == 200
 
 
-def test_wpscan(test_client):
+def test_wpscan(test_client, monkeypatch):
+    monkeypatch.setattr(settings, "safe_mode_default", False)
     mock_out = '{"plugins":{"sample-plugin":{"vulnerabilities":[{"title":"CVE-2026-1000"}]}}}'
     result = run_plugin_test(
         test_client,
@@ -76,15 +78,27 @@ def test_wpscan(test_client):
     assert any("WordPress Plugin Vulnerability" in f["title"] for f in result["structured"]["findings"])
 
 
-def test_joomscan(test_client):
+def test_joomscan(test_client, monkeypatch):
+    monkeypatch.setattr(settings, "safe_mode_default", False)
     mock_out = "[+] Vulnerable to: CVE-2015-8562\n[+] Joomla! version: 3.4.5"
-    result = run_plugin_test(test_client, "joomscan", {"target": "https://joomla.lab"}, mock_out)
+    result = run_plugin_test(
+        test_client,
+        "joomscan",
+        {"target": "https://joomla.lab"},
+        mock_out,
+    )
     assert any("Joomla Vulnerability" in f["title"] for f in result["structured"]["findings"])
 
 
-def test_droopescan(test_client):
+def test_droopescan(test_client, monkeypatch):
+    monkeypatch.setattr(settings, "safe_mode_default", False)
     mock_out = '{"vulnerabilities":[{"description":"CVE-2025-0001"}],"interesting urls":[{"description":"/admin"}]}'
-    result = run_plugin_test(test_client, "droopescan", {"target": "https://drupal.lab"}, mock_out)
+    result = run_plugin_test(
+        test_client,
+        "droopescan",
+        {"target": "https://drupal.lab"},
+        mock_out,
+    )
     assert any("DroopeScan vulnerabilities" in f["title"] for f in result["structured"]["findings"])
 
 
@@ -136,12 +150,18 @@ def test_metasploit(test_client):
     assert any("Metasploit Session Opened" in f["title"] for f in result["structured"]["findings"])
 
 
-def test_sqli_checker(test_client):
+def test_sqli_checker(test_client, monkeypatch):
+    monkeypatch.setattr(settings, "safe_mode_default", False)
     mock_out = "Payload: ' OR 1=1 --\navailable databases [2]:\nmain\naudit"
     result = run_plugin_test(
         test_client,
         "sqli_checker",
-        {"target": "https://api.lab/user?id=1", "level": 1, "risk": 1, "technique": "BEUSTQ"},
+        {
+            "target": "https://api.lab/user?id=1",
+            "level": 1,
+            "risk": 1,
+            "technique": "BEUSTQ",
+        },
         mock_out,
     )
     findings = result["structured"]["findings"]

@@ -42,6 +42,11 @@ def setup_test_environment(monkeypatch):
 
     temp_dir.cleanup()
 
+@pytest.fixture
+def anyio_backend():
+    """Force AnyIO tests to run on asyncio (trio is not a dependency in CI)."""
+    return "asyncio"
+
 
 @pytest.fixture
 def test_client(setup_test_environment):
