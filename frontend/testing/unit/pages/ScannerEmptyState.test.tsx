@@ -54,10 +54,10 @@ describe('Scanner empty-state UX', () => {
     await user.click(await screen.findByRole('tab', { name: /Recon Tools/i }))
     await screen.findByText(/WHOIS Lookup/i)
     await user.type(screen.getByPlaceholderText('SEARCH_PROTOCOLS...'), 'nothing-will-match')
-    expect(screen.getByText(/No tools match search/i)).toBeInTheDocument()
+    expect(screen.getByTestId('toolkit-search-empty')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /Clear Search/i }))
-    expect(screen.queryByText(/No tools match search/i)).not.toBeInTheDocument()
+    expect(screen.queryByTestId('toolkit-search-empty')).not.toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: /Robots/i }))
     await waitFor(() => {

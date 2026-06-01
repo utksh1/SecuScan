@@ -477,16 +477,29 @@ export default function Scanner() {
                 <div className="space-y-6">
                   {searchQuery.trim().length > 0 ? (
                     <>
-                      <div className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-amber">No tools match search</div>
-                      <p className="text-[10px] text-silver/60 uppercase tracking-widest leading-relaxed">
-                        No tools in this category match the current query.
-                      </p>
-                      <button
-                        onClick={() => setSearchQuery('')}
-                        className="px-6 py-3 text-[10px] font-black uppercase tracking-[0.3em] bg-rag-blue text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
+                      <div
+                        role="status"
+                        aria-live="polite"
+                        aria-label={`No tools found for "${searchQuery.trim()}"`}
+                        data-testid="toolkit-search-empty"
+                        className="space-y-6"
                       >
-                        Clear Search
-                      </button>
+                        <div className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-amber">
+                          No tools match &ldquo;{searchQuery.trim()}&rdquo;
+                        </div>
+                        <p className="text-[10px] text-silver/60 uppercase tracking-widest leading-relaxed">
+                          No tools in this category match the current search query.
+                        </p>
+                        <button
+                          type="button"
+                          data-testid="toolkit-search-empty-clear"
+                          aria-label="Clear search and show all tools"
+                          onClick={() => setSearchQuery('')}
+                          className="px-6 py-3 text-[10px] font-black uppercase tracking-[0.3em] bg-rag-blue text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
+                        >
+                          Clear Search
+                        </button>
+                      </div>
                     </>
                   ) : categoryToolsCount === 0 ? (
                     <>
