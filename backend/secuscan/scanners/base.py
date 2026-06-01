@@ -20,6 +20,7 @@ class BaseScanner(ABC):
 
     async def _execute_command(self, command: List[str]) -> tuple:
         """Executes the command after validating egress policies at the boundary."""
+        import asyncio
         from ..validation import validate_command_network_egress
 
         ok, err = await asyncio.to_thread(validate_command_network_egress, command, self.safe_mode, self.name, self.task_id)
