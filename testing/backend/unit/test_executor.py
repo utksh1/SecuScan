@@ -197,6 +197,38 @@ def test_classify_command_result_fails_on_undefined_flag_even_with_zero_exit(set
     assert error is not None
 
 
+def test_resolve_execution_timeout_clamps_requested_timeout(monkeypatch):
+    monkeypatch.setattr(settings, "sandbox_timeout", 600)
+
+    executor = TaskExecutor()
+
+    assert executor._resolve_execution_timeout({"timeout": 9999}) == 600
+
+
+def test_resolve_execution_timeout_allows_shorter_requested_timeout(monkeypatch):
+    monkeypatch.setattr(settings, "sandbox_timeout", 600)
+
+    executor = TaskExecutor()
+
+    assert executor._resolve_execution_timeout({"timeout": 120}) == 120
+
+
+def test_resolve_execution_timeout_ignores_invalid_values(monkeypatch):
+    monkeypatch.setattr(settings, "sandbox_timeout", 600)
+
+    executor = TaskExecutor()
+
+    assert executor._resolve_execution_timeout({"timeout": "invalid"}) == 600
+
+
+def test_resolve_execution_timeout_prefers_max_scan_time(monkeypatch):
+    monkeypatch.setattr(settings, "sandbox_timeout", 600)
+
+    executor = TaskExecutor()
+
+    assert executor._resolve_execution_timeout({"max_scan_time": 90, "timeout": 120}) == 90
+
+
 @pytest.mark.asyncio
 async def test_execute_task_sets_cancelled_status_in_db(setup_test_environment):
     """
