@@ -905,10 +905,19 @@ class TaskExecutor:
                 return self._normalize_parsed_result(plugin, parser_input, parsed)
             except ParserSandboxError as exc:
                 logger.error("Parser sandbox error for plugin '%s': %s", plugin.id, exc)
+                # For plugins that declared a custom parser, sandbox failure is a hard
+                # error — do NOT fall through to built-in parsers, which would produce
+                # empty or misleading results unrelated to the custom parser's logic.
+                raise RuntimeError(
+                    f"Custom parser failed for plugin '{plugin.id}': {exc.reason}"
+                ) from exc
             except Exception as exc:
                 logger.error("Unexpected error running parser sandbox for '%s': %s", plugin.id, exc)
+                raise RuntimeError(
+                    f"Custom parser encountered an unexpected error for plugin '{plugin.id}': {exc}"
+                ) from exc
 
-        # 2. Fallback to legacy built-in parsers
+        # 2. Fallback to legacy built-in parsers (only reached when no parser.py exists)
         if parser_type == "builtin_nmap":
             return self._normalize_parsed_result(plugin, parser_input, self._parse_nmap_output(parser_input))
         elif parser_type == "builtin_http":
