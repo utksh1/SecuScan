@@ -33,6 +33,19 @@ _INTERNAL_CONTROL_FIELDS: frozenset = frozenset({
 logger = logging.getLogger(__name__)
 
 
+def _is_absolute_path(value: str) -> bool:
+    """Check if a path is absolute regardless of the server OS.
+
+    Handles Unix (/), Windows drive-letter (C:\\, C:/),
+    and UNC (\\\\server\\share) absolute path styles.
+    """
+    if value.startswith("/"):
+        return True
+    if value.startswith("\\"):
+        return True
+    return bool(re.match(r'^[a-zA-Z]:[/\\]', value))
+
+
 class PluginManager:
     """Manages plugin loading and validation"""
 
@@ -360,7 +373,7 @@ class PluginManager:
         """Resolve plugin wordlist aliases and Linux-centric defaults to local project assets."""
         candidate = Path(os.path.expanduser(value))
 
-        if candidate.is_absolute() or os.path.isabs(value):
+        if _is_absolute_path(value):
             raise ValueError(
                 f"Wordlist path must be relative, got absolute path: {value!r}"
             )
