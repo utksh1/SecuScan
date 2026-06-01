@@ -209,6 +209,15 @@ class NotificationRuleCreate(BaseModel):
     is_active: bool = True
 
 
+class NotificationRuleUpdate(BaseModel):
+    """Partial update payload for a notification rule."""
+    name: Optional[str] = None
+    severity_threshold: Optional[NotificationSeverityThreshold] = None
+    channel_type: Optional[NotificationChannelType] = None
+    target_url_or_email: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
 class NotificationRuleResponse(BaseModel):
     """Stored notification rule returned by the API."""
     id: str
