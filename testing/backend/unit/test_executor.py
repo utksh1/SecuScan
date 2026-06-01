@@ -443,6 +443,74 @@ async def test_execute_task_allowed_by_network_policy(setup_test_environment):
     await db.disconnect()
 
 @pytest.mark.asyncio
+async def test_execute_task_network_policy_log_only(setup_test_environment):
+    """
+    When settings.network_policy_failure_mode == "log_only", even if policy check
+    returns disallowed, the task execution should continue (and not mark the task as failed
+    due to network policy).
+    """
+    await init_db(settings.database_path)
+    db = await get_db()
+
+    task_id = str(uuid.uuid4())
+    await db.execute(
+        """
+        INSERT INTO tasks (id, plugin_id, tool_name, target, inputs_json,
+                           status, consent_granted, safe_mode)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (task_id, "nmap", "nmap", "10.0.0.1", '{"target":"10.0.0.1"}',
+         TaskStatus.QUEUED.value, 1, 0)
+    )
+
+    executor = TaskExecutor()
+
+    # Policy denies target
+    mock_engine = MagicMock()
+    mock_engine.check_access.return_value = (False, "Blocked by denylist rule: test", None)
+
+    async def fake_command(*args, **kwargs):
+        return "80/tcp open http", 0
+
+    with patch("backend.secuscan.executor.settings") as mock_settings, \
+         patch("backend.secuscan.executor.get_policy_engine", return_value=mock_engine), \
+         patch.object(executor, "_execute_command", side_effect=fake_command), \
+         patch("backend.secuscan.executor.concurrent_limiter") as mock_limiter, \
+         patch("backend.secuscan.executor.get_plugin_manager") as mock_pm:
+
+        mock_settings.enforce_network_policy = True
+        mock_settings.network_policy_failure_mode = "log_only"
+        mock_settings.docker_enabled = False
+        mock_settings.raw_output_dir = settings.raw_output_dir
+        mock_settings.sandbox_timeout = 600
+
+        mock_limiter.release = AsyncMock()
+
+        mock_plugin = MagicMock()
+        mock_plugin.name = "nmap"
+        mock_plugin.presets = {}
+        mock_plugin.docker_image = None
+        mock_plugin.output = {"parser": "builtin_nmap", "format": "text"}
+        mock_plugin.category = "Network"
+        mock_plugin.id = "nmap"
+        mock_pm.return_value.get_plugin.return_value = mock_plugin
+        mock_pm.return_value.build_command.return_value = ["nmap", "10.0.0.1"]
+        mock_pm.return_value.plugins_dir = MagicMock()
+        mock_pm.return_value.plugins_dir.__truediv__ = MagicMock(
+            return_value=MagicMock(
+                __truediv__=MagicMock(return_value=MagicMock(exists=lambda: False))
+            )
+        )
+
+        await executor.execute_task(task_id)
+
+    row = await db.fetchone("SELECT status FROM tasks WHERE id = ?", (task_id,))
+    # Task should successfully complete because network violation is ignored in log_only mode!
+    assert row["status"] == TaskStatus.COMPLETED.value
+    mock_engine.check_access.assert_called_once()
+    await db.disconnect()
+
+@pytest.mark.asyncio
 async def test_execute_task_fails_when_docker_network_missing(setup_test_environment):
     """
     When docker_enabled=True and the named Docker network does not exist,

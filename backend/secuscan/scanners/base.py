@@ -22,7 +22,7 @@ class BaseScanner(ABC):
         """Executes the command after validating egress policies at the boundary."""
         from ..validation import validate_command_network_egress
 
-        ok, err = validate_command_network_egress(command, self.safe_mode, self.name, self.task_id)
+        ok, err = await asyncio.to_thread(validate_command_network_egress, command, self.safe_mode, self.name, self.task_id)
         if not ok:
             logger.error(f"Egress boundary check blocked command: {err}")
             return f"Execution blocked by egress boundary check: {err}", -1

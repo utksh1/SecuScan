@@ -583,6 +583,12 @@ def validate_command_network_egress(command: list[str], safe_mode: bool, plugin_
                     task_id=task_id,
                 )
                 if not allowed:
-                    return False, f"Command argument '{arg_str}' violates network policy: {reason}"
+                    if settings.network_policy_failure_mode == "log_only":
+                        import logging
+                        logging.getLogger(__name__).warning(
+                            f"[Log Only] Command argument '{arg_str}' network policy violation allowed: {reason}"
+                        )
+                    else:
+                        return False, f"Command argument '{arg_str}' violates network policy: {reason}"
 
     return True, ""

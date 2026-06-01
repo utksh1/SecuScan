@@ -255,3 +255,26 @@ class TestIsFilesystemTarget:
 
     def test_windows_lowercase_drive(self):
         assert is_filesystem_target(r"c:\users\repo") is True
+
+def test_validate_command_network_egress_log_only(monkeypatch):
+    """Test that validate_command_network_egress permits execution with a warning when failure mode is 'log_only'"""
+    from backend.secuscan.validation import validate_command_network_egress
+    from backend.secuscan.config import settings
+
+    # Setup monkeypatch for configuration settings
+    monkeypatch.setattr(settings, "enforce_network_policy", True)
+    monkeypatch.setattr(settings, "network_policy_failure_mode", "log_only")
+
+    # Command containing a blocked destination (e.g. 10.0.0.1)
+    command = ["curl", "http://10.0.0.1/"]
+    
+    # Under 'log_only' mode, egress violation is logged as a warning but allowed
+    ok, err = validate_command_network_egress(command, safe_mode=False, plugin_id="test", task_id="test-task")
+    assert ok is True
+    assert err == ""
+
+    # Under 'block' mode, it should be denied
+    monkeypatch.setattr(settings, "network_policy_failure_mode", "block")
+    ok, err = validate_command_network_egress(command, safe_mode=False, plugin_id="test", task_id="test-task")
+    assert ok is False
+    assert "network policy" in err.lower()

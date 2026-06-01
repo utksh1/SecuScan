@@ -66,6 +66,13 @@ class Settings(BaseSettings):
         "169.254.169.254/32",          # AWS metadata
         "169.254.0.0/16",              # Reserved/metadata
         "127.0.0.0/8",                 # Loopback (for remote execution)
+        "10.0.0.0/8",                  # Private RFC 1918
+        "172.16.0.0/12",               # Private RFC 1918
+        "192.168.0.0/16",              # Private RFC 1918
+        "100.64.0.0/10",               # Carrier-grade NAT (RFC 6598)
+        "fc00::/7",                    # IPv6 Unique Local Address
+        "fe80::/10",                   # IPv6 Link-local
+        "::1/128",                     # IPv6 Loopback
     ]
     network_audit_log_file: str = str(PROJECT_ROOT / "logs" / "network.audit.log")
     network_audit_retention_days: int = 90

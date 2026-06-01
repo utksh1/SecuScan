@@ -310,18 +310,31 @@ class TaskExecutor:
             # writes an audit entry on every path, so no extra logging needed.
             if target and settings.enforce_network_policy:
                 engine = get_policy_engine()
-                allowed, reason, _ = engine.check_access(
-                    dest_ip=target,
-                    plugin_id=plugin_id,
-                    task_id=task_id,
-                )
-                if not allowed:
-                    await self.mark_task_failed(
-                        task_id,
-                        f"Network policy denied access to {target}: {reason}",
+                try:
+                    allowed, reason, _ = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            engine.check_access,
+                            dest_ip=target,
+                            plugin_id=plugin_id,
+                            task_id=task_id,
+                        ),
+                        timeout=float(settings.dns_resolution_timeout_seconds),
                     )
-                    await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
-                    return  # finally block handles running_tasks cleanup + limiter release
+                except asyncio.TimeoutError:
+                    allowed, reason = False, "Network policy check timed out (DNS resolution timeout)"
+
+                if not allowed:
+                    if settings.network_policy_failure_mode == "log_only":
+                        logger.warning(
+                            f"[Log Only] Network policy violation allowed for {target}: {reason}"
+                        )
+                    else:
+                        await self.mark_task_failed(
+                            task_id,
+                            f"Network policy denied access to {target}: {reason}",
+                        )
+                        await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
+                        return  # finally block handles running_tasks cleanup + limiter release
 
             # Check if this is a modular scanner or a standard plugin
             if plugin_id in MODULAR_SCANNERS:
@@ -608,7 +621,7 @@ class TaskExecutor:
         plugin_id = task_row["plugin_id"] if task_row else "unknown"
 
         from .validation import validate_command_network_egress
-        ok, err = validate_command_network_egress(command, safe_mode, plugin_id, task_id)
+        ok, err = await asyncio.to_thread(validate_command_network_egress, command, safe_mode, plugin_id, task_id)
         if not ok:
             logger.error(f"Egress boundary check blocked command: {err}")
             return f"Execution blocked by egress boundary check: {err}", -1

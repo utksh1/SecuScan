@@ -271,3 +271,54 @@ class TestAuditLogFiltering:
         allow_entries = engine.get_audit_entries(action=PolicyAction.ALLOW)
         assert len(allow_entries) == 1
         assert allow_entries[0].action == PolicyAction.ALLOW
+
+class TestURLTargetHandling:
+    """Test URL and target parsing/cleaning in the policy engine"""
+
+    @patch("socket.gethostbyname")
+    def test_url_target_cleaning_and_resolution(self, mock_gethostbyname, tmp_path):
+        """URL hosts, ports, and brackets should be cleaned before matching policies"""
+        audit_log = tmp_path / "audit.log"
+        engine = NetworkPolicyEngine(audit_log_path=str(audit_log))
+        engine.add_allow_rule("93.184.216.34/32", reason="Example IP")
+
+        mock_gethostbyname.return_value = "93.184.216.34"
+
+        # Check full URL
+        allowed, reason, policy = engine.check_access(
+            dest_ip="https://example.com/path?query=1",
+            plugin_id="test",
+        )
+        assert allowed
+        mock_gethostbyname.assert_called_with("example.com")
+
+        # Check host with port
+        allowed, reason, policy = engine.check_access(
+            dest_ip="example.com:8080",
+            plugin_id="test",
+        )
+        assert allowed
+
+        # Check IPv6 brackets cleaning
+        engine.add_allow_rule("::1/128", reason="IPv6 Loopback")
+        allowed, reason, policy = engine.check_access(
+            dest_ip="[::1]",
+            plugin_id="test",
+        )
+        assert allowed
+
+class TestDefaultDenylistSSRFProtection:
+    """Test that private subnets are blocked by default in settings"""
+
+    def test_private_subnets_in_default_denylist(self):
+        """Standard private ranges (RFC1918, RFC6598, IPv6 local) must be in the default denylist"""
+        from backend.secuscan.config import Settings
+        default_settings = Settings()
+        denylist = default_settings.network_denylist
+        assert "10.0.0.0/8" in denylist
+        assert "172.16.0.0/12" in denylist
+        assert "192.168.0.0/16" in denylist
+        assert "100.64.0.0/10" in denylist
+        assert "fc00::/7" in denylist
+        assert "fe80::/10" in denylist
+        assert "::1/128" in denylist

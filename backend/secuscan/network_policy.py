@@ -179,24 +179,53 @@ class NetworkPolicyEngine:
         Returns:
             Tuple of (allowed: bool, decision_reason: str, matched_policy: NetworkPolicy)
         """
-        try:
-            ip = ipaddress.ip_address(dest_ip)
-        except ValueError:
-            # Try resolving hostname to IP if dest_ip is a domain name
+        # Clean dest_ip if it is a full URL, has a port, or has brackets
+        original_dest_ip = dest_ip
+        target_host = dest_ip.strip()
+        if "://" in target_host:
             try:
-                resolved = socket.gethostbyname(dest_ip)
+                from urllib.parse import urlparse
+                parsed = urlparse(target_host)
+                if parsed.scheme in {"http", "https", "ws", "wss"}:
+                    if parsed.hostname:
+                        target_host = parsed.hostname
+            except Exception:
+                pass
+
+        if ":" in target_host:
+            if target_host.startswith("["):
+                if "]" in target_host:
+                    parts = target_host.rsplit("]", 1)
+                    host_part = parts[0] + "]"
+                    port_part = parts[1]
+                    if port_part.startswith(":") and port_part[1:].isdigit():
+                        target_host = host_part
+            elif target_host.count(":") == 1:
+                parts = target_host.rsplit(":", 1)
+                if parts[1].isdigit():
+                    target_host = parts[0]
+        if target_host.startswith("[") and target_host.endswith("]"):
+            target_host = target_host[1:-1]
+
+        try:
+            ip = ipaddress.ip_address(target_host)
+            dest_ip = str(ip)
+        except ValueError:
+            # Try resolving hostname to IP if target_host is a domain name
+            try:
+                resolved = socket.gethostbyname(target_host)
                 ip = ipaddress.ip_address(resolved)
                 if not dest_hostname:
-                    dest_hostname = dest_ip
+                    dest_hostname = target_host
                 dest_ip = resolved
             except Exception:
-                reason = f"Invalid IP address format: {dest_ip}"
+                reason = f"Invalid IP address format: {original_dest_ip}"
                 entry = AuditLogEntry(
                     timestamp=datetime.now(),
                     plugin_id=plugin_id,
                     task_id=task_id,
                     action=PolicyAction.DENY,
-                    dest_ip=dest_ip,
+                    dest_ip=original_dest_ip,
                     dest_port=dest_port,
                     dest_hostname=dest_hostname,
                     policy_matched="invalid_ip",
