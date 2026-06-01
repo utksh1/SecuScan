@@ -277,12 +277,12 @@ class TaskExecutor:
                 should_validate = True
                 if plugin and plugin.category == "code":
                     should_validate = False
-                
+
                 # Check for filesystem targets using the same best-effort detection
                 is_fs = target.startswith(("/", "./", "../", "~")) or \
                         bool(re.match(r"^[A-Za-z]:[\\/]", target)) or \
                         ("/" in target and not target.startswith(("http://", "https://")))
-                
+
                 if should_validate and not is_fs:
                     from .validation import validate_target
                     try:
