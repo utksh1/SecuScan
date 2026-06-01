@@ -55,6 +55,11 @@ def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]
 
 
 def is_filesystem_target(target: str) -> bool:
+    """Best-effort detection for path-based targets that should bypass host validation."""
+    # Absolute or relative filesystem roots only — not CIDR notation (e.g. 8.8.8.8/32)
+    if target.startswith(("/", "./", "../", "~/")):
+        return True
+    # Windows drive paths (C:\ or C:/)
     """
     Return True only for genuine local filesystem paths.
 
@@ -121,10 +126,11 @@ from .validation import validate_target, validate_task_start_payload, validate_u
 from .reporting import reporting
 from .vault import VaultCrypto
 from .workflows import scheduler
+from .auth import require_api_key
 
 from sse_starlette.sse import EventSourceResponse
 
-router = APIRouter(prefix="/api/v1")
+router = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
 SSE_RAW_OUTPUT_CHUNK_SIZE = 64 * 1024
 
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")

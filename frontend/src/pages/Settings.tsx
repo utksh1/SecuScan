@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from '../components/ThemeContext'
 import { useToast } from '../components/ToastContext'
+import { getStoredApiKey, setStoredApiKey } from '../api'
 import { ConfirmModal } from '../components/ConfirmModal'
 
 function getSystemThemeForSettings(): string {
@@ -42,6 +43,27 @@ const DEFAULT_CONFIG = {
 export default function Settings() {
     const { theme, setTheme, resetToSystem, isSystemControlled } = useTheme()
     const { addToast } = useToast()
+
+    const [apiKey, setApiKey] = useState(() => getStoredApiKey() ?? '')
+    const [apiKeyVisible, setApiKeyVisible] = useState(false)
+
+    const handleSaveApiKey = () => {
+        const trimmed = apiKey.trim()
+        if (!trimmed) {
+            addToast("API key cannot be empty", "error")
+            return
+        }
+        setStoredApiKey(trimmed)
+        addToast("API key saved — all future requests will use this key", "success")
+    }
+
+    const handleClearApiKey = () => {
+        if (window.confirm("Clear the stored API key? The UI will return 401 errors until a valid key is configured.")) {
+            setApiKey('')
+            setStoredApiKey('')
+            addToast("API key cleared", "info")
+        }
+    }
 
     const [config, setConfig] = useState(() => {
         const saved = localStorage.getItem('secuscan-config')
@@ -200,6 +222,63 @@ export default function Settings() {
             </header>
             <div className="grid grid-cols-1 xl:grid-cols-4 gap-12 pt-4">
                 <main className="xl:col-span-3 space-y-20">
+
+                    <section className="space-y-8">
+                        <div className="flex items-center gap-4">
+                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">API_Key_Configuration</h3>
+                            <div className="h-0.5 flex-1 bg-black/10"></div>
+                        </div>
+                        <div className="bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-silver-bright uppercase tracking-widest block italic">Backend_API_Key</label>
+                                <p className="text-[10px] text-silver/40 uppercase font-bold italic mb-4 leading-relaxed">
+                                    Read from <span className="text-rag-blue font-mono">backend/data/.api_key</span> after starting the backend. Stored locally in browser — never sent to any remote server.
+                                </p>
+                            </div>
+                            <div className="flex gap-4 items-stretch">
+                                <input
+                                    type={apiKeyVisible ? 'text' : 'password'}
+                                    value={apiKey}
+                                    onChange={(e) => setApiKey(e.target.value)}
+                                    placeholder="PASTE_KEY_HERE"
+                                    className="flex-1 bg-black/40 border-4 border-black p-4 text-xs font-mono text-rag-blue font-bold focus:outline-none focus:border-rag-blue/50 transition-colors uppercase"
+                                    autoComplete="off"
+                                    spellCheck={false}
+                                />
+                                <button
+                                    onClick={() => setApiKeyVisible(v => !v)}
+                                    className="px-4 bg-charcoal-dark border-4 border-black text-[10px] font-black text-silver/40 uppercase tracking-widest hover:text-white transition-colors"
+                                    title={apiKeyVisible ? 'Hide key' : 'Show key'}
+                                >
+                                    {apiKeyVisible ? 'HIDE' : 'SHOW'}
+                                </button>
+                            </div>
+                            <div className="flex gap-4 pt-2">
+                                <button
+                                    onClick={handleSaveApiKey}
+                                    className="bg-rag-blue text-black px-8 py-3 text-[10px] font-black uppercase tracking-[0.3em] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all italic"
+                                >
+                                    SAVE_KEY
+                                </button>
+                                <button
+                                    onClick={handleClearApiKey}
+                                    className="bg-rag-red text-black px-8 py-3 text-[10px] font-black uppercase tracking-[0.3em] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all italic"
+                                >
+                                    CLEAR_KEY
+                                </button>
+                            </div>
+                            {getStoredApiKey() ? (
+                                <p className="text-[10px] font-mono text-rag-green uppercase tracking-widest">
+                                    ● KEY_CONFIGURED — requests will authenticate automatically
+                                </p>
+                            ) : (
+                                <p className="text-[10px] font-mono text-rag-red uppercase tracking-widest">
+                                    ● NO_KEY_SET — API requests will return 401 until a key is saved
+                                </p>
+                            )}
+                        </div>
+                    </section>
+
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
                             <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Engine_Parameters</h3>
