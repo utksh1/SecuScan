@@ -33,7 +33,7 @@ import subprocess
 import textwrap
 import logging
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -146,12 +146,13 @@ def run_parser_in_sandbox(
     stdin_bytes = envelope.encode("utf-8")
 
     import threading
-    import time
 
     stdout_chunks: list[bytes] = []
     stdout_total = 0
     overflow = False
     stderr_chunks: list[bytes] = []
+    # Stderr cap: diagnostics only — 64 KB is more than enough for any error message.
+    _MAX_STDERR_BYTES = 65536
 
     proc = subprocess.Popen(
         [sys.executable, "-c", bootstrap],
@@ -177,9 +178,14 @@ def run_parser_in_sandbox(
 
     def _read_stderr() -> None:
         assert proc.stderr is not None
+        total = 0
         while True:
             chunk = proc.stderr.read(4096)
             if not chunk:
+                break
+            total += len(chunk)
+            if total > _MAX_STDERR_BYTES:
+                # Discard the rest; we have enough for diagnostics.
                 break
             stderr_chunks.append(chunk)
 

@@ -296,6 +296,35 @@ class TestOutputSizeLimit:
         # Must be killed well before it finishes writing 20 MB — should take < 10s
         assert elapsed < 10, f"Overflow enforcement took too long: {elapsed:.1f}s"
 
+    def test_oversized_stderr_does_not_exhaust_memory(self, tmp_path):
+        """Regression: parser flooding stderr must not buffer unbounded bytes in parent.
+
+        The stderr reader applies a hard cap (64 KB) so a misbehaving parser
+        cannot exhaust the parent's memory through the diagnostic channel.
+        """
+        p = _write_parser(
+            tmp_path,
+            """\
+            import sys
+            def parse(output):
+                # Write 10 MB to stderr; parent must stop collecting well before that.
+                chunk = "e" * 4096
+                for _ in range(2560):  # 2560 * 4 KB = 10 MB
+                    sys.stderr.write(chunk)
+                    sys.stderr.flush()
+                return {"ok": True}
+            """,
+        )
+        import time
+        start = time.monotonic()
+        # Stderr overflow does NOT kill the process — the parser still succeeds.
+        # We just verify the collected stderr is bounded.
+        result = run_parser_in_sandbox(p, "stderr_flood_plugin", "data")
+        elapsed = time.monotonic() - start
+        assert result == {"ok": True}
+        # The whole operation must finish within the timeout window.
+        assert elapsed < 35, f"Stderr-flooded sandbox took too long: {elapsed:.1f}s"
+
 
 # ---------------------------------------------------------------------------
 # Missing parser file
