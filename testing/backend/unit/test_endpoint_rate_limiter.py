@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from backend.secuscan.config import settings
 from backend.secuscan.ratelimit import (
     EndpointRateLimiter,
+    RateLimiter,
     resolve_client_identity,
     reset_all_endpoint_limiters,
     task_start_limiter,
@@ -97,6 +98,66 @@ async def test_sliding_window_reset():
     # 4. Now the request should succeed since window elapsed
     await limiter(req, res)
     assert res.headers["X-RateLimit-Remaining"] == "1"
+
+
+@pytest.mark.asyncio
+async def test_endpoint_rate_limiter_prunes_expired_identity_buckets():
+    """Expired identities should not stay resident forever."""
+    limiter = EndpointRateLimiter("test_bucket", limit=5, window_seconds=10)
+    await limiter.reset()
+
+    class MockRequest:
+        def __init__(self, user_id):
+            self.client = type("Client", (), {"host": "127.0.0.1"})()
+            self.headers = {"x-user-id": user_id}
+            self.state = type("State", (), {})()
+
+    class MockResponse:
+        def __init__(self):
+            self.headers = {}
+
+    now = datetime.now()
+    async with limiter.lock:
+        limiter.history["user:expired_a"] = [now - timedelta(seconds=30)]
+        limiter.history["user:expired_b"] = [now - timedelta(seconds=20)]
+        limiter.history["user:active"] = [now - timedelta(seconds=2)]
+        limiter.last_cleanup = now - timedelta(seconds=11)
+
+    await limiter(MockRequest("current"), MockResponse())
+
+    async with limiter.lock:
+        assert "user:expired_a" not in limiter.history
+        assert "user:expired_b" not in limiter.history
+        assert "user:active" in limiter.history
+        assert "user:current" in limiter.history
+
+
+@pytest.mark.asyncio
+async def test_endpoint_rate_limiter_cleanup_is_interval_bounded():
+    """Cleanup should not scan every request inside the cleanup interval."""
+    limiter = EndpointRateLimiter("test_bucket", limit=5, window_seconds=10)
+    await limiter.reset()
+
+    class MockRequest:
+        def __init__(self, user_id):
+            self.client = type("Client", (), {"host": "127.0.0.1"})()
+            self.headers = {"x-user-id": user_id}
+            self.state = type("State", (), {})()
+
+    class MockResponse:
+        def __init__(self):
+            self.headers = {}
+
+    now = datetime.now()
+    async with limiter.lock:
+        limiter.history["user:expired"] = [now - timedelta(seconds=30)]
+        limiter.last_cleanup = now
+
+    await limiter(MockRequest("current"), MockResponse())
+
+    async with limiter.lock:
+        assert "user:expired" in limiter.history
+        assert "user:current" in limiter.history
 
 
 def test_priority_client_identity_resolution():
@@ -212,3 +273,107 @@ def test_route_level_integration_and_independent_buckets(test_client, monkeypatc
     assert resp_vault1.status_code == 200
     assert resp_vault1.headers["X-RateLimit-Limit"] == "2"
     assert resp_vault1.headers["X-RateLimit-Remaining"] == "1"
+
+
+# ── RateLimiter per-client keying tests ───────────────────────────────────────
+
+
+class TestRateLimiterClientKeying:
+    """Tests for the task-execution RateLimiter with per-(client_id, plugin_id) buckets."""
+
+    @pytest.mark.asyncio
+    async def test_independent_client_buckets(self):
+        """Two different clients sharing the same plugin have independent quotas.
+
+        Exhausting client_A's allowance must not prevent client_B from executing
+        the same plugin.
+        """
+        limiter = RateLimiter()
+        plugin_id = "nmap"
+        max_per_hour = 2
+
+        # Drain client_A's quota entirely
+        for _ in range(max_per_hour):
+            allowed, _ = await limiter.can_execute(plugin_id, max_per_hour=max_per_hour, client_id="client_A")
+            assert allowed
+
+        # client_A is now blocked
+        allowed_a, msg_a = await limiter.can_execute(plugin_id, max_per_hour=max_per_hour, client_id="client_A")
+        assert not allowed_a
+        assert "Rate limit exceeded" in msg_a
+
+        # client_B must still be allowed despite client_A being blocked
+        allowed_b, msg_b = await limiter.can_execute(plugin_id, max_per_hour=max_per_hour, client_id="client_B")
+        assert allowed_b, f"client_B was blocked unexpectedly: {msg_b}"
+
+    @pytest.mark.asyncio
+    async def test_reset_plugin_clears_all_client_buckets(self):
+        """reset(plugin_id) must clear the history for every client that used that plugin."""
+        limiter = RateLimiter()
+        plugin_id = "nmap"
+        max_per_hour = 1
+
+        # Exhaust both clients for the same plugin
+        await limiter.can_execute(plugin_id, max_per_hour=max_per_hour, client_id="client_A")
+        await limiter.can_execute(plugin_id, max_per_hour=max_per_hour, client_id="client_B")
+
+        # Confirm both are blocked before reset
+        allowed_a, _ = await limiter.can_execute(plugin_id, max_per_hour=max_per_hour, client_id="client_A")
+        allowed_b, _ = await limiter.can_execute(plugin_id, max_per_hour=max_per_hour, client_id="client_B")
+        assert not allowed_a
+        assert not allowed_b
+
+        # Reset quota for the plugin (all clients)
+        await limiter.reset(plugin_id)
+
+        # Both clients must be allowed again after reset
+        allowed_a_after, _ = await limiter.can_execute(plugin_id, max_per_hour=max_per_hour, client_id="client_A")
+        allowed_b_after, _ = await limiter.can_execute(plugin_id, max_per_hour=max_per_hour, client_id="client_B")
+        assert allowed_a_after, "client_A should be allowed after reset"
+        assert allowed_b_after, "client_B should be allowed after reset"
+
+    @pytest.mark.asyncio
+    async def test_reset_plugin_does_not_affect_other_plugins(self):
+        """reset(plugin_id) must only clear buckets for that specific plugin."""
+        limiter = RateLimiter()
+        max_per_hour = 1
+
+        # Exhaust quotas for two different plugins under the same client
+        await limiter.can_execute("nmap", max_per_hour=max_per_hour, client_id="client_A")
+        await limiter.can_execute("gobuster", max_per_hour=max_per_hour, client_id="client_A")
+
+        # Reset only nmap
+        await limiter.reset("nmap")
+
+        # nmap bucket cleared: request should be allowed
+        allowed_nmap, _ = await limiter.can_execute("nmap", max_per_hour=max_per_hour, client_id="client_A")
+        assert allowed_nmap, "nmap bucket should be cleared after reset"
+
+        # gobuster bucket untouched: request should still be blocked
+        allowed_gobuster, _ = await limiter.can_execute("gobuster", max_per_hour=max_per_hour, client_id="client_A")
+        assert not allowed_gobuster, "gobuster bucket should remain exhausted"
+
+    @pytest.mark.asyncio
+    async def test_backward_compatible_global_bucket(self):
+        """Callers that omit client_id default to the 'global' bucket.
+
+        This ensures no regression for existing call sites that do not pass a
+        client identity.
+        """
+        limiter = RateLimiter()
+        plugin_id = "nikto"
+        max_per_hour = 2
+
+        # Call without explicit client_id (uses default "global")
+        allowed_1, _ = await limiter.can_execute(plugin_id, max_per_hour=max_per_hour)
+        allowed_2, _ = await limiter.can_execute(plugin_id, max_per_hour=max_per_hour)
+        allowed_3, msg = await limiter.can_execute(plugin_id, max_per_hour=max_per_hour)
+
+        assert allowed_1
+        assert allowed_2
+        assert not allowed_3, "Global bucket should be rate-limited after quota is exhausted"
+        assert "Rate limit exceeded" in msg
+
+        # Verify the key in task_history is the expected global bucket format
+        async with limiter.lock:
+            assert f"global:{plugin_id}" in limiter.task_history

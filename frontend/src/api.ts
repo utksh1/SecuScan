@@ -110,6 +110,10 @@ export function getPluginSchema(id: string) {
   return request<PluginSchemaResponse>(`/plugin/${id}/schema`)
 }
 
+export function getSettings() {
+  return request<any>(`/settings`)
+}
+
 export function getDashboardSummary() {
   return request('/dashboard/summary')
 }
@@ -128,6 +132,8 @@ export function getTasks(params?: URLSearchParams) {
   const suffix = params ? `?${params.toString()}` : ''
   return request(`/tasks${suffix}`)
 }
+
+export type ScanPhase = 'queued' | 'running_command' | 'parsing' | 'reporting' | 'finished'
 
 export function getTaskStatus(taskId: string): Promise<any> {
   return request<any>(`/task/${taskId}/status`)

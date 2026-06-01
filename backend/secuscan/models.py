@@ -26,6 +26,15 @@ class TaskStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class ScanPhase(str, Enum):
+    """Granular scan phase for progress display"""
+    QUEUED = "queued"
+    RUNNING_COMMAND = "running_command"
+    PARSING = "parsing"
+    REPORTING = "reporting"
+    FINISHED = "finished"
+
+
 class PluginFieldType(str, Enum):
     """Plugin field input types"""
     STRING = "string"
@@ -168,6 +177,67 @@ class ErrorResponse(BaseModel):
     message: str
     field: Optional[str] = None
     details: Optional[Dict[str, Any]] = None
+
+
+class NotificationChannelType(str, Enum):
+    """Supported notification delivery channels."""
+    WEBHOOK = "webhook"
+    EMAIL = "email"
+
+
+class NotificationSeverityThreshold(str, Enum):
+    """Minimum finding severity that can trigger a notification rule."""
+    CRITICAL = "critical"
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    INFO = "info"
+
+
+class NotificationDeliveryStatus(str, Enum):
+    """Outcome of a notification delivery attempt."""
+    SUCCESS = "success"
+    FAILED = "failed"
+
+
+class NotificationRuleCreate(BaseModel):
+    """Request payload for creating or updating a notification rule."""
+    name: str
+    severity_threshold: NotificationSeverityThreshold
+    channel_type: NotificationChannelType
+    target_url_or_email: str
+    is_active: bool = True
+
+
+class NotificationRuleUpdate(BaseModel):
+    """Partial update payload for a notification rule."""
+    name: Optional[str] = None
+    severity_threshold: Optional[NotificationSeverityThreshold] = None
+    channel_type: Optional[NotificationChannelType] = None
+    target_url_or_email: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
+class NotificationRuleResponse(BaseModel):
+    """Stored notification rule returned by the API."""
+    id: str
+    name: str
+    severity_threshold: str
+    channel_type: str
+    target_url_or_email: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class NotificationHistoryResponse(BaseModel):
+    """Record of a single notification delivery attempt."""
+    id: str
+    rule_id: str
+    finding_id: str
+    status: str
+    error_message: Optional[str] = None
+    sent_at: datetime
 
 
 class BulkDeleteRequest(RootModel[Annotated[List[str], Field(max_length=MAX_BULK_DELETE)]]):
