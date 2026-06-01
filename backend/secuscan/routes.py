@@ -2,7 +2,7 @@
 API routes for SecuScan backend
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request, Depends
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request, Depends, Body
 from fastapi.responses import JSONResponse
 from typing import Any, Optional, List, Dict, Callable
 import json
@@ -29,7 +29,6 @@ def parse_json_fields(rows: List[Dict], fields: List[str]) -> List[Dict]:
         parsed.append(item)
     return parsed
 
-
 def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
     if isinstance(raw_steps, list):
         return raw_steps
@@ -40,7 +39,6 @@ def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
     except (TypeError, json.JSONDecodeError):
         return []
     return parsed if isinstance(parsed, list) else []
-
 
 def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]] = None) -> Dict[str, Any]:
     """Return the workflow shape consumed by the frontend."""
@@ -55,22 +53,34 @@ def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]
         "queued_task_ids": queued_task_ids or [],
     }
 
-
 def is_filesystem_target(target: str) -> bool:
-    """Best-effort detection for path-based targets that should bypass host validation."""
-    if target.startswith(("/", "./", "../", "~")):
+    """
+    Return True only for genuine local filesystem paths.
+
+    Explicit roots accepted:
+      - Unix absolute paths:   /home/user/repo
+      - Unix relative paths:   ./src, ../lib
+      - Home-relative paths:   ~/projects
+      - Windows paths:         C:\\Users\\repo, D:/work
+
+    Anything else — including CIDR notation (8.8.8.8/32, 192.168.1.0/24),
+    bare hostnames, URLs, and domain paths — returns False and will be
+    subject to the full validate_target() check including safe-mode enforcement.
+
+    CIDR notation is handled correctly by ipaddress.ip_network() inside
+    validate_target() and does NOT need special-casing here.
+    """
+    # Unix absolute, relative, and home-relative paths
+    if target.startswith(("/", "./", "../", "~/")):
         return True
+    # Windows paths: C:\ or C:/
     if re.match(r"^[A-Za-z]:[\\/]", target):
         return True
-    if "/" in target and not target.startswith(("http://", "https://")):
-        return True
     return False
-
 
 def _slugify_filename_part(value: str, fallback: str) -> str:
     cleaned = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
     return cleaned or fallback
-
 
 def build_report_filename(task: Dict[str, Any], extension: str) -> str:
     tool = _slugify_filename_part(str(task.get("tool_name") or task.get("plugin_id") or "scan"), "scan")
@@ -125,7 +135,6 @@ async def get_or_set_cached(key: str, builder):
     value = await builder()
     await cache.set_json(key, value)
     return value
-
 
 async def invalidate_view_cache():
     """Clear aggregate caches after writes."""
@@ -193,7 +202,7 @@ async def get_plugins_summary():
     category_counts: Dict[str, int] = {}
 
     for plugin in plugins:
-        category = getattr(plugin, "category", "unknown")
+        category = plugin.get("category", "unknown")
 
         category_counts[category] = (
             category_counts.get(category, 0) + 1
@@ -264,13 +273,45 @@ async def start_task(
         logger.warning(f"Task start failed: Plugin not found: {request.plugin_id}")
         raise HTTPException(status_code=404, detail=f"Plugin not found: {request.plugin_id}")
 
-    if target := request.inputs.get("target"):
-        safe_mode = request.inputs.get("safe_mode", settings.safe_mode_default)
+    # Server-controlled safe mode: never trust client-supplied `inputs.safe_mode`.
+    safe_mode = bool(settings.safe_mode_default)
+
+    # Ensure downstream scanners/plugins see the effective safe-mode, but prevent client override.
+    effective_inputs = dict(request.inputs or {})
+    if "safe_mode" in effective_inputs:
+        effective_inputs.pop("safe_mode", None)
+    effective_inputs["safe_mode"] = safe_mode
+
+    # Validate numeric timeout inputs at request time to prevent unsafe values
+    for tkey in ("timeout", "max_scan_time"):
+        # Only enforce bounds if the plugin declares the field in its schema
+        declared = any(getattr(f, "id", None) == tkey for f in (plugin.fields or []))
+        if not declared:
+            continue
+        if tkey in effective_inputs and effective_inputs[tkey] not in (None, ""):
+            try:
+                tval = int(effective_inputs[tkey])
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail=f"Invalid value for {tkey}: must be an integer")
+            if tval <= 0 or tval > settings.sandbox_timeout:
+                raise HTTPException(status_code=400, detail=f"{tkey} must be between 1 and {settings.sandbox_timeout} seconds")
+
+    if target := effective_inputs.get("target"):
         target_str = str(target)
         should_validate_target = plugin.category != "code" and not is_filesystem_target(target_str)
 
         if should_validate_target:
-            is_valid, error_msg = validate_target(target_str, safe_mode)
+            try:
+                is_valid, error_msg = await asyncio.wait_for(
+                    asyncio.to_thread(validate_target, target_str, safe_mode),
+                    timeout=float(settings.dns_resolution_timeout_seconds),
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Task start failed: Target validation timed out for '%s'", target_str)
+                raise HTTPException(
+                    status_code=400,
+                    detail="Target validation timed out in safe mode (SecuScan Guardrail)",
+                )
 
             if not is_valid:
                 logger.warning(f"Task start failed: Target validation failed for '{target}': {error_msg}")
@@ -292,9 +333,10 @@ async def start_task(
     try:
         task_id = await executor.create_task(
             request.plugin_id,
-            request.inputs,
-            request.preset,
-            request.consent_granted
+            effective_inputs,
+            safe_mode=safe_mode,
+            preset=request.preset,
+            consent_granted=request.consent_granted,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -310,6 +352,10 @@ async def start_task(
 
     # Slot is held — schedule execution.
     # execute_task releases the slot in its finally block on every exit path.
+    #
+    # Use BackgroundTasks so the response can be sent without waiting in real
+    # ASGI servers, while tests using TestClient still execute the task to keep
+    # contract tests deterministic.
     background_tasks.add_task(executor.execute_task, task_id)
     await invalidate_view_cache()
 
@@ -909,6 +955,10 @@ async def bulk_delete_tasks(request: BulkDeleteRequest):
     if running_tasks:
         raise HTTPException(status_code=400, detail="Cannot delete running tasks. Abort them first.")
 
+    # If the task is currently executing but the DB hasn't been updated yet, fail closed.
+    if any(tid in executor.running_tasks for tid in task_ids):
+        raise HTTPException(status_code=400, detail="Cannot delete running tasks. Abort them first.")
+
     await delete_task_records(task_ids)
     await invalidate_view_cache()
 
@@ -1081,10 +1131,15 @@ async def run_workflow_once(workflow_id: str):
     steps = json.loads(row["steps_json"] or "[]")
     created_task_ids: List[str] = []
     for step in steps:
+        safe_mode = bool(settings.safe_mode_default)
+        effective_inputs = dict(step.get("inputs", {}) or {})
+        effective_inputs.pop("safe_mode", None)
+        effective_inputs["safe_mode"] = safe_mode
         task_id = await executor.create_task(
             step.get("plugin_id"),
-            step.get("inputs", {}),
-            step.get("preset"),
+            effective_inputs,
+            safe_mode=safe_mode,
+            preset=step.get("preset"),
             consent_granted=True,
         )
         asyncio.create_task(executor.execute_task(task_id))

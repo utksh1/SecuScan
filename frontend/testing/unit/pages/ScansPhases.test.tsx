@@ -74,6 +74,7 @@ describe('Scans — phase display', () => {
     vi.useFakeTimers();
 
     fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
       json: () => Promise.resolve(RUNNING_WITH_PHASE_RESPONSE),
     });
     vi.stubGlobal('fetch', fetchSpy);
@@ -107,6 +108,7 @@ describe('Scans — phase display', () => {
 
   it('does not show phase for queued task', async () => {
     fetchSpy.mockResolvedValue({
+      ok: true,
       json: () => Promise.resolve(QUEUED_RESPONSE),
     });
 
@@ -125,6 +127,7 @@ describe('Scans — phase display', () => {
     await flush();
 
     fetchSpy.mockResolvedValueOnce({
+      ok: true,
       json: () =>
         Promise.resolve({
           tasks: [makeTask('task-1', 'running', 'parsing')],

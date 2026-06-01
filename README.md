@@ -108,6 +108,8 @@ After startup:
 
 ### Troubleshooting / Common Issues
 
+For more detailed Windows-specific setup and troubleshooting instructions, see the [Windows Contributor Development Guide](docs/windows_contributor_guide.md).
+
 #### Python version issues
 
 This project requires Python 3.11 or newer.
@@ -299,6 +301,8 @@ Long-form product and planning material lives outside the main README so onboard
 - [SecuScan Product Specification](docs/PRODUCT_SPEC.md)
 - [Plugin Catalogue](PLUGINS.md)
 - [Secure Deployment Guide](docs/SECURE_DEPLOYMENT.md)
+- [Windows Contributor Development Guide](docs/windows_contributor_guide.md)
+
 
 ## Tech Stack
 
