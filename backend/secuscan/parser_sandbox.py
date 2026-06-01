@@ -184,10 +184,9 @@ def run_parser_in_sandbox(
             if not chunk:
                 break
             total += len(chunk)
-            if total > _MAX_STDERR_BYTES:
-                # Discard the rest; we have enough for diagnostics.
-                break
-            stderr_chunks.append(chunk)
+            if total <= _MAX_STDERR_BYTES:
+                stderr_chunks.append(chunk)
+            # Always drain so the child is never blocked on a full pipe.
 
     t_out = threading.Thread(target=_read_stdout, daemon=True)
     t_err = threading.Thread(target=_read_stderr, daemon=True)
