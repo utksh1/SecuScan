@@ -329,3 +329,42 @@ This project is released under the [MIT License](LICENSE).
 - `LICENSE` is the canonical legal text for this repository.
 - Contributions merged into this repository are distributed under the same MIT License unless explicitly stated otherwise.
 - Third-party tools, libraries, and external scanners referenced by SecuScan may have their own licenses and usage terms. Check upstream projects before redistributing bundled integrations.
+
+
+---
+
+## 🛠️ Troubleshooting & Local Setup Failsafe
+
+If your local environment glitches or throws errors during installation or launch, find your fast, actionable solution below.
+
+### 1. Stale Local Vite Module Cache
+**Symptoms:** Changes in your frontend components don't update in the browser, or Vite throws internal parsing/bundling syntax errors.
+**Fix:** Force Vite to ignore its stale cache and run a fresh reload:
+```bash
+cd frontend
+npm run dev -- --force
+
+### 2. Node Dependency Resolution Loops (`npm i` hanging/failing)
+**Symptoms:** `npm install` throws severe dependency tree conflicts, peer dependency errors, or hangs indefinitely.
+**Fix:** Force an override of strict package-lock rules using the legacy peer flags:
+```bash
+npm install --legacy-peer-deps
+
+###3. Missing or Mismatched Environment Variables
+**Symptoms**: The frontend loads, but API requests return undefined network targets, or authentication/scans fail to connect.
+**Fix**: Verify you have your local .env setup active. Run this in your root layout:
+```bash
+cp .env.example .env
+
+
+###4. Port 5173 Already in Use Error
+**Symptoms**: Terminal displays Port 5173 is already in use, using port 5174 instead.
+**Fix**: Kill the hidden background ghost process running on that port:
+
+```Windows (Command Prompt / PowerShell):
+```PowerShell
+Stop-Process -Id (Get-NetTCPConnection -LocalPort 5173).OwningProcess -Force
+
+```Linux / macOS:
+```Bash
+kill -9 $(lsof -t -i:5173)
