@@ -4,7 +4,8 @@
     "name": "SecuScan Contributors"
   },
   "category": "robots",
-  "checksum": "510412b642b93adaaf5bb782d3d86c4e3bf987e92adaf58bfede7224e5ec7af3",
+  "capabilities": ["network"],
+  "checksum": "fb043331ef88a1ed0fa59ae5d0075e700978f853252ce2859562274a6f43eeb4",
   "command_template": [
     "wafw00f",
     "{target}"
