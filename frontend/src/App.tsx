@@ -13,6 +13,7 @@ import Workflows from './pages/Workflows'
 
 import { ThemeProvider } from './components/ThemeContext'
 import { ToastProvider, ToastContainer } from './components/ToastContext'
+import { NotificationProvider } from './components/NotificationContext'
 import { I18nProvider } from './components/I18nContext'
 import { routes } from './routes'
 
@@ -38,6 +39,7 @@ export default function App() {
   return (
     <ThemeProvider>
       <I18nProvider>
+        <NotificationProvider>
         <ToastProvider>
           <Router>
             <AppShell>
@@ -45,6 +47,7 @@ export default function App() {
             </AppShell>
           </Router>
         </ToastProvider>
+        </NotificationProvider>
       </I18nProvider>
     </ThemeProvider>
   )

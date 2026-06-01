@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Background from './Background'
 import { useShortcuts } from '../hooks/useShortcuts'
+import { NotificationBell } from './NotificationContext'
 import { routes } from '../routes'
 
 interface AppShellProps {
@@ -74,7 +75,7 @@ export default function AppShell({ children }: AppShellProps) {
                         </span>
                     </button>
                     <span className="text-[12px] font-black tracking-[0.2em] text-silver-bright uppercase">SecuScan</span>
-                    <span className="w-9 h-9" />
+                    <NotificationBell />
                 </div>
 
                 {mobileMenuOpen && (
