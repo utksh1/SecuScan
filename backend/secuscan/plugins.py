@@ -33,6 +33,19 @@ _INTERNAL_CONTROL_FIELDS: frozenset = frozenset({
 logger = logging.getLogger(__name__)
 
 
+def _is_absolute_path(value: str) -> bool:
+    """Check if a path is absolute regardless of the server OS.
+
+    Handles Unix (/), Windows drive-letter (C:\\, C:/),
+    and UNC (\\\\server\\share) absolute path styles.
+    """
+    if value.startswith("/"):
+        return True
+    if value.startswith("\\"):
+        return True
+    return bool(re.match(r'^[a-zA-Z]:[/\\]', value))
+
+
 class PluginManager:
     """Manages plugin loading and validation"""
 
@@ -337,13 +350,49 @@ class PluginManager:
                     normalized[field.id] = field.default
         return normalized
 
+    def _reject_path_traversal(self, value: str) -> None:
+        """Raise ValueError if value contains parent-directory traversal components."""
+        normalized = value.replace("\\", os.sep).replace("/", os.sep)
+        parts = normalized.split(os.sep)
+        if ".." in parts:
+            raise ValueError(
+                f"Wordlist path {value!r} contains parent-directory traversal ('..'), "
+                f"which is not allowed."
+            )
+
+    def _is_path_in_wordlists_dir(self, resolved: Path) -> bool:
+        """Check that a resolved path is within the configured wordlists directory."""
+        wordlists_dir = Path(settings.wordlists_dir).resolve()
+        try:
+            resolved.resolve().relative_to(wordlists_dir)
+            return True
+        except ValueError:
+            return False
+
     def _resolve_wordlist_path(self, value: str) -> str:
         """Resolve plugin wordlist aliases and Linux-centric defaults to local project assets."""
         candidate = Path(os.path.expanduser(value))
+
+        if _is_absolute_path(value):
+            raise ValueError(
+                f"Wordlist path must be relative, got absolute path: {value!r}"
+            )
+
+        self._reject_path_traversal(value)
+
         if candidate.exists():
+            resolved = candidate.resolve()
+            if not self._is_path_in_wordlists_dir(resolved):
+                raise ValueError(
+                    f"Wordlist path {value!r} resolves outside the allowed wordlists directory "
+                    f"({settings.wordlists_dir}). Only paths within the wordlists directory "
+                    f"are permitted by default."
+                )
             return str(candidate)
 
         wordlists_dir = Path(settings.wordlists_dir)
+        wordlists_resolved = wordlists_dir.resolve()
+
         alias_map = {
             "small": wordlists_dir / "small.txt",
             "medium": wordlists_dir / "medium.txt",
@@ -370,7 +419,17 @@ class PluginManager:
 
         for fallback in fallback_candidates:
             if fallback.exists():
+                resolved = fallback.resolve()
+                if wordlists_resolved not in resolved.parents and resolved != wordlists_resolved:
+                    continue
                 return str(fallback)
+
+        # Before returning the raw value, verify it doesn't escape
+        resolved_value = (wordlists_dir / value).resolve()
+        if wordlists_resolved not in resolved_value.parents and resolved_value != wordlists_resolved:
+            raise ValueError(
+                f"Wordlist path {value!r} escapes the wordlists directory"
+            )
 
         return value
 
