@@ -10,7 +10,7 @@ import Settings from './pages/Settings'
 import Scans from './pages/Scans'
 import TaskDetails from './pages/TaskDetails'
 import Workflows from './pages/Workflows'
-import ApiKeySetupModal from './components/ApiKeySetupModal'
+import ApiKeySetupScreen from './components/ApiKeySetupScreen'
 
 import { ThemeProvider } from './components/ThemeContext'
 import { ToastProvider } from './components/ToastContext'
@@ -37,12 +37,12 @@ export function AppRoutes() {
 }
 
 export default function App() {
-  // Show the key-setup modal when no key is stored or when any request gets 401.
-  const [showKeySetup, setShowKeySetup] = useState(() => !getStoredApiKey())
+  // True when setup is needed: no key stored, or any request got a 401.
+  const [needsKey, setNeedsKey] = useState(() => !getStoredApiKey())
 
   useEffect(() => {
     function onAuthRequired() {
-      setShowKeySetup(true)
+      setNeedsKey(true)
     }
     window.addEventListener(AUTH_REQUIRED_EVENT, onAuthRequired)
     return () => window.removeEventListener(AUTH_REQUIRED_EVENT, onAuthRequired)
@@ -52,14 +52,17 @@ export default function App() {
     <ThemeProvider>
       <I18nProvider>
         <ToastProvider>
-          <Router>
-            <AppShell>
-              <AppRoutes />
-            </AppShell>
-            {showKeySetup && (
-              <ApiKeySetupModal onSaved={() => setShowKeySetup(false)} />
-            )}
-          </Router>
+          {needsKey ? (
+            // Render ONLY the setup screen — no page routes are mounted, so no
+            // API calls can fire and spam 401 failures before the key is saved.
+            <ApiKeySetupScreen onSaved={() => setNeedsKey(false)} />
+          ) : (
+            <Router>
+              <AppShell>
+                <AppRoutes />
+              </AppShell>
+            </Router>
+          )}
         </ToastProvider>
       </I18nProvider>
     </ThemeProvider>
