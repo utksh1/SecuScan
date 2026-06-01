@@ -14,6 +14,7 @@ import hmac
 
 from .models import PluginMetadata, PluginFieldType
 from .config import settings
+from .preflight import check_plugin_dependencies
 
 # Port specifications: one or more comma-separated port numbers or port ranges.
 # Valid: "22", "80,443", "1-1000", "22,80,1000-2000"
@@ -243,10 +244,13 @@ class PluginManager:
         return self.plugins.get(plugin_id)
 
     def list_plugins(self) -> List[Dict]:
-        """List all loaded plugins"""
+        """List all loaded plugins with OS-aware dependency preflight info."""
         plugins: List[Dict] = []
         for plugin in self.plugins.values():
-            missing_binaries = self._get_missing_binaries(plugin)
+            preflight = check_plugin_dependencies(
+                engine=plugin.engine,
+                dependencies=plugin.dependencies,
+            )
             plugins.append(
                 {
                     "id": plugin.id,
@@ -259,40 +263,16 @@ class PluginManager:
                     "requires_consent": bool(plugin.safety.get("requires_consent", False)),
                     "consent_message": plugin.safety.get("consent_message"),
                     "availability": {
-                        "runnable": len(missing_binaries) == 0,
-                        "missing_binaries": missing_binaries,
-                        "status": "available" if len(missing_binaries) == 0 else "unavailable",
-                        "guidance": (
-                            None
-                            if len(missing_binaries) == 0
-                            else (
-                                f"Unavailable: Requires external binaries ({', '.join(missing_binaries)}). "
-                                "Install required tools locally to enable this scanner."
-                            )
-                        ),
+                        "runnable": preflight.runnable,
+                        "missing_binaries": preflight.missing_binaries,
+                        "missing_packages": preflight.missing_packages,
+                        "status": preflight.status,
+                        "install_guidance": preflight.install_guidance,
                     },
                 }
             )
         return plugins
-
-    def _get_missing_binaries(self, plugin: PluginMetadata) -> List[str]:
-        """Resolve missing CLI binaries for runtime availability reporting."""
-        required: List[str] = []
-
-        if plugin.engine.get("type") == "cli":
-            engine_binary = plugin.engine.get("binary")
-            if engine_binary:
-                required.append(engine_binary)
-
-        if plugin.dependencies:
-            for dep_binary in plugin.dependencies.get("binaries", []):
-                if dep_binary:
-                    required.append(dep_binary)
-
-        # Preserve declaration order while removing duplicates.
-        unique_required = list(dict.fromkeys(required))
-        return [binary for binary in unique_required if shutil.which(binary) is None]
-
+    
     def get_plugin_schema(self, plugin_id: str) -> Optional[Dict]:
         """Get full plugin schema for UI generation"""
         if plugin := self.get_plugin(plugin_id):
