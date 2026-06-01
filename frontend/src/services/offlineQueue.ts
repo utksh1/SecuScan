@@ -1,4 +1,8 @@
 const STORAGE_KEY = 'offline-queue'
+const MAX_QUEUE_SIZE = 50
+const ACTION_TTL_MS = 86_400_000 // 24 hours
+
+export const SAFE_ACTION_TYPES: ActionType[] = ['startTask', 'createWorkflow', 'updateWorkflow']
 
 export type ActionType = 'startTask' | 'createWorkflow' | 'updateWorkflow'
 
@@ -20,18 +24,31 @@ type Listener = () => void
 let queue: QueuedAction[] = []
 let listeners: Set<Listener> = new Set()
 let autoReplayEnabled = false
+let storageAvailable = true
 
 function load(): QueuedAction[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : []
+    const parsed: QueuedAction[] = raw ? JSON.parse(raw) : []
+    const now = Date.now()
+    const fresh = parsed.filter((a) => now - a.timestamp < ACTION_TTL_MS)
+    if (fresh.length !== parsed.length) {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh)) } catch {}
+    }
+    return fresh
   } catch {
     return []
   }
 }
 
 function persist(): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(queue))
+  if (!storageAvailable) return
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(queue))
+  } catch {
+    storageAvailable = false
+    // continue with in-memory queue only
+  }
 }
 
 function notify(): void {
@@ -47,6 +64,7 @@ export function getQueue(): QueuedAction[] {
 }
 
 export function enqueue(action: Omit<QueuedAction, 'id' | 'timestamp' | 'retryCount'>): QueuedAction {
+  if (queue.length >= MAX_QUEUE_SIZE) throw new Error('Queue is full')
   const item: QueuedAction = {
     ...action,
     id: addUniqueId(),
@@ -93,8 +111,33 @@ export function retry(id: string): Promise<boolean> {
   })
 }
 
+function isSafeActionType(actionType?: ActionType): boolean {
+  return actionType ? SAFE_ACTION_TYPES.includes(actionType) : false
+}
+
 export async function retryAll(): Promise<number> {
   const ids = [...queue.map((a) => a.id)]
+  let success = 0
+  for (const id of ids) {
+    const ok = await retry(id).catch(() => false)
+    if (ok) success++
+  }
+  return success
+}
+
+/**
+ * Called when the browser comes back online.
+ * Does NOT auto-replay unless autoReplayEnabled is explicitly set.
+ * Even then, only actions with a safe actionType are replayed.
+ */
+export function onReconnect(): Promise<number> {
+  if (!autoReplayEnabled) return Promise.resolve(0)
+  const safeIds = queue.filter((a) => isSafeActionType(a.actionType)).map((a) => a.id)
+  if (safeIds.length === 0) return Promise.resolve(0)
+  return retryAllFiltered(safeIds)
+}
+
+async function retryAllFiltered(ids: string[]): Promise<number> {
   let success = 0
   for (const id of ids) {
     const ok = await retry(id).catch(() => false)
@@ -120,6 +163,10 @@ export function setAutoReplay(enabled: boolean): void {
 
 export function isOnline(): boolean {
   return typeof navigator !== 'undefined' ? navigator.onLine : true
+}
+
+export function getAutoReplay(): boolean {
+  return autoReplayEnabled
 }
 
 async function conflictCheck(action: QueuedAction): Promise<'no-conflict' | 'conflict' | 'gone'> {
@@ -165,6 +212,9 @@ async function conflictCheck(action: QueuedAction): Promise<'no-conflict' | 'con
 }
 
 function replayAction(action: QueuedAction): Promise<ReplayResult> {
+  if (action.actionType && !isSafeActionType(action.actionType)) {
+    return Promise.resolve('gone' as const)
+  }
   if (action.actionType) {
     return conflictCheck(action).then((check) => {
       if (check !== 'no-conflict') return check

@@ -25,7 +25,10 @@ export function OfflineQueueProvider({ children }: { children: ReactNode }) {
   const [, setTick] = useState(0)
 
   useEffect(() => {
-    const onOnline = () => setIsOnline(true)
+    const onOnline = () => {
+      setIsOnline(true)
+      offlineQueue.onReconnect()
+    }
     const onOffline = () => setIsOnline(false)
     window.addEventListener('online', onOnline)
     window.addEventListener('offline', onOffline)

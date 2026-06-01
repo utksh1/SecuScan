@@ -445,4 +445,84 @@ describe('offlineQueue', () => {
       expect(() => offlineQueue.setAutoReplay(true)).not.toThrow()
     })
   })
+
+  describe('queue safety boundaries', () => {
+    it('enforces max queue size and throws when full', () => {
+      for (let i = 0; i < 50; i++) {
+        offlineQueue.enqueue({ url: `/a/${i}`, method: 'POST', maxRetries: 3 })
+      }
+      expect(() => offlineQueue.enqueue({ url: '/overflow', method: 'POST', maxRetries: 3 })).toThrow('Queue is full')
+      expect(offlineQueue.getQueue()).toHaveLength(50)
+    })
+
+    it('drops stale entries older than TTL on load', () => {
+      const oldTimestamp = Date.now() - 86_400_001 // 24h + 1ms
+      const stale = [{ id: 'old', url: '/stale', method: 'POST', timestamp: oldTimestamp, retryCount: 0, maxRetries: 3 }]
+      mockStorage.getItem.mockReturnValue(JSON.stringify(stale))
+
+      const fresh = offlineQueue.enqueue({ url: '/fresh', method: 'POST', maxRetries: 3 })
+      expect(offlineQueue.getQueue()).toHaveLength(1)
+      expect(offlineQueue.getQueue()[0].id).toBe(fresh.id)
+    })
+
+    it('falls back to in-memory when localStorage fails on persist', () => {
+      mockStorage.setItem.mockImplementation(() => { throw new Error('QuotaExceeded') })
+      const action = offlineQueue.enqueue({ url: '/a', method: 'POST', maxRetries: 3 })
+      expect(action).not.toBeNull()
+      expect(offlineQueue.getQueue()).toHaveLength(1)
+    })
+  })
+
+  describe('onReconnect guard', () => {
+    it('does not replay when autoReplay is disabled', async () => {
+      offlineQueue.setAutoReplay(false)
+      const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({ ok: true } as Response)
+      offlineQueue.enqueue({ url: '/a', method: 'POST', maxRetries: 3, actionType: 'startTask' })
+      offlineQueue.enqueue({ url: '/b', method: 'POST', maxRetries: 3, actionType: 'createWorkflow' })
+
+      const count = await offlineQueue.onReconnect()
+      expect(count).toBe(0)
+      expect(fetchSpy).not.toHaveBeenCalled()
+      fetchSpy.mockRestore()
+    })
+
+    it('only replays safe action types when autoReplay is enabled', async () => {
+      offlineQueue.setAutoReplay(true)
+      global.fetch = vi.fn().mockResolvedValue({ ok: true })
+      offlineQueue.enqueue({ url: '/safe', method: 'POST', maxRetries: 3, actionType: 'startTask' })
+      offlineQueue.enqueue({ url: '/unsafe', method: 'DELETE', maxRetries: 3, actionType: undefined })
+
+      const count = await offlineQueue.onReconnect()
+      expect(count).toBe(1)
+      expect(global.fetch).toHaveBeenCalledTimes(2)
+    })
+
+    it('returns 0 and replays nothing when autoReplay is enabled but queue has no safe action types', async () => {
+      offlineQueue.setAutoReplay(true)
+      global.fetch = vi.fn().mockResolvedValue({ ok: true })
+      offlineQueue.enqueue({ url: '/unsafe', method: 'DELETE', maxRetries: 3, actionType: undefined })
+
+      const count = await offlineQueue.onReconnect()
+      expect(count).toBe(0)
+      expect(global.fetch).not.toHaveBeenCalled()
+    })
+
+    it('replays nothing when queue is empty', async () => {
+      offlineQueue.setAutoReplay(true)
+      const count = await offlineQueue.onReconnect()
+      expect(count).toBe(0)
+    })
+  })
+
+  describe('SAFE_ACTION_TYPES', () => {
+    it('only includes startTask, createWorkflow, updateWorkflow', () => {
+      expect(offlineQueue.SAFE_ACTION_TYPES).toEqual(['startTask', 'createWorkflow', 'updateWorkflow'])
+      expect(offlineQueue.SAFE_ACTION_TYPES).not.toContain('deleteTask')
+      expect(offlineQueue.SAFE_ACTION_TYPES).not.toContain('cancelTask')
+      expect(offlineQueue.SAFE_ACTION_TYPES).not.toContain('clearAllTasks')
+      expect(offlineQueue.SAFE_ACTION_TYPES).not.toContain('runWorkflow')
+      expect(offlineQueue.SAFE_ACTION_TYPES).not.toContain('deleteWorkflow')
+      expect(offlineQueue.SAFE_ACTION_TYPES).not.toContain('bulkDeleteTasks')
+    })
+  })
 })
