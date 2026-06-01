@@ -131,9 +131,24 @@ class CapabilityEnforcer:
 
     def __init__(self, denied_capabilities: Optional[List[str]] = None) -> None:
         raw = denied_capabilities or []
-        self._denied: FrozenSet[str] = frozenset(
-            tok.strip().lower() for tok in raw if tok.strip()
-        )
+        normalised: List[str] = []
+        unknown: List[str] = []
+        for tok in raw:
+            token = tok.strip().lower()
+            if not token:
+                continue
+            if token not in ALL_CAPABILITIES:
+                unknown.append(tok.strip())
+            else:
+                normalised.append(token)
+        if unknown:
+            raise ValueError(
+                f"SECUSCAN_DENIED_CAPABILITIES contains unrecognised capability tokens: "
+                f"{unknown!r}. Supported capabilities: {sorted(ALL_CAPABILITIES)}. "
+                "Fix the typo or remove the unknown token — a misconfigured deny-list "
+                "silently fails to enforce the intended policy."
+            )
+        self._denied: FrozenSet[str] = frozenset(normalised)
         if self._denied:
             logger.info(
                 "CapabilityEnforcer: operator has denied capabilities: %s",
