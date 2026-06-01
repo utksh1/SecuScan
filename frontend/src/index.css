@@ -3770,3 +3770,88 @@ button,
 .sidebar-card .btn:first-of-type {
   margin-top: 0;
 }
+
+/* ============================================
+   AppShell Navigation Responsive Improvements
+   ============================================ */
+
+@media (max-width: 768px) {
+  .topbar {
+    padding: 0 1rem;
+  }
+
+  .topbar-content {
+    gap: 0.75rem;
+  }
+
+  .sidebar {
+    width: min(280px, 85vw);
+  }
+
+  .sidebar-header {
+    padding: 1rem;
+  }
+
+  .sidebar-nav {
+    padding: 0 0.75rem;
+  }
+
+  .nav-item {
+    padding: 0.875rem 1rem;
+    min-height: 44px;
+  }
+
+  .workspace {
+    padding: 1rem;
+  }
+
+  .scanner-layout,
+  .attack-surface-layout,
+  .tool-config-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .scanner-sidebar,
+  .tool-config-sidebar {
+    position: static;
+    top: auto;
+  }
+
+  .dashboard-grid,
+  .overview-stats,
+  .attack-surface-stats,
+  .vuln-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tool-config-panel {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .workspace {
+    padding: 0.75rem;
+  }
+
+  .logo-text {
+    font-size: 1rem;
+  }
+
+  .nav-item {
+    font-size: 0.875rem;
+  }
+
+  .scanner-tabs {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .scanner-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .scanner-tab {
+    white-space: nowrap;
+  }
+}
