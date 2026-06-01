@@ -211,7 +211,6 @@ export default function TaskDetails() {
     const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null)
     const [rawSearch, setRawSearch] = useState('')
     const [wrapRawOutput, setWrapRawOutput] = useState(true)
-    const [copiedRawOutput, setCopiedRawOutput] = useState(false)
 
     const FindingDrawer = ({ finding, onClose }: { finding: Finding, onClose: () => void }) => {
         const drawerRef = useRef<HTMLDivElement>(null)
@@ -669,15 +668,6 @@ export default function TaskDetails() {
         setExpandedFindingRows(prev => ({ ...prev, [index]: !prev[index] }))
     }
 
-    const copyRaw = async () => {
-        try {
-            await navigator.clipboard.writeText(rawOutput || result?.raw_output || '')
-            setCopiedRawOutput(true)
-            window.setTimeout(() => setCopiedRawOutput(false), 1500)
-        } catch (err) {
-            console.error('Failed to copy raw output:', err)
-        }
-    }
 
 
     const DetailCard = ({ label, value, subValue }: { label: string, value: string, subValue?: string }) => (

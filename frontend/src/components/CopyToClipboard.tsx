@@ -1,9 +1,14 @@
 import React, { useState } from 'react';
 
-const CopyToClipboard = ({ textToCopy }) => {
-  const [isCopied, setIsCopied] = useState(false);
+// Defining an explicit type interface for the component props
+interface CopyToClipboardProps {
+  textToCopy: string;
+}
 
-  const handleCopy = async () => {
+const CopyToClipboard: React.FC<CopyToClipboardProps> = ({ textToCopy }) => {
+  const [isCopied, setIsCopied] = useState<boolean>(false);
+
+  const handleCopy = async (): Promise<void> => {
     if (!textToCopy) return;
     try {
       await navigator.clipboard.writeText(textToCopy);
@@ -17,6 +22,7 @@ const CopyToClipboard = ({ textToCopy }) => {
   return (
     <button
       onClick={handleCopy}
+      type="button"
       className={`flex items-center gap-1.5 border px-3 py-2 text-[10px] uppercase tracking-[0.2em] font-medium transition-all duration-200 ${
         isCopied 
           ? 'bg-green-900/30 border-green-500 text-green-400' 
