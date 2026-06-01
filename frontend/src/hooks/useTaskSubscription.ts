@@ -38,7 +38,6 @@ export function useTaskSubscription({
   const reconnectAttemptRef = useRef(0)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastStatusRef = useRef<string | null>(null)
-  const seenOutputsRef = useRef<Set<string>>(new Set())
   const cleanupRef = useRef(false)
 
   onStatusRef.current = onStatus
@@ -129,8 +128,7 @@ export function useTaskSubscription({
       if (cleanupRef.current) return
       try {
         const data = JSON.parse(e.data) as { chunk: string }
-        if (data.chunk && !seenOutputsRef.current.has(data.chunk)) {
-          seenOutputsRef.current.add(data.chunk)
+        if (data.chunk) {
           onOutputRef.current?.(data.chunk)
         }
       } catch {
@@ -167,7 +165,6 @@ export function useTaskSubscription({
   useEffect(() => {
     cleanupRef.current = false
     lastStatusRef.current = null
-    seenOutputsRef.current = new Set()
     reconnectAttemptRef.current = 0
 
     connectSSE()

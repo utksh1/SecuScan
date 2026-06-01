@@ -104,7 +104,7 @@ describe('useTaskSubscription', () => {
     expect(onOutput).toHaveBeenCalledWith('line1\n')
   })
 
-  it('deduplicates identical output chunks', async () => {
+  it('appends identical output chunks in order', async () => {
     const onOutput = vi.fn()
     renderHook({ taskId: 'task-1', onOutput })
     await flush()
@@ -112,7 +112,9 @@ describe('useTaskSubscription', () => {
     es.triggerOpen()
     es.dispatchEvent('output', JSON.stringify({ chunk: 'line1\n' }))
     es.dispatchEvent('output', JSON.stringify({ chunk: 'line1\n' }))
-    expect(onOutput).toHaveBeenCalledTimes(1)
+    expect(onOutput).toHaveBeenCalledTimes(2)
+    expect(onOutput).toHaveBeenNthCalledWith(1, 'line1\n')
+    expect(onOutput).toHaveBeenNthCalledWith(2, 'line1\n')
   })
 
   it('falls back to polling after SSE max reconnect attempts', async () => {
