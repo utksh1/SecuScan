@@ -8,7 +8,7 @@ import uuid
 import json
 import time
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 import logging
 import re
@@ -18,8 +18,46 @@ from .cache import get_cache
 from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager
-from .models import TaskStatus
+from .models import TaskStatus, ScanPhase
 from .ratelimit import concurrent_limiter
+from .risk_scoring import compute_risk_score, compute_risk_factors
+from .capabilities import CapabilityEnforcer, CapabilityDeniedError, build_enforcer_from_settings
+from .parser_sandbox import run_parser_in_sandbox, ParserSandboxError
+
+
+def _parse_discovered_at(finding: dict) -> Optional[datetime]:
+    """Extract and parse discovered_at from a finding dict, or return current UTC time."""
+    raw = finding.get("discovered_at")
+    if raw:
+        try:
+            if isinstance(raw, str):
+                return datetime.fromisoformat(raw)
+            if isinstance(raw, datetime):
+                return raw
+        except (ValueError, TypeError):
+            pass
+    return datetime.now(timezone.utc)
+
+
+def _validate_risk_fields(finding: dict) -> None:
+    """Validate exploitability, confidence, and asset_exposure bounds in-place."""
+    exp = finding.get("exploitability")
+    if exp is not None:
+        if not isinstance(exp, (int, float)):
+            raise ValueError(f"exploitability must be numeric, got {type(exp).__name__}")
+        if exp < 0 or exp > 10:
+            raise ValueError(f"exploitability must be in [0, 10], got {exp}")
+
+    conf = finding.get("confidence")
+    if conf is not None:
+        if not isinstance(conf, (int, float)):
+            raise ValueError(f"confidence must be numeric, got {type(conf).__name__}")
+        if conf < 0 or conf > 1:
+            raise ValueError(f"confidence must be in [0, 1], got {conf}")
+
+    ae = finding.get("asset_exposure")
+    if ae is not None and ae.lower() not in ("critical", "high", "medium", "low"):
+        raise ValueError(f"asset_exposure must be one of critical/high/medium/low, got {ae}")
 
 # Modular Scanners
 from .scanners.port_scanner import PortScanner
@@ -33,6 +71,7 @@ MODULAR_SCANNERS = {
 }
 
 logger = logging.getLogger(__name__)
+STREAM_LISTENER_QUEUE_MAXSIZE = 100
 
 
 def extract_target(inputs: Dict[str, Any]) -> str:
@@ -51,12 +90,13 @@ class TaskExecutor:
         self.running_tasks: Dict[str, asyncio.Task] = {}
         # PubSub: Map of task_id to list of active async queues listening for output/status updates
         self._listeners: Dict[str, List[asyncio.Queue]] = {}
+        self._capability_enforcer: CapabilityEnforcer = build_enforcer_from_settings()
 
     def subscribe(self, task_id: str) -> asyncio.Queue:
         """Subscribe to a task's real-time events."""
         if task_id not in self._listeners:
             self._listeners[task_id] = []
-        q = asyncio.Queue()
+        q = asyncio.Queue(maxsize=STREAM_LISTENER_QUEUE_MAXSIZE)
         self._listeners[task_id].append(q)
         return q
 
@@ -71,13 +111,39 @@ class TaskExecutor:
         """Broadcast an event to all active listeners of a task."""
         if task_id in self._listeners:
             event = {"type": event_type, "data": data}
-            for q in self._listeners[task_id]:
-                await q.put(event)
+            for q in list(self._listeners[task_id]):
+                self._enqueue_listener_event(task_id, q, event)
+
+    def _enqueue_listener_event(self, task_id: str, q: asyncio.Queue, event: Dict[str, Any]):
+        """Add an event to a bounded listener queue without unbounded memory growth."""
+        try:
+            q.put_nowait(event)
+            return
+        except asyncio.QueueFull:
+            try:
+                q.get_nowait()
+            except asyncio.QueueEmpty:
+                pass
+
+        try:
+            q.put_nowait(event)
+        except asyncio.QueueFull:
+            logger.warning("Dropping stream event for slow listener on task %s", task_id)
     
+    async def _broadcast_phase(self, task_id: str, phase: str):
+        """Broadcast a scan phase transition and persist it to the database."""
+        await self._broadcast(task_id, "phase", phase)
+        db = await get_db()
+        await db.execute(
+            "UPDATE tasks SET scan_phase = ? WHERE id = ?",
+            (phase, task_id)
+        )
+
     async def create_task(
         self,
         plugin_id: str,
         inputs: Dict[str, Any],
+        safe_mode: bool,
         preset: Optional[str] = None,
         consent_granted: bool = False
     ) -> str:
@@ -112,8 +178,8 @@ class TaskExecutor:
             """
             INSERT INTO tasks (
                 id, plugin_id, tool_name, target, inputs_json, preset,
-                status, consent_granted, safe_mode
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                status, scan_phase, consent_granted, safe_mode
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 task_id,
@@ -123,8 +189,9 @@ class TaskExecutor:
                 json.dumps(inputs),
                 preset,
                 TaskStatus.QUEUED.value,
+                ScanPhase.QUEUED.value,
                 consent_granted,
-                inputs.get("safe_mode", True)
+                bool(safe_mode)
             )
         )
         
@@ -213,6 +280,7 @@ class TaskExecutor:
                 
                 logger.info(f"Executing modular scanner {plugin_id} for task {task_id}")
                 await self._broadcast(task_id, "status", TaskStatus.RUNNING.value)
+                await self._broadcast_phase(task_id, ScanPhase.RUNNING_COMMAND.value)
                 
                 start_time = time.time()
                 # Run the scanner
@@ -243,6 +311,7 @@ class TaskExecutor:
                 )
 
                 # Upsert findings and report using the scanner's result
+                await self._broadcast_phase(task_id, ScanPhase.PARSING.value)
                 await self._upsert_findings_and_report_from_scanner(
                     db=db,
                     task_id=task_id,
@@ -252,6 +321,7 @@ class TaskExecutor:
                     status=final_status,
                     result=result
                 )
+                await self._broadcast_phase(task_id, ScanPhase.REPORTING.value)
 
             else:
                 # Standard Plugin Execution
@@ -260,8 +330,13 @@ class TaskExecutor:
                 if not plugin:
                     raise ValueError(f"Plugin not found: {plugin_id}")
 
-                # Pending records for assets removed
-                
+                # Enforce capability policy before any command is built or process spawned
+                self._capability_enforcer.check(
+                    plugin_id=plugin.id,
+                    declared=plugin.capabilities,
+                    safety_level=plugin.safety.get("level", "safe"),
+                )
+
                 command = plugin_manager.build_command(plugin_id, inputs)
 
                 if not command:
@@ -286,6 +361,7 @@ class TaskExecutor:
 
                 logger.info(f"Executing task {task_id}: {' '.join(command)}")
                 await self._broadcast(task_id, "status", TaskStatus.RUNNING.value)
+                await self._broadcast_phase(task_id, ScanPhase.RUNNING_COMMAND.value)
 
                 # Execute command
                 start_time = time.time()
@@ -335,6 +411,7 @@ class TaskExecutor:
                 )
 
                 # Upsert findings and report
+                await self._broadcast_phase(task_id, ScanPhase.PARSING.value)
                 await self._upsert_findings_and_report(
                     db=db,
                     task_id=task_id,
@@ -344,7 +421,9 @@ class TaskExecutor:
                     status=final_status,
                     output=output
                 )
+                await self._broadcast_phase(task_id, ScanPhase.REPORTING.value)
 
+            await self._broadcast_phase(task_id, ScanPhase.FINISHED.value)
             await self._broadcast(task_id, "status", final_status)
             await self._invalidate_cached_views()
 
@@ -386,6 +465,40 @@ class TaskExecutor:
             await self._invalidate_cached_views()
             raise  # let asyncio complete the cancellation
 
+        except CapabilityDeniedError as e:
+            logger.warning("Task %s blocked by capability policy: %s", task_id, e)
+            duration = (time.time() - start_time) if "start_time" in locals() else 0
+            await db.execute(
+                """
+                UPDATE tasks SET
+                    status = ?,
+                    completed_at = ?,
+                    duration_seconds = ?,
+                    error_message = ?
+                WHERE id = ?
+                """,
+                (
+                    TaskStatus.FAILED.value,
+                    datetime.now().isoformat(),
+                    duration,
+                    str(e),
+                    task_id,
+                ),
+            )
+            await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
+            await self._invalidate_cached_views()
+            await db.log_audit(
+                "task_capability_denied",
+                f"Task blocked by capability policy: {str(e)}",
+                severity="warning",
+                context={
+                    "task_id": task_id,
+                    "denied_capabilities": sorted(e.denied_capabilities),
+                    "plugin_id": plugin_id,
+                },
+                task_id=task_id,
+            )
+
         except Exception as e:
             logger.error(f"Task {task_id} failed: {e}", exc_info=True)
 
@@ -420,9 +533,8 @@ class TaskExecutor:
                 task_id=task_id
             )
         finally:
-            # Always runs regardless of success, failure, or cancellation.
-            # Remove from in-memory registry and release the concurrency slot
-            # so future tasks are not permanently blocked.
+            # Always clean up: remove from the in-memory registry and
+            # release the concurrency slot regardless of how the task ended.
             self.running_tasks.pop(task_id, None)
             await concurrent_limiter.release(task_id)
     
@@ -489,7 +601,12 @@ class TaskExecutor:
             return f"Execution error: {str(e)}", -1
 
     def _resolve_execution_timeout(self, inputs: Dict[str, Any]) -> int:
-        """Resolve per-task process timeout from plugin inputs."""
+        """Resolve per-task process timeout from plugin inputs.
+
+        The caller may request a shorter timeout than the operator cap, but
+        never a longer one. ``settings.sandbox_timeout`` is the hard ceiling
+        and is always enforced regardless of what the client supplies.
+        """
         for key in ("max_scan_time", "timeout"):
             raw_value = inputs.get(key)
             try:
@@ -497,7 +614,7 @@ class TaskExecutor:
             except (TypeError, ValueError):
                 continue
             if timeout > 0:
-                return timeout
+                return min(timeout, settings.sandbox_timeout)
         return settings.sandbox_timeout
 
     def _classify_command_result(self, plugin, output: str, exit_code: int) -> tuple[str, Optional[str]]:
@@ -589,7 +706,7 @@ class TaskExecutor:
         db = await get_db()
         task_row = await db.fetchone(
             """
-            SELECT id, plugin_id, tool_name, target, status, created_at, started_at, completed_at, 
+            SELECT id, plugin_id, tool_name, target, status, scan_phase, created_at, started_at, completed_at,
                    duration_seconds, exit_code, error_message, preset, inputs_json
             FROM tasks WHERE id = ?
             """,
@@ -616,6 +733,7 @@ class TaskExecutor:
             "tool": task_row["tool_name"],
             "target": task_row["target"],
             "status": task_row["status"],
+            "scan_phase": task_row.get("scan_phase"),
             "created_at": task_row["created_at"],
             "started_at": task_row["started_at"],
             "completed_at": task_row["completed_at"],
@@ -623,7 +741,6 @@ class TaskExecutor:
             "exit_code": task_row["exit_code"],
             "error_message": task_row["error_message"],
             "preset": task_row["preset"],
-            "inputs": json.loads(task_row["inputs_json"] or "{}"),
             "queue_position": queue_position,
             "pending_count": pending_count,
         }
@@ -643,13 +760,38 @@ class TaskExecutor:
         for finding in findings_data:
             u_id = str(uuid.uuid4()).replace("-", "")
             finding_id = f"finding:{task_id}:{u_id[:8]}"
+
+            _validate_risk_fields(finding)
+            exploitability = finding.get("exploitability")
+            confidence = finding.get("confidence")
+            asset_exposure = finding.get("asset_exposure")
+            discovered = _parse_discovered_at(finding)
+            risk_score = compute_risk_score(
+                severity=finding["severity"],
+                exploitability=exploitability,
+                asset_exposure=asset_exposure,
+                discovered_at=discovered,
+                confidence=confidence,
+            )
+            risk_factors = compute_risk_factors(
+                severity=finding["severity"],
+                exploitability=exploitability,
+                asset_exposure=asset_exposure,
+                discovered_at=discovered,
+                confidence=confidence,
+                risk_score=risk_score,
+            )
+
             await db.execute(
                 """
                 INSERT INTO findings (
                     id, task_id, plugin_id, title, category, severity,
                     target, description, remediation, proof, cvss, cve,
-                    metadata_json, discovered_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (datetime('now')))
+                    metadata_json, discovered_at,
+                    exploitability, confidence, asset_exposure,
+                    risk_score, risk_factors_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                          ?, ?, ?, ?, ?)
                 """,
                 (
                     finding_id,
@@ -665,6 +807,12 @@ class TaskExecutor:
                     finding.get("cvss"),
                     finding.get("cve"),
                     json.dumps(finding.get("metadata", {})),
+                    discovered.isoformat() if discovered else datetime.now(timezone.utc).isoformat(),
+                    exploitability,
+                    confidence,
+                    asset_exposure,
+                    risk_score,
+                    json.dumps(risk_factors),
                 ),
             )
 
@@ -697,13 +845,38 @@ class TaskExecutor:
         for finding in findings_data:
             u_id = str(uuid.uuid4()).replace("-", "")
             finding_id = f"finding:{task_id}:{u_id[:8]}"
+
+            _validate_risk_fields(finding)
+            exploitability = finding.get("exploitability")
+            confidence = finding.get("confidence")
+            asset_exposure = finding.get("asset_exposure")
+            discovered = _parse_discovered_at(finding)
+            risk_score = compute_risk_score(
+                severity=finding["severity"],
+                exploitability=exploitability,
+                asset_exposure=asset_exposure,
+                discovered_at=discovered,
+                confidence=confidence,
+            )
+            risk_factors = compute_risk_factors(
+                severity=finding["severity"],
+                exploitability=exploitability,
+                asset_exposure=asset_exposure,
+                discovered_at=discovered,
+                confidence=confidence,
+                risk_score=risk_score,
+            )
+
             await db.execute(
                 """
                 INSERT INTO findings (
                     id, task_id, plugin_id, title, category, severity,
                     target, description, remediation, proof, cvss, cve,
-                    metadata_json, discovered_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, (datetime('now')))
+                    metadata_json, discovered_at,
+                    exploitability, confidence, asset_exposure,
+                    risk_score, risk_factors_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                          ?, ?, ?, ?, ?)
                 """,
                 (
                     finding_id,
@@ -719,6 +892,12 @@ class TaskExecutor:
                     finding.get("cvss"),
                     finding.get("cve"),
                     json.dumps(finding.get("metadata", {})),
+                    discovered.isoformat() if discovered else datetime.now(timezone.utc).isoformat(),
+                    exploitability,
+                    confidence,
+                    asset_exposure,
+                    risk_score,
+                    json.dumps(risk_factors),
                 )
             )
 
@@ -755,24 +934,36 @@ class TaskExecutor:
         parser_path = plugin_dir / "parser.py"
         
         if parser_path.exists():
+            if not plugin_manager.verify_parser_at_exec_time(plugin, plugin_dir):
+                raise ValueError(
+                    f"Security error: parser.py integrity check failed for plugin {plugin.id!r}; "
+                    "the file may have been tampered with. Rotate the plugin checksum or "
+                    "reinstall the plugin before retrying."
+                )
             try:
-                import importlib.util
-                spec = importlib.util.spec_from_file_location(f"parser_{plugin.id}", parser_path)
-                if spec is not None:
-                    loader = spec.loader
-                    if loader is not None:
-                        module = importlib.util.module_from_spec(spec)
-                        loader.exec_module(module)
-                        if hasattr(module, "parse"):
-                            logger.info(f"Using custom parser for {plugin.id}")
-                            parsed = module.parse(parser_input)
-                            return self._normalize_parsed_result(plugin, parser_input, parsed)
-                        else:
-                            logger.warning(f"Custom parser {parser_path} missing 'parse' function")
-            except Exception as e:
-                logger.error(f"Error executing custom parser for {plugin.id}: {e}")
+                parsed = run_parser_in_sandbox(
+                    parser_path=parser_path,
+                    plugin_id=plugin.id,
+                    parser_input=parser_input,
+                    timeout_seconds=settings.parser_sandbox_timeout_seconds,
+                    max_output_bytes=settings.parser_sandbox_max_output_bytes,
+                )
+                return self._normalize_parsed_result(plugin, parser_input, parsed)
+            except ParserSandboxError as exc:
+                logger.error("Parser sandbox error for plugin '%s': %s", plugin.id, exc)
+                # For plugins that declared a custom parser, sandbox failure is a hard
+                # error — do NOT fall through to built-in parsers, which would produce
+                # empty or misleading results unrelated to the custom parser's logic.
+                raise RuntimeError(
+                    f"Custom parser failed for plugin '{plugin.id}': {exc.reason}"
+                ) from exc
+            except Exception as exc:
+                logger.error("Unexpected error running parser sandbox for '%s': %s", plugin.id, exc)
+                raise RuntimeError(
+                    f"Custom parser encountered an unexpected error for plugin '{plugin.id}': {exc}"
+                ) from exc
 
-        # 2. Fallback to legacy built-in parsers
+        # 2. Fallback to legacy built-in parsers (only reached when no parser.py exists)
         if parser_type == "builtin_nmap":
             return self._normalize_parsed_result(plugin, parser_input, self._parse_nmap_output(parser_input))
         elif parser_type == "builtin_http":

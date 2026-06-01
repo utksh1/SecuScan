@@ -12,6 +12,7 @@ import {
     Refresh01Icon,
 } from '@hugeicons/core-free-icons'
 import { API_BASE, getPluginSchema, getTaskResult, getTaskStatus, PluginFieldSchema, PluginSchemaResponse, startTask } from '../api'
+import { useTaskSubscription } from '../hooks/useTaskSubscription'
 import { routes, routePath } from '../routes'
 import { parseDateSafe, formatDateLong, formatLocaleTime } from '../utils/date'
 import {
@@ -34,6 +35,7 @@ interface Task {
     tool: string
     target: string
     status: string
+    scan_phase?: string
     created_at: string
     started_at?: string
     completed_at?: string
@@ -44,6 +46,16 @@ interface Task {
     preset?: string
     queue_position?: number
     pending_count?: number
+}
+
+interface RiskFactor {
+    factor: string
+    label: string
+    value: string | number
+    score: number
+    weight: number
+    contribution: number
+    detail: string
 }
 
 interface Finding {
@@ -59,6 +71,11 @@ interface Finding {
     proof?: string
     discovered_at?: string
     metadata?: Record<string, any>
+    risk_score?: number
+    risk_factors?: RiskFactor[]
+    exploitability?: number
+    confidence?: number
+    asset_exposure?: string
 }
 
 interface TaskResult {
@@ -91,6 +108,57 @@ function defaultValueForField(field: PluginFieldSchema): unknown {
     return ''
 }
 
+
+const PHASE_LABELS: Record<string, string> = {
+    queued: 'QUEUED',
+    running_command: 'RUNNING_SCAN',
+    parsing: 'PARSING_RESULTS',
+    reporting: 'GENERATING_REPORT',
+    finished: 'FINALIZING',
+}
+
+const PHASE_MESSAGES: Record<string, string> = {
+    queued: 'Awaiting execution slot...',
+    running_command: 'Executing security scan...',
+    parsing: 'Parsing scan results...',
+    reporting: 'Generating reports...',
+    finished: 'Finalizing...',
+}
+
+function PhaseLabel({ phase }: { phase?: string }) {
+    const label = phase ? PHASE_LABELS[phase] : null
+    const message = phase ? PHASE_MESSAGES[phase] : 'Decrypting_Briefing...'
+    return (
+        <p className="text-xs font-black text-silver-bright uppercase tracking-[0.5em] italic">
+            {label || 'DECRYPTING_BRIEFING...'}
+        </p>
+    )
+}
+
+function PhaseProgress({ phase }: { phase?: string }) {
+    if (!phase || phase === 'finished') return null
+    const phases = ['queued', 'running_command', 'parsing', 'reporting']
+    const currentIdx = phases.indexOf(phase)
+    if (currentIdx === -1) return null
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center gap-2">
+                {phases.map((p, i) => (
+                    <React.Fragment key={p}>
+                        <div className={`w-3 h-3 border-2 ${i <= currentIdx ? 'bg-rag-blue border-rag-blue shadow-[0_0_8px_rgba(0,112,243,0.5)]' : 'bg-charcoal-dark border-silver/20'} transition-all duration-500`} />
+                        {i < phases.length - 1 && (
+                            <div className={`h-0.5 flex-1 ${i < currentIdx ? 'bg-rag-blue' : 'bg-silver/10'} transition-all duration-500`} />
+                        )}
+                    </React.Fragment>
+                ))}
+            </div>
+            <p className="text-[10px] font-mono text-rag-blue/80 uppercase tracking-[0.3em] italic">
+                {PHASE_MESSAGES[phase] || 'Processing...'}
+            </p>
+        </div>
+    )
+}
 
 function formatToolLabel(tool?: string, pluginId?: string) {
     const normalized = (tool || '').trim()
@@ -136,6 +204,7 @@ export default function TaskDetails() {
     const [rawOutput, setRawOutput] = useState<string>('')
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [scanPhase, setScanPhase] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<'summary' | 'results' | 'parameters' | 'raw'>('summary')
     const [expandedFindingRows, setExpandedFindingRows] = useState<Record<number, boolean>>({})
     const [expandedDiscoveryRows, setExpandedDiscoveryRows] = useState<Record<number, boolean>>({})
@@ -229,6 +298,14 @@ export default function TaskDetails() {
                                 </p>
                             </div>
                         )}
+                        {finding.risk_score !== undefined && finding.risk_score !== null && (
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Risk Score</h3>
+                                <p className={`text-sm font-black italic ${finding.risk_score >= 7 ? 'text-rag-red' : finding.risk_score >= 4 ? 'text-rag-amber' : 'text-rag-blue'}`}>
+                                    {finding.risk_score.toFixed(1)}
+                                </p>
+                            </div>
+                        )}
                         {finding.cve && (
                             <div className="space-y-4">
                                 <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">CVE Identifiers</h3>
@@ -242,6 +319,28 @@ export default function TaskDetails() {
                             </p>
                         </div>
                     </div>
+
+                    {finding.risk_factors && finding.risk_factors.length > 0 && (
+                        <div className="space-y-4">
+                            <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Risk Factor Breakdown</h3>
+                            <div className="space-y-2">
+                                {finding.risk_factors.map((rf) => (
+                                    <div key={rf.factor} className="flex items-center justify-between text-[11px] border-b border-white/[0.03] pb-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-silver/40 uppercase tracking-wider">{rf.label}</span>
+                                            <span className="text-silver/25 text-[9px]">({(rf.weight * 100).toFixed(0)}%)</span>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-silver/70 font-mono">{rf.score.toFixed(1)}</span>
+                                            <span className={`text-[10px] font-mono ${rf.contribution >= 2 ? 'text-rag-red' : rf.contribution >= 1 ? 'text-rag-amber' : 'text-silver/40'}`}>
+                                                +{rf.contribution.toFixed(1)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {Object.keys(finding.metadata || {}).length > 0 && (
                         <div className="space-y-4">
@@ -263,38 +362,23 @@ export default function TaskDetails() {
 
     useEffect(() => {
         loadTask()
-
-        const es = new EventSource(`${API_BASE}/task/${taskId}/stream`)
-
-        es.addEventListener('status', (e) => {
-            try {
-                const data = JSON.parse(e.data)
-                setTask((prev: Task | null) => prev ? { ...prev, status: data.status } : null)
-                if (['completed', 'failed', 'cancelled'].includes(data.status)) {
-                    es.close()
-                    loadTask()
-                }
-            } catch (err) {
-                console.error("Status stream error", err)
-            }
-        })
-
-        es.addEventListener('output', (e) => {
-            try {
-                const data = JSON.parse(e.data)
-                setRawOutput(prev => prev + data.chunk)
-            } catch (err) {
-                console.error("Output stream error", err)
-            }
-        })
-
-        es.onerror = (err) => {
-            console.error("EventSource error:", err)
-            es.close()
-        }
-
-        return () => es.close()
     }, [taskId])
+
+    useTaskSubscription({
+        taskId: taskId!,
+        onStatus: (status) => {
+            setTask((prev: Task | null) => prev ? { ...prev, status } : null)
+            if (['completed', 'failed', 'cancelled'].includes(status)) {
+                loadTask()
+            }
+        },
+        onPhase: (phase) => {
+            setScanPhase(phase)
+        },
+        onOutput: (chunk) => {
+            setRawOutput((prev) => prev + chunk)
+        },
+    })
 
     async function loadTask() {
         try {
@@ -304,6 +388,9 @@ export default function TaskDetails() {
                 getTaskResult(taskId!).catch(() => null) as Promise<TaskResult | null>
             ])
             setTask(statusData)
+            if (statusData.scan_phase) {
+                setScanPhase(statusData.scan_phase)
+            }
             getPluginSchema(statusData.plugin_id).then(setSchema).catch(() => setSchema(null))
 
             if (resultData) {
@@ -379,7 +466,7 @@ export default function TaskDetails() {
             <div className="min-h-screen bg-charcoal-dark flex items-center justify-center p-12">
                 <div className="space-y-4 text-center">
                     <div className="w-20 h-20 border-8 border-silver-bright/10 border-t-rag-blue animate-spin mx-auto shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"></div>
-                    <p className="text-xs font-black text-silver-bright uppercase tracking-[0.5em] italic">Decrypting_Briefing...</p>
+                    <PhaseLabel phase={scanPhase || undefined} />
                 </div>
             </div>
         )
@@ -667,7 +754,11 @@ export default function TaskDetails() {
                 </div>
             </header>
 
-
+            {!isTerminal && scanPhase && (
+                <section className="border border-rag-blue/20 bg-charcoal p-6">
+                    <PhaseProgress phase={scanPhase} />
+                </section>
+            )}
 
             <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                 <DetailCard

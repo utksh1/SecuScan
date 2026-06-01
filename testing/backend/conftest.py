@@ -5,6 +5,11 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
 # Add repo root to sys.path so package imports work (backend.*)
 repo_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(repo_root))
@@ -15,12 +20,13 @@ from backend.secuscan.database import init_db
 from backend.secuscan.main import app
 from backend.secuscan.plugins import init_plugins
 from backend.secuscan.ratelimit import concurrent_limiter, rate_limiter
+from backend.secuscan import auth as auth_module
 
 
 @pytest.fixture(autouse=True)
 def setup_test_environment(monkeypatch):
     """Override settings for tests to ensure isolated execution."""
-    temp_dir = tempfile.TemporaryDirectory()
+    temp_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
     temp_path = temp_dir.name
 
     monkeypatch.setattr(settings, "data_dir", temp_path)
@@ -35,6 +41,11 @@ def setup_test_environment(monkeypatch):
     yield temp_path
 
     temp_dir.cleanup()
+
+@pytest.fixture
+def anyio_backend():
+    """Force AnyIO tests to run on asyncio (trio is not a dependency in CI)."""
+    return "asyncio"
 
 
 @pytest.fixture
@@ -56,7 +67,9 @@ def test_client(setup_test_environment):
 
     asyncio.run(setup())
 
-    with TestClient(app) as client:
+    api_key = auth_module.init_api_key(settings.data_dir)
+
+    with TestClient(app, headers={"X-Api-Key": api_key}) as client:
         yield client
 
     async def teardown():
