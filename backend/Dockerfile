@@ -10,10 +10,10 @@ COPY requirements.txt ./
 # Remove once python:3.11-slim-bookworm ships with patched openssl
 RUN apt-get update && apt-get upgrade -y --no-install-recommends openssl \
     && apt-get install -y --no-install-recommends \
-    gcc \
-    libcairo2-dev \
-    pkg-config \
-    python3-dev \
+    gcc=4:12.2.0-3 \
+    libcairo2-dev=1.16.0-7 \
+    pkg-config=1.8.1-1 \
+    python3-dev=3.11.2-1+b1 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
