@@ -9,7 +9,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from .request_middleware import RequestIDMiddleware
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -18,6 +18,7 @@ from .cache import init_cache, cache as global_cache
 from .database import init_db, db as global_db
 from .plugins import init_plugins
 from .routes import router
+from .auth import require_api_key
 from .workflows import scheduler
 
 
@@ -124,7 +125,7 @@ app.add_middleware(
 app.add_middleware(RequestIDMiddleware)
 
 # Include API routes
-app.include_router(router)
+app.include_router(router, dependencies=[Depends(require_api_key)])
 
 # Health check endpoint
 @app.get("/api/v1/health")
