@@ -32,3 +32,13 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["backend*"]
+<<<<<<< HEAD
+=======
+
+[tool.pytest.ini_options]
+markers = [
+    "benchmark: performance benchmark tests (deselect with '-m not benchmark')",
+]
+asyncio_mode = "strict"
+python_files = ["test_*.py", "bench_*.py"]
+>>>>>>> upstream/main

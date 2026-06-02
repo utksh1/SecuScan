@@ -48,9 +48,16 @@ async def run_scan(target: str, plugin_id: str, output_format: str, output_file:
         return 1
 
     # Create task
+<<<<<<< HEAD
     inputs = {"target": target}
     try:
         task_id = await executor.create_task(plugin_id, inputs, consent_granted=True)
+=======
+    safe_mode = bool(settings.safe_mode_default)
+    inputs = {"target": target, "safe_mode": safe_mode}
+    try:
+        task_id = await executor.create_task(plugin_id, inputs, safe_mode=safe_mode, consent_granted=True)
+>>>>>>> upstream/main
     except Exception as e:
         print(f"Error creating task: {e}")
         return 1

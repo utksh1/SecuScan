@@ -3,8 +3,16 @@ Backend integration tests for task cancellation and cleanup endpoints.
 Issue #30 - covers: cancel, single delete, bulk delete, clear all, missing ID errors.
 """
 
+<<<<<<< HEAD
 import asyncio
 import json
+=======
+import json
+import uuid
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import aiosqlite
+>>>>>>> upstream/main
 import pytest
 import tempfile
 import os
@@ -26,10 +34,58 @@ async def make_db():
     return db
 
 
+<<<<<<< HEAD
 def make_get_db(db):
     async def _get_db():
         return db
     return _get_db
+=======
+@pytest_asyncio.fixture
+async def app_client(db_path):
+    """
+    Yield an AsyncClient wired to the FastAPI app with:
+      - a real isolated temp SQLite DB (schema auto-created by init_db)
+      - a real in-memory cache (init_cache — no Redis needed)
+      - executor fully mocked (no real scans)
+    """
+    mock_executor = MagicMock()
+    mock_executor.cancel_task = AsyncMock(return_value=True)
+    mock_executor.get_task_status = AsyncMock(return_value={"status": "queued"})
+
+    with patch("backend.secuscan.routes.executor", mock_executor):
+
+        from backend.secuscan.main import app
+        from backend.secuscan import database as db_module
+        from backend.secuscan import cache as cache_module
+        from backend.secuscan import auth as auth_module
+        import tempfile
+
+        # Initialise a real in-memory cache (it's just a dict, no external deps)
+        await cache_module.init_cache()
+
+        # Initialise a fresh DB pointing at our temp file
+        test_db = await db_module.init_db(db_path)
+
+        # Initialise API key in a temporary directory so the dependency resolves
+        with tempfile.TemporaryDirectory() as tmp_auth_dir:
+            api_key = auth_module.init_api_key(tmp_auth_dir)
+
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+                headers={"X-Api-Key": api_key},
+            ) as client:
+                client._mock_executor = mock_executor
+                client._db = test_db
+                client._db_path = db_path
+                yield client
+
+        # Teardown
+        await test_db.disconnect()
+        db_module.db = None
+        await cache_module.cache.disconnect()
+        cache_module.cache = None
+>>>>>>> upstream/main
 
 
 async def insert_task(db, task_id="task-1", status="queued", raw_output_path=None):
@@ -230,6 +286,40 @@ class TestDeleteSingleTask:
             assert not os.path.exists(tmp_path)
 
         asyncio.run(run())
+
+
+@pytest.mark.asyncio
+async def test_completed_task_stream_replays_raw_output_in_chunks(app_client, tmp_path):
+    """Completed-task SSE must not read and send the full raw output in one event."""
+    from backend.secuscan.routes import SSE_RAW_OUTPUT_CHUNK_SIZE
+
+    raw_output = "a" * SSE_RAW_OUTPUT_CHUNK_SIZE + "tail"
+    raw_file = tmp_path / "large_scan_output.txt"
+    raw_file.write_text(raw_output)
+
+    task_id = await insert_task(
+        app_client._db,
+        status="completed",
+        raw_output_path=str(raw_file),
+    )
+    app_client._mock_executor.get_task_status = AsyncMock(
+        return_value={"status": "completed"}
+    )
+
+    resp = await app_client.get(f"/api/v1/task/{task_id}/stream")
+
+    assert resp.status_code == 200, resp.text
+    event_name = None
+    output_chunks = []
+    for line in resp.text.splitlines():
+        if line.startswith("event: "):
+            event_name = line.removeprefix("event: ")
+        elif line.startswith("data: ") and event_name == "output":
+            output_chunks.append(json.loads(line.removeprefix("data: "))["chunk"])
+
+    assert len(output_chunks) == 2
+    assert all(len(chunk) <= SSE_RAW_OUTPUT_CHUNK_SIZE for chunk in output_chunks)
+    assert "".join(output_chunks) == raw_output
 
 
 # ---------------------------------------------------------------------------

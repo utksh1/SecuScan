@@ -2,7 +2,11 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import Workflows from '../../../src/pages/Workflows'
+<<<<<<< HEAD
 import { getWorkflows, runWorkflow, updateWorkflow, deleteWorkflow } from '../../../src/api'
+=======
+import { getWorkflows, createWorkflow, runWorkflow, updateWorkflow, deleteWorkflow } from '../../../src/api'
+>>>>>>> upstream/main
 
 vi.mock('../../../src/api', () => ({
   getWorkflows: vi.fn(),
@@ -15,7 +19,11 @@ vi.mock('../../../src/api', () => ({
 const mockWorkflow = {
   id: 'wf-001',
   name: 'Nightly Scan',
+<<<<<<< HEAD
   schedule_interval: '0 0 * * *',
+=======
+  schedule_seconds: 3600,
+>>>>>>> upstream/main
   enabled: true,
   steps: [{ plugin_id: 'nmap', inputs: {} }],
   last_run_at: null,
@@ -99,7 +107,11 @@ describe('Workflows — listing', () => {
   it('shows schedule interval', async () => {
     renderPage()
     await screen.findByText('Nightly Scan')
+<<<<<<< HEAD
     expect(screen.getAllByText('0 0 * * *').length).toBeGreaterThan(0)
+=======
+    expect(screen.getAllByText('Every 1h').length).toBeGreaterThan(0)
+>>>>>>> upstream/main
   })
 
   it('shows step count', async () => {
@@ -109,6 +121,35 @@ describe('Workflows — listing', () => {
   })
 })
 
+<<<<<<< HEAD
+=======
+describe('Workflows — create action', () => {
+  beforeEach(() => {
+    vi.mocked(getWorkflows).mockResolvedValue([])
+    vi.mocked(createWorkflow).mockResolvedValue(mockWorkflow)
+  })
+
+  it('creates workflow with schedule_seconds payload', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText(/No Workflows/i)
+
+    await user.click(screen.getAllByRole('button', { name: /New Workflow/i })[0])
+    await user.type(screen.getByPlaceholderText('My Workflow'), 'Nightly Scan')
+    await user.clear(screen.getByPlaceholderText('3600'))
+    await user.type(screen.getByPlaceholderText('3600'), '7200')
+    await user.click(screen.getByRole('button', { name: /^Create$/i }))
+
+    expect(vi.mocked(createWorkflow)).toHaveBeenCalledWith({
+      name: 'Nightly Scan',
+      schedule_seconds: 7200,
+      enabled: true,
+      steps: [{ plugin_id: '', inputs: {} }],
+    })
+  })
+})
+
+>>>>>>> upstream/main
 describe('Workflows — run action', () => {
   beforeEach(() => {
     vi.mocked(getWorkflows).mockResolvedValue([mockWorkflow])
@@ -186,4 +227,8 @@ describe('Workflows — delete action', () => {
     expect(vi.mocked(deleteWorkflow)).not.toHaveBeenCalled()
     expect(screen.getByText('Nightly Scan')).toBeInTheDocument()
   })
+<<<<<<< HEAD
 })
+=======
+})
+>>>>>>> upstream/main

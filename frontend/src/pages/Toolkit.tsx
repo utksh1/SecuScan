@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { listPlugins, PluginListItem } from '../api'
 import { scanTools } from '../data/scanTools'
 import { routePath } from '../routes'
+import { ToolCheatSheet } from '../components/ToolCheatSheet'
 
 type RiskLevel = 'passive' | 'active' | 'aggressive'
 type PresetCompatibility = 'quick-recon' | 'deep-scan' | 'both' | 'none'
@@ -96,12 +97,10 @@ function getToolAccessibilityLabel(tool: CatalogTool): string {
 function mapPluginCategoryToLegacyTab(category: string, pluginId?: string): UITab {
   const pinnedTool = scanTools.find(t => t.id === pluginId);
   
-  // If we found a tool in scanTools.ts, use its defined category
   if (pinnedTool) {
     return pinnedTool.category as UITab;
   }
 
-  // Fallback mapping for dynamic plugins
   switch (category) {
     case 'cms':
     case 'web':
@@ -182,6 +181,10 @@ export default function Scanner() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [catalogLoadAttempt, setCatalogLoadAttempt] = useState(0)
+<<<<<<< HEAD
+=======
+  const [selectedToolId, setSelectedToolId] = useState<string>('nmap')
+>>>>>>> upstream/main
 
   useEffect(() => {
     setRecentToolIds(readRecentToolIds())
@@ -230,31 +233,57 @@ export default function Scanner() {
     }
   }, [tabOrder, activeTab])
 
-  const categoryToolsCount = useMemo(
-    () => tools.filter((tool) => {
-      if (activeTab === 'quick-start') return tool.isQuickStart
-      return tool.category === activeTab
-    }).length,
-    [tools, activeTab],
-  )
+  const toolsByCategory = useMemo(() => {
+    const groups: Record<string, CatalogTool[]> = {}
+    const quickStart: CatalogTool[] = []
+    for (const tool of tools) {
+      if (tool.isQuickStart) {
+        quickStart.push(tool)
+      }
+      const cat = tool.category
+      if (!groups[cat]) {
+        groups[cat] = []
+      }
+      groups[cat].push(tool)
+    }
+    return { groups, quickStart }
+  }, [tools])
+
+  const toolsById = useMemo(() => {
+    return new Map(tools.map((tool) => [tool.id, tool]))
+  }, [tools])
+
+  const categoryToolsCount = useMemo(() => {
+    if (activeTab === 'quick-start') return toolsByCategory.quickStart.length
+    return toolsByCategory.groups[activeTab]?.length || 0
+  }, [toolsByCategory, activeTab])
 
   const filteredTools = useMemo(() => {
     const query = searchQuery.toLowerCase().trim()
-    return tools.filter((tool) => {
-      const matchesCategory = activeTab === 'quick-start' ? tool.isQuickStart : tool.category === activeTab
-      if (!matchesCategory) return false
-      if (!query) return true
-      return tool.name.toLowerCase().includes(query) || tool.purpose.toLowerCase().includes(query)
-    })
-  }, [tools, activeTab, searchQuery])
+    const toolsInTab = activeTab === 'quick-start'
+      ? toolsByCategory.quickStart
+      : (toolsByCategory.groups[activeTab] || [])
+
+    if (!query) return toolsInTab
+
+    return toolsInTab.filter(
+      (tool) =>
+        tool.name.toLowerCase().includes(query) ||
+        tool.purpose.toLowerCase().includes(query)
+    )
+  }, [toolsByCategory, activeTab, searchQuery])
 
   const quickAccessTools = useMemo(() => {
-    const byId = new Map(tools.map((tool) => [tool.id, tool]))
     return recentToolIds
-      .map((id) => byId.get(id))
+      .map((id) => toolsById.get(id))
       .filter((tool): tool is CatalogTool => Boolean(tool))
       .slice(0, RECENT_TOOLS_LIMIT)
-  }, [tools, recentToolIds])
+  }, [toolsById, recentToolIds])
+
+  const placeholders = useMemo(() => {
+    const count = loading || filteredTools.length === 0 ? 0 : Math.max(0, 4 - (filteredTools.length % 4 || 4))
+    return Array.from({ length: count })
+  }, [loading, filteredTools.length])
 
   const trackRecentTool = (toolId: string) => {
     setRecentToolIds((prev) => {
@@ -270,12 +299,14 @@ export default function Scanner() {
 
   const handleToolSelect = (tool: CatalogTool) => {
     if (tool.disabled) return
+    setSelectedToolId(tool.id)
     trackRecentTool(tool.id)
     navigate(routePath.scanTool(tool.id))
   }
 
   return (
-    <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
+    <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12 flex gap-0">
+      <div className="flex-1 space-y-12">
       <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10 font-black">
         <div className="space-y-4">
           <div className="bg-rag-red text-black px-4 py-1 text-xs uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -482,7 +513,7 @@ export default function Scanner() {
 
             {!loading &&
               filteredTools.length > 0 &&
-              Array.from({ length: Math.max(0, 4 - (filteredTools.length % 4 || 4)) }).map((_, index) => (
+              placeholders.map((_, index) => (
                 <div key={index} className="bg-charcoal/30 border-4 border-black/5 border-dashed flex items-center justify-center opacity-10 p-10">
                   <span className="material-symbols-outlined text-4xl" aria-hidden="true">add_box</span>
                 </div>
@@ -504,6 +535,9 @@ export default function Scanner() {
           </div>
         </div>
       </footer>
+      </div>
+
+      <ToolCheatSheet activeToolId={selectedToolId} />
     </div>
   )
 }

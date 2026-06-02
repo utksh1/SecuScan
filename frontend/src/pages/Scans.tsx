@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import React, { useState, useEffect } from "react";
+=======
+import React, { useState, useEffect, useRef } from "react";
+>>>>>>> upstream/main
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { API_BASE, deleteTask, clearAllTasks, bulkDeleteTasks } from "../api";
@@ -8,6 +12,10 @@ import {
   formatLocaleDate,
   formatLocaleTime,
 } from "../utils/date";
+<<<<<<< HEAD
+=======
+import { ConfirmModal } from "../components/ConfirmModal";
+>>>>>>> upstream/main
 import Pagination from "../components/Pagination";
 
 interface Task {
@@ -16,6 +24,10 @@ interface Task {
   tool: string;
   target: string;
   status: "queued" | "running" | "completed" | "failed" | "cancelled";
+<<<<<<< HEAD
+=======
+  scan_phase?: string;
+>>>>>>> upstream/main
   created_at: string;
   started_at?: string;
   completed_at?: string;
@@ -63,6 +75,7 @@ export default function Scans() {
   const [total, setTotal] = useState(0);
   const PAGE_LIMIT = 10;
 
+<<<<<<< HEAD
   useEffect(() => {
     loadTasks();
     const interval = setInterval(loadTasks, 5000);
@@ -70,24 +83,117 @@ export default function Scans() {
   }, [filter, page]);
 
   async function loadTasks() {
+=======
+  // Modal state for confirm dialogs
+  const [modalState, setModalState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    type: "danger" | "warning" | "info";
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+    type: "warning",
+  });
+
+  // Ref so the visibilitychange handler always sees the current interval id
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const requestSeqRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+
+  function startPolling() {
+    stopPolling();
+    intervalRef.current = setInterval(loadTasks, 5000);
+  }
+
+  function stopPolling() {
+    if (intervalRef.current !== null) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }
+
+  useEffect(() => {
+    loadTasks();
+    startPolling();
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "hidden") {
+        stopPolling();
+      } else {
+        abortRef.current?.abort();
+        abortRef.current = new AbortController();
+        loadTasks();
+        startPolling();
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      stopPolling();
+      if (abortRef.current) {
+        abortRef.current.abort();
+        abortRef.current = null;
+      }
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [filter, page]);
+
+  async function loadTasks() {
+    const requestSeq = requestSeqRef.current + 1;
+    requestSeqRef.current = requestSeq;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+>>>>>>> upstream/main
     try {
       const params = new URLSearchParams();
       if (filter !== "all") params.set("status", filter);
       params.set("page", String(page));
       params.set("per_page", String(PAGE_LIMIT));
 
+<<<<<<< HEAD
       const res = await fetch(`${API_BASE}/tasks?${params.toString()}`);
       const data = await res.json();
+=======
+      const res = await fetch(`${API_BASE}/tasks?${params.toString()}`, {
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to load tasks: ${res.status}`);
+      }
+      const data = await res.json();
+      if (requestSeq !== requestSeqRef.current) return;
+
+>>>>>>> upstream/main
       setTasks(data.tasks || []);
       if (data.pagination?.total_items !== undefined) {
         setTotal(data.pagination.total_items);
       }
     } catch (err) {
+<<<<<<< HEAD
       console.error("Failed to load tasks:", err);
     } finally {
       setLoading(false);
     }
   }
+=======
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      console.error("Failed to load tasks:", err);
+    } finally {
+      if (requestSeq === requestSeqRef.current) {
+        abortRef.current = null;
+        setLoading(false);
+      }
+    }
+  }
+
+>>>>>>> upstream/main
   function handleFilterChange(value: string) {
     setFilter(value);
     setPage(1);
@@ -115,6 +221,7 @@ export default function Scans() {
   }
 
   async function handleTaskDelete(taskId: string) {
+<<<<<<< HEAD
     if (
       !window.confirm(
         "Are you sure you want to delete this scan record? This will also remove associated findings and reports.",
@@ -151,18 +258,99 @@ export default function Scans() {
       console.error("Failed to clear history:", err);
       alert("Failed to clear history. Ensure no tasks are currently running.");
     }
+=======
+    setModalState({
+      isOpen: true,
+      title: "Delete Scan Record",
+      message: "Are you sure you want to delete this scan record? This will also remove associated findings and reports.",
+      type: "danger",
+      onConfirm: async () => {
+        try {
+          await deleteTask(taskId);
+          setTasks((prev) => prev.filter((t) => t.task_id !== taskId));
+          if (expandedId === taskId) setExpandedId(null);
+          setModalState(prev => ({ ...prev, isOpen: false }));
+        } catch (err) {
+          console.error("Failed to delete task:", err);
+          alert("Failed to delete task. It might still be running.");
+          setModalState(prev => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
+  }
+
+  async function handleClearAll() {
+    setModalState({
+      isOpen: true,
+      title: "CRITICAL OPERATION",
+      message: "CRITICAL: Are you sure you want to PURGE ALL RECORDS? This will wipe all scan history, findings, assets, and reports. This action is irreversible.",
+      type: "danger",
+      onConfirm: async () => {
+        try {
+          await clearAllTasks();
+          setTasks([]);
+          setSelectedIds([]);
+          setExpandedId(null);
+          setModalState(prev => ({ ...prev, isOpen: false }));
+        } catch (err) {
+          console.error("Failed to clear history:", err);
+          alert("Failed to clear history. Ensure no tasks are currently running.");
+          setModalState(prev => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
+>>>>>>> upstream/main
   }
 
   async function handleBulkDelete() {
     if (selectedIds.length === 0) return;
+<<<<<<< HEAD
     if (
       !window.confirm(
         `Are you sure you want to delete ${selectedIds.length} selected scan records?`,
       )
     ) {
       return;
-    }
+=======
+    setModalState({
+      isOpen: true,
+      title: "Bulk Delete Records",
+      message: `Are you sure you want to delete ${selectedIds.length} selected scan records?`,
+      type: "danger",
+      onConfirm: async () => {
+        try {
+          await bulkDeleteTasks(selectedIds);
+          setTasks((prev) => prev.filter((t) => !selectedIds.includes(t.task_id)));
+          setSelectedIds([]);
+          setModalState(prev => ({ ...prev, isOpen: false }));
+        } catch (err) {
+          console.error("Bulk delete failed:", err);
+          alert("Failed to delete some tasks. Ensure they are not currently running.");
+          setModalState(prev => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
+  }
 
+  function toggleSelection(taskId: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setSelectedIds((prev) =>
+      prev.includes(taskId)
+        ? prev.filter((id) => id !== taskId)
+        : [...prev, taskId],
+    );
+  }
+
+  function toggleSelectAll() {
+    if (selectedIds.length === tasks.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(tasks.map((t) => t.task_id));
+>>>>>>> upstream/main
+    }
+  }
+
+<<<<<<< HEAD
     try {
       await bulkDeleteTasks(selectedIds);
       setTasks((prev) => prev.filter((t) => !selectedIds.includes(t.task_id)));
@@ -332,6 +520,148 @@ export default function Scans() {
                       }`}
                     ></div>
 
+=======
+  function formatDuration(seconds?: number) {
+    if (!seconds) return null;
+    if (seconds < 60) return `${Math.round(seconds)}s`;
+    if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+    return `${Math.round(seconds / 3600)}h`;
+  }
+
+  return (
+    <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
+      {/* Neo-Brutalist Header */}
+      <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10">
+        <div className="space-y-4">
+          <div className="bg-rag-blue text-black px-4 py-1 text-xs font-black uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            Operational_Registry_v10.1
+          </div>
+          <h1 className="text-6xl md:text-8xl font-black text-silver-bright uppercase tracking-tighter leading-none italic">
+            Operational{" "}
+            <span
+              className="text-transparent stroke-white"
+              style={{ WebkitTextStroke: "1px var(--accent-silver-bright)" }}
+            >
+              Registry
+            </span>
+          </h1>
+          <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic flex items-center gap-4">
+            Total_Registry_Keys: {total} // SYSTEM_STATUS:{" "}
+            {loading ? "SYNCING..." : "SYNCED"}
+            <span
+              className={`w-2 h-2 rounded-full ${loading ? "bg-rag-amber animate-pulse" : "bg-rag-green"}`}
+            ></span>
+          </p>
+        </div>
+
+        <div className="flex items-center gap-12 border-l-4 border-silver-bright/10 pl-12 hidden lg:flex">
+          <div className="text-right">
+            <span className="text-[10px] font-black text-silver/40 uppercase tracking-[0.3em] block mb-2 italic">
+              Integrity_Check
+            </span>
+            <span className="text-xs font-mono text-rag-green uppercase font-black">
+              OPSEC_CLEARANCE_L5
+            </span>
+          </div>
+        </div>
+      </header>
+
+      {/* Filtration Block */}
+      <section className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col xl:flex-row justify-between items-center gap-12">
+        <div className="flex flex-wrap items-center gap-4">
+          <button
+            onClick={toggleSelectAll}
+            className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-3 ${
+              selectedIds.length === tasks.length && tasks.length > 0
+                ? "bg-rag-blue text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+                : "bg-charcoal-dark text-silver/30 border-silver-bright/5 hover:border-silver-bright/20"
+            }`}
+          >
+            <span className="material-symbols-outlined text-sm">
+              {selectedIds.length === tasks.length && tasks.length > 0
+                ? "check_box"
+                : "check_box_outline_blank"}
+            </span>
+            Select_All
+          </button>
+          <div className="w-1 h-8 bg-black/40 mx-2 hidden md:block"></div>
+          {statusFilters.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => handleFilterChange(f.value)}
+              className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-2 ${
+                filter === f.value
+                  ? "bg-silver-bright text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-x-0.5 -translate-y-0.5"
+                  : "bg-charcoal-dark text-silver/30 border-silver-bright/5 hover:border-silver-bright/20"
+              }`}
+            >
+              {f.label}
+              {filter === f.value && <span className="w-1 h-3 bg-black"></span>}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-6">
+          {tasks.length > 0 && (
+            <button
+              onClick={handleClearAll}
+              className="px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 bg-rag-red/10 text-rag-red border-rag-red/20 hover:bg-rag-red hover:text-black hover:border-black flex items-center gap-2 italic"
+            >
+              Purge_All_Records
+              <span className="material-symbols-outlined text-sm">
+                delete_forever
+              </span>
+            </button>
+          )}
+          <div className="flex items-center gap-4 text-[10px] font-mono text-silver/20 uppercase italic tracking-widest hidden sm:flex">
+            Isolation_Protocol_Active //{" "}
+            <span className="text-rag-blue">v4_stable</span>
+          </div>
+        </div>
+      </section>
+
+      {/* Timeline Operations Feed */}
+      <section className="relative">
+        {/* Vertical Timeline Cable */}
+        <div className="absolute left-[39px] top-0 bottom-0 w-1 bg-silver-bright/5 hidden md:block"></div>
+
+        <AnimatePresence mode="popLayout">
+          {tasks.length > 0 ? (
+            <motion.div
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+              className="space-y-8"
+            >
+              {tasks.map((task) => {
+                const createDate = parseDateSafe(task.created_at);
+                const startDate = task.started_at
+                  ? parseDateSafe(task.started_at)
+                  : null;
+                const endDate = task.completed_at
+                  ? parseDateSafe(task.completed_at)
+                  : null;
+
+                return (
+                  <motion.div
+                    key={task.task_id}
+                    variants={itemVariants}
+                    layout
+                    className={`relative group md:pl-20 transition-all`}
+                  >
+                    {/* Timeline Node */}
+                    <div
+                      className={`absolute left-[31px] top-12 w-5 h-5 border-4 border-black z-10 hidden md:block transition-all duration-500 ${
+                        task.status === "completed"
+                          ? "bg-rag-green shadow-[0_0_15px_rgba(34,197,94,0.3)]"
+                          : task.status === "failed"
+                            ? "bg-rag-red"
+                            : task.status === "running"
+                              ? "bg-rag-amber animate-pulse"
+                              : "bg-silver/10"
+                      }`}
+                    ></div>
+
+>>>>>>> upstream/main
                     <div
                       className={`bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer relative overflow-hidden group/card ${
                         expandedId === task.task_id
@@ -441,6 +771,14 @@ export default function Scans() {
                                       {task.plugin_id}
                                     </span>
                                   </p>
+<<<<<<< HEAD
+=======
+                                  {task.status === 'running' && task.scan_phase && (
+                                    <p className="text-[10px] font-mono text-rag-blue/80 uppercase tracking-widest">
+                                      PHASE: {task.scan_phase.replace(/_/g, ' ')}
+                                    </p>
+                                  )}
+>>>>>>> upstream/main
                                   <p className="text-[10px] font-mono text-silver/40">
                                     SESSION:{" "}
                                     <span className="text-silver-bright uppercase">
@@ -620,6 +958,19 @@ export default function Scans() {
           ))}
         </div>
       </footer>
+<<<<<<< HEAD
+=======
+
+      {/* Confirm Modal */}
+      <ConfirmModal
+        isOpen={modalState.isOpen}
+        title={modalState.title}
+        message={modalState.message}
+        onConfirm={modalState.onConfirm}
+        onCancel={() => setModalState(prev => ({ ...prev, isOpen: false }))}
+        type={modalState.type}
+      />
+>>>>>>> upstream/main
     </div>
   );
 }
