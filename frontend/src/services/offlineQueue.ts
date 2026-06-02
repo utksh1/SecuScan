@@ -2,9 +2,9 @@ const STORAGE_KEY = 'offline-queue'
 const MAX_QUEUE_SIZE = 50
 const ACTION_TTL_MS = 86_400_000 // 24 hours
 
-export const SAFE_ACTION_TYPES: ActionType[] = ['startTask', 'createWorkflow', 'updateWorkflow']
+export const SAFE_ACTION_TYPES: ActionType[] = ['createWorkflow', 'updateWorkflow']
 
-export type ActionType = 'startTask' | 'createWorkflow' | 'updateWorkflow'
+export type ActionType = 'createWorkflow' | 'updateWorkflow'
 
 export interface QueuedAction {
   id: string
@@ -189,19 +189,6 @@ async function conflictCheck(action: QueuedAction): Promise<'no-conflict' | 'con
         const workflows = Array.isArray(data) ? data : data.workflows
         const exists = Array.isArray(workflows) && workflows.some((w: any) => w.name === body.name)
         return exists ? 'conflict' : 'no-conflict'
-      }
-      case 'startTask': {
-        const tasksUrl = action.url.replace('/task/start', '/tasks')
-        const res = await fetch(tasksUrl, { method: 'GET' })
-        if (!res.ok) return 'no-conflict'
-        const body = action.body ? JSON.parse(action.body) : null
-        if (!body?.plugin_id) return 'no-conflict'
-        const data = await res.json()
-        const tasks = Array.isArray(data) ? data : data.tasks
-        const running = Array.isArray(tasks) && tasks.some((t: any) =>
-          t.plugin_id === body.plugin_id && (t.status === 'running' || t.status === 'queued')
-        )
-        return running ? 'conflict' : 'no-conflict'
       }
       default:
         return 'no-conflict'

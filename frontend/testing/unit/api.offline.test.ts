@@ -23,18 +23,15 @@ describe('API offline integration', () => {
   })
 
   describe('retryable actions (safe/idempotent mutations only)', () => {
-    it('startTask enqueues when offline', async () => {
+    it('startTask does not enqueue when offline (non-idempotent)', async () => {
       Object.defineProperty(navigator, 'onLine', { configurable: true, value: false })
       const api = await getApi()
 
       await expect(
         api.startTask('test_plugin', { target: 'http://example.com' }, true),
-      ).rejects.toThrow(OfflineQueueError)
+      ).rejects.toThrow()
 
-      const queue = offlineQueue.getQueue()
-      expect(queue).toHaveLength(1)
-      expect(queue[0].label).toBe('Start Scan')
-      expect(queue[0].method).toBe('POST')
+      expect(offlineQueue.getQueue()).toHaveLength(0)
     })
 
     it('createWorkflow enqueues when offline', async () => {

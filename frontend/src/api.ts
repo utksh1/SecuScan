@@ -179,9 +179,6 @@ export function startTask(plugin_id: string, inputs: Record<string, unknown>, co
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ plugin_id, inputs, consent_granted, preset }),
-    retryable: true,
-    label: 'Start Scan',
-    actionType: 'startTask',
   })
 }
 

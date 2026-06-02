@@ -359,60 +359,6 @@ describe('offlineQueue', () => {
       expect(callCount).toBe(2)
     })
 
-    it('removes startTask when similar task is already running (conflict)', async () => {
-      let callCount = 0
-      global.fetch = vi.fn().mockImplementation(() => {
-        callCount++
-        if (callCount === 1) return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({
-            tasks: [{ plugin_id: 'test_plugin', status: 'running' }],
-          }),
-        })
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
-      })
-
-      const action = offlineQueue.enqueue({
-        url: '/api/v1/task/start',
-        method: 'POST',
-        body: JSON.stringify({ plugin_id: 'test_plugin', inputs: {} }),
-        maxRetries: 3,
-        actionType: 'startTask',
-      })
-
-      const ok = await offlineQueue.retry(action.id)
-      expect(ok).toBe(false)
-      expect(offlineQueue.getQueue()).toHaveLength(0)
-      expect(callCount).toBe(1)
-    })
-
-    it('proceeds with startTask when no similar task is running (no conflict)', async () => {
-      let callCount = 0
-      global.fetch = vi.fn().mockImplementation(() => {
-        callCount++
-        if (callCount === 1) return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve({
-            tasks: [{ plugin_id: 'other_plugin', status: 'completed' }],
-          }),
-        })
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ task_id: 'task-1' }) })
-      })
-
-      const action = offlineQueue.enqueue({
-        url: '/api/v1/task/start',
-        method: 'POST',
-        body: JSON.stringify({ plugin_id: 'test_plugin', inputs: {} }),
-        maxRetries: 3,
-        actionType: 'startTask',
-      })
-
-      const ok = await offlineQueue.retry(action.id)
-      expect(ok).toBe(true)
-      expect(offlineQueue.getQueue()).toHaveLength(0)
-      expect(callCount).toBe(2)
-    })
-
     it('skips conflict check when actionType is not set (backward compat)', async () => {
       global.fetch = vi.fn().mockResolvedValue({ ok: true })
 
@@ -477,7 +423,7 @@ describe('offlineQueue', () => {
     it('does not replay when autoReplay is disabled', async () => {
       offlineQueue.setAutoReplay(false)
       const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({ ok: true } as Response)
-      offlineQueue.enqueue({ url: '/a', method: 'POST', maxRetries: 3, actionType: 'startTask' })
+      offlineQueue.enqueue({ url: '/a', method: 'POST', maxRetries: 3, actionType: 'createWorkflow' })
       offlineQueue.enqueue({ url: '/b', method: 'POST', maxRetries: 3, actionType: 'createWorkflow' })
 
       const count = await offlineQueue.onReconnect()
@@ -488,13 +434,18 @@ describe('offlineQueue', () => {
 
     it('only replays safe action types when autoReplay is enabled', async () => {
       offlineQueue.setAutoReplay(true)
-      global.fetch = vi.fn().mockResolvedValue({ ok: true })
-      offlineQueue.enqueue({ url: '/safe', method: 'POST', maxRetries: 3, actionType: 'startTask' })
+      let callCount = 0
+      global.fetch = vi.fn().mockImplementation(() => {
+        callCount++
+        if (callCount === 1) return Promise.resolve({ ok: true, json: () => Promise.resolve({ workflows: [] }) })
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+      })
+      offlineQueue.enqueue({ url: '/api/v1/workflows', method: 'POST', maxRetries: 3, actionType: 'createWorkflow' })
       offlineQueue.enqueue({ url: '/unsafe', method: 'DELETE', maxRetries: 3, actionType: undefined })
 
       const count = await offlineQueue.onReconnect()
       expect(count).toBe(1)
-      expect(global.fetch).toHaveBeenCalledTimes(2)
+      expect(callCount).toBe(2) // 1 conflict check GET + 1 actual POST
     })
 
     it('returns 0 and replays nothing when autoReplay is enabled but queue has no safe action types', async () => {
@@ -515,8 +466,9 @@ describe('offlineQueue', () => {
   })
 
   describe('SAFE_ACTION_TYPES', () => {
-    it('only includes startTask, createWorkflow, updateWorkflow', () => {
-      expect(offlineQueue.SAFE_ACTION_TYPES).toEqual(['startTask', 'createWorkflow', 'updateWorkflow'])
+    it('only includes createWorkflow and updateWorkflow', () => {
+      expect(offlineQueue.SAFE_ACTION_TYPES).toEqual(['createWorkflow', 'updateWorkflow'])
+      expect(offlineQueue.SAFE_ACTION_TYPES).not.toContain('startTask')
       expect(offlineQueue.SAFE_ACTION_TYPES).not.toContain('deleteTask')
       expect(offlineQueue.SAFE_ACTION_TYPES).not.toContain('cancelTask')
       expect(offlineQueue.SAFE_ACTION_TYPES).not.toContain('clearAllTasks')
