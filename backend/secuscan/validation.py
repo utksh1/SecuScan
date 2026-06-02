@@ -327,7 +327,7 @@ def validate_port_range(port_range: str) -> Tuple[bool, str]:
                 return False, msg
 
             is_valid, msg = validate_port(end)
-            return (True, "") if is_valid else (False, msg)
+            return True, "" if is_valid else (False, msg)
         except ValueError:
             return False, "Invalid port range format"
 
@@ -450,12 +450,12 @@ def validate_task_start_payload(raw_body: bytes, inputs: Dict[str, Any]) -> Tupl
     """
     # 1. Total body size
     if len(raw_body) > settings.task_start_max_body_bytes:
-        return (
+        return 
             False,
             413,
             f"Request body exceeds the maximum allowed size of "
             f"{settings.task_start_max_body_bytes} bytes.",
-        )
+        
 
     # 2. inputs must be a dict
     if not isinstance(inputs, dict):
@@ -475,12 +475,12 @@ def _check_field(key: str, value: Any) -> Tuple[bool, int, str]:
     if isinstance(value, str):
         if len(value) > settings.task_start_max_field_length:
             # Do NOT include the value itself — it may be huge or sensitive.
-            return (
+            return 
                 False,
                 400,
                 f"Input field '{key}' exceeds the maximum allowed length of "
                 f"{settings.task_start_max_field_length} characters.",
-            )
+            
 
     elif isinstance(value, list):
         if len(value) > settings.task_start_max_array_length:
@@ -492,12 +492,12 @@ def _check_field(key: str, value: Any) -> Tuple[bool, int, str]:
             )
         for idx, item in enumerate(value):
             if isinstance(item, str) and len(item) > settings.task_start_max_field_length:
-                return (
+                return 
                     False,
                     400,
                     f"Item at index {idx} in input field '{key}' exceeds the "
                     f"maximum allowed length of "
                     f"{settings.task_start_max_field_length} characters.",
-                )
+                
 
     return True, 0, ""

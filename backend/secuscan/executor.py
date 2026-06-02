@@ -622,10 +622,10 @@ class TaskExecutor:
         normalized_output = output.lower()
 
         if "unknown option:" in normalized_output or "flag provided but not defined:" in normalized_output:
-            return (
+            return 
                 TaskStatus.FAILED.value,
                 output or "Tool rejected one or more generated CLI options. Check the final command and raw output for details.",
-            )
+            
 
         if exit_code == 0:
             return TaskStatus.COMPLETED.value, None
@@ -652,10 +652,10 @@ class TaskExecutor:
             )
             return TaskStatus.COMPLETED.value, None
 
-        return (
+        return 
             TaskStatus.FAILED.value,
             f"Tool returned non-zero exit code {exit_code}. Check raw output for details.",
-        )
+        
 
     async def cancel_task(self, task_id: str) -> bool:
         """

@@ -49,7 +49,7 @@ def seed_database(db_path: str, findings_count: int = 10_000, tasks_count: int =
                 "http_inspector",
                 f"192.168.1.{i % 255}",
                 STATUSES[i % len(STATUSES)],
-                (datetime.utcnow() - timedelta(seconds=i)).isoformat(),
+                (datetime.now(timezone.utc) - timedelta(seconds=i)).isoformat(),
                 json.dumps({"target": f"192.168.1.{i % 255}"}),
             ),
         )
@@ -73,7 +73,7 @@ def seed_database(db_path: str, findings_count: int = 10_000, tasks_count: int =
                 f"192.168.1.{i % 255}",
                 f"Description {i}",
                 "Apply patch",
-                (datetime.utcnow() - timedelta(seconds=i)).isoformat(),
+                (datetime.now(timezone.utc) - timedelta(seconds=i)).isoformat(),
                 json.dumps({}),
             ),
         )
