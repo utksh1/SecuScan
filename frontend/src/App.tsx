@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import AppShell from './components/AppShell'
 import Dashboard from './pages/Dashboard'
@@ -10,12 +10,14 @@ import Settings from './pages/Settings'
 import Scans from './pages/Scans'
 import TaskDetails from './pages/TaskDetails'
 import Workflows from './pages/Workflows'
+import ApiKeySetupScreen from './components/ApiKeySetupScreen'
 
 import { ThemeProvider } from './components/ThemeContext'
-import { ToastProvider, ToastContainer } from './components/ToastContext'
+import { ToastProvider } from './components/ToastContext'
 import { I18nProvider } from './components/I18nContext'
 import { OfflineQueueProvider } from './components/OfflineQueueContext'
 import { routes } from './routes'
+import { AUTH_REQUIRED_EVENT, getStoredApiKey } from './api'
 
 export function AppRoutes() {
   return (
@@ -36,17 +38,32 @@ export function AppRoutes() {
 }
 
 export default function App() {
+  // True when setup is needed: no key stored, or any request got a 401.
+  const [needsKey, setNeedsKey] = useState(() => !getStoredApiKey())
+
+  useEffect(() => {
+    function onAuthRequired() {
+      setNeedsKey(true)
+    }
+    window.addEventListener(AUTH_REQUIRED_EVENT, onAuthRequired)
+    return () => window.removeEventListener(AUTH_REQUIRED_EVENT, onAuthRequired)
+  }, [])
+
   return (
     <ThemeProvider>
       <I18nProvider>
         <ToastProvider>
-          <OfflineQueueProvider>
-          <Router>
-            <AppShell>
-              <AppRoutes />
-            </AppShell>
-          </Router>
-          </OfflineQueueProvider>
+          {needsKey ? (
+            <ApiKeySetupScreen onSaved={() => setNeedsKey(false)} />
+          ) : (
+            <OfflineQueueProvider>
+            <Router>
+              <AppShell>
+                <AppRoutes />
+              </AppShell>
+            </Router>
+            </OfflineQueueProvider>
+          )}
         </ToastProvider>
       </I18nProvider>
     </ThemeProvider>

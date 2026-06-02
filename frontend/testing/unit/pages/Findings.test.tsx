@@ -10,6 +10,20 @@ vi.mock('../../../src/api', () => ({
   API_BASE: 'http://127.0.0.1:8000',
 }))
 
+vi.mock('../../../src/hooks/useSavedViews', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/hooks/useSavedViews')>()
+  return {
+    ...actual,
+    useSavedViews: () => ({
+      views: [],
+      loading: false,
+      saveView: vi.fn(),
+      deleteView: vi.fn(),
+      renameView: vi.fn(),
+    }),
+  }
+})
+
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const criticalFinding = {
