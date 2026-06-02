@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { getFindings } from '../api'
 import { formatLocaleDate, parseDateSafe, getCurrentTimeZone } from '../utils/date'
+import SavedViewsPanel from '../components/SavedViewsPanel'
+import { useSavedViews, FilterPreset } from '../hooks/useSavedViews'
 type RiskFactor = {
   factor: string
   label: string
@@ -118,6 +120,29 @@ export default function Findings() {
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null)
   const [reviewState, setReviewState] = useState<ReviewState>({})
   const [copiedFindingId, setCopiedFindingId] = useState<string | null>(null)
+
+  // ── Saved views ────────────────────────────────────────────────────────────
+  const { views, loading: viewsLoading, saveView, deleteView, renameView } = useSavedViews()
+
+  const currentPreset: FilterPreset = {
+    severity: filterSeverity,
+    target: filterTarget,
+    scanner: filterScanner,
+    sortMode,
+    dateFrom,
+    dateTo,
+    searchQuery,
+  }
+
+  function applyPreset(preset: FilterPreset) {
+    setFilterSeverity(preset.severity)
+    setFilterTarget(preset.target)
+    setFilterScanner(preset.scanner)
+    setSortMode(preset.sortMode as SortMode)
+    setDateFrom(preset.dateFrom)
+    setDateTo(preset.dateTo)
+    setSearchQuery(preset.searchQuery)
+  }
 
   useEffect(() => {
     setLoading(true)
@@ -555,13 +580,32 @@ export default function Findings() {
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={resetAllFilters}
-                className="h-11 w-full border border-silver-bright/20 bg-charcoal-dark px-4 text-[10px] font-black uppercase tracking-[0.18em] text-silver/65 transition-all hover:border-rag-red hover:text-silver-bright xl:w-auto xl:min-w-[180px]"
-              >
-                Reset Filters
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <SavedViewsPanel
+                  views={views}
+                  loading={viewsLoading}
+                  saveView={saveView}
+                  deleteView={deleteView}
+                  renameView={renameView}
+                  currentPreset={currentPreset}
+                  onApply={applyPreset}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterSeverity('all')
+                    setFilterTarget('all')
+                    setFilterScanner('all')
+                    setSortMode('severity')
+                    setDateFrom('')
+                    setDateTo('')
+                    setSearchQuery('')
+                  }}
+                  className="h-11 w-full border border-silver-bright/20 bg-charcoal-dark px-4 text-[10px] font-black uppercase tracking-[0.18em] text-silver/65 transition-all hover:border-rag-red hover:text-silver-bright xl:w-auto xl:min-w-[180px]"
+                >
+                  Reset Filters
+                </button>
+              </div>
             </div>
           </div>
         </section>
