@@ -26,6 +26,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
+  // Focus trap and keyboard handling
   useEffect(() => {
     if (!isOpen) return;
 
@@ -40,6 +41,8 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
       if (e.key === 'Escape') {
         onCancel();
       } else if (e.key === 'Enter' && !e.shiftKey) {
+        // Only trigger onConfirm if the active element is NOT a button
+        // (buttons already handle Enter via their onClick)
         const activeElement = document.activeElement;
         if (activeElement?.tagName !== 'BUTTON') {
           e.preventDefault();
@@ -72,6 +75,23 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
       previousFocusRef.current?.focus();
     };
   }, [isOpen, onConfirm, onCancel]);
+
+  // Lock body scroll when modal opens
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const originalOverflow = document.body.style.overflow;
+    const originalPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
+
+    document.body.style.overflow = 'hidden';
+    document.body.style.paddingRight = `${scrollbarWidth}px`;
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.body.style.paddingRight = originalPaddingRight;
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 

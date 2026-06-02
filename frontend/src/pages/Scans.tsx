@@ -105,7 +105,9 @@ export default function Scans() {
       if (document.visibilityState === "hidden") {
         stopPolling();
       } else {
-        loadTasks();   // immediate refresh when tab comes back
+        abortRef.current?.abort();
+        abortRef.current = new AbortController();
+        loadTasks();
         startPolling();
       }
     }
@@ -114,7 +116,10 @@ export default function Scans() {
 
     return () => {
       stopPolling();
-      abortRef.current?.abort();
+      if (abortRef.current) {
+        abortRef.current.abort();
+        abortRef.current = null;
+      }
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [filter, page]);

@@ -25,7 +25,6 @@ from .capabilities import CapabilityEnforcer, CapabilityDeniedError, build_enfor
 from .parser_sandbox import run_parser_in_sandbox, ParserSandboxError
 from .network_policy import get_policy_engine
 
-
 def _parse_discovered_at(finding: dict) -> Optional[datetime]:
     """Extract and parse discovered_at from a finding dict, or return current UTC time."""
     raw = finding.get("discovered_at")
