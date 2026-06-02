@@ -9,11 +9,13 @@ import Reports from './pages/Reports'
 import Settings from './pages/Settings'
 import Scans from './pages/Scans'
 import TaskDetails from './pages/TaskDetails'
+import Workflows from './pages/Workflows'
 
 import { ThemeProvider } from './components/ThemeContext'
 import { ToastProvider, ToastContainer } from './components/ToastContext'
 import { I18nProvider } from './components/I18nContext'
 import { routes } from './routes'
+import ReportComparison from './pages/ReportComparison'
 
 export function AppRoutes() {
   return (
@@ -24,8 +26,10 @@ export function AppRoutes() {
       <Route path={routes.findings} element={<Findings />} />
       <Route path={routes.scans} element={<Scans />} />
       <Route path={routes.reports} element={<Reports />} />
+      <Route path={routes.workflows} element={<Workflows />} />
       <Route path={routes.settings} element={<Settings />} />
       <Route path={routes.task} element={<TaskDetails />} />
+      <Route path="/reports/compare" element={<ReportComparison />} />
 
       <Route path="*" element={<Navigate to={routes.dashboard} replace />} />
     </Routes>
