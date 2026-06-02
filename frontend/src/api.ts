@@ -8,11 +8,9 @@ function resolveApiBase(): string {
     const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     const isViteDevServer = window.location.port === '5173'
 
-    // For localhost preview/static modes (e.g. :8080), call backend directly.
     if (isLocalHost && !isViteDevServer) return 'http://127.0.0.1:8000/api/v1'
   }
 
-  // Default for Vite dev server where /api is proxied to backend.
   return '/api/v1'
 }
 
@@ -44,6 +42,7 @@ export interface PluginFieldSchema {
   options?: PluginFieldOption[]
   validation?: Record<string, unknown>
 }
+
 export interface PluginAvailability {
   runnable: boolean
   missing_binaries: string[]
@@ -91,6 +90,13 @@ interface RequestOptions extends RequestInit {
   actionType?: offlineQueue.ActionType
 }
 
+export class OfflineQueueError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'OfflineQueueError'
+  }
+}
+
 async function request<T>(path: string, init?: RequestOptions): Promise<T> {
   const method = (init?.method || 'GET').toUpperCase()
   const isSafe = method === 'GET' || method === 'HEAD'
@@ -116,17 +122,11 @@ async function request<T>(path: string, init?: RequestOptions): Promise<T> {
     signal: controller.signal,
   })
   window.clearTimeout(timeoutId)
+
   if (!response.ok) {
     throw new Error(`Request failed: ${response.status}`)
   }
   return response.json()
-}
-
-export class OfflineQueueError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'OfflineQueueError'
-  }
 }
 
 export function getHealth() {
@@ -149,11 +149,9 @@ export function getDashboardSummary() {
   return request('/dashboard/summary')
 }
 
-
 export function getFindings() {
   return request('/findings')
 }
-
 
 export function getReports() {
   return request('/reports')
@@ -185,7 +183,6 @@ export function startTask(plugin_id: string, inputs: Record<string, unknown>, co
 export function deleteTask(taskId: string) {
   return request<{ task_id: string; deleted: boolean }>(`/task/${taskId}`, {
     method: 'DELETE',
-    label: 'Delete Task',
   })
 }
 
@@ -194,14 +191,12 @@ export function bulkDeleteTasks(taskIds: string[]) {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(taskIds),
-    label: 'Bulk Delete Tasks',
   })
 }
 
 export function clearAllTasks() {
   return request<{ cleared: boolean; message: string }>('/tasks/clear', {
     method: 'DELETE',
-    label: 'Clear All Tasks',
   })
 }
 
@@ -209,7 +204,6 @@ export function cancelTask(taskId: string) {
   return request(`/task/${taskId}/cancel`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    label: 'Cancel Task',
   })
 }
 
@@ -220,6 +214,7 @@ export function streamTask(taskId: string, onEvent: (ev: MessageEvent) => void) 
   es.onerror = () => {}
   return es
 }
+
 export interface WorkflowStep {
   plugin_id: string
   inputs: Record<string, unknown>
@@ -312,7 +307,6 @@ export async function runWorkflow(workflowId: string): Promise<{ queued_task_ids
   const result: any = await request(`/workflows/${workflowId}/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    label: 'Run Workflow',
   })
   return {
     queued_task_ids: Array.isArray(result.queued_task_ids)
@@ -338,6 +332,5 @@ export async function updateWorkflow(workflowId: string, data: WorkflowUpdatePay
 export function deleteWorkflow(workflowId: string): Promise<{ deleted: boolean }> {
   return request<{ deleted: boolean }>(`/workflows/${workflowId}`, {
     method: 'DELETE',
-    label: 'Delete Workflow',
   })
 }
