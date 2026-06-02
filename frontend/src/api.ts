@@ -140,13 +140,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     window.clearTimeout(timeoutId)
   }
 }
-  
-  //   if (!response.ok) {
-    //     throw new Error(`Request failed: ${response.status}`)
-    //   }
-    //   return response.json()
-    // }
-
 
 export function getHealth() {
   return request('/health')
