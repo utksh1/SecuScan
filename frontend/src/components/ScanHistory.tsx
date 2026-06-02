@@ -40,7 +40,6 @@ export default function ScanHistory({ onSelect, activeScanId }: Props) {
       });
   }, []);
 
-  // Sleek cyber-themed loading skeleton to match your design system
   if (loading) {
     return (
       <div className="w-64 border-2 border-black bg-charcoal/95 p-4 font-mono text-[10px] text-silver/45 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] tracking-wider">
@@ -57,10 +56,9 @@ export default function ScanHistory({ onSelect, activeScanId }: Props) {
           // Session Index
         </h3>
       </div>
-      
+
       <div className="flex flex-col gap-3 max-h-[70vh] overflow-y-auto pr-1">
         {history.length === 0 ? (
-          // Boxed fallback tile using your layout's exact background classes
           <div className="border-2 border-dashed border-silver-bright/10 bg-charcoal/40 p-4 text-center">
             <p className="text-[11px] font-mono text-silver/35 uppercase tracking-wider">No archived logs</p>
           </div>
@@ -89,12 +87,12 @@ export default function ScanHistory({ onSelect, activeScanId }: Props) {
               >
                 {/* Visual marker bar matching your findings rows */}
                 <span className={`absolute inset-y-0 left-0 w-1 ${isSelected ? 'bg-black' : 'bg-silver/20'}`} />
-                
+
                 <div className="pl-2 space-y-1">
                   <div className="text-sm font-black uppercase tracking-tight truncate">
                     {scan.target}
                   </div>
-                  
+
                   <div className="text-[10px] opacity-60 tracking-normal">
                     {formattedDate}
                   </div>
@@ -105,7 +103,7 @@ export default function ScanHistory({ onSelect, activeScanId }: Props) {
                     }`}>
                       {scan.finding_count} hits
                     </span>
-                    
+
                     {scan.severity_summary.critical > 0 && (
                       <span className="px-1.5 py-0.5 bg-rag-red text-black font-black text-[9px] shadow-[2px_2px_0px_rgba(0,0,0,1)]">
                         CRIT

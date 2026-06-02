@@ -430,7 +430,7 @@ export default function Findings() {
   return (
     <div className="min-h-screen bg-charcoal-dark text-silver px-4 py-6 md:px-8 md:py-10">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4">
-        
+
         {/* Dropdown Toggle Controller Bar */}
         <div className="flex items-center">
           <button
@@ -438,8 +438,8 @@ export default function Findings() {
             onClick={() => setShowHistory(!showHistory)}
             className="flex items-center gap-2 border-2 border-black bg-charcoal px-3 py-1.5 font-mono text-[10px] font-black uppercase tracking-[0.15em] text-silver-bright shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 active:shadow-none cursor-pointer"
           >
-            <span 
-              className="inline-block transition-transform duration-200" 
+            <span
+              className="inline-block transition-transform duration-200"
               style={{ transform: showHistory ? 'rotate(180deg)' : 'rotate(90deg)' }}
             >
               ▲
@@ -450,7 +450,7 @@ export default function Findings() {
 
         {/* Dynamic Workspace Container */}
         <div className="flex w-full gap-6 items-start">
-          
+
           {showHistory && (
             <ScanHistory onSelect={setActiveScanId} activeScanId={activeScanId} />
           )}
@@ -828,8 +828,8 @@ export default function Findings() {
               </motion.aside>
             </div>
 
-          </div> 
-        </div> 
+          </div>
+        </div>
       </div>
     </div>
   )
