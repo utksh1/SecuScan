@@ -11,7 +11,7 @@ import os
 import secrets
 from pathlib import Path
 
-from fastapi import Depends, HTTPException, Security, status
+from fastapi import Depends, HTTPException, Security, status, Request
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -42,6 +42,7 @@ def init_api_key(data_dir: str) -> str:
 
 
 async def require_api_key(
+    request: Request = None,
     bearer: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
     x_api_key: str | None = Security(_api_key_header),
 ) -> str:
@@ -52,6 +53,11 @@ async def require_api_key(
     - ``Authorization: Bearer <key>``
     - ``X-Api-Key: <key>``
     """
+    if request is not None and request.url.path.startswith("/api/v1/admin"):
+        # Admin endpoints have their own separate verify_admin_access dependency.
+        # We bypass require_api_key verification to avoid blocking valid admin key requests.
+        return ""
+
     if _api_key is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

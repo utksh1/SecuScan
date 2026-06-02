@@ -1545,13 +1545,6 @@ def verify_admin_access(
 ) -> Optional[str]:
     """Verify admin API key is provided and valid."""
     import hmac
-    if not api_key and request:
-        auth_header = request.headers.get("authorization")
-        if auth_header:
-            if auth_header.lower().startswith("bearer "):
-                api_key = auth_header[7:]
-            else:
-                api_key = auth_header
 
     # Secure-by-default: If admin_api_key setting is not configured, block all access
     if not settings.admin_api_key:
@@ -1567,12 +1560,27 @@ def verify_admin_access(
             detail="Admin API Key is too weak. It must be at least 16 characters long."
         )
 
-    if not hmac.compare_digest(api_key or "", settings.admin_api_key):
+    candidate = api_key
+    if request:
+        auth_header = request.headers.get("authorization")
+        if auth_header:
+            if auth_header.lower().startswith("bearer "):
+                token = auth_header[7:]
+            else:
+                token = auth_header
+            # If the Authorization header matches the admin API key, prefer it.
+            # This is important when the client automatically includes the general X-Api-Key in headers.
+            if hmac.compare_digest(token, settings.admin_api_key):
+                candidate = token
+            elif not candidate:
+                candidate = token
+
+    if not candidate or not hmac.compare_digest(candidate, settings.admin_api_key):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing Admin API Key"
         )
-    return api_key
+    return candidate
 
 @router.get("/admin/network-policy", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
 async def get_network_policy():
