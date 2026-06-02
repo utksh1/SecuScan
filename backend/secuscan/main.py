@@ -18,6 +18,7 @@ from .database import init_db, db as global_db
 from .plugins import init_plugins
 from .routes import router
 from .workflows import scheduler
+from backend.routes.history import router as history_router
 
 
 # Configure logging
@@ -116,7 +117,7 @@ app.add_middleware(
 
 # Include API routes
 app.include_router(router)
-
+app.include_router(history_router) 
 
 # Health check endpoint
 @app.get("/api/v1/health")
