@@ -21,7 +21,10 @@ from .plugins import get_plugin_manager
 from .models import TaskStatus, ScanPhase
 from .ratelimit import concurrent_limiter
 from .risk_scoring import compute_risk_score, compute_risk_factors
+from .capabilities import CapabilityEnforcer, CapabilityDeniedError, build_enforcer_from_settings
+from .parser_sandbox import run_parser_in_sandbox, ParserSandboxError
 from .network_policy import get_policy_engine
+
 
 def _parse_discovered_at(finding: dict) -> Optional[datetime]:
     """Extract and parse discovered_at from a finding dict, or return current UTC time."""
@@ -35,6 +38,7 @@ def _parse_discovered_at(finding: dict) -> Optional[datetime]:
         except (ValueError, TypeError):
             pass
     return datetime.now(timezone.utc)
+
 
 def _validate_risk_fields(finding: dict) -> None:
     """Validate exploitability, confidence, and asset_exposure bounds in-place."""
@@ -70,6 +74,7 @@ MODULAR_SCANNERS = {
 logger = logging.getLogger(__name__)
 STREAM_LISTENER_QUEUE_MAXSIZE = 100
 
+
 def extract_target(inputs: Dict[str, Any]) -> str:
     """Best-effort target extraction across plugin shapes."""
     return (
@@ -79,7 +84,6 @@ def extract_target(inputs: Dict[str, Any]) -> str:
         or inputs.get("domain")
         or ""
     )
-
 class TaskExecutor:
     """Executes security scanning tasks in isolated environments"""
 
@@ -87,6 +91,7 @@ class TaskExecutor:
         self.running_tasks: Dict[str, asyncio.Task] = {}
         # PubSub: Map of task_id to list of active async queues listening for output/status updates
         self._listeners: Dict[str, List[asyncio.Queue]] = {}
+        self._capability_enforcer: CapabilityEnforcer = build_enforcer_from_settings()
 
     def subscribe(self, task_id: str) -> asyncio.Queue:
         """Subscribe to a task's real-time events."""
@@ -120,11 +125,12 @@ class TaskExecutor:
                 q.get_nowait()
             except asyncio.QueueEmpty:
                 pass
+
         try:
             q.put_nowait(event)
         except asyncio.QueueFull:
             logger.warning("Dropping stream event for slow listener on task %s", task_id)
-
+    
     async def _broadcast_phase(self, task_id: str, phase: str):
         """Broadcast a scan phase transition and persist it to the database."""
         await self._broadcast(task_id, "phase", phase)
@@ -144,29 +150,29 @@ class TaskExecutor:
     ) -> str:
         """
         Create a new scan task.
-
+        
         Args:
             plugin_id: Plugin identifier
             inputs: User input values
             preset: Optional preset name
             consent_granted: Whether user granted consent
-
+        
         Returns:
             Task ID
         """
         task_id = str(uuid.uuid4())
         plugin_manager = get_plugin_manager()
         plugin = plugin_manager.get_plugin(plugin_id)
-
+        
         if not plugin:
             raise ValueError(f"Plugin not found: {plugin_id}")
-
+        
         # Apply preset if provided
         if preset and preset in plugin.presets:
             preset_values = plugin.presets[preset]
             # Merge preset with user inputs (user inputs take precedence)
             inputs = {**preset_values, **inputs}
-
+        
         # Store task in database
         db = await get_db()
         await db.execute(
@@ -189,7 +195,7 @@ class TaskExecutor:
                 bool(safe_mode)
             )
         )
-
+        
         # Log audit event
         await db.log_audit(
             "task_created",
@@ -198,9 +204,9 @@ class TaskExecutor:
             task_id=task_id,
             plugin_id=plugin_id
         )
-
+        
         return task_id
-
+    
     async def mark_task_failed(self, task_id: str, reason: str) -> None:
         """
         Mark a task as failed without running it.
@@ -239,7 +245,7 @@ class TaskExecutor:
     async def execute_task(self, task_id: str):
         """
         Execute a task asynchronously.
-
+        
         Args:
             task_id: Task identifier
         """
@@ -339,19 +345,20 @@ class TaskExecutor:
             # Check if this is a modular scanner or a standard plugin
             if plugin_id in MODULAR_SCANNERS:
                 scanner_class = MODULAR_SCANNERS[plugin_id]
-                scanner = scanner_class(task_id, db, safe_mode=safe_mode)
-
+                scanner = scanner_class(task_id, db)
+                
                 logger.info(f"Executing modular scanner {plugin_id} for task {task_id}")
                 await self._broadcast(task_id, "status", TaskStatus.RUNNING.value)
                 await self._broadcast_phase(task_id, ScanPhase.RUNNING_COMMAND.value)
+                
                 start_time = time.time()
                 # Run the scanner
                 result = await scanner.run(target, inputs)
                 duration = time.time() - start_time
-
+                
                 # Update task with results
                 final_status = TaskStatus.COMPLETED.value if result.get("status") != "failed" else TaskStatus.FAILED.value
-
+                
                 await db.execute(
                     """
                     UPDATE tasks SET
@@ -392,7 +399,12 @@ class TaskExecutor:
                 if not plugin:
                     raise ValueError(f"Plugin not found: {plugin_id}")
 
-                # Pending records for assets removed
+                # Enforce capability policy before any command is built or process spawned
+                self._capability_enforcer.check(
+                    plugin_id=plugin.id,
+                    declared=plugin.capabilities,
+                    safety_level=plugin.safety.get("level", "safe"),
+                )
 
                 command = plugin_manager.build_command(plugin_id, inputs)
 
@@ -559,6 +571,40 @@ class TaskExecutor:
             await self._invalidate_cached_views()
             raise  # let asyncio complete the cancellation
 
+        except CapabilityDeniedError as e:
+            logger.warning("Task %s blocked by capability policy: %s", task_id, e)
+            duration = (time.time() - start_time) if "start_time" in locals() else 0
+            await db.execute(
+                """
+                UPDATE tasks SET
+                    status = ?,
+                    completed_at = ?,
+                    duration_seconds = ?,
+                    error_message = ?
+                WHERE id = ?
+                """,
+                (
+                    TaskStatus.FAILED.value,
+                    datetime.now().isoformat(),
+                    duration,
+                    str(e),
+                    task_id,
+                ),
+            )
+            await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
+            await self._invalidate_cached_views()
+            await db.log_audit(
+                "task_capability_denied",
+                f"Task blocked by capability policy: {str(e)}",
+                severity="warning",
+                context={
+                    "task_id": task_id,
+                    "denied_capabilities": sorted(e.denied_capabilities),
+                    "plugin_id": plugin_id,
+                },
+                task_id=task_id,
+            )
+
         except Exception as e:
             logger.error(f"Task {task_id} failed: {e}", exc_info=True)
 
@@ -597,7 +643,7 @@ class TaskExecutor:
             # release the concurrency slot regardless of how the task ended.
             self.running_tasks.pop(task_id, None)
             await concurrent_limiter.release(task_id)
-
+    
     async def _execute_command(
         self,
         command: list,
@@ -615,17 +661,6 @@ class TaskExecutor:
         Returns:
             Tuple of (output, exit_code)
         """
-        db = await get_db()
-        task_row = await db.fetchone("SELECT plugin_id, safe_mode FROM tasks WHERE id = ?", (task_id,))
-        safe_mode = bool(task_row["safe_mode"]) if task_row else True
-        plugin_id = task_row["plugin_id"] if task_row else "unknown"
-
-        from .validation import validate_command_network_egress
-        ok, err = await asyncio.to_thread(validate_command_network_egress, command, safe_mode, plugin_id, task_id)
-        if not ok:
-            logger.error(f"Egress boundary check blocked command: {err}")
-            return f"Execution blocked by egress boundary check: {err}", -1
-
         try:
             process = await asyncio.create_subprocess_exec(
                 *command,
@@ -639,7 +674,7 @@ class TaskExecutor:
                 stdout = process.stdout
                 if stdout is None:
                     return
-
+                    
                 while not stdout.at_eof():
                     line = await stdout.readline()
                     if line:
@@ -672,7 +707,12 @@ class TaskExecutor:
             return f"Execution error: {str(e)}", -1
 
     def _resolve_execution_timeout(self, inputs: Dict[str, Any]) -> int:
-        """Resolve per-task process timeout from plugin inputs."""
+        """Resolve per-task process timeout from plugin inputs.
+
+        The caller may request a shorter timeout than the operator cap, but
+        never a longer one. ``settings.sandbox_timeout`` is the hard ceiling
+        and is always enforced regardless of what the client supplies.
+        """
         for key in ("max_scan_time", "timeout"):
             raw_value = inputs.get(key)
             try:
@@ -680,7 +720,7 @@ class TaskExecutor:
             except (TypeError, ValueError):
                 continue
             if timeout > 0:
-                return timeout
+                return min(timeout, settings.sandbox_timeout)
         return settings.sandbox_timeout
 
     def _classify_command_result(self, plugin, output: str, exit_code: int) -> tuple[str, Optional[str]]:
@@ -766,7 +806,7 @@ class TaskExecutor:
         )
 
         return True
-
+    
     async def get_task_status(self, task_id: str) -> Optional[Dict]:
         """Get task status and progress"""
         db = await get_db()
@@ -815,7 +855,7 @@ class TaskExecutor:
         """Persist derived findings and report records into SQLite."""
         parsed = self._parse_results(plugin, output)
         findings_data = parsed.get("findings", [])
-
+        
         # Update task with structured results
         await db.execute(
             "UPDATE tasks SET structured_json = ? WHERE id = ?",
@@ -906,7 +946,7 @@ class TaskExecutor:
     async def _upsert_findings_and_report_from_scanner(self, db, task_id: str, scanner: Any, plugin_id: str, target: str, status: str, result: Dict[str, Any]):
         """Persist modular scanner results into findings, and reports."""
         findings_data = result.get("findings", [])
-
+        
         # Insert findings
         for finding in findings_data:
             u_id = str(uuid.uuid4()).replace("-", "")
@@ -993,12 +1033,12 @@ class TaskExecutor:
         """Route to appropriate parser based on plugin metadata."""
         parser_type = plugin.output.get("parser")
         parser_input = self._resolve_parser_input(plugin, output)
-
+        
         # 1. Check for custom parser.py in plugin directory (Recommended)
         plugin_manager = get_plugin_manager()
         plugin_dir = plugin_manager.plugins_dir / plugin.id
         parser_path = plugin_dir / "parser.py"
-
+        
         if parser_path.exists():
             if not plugin_manager.verify_parser_at_exec_time(plugin, plugin_dir):
                 raise ValueError(
@@ -1007,30 +1047,34 @@ class TaskExecutor:
                     "reinstall the plugin before retrying."
                 )
             try:
-                import importlib.util
-                spec = importlib.util.spec_from_file_location(f"parser_{plugin.id}", parser_path)
-                if spec is not None:
-                    loader = spec.loader
-                    if loader is not None:
-                        module = importlib.util.module_from_spec(spec)
-                        loader.exec_module(module)
-                        if hasattr(module, "parse"):
-                            logger.info(f"Using custom parser for {plugin.id}")
-                            parsed = module.parse(parser_input)
-                            return self._normalize_parsed_result(plugin, parser_input, parsed)
-                        else:
-                            logger.warning(f"Custom parser {parser_path} missing 'parse' function")
-            except ValueError:
-                raise
-            except Exception as e:
-                logger.error(f"Error executing custom parser for {plugin.id}: {e}")
+                parsed = run_parser_in_sandbox(
+                    parser_path=parser_path,
+                    plugin_id=plugin.id,
+                    parser_input=parser_input,
+                    timeout_seconds=settings.parser_sandbox_timeout_seconds,
+                    max_output_bytes=settings.parser_sandbox_max_output_bytes,
+                )
+                return self._normalize_parsed_result(plugin, parser_input, parsed)
+            except ParserSandboxError as exc:
+                logger.error("Parser sandbox error for plugin '%s': %s", plugin.id, exc)
+                # For plugins that declared a custom parser, sandbox failure is a hard
+                # error — do NOT fall through to built-in parsers, which would produce
+                # empty or misleading results unrelated to the custom parser's logic.
+                raise RuntimeError(
+                    f"Custom parser failed for plugin '{plugin.id}': {exc.reason}"
+                ) from exc
+            except Exception as exc:
+                logger.error("Unexpected error running parser sandbox for '%s': %s", plugin.id, exc)
+                raise RuntimeError(
+                    f"Custom parser encountered an unexpected error for plugin '{plugin.id}': {exc}"
+                ) from exc
 
-        # 2. Fallback to legacy built-in parsers
+        # 2. Fallback to legacy built-in parsers (only reached when no parser.py exists)
         if parser_type == "builtin_nmap":
             return self._normalize_parsed_result(plugin, parser_input, self._parse_nmap_output(parser_input))
         elif parser_type == "builtin_http":
             return self._normalize_parsed_result(plugin, parser_input, self._parse_http_output(parser_input))
-
+        
         return self._normalize_parsed_result(plugin, parser_input, {"findings": [], "raw": parser_input})
 
     def _resolve_parser_input(self, plugin, output: str) -> str:
@@ -1189,7 +1233,7 @@ class TaskExecutor:
         findings = []
         ports = []
         services = []
-
+        
         # Regex for open ports: 80/tcp open http
         port_pattern = re.compile(r"(\d+)/(tcp|udp)\s+open\s+([\w-]+)")
         for match in port_pattern.finditer(output):
@@ -1205,7 +1249,7 @@ class TaskExecutor:
                 "remediation": "Close unnecessary ports and use a firewall to restrict access.",
                 "metadata": {"port": port_str, "protocol": proto, "service": service}
             })
-
+        
         return {
             "open_ports": sorted(list(set(ports))),
             "services": sorted(list(set(services))),
@@ -1258,6 +1302,7 @@ class TaskExecutor:
             await cache_client.delete_prefix("tasks:")
         except Exception as exc:
             logger.warning("Cache invalidation skipped: %s", exc)
+
 
 # Global executor instance
 executor = TaskExecutor()

@@ -511,11 +511,8 @@ async def test_execute_task_network_policy_log_only(setup_test_environment):
     await db.disconnect()
 
 @pytest.mark.asyncio
-async def test_execute_task_fails_when_docker_network_missing(setup_test_environment):
-    """
-    When docker_enabled=True and the named Docker network does not exist,
-    execute_task() must raise RuntimeError and mark the task FAILED.
-    """
+async def test_docker_network_autocreated_when_missing(setup_test_environment):
+    """If docker network is absent, executor auto-creates it and continues."""
     await init_db(settings.database_path)
     db = await get_db()
 
@@ -536,11 +533,94 @@ async def test_execute_task_fails_when_docker_network_missing(setup_test_environ
     mock_engine = MagicMock()
     mock_engine.check_access.return_value = (True, "Allowed", None)
 
-    # Simulate `docker network inspect restricted` returning non-zero (network absent)
-    async def fake_create_subprocess(*args, **kwargs):
+    call_count = 0
+    async def fake_subprocess(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        proc = MagicMock()
+        # First call: docker network inspect (fails, returncode=1)
+        # Second call: docker network create (succeeds, returncode=0)
+        proc.returncode = 1 if call_count == 1 else 0
+        proc.stdout = AsyncMock(return_value=b"")
+        proc.stderr = AsyncMock(return_value=b"")
+        async def _wait():
+            return proc.returncode
+        proc.wait = _wait
+        return proc
+
+    # Stub the actually executed command to not actually run docker/nmap
+    async def fake_command(*args, **kwargs):
+        return "80/tcp open http", 0
+
+    with patch("backend.secuscan.executor.settings") as mock_settings, \
+         patch("backend.secuscan.executor.get_policy_engine", return_value=mock_engine), \
+         patch("backend.secuscan.executor.asyncio.create_subprocess_exec", side_effect=fake_subprocess), \
+         patch.object(executor, "_execute_command", side_effect=fake_command), \
+         patch("backend.secuscan.executor.concurrent_limiter") as mock_limiter, \
+         patch("backend.secuscan.executor.get_plugin_manager") as mock_pm:
+
+        mock_settings.enforce_network_policy = True
+        mock_settings.docker_enabled = True
+        mock_settings.docker_network = "restricted"
+        mock_settings.sandbox_memory_mb = 512
+        mock_settings.sandbox_cpu_quota = 0.5
+        mock_settings.sandbox_timeout = 600
+        mock_settings.raw_output_dir = settings.raw_output_dir
+
+        mock_limiter.release = AsyncMock()
+
+        mock_plugin = MagicMock()
+        mock_plugin.name = "nmap"
+        mock_plugin.presets = {}
+        mock_plugin.docker_image = None
+        mock_plugin.output = {"parser": "builtin_nmap", "format": "text"}
+        mock_plugin.category = "Network"
+        mock_plugin.id = "nmap"
+        mock_pm.return_value.get_plugin.return_value = mock_plugin
+        mock_pm.return_value.build_command.return_value = ["nmap", "8.8.8.8"]
+        mock_pm.return_value.plugins_dir = MagicMock()
+        mock_pm.return_value.plugins_dir.__truediv__ = MagicMock(
+            return_value=MagicMock(
+                __truediv__=MagicMock(return_value=MagicMock(exists=lambda: False))
+            )
+        )
+
+        await executor.execute_task(task_id)
+
+    row = await db.fetchone("SELECT status FROM tasks WHERE id = ?", (task_id,))
+    # Should NOT be failed due to network - it was auto-created and completed
+    assert row["status"] == TaskStatus.COMPLETED.value
+    await db.disconnect()
+
+@pytest.mark.asyncio
+async def test_docker_network_missing_and_create_fails(setup_test_environment):
+    """If docker network inspect AND create both fail, task is marked FAILED."""
+    await init_db(settings.database_path)
+    db = await get_db()
+
+    task_id = str(uuid.uuid4())
+    await db.execute(
+        """
+        INSERT INTO tasks (id, plugin_id, tool_name, target, inputs_json,
+                           status, consent_granted, safe_mode)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (task_id, "nmap", "nmap", "8.8.8.8", '{"target":"8.8.8.8"}',
+         TaskStatus.QUEUED.value, 1, 0)
+    )
+
+    executor = TaskExecutor()
+
+    # Policy allows the target so we reach the Docker block
+    mock_engine = MagicMock()
+    mock_engine.check_access.return_value = (True, "Allowed", None)
+
+    # All subprocess calls (inspect, create isolated, create fallback) return returncode=1
+    async def fake_subprocess(*args, **kwargs):
         proc = MagicMock()
         proc.returncode = 1
-
+        proc.stdout = AsyncMock(return_value=b"")
+        proc.stderr = AsyncMock(return_value=b"")
         async def _wait():
             return 1
         proc.wait = _wait
@@ -548,8 +628,7 @@ async def test_execute_task_fails_when_docker_network_missing(setup_test_environ
 
     with patch("backend.secuscan.executor.settings") as mock_settings, \
          patch("backend.secuscan.executor.get_policy_engine", return_value=mock_engine), \
-         patch("backend.secuscan.executor.asyncio.create_subprocess_exec",
-               side_effect=fake_create_subprocess), \
+         patch("backend.secuscan.executor.asyncio.create_subprocess_exec", side_effect=fake_subprocess), \
          patch("backend.secuscan.executor.concurrent_limiter") as mock_limiter, \
          patch("backend.secuscan.executor.get_plugin_manager") as mock_pm:
 
@@ -573,11 +652,7 @@ async def test_execute_task_fails_when_docker_network_missing(setup_test_environ
         await executor.execute_task(task_id)
 
     row = await db.fetchone("SELECT status, error_message FROM tasks WHERE id = ?", (task_id,))
-    assert row["status"] == TaskStatus.FAILED.value, (
-        f"Expected FAILED, got {row['status']}"
-    )
-    assert "does not exist" in (row["error_message"] or ""), (
-        f"Expected network-missing message, got: {row['error_message']}"
-    )
+    assert row["status"] == TaskStatus.FAILED.value
+    assert "does not exist and could not be created" in (row["error_message"] or "")
     mock_limiter.release.assert_called_once_with(task_id)
     await db.disconnect()

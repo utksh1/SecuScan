@@ -2,7 +2,7 @@
 API routes for SecuScan backend
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request, Depends, Body
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request, Depends, Body, Query
 from fastapi.responses import JSONResponse
 from typing import Any, Optional, List, Dict, Callable
 import json
@@ -53,7 +53,13 @@ def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]
         "queued_task_ids": queued_task_ids or [],
     }
 
+
 def is_filesystem_target(target: str) -> bool:
+    """Best-effort detection for path-based targets that should bypass host validation."""
+    # Absolute or relative filesystem roots only — not CIDR notation (e.g. 8.8.8.8/32)
+    if target.startswith(("/", "./", "../", "~/")):
+        return True
+    # Windows drive paths (C:\ or C:/)
     """
     Return True only for genuine local filesystem paths.
 
@@ -101,7 +107,9 @@ logger = logging.getLogger(__name__)
 from .cache import get_cache
 from .models import (
     TaskCreateRequest, TaskResponse, TaskResult,
-    PluginListResponse, ErrorResponse, BulkDeleteRequest
+    PluginListResponse, ErrorResponse, BulkDeleteRequest,
+    NotificationRuleCreate, NotificationRuleUpdate,
+    NotificationChannelType,
 )
 from .config import settings
 from .database import get_db
@@ -112,17 +120,61 @@ from .ratelimit import (
     rate_limiter, concurrent_limiter,
     task_start_limiter, vault_limiter,
     report_download_limiter, read_heavy_limiter,
-    admin_limiter, resolve_client_identity,
+    resolve_client_identity, admin_limiter,
 )
-from .validation import validate_target, validate_task_start_payload
+from .validation import validate_target, validate_task_start_payload, validate_url
 from .reporting import reporting
 from .vault import VaultCrypto
 from .workflows import scheduler
+from .auth import require_api_key
 
 from sse_starlette.sse import EventSourceResponse
 
-router = APIRouter(prefix="/api/v1")
+router = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
 SSE_RAW_OUTPUT_CHUNK_SIZE = 64 * 1024
+
+_EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _validate_notification_target(channel_type: NotificationChannelType, target: str) -> str:
+    cleaned = target.strip()
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Notification target is required")
+
+    if channel_type == NotificationChannelType.WEBHOOK:
+        is_valid, error = validate_url(cleaned)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error or "Invalid webhook URL")
+        return cleaned
+
+    if not _EMAIL_PATTERN.match(cleaned):
+        raise HTTPException(status_code=400, detail="Invalid email address")
+    return cleaned
+
+
+def _serialize_notification_rule(row: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "severity_threshold": row["severity_threshold"],
+        "channel_type": row["channel_type"],
+        "target_url_or_email": row["target_url_or_email"],
+        "is_active": bool(row.get("is_active")),
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+    }
+
+
+def _serialize_notification_history(row: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": row["id"],
+        "rule_id": row["rule_id"],
+        "finding_id": row["finding_id"],
+        "status": row["status"],
+        "error_message": row.get("error_message"),
+        "sent_at": row.get("sent_at"),
+    }
+
 
 async def get_or_set_cached(key: str, builder):
     """Read from cache, or build and cache a JSON response."""
@@ -141,6 +193,7 @@ async def invalidate_view_cache():
     for prefix in ["summary:", "findings:", "reports:", "tasks:"]:
         await cache.delete_prefix(prefix)
 
+
 def iter_raw_output_chunks(path: str, chunk_size: int = SSE_RAW_OUTPUT_CHUNK_SIZE):
     """Yield raw output in bounded chunks for completed-task SSE replay."""
     with open(path, "r", encoding="utf-8", errors="replace") as output_file:
@@ -149,6 +202,7 @@ def iter_raw_output_chunks(path: str, chunk_size: int = SSE_RAW_OUTPUT_CHUNK_SIZ
             if not chunk:
                 break
             yield chunk
+
 
 def _report_generation_error_response(task_id: str, report_format: str) -> JSONResponse:
     logger.exception("Report generation failed for task_id=%s format=%s", task_id, report_format)
@@ -164,6 +218,7 @@ def _report_generation_error_response(task_id: str, report_format: str) -> JSONR
         },
     )
 
+
 async def get_plugin_manager_for_request():
     """
     In debug mode, refresh plugin metadata from disk on demand so frontend catalog
@@ -172,6 +227,7 @@ async def get_plugin_manager_for_request():
     if settings.debug:
         return await init_plugins(settings.plugins_dir)
     return get_plugin_manager()
+
 
 @router.get("/plugins", response_model=PluginListResponse)
 async def list_plugins():
@@ -226,6 +282,7 @@ async def get_plugin_schema(plugin_id: str):
     else:
         raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
 
+
 @router.get("/presets")
 async def get_all_presets():
     """Get all plugin presets"""
@@ -234,6 +291,7 @@ async def get_all_presets():
         plugin_id: plugin.presets
         for plugin_id, plugin in plugin_manager.plugins.items()
     }
+
 
 @router.post("/task/start", dependencies=[Depends(task_start_limiter)])
 async def start_task(
@@ -536,6 +594,7 @@ async def download_pdf_report(task_id: str):
         headers={"Content-Disposition": f'attachment; filename="{build_report_filename(dict(task_row), "pdf")}"'}
     )
 
+
 @router.get("/task/{task_id}/report/sarif", dependencies=[Depends(report_download_limiter)])
 async def download_sarif_report(task_id: str):
     """Download task results as a SARIF report."""
@@ -570,6 +629,7 @@ async def download_sarif_report(task_id: str):
         media_type="application/sarif+json",
         headers={"Content-Disposition": f'attachment; filename="{build_report_filename(dict(task_row), "sarif")}"'}
     )
+
 
 @router.get("/task/{task_id}/result")
 async def get_task_result(task_id: str):
@@ -656,6 +716,7 @@ async def get_task_result(task_id: str):
         "metadata": {}
     }
 
+
 @router.post("/task/{task_id}/cancel")
 async def cancel_task(task_id: str):
     """Cancel a running task"""
@@ -669,6 +730,7 @@ async def cancel_task(task_id: str):
         "status": "cancelled",
         "cancelled_at": "now"
     }
+
 
 @router.get("/dashboard/summary", dependencies=[Depends(read_heavy_limiter)])
 async def get_dashboard_summary():
@@ -757,6 +819,7 @@ async def get_dashboard_summary():
 
     return await get_or_set_cached("summary:dashboard", build)
 
+
 @router.get("/findings", dependencies=[Depends(read_heavy_limiter)])
 async def get_findings():
     """Return vulnerability findings."""
@@ -772,6 +835,7 @@ async def get_findings():
 
     return await get_or_set_cached("findings:list", build)
 
+
 @router.get("/reports", dependencies=[Depends(read_heavy_limiter)])
 async def get_reports():
     """Return generated reports."""
@@ -783,10 +847,11 @@ async def get_reports():
 
     return await get_or_set_cached("reports:list", build)
 
+
 @router.get("/tasks", dependencies=[Depends(read_heavy_limiter)])
 async def list_tasks(
-    page: int = 1,
-    per_page: int = 25,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(25, ge=1, le=100),
     plugin_id: Optional[str] = None,
     status: Optional[str] = None
 ):
@@ -859,6 +924,7 @@ async def list_tasks(
         }
     }
 
+
 SQLITE_CHUNK_SIZE = 500  # safely under SQLITE_LIMIT_VARIABLE_NUMBER = 999
 
 async def delete_task_records(task_ids: List[str]):
@@ -919,6 +985,7 @@ async def delete_task(task_id: str):
         "task_id": task_id,
         "deleted": True
     }
+
 
 @router.delete("/tasks/bulk")
 async def bulk_delete_tasks(request: BulkDeleteRequest):
@@ -990,6 +1057,7 @@ async def clear_all_tasks():
         "message": "All scan history and associated data has been purged."
     }
 
+
 @router.get("/settings")
 async def get_settings():
     """Get current settings"""
@@ -1014,6 +1082,7 @@ async def get_settings():
         }
     }
 
+
 @router.get("/vault", dependencies=[Depends(vault_limiter)])
 async def list_vault_secrets():
     db = await get_db()
@@ -1021,6 +1090,7 @@ async def list_vault_secrets():
         "SELECT id, name, created_at, updated_at FROM credential_vault ORDER BY name ASC"
     )
     return {"items": rows, "total": len(rows)}
+
 
 @router.put("/vault/{name}", dependencies=[Depends(vault_limiter)])
 async def upsert_vault_secret(name: str, payload: Dict[str, str]):
@@ -1046,6 +1116,7 @@ async def upsert_vault_secret(name: str, payload: Dict[str, str]):
         )
     return {"name": name, "stored": True}
 
+
 @router.get("/vault/{name}", dependencies=[Depends(vault_limiter)])
 async def get_vault_secret(name: str):
     db = await get_db()
@@ -1055,11 +1126,13 @@ async def get_vault_secret(name: str):
     crypto = VaultCrypto(settings.resolved_vault_key)
     return {"name": name, "value": crypto.decrypt(row["encrypted_value"])}
 
+
 @router.delete("/vault/{name}", dependencies=[Depends(vault_limiter)])
 async def delete_vault_secret(name: str):
     db = await get_db()
     await db.execute("DELETE FROM credential_vault WHERE name = ?", (name,))
     return {"name": name, "deleted": True}
+
 
 @router.get("/workflows")
 async def list_workflows():
@@ -1067,6 +1140,7 @@ async def list_workflows():
     rows = await db.fetchall("SELECT * FROM workflows ORDER BY created_at DESC")
     workflows = [_serialize_workflow(row) for row in rows]
     return {"workflows": workflows, "total": len(workflows)}
+
 
 @router.post("/workflows")
 async def create_workflow(payload: Dict[str, Any]):
@@ -1098,6 +1172,7 @@ async def create_workflow(payload: Dict[str, Any]):
     row = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
     return _serialize_workflow(row) if row else {"id": workflow_id, "created": True}
 
+
 @router.post("/workflows/{workflow_id}/run")
 async def run_workflow_once(workflow_id: str):
     db = await get_db()
@@ -1126,6 +1201,7 @@ async def run_workflow_once(workflow_id: str):
         "queued_task_ids": created_task_ids,
         "queued_tasks": created_task_ids,
     }
+
 
 @router.patch("/workflows/{workflow_id}")
 async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
@@ -1158,16 +1234,191 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
     updated = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
     return _serialize_workflow(updated) if updated else {"workflow_id": workflow_id, "updated": True}
 
+
 @router.delete("/workflows/{workflow_id}")
 async def delete_workflow(workflow_id: str):
     db = await get_db()
     await db.execute("DELETE FROM workflows WHERE id = ?", (workflow_id,))
     return {"workflow_id": workflow_id, "deleted": True}
 
+
 @router.post("/workflows/scheduler/tick")
 async def trigger_workflow_tick():
     await scheduler.tick()
     return {"tick": "ok"}
+
+
+@router.get("/notifications/rules")
+async def list_notification_rules():
+    db = await get_db()
+    rows = await db.fetchall(
+        "SELECT * FROM notification_rules ORDER BY created_at DESC"
+    )
+    rules = [_serialize_notification_rule(row) for row in rows]
+    return {"rules": rules, "total": len(rules)}
+
+
+@router.post("/notifications/rules")
+async def create_notification_rule(payload: NotificationRuleCreate):
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Rule name is required")
+
+    target = _validate_notification_target(payload.channel_type, payload.target_url_or_email)
+    rule_id = str(uuid.uuid4())
+    db = await get_db()
+    await db.execute(
+        """
+        INSERT INTO notification_rules (
+            id, name, severity_threshold, channel_type, target_url_or_email, is_active
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            rule_id,
+            name,
+            payload.severity_threshold.value,
+            payload.channel_type.value,
+            target,
+            1 if payload.is_active else 0,
+        ),
+    )
+    row = await db.fetchone(
+        "SELECT * FROM notification_rules WHERE id = ?",
+        (rule_id,),
+    )
+    if not row:
+        raise HTTPException(status_code=500, detail="Failed to create notification rule")
+    return _serialize_notification_rule(row)
+
+
+@router.get("/notifications/rules/{rule_id}")
+async def get_notification_rule(rule_id: str):
+    db = await get_db()
+    row = await db.fetchone(
+        "SELECT * FROM notification_rules WHERE id = ?",
+        (rule_id,),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Notification rule not found")
+    return _serialize_notification_rule(row)
+
+
+@router.patch("/notifications/rules/{rule_id}")
+async def update_notification_rule(rule_id: str, payload: NotificationRuleUpdate):
+    db = await get_db()
+    row = await db.fetchone(
+        "SELECT * FROM notification_rules WHERE id = ?",
+        (rule_id,),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Notification rule not found")
+
+    updates: List[str] = []
+    params: List[Any] = []
+
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Rule name is required")
+        updates.append("name = ?")
+        params.append(name)
+
+    effective_channel = (
+        payload.channel_type
+        if payload.channel_type is not None
+        else NotificationChannelType(row["channel_type"])
+    )
+    if payload.target_url_or_email is not None:
+        target = _validate_notification_target(
+            effective_channel,
+            payload.target_url_or_email,
+        )
+        updates.append("target_url_or_email = ?")
+        params.append(target)
+    elif payload.channel_type is not None:
+        target = _validate_notification_target(
+            effective_channel,
+            row["target_url_or_email"],
+        )
+        updates.append("target_url_or_email = ?")
+        params.append(target)
+
+    if payload.severity_threshold is not None:
+        updates.append("severity_threshold = ?")
+        params.append(payload.severity_threshold.value)
+
+    if payload.channel_type is not None:
+        updates.append("channel_type = ?")
+        params.append(payload.channel_type.value)
+
+    if payload.is_active is not None:
+        updates.append("is_active = ?")
+        params.append(1 if payload.is_active else 0)
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="No update fields provided")
+
+    updates.append("updated_at = datetime('now')")
+    params.append(rule_id)
+    await db.execute(
+        f"UPDATE notification_rules SET {', '.join(updates)} WHERE id = ?",
+        tuple(params),
+    )
+    updated = await db.fetchone(
+        "SELECT * FROM notification_rules WHERE id = ?",
+        (rule_id,),
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Notification rule not found")
+    return _serialize_notification_rule(updated)
+
+
+@router.delete("/notifications/rules/{rule_id}")
+async def delete_notification_rule(rule_id: str):
+    db = await get_db()
+    row = await db.fetchone(
+        "SELECT id FROM notification_rules WHERE id = ?",
+        (rule_id,),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Notification rule not found")
+    await db.execute("DELETE FROM notification_rules WHERE id = ?", (rule_id,))
+    return {"rule_id": rule_id, "deleted": True}
+
+
+@router.get("/notifications/history", dependencies=[Depends(read_heavy_limiter)])
+async def list_notification_history(
+    rule_id: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+):
+    if limit < 1 or limit > 200:
+        raise HTTPException(status_code=400, detail="Limit must be between 1 and 200")
+    if offset < 0:
+        raise HTTPException(status_code=400, detail="Offset must be non-negative")
+
+    db = await get_db()
+    query = "SELECT * FROM notification_history"
+    params: List[Any] = []
+    if rule_id:
+        query += " WHERE rule_id = ?"
+        params.append(rule_id)
+    query += " ORDER BY sent_at DESC LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
+
+    rows = await db.fetchall(query, tuple(params))
+    history = [_serialize_notification_history(row) for row in rows]
+
+    count_query = "SELECT COUNT(*) AS total FROM notification_history"
+    count_params: List[Any] = []
+    if rule_id:
+        count_query += " WHERE rule_id = ?"
+        count_params.append(rule_id)
+    count_row = await db.fetchone(count_query, tuple(count_params))
+    total = int(count_row["total"]) if count_row else 0
+
+    return {"history": history, "total": total, "limit": limit, "offset": offset}
+
 
 @router.get("/finding/{finding_id}")
 async def get_finding_details(finding_id: str):
@@ -1224,6 +1475,7 @@ async def get_finding_details(finding_id: str):
         "risk_factors": risk_factors,
     }
 
+
 @router.get("/attack-surface")
 async def get_attack_surface():
     """Return an aggregated view of the monitored attack surface."""
@@ -1267,6 +1519,7 @@ async def get_attack_surface():
             seen_targets.add(target)
 
     return {"entries": entries}
+
 
 @router.get("/assets")
 async def get_assets():
