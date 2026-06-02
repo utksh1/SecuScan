@@ -205,7 +205,7 @@ securityContext:
 
 ### Docker Sandbox Network Isolation
 
-When running in Docker-sandboxed mode (`SECUSCAN_DOCKER_ENABLED=true`), SecuScan executes standard plugins inside isolated container sandboxes. 
+When running in Docker-sandboxed mode (`SECUSCAN_DOCKER_ENABLED=true`), SecuScan executes standard plugins inside isolated container sandboxes.
 
 To ensure strict network isolation and prevent lateral movement or inter-container communication (ICC):
 * SecuScan uses a dedicated Docker bridge network defined by the environment variable `SECUSCAN_DOCKER_NETWORK` (defaults to `restricted`).
