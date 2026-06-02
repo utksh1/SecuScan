@@ -183,7 +183,7 @@ async def test_delete_task_returns_200_and_removes_row(app_client):
 
 @pytest.mark.asyncio
 async def test_delete_task_also_removes_associated_records(app_client):
-    """Deleting a task cascades to findings, reports, and audit_log."""
+    """Deleting a task cascades to findings and reports but preserves audit_log."""
     db = app_client._db
     db_path = app_client._db_path
     task_id = await insert_task(db, status="completed")
@@ -201,7 +201,7 @@ async def test_delete_task_also_removes_associated_records(app_client):
     assert len(rows) == 0, "Report should have been deleted"
 
     rows = await db_fetchall(db_path, "SELECT id FROM audit_log WHERE task_id = ?", (task_id,))
-    assert len(rows) == 0, "Audit log rows should have been deleted"
+    assert len(rows) == 1, "Audit log rows should be preserved for accountability"
 
 
 @pytest.mark.asyncio
