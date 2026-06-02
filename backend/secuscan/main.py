@@ -14,13 +14,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
-from .auth import init_api_key
 from .cache import init_cache, cache as global_cache
 from .database import init_db, db as global_db
 from .plugins import init_plugins
 from .routes import router
-from .saved_views import saved_views_router
 from .workflows import scheduler
+from .retention import retention_scheduler
 
 
 logging.basicConfig(
@@ -52,10 +51,6 @@ async def lifespan(app: FastAPI):
     # Ensure directories exist
     settings.ensure_directories()
     logger.info("✓ Directories initialized")
-
-    # Initialize API key authentication
-    api_key = init_api_key(settings.data_dir)
-    logger.info("✓ API key authentication ready (key file: %s/.api_key)", settings.data_dir)
     
     # Initialize database
     await init_db(settings.database_path)
@@ -70,6 +65,15 @@ async def lifespan(app: FastAPI):
 
     await scheduler.start()
     logger.info("✓ Workflow scheduler started")
+
+    # Start artifact retention background loop (no-op when all limits are 0)
+    await retention_scheduler.start(
+        interval_seconds=settings.retention_interval_seconds,
+        max_age_days=settings.retention_max_age_days,
+        max_task_count=settings.retention_max_task_count,
+        keep_statuses=settings.retention_keep_statuses_set,
+    )
+    logger.info("✓ Retention scheduler started")
     
     logger.info("✓ Ready to serve on %s:%d", settings.bind_address, settings.bind_port)
     
@@ -82,6 +86,7 @@ async def lifespan(app: FastAPI):
     if global_cache:
         await global_cache.disconnect()
     await scheduler.stop()
+    await retention_scheduler.stop()
     logger.info("✓ Shutdown complete")
 
 
@@ -131,8 +136,6 @@ app.add_middleware(RequestIDMiddleware)
 
 # Include API routes
 app.include_router(router)
-app.include_router(saved_views_router)
-
 
 # Health check endpoint
 @app.get("/api/v1/health")
