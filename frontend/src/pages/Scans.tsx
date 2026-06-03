@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { API_BASE, deleteTask, clearAllTasks, bulkDeleteTasks } from "../api";
 import { routePath } from "../routes";
@@ -8,6 +10,7 @@ import {
   formatLocaleDate,
   formatLocaleTime,
 } from "../utils/date";
+import { ConfirmModal } from "../components/ConfirmModal";
 import Pagination from "../components/Pagination";
 
 interface Task {
@@ -16,6 +19,7 @@ interface Task {
   tool: string;
   target: string;
   status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  scan_phase?: string;
   created_at: string;
   started_at?: string;
   completed_at?: string;
@@ -66,31 +70,102 @@ export default function Scans() {
   const [total, setTotal] = useState(0);
   const PAGE_LIMIT = 10;
 
+  // Modal state for confirm dialogs
+  const [modalState, setModalState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    type: "danger" | "warning" | "info";
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+    type: "warning",
+  });
+
+  // Ref so the visibilitychange handler always sees the current interval id
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const requestSeqRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+
+  function startPolling() {
+    stopPolling();
+    intervalRef.current = setInterval(loadTasks, 5000);
+  }
+
+  function stopPolling() {
+    if (intervalRef.current !== null) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }
+
   useEffect(() => {
     loadTasks();
-    const interval = setInterval(loadTasks, 5000);
-    return () => clearInterval(interval);
+    startPolling();
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "hidden") {
+        stopPolling();
+      } else {
+        abortRef.current?.abort();
+        abortRef.current = new AbortController();
+        loadTasks();
+        startPolling();
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      stopPolling();
+      if (abortRef.current) {
+        abortRef.current.abort();
+        abortRef.current = null;
+      }
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [filter, page]);
 
   async function loadTasks() {
+    const requestSeq = requestSeqRef.current + 1;
+    requestSeqRef.current = requestSeq;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       const params = new URLSearchParams();
       if (filter !== "all") params.set("status", filter);
       params.set("page", String(page));
       params.set("per_page", String(PAGE_LIMIT));
 
-      const res = await fetch(`${API_BASE}/tasks?${params.toString()}`);
+      const res = await fetch(`${API_BASE}/tasks?${params.toString()}`, {
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to load tasks: ${res.status}`);
+      }
       const data = await res.json();
+      if (requestSeq !== requestSeqRef.current) return;
+
       setTasks(data.tasks || []);
       if (data.pagination?.total_items !== undefined) {
         setTotal(data.pagination.total_items);
       }
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       console.error("Failed to load tasks:", err);
     } finally {
-      setLoading(false);
+      if (requestSeq === requestSeqRef.current) {
+        abortRef.current = null;
+        setLoading(false);
+      }
     }
   }
+
   function handleFilterChange(value: string) {
     setSearchParams((prev) => {
       if (value === "all") {
@@ -125,64 +200,68 @@ export default function Scans() {
   }
 
   async function handleTaskDelete(taskId: string) {
-    if (
-      !window.confirm(
-        "Are you sure you want to delete this scan record? This will also remove associated findings and reports.",
-      )
-    ) {
-      return;
-    }
-
-    try {
-      await deleteTask(taskId);
-      setTasks((prev) => prev.filter((t) => t.task_id !== taskId));
-      if (expandedId === taskId) setExpandedId(null);
-    } catch (err) {
-      console.error("Failed to delete task:", err);
-      alert("Failed to delete task. It might still be running.");
-    }
+    setModalState({
+      isOpen: true,
+      title: "Delete Scan Record",
+      message: "Are you sure you want to delete this scan record? This will also remove associated findings and reports.",
+      type: "danger",
+      onConfirm: async () => {
+        try {
+          await deleteTask(taskId);
+          setTasks((prev) => prev.filter((t) => t.task_id !== taskId));
+          if (expandedId === taskId) setExpandedId(null);
+          setModalState(prev => ({ ...prev, isOpen: false }));
+        } catch (err) {
+          console.error("Failed to delete task:", err);
+          alert("Failed to delete task. It might still be running.");
+          setModalState(prev => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
   }
 
   async function handleClearAll() {
-    if (
-      !window.confirm(
-        "CRITICAL: Are you sure you want to PURGE ALL RECORDS? This will wipe all scan history, findings, assets, and reports. This action is irreversible.",
-      )
-    ) {
-      return;
-    }
-
-    try {
-      await clearAllTasks();
-      setTasks([]);
-      setSelectedIds([]);
-      setExpandedId(null);
-    } catch (err) {
-      console.error("Failed to clear history:", err);
-      alert("Failed to clear history. Ensure no tasks are currently running.");
-    }
+    setModalState({
+      isOpen: true,
+      title: "CRITICAL OPERATION",
+      message: "CRITICAL: Are you sure you want to PURGE ALL RECORDS? This will wipe all scan history, findings, assets, and reports. This action is irreversible.",
+      type: "danger",
+      onConfirm: async () => {
+        try {
+          await clearAllTasks();
+          setTasks([]);
+          setSelectedIds([]);
+          setExpandedId(null);
+          setModalState(prev => ({ ...prev, isOpen: false }));
+        } catch (err) {
+          console.error("Failed to clear history:", err);
+          alert("Failed to clear history. Ensure no tasks are currently running.");
+          setModalState(prev => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
   }
 
   async function handleBulkDelete() {
     if (selectedIds.length === 0) return;
-    if (
-      !window.confirm(
-        `Are you sure you want to delete ${selectedIds.length} selected scan records?`,
-      )
-    ) {
-      return;
-    }
-
-    try {
-      await bulkDeleteTasks(selectedIds);
-      setTasks((prev) => prev.filter((t) => !selectedIds.includes(t.task_id)));
-      setSelectedIds([]);
-    } catch (err) {
-      console.error("Bulk delete failed:", err);
-      alert(
-        "Failed to delete some tasks. Ensure they are not currently running.",
-      );
-    }
+    setModalState({
+      isOpen: true,
+      title: "Bulk Delete Records",
+      message: `Are you sure you want to delete ${selectedIds.length} selected scan records?`,
+      type: "danger",
+      onConfirm: async () => {
+        try {
+          await bulkDeleteTasks(selectedIds);
+          setTasks((prev) => prev.filter((t) => !selectedIds.includes(t.task_id)));
+          setSelectedIds([]);
+          setModalState(prev => ({ ...prev, isOpen: false }));
+        } catch (err) {
+          console.error("Bulk delete failed:", err);
+          alert("Failed to delete some tasks. Ensure they are not currently running.");
+          setModalState(prev => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
   }
 
   function toggleSelection(taskId: string, e: React.MouseEvent) {
@@ -451,6 +530,11 @@ export default function Scans() {
                                       {task.plugin_id}
                                     </span>
                                   </p>
+                                  {task.status === 'running' && task.scan_phase && (
+                                    <p className="text-[10px] font-mono text-rag-blue/80 uppercase tracking-widest">
+                                      PHASE: {task.scan_phase.replace(/_/g, ' ')}
+                                    </p>
+                                  )}
                                   <p className="text-[10px] font-mono text-silver/40">
                                     SESSION:{" "}
                                     <span className="text-silver-bright uppercase">
@@ -630,6 +714,16 @@ export default function Scans() {
           ))}
         </div>
       </footer>
+
+      {/* Confirm Modal */}
+      <ConfirmModal
+        isOpen={modalState.isOpen}
+        title={modalState.title}
+        message={modalState.message}
+        onConfirm={modalState.onConfirm}
+        onCancel={() => setModalState(prev => ({ ...prev, isOpen: false }))}
+        type={modalState.type}
+      />
     </div>
   );
 }

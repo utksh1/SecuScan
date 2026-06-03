@@ -2,6 +2,18 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { getFindings } from '../api'
 import { formatLocaleDate, parseDateSafe, getCurrentTimeZone } from '../utils/date'
+import SavedViewsPanel from '../components/SavedViewsPanel'
+import { useSavedViews, FilterPreset } from '../hooks/useSavedViews'
+type RiskFactor = {
+  factor: string
+  label: string
+  value: string | number
+  score: number
+  weight: number
+  contribution: number
+  detail: string
+}
+
 type Finding = {
   id: string
   severity: string
@@ -14,6 +26,11 @@ type Finding = {
   cvss?: number
   cve?: string
   plugin_id?: string
+  risk_score?: number
+  risk_factors?: RiskFactor[]
+  exploitability?: number
+  confidence?: number
+  asset_exposure?: string
 }
 
 type FindingStatus = 'new' | 'reviewed' | 'suppressed'
@@ -103,6 +120,29 @@ export default function Findings() {
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null)
   const [reviewState, setReviewState] = useState<ReviewState>({})
   const [copiedFindingId, setCopiedFindingId] = useState<string | null>(null)
+
+  // ── Saved views ────────────────────────────────────────────────────────────
+  const { views, loading: viewsLoading, saveView, deleteView, renameView } = useSavedViews()
+
+  const currentPreset: FilterPreset = {
+    severity: filterSeverity,
+    target: filterTarget,
+    scanner: filterScanner,
+    sortMode,
+    dateFrom,
+    dateTo,
+    searchQuery,
+  }
+
+  function applyPreset(preset: FilterPreset) {
+    setFilterSeverity(preset.severity)
+    setFilterTarget(preset.target)
+    setFilterScanner(preset.scanner)
+    setSortMode(preset.sortMode as SortMode)
+    setDateFrom(preset.dateFrom)
+    setDateTo(preset.dateTo)
+    setSearchQuery(preset.searchQuery)
+  }
 
   useEffect(() => {
     setLoading(true)
@@ -540,13 +580,32 @@ export default function Findings() {
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={resetAllFilters}
-                className="h-11 w-full border border-silver-bright/20 bg-charcoal-dark px-4 text-[10px] font-black uppercase tracking-[0.18em] text-silver/65 transition-all hover:border-rag-red hover:text-silver-bright xl:w-auto xl:min-w-[180px]"
-              >
-                Reset Filters
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <SavedViewsPanel
+                  views={views}
+                  loading={viewsLoading}
+                  saveView={saveView}
+                  deleteView={deleteView}
+                  renameView={renameView}
+                  currentPreset={currentPreset}
+                  onApply={applyPreset}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterSeverity('all')
+                    setFilterTarget('all')
+                    setFilterScanner('all')
+                    setSortMode('severity')
+                    setDateFrom('')
+                    setDateTo('')
+                    setSearchQuery('')
+                  }}
+                  className="h-11 w-full border border-silver-bright/20 bg-charcoal-dark px-4 text-[10px] font-black uppercase tracking-[0.18em] text-silver/65 transition-all hover:border-rag-red hover:text-silver-bright xl:w-auto xl:min-w-[180px]"
+                >
+                  Reset Filters
+                </button>
+              </div>
             </div>
           </div>
         </section>
@@ -667,12 +726,47 @@ export default function Findings() {
                         </p>
                       </div>
                       <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
-                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Severity Score</p>
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">CVSS</p>
                         <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">
                           {typeof selectedFinding.cvss === 'number' ? selectedFinding.cvss.toFixed(1) : 'N/A'}
                         </p>
                       </div>
                     </div>
+
+                    {typeof selectedFinding.risk_score === 'number' && (
+                      <div className="border-2 border-black bg-charcoal-dark p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Risk Score</p>
+                          <p className={`text-2xl font-black italic ${
+                            selectedFinding.risk_score >= 7 ? 'text-rag-red' :
+                            selectedFinding.risk_score >= 4 ? 'text-rag-amber' : 'text-rag-blue'
+                          }`}>
+                            {selectedFinding.risk_score.toFixed(1)}
+                          </p>
+                        </div>
+                        {selectedFinding.risk_factors && selectedFinding.risk_factors.length > 0 && (
+                          <div className="mt-3 space-y-1.5 border-t border-silver-bright/8 pt-3">
+                            {selectedFinding.risk_factors.map((rf) => (
+                              <div key={rf.factor} className="flex items-center justify-between text-[10px]">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="font-black uppercase tracking-[0.15em] text-silver/45">{rf.label}</span>
+                                  <span className="text-silver/30 text-[9px] font-mono">({(rf.weight * 100).toFixed(0)}%)</span>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className="font-mono text-silver-bright">{rf.score.toFixed(1)}</span>
+                                  <span className={`text-[9px] font-mono ${
+                                    rf.contribution >= 2 ? 'text-rag-red' :
+                                    rf.contribution >= 1 ? 'text-rag-amber' : 'text-silver/40'
+                                  }`}>
+                                    +{rf.contribution.toFixed(1)}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-5">

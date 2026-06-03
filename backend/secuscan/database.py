@@ -10,6 +10,7 @@ from typing import Any, Optional, List, Dict
 
 import aiosqlite
 from .config import settings
+from .risk_scoring import compute_risk_score, compute_risk_factors
 
 
 class Database:
@@ -33,11 +34,12 @@ class Database:
         """Establish database connection and ensure schema exists."""
         # Ensure data directory exists
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        
+
         conn = await aiosqlite.connect(self.db_path)
         self._connection = conn
         conn.row_factory = aiosqlite.Row
         await self._create_schema()
+        await self._run_migrations()
 
     async def disconnect(self):
         """Close the current database connection."""
@@ -171,11 +173,60 @@ class Database:
                 last_run_at TIMESTAMP
             );
 
+            CREATE TABLE IF NOT EXISTS notification_rules (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                severity_threshold TEXT NOT NULL,
+                channel_type TEXT NOT NULL,
+                target_url_or_email TEXT NOT NULL,
+                is_active BOOLEAN NOT NULL DEFAULT 1,
+                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS notification_history (
+                id TEXT PRIMARY KEY,
+                rule_id TEXT NOT NULL REFERENCES notification_rules(id) ON DELETE CASCADE,
+                finding_id TEXT NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
+                status TEXT NOT NULL,
+                error_message TEXT,
+                sent_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+            );
+
+            -- Tasks indexes (existing)
             CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at);
             CREATE INDEX IF NOT EXISTS idx_tasks_target ON tasks(target);
             CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
             CREATE INDEX IF NOT EXISTS idx_tasks_plugin ON tasks(plugin_id);
+            -- Composite index for dashboard running tasks query
+            CREATE INDEX IF NOT EXISTS idx_tasks_status_created ON tasks(status, created_at DESC);
+
+            -- Findings indexes (new)
+            CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
+            CREATE INDEX IF NOT EXISTS idx_findings_task_id ON findings(task_id);
+            CREATE INDEX IF NOT EXISTS idx_findings_discovered_at ON findings(discovered_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_findings_plugin_id ON findings(plugin_id);
+            CREATE INDEX IF NOT EXISTS idx_findings_target ON findings(target);
+            -- Composite index for severity counting by task
+            CREATE INDEX IF NOT EXISTS idx_findings_task_severity ON findings(task_id, severity);
+
+            -- Reports indexes (new)
+            CREATE INDEX IF NOT EXISTS idx_reports_task_id ON reports(task_id);
+            CREATE INDEX IF NOT EXISTS idx_reports_generated_at ON reports(generated_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status);
+
+            -- Audit log indexes (new)
+            CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp DESC);
+            CREATE INDEX IF NOT EXISTS idx_audit_event_type ON audit_log(event_type);
+            CREATE INDEX IF NOT EXISTS idx_audit_task_id ON audit_log(task_id);
+
+            -- Workflows index (existing)
             CREATE INDEX IF NOT EXISTS idx_workflows_enabled ON workflows(enabled);
+            CREATE INDEX IF NOT EXISTS idx_notification_rules_active ON notification_rules(is_active);
+            CREATE INDEX IF NOT EXISTS idx_notification_rules_severity ON notification_rules(severity_threshold);
+            CREATE INDEX IF NOT EXISTS idx_notification_history_rule_id ON notification_history(rule_id);
+            CREATE INDEX IF NOT EXISTS idx_notification_history_finding_id ON notification_history(finding_id);
+            CREATE INDEX IF NOT EXISTS idx_notification_history_sent_at ON notification_history(sent_at DESC);
             """
         )
 
@@ -185,6 +236,7 @@ class Database:
         
         needed_cols = {
             "exit_code": "INTEGER",
+            "scan_phase": "TEXT",
             "structured_json": "TEXT",
             "raw_output_path": "TEXT",
             "command_used": "TEXT",
@@ -214,6 +266,76 @@ class Database:
                 print("Added missing column 'proof' to findings table.")
             except Exception as e:
                 print(f"Failed to add 'proof' to findings: {e}")
+        risk_cols = {
+            "exploitability": "REAL",
+            "confidence": "REAL",
+            "asset_exposure": "TEXT",
+            "risk_score": "REAL",
+            "risk_factors_json": "TEXT NOT NULL DEFAULT '[]'",
+        }
+        for col_name, col_type in risk_cols.items():
+            if col_name not in existing_finding_cols:
+                try:
+                    await self.execute(f"ALTER TABLE findings ADD COLUMN {col_name} {col_type}")
+                    print(f"Added missing column {col_name} to findings table.")
+                except Exception as e:
+                    print(f"Failed to add column {col_name}: {e}")
+
+    async def _run_migrations(self):
+        migrations_dir = Path(__file__).parent / "migrations"
+
+        if not migrations_dir.exists():
+            raise RuntimeError(
+            f"Migrations directory not found at {migrations_dir} — "
+            "ensure the backend package is installed correctly."
+        )
+
+        for migration_file in sorted(migrations_dir.glob("*.sql")):
+            sql = migration_file.read_text(encoding="utf-8")
+            try:
+                await self.connection.executescript(sql)
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Migration {migration_file.name} failed — startup aborted: {exc}"
+                ) from exc
+
+        await self._backfill_risk_scores()
+
+    async def _backfill_risk_scores(self):
+        """Compute risk scores for existing findings that have none."""
+        from datetime import datetime, timezone
+        rows = await self.fetchall(
+            "SELECT id, severity, exploitability, confidence, asset_exposure, discovered_at, risk_score FROM findings WHERE risk_score IS NULL"
+        )
+        if not rows:
+            return
+        for row in rows:
+            discovered = None
+            if row.get("discovered_at"):
+                try:
+                    discovered = datetime.fromisoformat(row["discovered_at"])
+                except (ValueError, TypeError):
+                    discovered = datetime.now(timezone.utc)
+            score = compute_risk_score(
+                severity=row["severity"],
+                exploitability=row.get("exploitability"),
+                asset_exposure=row.get("asset_exposure"),
+                discovered_at=discovered,
+                confidence=row.get("confidence"),
+            )
+            factors = compute_risk_factors(
+                severity=row["severity"],
+                exploitability=row.get("exploitability"),
+                asset_exposure=row.get("asset_exposure"),
+                discovered_at=discovered,
+                confidence=row.get("confidence"),
+                risk_score=score,
+            )
+            await self.execute(
+                "UPDATE findings SET risk_score = ?, risk_factors_json = ? WHERE id = ?",
+                (score, json.dumps(factors), row["id"]),
+            )
+        print(f"Backfilled risk scores for {len(rows)} existing finding(s).")
 
     async def execute(self, query: str, params: tuple = ()):
         """Execute a write query."""
@@ -222,13 +344,13 @@ class Database:
 
     async def fetchone(self, query: str, params: tuple = ()) -> Optional[Dict]:
         """Fetch one row."""
-        async with self.connection.execute(query, params) as cursor:
+        async with await self.connection.execute(query, params) as cursor:
             row = await cursor.fetchone()
             return dict(row) if row else None
 
     async def fetchall(self, query: str, params: tuple = ()) -> List[Dict]:
         """Fetch all rows."""
-        async with self.connection.execute(query, params) as cursor:
+        async with await self.connection.execute(query, params) as cursor:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
 
@@ -245,18 +367,34 @@ class Database:
         context: Optional[dict] = None,
         task_id: Optional[str] = None,
         plugin_id: Optional[str] = None,
+        request_id: Optional[str] = None,
     ):
         """Log an audit event."""
+
+        from .request_context import get_request_id
+
+        request_id = request_id or get_request_id()
+
+        context = context or {}
+        context["request_id"] = request_id
+
         await self.execute(
             """
-            INSERT INTO audit_log (event_type, severity, message, context_json, task_id, plugin_id)
+            INSERT INTO audit_log (
+                event_type,
+                severity,
+                message,
+                context_json,
+                task_id,
+                plugin_id
+            )
             VALUES (?, ?, ?, ?, ?, ?)
             """,
             (
                 event_type,
                 severity,
                 message,
-                json.dumps(context) if context else None,
+                json.dumps(context),
                 task_id,
                 plugin_id,
             ),
@@ -269,10 +407,12 @@ db: Optional[Database] = None
 async def init_db(db_path: Optional[str] = None) -> Database:
     """Initialize the global database connection."""
     global db
-    # Fallback to config path if not provided
+
     path = db_path or f"{settings.data_dir}/secuscan.db"
+
     db_instance = Database(path)
     await db_instance.connect()
+
     db = db_instance
     return db_instance
 
@@ -281,4 +421,5 @@ async def get_db() -> Database:
     """Get the global database instance."""
     if db is None:
         raise RuntimeError("Database not initialized")
+
     return db
