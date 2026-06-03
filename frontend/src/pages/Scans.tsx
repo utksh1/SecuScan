@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { API_BASE, deleteTask, clearAllTasks, bulkDeleteTasks } from '../api'
 import { routePath } from '../routes'
 import { parseDateSafe, formatLocaleDate, formatLocaleTime } from '../utils/date'
@@ -26,24 +27,6 @@ const statusFilters = [
     { value: 'failed', label: 'SYSTEM_FAILURE' },
     { value: 'cancelled', label: 'MANUAL_ABORT' }
 ]
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.1 }
-  }
-} as const
-
-const itemVariants = {
-  hidden: { opacity: 0, scale: 0.95, y: 20 },
-  visible: { 
-    opacity: 1, 
-    scale: 1, 
-    y: 0,
-    transition: { type: 'spring', stiffness: 200, damping: 20 } as any
-  }
-} as const
 
 export default function Scans() {
     const navigate = useNavigate()
@@ -100,7 +83,6 @@ export default function Scans() {
         if (!window.confirm('Are you sure you want to delete this scan record? This will also remove associated findings and reports.')) {
             return
         }
-
         try {
             await deleteTask(taskId)
             setTasks(prev => prev.filter(t => t.task_id !== taskId))
@@ -115,7 +97,6 @@ export default function Scans() {
         if (!window.confirm('CRITICAL: Are you sure you want to PURGE ALL RECORDS? This will wipe all scan history, findings, assets, and reports. This action is irreversible.')) {
             return
         }
-
         try {
             await clearAllTasks()
             setTasks([])
@@ -132,7 +113,6 @@ export default function Scans() {
         if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} selected scan records?`)) {
             return
         }
-
         try {
             await bulkDeleteTasks(selectedIds)
             setTasks(prev => prev.filter(t => !selectedIds.includes(t.task_id)))
@@ -145,10 +125,10 @@ export default function Scans() {
 
     function toggleSelection(taskId: string, e: React.MouseEvent) {
         e.stopPropagation()
-        setSelectedIds(prev => 
-            prev.includes(taskId) 
-            ? prev.filter(id => id !== taskId) 
-            : [...prev, taskId]
+        setSelectedIds(prev =>
+            prev.includes(taskId)
+                ? prev.filter(id => id !== taskId)
+                : [...prev, taskId]
         )
     }
 
@@ -167,22 +147,43 @@ export default function Scans() {
         return `${Math.round(seconds / 3600)}h`
     }
 
+    // ─── Virtualizer ────────────────────────────────────────────────────────────
+    // We use a windowed scrollable container rather than window-scroll to keep the
+    // timeline cable and sticky header in place.
+    const parentRef = useRef<HTMLDivElement>(null)
+
+    const virtualizer = useVirtualizer({
+        count: tasks.length,
+        getScrollElement: () => parentRef.current,
+        // Collapsed cards ~160px; expanded adds ~300px. measureElement handles truth.
+        estimateSize: useCallback(
+            (index: number) => tasks[index]?.task_id === expandedId ? 460 : 160,
+            [tasks, expandedId]
+        ),
+        overscan: 4,
+    })
+
+    // Re-measure all items when expandedId changes (height changes)
+    useEffect(() => {
+        virtualizer.measure()
+    }, [expandedId]) // eslint-disable-line react-hooks/exhaustive-deps
+
     return (
         <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
-            
+
             {/* Neo-Brutalist Header */}
             <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10">
                 <div className="space-y-4">
-                  <div className="bg-rag-blue text-black px-4 py-1 text-xs font-black uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-                    Operational_Registry_v10.1
-                  </div>
-                  <h1 className="text-6xl md:text-8xl font-black text-silver-bright uppercase tracking-tighter leading-none italic">
-                    Operational <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '1px var(--accent-silver-bright)' }}>Registry</span>
-                  </h1>
-                  <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic flex items-center gap-4">
-                    Total_Registry_Keys: {tasks.length} // SYSTEM_STATUS: {loading ? 'SYNCING...' : 'SYNCED'}
-                    <span className={`w-2 h-2 rounded-full ${loading ? 'bg-rag-amber animate-pulse' : 'bg-rag-green'}`}></span>
-                  </p>
+                    <div className="bg-rag-blue text-black px-4 py-1 text-xs font-black uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                        Operational_Registry_v10.1
+                    </div>
+                    <h1 className="text-6xl md:text-8xl font-black text-silver-bright uppercase tracking-tighter leading-none italic">
+                        Operational <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '1px var(--accent-silver-bright)' }}>Registry</span>
+                    </h1>
+                    <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic flex items-center gap-4">
+                        Total_Registry_Keys: {tasks.length} // SYSTEM_STATUS: {loading ? 'SYNCING...' : 'SYNCED'}
+                        <span className={`w-2 h-2 rounded-full ${loading ? 'bg-rag-amber animate-pulse' : 'bg-rag-green'}`}></span>
+                    </p>
                 </div>
 
                 <div className="flex items-center gap-12 border-l-4 border-silver-bright/10 pl-12 hidden lg:flex">
@@ -198,11 +199,10 @@ export default function Scans() {
                 <div className="flex flex-wrap items-center gap-4">
                     <button
                         onClick={toggleSelectAll}
-                        className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-3 ${
-                            selectedIds.length === tasks.length && tasks.length > 0
-                            ? 'bg-rag-blue text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' 
+                        className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-3 ${selectedIds.length === tasks.length && tasks.length > 0
+                            ? 'bg-rag-blue text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
                             : 'bg-charcoal-dark text-silver/30 border-silver-bright/5 hover:border-silver-bright/20'
-                        }`}
+                            }`}
                     >
                         <span className="material-symbols-outlined text-sm">
                             {selectedIds.length === tasks.length && tasks.length > 0 ? 'check_box' : 'check_box_outline_blank'}
@@ -214,11 +214,10 @@ export default function Scans() {
                         <button
                             key={f.value}
                             onClick={() => setFilter(f.value)}
-                            className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-2 ${
-                                filter === f.value 
-                                ? 'bg-silver-bright text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-x-0.5 -translate-y-0.5' 
+                            className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-2 ${filter === f.value
+                                ? 'bg-silver-bright text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-x-0.5 -translate-y-0.5'
                                 : 'bg-charcoal-dark text-silver/30 border-silver-bright/5 hover:border-silver-bright/20'
-                            }`}
+                                }`}
                         >
                             {f.label}
                             {filter === f.value && <span className="w-1 h-3 bg-black"></span>}
@@ -236,199 +235,236 @@ export default function Scans() {
                         </button>
                     )}
                     <div className="flex items-center gap-4 text-[10px] font-mono text-silver/20 uppercase italic tracking-widest hidden sm:flex">
-                    Isolation_Protocol_Active // <span className="text-rag-blue">v4_stable</span>
+                        Isolation_Protocol_Active // <span className="text-rag-blue">v4_stable</span>
                     </div>
                 </div>
             </section>
 
-            {/* Timeline Operations Feed */}
+            {/* ── Timeline Operations Feed (Virtualized) ── */}
             <section className="relative">
-                {/* Vertical Timeline Cable */}
-                <div className="absolute left-[39px] top-0 bottom-0 w-1 bg-silver-bright/5 hidden md:block"></div>
+                {/* Vertical Timeline Cable — decorative, stays fixed alongside the scroller */}
+                <div className="absolute left-[39px] top-0 bottom-0 w-1 bg-silver-bright/5 hidden md:block pointer-events-none"></div>
 
-                <AnimatePresence mode='popLayout'>
-                    {tasks.length > 0 ? (
-                        <motion.div 
-                            variants={containerVariants}
-                            initial="hidden"
-                            animate="visible"
-                            className="space-y-8"
-                        >
-                            {tasks.map((task) => {
-                                const createDate = parseDateSafe(task.created_at);
-                                const startDate = task.started_at ? parseDateSafe(task.started_at) : null;
-                                const endDate = task.completed_at ? parseDateSafe(task.completed_at) : null;
+                {loading ? (
+                    <div className="py-40 bg-charcoal/30 border-4 border-dashed border-silver-bright/5 text-center flex flex-col items-center gap-8">
+                        <span className="material-symbols-outlined text-silver/5 text-9xl animate-pulse">hourglass_empty</span>
+                        <p className="text-xl font-black text-silver/20 uppercase tracking-[0.4em] italic">Syncing Registry...</p>
+                    </div>
+                ) : tasks.length === 0 ? (
+                    <div className="py-40 bg-charcoal/30 border-4 border-dashed border-silver-bright/5 text-center flex flex-col items-center gap-8">
+                        <span className="material-symbols-outlined text-silver/5 text-9xl">inventory_2</span>
+                        <div className="space-y-2">
+                            <p className="text-xl font-black text-silver/20 uppercase tracking-[0.4em] italic">Archive Isolated</p>
+                            <p className="text-xs font-mono text-silver/10 uppercase tracking-widest">No historical signal streams available for current selection</p>
+                        </div>
+                    </div>
+                ) : (
+                    /* Scrollable virtual window */
+                    <div
+                        ref={parentRef}
+                        style={{ height: '80vh', overflowY: 'auto' }}
+                        className="relative"
+                    >
+                        <div style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
+                            {virtualizer.getVirtualItems().map((virtualItem) => {
+                                const task = tasks[virtualItem.index]
+                                if (!task) return null
+
+                                const createDate = parseDateSafe(task.created_at)
+                                const startDate = task.started_at ? parseDateSafe(task.started_at) : null
+                                const endDate = task.completed_at ? parseDateSafe(task.completed_at) : null
+                                const isExpanded = expandedId === task.task_id
 
                                 return (
-                                    <motion.div 
+                                    <div
                                         key={task.task_id}
-                                        variants={itemVariants}
-                                        layout
-                                        className={`relative group md:pl-20 transition-all`}
+                                        data-index={virtualItem.index}
+                                        ref={virtualizer.measureElement}
+                                        style={{
+                                            position: 'absolute',
+                                            top: 0,
+                                            left: 0,
+                                            width: '100%',
+                                            transform: `translateY(${virtualItem.start}px)`,
+                                            paddingBottom: '2rem',
+                                        }}
                                     >
-                                        {/* Timeline Node */}
-                                        <div className={`absolute left-[31px] top-12 w-5 h-5 border-4 border-black z-10 hidden md:block transition-all duration-500 ${
-                                            task.status === 'completed' ? 'bg-rag-green shadow-[0_0_15px_rgba(34,197,94,0.3)]' :
-                                            task.status === 'failed' ? 'bg-rag-red' :
-                                            task.status === 'running' ? 'bg-rag-amber animate-pulse' : 'bg-silver/10'
-                                        }`}></div>
+                                        <div className={`relative group md:pl-20`}>
+                                            {/* Timeline Node */}
+                                            <div className={`absolute left-[31px] top-12 w-5 h-5 border-4 border-black z-10 hidden md:block transition-all duration-500 ${task.status === 'completed' ? 'bg-rag-green shadow-[0_0_15px_rgba(34,197,94,0.3)]' :
+                                                task.status === 'failed' ? 'bg-rag-red' :
+                                                    task.status === 'running' ? 'bg-rag-amber animate-pulse' : 'bg-silver/10'
+                                                }`}></div>
 
-                                        <div 
-                                            className={`bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer relative overflow-hidden group/card ${
-                                                expandedId === task.task_id ? 'border-rag-blue/40 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]' : ''
-                                            }`}
-                                            onClick={() => setExpandedId(expandedId === task.task_id ? null : task.task_id)}
-                                        >
-                                            <div className="flex flex-col xl:flex-row justify-between gap-8">
-                                                <div className="flex-1 space-y-6">
-                                                    <div className="flex flex-wrap items-center gap-4">
-                                                        <div 
-                                                            onClick={(e) => toggleSelection(task.task_id, e)}
-                                                            className={`w-10 h-10 border-4 border-black flex items-center justify-center transition-all ${
-                                                                selectedIds.includes(task.task_id) 
-                                                                ? 'bg-rag-blue text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-x-1 -translate-y-1' 
-                                                                : 'bg-charcoal-dark text-silver/10 hover:border-rag-blue/40'
-                                                            }`}
-                                                        >
-                                                            <span className="material-symbols-outlined text-base font-black">
-                                                                {selectedIds.includes(task.task_id) ? 'check' : 'add'}
+                                            <div
+                                                className={`bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer relative overflow-hidden group/card ${isExpanded ? 'border-rag-blue/40 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]' : ''
+                                                    }`}
+                                                onClick={() => setExpandedId(isExpanded ? null : task.task_id)}
+                                            >
+                                                <div className="flex flex-col xl:flex-row justify-between gap-8">
+                                                    <div className="flex-1 space-y-6">
+                                                        <div className="flex flex-wrap items-center gap-4">
+                                                            <div
+                                                                onClick={(e) => toggleSelection(task.task_id, e)}
+                                                                role="checkbox"
+                                                                aria-checked={selectedIds.includes(task.task_id)}
+                                                                tabIndex={0}
+                                                                onKeyDown={(e) => {
+                                                                    if (e.key === ' ' || e.key === 'Enter') {
+                                                                        e.preventDefault()
+                                                                        toggleSelection(task.task_id, e as any)
+                                                                    }
+                                                                }}
+                                                                className={`w-10 h-10 border-4 border-black flex items-center justify-center transition-all cursor-pointer ${selectedIds.includes(task.task_id)
+                                                                    ? 'bg-rag-blue text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-x-1 -translate-y-1'
+                                                                    : 'bg-charcoal-dark text-silver/10 hover:border-rag-blue/40'
+                                                                    }`}
+                                                            >
+                                                                <span className="material-symbols-outlined text-base font-black">
+                                                                    {selectedIds.includes(task.task_id) ? 'check' : 'add'}
+                                                                </span>
+                                                            </div>
+                                                            <span className={`px-2 py-0.5 text-[9px] font-black uppercase italic border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${task.status === 'completed' ? 'bg-rag-green text-black' :
+                                                                task.status === 'failed' ? 'bg-rag-red text-black' :
+                                                                    'bg-charcoal-dark text-silver-bright/50'
+                                                                }`}>
+                                                                {task.status}
+                                                            </span>
+                                                            <span className="text-[10px] font-mono text-silver/20 uppercase tracking-widest italic">
+                                                                OP_ID_{task.task_id.split('-')[0].toUpperCase()}
                                                             </span>
                                                         </div>
-                                                        <span className={`px-2 py-0.5 text-[9px] font-black uppercase italic border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
-                                                            task.status === 'completed' ? 'bg-rag-green text-black' :
-                                                            task.status === 'failed' ? 'bg-rag-red text-black' :
-                                                            'bg-charcoal-dark text-silver-bright/50'
-                                                        }`}>
-                                                            {task.status}
-                                                        </span>
-                                                        <span className="text-[10px] font-mono text-silver/20 uppercase tracking-widest italic">
-                                                            OP_ID_{task.task_id.split('-')[0].toUpperCase()}
-                                                        </span>
+
+                                                        <div className="space-y-2">
+                                                            <h3 className="text-3xl font-black text-silver-bright uppercase tracking-tighter italic leading-none group-hover/card:text-rag-blue transition-colors">
+                                                                {task.tool}
+                                                            </h3>
+                                                            <p className="text-xs font-mono text-silver/40 uppercase tracking-widest flex items-center gap-3">
+                                                                <span className="material-symbols-outlined text-sm">target</span>
+                                                                {task.target}
+                                                            </p>
+                                                        </div>
                                                     </div>
 
-                                                    <div className="space-y-2">
-                                                        <h3 className="text-3xl font-black text-silver-bright uppercase tracking-tighter italic leading-none group-hover/card:text-rag-blue transition-colors">
-                                                            {task.tool}
-                                                        </h3>
-                                                        <p className="text-xs font-mono text-silver/40 uppercase tracking-widest flex items-center gap-3">
-                                                            <span className="material-symbols-outlined text-sm">target</span>
-                                                            {task.target}
-                                                        </p>
+                                                    <div className="flex flex-row xl:flex-col items-center xl:items-end justify-between xl:justify-center gap-8 shrink-0">
+                                                        <div className="text-left xl:text-right">
+                                                            <p className="text-[8px] font-black uppercase text-silver/20 tracking-[0.3em] mb-1 italic">Historical_Execution</p>
+                                                            <p className="text-xs font-mono text-silver-bright/80 uppercase">
+                                                                {formatLocaleDate(createDate)} // {formatLocaleTime(createDate)}
+                                                            </p>
+                                                        </div>
+                                                        {task.duration_seconds && (
+                                                            <div className="bg-charcoal-dark border-2 border-black px-4 py-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                                                                <p className="text-[10px] font-black font-mono text-rag-blue leading-none">{formatDuration(task.duration_seconds)?.toUpperCase()}</p>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
 
-                                                <div className="flex flex-row xl:flex-col items-center xl:items-end justify-between xl:justify-center gap-8 shrink-0">
-                                                    <div className="text-left xl:text-right">
-                                                        <p className="text-[8px] font-black uppercase text-silver/20 tracking-[0.3em] mb-1 italic">Historical_Execution</p>
-                                                        <p className="text-xs font-mono text-silver-bright/80 uppercase">
-                                                            {formatLocaleDate(createDate)} // {formatLocaleTime(createDate)}
-                                                        </p>
-                                                    </div>
-                                                    {task.duration_seconds && (
-                                                        <div className="bg-charcoal-dark border-2 border-black px-4 py-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-                                                            <p className="text-[10px] font-black font-mono text-rag-blue leading-none">{formatDuration(task.duration_seconds)?.toUpperCase()}</p>
-                                                        </div>
+                                                {/* Expandable Details Block */}
+                                                <AnimatePresence>
+                                                    {isExpanded && (
+                                                        <motion.div
+                                                            initial={{ height: 0, opacity: 0 }}
+                                                            animate={{ height: 'auto', opacity: 1 }}
+                                                            exit={{ height: 0, opacity: 0 }}
+                                                            transition={{ duration: 0.2 }}
+                                                            className="overflow-hidden"
+                                                        >
+                                                            <div className="mt-12 pt-12 border-t-4 border-black grid grid-cols-1 md:grid-cols-3 gap-12 bg-charcoal-dark/20 -mx-8 -mb-8 p-8 border-dashed">
+                                                                <div className="space-y-4">
+                                                                    <h5 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.3em] italic flex items-center gap-3">
+                                                                        <span className="w-1.5 h-3 bg-rag-red"></span> Target_Packet
+                                                                    </h5>
+                                                                    <div className="space-y-2">
+                                                                        <p className="text-[10px] font-mono text-silver/40">TARGET: <span className="text-silver-bright uppercase">{task.target}</span></p>
+                                                                        <p className="text-[10px] font-mono text-silver/40">TOOL: <span className="text-silver-bright uppercase">{task.tool}</span></p>
+                                                                        {task.preset && (
+                                                                            <p className="text-[10px] font-mono text-silver/40">PRESET: <span className="text-silver-bright uppercase">{task.preset}</span></p>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="space-y-4">
+                                                                    <h5 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.3em] italic flex items-center gap-3">
+                                                                        <span className="w-1.5 h-3 bg-rag-blue"></span> Signal_Metadata
+                                                                    </h5>
+                                                                    <div className="space-y-2">
+                                                                        <p className="text-[10px] font-mono text-silver/40">PLUGIN: <span className="text-silver-bright uppercase">{task.plugin_id}</span></p>
+                                                                        <p className="text-[10px] font-mono text-silver/40">SESSION: <span className="text-silver-bright uppercase">ENCRYPTED_VTX</span></p>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="space-y-4">
+                                                                    <h5 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.3em] italic flex items-center gap-3">
+                                                                        <span className="w-1.5 h-3 bg-rag-amber"></span> Time_Matrix
+                                                                    </h5>
+                                                                    <div className="grid grid-cols-2 gap-4">
+                                                                        <div className="space-y-1">
+                                                                            <span className="text-[8px] text-silver/20 uppercase font-black tracking-widest">In_Lock</span>
+                                                                            <span className="text-[10px] font-mono text-silver-bright block">{startDate ? formatLocaleTime(startDate) : 'PENDING'}</span>
+                                                                        </div>
+                                                                        <div className="space-y-1">
+                                                                            <span className="text-[8px] text-silver/20 uppercase font-black tracking-widest">Release</span>
+                                                                            <span className="text-[10px] font-mono text-silver-bright block">{endDate ? formatLocaleTime(endDate) : 'N/A'}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="flex items-center justify-end gap-6 md:col-span-3">
+                                                                    {(task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') && (
+                                                                        <button
+                                                                            className="bg-rag-red/20 text-rag-red border-2 border-rag-red/20 hover:bg-rag-red hover:text-black hover:border-black px-6 py-4 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 italic"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation()
+                                                                                handleTaskDelete(task.task_id)
+                                                                            }}
+                                                                        >
+                                                                            Delete_Record
+                                                                            <span className="material-symbols-outlined text-sm">delete</span>
+                                                                        </button>
+                                                                    )}
+                                                                    {(task.status === 'completed' || task.status === 'failed') && (
+                                                                        <button
+                                                                            className="bg-rag-blue text-black px-8 py-4 text-[10px] font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3 group/btn italic"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation()
+                                                                                handleRescan(task)
+                                                                            }}
+                                                                        >
+                                                                            Rescan_Signal
+                                                                            <span className="material-symbols-outlined text-sm group-hover/btn:translate-x-1 transition-transform">replay</span>
+                                                                        </button>
+                                                                    )}
+                                                                    <button
+                                                                        className="bg-silver-bright text-black px-8 py-4 text-[10px] font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3 group/btn italic"
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation()
+                                                                            navigate(routePath.task(task.task_id))
+                                                                        }}
+                                                                    >
+                                                                        Open_Deep_Brief
+                                                                        <span className="material-symbols-outlined text-sm group-hover/btn:translate-x-1 transition-transform">arrow_right_alt</span>
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </motion.div>
                                                     )}
-                                                </div>
+                                                </AnimatePresence>
                                             </div>
-
-                                            {/* Expandable Details Block */}
-                                            <AnimatePresence>
-                                                {expandedId === task.task_id && (
-                                                    <motion.div 
-                                                        initial={{ height: 0, opacity: 0 }}
-                                                        animate={{ height: 'auto', opacity: 1 }}
-                                                        exit={{ height: 0, opacity: 0 }}
-                                                        className="overflow-hidden"
-                                                    >
-                                                        <div className="mt-12 pt-12 border-t-4 border-black grid grid-cols-1 md:grid-cols-3 gap-12 bg-charcoal-dark/20 -mx-8 -mb-8 p-8 border-dashed">
-                                                            <div className="space-y-4">
-                                                                <h5 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.3em] italic flex items-center gap-3">
-                                                                    <span className="w-1.5 h-3 bg-rag-blue"></span> Signal_Metadata
-                                                                </h5>
-                                                                <div className="space-y-2">
-                                                                    <p className="text-[10px] font-mono text-silver/40">PLUGIN: <span className="text-silver-bright uppercase">{task.plugin_id}</span></p>
-                                                                    <p className="text-[10px] font-mono text-silver/40">SESSION: <span className="text-silver-bright uppercase">ENCRYPTED_VTX</span></p>
-                                                                </div>
-                                                            </div>
-
-                                                            <div className="space-y-4">
-                                                                <h5 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.3em] italic flex items-center gap-3">
-                                                                    <span className="w-1.5 h-3 bg-rag-amber"></span> Time_Matrix
-                                                                </h5>
-                                                                <div className="grid grid-cols-2 gap-4">
-                                                                    <div className="space-y-1">
-                                                                        <span className="text-[8px] text-silver/20 uppercase font-black tracking-widest">In_Lock</span>
-                                                                        <span className="text-[10px] font-mono text-silver-bright block">{startDate ? formatLocaleTime(startDate) : 'PENDING'}</span>
-                                                                    </div>
-                                                                    <div className="space-y-1">
-                                                                        <span className="text-[8px] text-silver/20 uppercase font-black tracking-widest">Release</span>
-                                                                        <span className="text-[10px] font-mono text-silver-bright block">{endDate ? formatLocaleTime(endDate) : 'N/A'}</span>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-
-                                                              <div className="flex items-center justify-end gap-6">
-                                                                {(task.status === 'completed' || task.status === 'failed' || task.status === 'cancelled') && (
-                                                                    <button 
-                                                                        className="bg-rag-red/20 text-rag-red border-2 border-rag-red/20 hover:bg-rag-red hover:text-black hover:border-black px-6 py-4 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 italic"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation()
-                                                                            handleTaskDelete(task.task_id)
-                                                                        }}
-                                                                    >
-                                                                        Delete_Record
-                                                                        <span className="material-symbols-outlined text-sm">delete</span>
-                                                                    </button>
-                                                                )}
-                                                                {(task.status === 'completed' || task.status === 'failed') && (
-                                                                    <button 
-                                                                        className="bg-rag-blue text-black px-8 py-4 text-[10px] font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3 group/btn italic"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation()
-                                                                            handleRescan(task)
-                                                                        }}
-                                                                    >
-                                                                        Rescan_Signal
-                                                                        <span className="material-symbols-outlined text-sm group-hover/btn:translate-x-1 transition-transform">replay</span>
-                                                                    </button>
-                                                                )}
-                                                                <button 
-                                                                    className="bg-silver-bright text-black px-8 py-4 text-[10px] font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3 group/btn italic"
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation()
-                                                                        navigate(routePath.task(task.task_id))
-                                                                    }}
-                                                                >
-                                                                    Open_Deep_Brief
-                                                                    <span className="material-symbols-outlined text-sm group-hover/btn:translate-x-1 transition-transform">arrow_right_alt</span>
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    </motion.div>
-                                                )}
-                                            </AnimatePresence>
                                         </div>
-                                    </motion.div>
-                                );
+                                    </div>
+                                )
                             })}
-                        </motion.div>
-                    ) : (
-                        <div className="py-40 bg-charcoal/30 border-4 border-dashed border-silver-bright/5 text-center flex flex-col items-center gap-8">
-                            <span className="material-symbols-outlined text-silver/5 text-9xl">inventory_2</span>
-                            <div className="space-y-2">
-                                <p className="text-xl font-black text-silver/20 uppercase tracking-[0.4em] italic">Archive Isolated</p>
-                                <p className="text-xs font-mono text-silver/10 uppercase tracking-widest">No historical signal streams available for current selection</p>
-                            </div>
                         </div>
-                    )}
-                </AnimatePresence>
+                    </div>
+                )}
             </section>
 
             {/* Floating Bulk Action Bar */}
             <AnimatePresence>
                 {selectedIds.length > 0 && (
-                    <motion.div 
+                    <motion.div
                         initial={{ y: 100, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
                         exit={{ y: 100, opacity: 0 }}
@@ -443,13 +479,13 @@ export default function Scans() {
                                 </div>
                             </div>
                             <div className="flex items-center gap-4">
-                                <button 
+                                <button
                                     onClick={() => setSelectedIds([])}
                                     className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-silver/40 hover:text-silver transition-colors"
                                 >
                                     Cancel
                                 </button>
-                                <button 
+                                <button
                                     onClick={handleBulkDelete}
                                     className="bg-rag-red text-black px-8 py-3 text-[10px] font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3 italic"
                                 >
@@ -469,7 +505,7 @@ export default function Scans() {
                     SECUSCAN ARCHIVE INTEGRITY PROTOCOL v10.1
                 </div>
                 <div className="flex gap-2">
-                    {[1,2,3,4,5,6,7,8,9,10,11,12].map(i => <div key={i} className="w-1.5 h-3 bg-silver/20"></div>)}
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(i => <div key={i} className="w-1.5 h-3 bg-silver/20"></div>)}
                 </div>
             </footer>
         </div>
