@@ -10,6 +10,20 @@ vi.mock('../../../src/api', () => ({
   API_BASE: 'http://127.0.0.1:8000',
 }))
 
+vi.mock('../../../src/hooks/useSavedViews', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/hooks/useSavedViews')>()
+  return {
+    ...actual,
+    useSavedViews: () => ({
+      views: [],
+      loading: false,
+      saveView: vi.fn(),
+      deleteView: vi.fn(),
+      renameView: vi.fn(),
+    }),
+  }
+})
+
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const criticalFinding = {
@@ -497,6 +511,27 @@ describe('Findings — risk score display', () => {
   beforeEach(() => {
     vi.mocked(getFindings).mockResolvedValue({ findings: [criticalFindingWithRisk, highFinding, mediumFinding] })
   })
+  describe('Findings — corrupted review state storage', () => {
+  beforeEach(() => {
+    vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
+  })
+
+  it('ignores malformed review state stored in localStorage', async () => {
+    localStorage.setItem(
+      'secuscan-finding-review-state',
+      '{invalid-json'
+    )
+
+    renderFindings()
+
+    await waitForLoad()
+
+    expect(
+      screen.getAllByText('SQL Injection in Login').length
+    ).toBeGreaterThanOrEqual(1)
+  })
+})
+
 
   it('shows risk score in sidebar when available', async () => {
     renderFindings()

@@ -167,7 +167,26 @@ class EndpointRateLimiter:
         self.limit = limit
         self.window_seconds = window_seconds
         self.history: Dict[str, List[datetime]] = defaultdict(list)
+        self.last_cleanup: datetime | None = None
         self.lock = asyncio.Lock()
+
+    def _cleanup_expired_identities(self, cutoff: datetime, now: datetime):
+        cleanup_interval = timedelta(seconds=max(1, self.window_seconds))
+        if self.last_cleanup and now - self.last_cleanup < cleanup_interval:
+            return
+
+        expired_identities = []
+        for identity, timestamps in self.history.items():
+            active_timestamps = [ts for ts in timestamps if ts > cutoff]
+            if active_timestamps:
+                self.history[identity] = active_timestamps
+            else:
+                expired_identities.append(identity)
+
+        for identity in expired_identities:
+            self.history.pop(identity, None)
+
+        self.last_cleanup = now
 
     async def __call__(self, request: Request, response: Response):
         identity = resolve_client_identity(request)
@@ -175,6 +194,7 @@ class EndpointRateLimiter:
         async with self.lock:
             now = datetime.now()
             cutoff = now - timedelta(seconds=self.window_seconds)
+            self._cleanup_expired_identities(cutoff, now)
 
             # Filter history to keep only timestamps within the sliding window
             self.history[identity] = [ts for ts in self.history[identity] if ts > cutoff]
@@ -214,6 +234,7 @@ class EndpointRateLimiter:
         """Clear all rate limiting history for this bucket."""
         async with self.lock:
             self.history.clear()
+            self.last_cleanup = None
 
 
 # Global instances
@@ -245,6 +266,11 @@ read_heavy_limiter = EndpointRateLimiter(
     window_seconds=settings.rate_limit_read_heavy_window
 )
 
+admin_limiter = EndpointRateLimiter(
+    bucket_name="admin",
+    limit=30,
+    window_seconds=60
+)
 
 async def reset_all_endpoint_limiters():
     """Reset rate limiting history for all route-specific buckets."""
@@ -252,3 +278,4 @@ async def reset_all_endpoint_limiters():
     await vault_limiter.reset()
     await report_download_limiter.reset()
     await read_heavy_limiter.reset()
+    await admin_limiter.reset()

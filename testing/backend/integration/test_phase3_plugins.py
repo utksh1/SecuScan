@@ -129,7 +129,7 @@ def test_hashcat(test_client):
     result = run_plugin_test(
         test_client,
         "hashcat",
-        {"target": "/tmp/hashes.txt", "hash_type": 0, "attack_mode": 0, "wordlist": "/tmp/words.txt"},
+        {"target": "/tmp/hashes.txt", "hash_type": 0, "attack_mode": 0, "wordlist": "words.txt"},
         mock_out,
     )
     assert any("Hash Recovered" in f["title"] for f in result["structured"]["findings"])
