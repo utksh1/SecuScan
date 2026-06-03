@@ -1,0 +1,371 @@
+/* ScanScheduleForm.module.css */
+
+.container {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 2rem;
+  border-radius: 8px;
+  background-color: var(--background-secondary, #f8f9fa);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+.header {
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 2px solid var(--border-color, #e0e0e0);
+}
+
+.header h2 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text-primary, #1a1a1a);
+}
+
+.subtitle {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text-secondary, #666);
+  line-height: 1.5;
+}
+
+/* Alerts */
+.errorAlert,
+.successAlert {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  animation: slideIn 0.3s ease-out;
+}
+
+.errorAlert {
+  background-color: #fee;
+  border: 1px solid #fcc;
+  color: #c33;
+}
+
+.successAlert {
+  background-color: #efe;
+  border: 1px solid #cfc;
+  color: #3c3;
+}
+
+.errorIcon,
+.successIcon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Form Groups */
+.formGroup {
+  margin-bottom: 2rem;
+}
+
+.formGroup:last-of-type {
+  margin-bottom: 0;
+}
+
+.label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary, #1a1a1a);
+}
+
+.required {
+  color: #e74c3c;
+  margin-left: 0.25rem;
+}
+
+.optional {
+  color: var(--text-secondary, #666);
+  font-weight: 400;
+  font-size: 0.9rem;
+}
+
+/* Input Fields */
+.input,
+.select,
+.timeField {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color, #d0d0d0);
+  border-radius: 4px;
+  font-size: 1rem;
+  font-family: inherit;
+  background-color: var(--background-primary, #fff);
+  color: var(--text-primary, #1a1a1a);
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.input:focus,
+.select:focus,
+.timeField:focus {
+  outline: none;
+  border-color: var(--primary-color, #007bff);
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.input::placeholder {
+  color: var(--text-tertiary, #999);
+}
+
+.select {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  padding-right: 2.5rem;
+}
+
+/* Help Text */
+.helpText {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #666);
+  line-height: 1.4;
+}
+
+.helpText code {
+  display: inline-block;
+  background-color: var(--code-background, #f0f0f0);
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.9rem;
+  color: var(--code-color, #d32f2f);
+  white-space: nowrap;
+}
+
+/* Description Text */
+.description {
+  margin: 0.5rem 0 1rem 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary, #666);
+  line-height: 1.5;
+}
+
+/* Time Range Container */
+.timeRangeContainer {
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.timeInput {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.timeLabel {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary, #1a1a1a);
+}
+
+.timeField {
+  padding: 0.65rem;
+  font-size: 0.95rem;
+}
+
+.separator {
+  display: none;
+  margin: 0 0.5rem;
+  color: var(--text-secondary, #666);
+  font-weight: 500;
+}
+
+@media (min-width: 480px) {
+  .timeRangeContainer {
+    gap: 0.75rem;
+  }
+
+  .separator {
+    display: block;
+    margin-bottom: 0.25rem;
+  }
+}
+
+/* Form Actions */
+.formActions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-color, #e0e0e0);
+}
+
+.submitButton,
+.cancelButton {
+  flex: 1;
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.submitButton {
+  background-color: var(--primary-color, #007bff);
+  color: #fff;
+}
+
+.submitButton:hover:not(:disabled) {
+  background-color: var(--primary-dark, #0056b3);
+  box-shadow: 0 4px 8px rgba(0, 86, 179, 0.2);
+}
+
+.submitButton:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.submitButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.cancelButton {
+  background-color: var(--background-tertiary, #e8e8e8);
+  color: var(--text-primary, #1a1a1a);
+}
+
+.cancelButton:hover:not(:disabled) {
+  background-color: var(--background-secondary, #d8d8d8);
+}
+
+.cancelButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Responsive Design */
+@media (max-width: 640px) {
+  .container {
+    padding: 1.5rem 1rem;
+    max-width: 100%;
+  }
+
+  .header h2 {
+    font-size: 1.5rem;
+  }
+
+  .header {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+  }
+
+  .formGroup {
+    margin-bottom: 1.5rem;
+  }
+
+  .timeRangeContainer {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .separator {
+    display: none !important;
+  }
+
+  .formActions {
+    flex-direction: column;
+  }
+
+  .submitButton,
+  .cancelButton {
+    width: 100%;
+  }
+}
+
+/* Dark mode support (if your app uses prefers-color-scheme) */
+@media (prefers-color-scheme: dark) {
+  .container {
+    background-color: #2a2a2a;
+  }
+
+  .header {
+    border-bottom-color: #444;
+  }
+
+  .header h2 {
+    color: #e8e8e8;
+  }
+
+  .subtitle {
+    color: #aaa;
+  }
+
+  .label {
+    color: #e8e8e8;
+  }
+
+  .input,
+  .select,
+  .timeField {
+    background-color: #3a3a3a;
+    border-color: #555;
+    color: #e8e8e8;
+  }
+
+  .input:focus,
+  .select:focus,
+  .timeField:focus {
+    border-color: #66b3ff;
+    box-shadow: 0 0 0 3px rgba(102, 179, 255, 0.2);
+  }
+
+  .helpText,
+  .description,
+  .separator {
+    color: #aaa;
+  }
+
+  .helpText code {
+    background-color: #1a1a1a;
+    color: #ff6b6b;
+  }
+
+  .timeLabel {
+    color: #e8e8e8;
+  }
+
+  .formActions {
+    border-top-color: #444;
+  }
+
+  .cancelButton {
+    background-color: #444;
+    color: #e8e8e8;
+  }
+
+  .cancelButton:hover:not(:disabled) {
+    background-color: #555;
+  }
+}
