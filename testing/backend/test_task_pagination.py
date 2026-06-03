@@ -57,6 +57,23 @@ class TestTasksPagination:
         response = test_client.get(f"/api/v1/tasks?{qs}")
         assert response.status_code == 422
 
+    def test_status_filter_valid(self, test_client):
+        response = test_client.get("/api/v1/tasks?status=completed")
+        assert response.status_code == 200
+
+        data = response.json()
+        assert "tasks" in data
+        assert all(task["status"] == "completed" for task in data["tasks"])
+
+    def test_status_filter_invalid(self, test_client):
+        response = test_client.get("/api/v1/tasks?status=invalid-status")
+        assert response.status_code == 400
+
+        data = response.json()
+        assert data["detail"] == (
+            "Invalid task status 'invalid-status'. Allowed values: queued, running, completed, failed, cancelled"
+        )
+
     def test_first_page_previous_is_null(self, test_client):
         """Test that previous is None on first page"""
         response = test_client.get("/api/v1/tasks?page=1&per_page=10")

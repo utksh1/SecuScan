@@ -109,7 +109,7 @@ from .models import (
     TaskCreateRequest, TaskResponse, TaskResult,
     PluginListResponse, ErrorResponse, BulkDeleteRequest,
     NotificationRuleCreate, NotificationRuleUpdate,
-    NotificationChannelType,
+    NotificationChannelType, TaskStatus,
 )
 from .config import settings
 from .database import get_db
@@ -867,6 +867,15 @@ async def list_tasks(
         where_clauses.append("plugin_id = ?")
         params.append(plugin_id)
     if status:
+        try:
+            status = TaskStatus(status).value
+        except ValueError:
+            allowed_values = ", ".join([s.value for s in TaskStatus])
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid task status '{status}'. Allowed values: {allowed_values}"
+            )
+
         where_clauses.append("status = ?")
         params.append(status)
 
