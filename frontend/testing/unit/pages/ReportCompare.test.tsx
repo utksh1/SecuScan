@@ -74,6 +74,22 @@ describe('ReportCompare page', () => {
     })
   })
 
+  it('lists failed reports when they still have findings', async () => {
+    vi.mocked(getReports).mockResolvedValue({
+      reports: [
+        { ...readyA, status: 'failed' },
+        { ...readyB, status: 'failed' },
+      ],
+    })
+    renderCompare()
+
+    await waitFor(() => {
+      const options = screen.getAllByRole('option')
+      expect(options.some((o) => o.textContent?.includes('Scan A'))).toBe(true)
+      expect(options.some((o) => o.textContent?.includes('Scan B'))).toBe(true)
+    })
+  })
+
   it('renders compare selectors and diff sections', async () => {
     const user = userEvent.setup()
     renderCompare()

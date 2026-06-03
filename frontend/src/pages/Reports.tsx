@@ -64,6 +64,29 @@ function ReportIcon({
   return <HugeiconsIcon icon={icon} size={size} strokeWidth={1.9} className={className} />
 }
 
+function normalizeReport(raw: Partial<Report> & Record<string, unknown>): Report {
+  const findings = Number(raw.findings ?? 0)
+  const pages = Number(raw.pages ?? 0)
+  const assets = Number(raw.assets ?? 0)
+  const type = raw.type === 'executive' || raw.type === 'compliance' ? raw.type : 'technical'
+  const status =
+    raw.status === 'ready' || raw.status === 'generating' || raw.status === 'failed'
+      ? raw.status
+      : 'ready'
+
+  return {
+    id: String(raw.id ?? ''),
+    task_id: String(raw.task_id ?? ''),
+    name: String(raw.name ?? 'Untitled report'),
+    type,
+    generated_at: String(raw.generated_at ?? ''),
+    status,
+    findings: Number.isFinite(findings) ? findings : 0,
+    assets: Number.isFinite(assets) ? assets : 0,
+    pages: Number.isFinite(pages) ? pages : 0,
+  }
+}
+
 export default function Reports() {
   const navigate = useNavigate()
   const [reports, setReports] = useState<Report[]>([])
@@ -83,7 +106,8 @@ export default function Reports() {
     setError(null)
     Promise.all([getReports(), getDashboardSummary()])
       .then(([reportData, summaryData]: any) => {
-        setReports(reportData.reports || [])
+        const rows = Array.isArray(reportData?.reports) ? reportData.reports : []
+        setReports(rows.map((row: Record<string, unknown>) => normalizeReport(row)))
         setSummary(summaryData || {})
       })
       .catch(() => {

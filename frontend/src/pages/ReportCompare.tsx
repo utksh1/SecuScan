@@ -26,6 +26,30 @@ type ReportOption = {
   status: string
 }
 
+function reportHasFindings(
+  report: ReportOption,
+  findingsByTask: Record<string, ComparableFinding[]>,
+): boolean {
+  const fromApi = Number(report.findings)
+  if (fromApi > 0) return true
+  return (findingsByTask[report.task_id]?.length ?? 0) > 0
+}
+
+/** Compare uses finding diffs; include ready reports and failed scans that still produced findings. */
+function comparableReports(
+  rows: ReportOption[],
+  findingsByTask: Record<string, ComparableFinding[]>,
+): ReportOption[] {
+  return rows.filter(
+    (r) => r.status === 'ready' || (r.status === 'failed' && reportHasFindings(r, findingsByTask)),
+  )
+}
+
+function reportOptionLabel(report: ReportOption): string {
+  const statusNote = report.status === 'failed' ? ' (scan failed)' : ''
+  return `${report.name}${statusNote} — ${formatDateLong(report.generated_at)}`
+}
+
 const severityChip: Record<string, string> = {
   critical: 'bg-rag-red text-black',
   high: 'bg-rag-amber text-black',
@@ -131,8 +155,6 @@ export default function ReportCompare() {
       .then((results) => {
         const reportData = results[0] as { reports?: ReportOption[] }
         const findingsData = results[1] as { findings?: Record<string, unknown>[] }
-        const ready = (reportData.reports || []).filter((r) => r.status === 'ready')
-        setReports(ready)
 
         const byTask: Record<string, ComparableFinding[]> = {}
         for (const raw of findingsData.findings || []) {
@@ -146,6 +168,12 @@ export default function ReportCompare() {
           }
         }
         setFindingsByTask(byTask)
+
+        const rawReports = (reportData.reports || []).map((r) => ({
+          ...r,
+          findings: Number(r.findings ?? 0),
+        }))
+        setReports(comparableReports(rawReports, byTask))
       })
       .catch(() => setError('Failed to load reports or findings'))
       .finally(() => setLoading(false))
@@ -227,7 +255,7 @@ export default function ReportCompare() {
                 <option value="">Select baseline...</option>
                 {reports.map((r) => (
                   <option key={r.id} value={r.id}>
-                    {r.name} — {formatDateLong(r.generated_at)}
+                    {reportOptionLabel(r)}
                   </option>
                 ))}
               </select>
@@ -244,7 +272,7 @@ export default function ReportCompare() {
                 <option value="">Select comparison...</option>
                 {reports.map((r) => (
                   <option key={r.id} value={r.id}>
-                    {r.name} — {formatDateLong(r.generated_at)}
+                    {reportOptionLabel(r)}
                   </option>
                 ))}
               </select>
@@ -253,7 +281,8 @@ export default function ReportCompare() {
 
           {reports.length < 2 && (
             <p className="text-[10px] font-black uppercase tracking-widest text-silver/40">
-              At least two ready reports are required to compare.
+              At least two reports with findings are required to compare. Run scans that finish
+              with results, then refresh.
             </p>
           )}
 
