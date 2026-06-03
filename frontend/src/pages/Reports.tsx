@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
+import { routes } from '../routes'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   Analytics02Icon,
@@ -122,6 +123,12 @@ export default function Reports() {
         </div>
 
         <div className="flex items-center gap-6">
+          <Link
+            to={routes.reportsCompare}
+            className="bg-rag-blue border-4 border-black px-6 py-4 text-[9px] font-black uppercase tracking-widest text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
+          >
+            Compare Reports
+          </Link>
           <button
             onClick={() => {
               if (!latestReadyReport) return
