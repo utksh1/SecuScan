@@ -10,13 +10,15 @@ or directly:
     pytest testing/backend/unit/test_findings_redaction.py -v
 """
 
-import asyncio
 import json
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
+from backend.secuscan.config import settings
+from backend.secuscan.database import get_db, init_db
+from backend.secuscan.plugins import get_plugin_manager, init_plugins
 from backend.secuscan.redaction import redact_dict, REDACTED
 
 
@@ -72,7 +74,7 @@ def test_redact_dict_handles_nested_metadata():
     }
     result = redact_dict(finding)
     assert FAKE_AWS_KEY not in result["metadata"]["raw_value"]
-    assert result["metadata"]["port"] == 443
+    assert result["metadata"]["port"] == 443  # int untouched
     assert FAKE_AWS_KEY not in result["metadata"]["nested"]["token"]
 
 
@@ -99,17 +101,19 @@ def test_redact_dict_handles_missing_keys_gracefully():
 # ── Integration test: DB persistence paths ────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_upsert_findings_redacts_description_before_insert():
+async def test_upsert_findings_redacts_description_before_insert(setup_test_environment):
     """
     After _upsert_findings_and_report is called:
     1. The findings table row must not contain the raw secret.
     2. tasks.structured_json must not contain the raw secret.
     """
     from backend.secuscan.executor import TaskExecutor
-    from backend.secuscan.config import settings
-    from backend.secuscan.database import get_db, init_db
-    from backend.secuscan.plugins import get_plugin_manager, init_plugins
 
+    # Initialise a fresh temp DB (setup_test_environment sets settings.database_path to a tmp dir)
+    await init_db(settings.database_path)
+    db = await get_db()
+
+    # Ensure plugins are loaded
     try:
         pm = get_plugin_manager()
     except RuntimeError:
@@ -120,8 +124,8 @@ async def test_upsert_findings_redacts_description_before_insert():
     plugin = pm.get_plugin(plugin_id)
 
     task_id = str(uuid.uuid4())
-    db = await get_db()
 
+    # Insert a minimal task row so foreign-key constraints are satisfied
     await db.execute(
         """
         INSERT INTO tasks (id, plugin_id, tool_name, target, inputs_json, status, scan_phase, safe_mode)
