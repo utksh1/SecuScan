@@ -2,7 +2,7 @@
 API routes for SecuScan backend
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request, Depends
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request, Depends, Body, Query
 from fastapi.responses import JSONResponse
 from typing import Any, Optional, List, Dict, Callable
 import json
@@ -29,7 +29,6 @@ def parse_json_fields(rows: List[Dict], fields: List[str]) -> List[Dict]:
         parsed.append(item)
     return parsed
 
-
 def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
     if isinstance(raw_steps, list):
         return raw_steps
@@ -40,7 +39,6 @@ def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
     except (TypeError, json.JSONDecodeError):
         return []
     return parsed if isinstance(parsed, list) else []
-
 
 def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]] = None) -> Dict[str, Any]:
     """Return the workflow shape consumed by the frontend."""
@@ -58,19 +56,37 @@ def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]
 
 def is_filesystem_target(target: str) -> bool:
     """Best-effort detection for path-based targets that should bypass host validation."""
-    if target.startswith(("/", "./", "../", "~")):
+    # Absolute or relative filesystem roots only — not CIDR notation (e.g. 8.8.8.8/32)
+    if target.startswith(("/", "./", "../", "~/")):
         return True
+    # Windows drive paths (C:\ or C:/)
+    """
+    Return True only for genuine local filesystem paths.
+
+    Explicit roots accepted:
+      - Unix absolute paths:   /home/user/repo
+      - Unix relative paths:   ./src, ../lib
+      - Home-relative paths:   ~/projects
+      - Windows paths:         C:\\Users\\repo, D:/work
+
+    Anything else — including CIDR notation (8.8.8.8/32, 192.168.1.0/24),
+    bare hostnames, URLs, and domain paths — returns False and will be
+    subject to the full validate_target() check including safe-mode enforcement.
+
+    CIDR notation is handled correctly by ipaddress.ip_network() inside
+    validate_target() and does NOT need special-casing here.
+    """
+    # Unix absolute, relative, and home-relative paths
+    if target.startswith(("/", "./", "../", "~/")):
+        return True
+    # Windows paths: C:\ or C:/
     if re.match(r"^[A-Za-z]:[\\/]", target):
         return True
-    if "/" in target and not target.startswith(("http://", "https://")):
-        return True
     return False
-
 
 def _slugify_filename_part(value: str, fallback: str) -> str:
     cleaned = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
     return cleaned or fallback
-
 
 def build_report_filename(task: Dict[str, Any], extension: str) -> str:
     tool = _slugify_filename_part(str(task.get("tool_name") or task.get("plugin_id") or "scan"), "scan")
@@ -91,7 +107,9 @@ logger = logging.getLogger(__name__)
 from .cache import get_cache
 from .models import (
     TaskCreateRequest, TaskResponse, TaskResult,
-    PluginListResponse, ErrorResponse, BulkDeleteRequest
+    PluginListResponse, ErrorResponse, BulkDeleteRequest,
+    NotificationRuleCreate, NotificationRuleUpdate,
+    NotificationChannelType,
 )
 from .config import settings
 from .database import get_db
@@ -102,17 +120,60 @@ from .ratelimit import (
     rate_limiter, concurrent_limiter,
     task_start_limiter, vault_limiter,
     report_download_limiter, read_heavy_limiter,
-    resolve_client_identity,
+    resolve_client_identity, admin_limiter,
 )
-from .validation import validate_target, validate_task_start_payload
+from .validation import validate_target, validate_task_start_payload, validate_url
 from .reporting import reporting
 from .vault import VaultCrypto
 from .workflows import scheduler
+from .auth import require_api_key
 
 from sse_starlette.sse import EventSourceResponse
 
-router = APIRouter(prefix="/api/v1")
+router = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
 SSE_RAW_OUTPUT_CHUNK_SIZE = 64 * 1024
+
+_EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def _validate_notification_target(channel_type: NotificationChannelType, target: str) -> str:
+    cleaned = target.strip()
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Notification target is required")
+
+    if channel_type == NotificationChannelType.WEBHOOK:
+        is_valid, error = validate_url(cleaned)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error or "Invalid webhook URL")
+        return cleaned
+
+    if not _EMAIL_PATTERN.match(cleaned):
+        raise HTTPException(status_code=400, detail="Invalid email address")
+    return cleaned
+
+
+def _serialize_notification_rule(row: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "severity_threshold": row["severity_threshold"],
+        "channel_type": row["channel_type"],
+        "target_url_or_email": row["target_url_or_email"],
+        "is_active": bool(row.get("is_active")),
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+    }
+
+
+def _serialize_notification_history(row: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "id": row["id"],
+        "rule_id": row["rule_id"],
+        "finding_id": row["finding_id"],
+        "status": row["status"],
+        "error_message": row.get("error_message"),
+        "sent_at": row.get("sent_at"),
+    }
 
 
 async def get_or_set_cached(key: str, builder):
@@ -125,7 +186,6 @@ async def get_or_set_cached(key: str, builder):
     value = await builder()
     await cache.set_json(key, value)
     return value
-
 
 async def invalidate_view_cache():
     """Clear aggregate caches after writes."""
@@ -193,7 +253,7 @@ async def get_plugins_summary():
     category_counts: Dict[str, int] = {}
 
     for plugin in plugins:
-        category = getattr(plugin, "category", "unknown")
+        category = plugin.get("category", "unknown")
 
         category_counts[category] = (
             category_counts.get(category, 0) + 1
@@ -264,13 +324,45 @@ async def start_task(
         logger.warning(f"Task start failed: Plugin not found: {request.plugin_id}")
         raise HTTPException(status_code=404, detail=f"Plugin not found: {request.plugin_id}")
 
-    if target := request.inputs.get("target"):
-        safe_mode = request.inputs.get("safe_mode", settings.safe_mode_default)
+    # Server-controlled safe mode: never trust client-supplied `inputs.safe_mode`.
+    safe_mode = bool(settings.safe_mode_default)
+
+    # Ensure downstream scanners/plugins see the effective safe-mode, but prevent client override.
+    effective_inputs = dict(request.inputs or {})
+    if "safe_mode" in effective_inputs:
+        effective_inputs.pop("safe_mode", None)
+    effective_inputs["safe_mode"] = safe_mode
+
+    # Validate numeric timeout inputs at request time to prevent unsafe values
+    for tkey in ("timeout", "max_scan_time"):
+        # Only enforce bounds if the plugin declares the field in its schema
+        declared = any(getattr(f, "id", None) == tkey for f in (plugin.fields or []))
+        if not declared:
+            continue
+        if tkey in effective_inputs and effective_inputs[tkey] not in (None, ""):
+            try:
+                tval = int(effective_inputs[tkey])
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail=f"Invalid value for {tkey}: must be an integer")
+            if tval <= 0 or tval > settings.sandbox_timeout:
+                raise HTTPException(status_code=400, detail=f"{tkey} must be between 1 and {settings.sandbox_timeout} seconds")
+
+    if target := effective_inputs.get("target"):
         target_str = str(target)
         should_validate_target = plugin.category != "code" and not is_filesystem_target(target_str)
 
         if should_validate_target:
-            is_valid, error_msg = validate_target(target_str, safe_mode)
+            try:
+                is_valid, error_msg = await asyncio.wait_for(
+                    asyncio.to_thread(validate_target, target_str, safe_mode),
+                    timeout=float(settings.dns_resolution_timeout_seconds),
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Task start failed: Target validation timed out for '%s'", target_str)
+                raise HTTPException(
+                    status_code=400,
+                    detail="Target validation timed out in safe mode (SecuScan Guardrail)",
+                )
 
             if not is_valid:
                 logger.warning(f"Task start failed: Target validation failed for '{target}': {error_msg}")
@@ -292,9 +384,10 @@ async def start_task(
     try:
         task_id = await executor.create_task(
             request.plugin_id,
-            request.inputs,
-            request.preset,
-            request.consent_granted
+            effective_inputs,
+            safe_mode=safe_mode,
+            preset=request.preset,
+            consent_granted=request.consent_granted,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -310,6 +403,10 @@ async def start_task(
 
     # Slot is held — schedule execution.
     # execute_task releases the slot in its finally block on every exit path.
+    #
+    # Use BackgroundTasks so the response can be sent without waiting in real
+    # ASGI servers, while tests using TestClient still execute the task to keep
+    # contract tests deterministic.
     background_tasks.add_task(executor.execute_task, task_id)
     await invalidate_view_cache()
 
@@ -753,8 +850,8 @@ async def get_reports():
 
 @router.get("/tasks", dependencies=[Depends(read_heavy_limiter)])
 async def list_tasks(
-    page: int = 1,
-    per_page: int = 25,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(25, ge=1, le=100),
     plugin_id: Optional[str] = None,
     status: Optional[str] = None
 ):
@@ -907,6 +1004,10 @@ async def bulk_delete_tasks(request: BulkDeleteRequest):
         tuple(task_ids)
     )
     if running_tasks:
+        raise HTTPException(status_code=400, detail="Cannot delete running tasks. Abort them first.")
+
+    # If the task is currently executing but the DB hasn't been updated yet, fail closed.
+    if any(tid in executor.running_tasks for tid in task_ids):
         raise HTTPException(status_code=400, detail="Cannot delete running tasks. Abort them first.")
 
     await delete_task_records(task_ids)
@@ -1081,10 +1182,15 @@ async def run_workflow_once(workflow_id: str):
     steps = json.loads(row["steps_json"] or "[]")
     created_task_ids: List[str] = []
     for step in steps:
+        safe_mode = bool(settings.safe_mode_default)
+        effective_inputs = dict(step.get("inputs", {}) or {})
+        effective_inputs.pop("safe_mode", None)
+        effective_inputs["safe_mode"] = safe_mode
         task_id = await executor.create_task(
             step.get("plugin_id"),
-            step.get("inputs", {}),
-            step.get("preset"),
+            effective_inputs,
+            safe_mode=safe_mode,
+            preset=step.get("preset"),
             consent_granted=True,
         )
         asyncio.create_task(executor.execute_task(task_id))
@@ -1140,6 +1246,178 @@ async def delete_workflow(workflow_id: str):
 async def trigger_workflow_tick():
     await scheduler.tick()
     return {"tick": "ok"}
+
+
+@router.get("/notifications/rules")
+async def list_notification_rules():
+    db = await get_db()
+    rows = await db.fetchall(
+        "SELECT * FROM notification_rules ORDER BY created_at DESC"
+    )
+    rules = [_serialize_notification_rule(row) for row in rows]
+    return {"rules": rules, "total": len(rules)}
+
+
+@router.post("/notifications/rules")
+async def create_notification_rule(payload: NotificationRuleCreate):
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Rule name is required")
+
+    target = _validate_notification_target(payload.channel_type, payload.target_url_or_email)
+    rule_id = str(uuid.uuid4())
+    db = await get_db()
+    await db.execute(
+        """
+        INSERT INTO notification_rules (
+            id, name, severity_threshold, channel_type, target_url_or_email, is_active
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            rule_id,
+            name,
+            payload.severity_threshold.value,
+            payload.channel_type.value,
+            target,
+            1 if payload.is_active else 0,
+        ),
+    )
+    row = await db.fetchone(
+        "SELECT * FROM notification_rules WHERE id = ?",
+        (rule_id,),
+    )
+    if not row:
+        raise HTTPException(status_code=500, detail="Failed to create notification rule")
+    return _serialize_notification_rule(row)
+
+
+@router.get("/notifications/rules/{rule_id}")
+async def get_notification_rule(rule_id: str):
+    db = await get_db()
+    row = await db.fetchone(
+        "SELECT * FROM notification_rules WHERE id = ?",
+        (rule_id,),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Notification rule not found")
+    return _serialize_notification_rule(row)
+
+
+@router.patch("/notifications/rules/{rule_id}")
+async def update_notification_rule(rule_id: str, payload: NotificationRuleUpdate):
+    db = await get_db()
+    row = await db.fetchone(
+        "SELECT * FROM notification_rules WHERE id = ?",
+        (rule_id,),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Notification rule not found")
+
+    updates: List[str] = []
+    params: List[Any] = []
+
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Rule name is required")
+        updates.append("name = ?")
+        params.append(name)
+
+    effective_channel = (
+        payload.channel_type
+        if payload.channel_type is not None
+        else NotificationChannelType(row["channel_type"])
+    )
+    if payload.target_url_or_email is not None:
+        target = _validate_notification_target(
+            effective_channel,
+            payload.target_url_or_email,
+        )
+        updates.append("target_url_or_email = ?")
+        params.append(target)
+    elif payload.channel_type is not None:
+        target = _validate_notification_target(
+            effective_channel,
+            row["target_url_or_email"],
+        )
+        updates.append("target_url_or_email = ?")
+        params.append(target)
+
+    if payload.severity_threshold is not None:
+        updates.append("severity_threshold = ?")
+        params.append(payload.severity_threshold.value)
+
+    if payload.channel_type is not None:
+        updates.append("channel_type = ?")
+        params.append(payload.channel_type.value)
+
+    if payload.is_active is not None:
+        updates.append("is_active = ?")
+        params.append(1 if payload.is_active else 0)
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="No update fields provided")
+
+    updates.append("updated_at = datetime('now')")
+    params.append(rule_id)
+    await db.execute(
+        f"UPDATE notification_rules SET {', '.join(updates)} WHERE id = ?",
+        tuple(params),
+    )
+    updated = await db.fetchone(
+        "SELECT * FROM notification_rules WHERE id = ?",
+        (rule_id,),
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Notification rule not found")
+    return _serialize_notification_rule(updated)
+
+
+@router.delete("/notifications/rules/{rule_id}")
+async def delete_notification_rule(rule_id: str):
+    db = await get_db()
+    row = await db.fetchone(
+        "SELECT id FROM notification_rules WHERE id = ?",
+        (rule_id,),
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Notification rule not found")
+    await db.execute("DELETE FROM notification_rules WHERE id = ?", (rule_id,))
+    return {"rule_id": rule_id, "deleted": True}
+
+
+@router.get("/notifications/history", dependencies=[Depends(read_heavy_limiter)])
+async def list_notification_history(
+    rule_id: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+):
+    if limit < 1 or limit > 200:
+        raise HTTPException(status_code=400, detail="Limit must be between 1 and 200")
+    if offset < 0:
+        raise HTTPException(status_code=400, detail="Offset must be non-negative")
+
+    db = await get_db()
+    query = "SELECT * FROM notification_history"
+    params: List[Any] = []
+    if rule_id:
+        query += " WHERE rule_id = ?"
+        params.append(rule_id)
+    query += " ORDER BY sent_at DESC LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
+
+    rows = await db.fetchall(query, tuple(params))
+    history = [_serialize_notification_history(row) for row in rows]
+
+    count_query = "SELECT COUNT(*) AS total FROM notification_history"
+    count_params: List[Any] = []
+    if rule_id:
+        count_query += " WHERE rule_id = ?"
+        count_params.append(rule_id)
+    count_row = await db.fetchone(count_query, tuple(count_params))
+    total = int(count_row["total"]) if count_row else 0
+
+    return {"history": history, "total": total, "limit": limit, "offset": offset}
 
 
 @router.get("/finding/{finding_id}")
@@ -1251,3 +1529,135 @@ async def get_assets():
     rows = await db.fetchall("SELECT DISTINCT target FROM tasks UNION SELECT DISTINCT target FROM findings")
     assets = [{"id": str(uuid.uuid4()), "name": row["target"]} for row in rows]
     return {"assets": assets}
+
+# ── Network Policy Management Endpoints ─────────────────────────────────────
+
+from fastapi.security import APIKeyHeader
+from fastapi import Security, status
+from .network_policy import get_policy_engine, PolicyAction
+from dataclasses import asdict
+
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+def verify_admin_access(
+    api_key: Optional[str] = Security(api_key_header),
+    request: Request = None,
+) -> Optional[str]:
+    """Verify admin API key is provided and valid."""
+    import hmac
+
+    # Secure-by-default: If admin_api_key setting is not configured, block all access
+    if not settings.admin_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Admin API Key is not configured on the server. Please set SECUSCAN_ADMIN_API_KEY."
+        )
+
+    # Entropy check: enforce a strong API key
+    if len(settings.admin_api_key) < 16:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Admin API Key is too weak. It must be at least 16 characters long."
+        )
+
+    candidate = api_key
+    if request:
+        auth_header = request.headers.get("authorization")
+        if auth_header:
+            if auth_header.lower().startswith("bearer "):
+                token = auth_header[7:]
+            else:
+                token = auth_header
+            # If the Authorization header matches the admin API key, prefer it.
+            # This is important when the client automatically includes the general X-Api-Key in headers.
+            if hmac.compare_digest(token, settings.admin_api_key):
+                candidate = token
+            elif not candidate:
+                candidate = token
+
+    if not candidate or not hmac.compare_digest(candidate, settings.admin_api_key):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing Admin API Key"
+        )
+    return candidate
+
+@router.get("/admin/network-policy", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
+async def get_network_policy():
+    """Get current network policy configuration"""
+    engine = get_policy_engine()
+
+    return {
+        "allowlist": [asdict(p) for net, p in engine.allowlist],
+        "denylist": [asdict(p) for net, p in engine.denylist],
+        "audit_entries_count": len(engine.audit_entries),
+    }
+
+@router.post("/admin/network-policy/allow", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
+async def add_allow_rule(request: dict):
+    """Add network to allowlist"""
+    engine = get_policy_engine()
+
+    try:
+        engine.add_allow_rule(
+            cidr=request["cidr"],
+            reason=request.get("reason", "Operator added"),
+        )
+        return {"status": "success", "cidr": request["cidr"]}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/admin/network-policy/deny", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
+async def add_deny_rule(request: dict):
+    """Add network to denylist"""
+    engine = get_policy_engine()
+
+    try:
+        engine.add_deny_rule(
+            cidr=request["cidr"],
+            reason=request.get("reason", "Operator added"),
+        )
+        return {"status": "success", "cidr": request["cidr"]}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/admin/network-audit-log", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
+async def get_audit_log(
+    plugin_id: Optional[str] = None,
+    action: Optional[str] = None,
+    limit: int = 100
+):
+    """Retrieve network audit log entries"""
+    engine = get_policy_engine()
+
+    policy_action = None
+    if action and action.upper() in ["ALLOW", "DENY"]:
+        policy_action = PolicyAction[action.upper()]
+
+    entries = engine.get_audit_entries(
+        plugin_id=plugin_id,
+        action=policy_action,
+        limit=limit
+    )
+
+    return {
+        "entries": [asdict(e) for e in entries],
+        "total": len(entries),
+    }
+
+@router.get("/admin/network-audit-log/export", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
+async def export_audit_log(format: str = "json"):
+    """Export audit log in specified format"""
+    engine = get_policy_engine()
+
+    if format not in ["json", "csv"]:
+        raise HTTPException(status_code=400, detail="Format must be 'json' or 'csv'")
+
+    content = engine.export_audit_log(format)
+
+    mime_type = "application/json" if format == "json" else "text/csv"
+    return Response(
+        content=content,
+        media_type=mime_type,
+        headers={"Content-Disposition": f"attachment; filename=network-audit.{format}"}
+    )

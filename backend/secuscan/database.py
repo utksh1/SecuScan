@@ -34,11 +34,12 @@ class Database:
         """Establish database connection and ensure schema exists."""
         # Ensure data directory exists
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        
+
         conn = await aiosqlite.connect(self.db_path)
         self._connection = conn
         conn.row_factory = aiosqlite.Row
         await self._create_schema()
+        await self._run_migrations()
 
     async def disconnect(self):
         """Close the current database connection."""
@@ -172,6 +173,26 @@ class Database:
                 last_run_at TIMESTAMP
             );
 
+            CREATE TABLE IF NOT EXISTS notification_rules (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                severity_threshold TEXT NOT NULL,
+                channel_type TEXT NOT NULL,
+                target_url_or_email TEXT NOT NULL,
+                is_active BOOLEAN NOT NULL DEFAULT 1,
+                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS notification_history (
+                id TEXT PRIMARY KEY,
+                rule_id TEXT NOT NULL REFERENCES notification_rules(id) ON DELETE CASCADE,
+                finding_id TEXT NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
+                status TEXT NOT NULL,
+                error_message TEXT,
+                sent_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+            );
+
             -- Tasks indexes (existing)
             CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at);
             CREATE INDEX IF NOT EXISTS idx_tasks_target ON tasks(target);
@@ -201,6 +222,11 @@ class Database:
 
             -- Workflows index (existing)
             CREATE INDEX IF NOT EXISTS idx_workflows_enabled ON workflows(enabled);
+            CREATE INDEX IF NOT EXISTS idx_notification_rules_active ON notification_rules(is_active);
+            CREATE INDEX IF NOT EXISTS idx_notification_rules_severity ON notification_rules(severity_threshold);
+            CREATE INDEX IF NOT EXISTS idx_notification_history_rule_id ON notification_history(rule_id);
+            CREATE INDEX IF NOT EXISTS idx_notification_history_finding_id ON notification_history(finding_id);
+            CREATE INDEX IF NOT EXISTS idx_notification_history_sent_at ON notification_history(sent_at DESC);
             """
         )
 
@@ -240,7 +266,6 @@ class Database:
                 print("Added missing column 'proof' to findings table.")
             except Exception as e:
                 print(f"Failed to add 'proof' to findings: {e}")
-
         risk_cols = {
             "exploitability": "REAL",
             "confidence": "REAL",
@@ -255,6 +280,24 @@ class Database:
                     print(f"Added missing column {col_name} to findings table.")
                 except Exception as e:
                     print(f"Failed to add column {col_name}: {e}")
+
+    async def _run_migrations(self):
+        migrations_dir = Path(__file__).parent / "migrations"
+
+        if not migrations_dir.exists():
+            raise RuntimeError(
+            f"Migrations directory not found at {migrations_dir} — "
+            "ensure the backend package is installed correctly."
+        )
+
+        for migration_file in sorted(migrations_dir.glob("*.sql")):
+            sql = migration_file.read_text(encoding="utf-8")
+            try:
+                await self.connection.executescript(sql)
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Migration {migration_file.name} failed — startup aborted: {exc}"
+                ) from exc
 
         await self._backfill_risk_scores()
 
@@ -301,13 +344,13 @@ class Database:
 
     async def fetchone(self, query: str, params: tuple = ()) -> Optional[Dict]:
         """Fetch one row."""
-        async with self.connection.execute(query, params) as cursor:
+        async with await self.connection.execute(query, params) as cursor:
             row = await cursor.fetchone()
             return dict(row) if row else None
 
     async def fetchall(self, query: str, params: tuple = ()) -> List[Dict]:
         """Fetch all rows."""
-        async with self.connection.execute(query, params) as cursor:
+        async with await self.connection.execute(query, params) as cursor:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
 

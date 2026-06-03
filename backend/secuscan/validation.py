@@ -4,7 +4,10 @@ Input validation and security checks
 
 import re
 import ipaddress
-from typing import Any, Dict, Tuple
+import socket
+import time
+from urllib.parse import urlparse
+from typing import Any, Dict, Tuple, Optional
 from fnmatch import fnmatch
 
 from .config import settings
@@ -27,6 +30,141 @@ ALLOWED_PRIVATE = [
 
 # Blocked TLDs in safe mode
 BLOCKED_TLDS = [".mil", ".gov"]
+
+
+def _net_within_allowed_networks(net: ipaddress._BaseNetwork) -> bool:
+    """Return True if net is permitted by settings.allowed_networks (best-effort, conservative)."""
+    patterns = [str(p).strip() for p in (settings.allowed_networks or []) if str(p).strip()]
+    if not patterns:
+        return True
+
+    def wildcard_to_net(pattern: str) -> ipaddress.IPv4Network | None:
+        # Convert simple trailing-octet wildcards like "10.*.*.*" → 10.0.0.0/8.
+        parts = pattern.split(".")
+        if len(parts) != 4:
+            return None
+        fixed = []
+        wildcard_started = False
+        for part in parts:
+            if part == "*":
+                wildcard_started = True
+                fixed.append(0)
+                continue
+            if wildcard_started:
+                return None
+            if not part.isdigit():
+                return None
+            value = int(part)
+            if value < 0 or value > 255:
+                return None
+            fixed.append(value)
+        wildcard_octets = sum(1 for p in parts if p == "*")
+        if wildcard_octets == 0:
+            return None
+        prefix = (4 - wildcard_octets) * 8
+        return ipaddress.IPv4Network(f"{'.'.join(map(str, fixed))}/{prefix}", strict=False)
+
+    # Single-IP networks can be checked against wildcards and CIDRs.
+    if net.num_addresses == 1:
+        ip_str = str(net.network_address)
+        for pattern in patterns:
+            try:
+                allowed_net = ipaddress.ip_network(pattern, strict=False)
+                if net.subnet_of(allowed_net) or net.overlaps(allowed_net):
+                    return True
+            except ValueError:
+                converted = wildcard_to_net(pattern)
+                if converted and net.version == converted.version and net.subnet_of(converted):
+                    return True
+                if fnmatch(ip_str, pattern):
+                    return True
+        return False
+
+    # Multi-address networks: only allow explicit CIDR allowlist entries that fully contain the target.
+    for pattern in patterns:
+        try:
+            allowed_net = ipaddress.ip_network(pattern, strict=False)
+        except ValueError:
+            allowed_net = wildcard_to_net(pattern)
+            if not allowed_net:
+                continue
+        if net.version == allowed_net.version and net.subnet_of(allowed_net):
+            return True
+
+    return False
+
+
+def _parse_url_hostname(target: str) -> str | None:
+    parsed = urlparse(target)
+    if parsed.scheme not in {"http", "https"}:
+        return None
+    return parsed.hostname
+
+
+def _resolve_host_ips(hostname: str) -> list[ipaddress._BaseAddress]:
+    """Resolve hostname to a list of IP addresses (A/AAAA).
+
+    Note: This function is synchronous and may block on DNS resolution. Callers
+    in async request paths should run it in a thread and enforce timeouts.
+    Results are cached for a short TTL to reduce repeated resolutions.
+    """
+    now = time.time()
+    cached = _DNS_CACHE.get(hostname)
+    if cached and cached[0] > now:
+        return list(cached[1])
+    try:
+        infos = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
+    except OSError:
+        _DNS_CACHE[hostname] = (now + max(1, int(settings.dns_cache_ttl_seconds)), [])
+        return []
+    ips: list[ipaddress._BaseAddress] = []
+    for family, _socktype, _proto, _canonname, sockaddr in infos:
+        try:
+            if family == socket.AF_INET:
+                ips.append(ipaddress.ip_address(sockaddr[0]))
+            elif family == socket.AF_INET6:
+                ips.append(ipaddress.ip_address(sockaddr[0]))
+        except ValueError:
+            continue
+    # Deduplicate while preserving order.
+    seen = set()
+    unique = []
+    for ip in ips:
+        if ip in seen:
+            continue
+        seen.add(ip)
+        unique.append(ip)
+    _DNS_CACHE[hostname] = (now + max(1, int(settings.dns_cache_ttl_seconds)), unique)
+    return list(unique)
+
+
+def _resolve_host_ips_uncached(hostname: str) -> list[ipaddress._BaseAddress]:
+    """Force a fresh DNS resolution (bypasses TTL cache)."""
+    _DNS_CACHE.pop(hostname, None)
+    return _resolve_host_ips(hostname)
+
+
+def _validate_resolved_ips_safe_mode(resolved_ips: list[ipaddress._BaseAddress]) -> Tuple[bool, str]:
+    if not resolved_ips:
+        return False, "Hostname did not resolve to any IPs in safe mode (SecuScan Guardrail)"
+
+    for ip in resolved_ips:
+        ip_net = ipaddress.ip_network(ip, strict=False)
+        if any(ip_net.overlaps(blocked) for blocked in BLOCKED_NETWORKS):
+            return False, "Target overlaps with blocked network range"
+        if ip.is_loopback and not settings.allow_loopback_scans:
+            return False, "Loopback scans are disabled in global settings"
+
+        is_private = any(
+            (ip_net.version == allowed.version and (ip_net.subnet_of(allowed) or ip_net.overlaps(allowed)))
+            for allowed in ALLOWED_PRIVATE
+        )
+        if not is_private:
+            return False, "Public IPs/networks not allowed in safe mode (SecuScan Guardrail)"
+        if not _net_within_allowed_networks(ip_net):
+            return False, "Target not within allowed networks in safe mode (SecuScan Guardrail)"
+
+    return True, ""
 
 
 def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
@@ -65,6 +203,9 @@ def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
             if not is_private:
                 return False, "Public IPs/networks not allowed in safe mode (SecuScan Guardrail)"
 
+            if not _net_within_allowed_networks(net):
+                return False, "Target not within allowed networks in safe mode (SecuScan Guardrail)"
+
         return True, ""
 
     except ValueError:
@@ -73,14 +214,16 @@ def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
 
     # Handle URLs
     hostname_to_validate = target
-    if target.startswith(("http://", "https://")):
-        # Extract host:port or host (handle IPv6 literals in brackets)
-        host_part = target.split("://", 1)[1].split("/", 1)[0]
-        if host_part.startswith("["):
-            # IPv6 literal like [::1]:8080 or [::1] for ipv6
-            hostname_to_validate = host_part.split("]")[0][1:]
-        else:
-            hostname_to_validate = host_part.split(":", 1)[0]
+    parsed_host = _parse_url_hostname(target)
+    if parsed_host is not None:
+        hostname_to_validate = parsed_host
+
+    # If host is an IP literal (including URL host), validate it via the same IP/CIDR path.
+    try:
+        net = ipaddress.ip_network(hostname_to_validate, strict=False)
+        return validate_target(str(net), safe_mode=safe_mode)
+    except ValueError:
+        pass
 
     # Validate hostname format (RFC 1123)
     if not re.match(r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$', hostname_to_validate):
@@ -92,7 +235,31 @@ def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
             if hostname_to_validate.lower().endswith(tld):
                 return False, f"Domains ending in {tld} are blocked in safe mode"
 
+        # Safe mode: resolve hostname and ensure ALL resolved IPs are within private + allowed networks.
+        # Also protect against rebinding/round-robin by optionally doing a second fresh resolution and validating the union.
+        resolved_ips = _resolve_host_ips(hostname_to_validate)
+        ok, msg = _validate_resolved_ips_safe_mode(resolved_ips)
+        if not ok:
+            return ok, msg
+
+        if settings.dns_rebind_check:
+            resolved_ips2 = _resolve_host_ips_uncached(hostname_to_validate)
+            union = []
+            seen = set()
+            for ip in list(resolved_ips) + list(resolved_ips2):
+                if ip in seen:
+                    continue
+                seen.add(ip)
+                union.append(ip)
+            ok2, msg2 = _validate_resolved_ips_safe_mode(union)
+            if not ok2:
+                return ok2, msg2
+
     return True, ""
+
+
+# Simple TTL cache: hostname -> (expires_at_epoch, [ips])
+_DNS_CACHE: dict[str, tuple[float, list[ipaddress._BaseAddress]]] = {}
 
 
 def validate_port(port: int) -> Tuple[bool, str]:
@@ -334,3 +501,94 @@ def _check_field(key: str, value: Any) -> Tuple[bool, int, str]:
                 )
 
     return True, 0, ""
+
+def _is_filesystem_target(target: str) -> bool:
+    """Best-effort detection for path-based targets that should bypass host validation."""
+    if target.startswith(("/", "./", "../", "~")):
+        return True
+    if re.match(r"^[A-Za-z]:[\\/]", target):
+        return True
+    if "/" in target and not target.startswith(("http://", "https://")):
+        return True
+    return False
+
+def validate_command_network_egress(command: list[str], safe_mode: bool, plugin_id: str, task_id: str) -> Tuple[bool, str]:
+    """
+    Inspect all command arguments. If any argument represents an outbound network
+    destination (IP, hostname, URL), validate it against both Safe Mode and Network Policy.
+    """
+    from .network_policy import get_policy_engine
+
+    for arg in command:
+        arg_str = str(arg).strip()
+        if not arg_str:
+            continue
+        if arg_str.startswith("-"):
+            continue  # Ignore flags
+        if _is_filesystem_target(arg_str):
+            continue  # Ignore local paths
+
+        # Check if it looks like a URL
+        is_url = False
+        hostname = None
+        if "://" in arg_str:
+            try:
+                parsed = urlparse(arg_str)
+                if parsed.scheme in ("http", "https", "ws", "wss"):
+                    is_url = True
+                    hostname = parsed.hostname
+            except Exception:
+                pass
+
+        # If it's a URL, validate the hostname. If not, check if it could be a hostname or IP.
+        candidate = hostname if is_url else arg_str
+        if not candidate:
+            continue
+
+        # Clean port suffix if present (e.g. "example.com:80" or "10.0.0.1:8080")
+        if ":" in candidate and not candidate.startswith("["):
+            parts = candidate.rsplit(":", 1)
+            if parts[1].isdigit():
+                candidate = parts[0]
+
+        is_ip = False
+        try:
+            # Try to parse as IP/CIDR (handles single IP and subnet validation)
+            ipaddress.ip_network(candidate, strict=False)
+            is_ip = True
+        except ValueError:
+            pass
+
+        is_host = False
+        if not is_ip:
+            # Basic hostname check (with dots and valid characters, or 'localhost')
+            if candidate.lower() == "localhost" or re.match(
+                r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)+$',
+                candidate
+            ):
+                is_host = True
+
+        if is_ip or is_host:
+            # Validate against safe mode
+            is_valid, err = validate_target(candidate, safe_mode=safe_mode)
+            if not is_valid:
+                return False, f"Command argument '{arg_str}' violates safe mode: {err}"
+
+            # Validate against network policy
+            if settings.enforce_network_policy:
+                engine = get_policy_engine()
+                allowed, reason, _ = engine.check_access(
+                    dest_ip=candidate,
+                    plugin_id=plugin_id,
+                    task_id=task_id,
+                )
+                if not allowed:
+                    if settings.network_policy_failure_mode == "log_only":
+                        import logging
+                        logging.getLogger(__name__).warning(
+                            f"[Log Only] Command argument '{arg_str}' network policy violation allowed: {reason}"
+                        )
+                    else:
+                        return False, f"Command argument '{arg_str}' violates network policy: {reason}"
+
+    return True, ""

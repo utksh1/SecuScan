@@ -21,7 +21,9 @@ from .plugins import get_plugin_manager
 from .models import TaskStatus, ScanPhase
 from .ratelimit import concurrent_limiter
 from .risk_scoring import compute_risk_score, compute_risk_factors
-
+from .capabilities import CapabilityEnforcer, CapabilityDeniedError, build_enforcer_from_settings
+from .parser_sandbox import run_parser_in_sandbox, ParserSandboxError
+from .network_policy import get_policy_engine
 
 def _parse_discovered_at(finding: dict) -> Optional[datetime]:
     """Extract and parse discovered_at from a finding dict, or return current UTC time."""
@@ -88,6 +90,7 @@ class TaskExecutor:
         self.running_tasks: Dict[str, asyncio.Task] = {}
         # PubSub: Map of task_id to list of active async queues listening for output/status updates
         self._listeners: Dict[str, List[asyncio.Queue]] = {}
+        self._capability_enforcer: CapabilityEnforcer = build_enforcer_from_settings()
 
     def subscribe(self, task_id: str) -> asyncio.Queue:
         """Subscribe to a task's real-time events."""
@@ -140,6 +143,7 @@ class TaskExecutor:
         self,
         plugin_id: str,
         inputs: Dict[str, Any],
+        safe_mode: bool,
         preset: Optional[str] = None,
         consent_granted: bool = False
     ) -> str:
@@ -187,7 +191,7 @@ class TaskExecutor:
                 TaskStatus.QUEUED.value,
                 ScanPhase.QUEUED.value,
                 consent_granted,
-                inputs.get("safe_mode", True)
+                bool(safe_mode)
             )
         )
         
@@ -269,6 +273,74 @@ class TaskExecutor:
             safe_mode = bool(task_row["safe_mode"])
             target = extract_target(inputs)
 
+            # ── Safe Mode & Network policy enforcement ───────────────────────
+            # Enforce Safe Mode target validation inside TaskExecutor to guarantee
+            # that all execution paths (manual API, workflows, scheduled tasks) are protected.
+            if target:
+                plugin_manager = get_plugin_manager()
+                plugin = plugin_manager.get_plugin(plugin_id)
+                should_validate = True
+                if plugin and plugin.category == "code":
+                    should_validate = False
+
+                # Check for filesystem targets using the same best-effort detection
+                is_fs = target.startswith(("/", "./", "../", "~")) or \
+                        bool(re.match(r"^[A-Za-z]:[\\/]", target)) or \
+                        ("/" in target and not target.startswith(("http://", "https://")))
+
+                if should_validate and not is_fs:
+                    from .validation import validate_target
+                    try:
+                        # Enforce safe mode validation of target address in a thread pool
+                        is_valid, error_msg = await asyncio.wait_for(
+                            asyncio.to_thread(validate_target, target, safe_mode),
+                            timeout=float(settings.dns_resolution_timeout_seconds),
+                        )
+                        if not is_valid:
+                            await self.mark_task_failed(
+                                task_id,
+                                f"Safe mode target validation failed: {error_msg}",
+                            )
+                            await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
+                            return
+                    except asyncio.TimeoutError:
+                        await self.mark_task_failed(
+                            task_id,
+                            "Target validation timed out (SecuScan Guardrail)",
+                        )
+                        await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
+                        return
+
+            # Check before launching any scanner or subprocess.  check_access()
+            # writes an audit entry on every path, so no extra logging needed.
+            if target and settings.enforce_network_policy:
+                engine = get_policy_engine()
+                try:
+                    allowed, reason, _ = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            engine.check_access,
+                            dest_ip=target,
+                            plugin_id=plugin_id,
+                            task_id=task_id,
+                        ),
+                        timeout=float(settings.dns_resolution_timeout_seconds),
+                    )
+                except asyncio.TimeoutError:
+                    allowed, reason = False, "Network policy check timed out (DNS resolution timeout)"
+
+                if not allowed:
+                    if settings.network_policy_failure_mode == "log_only":
+                        logger.warning(
+                            f"[Log Only] Network policy violation allowed for {target}: {reason}"
+                        )
+                    else:
+                        await self.mark_task_failed(
+                            task_id,
+                            f"Network policy denied access to {target}: {reason}",
+                        )
+                        await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
+                        return  # finally block handles running_tasks cleanup + limiter release
+
             # Check if this is a modular scanner or a standard plugin
             if plugin_id in MODULAR_SCANNERS:
                 scanner_class = MODULAR_SCANNERS[plugin_id]
@@ -326,8 +398,13 @@ class TaskExecutor:
                 if not plugin:
                     raise ValueError(f"Plugin not found: {plugin_id}")
 
-                # Pending records for assets removed
-                
+                # Enforce capability policy before any command is built or process spawned
+                self._capability_enforcer.check(
+                    plugin_id=plugin.id,
+                    declared=plugin.capabilities,
+                    safety_level=plugin.safety.get("level", "safe"),
+                )
+
                 command = plugin_manager.build_command(plugin_id, inputs)
 
                 if not command:
@@ -335,6 +412,41 @@ class TaskExecutor:
 
                 # Apply Docker Sandboxing if enabled
                 if settings.docker_enabled:
+                    # Validate the named Docker network exists before using it.
+                    # If missing, attempt to create it automatically rather than failing.
+                    _net_check = await asyncio.create_subprocess_exec(
+                        "docker", "network", "inspect", settings.docker_network,
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL,
+                    )
+                    await _net_check.wait()
+                    if _net_check.returncode != 0:
+                        logger.info(f"Docker network '{settings.docker_network}' not found. Creating isolated bridge network (ICC disabled)...")
+                        _net_create = await asyncio.create_subprocess_exec(
+                            "docker", "network", "create",
+                            "--driver", "bridge",
+                            "--opt", "com.docker.network.bridge.enable_icc=false",
+                            settings.docker_network,
+                            stdout=asyncio.subprocess.DEVNULL,
+                            stderr=asyncio.subprocess.DEVNULL,
+                        )
+                        await _net_create.wait()
+                        if _net_create.returncode != 0:
+                            logger.warning("Failed to create isolated bridge network with ICC disabled. Falling back to standard bridge...")
+                            _net_create_fallback = await asyncio.create_subprocess_exec(
+                                "docker", "network", "create", "--driver", "bridge", settings.docker_network,
+                                stdout=asyncio.subprocess.DEVNULL,
+                                stderr=asyncio.subprocess.DEVNULL,
+                            )
+                            await _net_create_fallback.wait()
+                            if _net_create_fallback.returncode != 0:
+                                raise RuntimeError(
+                                    f"Docker network '{settings.docker_network}' does not exist and could not be created automatically."
+                                )
+                            logger.info(f"Successfully created Docker network '{settings.docker_network}' (fallback)")
+                        else:
+                            logger.info(f"Successfully created Docker network '{settings.docker_network}' with ICC disabled")
+
                     docker_image = plugin.docker_image or "alpine:latest"
                     docker_cmd = [
                         "docker",
@@ -346,6 +458,8 @@ class TaskExecutor:
                         f"{settings.sandbox_memory_mb}m",
                         "--cpus",
                         str(settings.sandbox_cpu_quota),
+                        "--cap-drop", "NET_RAW",
+                        "--network", settings.docker_network,
                         docker_image,
                     ]
                     command = docker_cmd + command
@@ -456,6 +570,40 @@ class TaskExecutor:
             await self._invalidate_cached_views()
             raise  # let asyncio complete the cancellation
 
+        except CapabilityDeniedError as e:
+            logger.warning("Task %s blocked by capability policy: %s", task_id, e)
+            duration = (time.time() - start_time) if "start_time" in locals() else 0
+            await db.execute(
+                """
+                UPDATE tasks SET
+                    status = ?,
+                    completed_at = ?,
+                    duration_seconds = ?,
+                    error_message = ?
+                WHERE id = ?
+                """,
+                (
+                    TaskStatus.FAILED.value,
+                    datetime.now().isoformat(),
+                    duration,
+                    str(e),
+                    task_id,
+                ),
+            )
+            await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
+            await self._invalidate_cached_views()
+            await db.log_audit(
+                "task_capability_denied",
+                f"Task blocked by capability policy: {str(e)}",
+                severity="warning",
+                context={
+                    "task_id": task_id,
+                    "denied_capabilities": sorted(e.denied_capabilities),
+                    "plugin_id": plugin_id,
+                },
+                task_id=task_id,
+            )
+
         except Exception as e:
             logger.error(f"Task {task_id} failed: {e}", exc_info=True)
 
@@ -558,7 +706,12 @@ class TaskExecutor:
             return f"Execution error: {str(e)}", -1
 
     def _resolve_execution_timeout(self, inputs: Dict[str, Any]) -> int:
-        """Resolve per-task process timeout from plugin inputs."""
+        """Resolve per-task process timeout from plugin inputs.
+
+        The caller may request a shorter timeout than the operator cap, but
+        never a longer one. ``settings.sandbox_timeout`` is the hard ceiling
+        and is always enforced regardless of what the client supplies.
+        """
         for key in ("max_scan_time", "timeout"):
             raw_value = inputs.get(key)
             try:
@@ -566,7 +719,7 @@ class TaskExecutor:
             except (TypeError, ValueError):
                 continue
             if timeout > 0:
-                return timeout
+                return min(timeout, settings.sandbox_timeout)
         return settings.sandbox_timeout
 
     def _classify_command_result(self, plugin, output: str, exit_code: int) -> tuple[str, Optional[str]]:
@@ -893,25 +1046,29 @@ class TaskExecutor:
                     "reinstall the plugin before retrying."
                 )
             try:
-                import importlib.util
-                spec = importlib.util.spec_from_file_location(f"parser_{plugin.id}", parser_path)
-                if spec is not None:
-                    loader = spec.loader
-                    if loader is not None:
-                        module = importlib.util.module_from_spec(spec)
-                        loader.exec_module(module)
-                        if hasattr(module, "parse"):
-                            logger.info(f"Using custom parser for {plugin.id}")
-                            parsed = module.parse(parser_input)
-                            return self._normalize_parsed_result(plugin, parser_input, parsed)
-                        else:
-                            logger.warning(f"Custom parser {parser_path} missing 'parse' function")
-            except ValueError:
-                raise
-            except Exception as e:
-                logger.error(f"Error executing custom parser for {plugin.id}: {e}")
+                parsed = run_parser_in_sandbox(
+                    parser_path=parser_path,
+                    plugin_id=plugin.id,
+                    parser_input=parser_input,
+                    timeout_seconds=settings.parser_sandbox_timeout_seconds,
+                    max_output_bytes=settings.parser_sandbox_max_output_bytes,
+                )
+                return self._normalize_parsed_result(plugin, parser_input, parsed)
+            except ParserSandboxError as exc:
+                logger.error("Parser sandbox error for plugin '%s': %s", plugin.id, exc)
+                # For plugins that declared a custom parser, sandbox failure is a hard
+                # error — do NOT fall through to built-in parsers, which would produce
+                # empty or misleading results unrelated to the custom parser's logic.
+                raise RuntimeError(
+                    f"Custom parser failed for plugin '{plugin.id}': {exc.reason}"
+                ) from exc
+            except Exception as exc:
+                logger.error("Unexpected error running parser sandbox for '%s': %s", plugin.id, exc)
+                raise RuntimeError(
+                    f"Custom parser encountered an unexpected error for plugin '{plugin.id}': {exc}"
+                ) from exc
 
-        # 2. Fallback to legacy built-in parsers
+        # 2. Fallback to legacy built-in parsers (only reached when no parser.py exists)
         if parser_type == "builtin_nmap":
             return self._normalize_parsed_result(plugin, parser_input, self._parse_nmap_output(parser_input))
         elif parser_type == "builtin_http":
