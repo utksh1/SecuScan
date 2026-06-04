@@ -236,6 +236,24 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_notification_history_rule_id ON notification_history(rule_id);
             CREATE INDEX IF NOT EXISTS idx_notification_history_finding_id ON notification_history(finding_id);
             CREATE INDEX IF NOT EXISTS idx_notification_history_sent_at ON notification_history(sent_at DESC);
+
+            -- Idempotency keys table (issue #215): prevents duplicate scan submissions
+            -- within a configurable TTL window. Composite PK ensures that two owners
+            -- using the same key string are always treated as independent submissions.
+            CREATE TABLE IF NOT EXISTS task_idempotency (
+                idempotency_key TEXT NOT NULL,
+                task_id         TEXT NOT NULL,
+                owner_id        TEXT NOT NULL,
+                created_at      TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                expires_at      TIMESTAMP NOT NULL,
+                PRIMARY KEY (idempotency_key, owner_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_idempotency_expires
+                ON task_idempotency(expires_at);
+
+            CREATE INDEX IF NOT EXISTS idx_idempotency_owner
+                ON task_idempotency(owner_id);
             """
         )
 
@@ -401,6 +419,79 @@ class Database:
         """Execute a schema or migration script."""
         await self.connection.executescript(script)
         await self.connection.commit()
+
+    async def record_idempotency_key(
+        self,
+        key: str,
+        task_id: str,
+        owner_id: str,
+        ttl_seconds: int,
+    ) -> None:
+        """Persist an idempotency key so that an identical follow-up request
+        within the TTL window returns the existing task instead of spawning a
+        duplicate scan.
+
+        The composite primary key (idempotency_key, owner_id) guarantees that
+        two different owners using the same key value are treated independently.
+        INSERT OR IGNORE makes this call a no-op when called more than once for
+        the same key/owner pair (e.g. during a retry storm), which prevents the
+        race condition where two concurrent requests with the same key would both
+        slip through before either persists the row.
+        """
+        await self.execute(
+            """
+            INSERT OR IGNORE INTO task_idempotency
+                (idempotency_key, task_id, owner_id, created_at, expires_at)
+            VALUES (
+                ?,
+                ?,
+                ?,
+                datetime('now'),
+                datetime('now', ? || ' seconds')
+            )
+            """,
+            (key, task_id, owner_id, str(ttl_seconds)),
+        )
+
+    async def lookup_idempotency_key(
+        self,
+        key: str,
+        owner_id: str,
+    ) -> Optional[str]:
+        """Return the task_id associated with *key* for *owner_id* if the row
+        exists and has not yet expired; otherwise return None.
+
+        Expired rows are left in place until the next purge sweep so that we
+        can distinguish "key exists but expired" from "key never submitted".
+        The caller only needs to know whether a live match was found.
+        """
+        row = await self.fetchone(
+            """
+            SELECT task_id
+            FROM task_idempotency
+            WHERE idempotency_key = ?
+              AND owner_id        = ?
+              AND expires_at      > datetime('now')
+            """,
+            (key, owner_id),
+        )
+        return row["task_id"] if row else None
+
+    async def purge_expired_idempotency_keys(self) -> int:
+        """Delete all rows whose TTL has elapsed and return the count removed.
+
+        This should be called periodically (e.g. on application startup and
+        from a background maintenance task) to prevent unbounded table growth.
+        The purge is scoped to rows where expires_at is strictly less than the
+        current database wall-clock time so that keys expiring right now are
+        kept for one final lookup cycle.
+        """
+        async with await self.connection.execute(
+            "DELETE FROM task_idempotency WHERE expires_at < datetime('now')"
+        ) as cursor:
+            deleted = cursor.rowcount
+        await self.connection.commit()
+        return deleted
 
     async def log_audit(
         self,

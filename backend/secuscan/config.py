@@ -113,6 +113,12 @@ class Settings(BaseSettings):
     sandbox_memory_mb: int = 512
     docker_network: str = "restricted"  # Docker network name for sandboxed containers
 
+    # Idempotency key configuration (issue #215)
+    # How long an idempotency key remains valid after the initial task creation.
+    # Within this window a repeat submission with the same key and owner returns
+    # the existing task rather than creating a new scan.  Default is 24 hours.
+    idempotency_key_ttl_seconds: int = 86400
+
     # Task-start payload limits (tunable via env vars)
     task_start_max_body_bytes: int = 64_000       # 64 KB total JSON body
     task_start_max_field_length: int = 1_000      # max chars per string input value

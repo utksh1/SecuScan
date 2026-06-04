@@ -58,6 +58,17 @@ async def lifespan(app: FastAPI):
     await init_db(settings.database_path)
     logger.info("✓ SQLite connected")
 
+    # Purge stale idempotency keys left over from previous runs so the table
+    # does not grow without bound.  This is a fast indexed DELETE that completes
+    # in milliseconds even on large deployments.
+    from .database import get_db as _get_db
+    _db = await _get_db()
+    purged = await _db.purge_expired_idempotency_keys()
+    if purged:
+        logger.info("✓ Purged %d expired idempotency key(s) on startup", purged)
+    else:
+        logger.info("✓ Idempotency key table clean (0 expired rows)")
+
     await init_cache()
     logger.info("✓ In-memory cache initialized")
     
