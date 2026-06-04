@@ -2,7 +2,31 @@
 Tests for pagination metadata in tasks list endpoint.
 """
 
+import asyncio
+
 import pytest
+from backend.secuscan.database import get_db
+
+
+async def _insert_task(task_id, plugin_id, status, created_at):
+    db = await get_db()
+    await db.execute(
+        """
+        INSERT INTO tasks (
+            id, plugin_id, tool_name, target, status, created_at, inputs_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            task_id,
+            plugin_id,
+            "Test Scanner",
+            "example.com",
+            status,
+            created_at,
+            "{}",
+        ),
+    )
 
 
 class TestTasksPagination:
@@ -96,3 +120,31 @@ class TestTasksPagination:
             assert "per_page=5" in next_url
             assert "status=completed" in next_url
             assert "plugin_id=nmap" in next_url
+
+    def test_next_url_encodes_filtered_pagination_params(self, test_client):
+        """Test that filtered pagination links URL-encode query values."""
+        plugin_id = "web scanner/alpha"
+        status = "queued & reviewed"
+        asyncio.run(
+            _insert_task("encoded-filter-1", plugin_id, status, "2026-06-02T10:00:00")
+        )
+        asyncio.run(
+            _insert_task("encoded-filter-2", plugin_id, status, "2026-06-02T09:00:00")
+        )
+
+        response = test_client.get(
+            "/api/v1/tasks",
+            params={
+                "page": 1,
+                "per_page": 1,
+                "plugin_id": plugin_id,
+                "status": status,
+            },
+        )
+        assert response.status_code == 200
+
+        next_url = response.json()["pagination"]["next"]
+        assert next_url == (
+            "/api/v1/tasks?page=2&per_page=1&"
+            "plugin_id=web+scanner%2Falpha&status=queued+%26+reviewed"
+        )
