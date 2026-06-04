@@ -308,6 +308,27 @@ async def get_all_presets():
     }
 
 
+_IDEMPOTENCY_KEY_RE = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
+
+
+def _validate_idempotency_key(key: str) -> None:
+    """Raise HTTP 400 when the supplied Idempotency-Key value is malformed.
+
+    Accepted format: 8-128 characters consisting of ASCII letters, digits,
+    hyphens, or underscores.  This mirrors the convention used by Stripe and
+    other major APIs and is strict enough to reject injected whitespace or
+    special characters that could confuse downstream log parsers.
+    """
+    if not _IDEMPOTENCY_KEY_RE.match(key):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Idempotency-Key must be 8-128 characters and contain only "
+                "ASCII letters, digits, hyphens (-), or underscores (_)."
+            ),
+        )
+
+
 @router.post("/task/start", dependencies=[Depends(task_start_limiter)])
 async def start_task(
     request: TaskCreateRequest,
@@ -317,12 +338,61 @@ async def start_task(
 ):
     """
     Start a new scan task.
+
+    Idempotency-Key header (optional)
+    ----------------------------------
+    Clients that may retry on network failure should supply a unique
+    ``Idempotency-Key`` header.  If a request with the same key and owner has
+    already succeeded within the TTL window (default 24 h), the existing task
+    is returned with HTTP 200 and no new scan is launched.  The response will
+    include ``"idempotent": true`` so callers can distinguish a cached result
+    from a freshly created task.
     """
     # ── Payload size / field-length guard ─────────────────────────────────
     raw_body = await raw_request.body()
     ok, status_code, error_msg = validate_task_start_payload(raw_body, request.inputs)
     if not ok:
         raise HTTPException(status_code=status_code, detail=error_msg)
+
+    # ── Idempotency-Key: short-circuit before any real work if key hits ────
+    idempotency_key: Optional[str] = raw_request.headers.get("Idempotency-Key")
+    if idempotency_key is not None:
+        _validate_idempotency_key(idempotency_key)
+        db = await get_db()
+        existing_task_id = await db.lookup_idempotency_key(idempotency_key, owner)
+        if existing_task_id is not None:
+            task_row = await db.fetchone(
+                "SELECT id, status, plugin_id, created_at FROM tasks WHERE id = ? AND owner_id = ?",
+                (existing_task_id, owner),
+            )
+            if task_row:
+                logger.info(
+                    "Idempotency hit: key=%s owner=%s → returning existing task %s",
+                    idempotency_key,
+                    owner,
+                    existing_task_id,
+                )
+                await db.log_audit(
+                    "idempotency_hit",
+                    (
+                        f"Duplicate submission blocked by idempotency key; "
+                        f"returning task {existing_task_id}"
+                    ),
+                    context={
+                        "idempotency_key": idempotency_key,
+                        "existing_task_id": existing_task_id,
+                        "owner_id": owner,
+                    },
+                    task_id=existing_task_id,
+                    plugin_id=task_row.get("plugin_id"),
+                )
+                return {
+                    "task_id": existing_task_id,
+                    "status": task_row["status"],
+                    "created_at": task_row["created_at"],
+                    "stream_url": f"/api/v1/task/{existing_task_id}/stream",
+                    "idempotent": True,
+                }
 
     # Validate consent
     if settings.require_consent and not request.consent_granted:
@@ -427,11 +497,22 @@ async def start_task(
     background_tasks.add_task(executor.execute_task, task_id)
     await invalidate_view_cache()
 
+    # ── Idempotency-Key: persist the mapping now that the task is committed ──
+    if idempotency_key is not None:
+        db = await get_db()
+        await db.record_idempotency_key(
+            idempotency_key,
+            task_id,
+            owner,
+            settings.idempotency_key_ttl_seconds,
+        )
+
     return {
         "task_id": task_id,
         "status": "queued",
         "created_at": "now",
-        "stream_url": f"/api/v1/task/{task_id}/stream"
+        "stream_url": f"/api/v1/task/{task_id}/stream",
+        "idempotent": False,
     }
 
 @router.get("/task/{task_id}/status")
@@ -1798,3 +1879,50 @@ async def export_audit_log(format: str = "json"):
         media_type=mime_type,
         headers={"Content-Disposition": f"attachment; filename=network-audit.{format}"}
     )
+
+
+@router.get("/admin/startup-recovery", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
+async def get_startup_recovery_result():
+    """
+    Return the task-recovery summary captured during the most recent backend startup.
+
+    This endpoint gives operators a convenient, machine-readable view of what
+    happened when the backend last restarted.  Two categories of tasks are
+    reported:
+
+    * **task_ids_failed** — tasks that were ``running`` at the time of the restart.
+      Because their execution context is gone, they cannot be continued; they have
+      been permanently marked ``failed`` with an ``error_message`` explaining the
+      cause.  Operators should review these tasks and decide whether to re-run them.
+
+    * **task_ids_requeued** — tasks that were ``queued`` at the time of the restart.
+      They had not started yet, so no work was lost; they have been automatically
+      re-submitted to the executor and will be processed in FIFO order.
+
+    The response also includes:
+    * ``recovered_running`` — total count of tasks marked failed.
+    * ``recovered_queued``  — total count of tasks re-enqueued.
+    * ``recovered_at``      — ISO-8601 timestamp of when the recovery routine ran.
+
+    If the server has not yet completed its first startup recovery (very unlikely
+    in normal operation) the endpoint returns HTTP 503.
+    """
+    import backend.secuscan.executor as _executor_module
+
+    result = _executor_module._last_recovery_result
+    if result is None:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=503,
+            detail="Startup recovery has not run yet. The server may still be initialising."
+        )
+
+    return {
+        "status": "ok",
+        "recovered_running": result["recovered_running"],
+        "recovered_queued": result["recovered_queued"],
+        "task_ids_failed": result["task_ids_failed"],
+        "task_ids_requeued": result["task_ids_requeued"],
+        "recovered_at": result["recovered_at"],
+    }
+

@@ -19,6 +19,8 @@ from .cache import init_cache, cache as global_cache
 from .database import init_db, db as global_db
 from .plugins import init_plugins
 from .routes import router
+from .executor import recover_tasks_on_startup
+import backend.secuscan.executor as _executor_module
 from .saved_views import saved_views_router
 from .workflows import scheduler
 
@@ -104,6 +106,17 @@ async def lifespan(app: FastAPI):
                 logger.warning(f"Failed to check/create Docker network '{settings.docker_network}': {e}")
         else:
             logger.warning("Docker sandboxing is enabled but 'docker' executable is not in PATH.")
+
+    # Recover tasks that were mid-flight or queued when the backend last stopped.
+    # This runs synchronously (before yield) so the HTTP server only starts
+    # accepting traffic after every interrupted task has been accounted for.
+    _recovery_result = await recover_tasks_on_startup(global_db)
+    _executor_module._last_recovery_result = _recovery_result
+    logger.info(
+        "✓ Startup recovery: %d running->failed, %d queued re-enqueued",
+        _recovery_result["recovered_running"],
+        _recovery_result["recovered_queued"],
+    )
 
     await scheduler.start()
     logger.info("✓ Workflow scheduler started")
