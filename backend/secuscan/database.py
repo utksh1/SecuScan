@@ -176,6 +176,35 @@ class Database:
                 last_run_at TIMESTAMP
             );
 
+            CREATE TABLE IF NOT EXISTS workflow_versions (
+                id              TEXT PRIMARY KEY,
+                workflow_id     TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+                version_number  INTEGER NOT NULL,
+                definition_json TEXT NOT NULL,
+                created_at      TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                created_by      TEXT NOT NULL DEFAULT 'system',
+                UNIQUE(workflow_id, version_number)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_wf_versions_workflow ON workflow_versions(workflow_id, version_number DESC);
+
+            CREATE TABLE IF NOT EXISTS workflow_runs (
+                id              TEXT PRIMARY KEY,
+                workflow_id     TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+                version_id      TEXT REFERENCES workflow_versions(id) ON DELETE SET NULL,
+                version_number  INTEGER,
+                triggered_by    TEXT NOT NULL DEFAULT 'manual',
+                status          TEXT NOT NULL DEFAULT 'pending',
+                task_ids_json   TEXT NOT NULL DEFAULT '[]',
+                started_at      TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                completed_at    TIMESTAMP,
+                error_message   TEXT
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_wf_runs_workflow   ON workflow_runs(workflow_id, started_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_wf_runs_status     ON workflow_runs(status);
+            CREATE INDEX IF NOT EXISTS idx_wf_runs_version_id ON workflow_runs(version_id);
+
             CREATE TABLE IF NOT EXISTS notification_rules (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -442,6 +471,141 @@ class Database:
                 plugin_id,
             ),
         )
+
+
+    async def snapshot_workflow_version(
+        self,
+        workflow_id: str,
+        name: str,
+        schedule_seconds: Optional[int],
+        enabled: bool,
+        steps: List[Dict],
+        created_by: str = "system",
+    ) -> Dict:
+        """Snapshot the current workflow definition as a new version row.
+
+        Returns the new version record including its auto-assigned version_number.
+        The version_number is the next integer in the per-workflow sequence.
+        """
+        version_id = json.dumps(None)
+        row = await self.fetchone(
+            "SELECT MAX(version_number) AS max_v FROM workflow_versions WHERE workflow_id = ?",
+            (workflow_id,),
+        )
+        next_version = (row["max_v"] or 0) + 1 if row else 1
+        version_id = __import__("uuid").uuid4().hex
+        definition = {
+            "name": name,
+            "schedule_seconds": schedule_seconds,
+            "enabled": enabled,
+            "steps": steps,
+        }
+        await self.execute(
+            "INSERT INTO workflow_versions (id, workflow_id, version_number, definition_json, created_by) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (version_id, workflow_id, next_version, json.dumps(definition), created_by),
+        )
+        return {
+            "id": version_id,
+            "workflow_id": workflow_id,
+            "version_number": next_version,
+            "definition": definition,
+            "created_by": created_by,
+        }
+
+    async def get_workflow_versions(self, workflow_id: str) -> List[Dict]:
+        """Return all versions for a workflow ordered newest first."""
+        rows = await self.fetchall(
+            "SELECT id, workflow_id, version_number, definition_json, created_at, created_by "
+            "FROM workflow_versions WHERE workflow_id = ? ORDER BY version_number DESC",
+            (workflow_id,),
+        )
+        result = []
+        for row in rows:
+            try:
+                defn = json.loads(row["definition_json"])
+            except (json.JSONDecodeError, TypeError):
+                defn = {}
+            result.append({
+                "id": row["id"],
+                "workflow_id": row["workflow_id"],
+                "version_number": row["version_number"],
+                "definition": defn,
+                "created_at": row["created_at"],
+                "created_by": row["created_by"],
+            })
+        return result
+
+    async def get_workflow_version(self, workflow_id: str, version_number: int) -> Optional[Dict]:
+        """Return a specific version record or None if it does not exist."""
+        row = await self.fetchone(
+            "SELECT id, workflow_id, version_number, definition_json, created_at, created_by "
+            "FROM workflow_versions WHERE workflow_id = ? AND version_number = ?",
+            (workflow_id, version_number),
+        )
+        if row is None:
+            return None
+        try:
+            defn = json.loads(row["definition_json"])
+        except (json.JSONDecodeError, TypeError):
+            defn = {}
+        return {
+            "id": row["id"],
+            "workflow_id": row["workflow_id"],
+            "version_number": row["version_number"],
+            "definition": defn,
+            "created_at": row["created_at"],
+            "created_by": row["created_by"],
+        }
+
+    async def record_workflow_run(
+        self,
+        workflow_id: str,
+        version_id: Optional[str],
+        version_number: Optional[int],
+        task_ids: List[str],
+        triggered_by: str = "manual",
+    ) -> str:
+        """Insert a workflow run record and return the run ID."""
+        run_id = __import__("uuid").uuid4().hex
+        await self.execute(
+            "INSERT INTO workflow_runs "
+            "(id, workflow_id, version_id, version_number, triggered_by, status, task_ids_json) "
+            "VALUES (?, ?, ?, ?, ?, 'pending', ?)",
+            (run_id, workflow_id, version_id, version_number, triggered_by, json.dumps(task_ids)),
+        )
+        return run_id
+
+    async def get_workflow_runs(self, workflow_id: str, limit: int = 50, offset: int = 0) -> Dict:
+        """Return paginated run history for a workflow."""
+        count_row = await self.fetchone(
+            "SELECT COUNT(*) AS total FROM workflow_runs WHERE workflow_id = ?", (workflow_id,)
+        )
+        total = count_row["total"] if count_row else 0
+        rows = await self.fetchall(
+            "SELECT * FROM workflow_runs WHERE workflow_id = ? "
+            "ORDER BY started_at DESC LIMIT ? OFFSET ?",
+            (workflow_id, limit, offset),
+        )
+        entries = []
+        for row in rows:
+            try:
+                task_ids = json.loads(row["task_ids_json"] or "[]")
+            except (json.JSONDecodeError, TypeError):
+                task_ids = []
+            entries.append({
+                "id": row["id"],
+                "workflow_id": row["workflow_id"],
+                "version_id": row["version_id"],
+                "version_number": row["version_number"],
+                "triggered_by": row["triggered_by"],
+                "status": row["status"],
+                "task_ids": task_ids,
+                "started_at": row["started_at"],
+                "completed_at": row["completed_at"],
+                "error_message": row["error_message"],
+            })
+        return {"total": total, "runs": entries}
 
 
 db: Optional[Database] = None
