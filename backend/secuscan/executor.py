@@ -4,6 +4,8 @@ Task execution engine with Docker sandboxing
 
 import asyncio
 from asyncio import subprocess
+import os
+import signal
 import uuid
 import json
 import time
@@ -12,6 +14,8 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 import logging
 import re
+
+_CANCEL_GRACE_SECONDS = 5
 
 from .auth import DEFAULT_OWNER_ID
 from .redaction import redact
@@ -26,6 +30,45 @@ from .capabilities import CapabilityEnforcer, CapabilityDeniedError, build_enfor
 from .parser_sandbox import run_parser_in_sandbox, ParserSandboxError
 from .network_policy import get_policy_engine
 from .notification_service import process_task_notifications
+
+async def _terminate_process_group(pid: int, task_id: str, grace_seconds: int = _CANCEL_GRACE_SECONDS) -> None:
+    """Send SIGTERM to the process group of *pid*, wait *grace_seconds*, then SIGKILL.
+
+    Using a process group (via start_new_session=True on subprocess creation)
+    ensures every child and grandchild spawned by the scanner receives the
+    signal, leaving no orphan processes after cancellation or timeout.
+
+    Errors are logged but never re-raised so callers can always proceed to
+    update task status regardless of OS-level kill failures.
+    """
+    try:
+        pgid = os.getpgid(pid)
+    except (ProcessLookupError, PermissionError) as exc:
+        logger.debug("process group for pid %d already gone: %s", pid, exc)
+        return
+
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError) as exc:
+        logger.debug("SIGTERM to pgid %d failed (already exited?): %s", pgid, exc)
+        return
+
+    for _ in range(grace_seconds * 10):
+        await asyncio.sleep(0.1)
+        try:
+            os.killpg(pgid, 0)
+        except (ProcessLookupError, PermissionError):
+            return
+
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+        logger.warning(
+            "process group %d did not exit within %ds grace — SIGKILL sent (task %s)",
+            pgid, grace_seconds, task_id,
+        )
+    except (ProcessLookupError, PermissionError) as exc:
+        logger.debug("SIGKILL to pgid %d failed: %s", pgid, exc)
+
 
 def _parse_discovered_at(finding: dict) -> Optional[datetime]:
     """Extract and parse discovered_at from a finding dict, or return current UTC time."""
@@ -90,6 +133,7 @@ class TaskExecutor:
 
     def __init__(self):
         self.running_tasks: Dict[str, asyncio.Task] = {}
+        self._process_pids: Dict[str, int] = {}
         # PubSub: Map of task_id to list of active async queues listening for output/status updates
         self._listeners: Dict[str, List[asyncio.Queue]] = {}
         self._capability_enforcer: CapabilityEnforcer = build_enforcer_from_settings()
@@ -654,6 +698,7 @@ class TaskExecutor:
             # Always clean up: remove from the in-memory registry and
             # release the concurrency slot regardless of how the task ended.
             self.running_tasks.pop(task_id, None)
+            self._process_pids.pop(task_id, None)
             await concurrent_limiter.release(task_id)
     
     async def _execute_command(
@@ -677,8 +722,10 @@ class TaskExecutor:
             process = await asyncio.create_subprocess_exec(
                 *command,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
             )
+            self._process_pids[task_id] = process.pid
 
             output_lines = []
 
@@ -686,11 +733,10 @@ class TaskExecutor:
                 stdout = process.stdout
                 if stdout is None:
                     return
-                    
                 while not stdout.at_eof():
                     line = await stdout.readline()
                     if line:
-                        decoded_line = line.decode('utf-8', errors='replace')
+                        decoded_line = line.decode("utf-8", errors="replace")
                         output_lines.append(decoded_line)
                         await self._broadcast(task_id, "output", decoded_line)
 
@@ -700,18 +746,27 @@ class TaskExecutor:
                 return "".join(output_lines), process.returncode if process.returncode is not None else -1
 
             except asyncio.TimeoutError:
-                process.kill()
-                await process.wait()
+                logger.warning(
+                    "Task %s timed out after %ds — terminating process group (pid=%d)",
+                    task_id, timeout, process.pid,
+                )
+                await _terminate_process_group(process.pid, task_id)
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=3)
+                except asyncio.TimeoutError:
+                    pass
                 return "".join(output_lines) + "\nTask timed out", -1
 
             except asyncio.CancelledError:
-                # Handle task cancellation by killing the subprocess
-                logger.warning(f"Task {task_id} cancelled. Killing process {process.pid}")
+                logger.warning(
+                    "Task %s cancelled — terminating process group (pid=%d)",
+                    task_id, process.pid,
+                )
+                await _terminate_process_group(process.pid, task_id)
                 try:
-                    process.kill()
-                    await process.wait()
-                except Exception as e:
-                    logger.error(f"Error killing process for cancelled task {task_id}: {e}")
+                    await asyncio.wait_for(process.wait(), timeout=3)
+                except asyncio.TimeoutError:
+                    pass
                 raise
 
         except Exception as e:
@@ -788,6 +843,11 @@ class TaskExecutor:
         if task_id not in self.running_tasks:
             return False
         task = self.running_tasks[task_id]
+
+        pid = self._process_pids.get(task_id)
+        if pid is not None:
+            await _terminate_process_group(pid, task_id)
+
         task.cancel()
 
         # If docker is enabled, forcefully kill the sandbox container
