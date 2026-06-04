@@ -1,6 +1,6 @@
 {
   "id": "waf_detector",
-  "name": "WAF Detector",
+  "name": "WAF Detection Scanner",
   "version": "1.0.0",
   "description": "Automatically identify Web Application Firewalls protecting targets.",
   "long_description": "Automatically identify Web Application Firewalls protecting targets.",
@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udee0\ufe0f",
+  "icon": "🛠️",
   "engine": {
     "type": "cli",
     "binary": "wafw00f"
@@ -54,5 +54,6 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "1e3dfcf6d4ba7847e398b9d9a4709dc275092f52a5f405e63d65cea0f8389cc0"
+  "capabilities": ["network"],
+  "checksum": "ac518fd15fe9a14f9327812178fd244ebaa2ee95d29d04b93ee928fa3fda7ffa"
 }

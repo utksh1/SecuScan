@@ -42,10 +42,11 @@ export interface PluginFieldSchema {
   options?: PluginFieldOption[]
   validation?: Record<string, unknown>
 }
-
 export interface PluginAvailability {
   runnable: boolean
   missing_binaries: string[]
+  status?: string
+  guidance?: string | null
 }
 
 export interface PluginListItem {
@@ -82,19 +83,62 @@ export interface TaskStartResponse {
   stream_url: string
 }
 
+const API_KEY_STORAGE_KEY = 'secuscan_api_key'
+
+export function getStoredApiKey(): string | null {
+  try {
+    return localStorage.getItem(API_KEY_STORAGE_KEY) || null
+  } catch {
+    return null
+  }
+}
+
+export function setStoredApiKey(key: string): void {
+  try {
+    localStorage.setItem(API_KEY_STORAGE_KEY, key)
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function getApiKey(): string | null {
+  return getStoredApiKey()
+}
+
+/** Fired on the window when any API request receives HTTP 401. */
+export const AUTH_REQUIRED_EVENT = 'secuscan:auth-required'
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController()
   const timeoutId = window.setTimeout(() => controller.abort(), 10000)
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    signal: controller.signal,
-  })
-  window.clearTimeout(timeoutId)
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`)
+  const apiKey = getApiKey()
+  const authHeaders: Record<string, string> = apiKey ? { 'X-Api-Key': apiKey } : {}
+
+  try {
+    const response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: {
+        ...authHeaders,
+        ...(init?.headers as Record<string, string> | undefined),
+      },
+      signal: controller.signal,
+    })
+
+    if (response.status === 401) {
+      // Notify the app so it can show the API-key setup UI without every
+      // caller needing to handle auth independently.
+      window.dispatchEvent(new CustomEvent(AUTH_REQUIRED_EVENT))
+      throw new Error('AUTH_REQUIRED')
+    }
+
+    if (!response.ok) {
+      throw new Error(`Request failed: ${response.status}`)
+    }
+    return response.json()
+  } finally {
+    window.clearTimeout(timeoutId)
   }
-  return response.json()
 }
 
 export function getHealth() {
@@ -107,6 +151,10 @@ export function listPlugins() {
 
 export function getPluginSchema(id: string) {
   return request<PluginSchemaResponse>(`/plugin/${id}/schema`)
+}
+
+export function getSettings() {
+  return request<any>(`/settings`)
 }
 
 export function getDashboardSummary() {
@@ -127,6 +175,8 @@ export function getTasks(params?: URLSearchParams) {
   const suffix = params ? `?${params.toString()}` : ''
   return request(`/tasks${suffix}`)
 }
+
+export type ScanPhase = 'queued' | 'running_command' | 'parsing' | 'reporting' | 'finished'
 
 export function getTaskStatus(taskId: string): Promise<any> {
   return request<any>(`/task/${taskId}/status`)
@@ -177,4 +227,117 @@ export function streamTask(taskId: string, onEvent: (ev: MessageEvent) => void) 
   es.onmessage = onEvent
   es.onerror = () => {}
   return es
+}
+export interface WorkflowStep {
+  plugin_id: string
+  inputs: Record<string, unknown>
+}
+
+export interface Workflow {
+  id: string
+  name: string
+  schedule_seconds: number | null
+  enabled: boolean
+  steps: WorkflowStep[]
+  last_run_at?: string | null
+  queued_task_ids?: string[]
+  created_at?: string
+}
+
+export interface WorkflowCreatePayload {
+  name: string
+  schedule_seconds?: number | null
+  enabled: boolean
+  steps: WorkflowStep[]
+}
+
+export interface WorkflowUpdatePayload {
+  name?: string
+  schedule_seconds?: number | null
+  enabled?: boolean
+  steps?: WorkflowStep[]
+}
+
+interface WorkflowListResponse {
+  workflows: unknown[]
+  total: number
+}
+
+function parseWorkflowSteps(value: unknown): WorkflowStep[] {
+  if (Array.isArray(value)) return value as WorkflowStep[]
+  if (typeof value !== 'string' || value.trim() === '') return []
+
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed as WorkflowStep[] : []
+  } catch {
+    return []
+  }
+}
+
+function parseScheduleSeconds(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function normalizeWorkflow(raw: any): Workflow {
+  return {
+    id: String(raw.id),
+    name: String(raw.name ?? ''),
+    schedule_seconds: parseScheduleSeconds(raw.schedule_seconds),
+    enabled: Boolean(raw.enabled),
+    steps: parseWorkflowSteps(raw.steps ?? raw.steps_json),
+    last_run_at: raw.last_run_at ?? null,
+    queued_task_ids: Array.isArray(raw.queued_task_ids)
+      ? raw.queued_task_ids
+      : Array.isArray(raw.queued_tasks)
+        ? raw.queued_tasks
+        : [],
+    created_at: raw.created_at,
+  }
+}
+
+export async function getWorkflows(): Promise<Workflow[]> {
+  const data = await request<WorkflowListResponse | unknown[]>('/workflows')
+  const workflows = Array.isArray(data) ? data : data.workflows
+  return Array.isArray(workflows) ? workflows.map(normalizeWorkflow) : []
+}
+
+export async function createWorkflow(data: WorkflowCreatePayload): Promise<Workflow> {
+  const workflow = await request<unknown>('/workflows', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  return normalizeWorkflow(workflow)
+}
+
+export async function runWorkflow(workflowId: string): Promise<{ queued_task_ids: string[] }> {
+  const result: any = await request(`/workflows/${workflowId}/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+  return {
+    queued_task_ids: Array.isArray(result.queued_task_ids)
+      ? result.queued_task_ids
+      : Array.isArray(result.queued_tasks)
+        ? result.queued_tasks
+        : [],
+  }
+}
+
+export async function updateWorkflow(workflowId: string, data: WorkflowUpdatePayload): Promise<Workflow> {
+  const workflow = await request<unknown>(`/workflows/${workflowId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  return normalizeWorkflow(workflow)
+}
+
+export function deleteWorkflow(workflowId: string): Promise<{ deleted: boolean }> {
+  return request<{ deleted: boolean }>(`/workflows/${workflowId}`, {
+    method: 'DELETE',
+  })
 }

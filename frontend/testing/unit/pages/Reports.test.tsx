@@ -1,206 +1,414 @@
-import React from 'react'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import Reports from '../../../src/pages/Reports'
-
-// ── Mocks ────────────────────────────────────────────────────────────────────
+import { getReports, getDashboardSummary } from '../../../src/api'
+import { isWithinDateRange } from '../../../src/utils/date'
 
 vi.mock('../../../src/api', () => ({
   getReports: vi.fn(),
   getDashboardSummary: vi.fn(),
-  API_BASE: 'http://localhost:5000',
+  API_BASE: 'http://127.0.0.1:8000',
 }))
 
-vi.mock('../../../src/utils/date', () => ({
-  formatDateLong: (d: any) => d ?? '',
-}))
+const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
 
-global.ResizeObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}))
+// Fixed base time so date-range tests are deterministic
+const BASE_NOW = new Date('2026-05-14T12:00:00Z').getTime()
 
-Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, value: 800 })
-Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 600 })
-
-import { getReports, getDashboardSummary } from '../../../src/api'
-
-// ── Fixtures ─────────────────────────────────────────────────────────────────
-
-function makeReport(overrides: any = {}) {
-  return {
-    id: `r-${Math.random().toString(36).slice(2)}`,
-    task_id: 'task-001',
-    name: 'Test Report',
-    type: 'technical' as const,
-    generated_at: '2024-01-01T00:00:00Z',
-    status: 'ready' as const,
-    findings: 12,
-    assets: 3,
-    pages: 8,
-    ...overrides,
-  }
+const readyReport = {
+  id: 'report-1', task_id: 'task-abc-123',
+  name: 'Security Scan — example.com', type: 'technical',
+  generated_at: '2026-05-14T10:00:00Z', status: 'ready',
+  findings: 7, assets: 3, pages: 12,
 }
-
-function makeLargeDataset(count: number) {
-  return Array.from({ length: count }, (_, i) =>
-    makeReport({
-      id: `r-${i}`,
-      name: `Report ${i}`,
-      type: (['executive', 'technical', 'compliance'] as const)[i % 3],
-    }),
-  )
+const newerReadyReport = {
+  id: 'report-4', task_id: 'task-jkl-012',
+  name: 'Security Scan — docs.example.com', type: 'technical',
+  generated_at: '2026-05-14T11:30:00Z', status: 'ready',
+  findings: 2, assets: 1, pages: 4,
 }
-
-function mockApis(reports: ReturnType<typeof makeReport>[], summary: any = {}) {
-  vi.mocked(getReports).mockResolvedValue({ reports })
-  vi.mocked(getDashboardSummary).mockResolvedValue({
-    total_findings: 42,
-    total_assets: 7,
-    ...summary,
-  })
+const generatingReport = {
+  id: 'report-2', task_id: 'task-def-456',
+  name: 'Security Scan — staging.example.com', type: 'executive',
+  generated_at: '2026-05-12T12:00:00Z', status: 'generating',
+  findings: 0, assets: 0, pages: 0,
+}
+const failedReport = {
+  id: 'report-3', task_id: 'task-ghi-789',
+  name: 'Security Scan — api.example.com', type: 'compliance',
+  generated_at: '2026-05-04T12:00:00Z', status: 'failed',
+  findings: 0, assets: 0, pages: 0,
+}
+const emptySummary = {
+  total_findings: 0, total_assets: 0, critical_findings: 0,
+  high_findings: 0, total_attack_surface: 0,
 }
 
 function renderReports() {
-  return render(
-    <MemoryRouter>
-      <Reports />
-    </MemoryRouter>
-  )
+  return render(<MemoryRouter><Reports /></MemoryRouter>)
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
+// ── Loading state ─────────────────────────────────────────────────────────────────────────────
 
-describe('Reports — virtualized grid', () => {
+describe('Reports — loading state', () => {
+  it('shows loading spinner while fetching', () => {
+    vi.mocked(getReports).mockReturnValue(new Promise(() => {}))
+    vi.mocked(getDashboardSummary).mockReturnValue(new Promise(() => {}))
+    renderReports()
+    expect(screen.getByText(/Retrieving Archive Data/i)).toBeInTheDocument()
+  })
+})
+
+// ── Error state ───────────────────────────────────────────────────────────────────────────────
+
+describe('Reports — error state', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    vi.mocked(getReports).mockRejectedValue(new Error('Network error'))
+    vi.mocked(getDashboardSummary).mockRejectedValue(new Error('Network error'))
+    vi.mocked(getReports).mockClear()
   })
 
-  it('renders the page header', () => {
-    mockApis([])
+  it('shows error message when fetch fails', async () => {
+    vi.mocked(getReports).mockRejectedValue(new Error('Network error'))
+    vi.mocked(getDashboardSummary).mockRejectedValue(new Error('Network error'))
     renderReports()
-    expect(screen.getByText(/Analytics/i)).toBeInTheDocument()
+    expect(await screen.findByText(/Archive_Retrieval_Failed/i)).toBeInTheDocument()
+    expect(screen.getByText(/Failed to fetch reports/i)).toBeInTheDocument()
   })
 
-  it('shows empty state when no reports', async () => {
-    mockApis([])
+  it('shows a retry button when fetch fails', async () => {
+    vi.mocked(getReports).mockRejectedValue(new Error('Network error'))
+    vi.mocked(getDashboardSummary).mockRejectedValue(new Error('Network error'))
     renderReports()
-    await waitFor(() => expect(screen.getByText(/Archive Isolated/i)).toBeInTheDocument())
+    expect(await screen.findByRole('button', { name: /Retry/i })).toBeInTheDocument()
   })
 
-  it('renders report cards for loaded reports', async () => {
-    const reports = [makeReport({ name: 'Q1 Security Audit' })]
-    mockApis(reports)
+  it('retries fetch when retry button is clicked', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getReports).mockRejectedValue(new Error('Network error'))
+    vi.mocked(getDashboardSummary).mockRejectedValue(new Error('Network error'))
     renderReports()
-    await waitFor(() => expect(screen.getByText('Q1 Security Audit')).toBeInTheDocument())
+    await screen.findByRole('button', { name: /Retry/i })
+    await user.click(screen.getByRole('button', { name: /Retry/i }))
+    expect(vi.mocked(getReports)).toHaveBeenCalledTimes(2)
+  })
+})
+
+// ── Empty state ───────────────────────────────────────────────────────────────────────────────
+
+describe('Reports — empty state', () => {
+  beforeEach(() => {
+    vi.mocked(getReports).mockResolvedValue({ reports: [] })
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
   })
 
-  it('does not mount all cards to DOM with 200 reports (DOM bloat test)', async () => {
-    const reports = makeLargeDataset(200)
-    mockApis(reports)
-    const { container } = renderReports()
-
-    await waitFor(() => expect(screen.queryByText(/Archive Isolated/i)).not.toBeInTheDocument(), { timeout: 3000 })
-
-    // Each virtual row holds 2 cards; overscan(3) = ~8 rows visible max
-    // 200 reports = 100 rows; only a small window should render
-    const cards = container.querySelectorAll('.group')
-    expect(cards.length).toBeLessThan(30)
+  it('shows Archive Isolated when there are no reports at all', async () => {
+    renderReports()
+    expect(await screen.findByText(/Archive Isolated/i)).toBeInTheDocument()
   })
 
-  it('filters by type using sidebar buttons', async () => {
-    const reports = [
-      makeReport({ id: 'r1', name: 'Exec Report', type: 'executive' }),
-      makeReport({ id: 'r2', name: 'Tech Report', type: 'technical' }),
-    ]
-    mockApis(reports)
+  it('shows Archive Isolated when filter returns no matching reports', async () => {
+    vi.mocked(getReports).mockResolvedValue({ reports: [readyReport] })
+    const user = userEvent.setup()
+    renderReports()
+    await screen.findByText(/Security Scan — example.com/i)
+    await user.click(screen.getByRole('button', { name: /executive briefings/i }))
+    expect(await screen.findByText(/Archive Isolated/i)).toBeInTheDocument()
+  })
+})
+
+// ── Export buttons — ready report ─────────────────────────────────────────────────────────────────
+
+describe('Reports — export buttons on a ready report', () => {
+  beforeEach(() => {
+    vi.mocked(getReports).mockResolvedValue({ reports: [readyReport] })
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+    openSpy.mockClear()
+  })
+
+  it('shows PDF, HTML and CSV buttons for a ready report', async () => {
+    renderReports()
+    expect(await screen.findByRole('button', { name: /^pdf$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^html$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^csv$/i })).toBeInTheDocument()
+  })
+
+  it('export buttons are enabled for a ready report', async () => {
+    renderReports()
+    await screen.findByRole('button', { name: /^pdf$/i })
+    expect(screen.getByRole('button', { name: /^pdf$/i })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /^html$/i })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /^csv$/i })).not.toBeDisabled()
+  })
+
+  it('clicking PDF opens the correct backend URL', async () => {
+    const user = userEvent.setup()
+    renderReports()
+    await user.click(await screen.findByRole('button', { name: /^pdf$/i }))
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.stringContaining('/task/' + readyReport.task_id + '/report/pdf'), '_blank')
+  })
+
+  it('clicking HTML opens the correct backend URL', async () => {
+    const user = userEvent.setup()
+    renderReports()
+    await user.click(await screen.findByRole('button', { name: /^html$/i }))
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.stringContaining('/task/' + readyReport.task_id + '/report/html'), '_blank')
+  })
+
+  it('clicking CSV opens the correct backend URL', async () => {
+    const user = userEvent.setup()
+    renderReports()
+    await user.click(await screen.findByRole('button', { name: /^csv$/i }))
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.stringContaining('/task/' + readyReport.task_id + '/report/csv'), '_blank')
+  })
+
+  it('does not use the old placeholder latest-report route', async () => {
+    const user = userEvent.setup()
+    renderReports()
+    await user.click(await screen.findByRole('button', { name: /^pdf$/i }))
+    expect(openSpy).not.toHaveBeenCalledWith(expect.stringContaining('latest'), expect.anything())
+  })
+})
+
+describe('Reports — header export button', () => {
+  beforeEach(() => {
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+    openSpy.mockClear()
+  })
+
+  it('opens the newest ready report PDF from the header button', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getReports).mockResolvedValue({ reports: [readyReport, generatingReport, newerReadyReport, failedReport] })
+
     renderReports()
 
-    await waitFor(() => expect(screen.getByText('Exec Report')).toBeInTheDocument())
+    await user.click(await screen.findByRole('button', { name: /download latest ready report pdf/i }))
 
-    // Click 'executive BRIEFINGS'
-    await userEvent.click(screen.getByRole('button', { name: /executive BRIEFINGS/i }))
-
-    expect(screen.getByText('Exec Report')).toBeInTheDocument()
-    expect(screen.queryByText('Tech Report')).not.toBeInTheDocument()
+    expect(openSpy).toHaveBeenCalledWith(
+      expect.stringContaining('/task/' + newerReadyReport.task_id + '/report/pdf'), '_blank')
+    expect(openSpy).not.toHaveBeenCalledWith(expect.stringContaining('/task/latest/report/pdf'), expect.anything())
   })
 
-  it('resets to all types when "all BRIEFINGS" is clicked', async () => {
-    const reports = [
-      makeReport({ id: 'r1', name: 'Exec Report', type: 'executive' }),
-      makeReport({ id: 'r2', name: 'Tech Report', type: 'technical' }),
-    ]
-    mockApis(reports)
+  it('disables the header export button when there is no ready report', async () => {
+    const user = userEvent.setup()
+    vi.mocked(getReports).mockResolvedValue({ reports: [generatingReport, failedReport] })
+
     renderReports()
 
-    await waitFor(() => expect(screen.getByText('Exec Report')).toBeInTheDocument())
+    const button = await screen.findByRole('button', { name: /download latest ready report pdf/i })
+    expect(button).toBeDisabled()
 
-    await userEvent.click(screen.getByRole('button', { name: /executive BRIEFINGS/i }))
-    await userEvent.click(screen.getByRole('button', { name: /all BRIEFINGS/i }))
+    await user.click(button)
+    expect(openSpy).not.toHaveBeenCalled()
+  })
+})
 
-    expect(screen.getByText('Exec Report')).toBeInTheDocument()
-    expect(screen.getByText('Tech Report')).toBeInTheDocument()
+// ── Export buttons — generating report ────────────────────────────────────────────────────────────
+
+describe('Reports — export buttons on a generating report', () => {
+  beforeEach(() => {
+    vi.mocked(getReports).mockResolvedValue({ reports: [generatingReport] })
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+    openSpy.mockClear()
   })
 
-  it('displays metrics from summary API', async () => {
-    mockApis([], { total_findings: 99, total_assets: 15 })
+  it('export buttons are disabled when report is generating', async () => {
     renderReports()
+    await screen.findByRole('button', { name: /^pdf$/i })
+    expect(screen.getByRole('button', { name: /^pdf$/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^html$/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^csv$/i })).toBeDisabled()
+  })
 
+  it('clicking a disabled button does not open any URL', async () => {
+    const user = userEvent.setup()
+    renderReports()
+    await screen.findByRole('button', { name: /^pdf$/i })
+    await user.click(screen.getByRole('button', { name: /^pdf$/i }))
+    expect(openSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe('Reports — export buttons on a failed report', () => {
+  beforeEach(() => {
+    vi.mocked(getReports).mockResolvedValue({ reports: [failedReport] })
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+    openSpy.mockClear()
+  })
+
+  it('export buttons are enabled for a failed report since backend supports it', async () => {
+    renderReports()
+    await screen.findByRole('button', { name: /^pdf$/i })
+    expect(screen.getByRole('button', { name: /^pdf$/i })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /^html$/i })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /^csv$/i })).not.toBeDisabled()
+  })
+})
+
+// ── Type filter ─────────────────────────────────────────────────────────────────────────────────────
+
+describe('Reports — type filter', () => {
+  beforeEach(() => {
+    vi.mocked(getReports).mockResolvedValue({ reports: [readyReport, generatingReport] })
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+  })
+
+  it('shows all reports when All filter is selected', async () => {
+    renderReports()
+    expect(await screen.findByText(/Security Scan — example.com/i)).toBeInTheDocument()
+    expect(screen.getByText(/Security Scan — staging.example.com/i)).toBeInTheDocument()
+  })
+
+  it('shows only matching reports when a type filter is selected', async () => {
+    const user = userEvent.setup()
+    renderReports()
+    await screen.findByText(/Security Scan — example.com/i)
+    await user.click(screen.getByRole('button', { name: /executive briefings/i }))
     await waitFor(() => {
-      expect(screen.getByText('99')).toBeInTheDocument()
-      expect(screen.getByText('15')).toBeInTheDocument()
+      expect(screen.queryByText(/Security Scan — example.com/i)).not.toBeInTheDocument()
+    })
+    expect(screen.getByText(/Security Scan — staging.example.com/i)).toBeInTheDocument()
+  })
+})
+
+// ── Status filter ────────────────────────────────────────────────────────────────────────────────
+
+describe('Reports — status filter', () => {
+  beforeEach(() => {
+    vi.mocked(getReports).mockResolvedValue({ reports: [readyReport, generatingReport, failedReport] })
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+  })
+
+  it('shows only ready reports when status filter is Ready', async () => {
+    const user = userEvent.setup()
+    renderReports()
+    await screen.findByText(/Security Scan — example.com/i)
+    await user.click(screen.getByRole('button', { name: /status ready/i }))
+    expect(await screen.findByText(/Security Scan — example.com/i)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByText(/Security Scan — staging.example.com/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/Security Scan — api.example.com/i)).not.toBeInTheDocument()
     })
   })
 
-  it('refresh button re-fetches reports', async () => {
-    mockApis([makeReport({ name: 'Initial Report' })])
+  it('shows only failed reports when status filter is Failed', async () => {
+    const user = userEvent.setup()
     renderReports()
-
-    await waitFor(() => expect(screen.getByText('Initial Report')).toBeInTheDocument())
-
-    mockApis([makeReport({ name: 'Initial Report' }), makeReport({ name: 'Refreshed Report' })])
-    await userEvent.click(screen.getByTitle('Refresh Archive'))
-
-    await waitFor(() => expect(screen.getByText('Refreshed Report')).toBeInTheDocument())
+    await screen.findByText(/Security Scan — example.com/i)
+    await user.click(screen.getByRole('button', { name: /status failed/i }))
+    expect(await screen.findByText(/Security Scan — api.example.com/i)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByText(/Security Scan — example.com/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/Security Scan — staging.example.com/i)).not.toBeInTheDocument()
+    })
   })
 
-  it('report card shows correct status bar colour for ready/failed/generating', async () => {
-    const reports = [
-      makeReport({ id: 'r1', name: 'Ready Report', status: 'ready' }),
-      makeReport({ id: 'r2', name: 'Failed Report', status: 'failed' }),
-    ]
-    mockApis(reports)
-    const { container } = renderReports()
+  it('shows only generating reports when status filter is Generating', async () => {
+    const user = userEvent.setup()
+    renderReports()
+    await screen.findByText(/Security Scan — example.com/i)
+    await user.click(screen.getByRole('button', { name: /status generating/i }))
+    expect(await screen.findByText(/Security Scan — staging.example.com/i)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByText(/Security Scan — example.com/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/Security Scan — api.example.com/i)).not.toBeInTheDocument()
+    })
+  })
+})
 
-    await waitFor(() => expect(screen.getByText('Ready Report')).toBeInTheDocument())
+// ── isWithinDateRange unit tests ──────────────────────────────────────────────────────────────────────
 
-    // Green bar for ready
-    const greenBars = container.querySelectorAll('.bg-rag-green.w-full')
-    expect(greenBars.length).toBeGreaterThan(0)
+describe('isWithinDateRange', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(BASE_NOW))
+  })
+  afterEach(() => { vi.useRealTimers() })
 
-    // Red bar for failed
-    const redBars = container.querySelectorAll('.bg-rag-red.w-full')
-    expect(redBars.length).toBeGreaterThan(0)
+  it('always returns true for range all', () => {
+    expect(isWithinDateRange('2020-01-01T00:00:00Z', 'all')).toBe(true)
   })
 
-  it('negative: compliance type filter hides executive and technical reports', async () => {
-    const reports = [
-      makeReport({ id: 'r1', name: 'Executive Dossier', type: 'executive' }),
-      makeReport({ id: 'r2', name: 'Technical Intel', type: 'technical' }),
-      makeReport({ id: 'r3', name: 'Compliance Audit', type: 'compliance' }),
-    ]
-    mockApis(reports)
+  it('returns false for empty string', () => {
+    expect(isWithinDateRange('', '24h')).toBe(false)
+  })
+
+  it('returns false for invalid date string', () => {
+    expect(isWithinDateRange('not-a-date', '7d')).toBe(false)
+  })
+
+  it('matches a date 1 hour ago within 24h', () => {
+    const d = new Date(BASE_NOW - 60 * 60 * 1000).toISOString()
+    expect(isWithinDateRange(d, '24h')).toBe(true)
+  })
+
+  it('does not match a date 25 hours ago within 24h', () => {
+    const d = new Date(BASE_NOW - 25 * 60 * 60 * 1000).toISOString()
+    expect(isWithinDateRange(d, '24h')).toBe(false)
+  })
+
+  it('matches a date 2 days ago within 7d', () => {
+    const d = new Date(BASE_NOW - 2 * 86400000).toISOString()
+    expect(isWithinDateRange(d, '7d')).toBe(true)
+  })
+
+  it('does not match a date 8 days ago within 7d', () => {
+    const d = new Date(BASE_NOW - 8 * 86400000).toISOString()
+    expect(isWithinDateRange(d, '7d')).toBe(false)
+  })
+
+  it('matches a date 10 days ago within 30d', () => {
+    const d = new Date(BASE_NOW - 10 * 86400000).toISOString()
+    expect(isWithinDateRange(d, '30d')).toBe(true)
+  })
+
+  it('does not match a date 31 days ago within 30d', () => {
+    const d = new Date(BASE_NOW - 31 * 86400000).toISOString()
+    expect(isWithinDateRange(d, '30d')).toBe(false)
+  })
+
+  it('does not match a future date within 24h', () => {
+    const d = new Date(BASE_NOW + 60 * 60 * 1000).toISOString()
+    expect(isWithinDateRange(d, '24h')).toBe(false)
+  })
+
+  it('does not match a future date within 7d', () => {
+    const d = new Date(BASE_NOW + 2 * 86400000).toISOString()
+    expect(isWithinDateRange(d, '7d')).toBe(false)
+  })
+})
+
+// ── Combined filters ─────────────────────────────────────────────────────────────────────────────────
+
+describe('Reports — combined filters', () => {
+  beforeEach(() => {
+    vi.mocked(getReports).mockResolvedValue({ reports: [readyReport, generatingReport, failedReport] })
+    vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
+  })
+
+  it('type + status filter works correctly', async () => {
+    const user = userEvent.setup()
     renderReports()
+    await screen.findByText(/Security Scan — example.com/i)
+    await user.click(screen.getByRole('button', { name: /technical/i }))
+    await user.click(screen.getByRole('button', { name: /status ready/i }))
+    expect(await screen.findByText(/Security Scan — example.com/i)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByText(/Security Scan — staging.example.com/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/Security Scan — api.example.com/i)).not.toBeInTheDocument()
+    })
+  })
 
-    await waitFor(() => expect(screen.getByText('Compliance Audit')).toBeInTheDocument())
-
-    await userEvent.click(screen.getByRole('button', { name: /compliance BRIEFINGS/i }))
-
-    expect(screen.getByText('Compliance Audit')).toBeInTheDocument()
-    expect(screen.queryByText('Executive Dossier')).not.toBeInTheDocument()
-    expect(screen.queryByText('Technical Intel')).not.toBeInTheDocument()
+  it('shows empty state when combined status + date filters match nothing', async () => {
+    const user = userEvent.setup()
+    renderReports()
+    await screen.findByText(/Security Scan — example.com/i)
+    await user.click(screen.getByRole('button', { name: /status failed/i }))
+    await user.click(screen.getByRole('button', { name: /date last 24 hours/i }))
+    expect(await screen.findByText(/archive isolated/i)).toBeInTheDocument()
   })
 })

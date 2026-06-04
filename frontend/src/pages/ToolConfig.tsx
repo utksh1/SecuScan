@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   getPluginSchema,
   listPlugins,
+  getSettings,
   PluginFieldSchema,
   PluginListItem,
   PluginSchemaResponse,
@@ -11,6 +12,7 @@ import {
 } from '../api'
 import { useToast } from '../components/ToastContext'
 import { routePath, routes } from '../routes'
+import { getValidationError } from '../utils/validation'
 
 type InputState = Record<string, unknown>
 
@@ -27,59 +29,6 @@ function buildDefaultInputs(fields: PluginFieldSchema[]): InputState {
   const defaults: InputState = {}
   for (const field of fields) defaults[field.id] = defaultValueForField(field)
   return defaults
-}
-
-function isRequiredFieldValid(field: PluginFieldSchema, value: unknown): boolean {
-  if (!field.required) return true
-  if (value === undefined || value === null) return false
-  if (typeof value === 'string') return value.trim().length > 0
-  if (Array.isArray(value)) return value.length > 0
-  return true
-}
-
-function asFiniteNumber(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value)
-    return Number.isFinite(parsed) ? parsed : null
-  }
-  return null
-}
-
-function getFieldValidationError(field: PluginFieldSchema, value: unknown): string | null {
-  if (!isRequiredFieldValid(field, value)) {
-    return `${field.label} is required`
-  }
-
-  const validation = field.validation || {}
-  const message = typeof validation.message === 'string' ? validation.message : null
-
-  if (typeof value === 'string' && value.trim()) {
-    const pattern = typeof validation.pattern === 'string' ? validation.pattern : null
-    if (pattern) {
-      try {
-        if (!new RegExp(pattern).test(value.trim())) {
-          return message || `${field.label} is not valid`
-        }
-      } catch {
-        return null
-      }
-    }
-  }
-
-  if (field.type === 'integer' && value !== '' && value !== undefined && value !== null) {
-    const numericValue = asFiniteNumber(value)
-    if (numericValue === null || !Number.isInteger(numericValue)) {
-      return message || `${field.label} must be a whole number`
-    }
-
-    const min = asFiniteNumber(validation.min)
-    const max = asFiniteNumber(validation.max)
-    if (min !== null && numericValue < min) return message || `${field.label} must be at least ${min}`
-    if (max !== null && numericValue > max) return message || `${field.label} must be no more than ${max}`
-  }
-
-  return null
 }
 
 function resolvePresetInputs(
@@ -114,6 +63,8 @@ export default function ToolConfig() {
   const [consentGranted, setConsentGranted] = useState(false)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [serverLimits, setServerLimits] = useState<any | null>(null)
+  const fieldRefs = useRef<Record<string, HTMLElement | null>>({})
 
   useEffect(() => {
     let cancelled = false
@@ -145,6 +96,12 @@ export default function ToolConfig() {
         setSelectedPreset(defaultPreset)
         setInputs(initialInputs)
         setConsentGranted(!matchedPlugin.requires_consent)
+        try {
+          const s = await getSettings()
+          setServerLimits(s || null)
+        } catch (e) {
+          // non-fatal; default to null
+        }
       } catch (error) {
         if (!cancelled) {
           addToast('Failed to load plugin configuration.', 'error')
@@ -162,15 +119,18 @@ export default function ToolConfig() {
   }, [toolId, navigate, addToast])
 
   const presetNames = useMemo(() => Object.keys(schema?.presets || {}), [schema])
+
   const validationErrors = useMemo<Record<string, string>>(() => {
     if (!schema) return {}
     return schema.fields.reduce<Record<string, string>>((errors, field) => {
-      const error = getFieldValidationError(field, inputs[field.id])
+      const error = getValidationError(field, inputs[field.id])
       if (error) errors[field.id] = error
       return errors
     }, {})
   }, [schema, inputs])
+
   const invalidFieldCount = Object.keys(validationErrors).length
+  const hasValidationErrors = invalidFieldCount > 0
   const safetyLevel = String(schema?.safety?.level || 'safe')
 
   const handleFieldChange = (field: PluginFieldSchema, value: unknown) => {
@@ -185,7 +145,11 @@ export default function ToolConfig() {
 
   const handleStartScan = async () => {
     if (!plugin || !schema || submitting) return
-    if (invalidFieldCount > 0) {
+    if (hasValidationErrors) {
+      const firstInvalidField = schema.fields.find((field) => validationErrors[field.id])
+      if (firstInvalidField) {
+        fieldRefs.current[firstInvalidField.id]?.focus()
+      }
       addToast('Fix highlighted scan parameters before starting the scan.', 'error')
       return
     }
@@ -231,6 +195,8 @@ export default function ToolConfig() {
         <div className="space-y-6">
           <div className="flex items-center gap-4">
             <button
+              type="button"
+              aria-label="Back to scans"
               onClick={() => navigate(routes.scans)}
               className="w-12 h-12 flex items-center justify-center border-4 border-black bg-charcoal hover:bg-rag-blue hover:text-black transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-x-1 active:translate-y-1"
             >
@@ -268,9 +234,15 @@ export default function ToolConfig() {
 
       {plugin.availability.missing_binaries.length > 0 && (
         <section className="bg-charcoal border-4 border-rag-amber p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-          <p className="text-[10px] uppercase font-black tracking-[0.3em] text-rag-amber">Dependency warning</p>
-          <p className="text-[10px] text-silver/70 uppercase tracking-widest mt-2">
-            Missing local binaries: {plugin.availability.missing_binaries.join(', ')}. Task launch is still allowed but may fail at runtime.
+          <p className="text-[10px] uppercase font-black tracking-[0.3em] text-rag-amber">
+            Plugin unavailable
+          </p>
+          <p className="text-[10px] text-silver/70 uppercase tracking-widest mt-2 leading-relaxed">
+            {plugin.availability.guidance ||
+              `Unavailable: Requires external binaries (${plugin.availability.missing_binaries.join(', ')}). Install required tools locally to enable this scanner.`}
+          </p>
+          <p className="text-[9px] text-silver/40 uppercase tracking-widest mt-3">
+            Task launch remains available, but execution may fail until dependencies are installed.
           </p>
         </section>
       )}
@@ -305,35 +277,73 @@ export default function ToolConfig() {
               {schema.fields.map((field) => {
                 const value = inputs[field.id]
                 const validationError = validationErrors[field.id]
+                const isInvalid = Boolean(validationError)
+                const inputBorderClass = isInvalid
+                  ? 'border-rag-red focus:border-rag-red'
+                  : 'border-black focus:border-rag-blue'
+                const fieldId = `field-${field.id}`
+                const labelId = `label-${field.id}`
+                const helpId = `help-${field.id}`
+                const errorId = `error-${field.id}`
+                const describedBy = [field.help ? helpId : null, isInvalid ? errorId : null].filter(Boolean).join(' ') || undefined
 
                 return (
                   <motion.div key={field.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
                     <div className="flex items-center justify-between gap-6">
-                      <label className="text-[10px] font-black uppercase tracking-[0.3em] text-silver-bright italic">
+                      <label
+                        htmlFor={fieldId}
+                        id={labelId}
+                        className="text-[10px] font-black uppercase tracking-[0.3em] text-silver-bright italic"
+                      >
                         {field.label}
-                        {field.required && <span className="text-rag-red ml-2">*</span>}
+                        {field.required && <span className="text-rag-red ml-2" aria-hidden="true">*</span>}
                       </label>
-                      {validationError && <span className="text-[9px] uppercase tracking-widest text-rag-red font-black">invalid</span>}
+                      {isInvalid && (
+                        <span className="text-[9px] uppercase tracking-widest text-rag-red font-black" aria-live="polite">
+                          invalid
+                        </span>
+                      )}
                     </div>
 
                     {field.type === 'text' ? (
                       <textarea
+                        id={fieldId}
+                        ref={(node) => {
+                          fieldRefs.current[field.id] = node
+                        }}
                         value={String(value ?? '')}
                         onChange={(event) => handleFieldChange(field, event.target.value)}
                         placeholder={field.placeholder || ''}
-                        className="w-full min-h-[120px] bg-charcoal-dark border-4 border-black p-4 text-sm text-silver-bright focus:outline-none focus:border-rag-blue"
+                        aria-invalid={isInvalid}
+                        aria-describedby={describedBy}
+                        className={`w-full min-h-[120px] bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
                       />
                     ) : field.type === 'integer' ? (
                       <input
+                        id={fieldId}
+                        ref={(node) => {
+                          fieldRefs.current[field.id] = node
+                        }}
                         type="number"
+                        min={Number(field.validation?.min ?? 1)}
+                        max={Math.min(Number(field.validation?.max ?? Infinity), Number(serverLimits?.sandbox?.default_timeout ?? Infinity))}
                         value={value === '' ? '' : String(value ?? '')}
                         onChange={(event) => handleFieldChange(field, coerceInteger(event.target.value))}
                         placeholder={field.placeholder || ''}
-                        className="w-full bg-charcoal-dark border-4 border-black p-4 text-sm text-silver-bright focus:outline-none focus:border-rag-blue"
+                        aria-invalid={isInvalid}
+                        aria-describedby={describedBy}
+                        className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
                       />
                     ) : field.type === 'boolean' ? (
                       <button
+                        id={fieldId}
+                        ref={(node) => {
+                          fieldRefs.current[field.id] = node
+                        }}
+                        type="button"
                         onClick={() => handleFieldChange(field, !Boolean(value))}
+                        aria-pressed={Boolean(value)}
+                        aria-describedby={describedBy}
                         className={`w-full flex items-center justify-between p-4 border-4 border-black transition-all ${
                           value ? 'bg-rag-green text-black' : 'bg-charcoal-dark text-silver-bright'
                         }`}
@@ -343,9 +353,15 @@ export default function ToolConfig() {
                       </button>
                     ) : field.type === 'select' ? (
                       <select
+                        id={fieldId}
+                        ref={(node) => {
+                          fieldRefs.current[field.id] = node
+                        }}
                         value={String(value ?? '')}
                         onChange={(event) => handleFieldChange(field, event.target.value)}
-                        className="w-full bg-charcoal-dark border-4 border-black p-4 text-sm text-silver-bright focus:outline-none focus:border-rag-blue"
+                        aria-invalid={isInvalid}
+                        aria-describedby={describedBy}
+                        className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
                       >
                         <option value="">Select option</option>
                         {(field.options || []).map((option) => (
@@ -355,12 +371,22 @@ export default function ToolConfig() {
                         ))}
                       </select>
                     ) : field.type === 'multiselect' ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <fieldset
+                        ref={(node) => {
+                          fieldRefs.current[field.id] = node
+                        }}
+                        aria-invalid={isInvalid}
+                        aria-describedby={describedBy}
+                        className="grid grid-cols-1 md:grid-cols-2 gap-3"
+                      >
+                        <legend className="sr-only">{field.label}</legend>
                         {(field.options || []).map((option) => {
                           const selected = Array.isArray(value) && value.includes(option.value)
                           return (
                             <button
                               key={option.value}
+                              type="button"
+                              aria-pressed={selected}
                               onClick={() => {
                                 const current = Array.isArray(value) ? [...value] : []
                                 const next = selected
@@ -376,57 +402,93 @@ export default function ToolConfig() {
                             </button>
                           )
                         })}
-                      </div>
+                      </fieldset>
                     ) : (
                       <input
+                        id={fieldId}
+                        ref={(node) => {
+                          fieldRefs.current[field.id] = node
+                        }}
                         type="text"
                         value={String(value ?? '')}
                         onChange={(event) => handleFieldChange(field, event.target.value)}
                         placeholder={field.placeholder || ''}
-                        className="w-full bg-charcoal-dark border-4 border-black p-4 text-sm text-silver-bright focus:outline-none focus:border-rag-blue"
+                        aria-invalid={isInvalid}
+                        aria-describedby={describedBy}
+                        className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
                       />
                     )}
 
-                    {field.help && <p className="text-[10px] text-silver/40 uppercase tracking-widest">{field.help}</p>}
-                    {validationError && <p className="text-[10px] text-rag-red uppercase tracking-widest">{validationError}</p>}
+                    {field.help && (
+                      <p id={helpId} className="text-[10px] text-silver/40 uppercase tracking-widest">
+                        {field.help}
+                      </p>
+                    )}
+                    {isInvalid && (
+                      <p id={errorId} role="alert" className="text-[10px] text-rag-red uppercase tracking-widest font-black">
+                        {validationError}
+                      </p>
+                    )}
                   </motion.div>
                 )
               })}
             </div>
           </section>
-
-          {plugin.requires_consent && (
-            <section className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-              <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic mb-6">Consent_Gate</h3>
-              <p className="text-[10px] text-silver/60 uppercase tracking-widest mb-4">
-                {plugin.consent_message || 'This plugin requires explicit authorization before execution.'}
-              </p>
-              <label className="flex items-center gap-3 text-[10px] uppercase tracking-widest font-black">
-                <input
-                  type="checkbox"
-                  checked={consentGranted}
-                  onChange={(event) => setConsentGranted(event.target.checked)}
-                  className="w-4 h-4"
-                />
-                I have explicit authorization for this target
-              </label>
-            </section>
-          )}
         </div>
 
         <aside className="xl:col-span-1">
           <section className="bg-charcoal-dark border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
             <h3 className="text-[11px] font-black text-silver-bright uppercase tracking-[0.4em] italic">Deploy_Control</h3>
+            <p
+              role={hasValidationErrors ? 'alert' : 'status'}
+              aria-live="polite"
+              className={`text-[10px] uppercase tracking-widest font-black ${
+                hasValidationErrors ? 'text-rag-red' : 'text-rag-green'
+              }`}
+            >
+              {hasValidationErrors
+                ? `${invalidFieldCount} field${invalidFieldCount > 1 ? 's' : ''} need${invalidFieldCount === 1 ? 's' : ''} attention before scan start`
+                : 'All fields valid'}
+            </p>
+            {plugin.requires_consent && (
+              <div className="space-y-4 border-4 border-black bg-charcoal p-5">
+                <p className="text-[10px] text-silver/60 uppercase tracking-widest leading-6">
+                  {plugin.consent_message || 'This plugin requires explicit authorization before execution.'}
+                </p>
+                <label className="flex items-start gap-3 text-[10px] uppercase tracking-widest font-black text-silver-bright">
+                  <input
+                    type="checkbox"
+                    checked={consentGranted}
+                    onChange={(event) => setConsentGranted(event.target.checked)}
+                    className="mt-0.5 w-4 h-4 shrink-0"
+                  />
+                  <span>I have explicit authorization for this target</span>
+                </label>
+              </div>
+            )}
             <button
+              type="button"
               onClick={handleStartScan}
               disabled={submitting}
-              className="w-full py-4 bg-rag-red border-4 border-black text-black text-[10px] font-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              aria-disabled={submitting || hasValidationErrors}
+              className={`w-full py-4 border-4 border-black text-black text-[10px] font-black uppercase tracking-[0.3em] transition-all ${
+                submitting || hasValidationErrors
+                  ? 'bg-rag-red/70 cursor-not-allowed opacity-60'
+                  : 'bg-rag-red hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1'
+              } disabled:hover:shadow-none disabled:hover:translate-y-0`}
             >
               {submitting ? 'QUEUEING...' : 'INITIATE_SCAN'}
             </button>
-            <p className="text-[10px] text-silver/30 uppercase tracking-widest">
-              Parameter issues: {invalidFieldCount}
-            </p>
+            {hasValidationErrors && (
+              <p role="status" className="text-[10px] text-rag-red uppercase tracking-widest font-black">
+                {invalidFieldCount} invalid field{invalidFieldCount > 1 ? 's' : ''} highlighted
+              </p>
+            )}
+            {!hasValidationErrors && (
+              <p className="text-[10px] text-rag-green uppercase tracking-widest font-black">
+                All fields valid
+              </p>
+            )}
           </section>
         </aside>
       </main>

@@ -35,13 +35,13 @@ venv_tests/
 *.swo
 *~
 .DS_Store
-
 # Testing
 .pytest_cache/
 .coverage
 htmlcov/
 *.cover
 .hypothesis/
+benchmark_results.json
 
 # Database
 *.db
@@ -53,6 +53,16 @@ data/raw/*
 data/reports/*
 !data/raw/.gitkeep
 !data/reports/.gitkeep
+
+# Backend scan artifacts
+backend/data/raw/*
+!backend/data/raw/.gitkeep
+
+# Scanner assets downloaded by scripts/bootstrap_scanner_assets.sh
+wordlists/common.txt
+wordlists/large.txt
+wordlists/medium.txt
+wordlists/subdomains-top1million-110000.txt
 
 # Logs
 logs/
@@ -77,3 +87,24 @@ temp/
 *.tmp
 node_modules/
 .vercel
+
+# Vite cache
+.vite/
+
+# Frontend builds
+frontend/dist/
+frontend/build/
+
+# Backend cache
+backend/__pycache__/
+
+# Misc
+Thumbs.db
+
+backend/data/reports/*
+!backend/data/reports/.gitkeep
+
+# Frontend generated test artifacts (see CONTRIBUTING.md)
+frontend/playwright-report/
+frontend/test-results/
+frontend/.vite/

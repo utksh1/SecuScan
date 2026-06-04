@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { listPlugins, PluginListItem } from '../api'
 import { scanTools } from '../data/scanTools'
 import { routePath } from '../routes'
+import { ToolCheatSheet } from '../components/ToolCheatSheet'
 
 type RiskLevel = 'passive' | 'active' | 'aggressive'
 type PresetCompatibility = 'quick-recon' | 'deep-scan' | 'both' | 'none'
@@ -75,15 +76,31 @@ function formatCategoryLabel(category: string): string {
     .join(' ')
 }
 
+function toDomId(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, '-')
+}
+
+function getToolAccessibilityLabel(tool: CatalogTool): string {
+  const parts = [
+    tool.name,
+    `${tool.riskLevel} risk scanner`,
+    tool.requiresConsent ? 'requires consent' : 'does not require consent',
+  ]
+
+  if (tool.disabled) {
+    parts.push(`unavailable: ${tool.disabledReason || 'backend plugin pending'}`)
+  }
+
+  return parts.join(', ')
+}
+
 function mapPluginCategoryToLegacyTab(category: string, pluginId?: string): UITab {
   const pinnedTool = scanTools.find(t => t.id === pluginId);
   
-  // If we found a tool in scanTools.ts, use its defined category
   if (pinnedTool) {
     return pinnedTool.category as UITab;
   }
 
-  // Fallback mapping for dynamic plugins
   switch (category) {
     case 'cms':
     case 'web':
@@ -163,6 +180,8 @@ export default function Scanner() {
   const [tabOrder, setTabOrder] = useState<UITab[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [catalogLoadAttempt, setCatalogLoadAttempt] = useState(0)
+  const [selectedToolId, setSelectedToolId] = useState<string>('nmap')
 
   useEffect(() => {
     setRecentToolIds(readRecentToolIds())
@@ -172,6 +191,8 @@ export default function Scanner() {
     let cancelled = false
 
     async function loadCatalog() {
+      if (!cancelled) setLoading(true)
+
       try {
         const response = await listPlugins()
         if (cancelled) return
@@ -201,7 +222,7 @@ export default function Scanner() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [catalogLoadAttempt])
 
   useEffect(() => {
     if (tabOrder.length > 0 && !tabOrder.includes(activeTab)) {
@@ -209,31 +230,57 @@ export default function Scanner() {
     }
   }, [tabOrder, activeTab])
 
-  const categoryToolsCount = useMemo(
-    () => tools.filter((tool) => {
-      if (activeTab === 'quick-start') return tool.isQuickStart
-      return tool.category === activeTab
-    }).length,
-    [tools, activeTab],
-  )
+  const toolsByCategory = useMemo(() => {
+    const groups: Record<string, CatalogTool[]> = {}
+    const quickStart: CatalogTool[] = []
+    for (const tool of tools) {
+      if (tool.isQuickStart) {
+        quickStart.push(tool)
+      }
+      const cat = tool.category
+      if (!groups[cat]) {
+        groups[cat] = []
+      }
+      groups[cat].push(tool)
+    }
+    return { groups, quickStart }
+  }, [tools])
+
+  const toolsById = useMemo(() => {
+    return new Map(tools.map((tool) => [tool.id, tool]))
+  }, [tools])
+
+  const categoryToolsCount = useMemo(() => {
+    if (activeTab === 'quick-start') return toolsByCategory.quickStart.length
+    return toolsByCategory.groups[activeTab]?.length || 0
+  }, [toolsByCategory, activeTab])
 
   const filteredTools = useMemo(() => {
     const query = searchQuery.toLowerCase().trim()
-    return tools.filter((tool) => {
-      const matchesCategory = activeTab === 'quick-start' ? tool.isQuickStart : tool.category === activeTab
-      if (!matchesCategory) return false
-      if (!query) return true
-      return tool.name.toLowerCase().includes(query) || tool.purpose.toLowerCase().includes(query)
-    })
-  }, [tools, activeTab, searchQuery])
+    const toolsInTab = activeTab === 'quick-start'
+      ? toolsByCategory.quickStart
+      : (toolsByCategory.groups[activeTab] || [])
+
+    if (!query) return toolsInTab
+
+    return toolsInTab.filter(
+      (tool) =>
+        tool.name.toLowerCase().includes(query) ||
+        tool.purpose.toLowerCase().includes(query)
+    )
+  }, [toolsByCategory, activeTab, searchQuery])
 
   const quickAccessTools = useMemo(() => {
-    const byId = new Map(tools.map((tool) => [tool.id, tool]))
     return recentToolIds
-      .map((id) => byId.get(id))
+      .map((id) => toolsById.get(id))
       .filter((tool): tool is CatalogTool => Boolean(tool))
       .slice(0, RECENT_TOOLS_LIMIT)
-  }, [tools, recentToolIds])
+  }, [toolsById, recentToolIds])
+
+  const placeholders = useMemo(() => {
+    const count = loading || filteredTools.length === 0 ? 0 : Math.max(0, 4 - (filteredTools.length % 4 || 4))
+    return Array.from({ length: count })
+  }, [loading, filteredTools.length])
 
   const trackRecentTool = (toolId: string) => {
     setRecentToolIds((prev) => {
@@ -249,12 +296,14 @@ export default function Scanner() {
 
   const handleToolSelect = (tool: CatalogTool) => {
     if (tool.disabled) return
+    setSelectedToolId(tool.id)
     trackRecentTool(tool.id)
     navigate(routePath.scanTool(tool.id))
   }
 
   return (
-    <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
+    <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12 flex gap-0">
+      <div className="flex-1 space-y-12">
       <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10 font-black">
         <div className="space-y-4">
           <div className="bg-rag-red text-black px-4 py-1 text-xs uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -270,9 +319,11 @@ export default function Scanner() {
 
         <div className="flex items-center gap-6 flex-wrap">
           <div className="relative group">
-            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-silver/20 group-focus-within:text-rag-red transition-colors text-sm">search</span>
+            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-silver/20 group-focus-within:text-rag-red transition-colors text-sm"
+            aria-hidden="true">search</span>
             <input
               type="text"
+              aria-label="Search scanner catalog"
               placeholder="SEARCH_PROTOCOLS..."
               className="bg-charcoal border-4 border-black pl-12 pr-4 py-4 text-xs font-black uppercase tracking-widest text-silver-bright focus:outline-none focus:border-rag-red transition-all w-80 placeholder:text-silver/10 italic shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
               value={searchQuery}
@@ -286,13 +337,26 @@ export default function Scanner() {
         <section className="bg-charcoal border-4 border-rag-red p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
           <p className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-red">Catalog load failed</p>
           <p className="text-[10px] text-silver/60 uppercase tracking-widest mt-3">{loadError}</p>
+          <button
+            type="button"
+            onClick={() => setCatalogLoadAttempt((value) => value + 1)}
+            disabled={loading}
+            className="mt-5 px-6 py-3 text-[10px] font-black uppercase tracking-[0.3em] bg-rag-red text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] disabled:opacity-60 disabled:cursor-not-allowed hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
+          >
+            {loading ? 'Retrying...' : 'Retry'}
+          </button>
         </section>
       )}
 
-      <nav className="flex flex-wrap gap-4">
+      <nav className="flex flex-wrap gap-4" role="tablist" aria-label="Scanner categories">
         {tabOrder.map((category) => (
           <button
             key={category}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === category}
+            aria-controls={`scanner-panel-${toDomId(category)}`}
+            id={`scanner-tab-${toDomId(category)}`}
             onClick={() => setActiveTab(category)}
             className={`px-8 py-4 text-[10px] font-black uppercase tracking-[0.3em] transition-all border-4 flex items-center gap-3 ${
               activeTab === category
@@ -301,14 +365,18 @@ export default function Scanner() {
             }`}
           >
             {formatCategoryLabel(category)}
-            {activeTab === category && <span className="w-2 h-2 bg-black" />}
+            {activeTab === category && <span className="w-2 h-2 bg-black" aria-hidden="true" />}
           </button>
         ))}
       </nav>
 
       {/* Quick Access section removed per user request */}
 
-      <main>
+      <main
+        role="tabpanel"
+        id={`scanner-panel-${toDomId(activeTab)}`}
+        aria-labelledby={`scanner-tab-${toDomId(activeTab)}`}
+      >
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab || 'loading'}
@@ -319,76 +387,87 @@ export default function Scanner() {
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8"
           >
             {!loading &&
-              filteredTools.map((tool) => (
-                <motion.button
-                  key={tool.id}
-                  variants={itemVariants}
-                  disabled={tool.disabled}
-                  onClick={() => handleToolSelect(tool)}
-                  className={`group relative p-8 bg-charcoal border-4 border-black text-left flex flex-col justify-between h-80 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all overflow-hidden ${
-                    tool.disabled
-                      ? 'opacity-30 cursor-not-allowed grayscale'
-                      : 'hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] hover:-translate-x-1 hover:-translate-y-1'
-                  }`}
-                >
-                  <div className="space-y-6 relative z-10">
-                    <div className="flex justify-between items-start">
-                      <div
-                        className={`px-2 py-0.5 text-[8px] font-black uppercase tracking-widest italic border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
-                          tool.riskLevel === 'aggressive'
-                            ? 'bg-rag-red text-black'
-                            : tool.riskLevel === 'active'
-                              ? 'bg-rag-amber text-black'
-                              : 'bg-rag-green text-black'
-                        }`}
-                      >
-                        {tool.riskLevel}_STRIKE
+              filteredTools.map((tool) => {
+                const toolId = toDomId(tool.id)
+                const descriptionId = `scanner-tool-${toolId}-description`
+                const disabledReasonId = `scanner-tool-${toolId}-disabled`
+
+                return (
+                  <motion.button
+                    key={tool.id}
+                    type="button"
+                    variants={itemVariants}
+                    aria-disabled={tool.disabled}
+                    aria-label={getToolAccessibilityLabel(tool)}
+                    aria-describedby={tool.disabled && tool.disabledReason ? `${descriptionId} ${disabledReasonId}` : descriptionId}
+                    onClick={() => handleToolSelect(tool)}
+                    className={`group relative p-8 bg-charcoal border-4 border-black text-left flex flex-col justify-between h-80 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all overflow-hidden ${
+                      tool.disabled
+                        ? 'opacity-30 cursor-not-allowed grayscale'
+                        : 'hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] hover:-translate-x-1 hover:-translate-y-1'
+                    }`}
+                  >
+                    <div className="space-y-6 relative z-10">
+                      <div className="flex justify-between items-start">
+                        <div
+                          aria-hidden="true"
+                          className={`px-2 py-0.5 text-[8px] font-black uppercase tracking-widest italic border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
+                            tool.riskLevel === 'aggressive'
+                              ? 'bg-rag-red text-black'
+                              : tool.riskLevel === 'active'
+                                ? 'bg-rag-amber text-black'
+                                : 'bg-rag-green text-black'
+                          }`}
+                        >
+                          {tool.riskLevel}_STRIKE
+                        </div>
+                        {tool.isProfessional && (
+                          <div className="px-2 py-0.5 text-[8px] font-black uppercase tracking-widest italic border-2 border-rag-blue text-black bg-rag-blue shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]" aria-hidden="true">
+                            PROFESSIONAL
+                          </div>
+                        )}
+                        <span className="material-symbols-outlined text-silver/10 group-hover:text-silver-bright transition-colors duration-500" aria-hidden="true">
+                          {tool.presetCompatibility === 'quick-recon' ? 'bolt' : 'psychology'}
+                        </span>
                       </div>
-                      {tool.isProfessional && (
-                        <div className="px-2 py-0.5 text-[8px] font-black uppercase tracking-widest italic border-2 border-rag-blue text-black bg-rag-blue shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
-                          PROFESSIONAL
+
+                      <div>
+                        <h3 className="text-3xl font-black text-silver-bright uppercase tracking-tighter italic leading-none group-hover:text-rag-red transition-colors">
+                          {tool.name}
+                        </h3>
+                        <div className="w-12 h-1 bg-silver-bright/10 mt-4 group-hover:w-full group-hover:bg-rag-red/30 transition-all duration-700" />
+                      </div>
+
+                      <p id={descriptionId} className="text-[10px] text-silver/40 uppercase tracking-widest leading-relaxed line-clamp-3 font-bold italic">
+                        {tool.purpose}
+                      </p>
+
+                      {tool.isPlugin && tool.availability && tool.availability.missing_binaries.length > 0 && (
+                        <div className="text-[9px] uppercase tracking-widest text-rag-amber font-black leading-relaxed">
+                          {tool.availability.guidance ||
+                            `Unavailable: Requires external binaries (${tool.availability.missing_binaries.join(', ')})`}
                         </div>
                       )}
-                      <span className="material-symbols-outlined text-silver/10 group-hover:text-silver-bright transition-colors duration-500">
-                        {tool.presetCompatibility === 'quick-recon' ? 'bolt' : 'psychology'}
+                    </div>
+
+                    <div className="pt-6 border-t-2 border-black border-dashed flex justify-between items-end">
+                      <span className="text-[9px] font-black text-silver-bright/20 uppercase tracking-[0.4em] group-hover:text-silver-bright transition-colors">
+                        INIT_DEPLOYMENT
+                      </span>
+                      <span className="material-symbols-outlined text-silver/20 group-hover:text-rag-red group-hover:translate-x-1 transition-all duration-300" aria-hidden="true">
+                        double_arrow
                       </span>
                     </div>
 
-                    <div>
-                      <h3 className="text-3xl font-black text-silver-bright uppercase tracking-tighter italic leading-none group-hover:text-rag-red transition-colors">
-                        {tool.name}
-                      </h3>
-                      <div className="w-12 h-1 bg-silver-bright/10 mt-4 group-hover:w-full group-hover:bg-rag-red/30 transition-all duration-700" />
-                    </div>
-
-                    <p className="text-[10px] text-silver/40 uppercase tracking-widest leading-relaxed line-clamp-3 font-bold italic">
-                      {tool.purpose}
-                    </p>
-
-                    {tool.isPlugin && tool.availability && tool.availability.missing_binaries.length > 0 && (
-                      <div className="text-[9px] uppercase tracking-widest text-rag-amber font-black">
-                        Missing: {tool.availability.missing_binaries.join(', ')}
+                    {tool.disabled && tool.disabledReason && (
+                      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center p-8 text-center z-20">
+                        <span className="material-symbols-outlined text-rag-red text-3xl mb-4" aria-hidden="true">lock_reset</span>
+                        <span id={disabledReasonId} className="text-[10px] text-rag-red font-black uppercase tracking-widest italic">{tool.disabledReason}</span>
                       </div>
                     )}
-                  </div>
-
-                  <div className="pt-6 border-t-2 border-black border-dashed flex justify-between items-end">
-                    <span className="text-[9px] font-black text-silver-bright/20 uppercase tracking-[0.4em] group-hover:text-silver-bright transition-colors">
-                      INIT_DEPLOYMENT
-                    </span>
-                    <span className="material-symbols-outlined text-silver/20 group-hover:text-rag-red group-hover:translate-x-1 transition-all duration-300">
-                      double_arrow
-                    </span>
-                  </div>
-
-                  {tool.disabled && tool.disabledReason && (
-                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center p-8 text-center z-20">
-                      <span className="material-symbols-outlined text-rag-red text-3xl mb-4">lock_reset</span>
-                      <span className="text-[10px] text-rag-red font-black uppercase tracking-widest italic">{tool.disabledReason}</span>
-                    </div>
-                  )}
-                </motion.button>
-              ))}
+                  </motion.button>
+                )
+              })}
 
             {!loading && filteredTools.length === 0 && (
               <motion.div
@@ -431,9 +510,9 @@ export default function Scanner() {
 
             {!loading &&
               filteredTools.length > 0 &&
-              Array.from({ length: Math.max(0, 4 - (filteredTools.length % 4 || 4)) }).map((_, index) => (
+              placeholders.map((_, index) => (
                 <div key={index} className="bg-charcoal/30 border-4 border-black/5 border-dashed flex items-center justify-center opacity-10 p-10">
-                  <span className="material-symbols-outlined text-4xl">add_box</span>
+                  <span className="material-symbols-outlined text-4xl" aria-hidden="true">add_box</span>
                 </div>
               ))}
           </motion.div>
@@ -442,7 +521,7 @@ export default function Scanner() {
 
       <footer className="pt-24 opacity-20 hover:opacity-100 transition-opacity duration-700 pointer-events-none md:pointer-events-auto">
         <div className="p-12 border-4 border-black border-dashed flex flex-col md:flex-row items-center gap-10 bg-charcoal/50">
-          <span className="material-symbols-outlined text-rag-red text-6xl">gavel</span>
+          <span className="material-symbols-outlined text-rag-red text-6xl" aria-hidden="true">gavel</span>
           <div className="space-y-4">
             <p className="text-xs font-black text-rag-amber uppercase tracking-[0.4em] italic leading-relaxed">
               UNAUTHORIZED_DEPLOYMENT_IS_MONITORED
@@ -453,6 +532,9 @@ export default function Scanner() {
           </div>
         </div>
       </footer>
+      </div>
+
+      <ToolCheatSheet activeToolId={selectedToolId} />
     </div>
   )
 }
