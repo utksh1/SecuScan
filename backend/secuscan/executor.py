@@ -13,6 +13,7 @@ from typing import Optional, Dict, Any, List
 import logging
 import re
 
+from .auth import DEFAULT_OWNER_ID
 from .redaction import redact
 from .cache import get_cache
 from .config import settings
@@ -145,17 +146,22 @@ class TaskExecutor:
         inputs: Dict[str, Any],
         safe_mode: bool,
         preset: Optional[str] = None,
-        consent_granted: bool = False
+        consent_granted: bool = False,
+        owner_id: str = DEFAULT_OWNER_ID,
     ) -> str:
         """
         Create a new scan task.
-        
+
         Args:
             plugin_id: Plugin identifier
             inputs: User input values
             preset: Optional preset name
             consent_granted: Whether user granted consent
-        
+            owner_id: Owning user/workspace identity used to scope later
+                access (issue #401). Defaults to the shared default owner for
+                internal callers (workflows, scheduler, CLI) that are not tied
+                to a request.
+
         Returns:
             Task ID
         """
@@ -177,12 +183,13 @@ class TaskExecutor:
         await db.execute(
             """
             INSERT INTO tasks (
-                id, plugin_id, tool_name, target, inputs_json, preset,
+                id, owner_id, plugin_id, tool_name, target, inputs_json, preset,
                 status, scan_phase, consent_granted, safe_mode
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 task_id,
+                owner_id,
                 plugin_id,
                 plugin.name,
                 extract_target(inputs),
@@ -261,13 +268,14 @@ class TaskExecutor:
 
             # Get task details
             task_row = await db.fetchone(
-                "SELECT plugin_id, inputs_json, safe_mode FROM tasks WHERE id = ?",
+                "SELECT owner_id, plugin_id, inputs_json, safe_mode FROM tasks WHERE id = ?",
                 (task_id,)
             )
 
             if not task_row:
                 raise ValueError(f"Task not found: {task_id}")
 
+            owner_id = task_row["owner_id"]
             plugin_id = task_row["plugin_id"]
             inputs = json.loads(task_row["inputs_json"])
             safe_mode = bool(task_row["safe_mode"])
@@ -383,6 +391,7 @@ class TaskExecutor:
                 await self._upsert_findings_and_report_from_scanner(
                     db=db,
                     task_id=task_id,
+                    owner_id=owner_id,
                     scanner=scanner,
                     plugin_id=plugin_id,
                     target=target,
@@ -520,6 +529,7 @@ class TaskExecutor:
                 await self._upsert_findings_and_report(
                     db=db,
                     task_id=task_id,
+                    owner_id=owner_id,
                     plugin=plugin,
                     plugin_id=plugin_id,
                     target=target,
@@ -850,7 +860,7 @@ class TaskExecutor:
             "pending_count": pending_count,
         }
 
-    async def _upsert_findings_and_report(self, db, task_id: str, plugin, plugin_id: str, target: str, status: str, output: str = ""):
+    async def _upsert_findings_and_report(self, db, task_id: str, owner_id: str, plugin, plugin_id: str, target: str, status: str, output: str = ""):
         """Persist derived findings and report records into SQLite."""
         parsed = self._parse_results(plugin, output)
         findings_data = parsed.get("findings", [])
@@ -890,16 +900,17 @@ class TaskExecutor:
             await db.execute(
                 """
                 INSERT INTO findings (
-                    id, task_id, plugin_id, title, category, severity,
+                    id, owner_id, task_id, plugin_id, title, category, severity,
                     target, description, remediation, proof, cvss, cve,
                     metadata_json, discovered_at,
                     exploitability, confidence, asset_exposure,
                     risk_score, risk_factors_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                           ?, ?, ?, ?, ?)
                 """,
                 (
                     finding_id,
+                    owner_id,
                     task_id,
                     plugin_id,
                     finding["title"],
@@ -924,8 +935,8 @@ class TaskExecutor:
         await db.execute(
             """
             INSERT INTO reports (
-                id, task_id, name, type, generated_at, status, findings, pages
-            ) VALUES (?, ?, ?, ?, (datetime('now')), ?, ?, ?)
+                id, owner_id, task_id, name, type, generated_at, status, findings, pages
+            ) VALUES (?, ?, ?, ?, ?, (datetime('now')), ?, ?, ?)
             ON CONFLICT (id) DO UPDATE SET
                 status = EXCLUDED.status,
                 findings = EXCLUDED.findings,
@@ -933,6 +944,7 @@ class TaskExecutor:
             """,
             (
                 f"report:{task_id}",
+                owner_id,
                 task_id,
                 f"{plugin.name} Report",
                 "technical",
@@ -942,7 +954,7 @@ class TaskExecutor:
             ),
         )
 
-    async def _upsert_findings_and_report_from_scanner(self, db, task_id: str, scanner: Any, plugin_id: str, target: str, status: str, result: Dict[str, Any]):
+    async def _upsert_findings_and_report_from_scanner(self, db, task_id: str, owner_id: str, scanner: Any, plugin_id: str, target: str, status: str, result: Dict[str, Any]):
         """Persist modular scanner results into findings, and reports."""
         findings_data = result.get("findings", [])
         
@@ -975,16 +987,17 @@ class TaskExecutor:
             await db.execute(
                 """
                 INSERT INTO findings (
-                    id, task_id, plugin_id, title, category, severity,
+                    id, owner_id, task_id, plugin_id, title, category, severity,
                     target, description, remediation, proof, cvss, cve,
                     metadata_json, discovered_at,
                     exploitability, confidence, asset_exposure,
                     risk_score, risk_factors_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                           ?, ?, ?, ?, ?)
                 """,
                 (
                     finding_id,
+                    owner_id,
                     task_id,
                     plugin_id,
                     finding["title"],
@@ -1010,8 +1023,8 @@ class TaskExecutor:
         await db.execute(
             """
             INSERT INTO reports (
-                id, task_id, name, type, generated_at, status, findings, pages
-            ) VALUES (?, ?, ?, ?, (datetime('now')), ?, ?, ?)
+                id, owner_id, task_id, name, type, generated_at, status, findings, pages
+            ) VALUES (?, ?, ?, ?, ?, (datetime('now')), ?, ?, ?)
             ON CONFLICT (id) DO UPDATE SET
                 status = EXCLUDED.status,
                 findings = EXCLUDED.findings,
@@ -1019,6 +1032,7 @@ class TaskExecutor:
             """,
             (
                 f"report:{task_id}",
+                owner_id,
                 task_id,
                 f"{scanner.name} Report",
                 "professional" if status == TaskStatus.COMPLETED.value else "failed",
