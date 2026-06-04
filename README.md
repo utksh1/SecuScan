@@ -55,6 +55,9 @@ The project is designed to be:
 - `frontend/testing/`: frontend unit and end-to-end test files
 - `docs/`: supporting project documentation
 - `scripts/`: helper scripts for signing, benchmarking, and maintenance
+- `wordlists/`: reusable wordlists and scan input dictionaries
+- `output/`: generated scan exports, reports, and other runtime artifacts
+- `scratch/`: temporary workspace used during scan execution and experimentation
 
 ## Prerequisites
 
