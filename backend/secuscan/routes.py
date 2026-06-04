@@ -13,6 +13,7 @@ import uuid
 import asyncio
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
+from secuscan.rate_limiter import rate_limit_scheduler
 
 def parse_json_fields(rows: List[Dict], fields: List[str]) -> List[Dict]:
     """Helper to parse stringified JSON fields from SQLite."""
@@ -1326,7 +1327,11 @@ async def delete_workflow(workflow_id: str):
 
 
 @router.post("/workflows/scheduler/tick")
-async def trigger_workflow_tick():
+async def trigger_workflow_tick(request: Request = Depends(rate_limit_scheduler)):
+    """
+    Trigger scheduler tick (rate limited)
+    CRITICAL: Limited to 5 requests per minute per user to prevent abuse
+    """
     await scheduler.tick()
     return {"tick": "ok"}
 
