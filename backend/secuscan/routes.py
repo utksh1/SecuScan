@@ -1205,16 +1205,31 @@ async def get_settings():
 
 
 @router.get("/vault", dependencies=[Depends(vault_limiter)])
-async def list_vault_secrets():
+async def list_vault_secrets(owner: str = Depends(get_current_owner)):
     db = await get_db()
     rows = await db.fetchall(
         "SELECT id, name, created_at, updated_at FROM credential_vault ORDER BY name ASC"
+    )
+    await db.log_credential_access(
+        credential_name="*",
+        access_type="list",
+        owner_id=owner,
+    )
+    await db.log_audit(
+        "credential_vault_listed",
+        f"Vault credential list accessed ({len(rows)} entries)",
+        severity="info",
+        context={"count": len(rows)},
     )
     return {"items": rows, "total": len(rows)}
 
 
 @router.put("/vault/{name}", dependencies=[Depends(vault_limiter)])
-async def upsert_vault_secret(name: str, payload: Dict[str, str]):
+async def upsert_vault_secret(
+    name: str,
+    payload: Dict[str, str],
+    owner: str = Depends(get_current_owner),
+):
     value = str(payload.get("value", ""))
     if not value:
         raise HTTPException(status_code=400, detail="Secret value is required")
@@ -1230,29 +1245,125 @@ async def upsert_vault_secret(name: str, payload: Dict[str, str]):
             "UPDATE credential_vault SET encrypted_value = ?, updated_at = datetime('now') WHERE name = ?",
             (encrypted, name),
         )
+        action = "updated"
     else:
         await db.execute(
             "INSERT INTO credential_vault (id, name, encrypted_value) VALUES (?, ?, ?)",
             (secret_id, name, encrypted),
         )
+        action = "created"
+
+    await db.log_credential_access(
+        credential_name=name,
+        access_type="write",
+        owner_id=owner,
+    )
+    await db.log_audit(
+        "credential_vault_written",
+        f"Vault credential '{name}' {action}",
+        severity="warning",
+        context={"credential_name": name, "action": action},
+    )
     return {"name": name, "stored": True}
 
 
 @router.get("/vault/{name}", dependencies=[Depends(vault_limiter)])
-async def get_vault_secret(name: str):
+async def get_vault_secret(name: str, owner: str = Depends(get_current_owner)):
     db = await get_db()
     row = await db.fetchone("SELECT encrypted_value FROM credential_vault WHERE name = ?", (name,))
     if not row:
         raise HTTPException(status_code=404, detail="Secret not found")
     crypto = VaultCrypto(settings.resolved_vault_key)
-    return {"name": name, "value": crypto.decrypt(row["encrypted_value"])}
+    decrypted = crypto.decrypt(row["encrypted_value"])
+    await db.log_credential_access(
+        credential_name=name,
+        access_type="read",
+        owner_id=owner,
+    )
+    await db.log_audit(
+        "credential_vault_read",
+        f"Vault credential '{name}' value read",
+        severity="warning",
+        context={"credential_name": name},
+    )
+    return {"name": name, "value": decrypted}
 
 
 @router.delete("/vault/{name}", dependencies=[Depends(vault_limiter)])
-async def delete_vault_secret(name: str):
+async def delete_vault_secret(name: str, owner: str = Depends(get_current_owner)):
     db = await get_db()
+    existing = await db.fetchone("SELECT id FROM credential_vault WHERE name = ?", (name,))
+    if not existing:
+        raise HTTPException(status_code=404, detail="Secret not found")
     await db.execute("DELETE FROM credential_vault WHERE name = ?", (name,))
+    await db.log_credential_access(
+        credential_name=name,
+        access_type="delete",
+        owner_id=owner,
+    )
+    await db.log_audit(
+        "credential_vault_deleted",
+        f"Vault credential '{name}' deleted",
+        severity="warning",
+        context={"credential_name": name},
+    )
     return {"name": name, "deleted": True}
+
+
+@router.get("/vault/{name}/usage", dependencies=[Depends(vault_limiter)])
+async def get_credential_usage_history(
+    name: str,
+    limit: int = 100,
+    offset: int = 0,
+):
+    """Return the access history for a named credential (names only, never secret values)."""
+    if limit < 1 or limit > 1000:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 1000")
+    if offset < 0:
+        raise HTTPException(status_code=400, detail="offset must be non-negative")
+    db = await get_db()
+    row = await db.fetchone("SELECT id FROM credential_vault WHERE name = ?", (name,))
+    if not row:
+        raise HTTPException(status_code=404, detail="Secret not found")
+    return await db.get_credential_usage(credential_name=name, limit=limit, offset=offset)
+
+
+@router.get("/vault/usage/all", dependencies=[Depends(vault_limiter), Depends(admin_limiter)])
+async def get_all_credential_usage(
+    access_type: Optional[str] = None,
+    owner_id: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    """Return the full credential access log filtered by access_type or owner (admin-level view)."""
+    if limit < 1 or limit > 1000:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 1000")
+    if offset < 0:
+        raise HTTPException(status_code=400, detail="offset must be non-negative")
+    if access_type and access_type not in ("read", "write", "delete", "list"):
+        raise HTTPException(
+            status_code=400,
+            detail="access_type must be one of: read, write, delete, list",
+        )
+    db = await get_db()
+    return await db.get_all_credential_usage(
+        access_type=access_type, owner_id=owner_id, limit=limit, offset=offset
+    )
+
+
+@router.get("/task/{task_id}/credentials")
+async def get_task_credential_usage(
+    task_id: str,
+    owner: str = Depends(get_current_owner),
+):
+    """Return credential names accessed during a task (no secret values exposed)."""
+    db = await get_db()
+    task_row = await db.fetchone("SELECT id, owner_id FROM tasks WHERE id = ?", (task_id,))
+    if task_row is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task_row["owner_id"] != owner:
+        raise HTTPException(status_code=403, detail="You do not have access to this task")
+    return await db.get_task_credential_usage(task_id=task_id)
 
 
 @router.get("/workflows")
