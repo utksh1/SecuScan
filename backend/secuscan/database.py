@@ -491,7 +491,11 @@ class Database:
             prev_row = await self.fetchone(
                 "SELECT id, entry_hash FROM audit_log ORDER BY id DESC LIMIT 1"
             )
-            prev_hash = prev_row["entry_hash"] if prev_row else _GENESIS_HASH
+            prev_hash = (
+                prev_row.get("entry_hash", _GENESIS_HASH)
+                if prev_row
+                else _GENESIS_HASH
+            )
 
             # Obtain the timestamp SQLite will assign so we can include it in
             # the hash before the INSERT.  Using strftime keeps it identical
