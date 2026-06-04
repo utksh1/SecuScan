@@ -127,6 +127,12 @@ from .reporting import reporting
 from .vault import VaultCrypto
 from .workflows import scheduler
 from .auth import require_api_key, get_current_owner
+from .report_tokens import (
+    generate_token, validate_token,
+    TokenError, TokenExpiredError, TokenFormatMismatchError,
+    TokenTaskMismatchError, TokenInvalidError,
+    _ALLOWED_FORMATS as _REPORT_TOKEN_FORMATS,
+)
 
 from sse_starlette.sse import EventSourceResponse
 
@@ -663,6 +669,137 @@ async def download_sarif_report(task_id: str, owner: str = Depends(get_current_o
         content=sarif_data,
         media_type="application/sarif+json",
         headers={"Content-Disposition": f'attachment; filename="{build_report_filename(dict(task_row), "sarif")}"'}
+    )
+
+
+_REPORT_MEDIA_TYPES = {
+    "csv": "text/csv",
+    "html": "text/html",
+    "pdf": "application/pdf",
+    "sarif": "application/sarif+json",
+}
+
+
+@router.post(
+    "/task/{task_id}/report/{fmt}/token",
+    dependencies=[Depends(report_download_limiter)],
+)
+async def generate_report_download_token(
+    task_id: str,
+    fmt: str,
+    owner: str = Depends(get_current_owner),
+):
+    """Return a short-lived signed token for a single report artifact download.
+
+    The token is bound to the task_id, format, and owner so it cannot be
+    replayed against a different task or by a different caller.  TTL is
+    controlled by SECUSCAN_REPORT_TOKEN_TTL_SECONDS (default: 300 s).
+    """
+    if fmt not in _REPORT_TOKEN_FORMATS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown format '{fmt}'. Allowed: {sorted(_REPORT_TOKEN_FORMATS)}",
+        )
+    db = await get_db()
+    task_row = await db.fetchone(
+        "SELECT id, owner_id, status FROM tasks WHERE id = ?", (task_id,)
+    )
+    if task_row is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task_row["owner_id"] != owner:
+        raise HTTPException(status_code=403, detail="You do not have access to this task")
+    if task_row["status"] not in ("completed", "failed"):
+        raise HTTPException(status_code=400, detail="Task is not finished yet")
+
+    ttl = settings.report_token_ttl_seconds
+    token = generate_token(task_id=task_id, fmt=fmt, owner_id=owner, ttl_seconds=ttl)
+    await db.log_audit(
+        "report_token_issued",
+        f"Download token issued for task {task_id} format {fmt}",
+        context={"task_id": task_id, "format": fmt, "ttl_seconds": ttl},
+        task_id=task_id,
+    )
+    return {"token": token, "expires_in_seconds": ttl, "format": fmt}
+
+
+@router.get(
+    "/task/{task_id}/report/{fmt}/download",
+    dependencies=[Depends(report_download_limiter)],
+)
+async def download_report_with_token(
+    task_id: str,
+    fmt: str,
+    token: str,
+    owner: str = Depends(get_current_owner),
+):
+    """Download a report artifact using a previously issued signed token.
+
+    The token must be valid (unmodified, unexpired), bound to this exact
+    task_id and format, and issued to the currently authenticated owner.
+    Any mismatch returns 401 so callers cannot distinguish between an
+    expired, wrong-format, or wrong-task token.
+    """
+    if fmt not in _REPORT_TOKEN_FORMATS:
+        raise HTTPException(status_code=400, detail=f"Unknown format '{fmt}'")
+
+    try:
+        validate_token(
+            token=token,
+            expected_task_id=task_id,
+            expected_fmt=fmt,
+            expected_owner_id=owner,
+        )
+    except TokenExpiredError:
+        raise HTTPException(status_code=401, detail="Download token has expired")
+    except TokenError:
+        raise HTTPException(status_code=401, detail="Invalid download token")
+
+    db = await get_db()
+    task_row = await db.fetchone(
+        "SELECT id, owner_id, plugin_id, tool_name, target, status, "
+        "created_at, preset, inputs_json, command_used, structured_json "
+        "FROM tasks WHERE id = ?",
+        (task_id,),
+    )
+    if task_row is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task_row["owner_id"] != owner:
+        raise HTTPException(status_code=403, detail="You do not have access to this task")
+    if task_row["status"] not in ("completed", "failed"):
+        raise HTTPException(status_code=400, detail="Task is not finished yet")
+
+    structured_data = (
+        json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
+    )
+    task_dict = dict(task_row)
+    report_context = {"structured": structured_data}
+
+    try:
+        if fmt == "csv":
+            content = reporting.generate_csv_report(task_dict, report_context)
+        elif fmt == "html":
+            content = reporting.generate_html_report(task_dict, report_context)
+        elif fmt == "pdf":
+            content = bytes(reporting.generate_pdf_report(task_dict, report_context))
+        else:
+            content = reporting.generate_sarif_report(task_dict, report_context)
+    except Exception:
+        return _report_generation_error_response(task_id, fmt)
+
+    await db.log_audit(
+        "report_downloaded",
+        f"Token-authenticated {fmt} report downloaded for task {task_id}",
+        context={"format": fmt, "task_id": task_id, "plugin_id": task_row["plugin_id"], "token_auth": True},
+        task_id=task_id,
+        plugin_id=task_row["plugin_id"],
+    )
+
+    return Response(
+        content=content,
+        media_type=_REPORT_MEDIA_TYPES[fmt],
+        headers={
+            "Content-Disposition": f'attachment; filename="{build_report_filename(task_dict, fmt)}"'
+        },
     )
 
 

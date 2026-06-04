@@ -94,6 +94,7 @@ class Settings(BaseSettings):
 
     rate_limit_report_download_limit: int = 30
     rate_limit_report_download_window: int = 60
+    report_token_ttl_seconds: int = 300
 
     rate_limit_read_heavy_limit: int = 100
     rate_limit_read_heavy_window: int = 60
