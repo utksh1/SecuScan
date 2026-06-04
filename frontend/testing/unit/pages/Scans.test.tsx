@@ -1,7 +1,7 @@
 import React from 'react'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import Scans from '../../../src/pages/Scans'
 
@@ -22,6 +22,26 @@ vi.mock('../../../src/utils/date', () => ({
   parseDateSafe: (d: any) => new Date(d || Date.now()),
   formatLocaleDate: () => '2024-01-01',
   formatLocaleTime: () => '12:00',
+}))
+
+vi.mock('../../../src/components/ConfirmModal', () => ({
+  ConfirmModal: ({ isOpen, onConfirm, title }: any) =>
+    isOpen ? (
+      <div>
+        <span>{title}</span>
+        <button onClick={onConfirm}>Confirm</button>
+      </div>
+    ) : null,
+}))
+
+vi.mock('../../../src/components/Pagination', () => ({
+  default: ({ page, onNext, onPrev }: any) => (
+    <div>
+      <button onClick={onPrev}>Prev</button>
+      <span>Page {page}</span>
+      <button onClick={onNext}>Next</button>
+    </div>
+  ),
 }))
 
 global.ResizeObserver = vi.fn().mockImplementation(() => ({
@@ -49,13 +69,13 @@ function makeTask(overrides: any = {}) {
   }
 }
 
-function makeLargeFetch(count: number) {
-  return Array.from({ length: count }, (_, i) => makeTask({ task_id: `task-${i}`, tool: `tool-${i}` }))
-}
-
-function mockFetch(tasks: ReturnType<typeof makeTask>[]) {
+function mockFetch(tasks: ReturnType<typeof makeTask>[], total?: number) {
   global.fetch = vi.fn().mockResolvedValue({
-    json: () => Promise.resolve({ tasks }),
+    ok: true,
+    json: () => Promise.resolve({
+      tasks,
+      pagination: { total_items: total ?? tasks.length },
+    }),
   } as any)
 }
 
@@ -69,7 +89,7 @@ function renderScans() {
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('Scans — virtualized task list', () => {
+describe('Scans — task list', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useFakeTimers({ shouldAdvanceTime: true })
@@ -82,7 +102,6 @@ describe('Scans — virtualized task list', () => {
   it('renders the page header', () => {
     mockFetch([])
     renderScans()
-    // Use heading role to avoid matching both the badge and the h1
     expect(screen.getByRole('heading', { name: /Operational/i })).toBeInTheDocument()
   })
 
@@ -100,37 +119,12 @@ describe('Scans — virtualized task list', () => {
     expect(screen.getByText('target.com')).toBeInTheDocument()
   })
 
-  it('does not mount all cards to DOM with 300 tasks (DOM bloat test)', async () => {
-    const tasks = makeLargeFetch(300)
-    mockFetch(tasks)
-    const { container } = renderScans()
-
-    await waitFor(() => expect(screen.queryByText(/Archive Isolated/i)).not.toBeInTheDocument(), { timeout: 3000 })
-
-    const cards = container.querySelectorAll('.group\\/card')
-    expect(cards.length).toBeLessThan(40)
-  })
-
   it('status filter buttons are rendered and clickable', async () => {
     mockFetch([])
     renderScans()
     const allBtn = screen.getByRole('button', { name: /ALL_OPERATIONS/i })
     expect(allBtn).toBeInTheDocument()
     await userEvent.click(allBtn)
-  })
-
-  it('selecting a task adds it to selectedIds (checkbox toggles)', async () => {
-    const tasks = [makeTask({ task_id: 'task-1', tool: 'nuclei' })]
-    mockFetch(tasks)
-    renderScans()
-
-    await waitFor(() => expect(screen.getByText('nuclei')).toBeInTheDocument())
-
-    // Checkbox has aria-label="add" (material icon name) — use getAllByRole and pick first
-    const checkboxes = screen.getAllByRole('checkbox')
-    await userEvent.click(checkboxes[0])
-
-    await waitFor(() => expect(screen.getByText(/Records_Selected_For_Pruning/i)).toBeInTheDocument())
   })
 
   it('select-all selects all tasks', async () => {
@@ -143,8 +137,7 @@ describe('Scans — virtualized task list', () => {
     await userEvent.click(screen.getByRole('button', { name: /Select_All/i }))
 
     await waitFor(() => {
-      const count = screen.getByText('2')
-      expect(count).toBeInTheDocument()
+      expect(screen.getByText('2')).toBeInTheDocument()
     })
   })
 
@@ -155,16 +148,15 @@ describe('Scans — virtualized task list', () => {
 
     await waitFor(() => expect(screen.getByText('nmap')).toBeInTheDocument())
 
-    // Select the task via checkbox
-    const checkboxes = screen.getAllByRole('checkbox')
-    await userEvent.click(checkboxes[0])
+    await userEvent.click(screen.getByRole('button', { name: /Select_All/i }))
     await waitFor(() => expect(screen.getByText(/Records_Selected_For_Pruning/i)).toBeInTheDocument())
 
-    // Cancel — selectedIds should clear, checkbox returns to unchecked
     await userEvent.click(screen.getByRole('button', { name: /Cancel/i }))
-    await waitFor(() =>
-      expect(checkboxes[0]).toHaveAttribute('aria-checked', 'false')
-    )
+
+    await waitFor(() => {
+      const selectAllBtn = screen.getByRole('button', { name: /Select_All/i })
+      expect(selectAllBtn.className).not.toContain('bg-rag-blue')
+    })
   })
 
   it('polls every 5 seconds', async () => {
@@ -174,6 +166,15 @@ describe('Scans — virtualized task list', () => {
     expect(global.fetch).toHaveBeenCalledTimes(1)
     vi.advanceTimersByTime(5000)
     await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2))
+  })
+
+  it('shows pagination when total exceeds page limit', async () => {
+    const tasks = Array.from({ length: 10 }, (_, i) => makeTask({ task_id: `task-${i}` }))
+    mockFetch(tasks, 25)
+    renderScans()
+
+    await waitFor(() => expect(screen.getAllByText(/nmap/i).length).toBeGreaterThan(0))
+    expect(screen.getByText(/Page 1/i)).toBeInTheDocument()
   })
 
   it('negative: Delete_Record button NOT shown for running tasks', async () => {
@@ -196,5 +197,20 @@ describe('Scans — virtualized task list', () => {
 
     const { bulkDeleteTasks } = await import('../../../src/api')
     expect(bulkDeleteTasks).not.toHaveBeenCalled()
+  })
+
+  it('shows confirm modal when deleting a task', async () => {
+    const tasks = [makeTask({ task_id: 'task-1', status: 'completed' })]
+    mockFetch(tasks)
+    renderScans()
+
+    await waitFor(() => expect(screen.getByText('nmap')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByText('nmap').closest('[class*="cursor-pointer"]')!)
+    await waitFor(() => expect(screen.getByText('Delete_Record')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByText('Delete_Record'))
+
+    await waitFor(() => expect(screen.getByText('Delete Scan Record')).toBeInTheDocument())
   })
 })
