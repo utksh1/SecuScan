@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import {
   getPluginSchema,
   listPlugins,
+  getSettings,
   PluginFieldSchema,
   PluginListItem,
   PluginSchemaResponse,
@@ -62,6 +63,7 @@ export default function ToolConfig() {
   const [consentGranted, setConsentGranted] = useState(false)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [serverLimits, setServerLimits] = useState<any | null>(null)
   const fieldRefs = useRef<Record<string, HTMLElement | null>>({})
 
   useEffect(() => {
@@ -94,6 +96,12 @@ export default function ToolConfig() {
         setSelectedPreset(defaultPreset)
         setInputs(initialInputs)
         setConsentGranted(!matchedPlugin.requires_consent)
+        try {
+          const s = await getSettings()
+          setServerLimits(s || null)
+        } catch (e) {
+          // non-fatal; default to null
+        }
       } catch (error) {
         if (!cancelled) {
           addToast('Failed to load plugin configuration.', 'error')
@@ -317,6 +325,8 @@ export default function ToolConfig() {
                           fieldRefs.current[field.id] = node
                         }}
                         type="number"
+                        min={Number(field.validation?.min ?? 1)}
+                        max={Math.min(Number(field.validation?.max ?? Infinity), Number(serverLimits?.sandbox?.default_timeout ?? Infinity))}
                         value={value === '' ? '' : String(value ?? '')}
                         onChange={(event) => handleFieldChange(field, coerceInteger(event.target.value))}
                         placeholder={field.placeholder || ''}

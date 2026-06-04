@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from '../components/ThemeContext'
 import { useToast } from '../components/ToastContext'
+import { getStoredApiKey, setStoredApiKey } from '../api'
+import { ConfirmModal } from '../components/ConfirmModal'
 
 function getSystemThemeForSettings(): string {
   if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
@@ -22,8 +24,8 @@ const itemVariants = {
 const DEFAULT_CONFIG = {
     concurrentScans: 8,
     scanTimeout: 3600,
-    scanIntensity: 'standard', // 'low', 'standard', 'aggressive'
-    dataRetention: 30, // days
+    scanIntensity: 'standard',
+    dataRetention: 30,
     shodanKey: '',
     virustotalKey: '',
     ipWhitelist: '127.0.0.1\n10.0.0.0/8',
@@ -42,6 +44,27 @@ export default function Settings() {
     const { theme, setTheme, resetToSystem, isSystemControlled } = useTheme()
     const { addToast } = useToast()
 
+    const [apiKey, setApiKey] = useState(() => getStoredApiKey() ?? '')
+    const [apiKeyVisible, setApiKeyVisible] = useState(false)
+
+    const handleSaveApiKey = () => {
+        const trimmed = apiKey.trim()
+        if (!trimmed) {
+            addToast("API key cannot be empty", "error")
+            return
+        }
+        setStoredApiKey(trimmed)
+        addToast("API key saved — all future requests will use this key", "success")
+    }
+
+    const handleClearApiKey = () => {
+        if (window.confirm("Clear the stored API key? The UI will return 401 errors until a valid key is configured.")) {
+            setApiKey('')
+            setStoredApiKey('')
+            addToast("API key cleared", "info")
+        }
+    }
+
     const [config, setConfig] = useState(() => {
         const saved = localStorage.getItem('secuscan-config')
         if (saved) {
@@ -55,6 +78,21 @@ export default function Settings() {
     })
 
     const [systemTimezone, setSystemTimezone] = useState('Detecting...')
+
+    // Modal state for confirm dialogs
+    const [modalState, setModalState] = useState<{
+        isOpen: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => void;
+        type: "danger" | "warning" | "info";
+    }>({
+        isOpen: false,
+        title: "",
+        message: "",
+        onConfirm: () => {},
+        type: "warning",
+    })
 
     useEffect(() => {
         try {
@@ -71,11 +109,32 @@ export default function Settings() {
     }
 
     const handleReset = () => {
-        if (window.confirm("Restore engine to factory specifications? All API keys and custom rules will be cleared.")) {
-            setConfig(DEFAULT_CONFIG)
-            localStorage.setItem('secuscan-config', JSON.stringify(DEFAULT_CONFIG))
-            addToast("Engine parameters reset to factory defaults", "info")
-        }
+        setModalState({
+            isOpen: true,
+            title: "Engine Reset",
+            message: "Restore engine to factory specifications? All API keys and custom rules will be cleared.",
+            type: "warning",
+            onConfirm: () => {
+                setConfig(DEFAULT_CONFIG)
+                localStorage.setItem('secuscan-config', JSON.stringify(DEFAULT_CONFIG))
+                addToast("Engine parameters reset to factory defaults", "info")
+                setModalState(prev => ({ ...prev, isOpen: false }))
+            }
+        })
+    }
+
+    const handleNuclearPurge = () => {
+        setModalState({
+            isOpen: true,
+            title: "NUCLEAR PURGE",
+            message: "CRITICAL: THIS WILL PURGE ALL HISTORY AND ASSETS. PROCEED?",
+            type: "danger",
+            onConfirm: () => {
+                localStorage.clear()
+                window.location.reload()
+                setModalState(prev => ({ ...prev, isOpen: false }))
+            }
+        })
     }
 
     const handleExport = () => {
@@ -142,7 +201,6 @@ export default function Settings() {
 
     return (
         <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
-
             <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10 font-black">
                 <div className="space-y-4">
                   <div className="bg-rag-blue text-black px-4 py-1 text-xs uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-black">
@@ -155,7 +213,6 @@ export default function Settings() {
                     HARDWARE_TUNING // AUDIT_STRATEGY // SECTOR_ISOLATION
                   </p>
                 </div>
-
                 <div className="flex flex-col items-end gap-4">
                    <div className="bg-charcoal border-4 border-black px-8 py-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
                         <span className="text-[10px] font-black text-silver/20 uppercase tracking-[0.4em] block mb-1 italic">SYSTEM_TIMEZONE_SYNC</span>
@@ -163,9 +220,64 @@ export default function Settings() {
                     </div>
                 </div>
             </header>
-
             <div className="grid grid-cols-1 xl:grid-cols-4 gap-12 pt-4">
                 <main className="xl:col-span-3 space-y-20">
+
+                    <section className="space-y-8">
+                        <div className="flex items-center gap-4">
+                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">API_Key_Configuration</h3>
+                            <div className="h-0.5 flex-1 bg-black/10"></div>
+                        </div>
+                        <div className="bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-silver-bright uppercase tracking-widest block italic">Backend_API_Key</label>
+                                <p className="text-[10px] text-silver/40 uppercase font-bold italic mb-4 leading-relaxed">
+                                    Read from <span className="text-rag-blue font-mono">backend/data/.api_key</span> after starting the backend. Stored locally in browser — never sent to any remote server.
+                                </p>
+                            </div>
+                            <div className="flex gap-4 items-stretch">
+                                <input
+                                    type={apiKeyVisible ? 'text' : 'password'}
+                                    value={apiKey}
+                                    onChange={(e) => setApiKey(e.target.value)}
+                                    placeholder="PASTE_KEY_HERE"
+                                    className="flex-1 bg-black/40 border-4 border-black p-4 text-xs font-mono text-rag-blue font-bold focus:outline-none focus:border-rag-blue/50 transition-colors uppercase"
+                                    autoComplete="off"
+                                    spellCheck={false}
+                                />
+                                <button
+                                    onClick={() => setApiKeyVisible(v => !v)}
+                                    className="px-4 bg-charcoal-dark border-4 border-black text-[10px] font-black text-silver/40 uppercase tracking-widest hover:text-white transition-colors"
+                                    title={apiKeyVisible ? 'Hide key' : 'Show key'}
+                                >
+                                    {apiKeyVisible ? 'HIDE' : 'SHOW'}
+                                </button>
+                            </div>
+                            <div className="flex gap-4 pt-2">
+                                <button
+                                    onClick={handleSaveApiKey}
+                                    className="bg-rag-blue text-black px-8 py-3 text-[10px] font-black uppercase tracking-[0.3em] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all italic"
+                                >
+                                    SAVE_KEY
+                                </button>
+                                <button
+                                    onClick={handleClearApiKey}
+                                    className="bg-rag-red text-black px-8 py-3 text-[10px] font-black uppercase tracking-[0.3em] shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all italic"
+                                >
+                                    CLEAR_KEY
+                                </button>
+                            </div>
+                            {getStoredApiKey() ? (
+                                <p className="text-[10px] font-mono text-rag-green uppercase tracking-widest">
+                                    ● KEY_CONFIGURED — requests will authenticate automatically
+                                </p>
+                            ) : (
+                                <p className="text-[10px] font-mono text-rag-red uppercase tracking-widest">
+                                    ● NO_KEY_SET — API requests will return 401 until a key is saved
+                                </p>
+                            )}
+                        </div>
+                    </section>
 
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
@@ -212,7 +324,6 @@ export default function Settings() {
                             />
                         </div>
                     </section>
-
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
                             <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Security_Interface</h3>
@@ -258,7 +369,6 @@ export default function Settings() {
                             </div>
                         </div>
                     </section>
-
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
                             <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Intelligence_API_Link</h3>
@@ -283,7 +393,6 @@ export default function Settings() {
                             />
                         </div>
                     </section>
-
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
                             <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Access_Perimeters</h3>
@@ -302,7 +411,6 @@ export default function Settings() {
                             />
                         </div>
                     </section>
-
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
                             <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Audit_Logic_Toggles</h3>
@@ -329,7 +437,6 @@ export default function Settings() {
                             />
                         </div>
                     </section>
-
                     <section className="pt-12">
                         <button
                             onClick={handleSave}
@@ -340,7 +447,6 @@ export default function Settings() {
                         </button>
                     </section>
                 </main>
-
                 <aside className="xl:col-span-1 space-y-12">
                     <section className="bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
                         <h3 className="text-[11px] font-black text-silver-bright uppercase tracking-[0.5em] italic mb-8">Management_Tools</h3>
@@ -358,19 +464,13 @@ export default function Settings() {
                                 ENGINE_RESET
                             </button>
                             <button
+                                onClick={handleNuclearPurge}
                                 className="w-full py-4 bg-rag-red border-4 border-black text-[10px] font-black text-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all italic"
-                                onClick={() => {
-                                    if (window.confirm("CRITICAL: THIS WILL PURGE ALL HISTORY AND ASSETS. PROCEED?")) {
-                                        localStorage.clear();
-                                        window.location.reload();
-                                    }
-                                }}
                             >
                                 NUCLEAR_PURGE
                             </button>
                         </div>
                     </section>
-
                     <section className="bg-charcoal-dark border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
                         <div className="space-y-4">
                             <h3 className="text-[11px] font-black text-silver-bright uppercase tracking-[0.5em] italic border-b-4 border-black pb-4">Engine_Status</h3>
@@ -392,7 +492,6 @@ export default function Settings() {
                     </section>
                 </aside>
             </div>
-
             <footer className="pt-24 border-t-4 border-black/5 flex flex-col md:flex-row justify-between items-center gap-8 text-[9px] font-black uppercase tracking-[0.5em] italic opacity-20">
                 <div className="flex items-center gap-6">
                     <div className="w-12 h-1 bg-silver/20"></div>
@@ -402,6 +501,14 @@ export default function Settings() {
                     {[1,2,3,4,5,6,7,8].map(i => <div key={i} className="w-2 h-2 bg-silver/20 rounded-full"></div>)}
                 </div>
             </footer>
+            <ConfirmModal
+                isOpen={modalState.isOpen}
+                title={modalState.title}
+                message={modalState.message}
+                onConfirm={modalState.onConfirm}
+                onCancel={() => setModalState(prev => ({ ...prev, isOpen: false }))}
+                type={modalState.type}
+            />
         </div>
     )
 }

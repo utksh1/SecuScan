@@ -1,3 +1,4 @@
+import CopyToClipboard from '../components/CopyToClipboard';
 import React, { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -12,6 +13,7 @@ import {
     Refresh01Icon,
 } from '@hugeicons/core-free-icons'
 import { API_BASE, getPluginSchema, getTaskResult, getTaskStatus, PluginFieldSchema, PluginSchemaResponse, startTask } from '../api'
+import { useTaskSubscription } from '../hooks/useTaskSubscription'
 import { routes, routePath } from '../routes'
 import { parseDateSafe, formatDateLong, formatLocaleTime } from '../utils/date'
 import {
@@ -210,7 +212,6 @@ export default function TaskDetails() {
     const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null)
     const [rawSearch, setRawSearch] = useState('')
     const [wrapRawOutput, setWrapRawOutput] = useState(true)
-    const [copiedRawOutput, setCopiedRawOutput] = useState(false)
 
     const FindingDrawer = ({ finding, onClose }: { finding: Finding, onClose: () => void }) => {
         const drawerRef = useRef<HTMLDivElement>(null)
@@ -361,50 +362,23 @@ export default function TaskDetails() {
 
     useEffect(() => {
         loadTask()
-
-        const es = new EventSource(`${API_BASE}/task/${taskId}/stream`)
-
-        es.addEventListener('status', (e) => {
-            try {
-                const data = JSON.parse(e.data)
-                setTask((prev: Task | null) => prev ? { ...prev, status: data.status } : null)
-                if (data.scan_phase) {
-                    setScanPhase(data.scan_phase)
-                }
-                if (['completed', 'failed', 'cancelled'].includes(data.status)) {
-                    es.close()
-                    loadTask()
-                }
-            } catch (err) {
-                console.error("Status stream error", err)
-            }
-        })
-
-        es.addEventListener('phase', (e) => {
-            try {
-                const data = JSON.parse(e.data)
-                setScanPhase(data.scan_phase)
-            } catch (err) {
-                console.error("Phase stream error", err)
-            }
-        })
-
-        es.addEventListener('output', (e) => {
-            try {
-                const data = JSON.parse(e.data)
-                setRawOutput(prev => prev + data.chunk)
-            } catch (err) {
-                console.error("Output stream error", err)
-            }
-        })
-
-        es.onerror = (err) => {
-            console.error("EventSource error:", err)
-            es.close()
-        }
-
-        return () => es.close()
     }, [taskId])
+
+    useTaskSubscription({
+        taskId: taskId!,
+        onStatus: (status) => {
+            setTask((prev: Task | null) => prev ? { ...prev, status } : null)
+            if (['completed', 'failed', 'cancelled'].includes(status)) {
+                loadTask()
+            }
+        },
+        onPhase: (phase) => {
+            setScanPhase(phase)
+        },
+        onOutput: (chunk) => {
+            setRawOutput((prev) => prev + chunk)
+        },
+    })
 
     async function loadTask() {
         try {
@@ -668,15 +642,6 @@ export default function TaskDetails() {
         setExpandedFindingRows(prev => ({ ...prev, [index]: !prev[index] }))
     }
 
-    const copyRaw = async () => {
-        try {
-            await navigator.clipboard.writeText(rawOutput || result?.raw_output || '')
-            setCopiedRawOutput(true)
-            window.setTimeout(() => setCopiedRawOutput(false), 1500)
-        } catch (err) {
-            console.error('Failed to copy raw output:', err)
-        }
-    }
 
 
     const DetailCard = ({ label, value, subValue }: { label: string, value: string, subValue?: string }) => (
@@ -1179,12 +1144,7 @@ export default function TaskDetails() {
                                                 >
                                                     {wrapRawOutput ? 'Disable Wrap' : 'Enable Wrap'}
                                                 </button>
-                                                <button
-                                                    onClick={copyRaw}
-                                                    className="border border-white/10 px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-silver/75 font-black"
-                                                >
-                                                    {copiedRawOutput ? 'Copied' : 'Copy Output'}
-                                                </button>
+                                                <CopyToClipboard textToCopy={rawOutput || result?.raw_output || ''} />
                                             </div>
                                         </div>
                                     </div>
