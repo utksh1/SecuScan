@@ -12,7 +12,7 @@ import os
 import uuid
 import asyncio
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 def parse_json_fields(rows: List[Dict], fields: List[str]) -> List[Dict]:
     """Helper to parse stringified JSON fields from SQLite."""
@@ -960,19 +960,18 @@ async def list_tasks(
     next_page = page + 1 if page < total_pages else None
     prev_page = page - 1 if page > 1 else None
 
-    # Function to build URL with all query parameters
     def build_page_url(page_num):
         if page_num is None:
             return None
-        # Start with page and per_page
-        params_list = [f"page={page_num}", f"per_page={per_page}"]
-        # Add filters if they exist
+        query_params = {
+            "page": page_num,
+            "per_page": per_page,
+        }
         if plugin_id:
-            params_list.append(f"plugin_id={plugin_id}")
+            query_params["plugin_id"] = plugin_id
         if status:
-            params_list.append(f"status={status}")
-        # Join with & and return
-        return f"/api/v1/tasks?{'&'.join(params_list)}"
+            query_params["status"] = status
+        return f"/api/v1/tasks?{urlencode(query_params)}"
     return {
         "tasks": tasks_list,
         "pagination": {
