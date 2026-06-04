@@ -19,12 +19,13 @@ from .cache import get_cache
 from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager
-from .models import TaskStatus, ScanPhase
+from .models import NotificationDeliveryStatus, TaskStatus, ScanPhase
 from .ratelimit import concurrent_limiter
 from .risk_scoring import compute_risk_score, compute_risk_factors
 from .capabilities import CapabilityEnforcer, CapabilityDeniedError, build_enforcer_from_settings
 from .parser_sandbox import run_parser_in_sandbox, ParserSandboxError
 from .network_policy import get_policy_engine
+from .notification_service import process_task_notifications
 
 def _parse_discovered_at(finding: dict) -> Optional[datetime]:
     """Extract and parse discovered_at from a finding dict, or return current UTC time."""
@@ -537,6 +538,8 @@ class TaskExecutor:
                     output=output
                 )
                 await self._broadcast_phase(task_id, ScanPhase.REPORTING.value)
+
+            await self._dispatch_task_notifications(db, task_id)
 
             await self._broadcast_phase(task_id, ScanPhase.FINISHED.value)
             await self._broadcast(task_id, "status", final_status)
@@ -1302,6 +1305,25 @@ class TaskExecutor:
             "technologies": sorted(list(set(techs))),
             "findings": findings
         }
+
+    async def _dispatch_task_notifications(self, db, task_id: str) -> None:
+        """Evaluate notification rules for all findings on a completed task."""
+        try:
+            results = await process_task_notifications(db, task_id)
+            sent = sum(
+                1
+                for r in results
+                if not r.skipped and r.status == NotificationDeliveryStatus.SUCCESS
+            )
+            if sent:
+                logger.info("Task %s: delivered %d notification(s)", task_id, sent)
+        except Exception as exc:
+            logger.warning(
+                "Task %s: notification dispatch failed: %s",
+                task_id,
+                exc,
+                exc_info=True,
+            )
 
     async def _invalidate_cached_views(self):
         """Clear cached aggregate views after write operations."""
