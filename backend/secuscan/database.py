@@ -3,10 +3,12 @@ SQLite database access for SecuScan.
 """
 
 import asyncio
+import hashlib
 import json
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional, List, Dict
+from typing import Any, Optional, List, Dict, Tuple
 
 import aiosqlite
 from .config import settings
@@ -236,6 +238,24 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_notification_history_rule_id ON notification_history(rule_id);
             CREATE INDEX IF NOT EXISTS idx_notification_history_finding_id ON notification_history(finding_id);
             CREATE INDEX IF NOT EXISTS idx_notification_history_sent_at ON notification_history(sent_at DESC);
+
+            -- Idempotency keys table (issue #215): prevents duplicate scan submissions
+            -- within a configurable TTL window. Composite PK ensures that two owners
+            -- using the same key string are always treated as independent submissions.
+            CREATE TABLE IF NOT EXISTS task_idempotency (
+                idempotency_key TEXT NOT NULL,
+                task_id         TEXT NOT NULL,
+                owner_id        TEXT NOT NULL,
+                created_at      TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                expires_at      TIMESTAMP NOT NULL,
+                PRIMARY KEY (idempotency_key, owner_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_idempotency_expires
+                ON task_idempotency(expires_at);
+
+            CREATE INDEX IF NOT EXISTS idx_idempotency_owner
+                ON task_idempotency(owner_id);
             """
         )
 
@@ -308,29 +328,205 @@ class Database:
             except Exception as e:
                 print(f"Failed to add 'owner_id' to reports: {e}")
 
-    async def _run_migrations(self):
+    # ── Schema-migration tracking ────────────────────────────────────────────
+
+    @staticmethod
+    def _checksum(content: str) -> str:
+        """Return the SHA-256 hex digest of *content*."""
+        return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+    async def _ensure_migration_table(self) -> None:
+        """Create the schema_migrations tracking table if it does not exist.
+
+        This method is called at the very beginning of ``_run_migrations`` so
+        that subsequent steps can immediately query which files have already
+        been applied.  The table records each migration file by name together
+        with the SHA-256 checksum of its contents at application time.
+        """
+        await self.connection.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                filename    TEXT    NOT NULL UNIQUE,
+                applied_at  TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                checksum    TEXT    NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_schema_migrations_filename
+                ON schema_migrations(filename);
+
+            CREATE INDEX IF NOT EXISTS idx_schema_migrations_applied_at
+                ON schema_migrations(applied_at DESC);
+            """
+        )
+        await self.connection.commit()
+
+    async def _applied_migration_checksums(self) -> Dict[str, str]:
+        """Return a mapping of {filename: checksum} for all applied migrations."""
+        rows = await self.fetchall(
+            "SELECT filename, checksum FROM schema_migrations ORDER BY id ASC"
+        )
+        return {row["filename"]: row["checksum"] for row in rows}
+
+    async def _record_migration(self, filename: str, checksum: str) -> None:
+        """Insert a record into schema_migrations for a newly applied file."""
+        await self.connection.execute(
+            """
+            INSERT INTO schema_migrations (filename, checksum)
+            VALUES (?, ?)
+            """,
+            (filename, checksum),
+        )
+        await self.connection.commit()
+
+    async def _run_migrations(self) -> None:
+        """Apply pending .sql migrations idempotently.
+
+        The method creates the ``schema_migrations`` tracking table on first
+        run, then iterates over every ``*.sql`` file in the migrations directory
+        in lexicographic order.  Files whose filename is already present in
+        ``schema_migrations`` are skipped.  Files not yet recorded are executed
+        via ``executescript``, then logged together with their SHA-256 checksum.
+
+        If a migration script raises an exception the error is re-raised
+        immediately so that startup is aborted — a partially-applied migration
+        is never silently ignored.
+        """
         migrations_dir = Path(__file__).parent / "migrations"
 
         if not migrations_dir.exists():
             raise RuntimeError(
-            f"Migrations directory not found at {migrations_dir} — "
-            "ensure the backend package is installed correctly."
-        )
+                f"Migrations directory not found at {migrations_dir} — "
+                "ensure the backend package is installed correctly."
+            )
 
-        for migration_file in sorted(migrations_dir.glob("*.sql")):
+        # Bootstrap the tracking table before reading which files are applied.
+        await self._ensure_migration_table()
+        applied = await self._applied_migration_checksums()
+
+        migration_files = sorted(migrations_dir.glob("*.sql"))
+        applied_count = 0
+        skipped_count = 0
+
+        for migration_file in migration_files:
+            filename = migration_file.name
             sql = migration_file.read_text(encoding="utf-8")
+            checksum = self._checksum(sql)
+
+            if filename in applied:
+                skipped_count += 1
+                continue
+
+            print(f"[migrations] Applying {filename} …")
             try:
                 await self.connection.executescript(sql)
+                await self.connection.commit()
             except Exception as exc:
                 raise RuntimeError(
-                    f"Migration {migration_file.name} failed — startup aborted: {exc}"
+                    f"Migration {filename} failed — startup aborted: {exc}"
                 ) from exc
+
+            await self._record_migration(filename, checksum)
+            applied_count += 1
+            print(f"[migrations] Applied  {filename} (checksum={checksum[:12]}…)")
+
+        version = len(applied) + applied_count
+        print(
+            f"[migrations] Schema at version {version} "
+            f"({applied_count} applied, {skipped_count} skipped)."
+        )
 
         await self._backfill_risk_scores()
 
+    # ── Public migration-introspection helpers ───────────────────────────────
+
+    async def get_schema_version(self) -> Dict[str, Any]:
+        """Return the current schema version and the full migration log.
+
+        The ``version`` field is the count of applied migration files.
+        ``migrations`` is a list of dicts with ``filename``, ``applied_at``,
+        and ``checksum`` for each applied file, sorted oldest-first.
+
+        If the ``schema_migrations`` table does not exist (legacy database that
+        has never run the new migration runner) a sentinel response is returned
+        rather than raising an exception.
+        """
+        table_exists = await self.fetchone(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'"
+        )
+        if not table_exists:
+            return {
+                "version": 0,
+                "migrations": [],
+                "warning": "schema_migrations table not found; run startup to initialise.",
+            }
+
+        rows = await self.fetchall(
+            "SELECT filename, applied_at, checksum FROM schema_migrations ORDER BY id ASC"
+        )
+        return {
+            "version": len(rows),
+            "migrations": [
+                {
+                    "filename": row["filename"],
+                    "applied_at": row["applied_at"],
+                    "checksum": row["checksum"],
+                }
+                for row in rows
+            ],
+        }
+
+    async def verify_migration_checksums(self) -> List[Dict[str, Any]]:
+        """Compare on-disk migration file checksums against stored values.
+
+        Returns a list of discrepancy dicts for any migration file whose
+        current SHA-256 digest no longer matches the value recorded at the
+        time it was applied.  An empty list means all applied migrations are
+        intact.  Files that have been deleted from disk are also flagged.
+        """
+        migrations_dir = Path(__file__).parent / "migrations"
+        table_exists = await self.fetchone(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'"
+        )
+        if not table_exists:
+            return []
+
+        rows = await self.fetchall(
+            "SELECT filename, checksum FROM schema_migrations ORDER BY id ASC"
+        )
+        mismatches: List[Dict[str, Any]] = []
+
+        for row in rows:
+            filename = row["filename"]
+            stored_checksum = row["checksum"]
+            migration_path = migrations_dir / filename
+
+            if not migration_path.exists():
+                mismatches.append(
+                    {
+                        "filename": filename,
+                        "status": "missing",
+                        "stored_checksum": stored_checksum,
+                        "current_checksum": None,
+                    }
+                )
+                continue
+
+            current = self._checksum(migration_path.read_text(encoding="utf-8"))
+            if current != stored_checksum:
+                mismatches.append(
+                    {
+                        "filename": filename,
+                        "status": "modified",
+                        "stored_checksum": stored_checksum,
+                        "current_checksum": current,
+                    }
+                )
+
+        return mismatches
+
     async def _backfill_risk_scores(self):
         """Compute risk scores for existing findings that have none."""
-        from datetime import datetime, timezone
         rows = await self.fetchall(
             "SELECT id, severity, exploitability, confidence, asset_exposure, discovered_at, risk_score FROM findings WHERE risk_score IS NULL"
         )
@@ -401,6 +597,79 @@ class Database:
         """Execute a schema or migration script."""
         await self.connection.executescript(script)
         await self.connection.commit()
+
+    async def record_idempotency_key(
+        self,
+        key: str,
+        task_id: str,
+        owner_id: str,
+        ttl_seconds: int,
+    ) -> None:
+        """Persist an idempotency key so that an identical follow-up request
+        within the TTL window returns the existing task instead of spawning a
+        duplicate scan.
+
+        The composite primary key (idempotency_key, owner_id) guarantees that
+        two different owners using the same key value are treated independently.
+        INSERT OR IGNORE makes this call a no-op when called more than once for
+        the same key/owner pair (e.g. during a retry storm), which prevents the
+        race condition where two concurrent requests with the same key would both
+        slip through before either persists the row.
+        """
+        await self.execute(
+            """
+            INSERT OR IGNORE INTO task_idempotency
+                (idempotency_key, task_id, owner_id, created_at, expires_at)
+            VALUES (
+                ?,
+                ?,
+                ?,
+                datetime('now'),
+                datetime('now', ? || ' seconds')
+            )
+            """,
+            (key, task_id, owner_id, str(ttl_seconds)),
+        )
+
+    async def lookup_idempotency_key(
+        self,
+        key: str,
+        owner_id: str,
+    ) -> Optional[str]:
+        """Return the task_id associated with *key* for *owner_id* if the row
+        exists and has not yet expired; otherwise return None.
+
+        Expired rows are left in place until the next purge sweep so that we
+        can distinguish "key exists but expired" from "key never submitted".
+        The caller only needs to know whether a live match was found.
+        """
+        row = await self.fetchone(
+            """
+            SELECT task_id
+            FROM task_idempotency
+            WHERE idempotency_key = ?
+              AND owner_id        = ?
+              AND expires_at      > datetime('now')
+            """,
+            (key, owner_id),
+        )
+        return row["task_id"] if row else None
+
+    async def purge_expired_idempotency_keys(self) -> int:
+        """Delete all rows whose TTL has elapsed and return the count removed.
+
+        This should be called periodically (e.g. on application startup and
+        from a background maintenance task) to prevent unbounded table growth.
+        The purge is scoped to rows where expires_at is strictly less than the
+        current database wall-clock time so that keys expiring right now are
+        kept for one final lookup cycle.
+        """
+        async with await self.connection.execute(
+            "DELETE FROM task_idempotency WHERE expires_at < datetime('now')"
+        ) as cursor:
+            deleted = cursor.rowcount
+        await self.connection.commit()
+        return deleted
 
     async def log_audit(
         self,
