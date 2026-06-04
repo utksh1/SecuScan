@@ -98,6 +98,12 @@ class Settings(BaseSettings):
     rate_limit_read_heavy_limit: int = 100
     rate_limit_read_heavy_window: int = 60
 
+    # Scheduler tick: one trigger per 10 seconds allows legitimate external
+    # callers while preventing a tight loop from forcing continuous workflow
+    # execution and exhausting scan quotas.
+    rate_limit_scheduler_tick_limit: int = 1
+    rate_limit_scheduler_tick_window: int = 10
+
     trusted_proxies: List[str] = ["127.0.0.1", "::1"]
 
     # Sandbox
