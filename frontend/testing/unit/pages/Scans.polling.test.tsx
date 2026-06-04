@@ -1,4 +1,4 @@
-import { render, act } from '@testing-library/react';
+import { render, act, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Scans from '../../../src/pages/Scans';
@@ -18,11 +18,34 @@ vi.mock('react-router-dom', async (importOriginal) => {
 });
 
 const EMPTY_RESPONSE = { tasks: [], pagination: { total_items: 0 } };
+const LATEST_RESPONSE = {
+  tasks: [{
+    task_id: 'latest-task',
+    plugin_id: 'nmap',
+    tool: 'Latest Tool',
+    target: 'latest.example.com',
+    status: 'completed',
+    created_at: '2026-05-29T10:00:00Z',
+  }],
+  pagination: { total_items: 1 },
+};
+const STALE_RESPONSE = {
+  tasks: [{
+    task_id: 'stale-task',
+    plugin_id: 'nmap',
+    tool: 'Stale Tool',
+    target: 'stale.example.com',
+    status: 'completed',
+    created_at: '2026-05-29T09:00:00Z',
+  }],
+  pagination: { total_items: 1 },
+};
 
 let fetchSpy: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   fetchSpy = vi.fn().mockResolvedValue({
+    ok: true,
     json: () => Promise.resolve(EMPTY_RESPONSE),
   });
   vi.stubGlobal('fetch', fetchSpy);
@@ -75,6 +98,20 @@ async function tickTime(ms: number) {
     await Promise.resolve();
     await Promise.resolve();
   });
+}
+
+function deferredResponse(body: unknown) {
+  let resolve!: (value: Response) => void;
+  const promise = new Promise<Response>((res) => {
+    resolve = res;
+  });
+  return {
+    promise,
+    resolve: () => resolve({
+      ok: true,
+      json: () => Promise.resolve(body),
+    } as Response),
+  };
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
@@ -152,5 +189,40 @@ describe('Scans — visibility-aware polling', () => {
     // No extra fetches after unmount
     expect(fetchSpy).toHaveBeenCalledTimes(callsAfterMount);
     expect(removeSpy).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
+  });
+
+  it('ignores stale task responses when a newer poll finishes first', async () => {
+    const stale = deferredResponse(STALE_RESPONSE);
+    const latest = deferredResponse(LATEST_RESPONSE);
+    fetchSpy.mockReset();
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(EMPTY_RESPONSE),
+    });
+    fetchSpy
+      .mockReturnValueOnce(stale.promise)
+      .mockReturnValueOnce(latest.promise);
+
+    renderScans();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    await tickTime(5_000);
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      latest.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText('Latest Tool')).toBeInTheDocument();
+
+    await act(async () => {
+      stale.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText('Latest Tool')).toBeInTheDocument();
+    expect(screen.queryByText('Stale Tool')).not.toBeInTheDocument();
   });
 });

@@ -42,6 +42,8 @@ async def app_client(db_path):
         from backend.secuscan.main import app
         from backend.secuscan import database as db_module
         from backend.secuscan import cache as cache_module
+        from backend.secuscan import auth as auth_module
+        import tempfile
 
         # Initialise a real in-memory cache (it's just a dict, no external deps)
         await cache_module.init_cache()
@@ -49,13 +51,19 @@ async def app_client(db_path):
         # Initialise a fresh DB pointing at our temp file
         test_db = await db_module.init_db(db_path)
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
-            client._mock_executor = mock_executor
-            client._db = test_db
-            client._db_path = db_path
-            yield client
+        # Initialise API key in a temporary directory so the dependency resolves
+        with tempfile.TemporaryDirectory() as tmp_auth_dir:
+            api_key = auth_module.init_api_key(tmp_auth_dir)
+
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+                headers={"X-Api-Key": api_key},
+            ) as client:
+                client._mock_executor = mock_executor
+                client._db = test_db
+                client._db_path = db_path
+                yield client
 
         # Teardown
         await test_db.disconnect()

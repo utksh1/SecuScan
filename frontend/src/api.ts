@@ -83,19 +83,62 @@ export interface TaskStartResponse {
   stream_url: string
 }
 
+const API_KEY_STORAGE_KEY = 'secuscan_api_key'
+
+export function getStoredApiKey(): string | null {
+  try {
+    return localStorage.getItem(API_KEY_STORAGE_KEY) || null
+  } catch {
+    return null
+  }
+}
+
+export function setStoredApiKey(key: string): void {
+  try {
+    localStorage.setItem(API_KEY_STORAGE_KEY, key)
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function getApiKey(): string | null {
+  return getStoredApiKey()
+}
+
+/** Fired on the window when any API request receives HTTP 401. */
+export const AUTH_REQUIRED_EVENT = 'secuscan:auth-required'
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController()
   const timeoutId = window.setTimeout(() => controller.abort(), 10000)
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    signal: controller.signal,
-  })
-  window.clearTimeout(timeoutId)
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`)
+  const apiKey = getApiKey()
+  const authHeaders: Record<string, string> = apiKey ? { 'X-Api-Key': apiKey } : {}
+
+  try {
+    const response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: {
+        ...authHeaders,
+        ...(init?.headers as Record<string, string> | undefined),
+      },
+      signal: controller.signal,
+    })
+
+    if (response.status === 401) {
+      // Notify the app so it can show the API-key setup UI without every
+      // caller needing to handle auth independently.
+      window.dispatchEvent(new CustomEvent(AUTH_REQUIRED_EVENT))
+      throw new Error('AUTH_REQUIRED')
+    }
+
+    if (!response.ok) {
+      throw new Error(`Request failed: ${response.status}`)
+    }
+    return response.json()
+  } finally {
+    window.clearTimeout(timeoutId)
   }
-  return response.json()
 }
 
 export function getHealth() {
@@ -108,6 +151,10 @@ export function listPlugins() {
 
 export function getPluginSchema(id: string) {
   return request<PluginSchemaResponse>(`/plugin/${id}/schema`)
+}
+
+export function getSettings() {
+  return request<any>(`/settings`)
 }
 
 export function getDashboardSummary() {

@@ -21,6 +21,7 @@ from backend.secuscan.database import init_db
 from backend.secuscan.main import app
 from backend.secuscan.plugins import init_plugins
 from backend.secuscan.ratelimit import concurrent_limiter, rate_limiter
+from backend.secuscan import auth as auth_module
 
 
 @pytest.fixture(autouse=True)
@@ -35,6 +36,11 @@ def setup_test_environment(monkeypatch):
     monkeypatch.setattr(settings, "plugins_dir", str(repo_root / "plugins"))
     monkeypatch.setattr(settings, "database_path", f"{temp_path}/test_secuscan.db")
     monkeypatch.setattr(settings, "vault_key", "test-vault-key-for-unit-tests-only")
+    monkeypatch.setattr(settings, "admin_api_key", "test-admin-key")
+    # Disable network policy enforcement in tests: integration tests mock
+    # _execute_command but the policy check runs before that mock fires.
+    # Tests that specifically test policy behaviour override this themselves.
+    monkeypatch.setattr(settings, "enforce_network_policy", False)
 
     settings.ensure_directories()
 
@@ -46,6 +52,7 @@ def setup_test_environment(monkeypatch):
 def anyio_backend():
     """Force AnyIO tests to run on asyncio (trio is not a dependency in CI)."""
     return "asyncio"
+
 
 
 @pytest.fixture
@@ -67,7 +74,9 @@ def test_client(setup_test_environment):
 
     asyncio.run(setup())
 
-    with TestClient(app) as client:
+    api_key = auth_module.init_api_key(settings.data_dir)
+
+    with TestClient(app, headers={"X-Api-Key": api_key}) as client:
         yield client
 
     async def teardown():
