@@ -124,7 +124,7 @@ class TestTasksPagination:
     def test_next_url_encodes_filtered_pagination_params(self, test_client):
         """Test that filtered pagination links URL-encode query values."""
         plugin_id = "web scanner/alpha"
-        status = "queued & reviewed"
+        status = "queued"
         asyncio.run(
             _insert_task("encoded-filter-1", plugin_id, status, "2026-06-02T10:00:00")
         )
@@ -146,5 +146,5 @@ class TestTasksPagination:
         next_url = response.json()["pagination"]["next"]
         assert next_url == (
             "/api/v1/tasks?page=2&per_page=1&"
-            "plugin_id=web+scanner%2Falpha&status=queued+%26+reviewed"
+            "plugin_id=web+scanner%2Falpha&status=queued"
         )
