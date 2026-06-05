@@ -43,7 +43,7 @@ fi
 # ── Check 2: files newly added in this PR/branch ──────────────────────────────
 echo "Checking for generated artifacts in PR diff..."
 if git rev-parse --verify "${BASE_BRANCH}" >/dev/null 2>&1; then
-  CHANGED_FILES=$(git diff --name-only "${BASE_BRANCH}"...HEAD 2>/dev/null || git diff --name-only HEAD)
+  CHANGED_FILES=$(git diff --name-only --diff-filter=A "${BASE_BRANCH}"...HEAD 2>/dev/null || git diff --name-only --cached)
 else
   CHANGED_FILES=$(git diff --name-only --cached)
 fi
