@@ -183,6 +183,39 @@ describe('Findings — virtualized list', () => {
     })
   })
 
+  it('keyboard ArrowDown follows sorted order in non-severity sort mode', async () => {
+    const findings = [
+      makeFinding({ id: 'f1', title: 'Alpha Finding', severity: 'high', discovered_at: '2024-01-01T00:00:00Z' }),
+      makeFinding({ id: 'f2', title: 'Beta Finding', severity: 'critical', discovered_at: '2024-01-03T00:00:00Z' }),
+      makeFinding({ id: 'f3', title: 'Gamma Finding', severity: 'medium', discovered_at: '2024-01-02T00:00:00Z' }),
+    ]
+    vi.mocked(getFindings).mockResolvedValue({ findings })
+
+    render(<Findings />)
+    await waitFor(() => expect(screen.queryByText('Synchronizing findings feed...')).not.toBeInTheDocument())
+
+    // Switch to "newest" sort — order should be f2 (Jan 3), f3 (Jan 2), f1 (Jan 1)
+    const selects = screen.getAllByRole('combobox')
+    const sortSelect = selects.find((s) =>
+      Array.from(s.querySelectorAll('option')).some((o) => /Newest First/i.test(o.textContent || '')),
+    )
+    expect(sortSelect).toBeDefined()
+    await userEvent.selectOptions(sortSelect!, 'newest')
+
+    // Select the first item in the sorted list (Beta Finding), then ArrowDown should go to Gamma
+    const betaOption = await screen.findByRole('option', { name: /Beta Finding/i })
+    await userEvent.click(betaOption)
+
+    const listbox = screen.getByRole('listbox')
+    listbox.focus()
+    fireEvent.keyDown(listbox, { key: 'ArrowDown' })
+
+    await waitFor(() => {
+      const selected = screen.getByRole('option', { name: /Gamma Finding/i })
+      expect(selected).toHaveAttribute('aria-selected', 'true')
+    })
+  })
+
   it('workflow actions (mark reviewed, suppress, reopen) update status chip', async () => {
     const findings = [makeFinding({ id: 'f1', title: 'Actionable Finding', severity: 'high' })]
     vi.mocked(getFindings).mockResolvedValue({ findings })

@@ -320,8 +320,8 @@ export default function Findings() {
   )
 
   const selectedFinding =
-    filteredFindings.find((finding) => finding.id === selectedFindingId) ??
-    filteredFindings[0] ??
+    sortedFindings.find((finding) => finding.id === selectedFindingId) ??
+    sortedFindings[0] ??
     null
 
   useEffect(() => {
@@ -329,10 +329,10 @@ export default function Findings() {
       setSelectedFindingId(null)
       return
     }
-    if (!filteredFindings.some((finding) => finding.id === selectedFinding.id)) {
-      setSelectedFindingId(filteredFindings[0]?.id ?? null)
+    if (!sortedFindings.some((finding) => finding.id === selectedFinding.id)) {
+      setSelectedFindingId(sortedFindings[0]?.id ?? null)
     }
-  }, [filteredFindings, selectedFinding])
+  }, [sortedFindings, selectedFinding])
 
   // Derives a flat list of active filter chips from non-default filter state.
   const activeFilters = useMemo(() => {
@@ -387,21 +387,21 @@ export default function Findings() {
   const listRef = useRef<HTMLDivElement>(null)
 
   function handleListKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    if (!filteredFindings.length) return
+    if (!sortedFindings.length) return
     const currentIdx = selectedFinding
-      ? filteredFindings.findIndex((f) => f.id === selectedFinding.id)
+      ? sortedFindings.findIndex((f) => f.id === selectedFinding.id)
       : -1
 
     if (e.key === 'ArrowDown') {
       e.preventDefault()
-      const next = filteredFindings[Math.min(currentIdx + 1, filteredFindings.length - 1)]
+      const next = sortedFindings[Math.min(currentIdx + 1, sortedFindings.length - 1)]
       if (next) setSelectedFindingId(next.id)
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
-      const prev = filteredFindings[Math.max(currentIdx - 1, 0)]
+      const prev = sortedFindings[Math.max(currentIdx - 1, 0)]
       if (prev) setSelectedFindingId(prev.id)
     }
-  }
+}
 
   // ─── Virtualizer ────────────────────────────────────────────────────────────
   const parentRef = useRef<HTMLDivElement>(null)
@@ -423,7 +423,6 @@ export default function Findings() {
       virtualizer.scrollToIndex(rowIdx, { align: 'auto', behavior: 'smooth' })
     }
   }, [selectedFindingId]) // eslint-disable-line react-hooks/exhaustive-deps
-
   return (
     <div className="min-h-screen bg-charcoal-dark text-silver px-4 py-6 md:px-8 md:py-10">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8">
