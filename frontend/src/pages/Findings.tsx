@@ -1,9 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { getFindings } from '../api'
 import { formatLocaleDate, parseDateSafe, getCurrentTimeZone } from '../utils/date'
 import SavedViewsPanel from '../components/SavedViewsPanel'
 import { useSavedViews, FilterPreset } from '../hooks/useSavedViews'
+
 type RiskFactor = {
   factor: string
   label: string
@@ -107,6 +109,18 @@ const filterControlClass =
 
 type SortMode = 'severity' | 'newest' | 'oldest' | 'target'
 
+// ─── Virtual row types ────────────────────────────────────────────────────────
+
+type HeaderRow = { kind: 'header'; severity: string; count: number }
+type FindingRow = { kind: 'finding'; finding: Finding & { status: FindingStatus }; isLastInGroup: boolean }
+type VirtualRow = HeaderRow | FindingRow
+
+// Estimated heights for virtualizer
+const ROW_HEIGHTS: Record<VirtualRow['kind'], number> = {
+  header: 72,
+  finding: 140,
+}
+
 export default function Findings() {
   const [findings, setFindings] = useState<Finding[]>([])
   const [loading, setLoading] = useState(true)
@@ -175,7 +189,7 @@ export default function Findings() {
       findings.map((finding) => ({
         ...finding,
         severity: normalizeSeverity(finding.severity),
-        status: reviewState[finding.id] || 'new',
+        status: reviewState[finding.id] || ('new' as FindingStatus),
       })),
     [findings, reviewState],
   )
@@ -201,9 +215,6 @@ export default function Findings() {
   const filteredFindings = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
 
-    // Compare dates using the *displayed* calendar day in the user's configured
-    // timezone, not raw UTC timestamps. This way a finding at 2026-05-13T20:00:00Z
-    // that shows as May 14 in IST correctly matches a From Date of 2026-05-14.
     const tz = getCurrentTimeZone()
     const dateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: tz })
 
@@ -212,11 +223,9 @@ export default function Findings() {
       const matchesTarget = filterTarget === 'all' || finding.target === filterTarget
       const matchesScanner = filterScanner === 'all' || finding.plugin_id === filterScanner
 
-      // Date range check — derive the calendar day in the display timezone
       if (dateFrom || dateTo) {
         const parsed = parseDateSafe(finding.discovered_at)
         if (!parsed) return false
-        // en-CA locale gives us YYYY-MM-DD which matches the <input type="date"> value
         const displayDay = dateFormatter.format(parsed)
         if (dateFrom && displayDay < dateFrom) return false
         if (dateTo && displayDay > dateTo) return false
@@ -259,35 +268,39 @@ export default function Findings() {
         )
       case 'severity':
       default:
-        // Keep the original severity-group ordering; groupedFindings handles it.
         return items
     }
   }, [filteredFindings, sortMode])
 
-  const groupedFindings = useMemo(
-    () =>
-      severityOrder.map((severity) => ({
-        severity,
-        items: sortedFindings.filter((finding) => finding.severity === severity),
-      })),
-    [sortedFindings],
-  )
-
-  const selectedFinding =
-    filteredFindings.find((finding) => finding.id === selectedFindingId) ??
-    filteredFindings[0] ??
-    null
-
-  useEffect(() => {
-    if (!selectedFinding) {
-      setSelectedFindingId(null)
-      return
+  // Build the flat virtual row list: header + findings per severity group
+  // For non-severity sort modes, all findings appear in a single flat list
+  const virtualRows = useMemo<VirtualRow[]>(() => {
+    const rows: VirtualRow[] = []
+    if (sortMode === 'severity') {
+      for (const severity of severityOrder) {
+        const items = filteredFindings.filter((f) => f.severity === severity)
+        if (items.length === 0) continue
+        rows.push({ kind: 'header', severity, count: items.length })
+        items.forEach((finding, idx) => {
+          rows.push({
+            kind: 'finding',
+            finding,
+            isLastInGroup: idx === items.length - 1,
+          })
+        })
+      }
+    } else {
+      // For newest/oldest/target sort — single flat list, no headers
+      sortedFindings.forEach((finding, idx) => {
+        rows.push({
+          kind: 'finding',
+          finding,
+          isLastInGroup: idx === sortedFindings.length - 1,
+        })
+      })
     }
-
-    if (!filteredFindings.some((finding) => finding.id === selectedFinding.id)) {
-      setSelectedFindingId(filteredFindings[0]?.id ?? null)
-    }
-  }, [filteredFindings, selectedFinding])
+    return rows
+  }, [filteredFindings, sortedFindings, sortMode])
 
   const countsBySeverity = useMemo(() => {
     return severityOrder.reduce<Record<string, number>>((acc, severity) => {
@@ -306,6 +319,21 @@ export default function Findings() {
     [enrichedFindings, filteredFindings, countsBySeverity],
   )
 
+  const selectedFinding =
+    sortedFindings.find((finding) => finding.id === selectedFindingId) ??
+    sortedFindings[0] ??
+    null
+
+  useEffect(() => {
+    if (!selectedFinding) {
+      setSelectedFindingId(null)
+      return
+    }
+    if (!sortedFindings.some((finding) => finding.id === selectedFinding.id)) {
+      setSelectedFindingId(sortedFindings[0]?.id ?? null)
+    }
+  }, [sortedFindings, selectedFinding])
+
   // Derives a flat list of active filter chips from non-default filter state.
   const activeFilters = useMemo(() => {
     const chips: { key: string; label: string }[] = []
@@ -317,7 +345,6 @@ export default function Findings() {
     if (dateTo)                  chips.push({ key: 'to',      label: `To: ${dateTo}` })
     return chips
   }, [searchQuery, filterTarget, filterScanner, sortMode, dateFrom, dateTo])
-
 
   function resetAllFilters() {
     setFilterSeverity('all')
@@ -356,73 +383,50 @@ export default function Findings() {
     }
   }
 
-  function renderFindingRow(finding: Finding & { severity: string; status: FindingStatus }) {
-    const isSelected = selectedFinding?.id === finding.id
-    const cfg = severityConfig[finding.severity]
+  // ─── Keyboard navigation ────────────────────────────────────────────────────
+  const listRef = useRef<HTMLDivElement>(null)
 
-    return (
-      <button
-        key={finding.id}
-        type="button"
-        onClick={() => setSelectedFindingId(finding.id)}
-        className={`relative block w-full px-5 py-5 text-left transition-all ${
-          isSelected ? 'bg-silver-bright/6' : 'hover:bg-silver-bright/3'
-        }`}
-      >
-        <span className={`absolute inset-y-0 left-0 w-1 ${cfg.rail}`} />
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0 flex-1 space-y-3 pl-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={`px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${cfg.chip}`}>
-                {cfg.label}
-              </span>
-              <span className={`border px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${getStatusTone(finding.status)}`}>
-                {finding.status}
-              </span>
-              <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-silver/35">
-                {finding.category || 'Uncategorized'}
-              </span>
-              {finding.cve ? (
-                <span className="border border-rag-blue/20 bg-rag-blue/10 px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-rag-blue">
-                  {finding.cve}
-                </span>
-              ) : null}
-            </div>
+  function handleListKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (!sortedFindings.length) return
+    const currentIdx = selectedFinding
+      ? sortedFindings.findIndex((f) => f.id === selectedFinding.id)
+      : -1
 
-            <div>
-              <h3 className="text-xl font-black uppercase tracking-tight text-silver-bright">{finding.title}</h3>
-              <p className="mt-2 text-[11px] font-mono uppercase tracking-[0.16em] text-silver/45">
-                Target // {finding.target || 'Unknown'} // Observed // {formatLocaleDate(finding.discovered_at)}
-              </p>
-            </div>
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      const next = sortedFindings[Math.min(currentIdx + 1, sortedFindings.length - 1)]
+      if (next) setSelectedFindingId(next.id)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      const prev = sortedFindings[Math.max(currentIdx - 1, 0)]
+      if (prev) setSelectedFindingId(prev.id)
+    }
+}
 
-            <p className="max-w-4xl text-sm leading-relaxed text-silver/70">
-              {finding.description || 'No description provided.'}
-            </p>
-          </div>
+  // ─── Virtualizer ────────────────────────────────────────────────────────────
+  const parentRef = useRef<HTMLDivElement>(null)
 
-          <div className="flex flex-row items-end gap-6 lg:min-w-[140px] lg:flex-col lg:items-end">
-            {typeof finding.cvss === 'number' ? (
-              <div className="text-right">
-                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">CVSS</p>
-                <p className={`text-3xl font-black italic ${finding.cvss >= 9 ? 'text-rag-red' : 'text-silver-bright'}`}>
-                  {finding.cvss.toFixed(1)}
-                </p>
-              </div>
-            ) : null}
+  const virtualizer = useVirtualizer({
+    count: virtualRows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: (index) => ROW_HEIGHTS[virtualRows[index]?.kind ?? 'finding'],
+    overscan: 6,
+  })
 
-            <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-silver-bright' : 'text-silver/30'}`} aria-hidden="true">
-              east
-            </span>
-          </div>
-        </div>
-      </button>
+  // Scroll selected finding into view when it changes
+  useEffect(() => {
+    if (!selectedFinding) return
+    const rowIdx = virtualRows.findIndex(
+      (row) => row.kind === 'finding' && row.finding.id === selectedFinding.id,
     )
-  }
-
+    if (rowIdx !== -1) {
+      virtualizer.scrollToIndex(rowIdx, { align: 'auto', behavior: 'smooth' })
+    }
+  }, [selectedFindingId]) // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="min-h-screen bg-charcoal-dark text-silver px-4 py-6 md:px-8 md:py-10">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8">
+        {/* Header */}
         <header className="border-b-4 border-silver-bright/10 pb-8">
           <div className="mb-4 inline-block bg-rag-red px-4 py-1 text-xs font-black uppercase tracking-widest text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
             Triage Workspace v5.1
@@ -456,39 +460,32 @@ export default function Findings() {
           </div>
         </header>
 
+        {/* Filter Bar */}
         <section className="border-2 border-black bg-charcoal/95 p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] backdrop-blur lg:sticky lg:top-4 lg:z-20">
           <div className="grid gap-4">
             <div className="grid gap-4 2xl:grid-cols-[minmax(320px,1fr)_auto] 2xl:items-end">
-             <div className="space-y-2">
-  <label className={filterLabelClass}>Search</label>
-
-  <div className="relative">
-    <input
-      type="text"
-      value={searchQuery}
-      onChange={(event) => setSearchQuery(event.target.value)}
-      placeholder="Title, target, CVE, remediation..."
-      className={`${filterControlClass} px-4 pr-12 placeholder:text-silver/20`}
-    />
-
-    {searchQuery.trim() && (
-      <button
-        type="button"
-        aria-label="Clear search"
-        onClick={() => setSearchQuery('')}
-        className="
-          absolute right-3 top-1/2
-          -translate-y-1/2
-          text-silver/50
-          hover:text-silver-bright
-          transition
-        "
-      >
-        ✕
-      </button>
-    )}
-  </div>
-</div>
+              <div className="space-y-2">
+                <label className={filterLabelClass}>Search</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Title, target, CVE, remediation..."
+                    className={`${filterControlClass} px-4 pr-12 placeholder:text-silver/20`}
+                  />
+                  {searchQuery.trim() && (
+                    <button
+                      type="button"
+                      aria-label="Clear search"
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-silver/50 hover:text-silver-bright transition"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
 
               <div className="flex flex-wrap gap-2 pb-2 sm:pb-0 2xl:max-w-[760px] 2xl:justify-end">
                 <button
@@ -592,15 +589,7 @@ export default function Findings() {
                 />
                 <button
                   type="button"
-                  onClick={() => {
-                    setFilterSeverity('all')
-                    setFilterTarget('all')
-                    setFilterScanner('all')
-                    setSortMode('severity')
-                    setDateFrom('')
-                    setDateTo('')
-                    setSearchQuery('')
-                  }}
+                  onClick={resetAllFilters}
                   className="h-11 w-full border border-silver-bright/20 bg-charcoal-dark px-4 text-[10px] font-black uppercase tracking-[0.18em] text-silver/65 transition-all hover:border-rag-red hover:text-silver-bright xl:w-auto xl:min-w-[180px]"
                 >
                   Reset Filters
@@ -610,8 +599,7 @@ export default function Findings() {
           </div>
         </section>
 
-        {/* ── Active filter summary strip ────────────────────────────────────────
-            Hidden when all filters are at their default values.    */}
+        {/* ── Active filter summary strip ── */}
         {activeFilters.length > 0 && (
           <div
             aria-label="active filters"
@@ -631,8 +619,10 @@ export default function Findings() {
           </div>
         )}
 
+        {/* Main Split Layout */}
         <div className="grid gap-8 xl:grid-cols-[minmax(0,1.2fr)_420px]">
-          <motion.section variants={sectionVariants} initial="hidden" animate="visible" className="space-y-5">
+          {/* ── Virtualized Findings List ── */}
+          <motion.section variants={sectionVariants} initial="hidden" animate="visible">
             {loading ? (
               <div className="border-4 border-dashed border-silver-bright/10 bg-charcoal/40 px-6 py-16 text-center">
                 <p className="text-sm font-mono uppercase tracking-[0.25em] text-silver/50">Synchronizing findings feed...</p>
@@ -642,50 +632,129 @@ export default function Findings() {
                 <p className="text-2xl font-black uppercase tracking-[0.25em] text-silver/25 italic">No Findings Match</p>
                 <p className="mt-3 text-xs font-mono uppercase tracking-[0.2em] text-silver/15">Adjust filters to reopen the queue.</p>
               </div>
-            ) : sortMode === 'severity' ? (
-              groupedFindings.map(({ severity, items }) => {
-                if (items.length === 0) return null
-
-                const config = severityConfig[severity]
-
-                return (
-                  <div key={severity} className="border-2 border-black bg-charcoal shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-                    <div className="flex w-full items-center justify-between border-b border-silver-bright/8 px-5 py-4 text-left">
-                      <div className="flex items-center gap-4">
-                        <span className={`h-3 w-3 rotate-45 ${config.rail}`} />
-                        <div>
-                          <p className={`text-lg font-black uppercase tracking-[0.18em] ${config.accent}`}>{config.label}</p>
-                          <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-silver/40">{items.length} visible in queue</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="divide-y divide-silver-bright/6">
-                      {items.map((finding) => renderFindingRow(finding))}
-                    </div>
-                  </div>
-                )
-              })
             ) : (
-              <div className="border-2 border-black bg-charcoal shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-                <div className="flex w-full items-center justify-between border-b border-silver-bright/8 px-5 py-4 text-left">
-                  <div className="flex items-center gap-4">
-                    <span className="h-3 w-3 rotate-45 bg-silver-bright" />
-                    <div>
-                      <p className="text-lg font-black uppercase tracking-[0.18em] text-silver-bright">
-                        {sortMode === 'newest' ? 'Newest First' : sortMode === 'oldest' ? 'Oldest First' : 'By Target'}
-                      </p>
-                      <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-silver/40">{sortedFindings.length} visible in queue</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="divide-y divide-silver-bright/6">
-                  {sortedFindings.map((finding) => renderFindingRow(finding))}
+              <div
+                ref={parentRef}
+                role="listbox"
+                aria-label="Findings list"
+                tabIndex={0}
+                onKeyDown={handleListKeyDown}
+                className="border-2 border-black bg-charcoal shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:ring-2 focus:ring-rag-red/40"
+                style={{ height: '72vh', overflowY: 'auto' }}
+              >
+                {/* Virtualizer inner container */}
+                <div
+                  style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}
+                >
+                  {virtualizer.getVirtualItems().map((virtualItem) => {
+                    const row = virtualRows[virtualItem.index]
+
+                    return (
+                      <div
+                        key={virtualItem.key}
+                        data-index={virtualItem.index}
+                        ref={virtualizer.measureElement}
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          transform: `translateY(${virtualItem.start}px)`,
+                        }}
+                      >
+                        {row.kind === 'header' ? (
+                          /* ── Severity group header ── */
+                          <div className="flex w-full items-center justify-between border-b border-silver-bright/8 px-5 py-4 bg-charcoal">
+                            <div className="flex items-center gap-4">
+                              <span className={`h-3 w-3 rotate-45 ${severityConfig[row.severity].rail}`} />
+                              <div>
+                                <p className={`text-lg font-black uppercase tracking-[0.18em] ${severityConfig[row.severity].accent}`}>
+                                  {severityConfig[row.severity].label}
+                                </p>
+                                <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-silver/40">
+                                  {row.count} visible in queue
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          /* ── Finding row ── */
+                          (() => {
+                            const { finding, isLastInGroup } = row
+                            const isSelected = selectedFinding?.id === finding.id
+                            const config = severityConfig[finding.severity]
+
+                            return (
+                              <button
+                                key={finding.id}
+                                type="button"
+                                role="option"
+                                aria-selected={isSelected}
+                                onClick={() => setSelectedFindingId(finding.id)}
+                                className={`relative block w-full px-5 py-5 text-left transition-all ${
+                                  !isLastInGroup ? 'border-b border-silver-bright/6' : ''
+                                } ${isSelected ? 'bg-silver-bright/6' : 'hover:bg-silver-bright/3'}`}
+                              >
+                                <span className={`absolute inset-y-0 left-0 w-1 ${config.rail}`} />
+                                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                  <div className="min-w-0 flex-1 space-y-3 pl-3">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className={`px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${config.chip}`}>
+                                        {config.label}
+                                      </span>
+                                      <span className={`border px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${getStatusTone(finding.status)}`}>
+                                        {finding.status}
+                                      </span>
+                                      <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-silver/35">
+                                        {finding.category || 'Uncategorized'}
+                                      </span>
+                                      {finding.cve ? (
+                                        <span className="border border-rag-blue/20 bg-rag-blue/10 px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-rag-blue">
+                                          {finding.cve}
+                                        </span>
+                                      ) : null}
+                                    </div>
+
+                                    <div>
+                                      <h3 className="text-xl font-black uppercase tracking-tight text-silver-bright">{finding.title}</h3>
+                                      <p className="mt-2 text-[11px] font-mono uppercase tracking-[0.16em] text-silver/45">
+                                        Target // {finding.target || 'Unknown'} // Observed // {formatLocaleDate(finding.discovered_at)}
+                                      </p>
+                                    </div>
+
+                                    <p className="max-w-4xl text-sm leading-relaxed text-silver/70">
+                                      {finding.description || 'No description provided.'}
+                                    </p>
+                                  </div>
+
+                                  <div className="flex flex-row items-end gap-6 lg:min-w-[140px] lg:flex-col lg:items-end">
+                                    {typeof finding.cvss === 'number' ? (
+                                      <div className="text-right">
+                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">CVSS</p>
+                                        <p className={`text-3xl font-black italic ${finding.cvss >= 9 ? 'text-rag-red' : 'text-silver-bright'}`}>
+                                          {finding.cvss.toFixed(1)}
+                                        </p>
+                                      </div>
+                                    ) : null}
+
+                                    <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-silver-bright' : 'text-silver/30'}`}>
+                                      east
+                                    </span>
+                                  </div>
+                                </div>
+                              </button>
+                            )
+                          })()
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             )}
           </motion.section>
 
+          {/* ── Detail Panel (unchanged) ── */}
           <motion.aside variants={sectionVariants} initial="hidden" animate="visible" className="xl:sticky xl:top-32 xl:self-start">
             <div className="border-4 border-black bg-charcoal shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]">
               {selectedFinding ? (
