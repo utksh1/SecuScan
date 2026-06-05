@@ -369,6 +369,22 @@ class Database:
         await self.connection.execute(query, params)
         await self.connection.commit()
 
+    async def execute_no_commit(self, query: str, params: tuple = ()):
+        """Execute a write query without committing (for use inside transactions)."""
+        await self.connection.execute(query, params)
+
+    async def begin(self):
+        """Begin a transaction."""
+        await self.connection.execute("BEGIN")
+
+    async def commit(self):
+        """Commit the current transaction."""
+        await self.connection.commit()
+
+    async def rollback(self):
+        """Roll back the current transaction."""
+        await self.connection.rollback()
+
     async def fetchone(self, query: str, params: tuple = ()) -> Optional[Dict]:
         """Fetch one row."""
         async with await self.connection.execute(query, params) as cursor:

@@ -120,6 +120,7 @@ from .ratelimit import (
     task_start_limiter, vault_limiter,
     report_download_limiter, read_heavy_limiter,
     resolve_client_identity, admin_limiter,
+    scheduler_tick_limiter,
 )
 from .validation import validate_target, validate_task_start_payload, validate_url
 from .reporting import reporting
@@ -1001,6 +1002,9 @@ async def delete_task_records(task_ids: List[str]):
 
     Processes IDs in chunks of SQLITE_CHUNK_SIZE to stay under
     SQLite's SQLITE_LIMIT_VARIABLE_NUMBER = 999 limit.
+
+    The deletion is wrapped in a transaction so that a failure mid-way
+    (e.g. crash, constraint violation) does not leave orphaned records.
     """
     if not task_ids:
         return
@@ -1018,16 +1022,50 @@ async def delete_task_records(task_ids: List[str]):
         )
         all_task_rows.extend(rows)
 
-    # Delete associated records in chunks
-    for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
-        chunk = task_ids[i : i + SQLITE_CHUNK_SIZE]
-        placeholders = ",".join(["?"] * len(chunk))
-        await db.execute(f"DELETE FROM findings   WHERE task_id IN ({placeholders})", tuple(chunk))
-        await db.execute(f"DELETE FROM reports    WHERE task_id IN ({placeholders})", tuple(chunk))
-        await db.execute(f"DELETE FROM audit_log  WHERE task_id IN ({placeholders})", tuple(chunk))
-        await db.execute(f"DELETE FROM tasks      WHERE id       IN ({placeholders})", tuple(chunk))
+    # Delete associated records in chunks, atomic within a transaction
+    await db.begin()
+    try:
+        # Re-check running status inside the transaction to prevent the
+        # race where a task starts running between the check and the delete.
+        for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
+            chunk = task_ids[i : i + SQLITE_CHUNK_SIZE]
+            placeholders = ",".join(["?"] * len(chunk))
+            running = await db.fetchone(
+                f"SELECT 1 FROM tasks WHERE id IN ({placeholders}) AND status = 'running' LIMIT 1",
+                tuple(chunk)
+            )
+            if running:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cannot delete running tasks. Abort them first."
+                )
 
-    # Cleanup files on disk
+        for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
+            chunk = task_ids[i : i + SQLITE_CHUNK_SIZE]
+            placeholders = ",".join(["?"] * len(chunk))
+            await db.execute_no_commit(
+                f"DELETE FROM findings   WHERE task_id IN ({placeholders})", tuple(chunk)
+            )
+            await db.execute_no_commit(
+                f"DELETE FROM reports    WHERE task_id IN ({placeholders})", tuple(chunk)
+            )
+            await db.execute_no_commit(
+                f"DELETE FROM audit_log  WHERE task_id IN ({placeholders})", tuple(chunk)
+            )
+            await db.execute_no_commit(
+                f"DELETE FROM tasks      WHERE id       IN ({placeholders})", tuple(chunk)
+            )
+        await db.commit()
+    except HTTPException:
+        await db.rollback()
+        raise
+    except Exception:
+        await db.rollback()
+        raise
+
+    # Cleanup files on disk (outside the transaction — file deletion is not
+    # transactional; a failure here does not leave the DB in an inconsistent
+    # state).
     for row in all_task_rows:
         if row and row["raw_output_path"]:
             try:
@@ -1325,7 +1363,7 @@ async def delete_workflow(workflow_id: str):
     return {"workflow_id": workflow_id, "deleted": True}
 
 
-@router.post("/workflows/scheduler/tick")
+@router.post("/workflows/scheduler/tick", dependencies=[Depends(scheduler_tick_limiter)])
 async def trigger_workflow_tick():
     await scheduler.tick()
     return {"tick": "ok"}
