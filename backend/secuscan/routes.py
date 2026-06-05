@@ -1277,9 +1277,35 @@ async def get_attack_surface():
 
 @router.get("/assets")
 async def get_assets():
-    """Return a list of tracked assets."""
+    """Return discovered assets aggregated from scan findings and tasks."""
     db = await get_db()
-    # For now, we use unique targets as assets
-    rows = await db.fetchall("SELECT DISTINCT target FROM tasks UNION SELECT DISTINCT target FROM findings")
-    assets = [{"id": str(uuid.uuid4()), "name": row["target"]} for row in rows]
-    return {"assets": assets}
+    rows = await db.fetchall(
+        """
+        SELECT
+            t.target                          AS host,
+            t.target                          AS ip,
+            t.tool_name                       AS scanner,
+            COUNT(DISTINCT f.id)              AS findings_count,
+            MAX(f.severity)                   AS severity,
+            MIN(t.created_at)                 AS first_seen,
+            MAX(t.created_at)                 AS last_seen
+        FROM tasks t
+        LEFT JOIN findings f ON f.task_id = t.id
+        GROUP BY t.target
+        ORDER BY last_seen DESC
+        """
+    )
+    return [
+        {
+            "host": row["host"],
+            "ip": row["ip"],
+            "ports": [],
+            "scanner": row["scanner"] or "unknown",
+            "findings": row["findings_count"] or 0,
+            "severity": row["severity"] or "none",
+            "tags": [],
+            "first": row["first_seen"],
+            "last": row["last_seen"],
+        }
+        for row in rows
+    ]

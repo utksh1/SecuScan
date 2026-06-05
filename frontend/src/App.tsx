@@ -10,6 +10,8 @@ import Settings from './pages/Settings'
 import Scans from './pages/Scans'
 import TaskDetails from './pages/TaskDetails'
 import Workflows from './pages/Workflows'
+import ReportCompare from './pages/ReportCompare'
+import AssetInventory from './pages/AssetInventory'
 
 import { ThemeProvider } from './components/ThemeContext'
 import { ToastProvider, ToastContainer } from './components/ToastContext'
@@ -26,9 +28,10 @@ export function AppRoutes() {
       <Route path={routes.scans} element={<Scans />} />
       <Route path={routes.reports} element={<Reports />} />
       <Route path={routes.workflows} element={<Workflows />} />
-      <Route path={routes.settings} element={<Settings />} />
+      <Route path={routes.inventory} element={<AssetInventory />} />
+      <Route path={routes.reportsCompare} element={<ReportCompare />} />
       <Route path={routes.task} element={<TaskDetails />} />
-
+      <Route path={routes.settings} element={<Settings />} />
       <Route path="*" element={<Navigate to={routes.dashboard} replace />} />
     </Routes>
   )

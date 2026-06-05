@@ -41,6 +41,8 @@ export interface PluginFieldSchema {
   help?: string
   options?: PluginFieldOption[]
   validation?: Record<string, unknown>
+  /** Explicit opt-in: always redact this field in command previews */
+  sensitive?: boolean
 }
 export interface PluginAvailability {
   runnable: boolean
@@ -74,6 +76,8 @@ export interface PluginSchemaResponse {
   fields: PluginFieldSchema[]
   presets: Record<string, Record<string, unknown>>
   safety: Record<string, unknown>
+  /** Raw command_template from plugin metadata, used for local command preview */
+  command_template?: string[]
 }
 
 export interface TaskStartResponse {
@@ -83,19 +87,62 @@ export interface TaskStartResponse {
   stream_url: string
 }
 
+const API_KEY_STORAGE_KEY = 'secuscan_api_key'
+
+export function getStoredApiKey(): string | null {
+  try {
+    return localStorage.getItem(API_KEY_STORAGE_KEY) || null
+  } catch {
+    return null
+  }
+}
+
+export function setStoredApiKey(key: string): void {
+  try {
+    localStorage.setItem(API_KEY_STORAGE_KEY, key)
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function getApiKey(): string | null {
+  return getStoredApiKey()
+}
+
+/** Fired on the window when any API request receives HTTP 401. */
+export const AUTH_REQUIRED_EVENT = 'secuscan:auth-required'
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController()
   const timeoutId = window.setTimeout(() => controller.abort(), 10000)
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    signal: controller.signal,
-  })
-  window.clearTimeout(timeoutId)
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`)
+  const apiKey = getApiKey()
+  const authHeaders: Record<string, string> = apiKey ? { 'X-Api-Key': apiKey } : {}
+
+  try {
+    const response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      headers: {
+        ...authHeaders,
+        ...(init?.headers as Record<string, string> | undefined),
+      },
+      signal: controller.signal,
+    })
+
+    if (response.status === 401) {
+      // Notify the app so it can show the API-key setup UI without every
+      // caller needing to handle auth independently.
+      window.dispatchEvent(new CustomEvent(AUTH_REQUIRED_EVENT))
+      throw new Error('AUTH_REQUIRED')
+    }
+
+    if (!response.ok) {
+      throw new Error(`Request failed: ${response.status}`)
+    }
+    return response.json()
+  } finally {
+    window.clearTimeout(timeoutId)
   }
-  return response.json()
 }
 
 export function getHealth() {
@@ -110,6 +157,10 @@ export function getPluginSchema(id: string) {
   return request<PluginSchemaResponse>(`/plugin/${id}/schema`)
 }
 
+export function getSettings() {
+  return request<any>(`/settings`)
+}
+
 export function getDashboardSummary() {
   return request('/dashboard/summary')
 }
@@ -122,6 +173,92 @@ export function getFindings() {
 
 export function getReports() {
   return request('/reports')
+}
+
+export type NotificationChannelType = 'webhook' | 'email'
+export type NotificationSeverityThreshold = 'critical' | 'high' | 'medium' | 'low' | 'info'
+
+export interface NotificationRule {
+  id: string
+  name: string
+  severity_threshold: NotificationSeverityThreshold | string
+  channel_type: NotificationChannelType | string
+  target_url_or_email: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface NotificationHistoryRow {
+  id: string
+  rule_id: string
+  finding_id: string
+  status: 'success' | 'failed' | string
+  error_message?: string | null
+  sent_at: string
+}
+
+export interface NotificationRuleCreatePayload {
+  name: string
+  severity_threshold: NotificationSeverityThreshold
+  channel_type: NotificationChannelType
+  target_url_or_email: string
+  is_active: boolean
+}
+
+export interface NotificationRuleUpdatePayload {
+  name?: string
+  severity_threshold?: NotificationSeverityThreshold
+  channel_type?: NotificationChannelType
+  target_url_or_email?: string
+  is_active?: boolean
+}
+
+export async function listNotificationRules(): Promise<NotificationRule[]> {
+  const data: any = await request('/notifications/rules')
+  const rules = Array.isArray(data) ? data : data?.rules
+  return Array.isArray(rules) ? (rules as NotificationRule[]) : []
+}
+
+export async function createNotificationRule(payload: NotificationRuleCreatePayload): Promise<NotificationRule> {
+  return request<NotificationRule>('/notifications/rules', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updateNotificationRule(ruleId: string, payload: NotificationRuleUpdatePayload): Promise<NotificationRule> {
+  return request<NotificationRule>(`/notifications/rules/${ruleId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function deleteNotificationRule(ruleId: string): Promise<{ rule_id: string; deleted: boolean }> {
+  return request<{ rule_id: string; deleted: boolean }>(`/notifications/rules/${ruleId}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function listNotificationHistory(params?: {
+  rule_id?: string
+  limit?: number
+  offset?: number
+}): Promise<{ history: NotificationHistoryRow[]; total: number; limit: number; offset: number }> {
+  const sp = new URLSearchParams()
+  if (params?.rule_id) sp.set('rule_id', params.rule_id)
+  if (typeof params?.limit === 'number') sp.set('limit', String(params.limit))
+  if (typeof params?.offset === 'number') sp.set('offset', String(params.offset))
+  const suffix = sp.toString() ? `?${sp.toString()}` : ''
+  const data: any = await request(`/notifications/history${suffix}`)
+  return {
+    history: Array.isArray(data?.history) ? (data.history as NotificationHistoryRow[]) : [],
+    total: Number(data?.total ?? 0),
+    limit: Number(data?.limit ?? (params?.limit ?? 50)),
+    offset: Number(data?.offset ?? (params?.offset ?? 0)),
+  }
 }
 
 export function getTasks(params?: URLSearchParams) {
@@ -146,7 +283,9 @@ export function startTask(plugin_id: string, inputs: Record<string, unknown>, co
     body: JSON.stringify({ plugin_id, inputs, consent_granted, preset }),
   })
 }
-
+export function getAssets() {
+  return request('/assets')
+}
 export function deleteTask(taskId: string) {
   return request<{ task_id: string; deleted: boolean }>(`/task/${taskId}`, {
     method: 'DELETE',
