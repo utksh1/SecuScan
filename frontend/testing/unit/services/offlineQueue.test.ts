@@ -33,6 +33,7 @@ describe('offlineQueue', () => {
     mockNavigatorOnline(true)
     offlineQueue.setAutoReplay(false)
     offlineQueue.clear()
+    vi.clearAllMocks()
   })
 
   afterEach(() => {
@@ -422,6 +423,7 @@ describe('offlineQueue', () => {
 
   describe('onReconnect guard', () => {
     it('does not replay when autoReplay is disabled', async () => {
+      offlineQueue.clear()
       offlineQueue.setAutoReplay(false)
       const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue({ ok: true } as Response)
       offlineQueue.enqueue({ url: '/a', method: 'POST', maxRetries: 3, actionType: 'createWorkflow' })
