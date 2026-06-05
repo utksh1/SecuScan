@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { getFindings } from '../api'
+import { getFindings, getTaskResult } from '../api'
+import { ScanHistory } from '../components/ScanHistory'
 import { formatLocaleDate, parseDateSafe, getCurrentTimeZone } from '../utils/date'
 import SavedViewsPanel from '../components/SavedViewsPanel'
 import { useSavedViews, FilterPreset } from '../hooks/useSavedViews'
@@ -120,6 +121,7 @@ export default function Findings() {
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null)
   const [reviewState, setReviewState] = useState<ReviewState>({})
   const [copiedFindingId, setCopiedFindingId] = useState<string | null>(null)
+  const [activeTaskId, setActiveTaskId] = useState<string | undefined>()
 
   // ── Saved views ────────────────────────────────────────────────────────────
   const { views, loading: viewsLoading, saveView, deleteView, renameView } = useSavedViews()
@@ -154,6 +156,17 @@ export default function Findings() {
       })
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+  if (!activeTaskId) return
+  getTaskResult(activeTaskId)
+    .then((data: any) => {
+      const nextFindings = data.findings || []
+      setFindings(nextFindings)
+      setSelectedFindingId(nextFindings[0]?.id ?? null) // reset to first finding of new scan
+    })
+    .catch(console.error)
+}, [activeTaskId])
 
   useEffect(() => {
     try {
@@ -422,7 +435,11 @@ export default function Findings() {
 
   return (
     <div className="min-h-screen bg-charcoal-dark text-silver px-4 py-6 md:px-8 md:py-10">
-      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8">
+      <div className="mx-auto flex w-full max-w-[1600px] gap-4">
+        <aside className="w-56 shrink-0 border-r border-silver/10 pr-2">
+          <ScanHistory onSelect={setActiveTaskId} activeTaskId={activeTaskId} />
+        </aside>
+        <div className="flex flex-col gap-8 flex-1">
         <header className="border-b-4 border-silver-bright/10 pb-8">
           <div className="mb-4 inline-block bg-rag-red px-4 py-1 text-xs font-black uppercase tracking-widest text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
             Triage Workspace v5.1
@@ -831,6 +848,7 @@ export default function Findings() {
               )}
             </div>
           </motion.aside>
+        </div>
         </div>
       </div>
     </div>

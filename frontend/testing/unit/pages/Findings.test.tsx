@@ -2,10 +2,12 @@ import { render, screen, waitFor, within, fireEvent } from '@testing-library/rea
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import Findings from '../../../src/pages/Findings'
-import { getFindings } from '../../../src/api'
+import { getFindings, getTasks, getTaskResult } from '../../../src/api'
 import * as dateUtils from '../../../src/utils/date'
 
 vi.mock('../../../src/api', () => ({
+  getTasks: vi.fn(() => Promise.resolve({ tasks: [] })),
+  getTaskResult: vi.fn(() => Promise.resolve({ findings: [] })),
   getFindings: vi.fn(),
   API_BASE: 'http://127.0.0.1:8000',
 }))
@@ -111,7 +113,7 @@ describe('Findings — loading state', () => {
 // ── Severity filter ───────────────────────────────────────────────────────────
 
 describe('Findings — severity filtering', () => {
-  beforeEach(() => {
+   beforeEach(() => {
     vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
   })
 
@@ -611,5 +613,91 @@ describe('Findings — risk score display', () => {
       expect(screen.getByText(/Stored XSS in Comments/i)).toBeInTheDocument()
     })
     expect(screen.queryByText('Risk Score')).not.toBeInTheDocument()
+  })
+})
+// ── ScanHistory — selecting a scan loads its findings ─────────────────────────
+
+describe('Findings — ScanHistory scan selection', () => {
+  const pastTasks = [
+    {
+      task_id: 'task-abc-1',
+      tool_name: 'sqlmap',
+      target: 'old.example.com',
+      status: 'completed',
+      created_at: '2026-05-10T09:00:00Z',
+    },
+    {
+      task_id: 'task-abc-2',
+      tool_name: 'zap',
+      target: 'other.example.com',
+      status: 'completed',
+      created_at: '2026-05-11T12:00:00Z',
+    },
+  ]
+
+  const taskFindings = [
+    {
+      id: 'task-finding-1',
+      severity: 'high',
+      category: 'xss',
+      title: 'XSS From Past Scan',
+      target: 'old.example.com',
+      description: 'Found in historical scan.',
+      remediation: 'Sanitize input.',
+      discovered_at: '2026-05-10T09:00:00Z',
+      plugin_id: 'sqlmap',
+    },
+  ]
+
+  beforeEach(() => {
+    vi.mocked(getFindings).mockResolvedValue({ findings: allFindings })
+    vi.mocked(getTasks).mockResolvedValue({ tasks: pastTasks })
+    vi.mocked(getTaskResult).mockResolvedValue({ findings: taskFindings })
+  })
+
+  it('renders past scans in the sidebar', async () => {
+    renderFindings()
+    await waitForLoad()
+
+    await waitFor(() => {
+      expect(screen.getByText('old.example.com')).toBeInTheDocument()
+      expect(screen.getByText('other.example.com')).toBeInTheDocument()
+    })
+  })
+
+  it('loads findings for the selected scan when a sidebar entry is clicked', async () => {
+    const user = userEvent.setup()
+    renderFindings()
+    await waitForLoad()
+
+    await waitFor(() => {
+      expect(screen.getByText('old.example.com')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByText('old.example.com'))
+
+    await waitFor(() => {
+      expect(screen.getAllByText('XSS From Past Scan').length).toBeGreaterThanOrEqual(1)
+    })
+
+    // Original findings should be replaced
+    expect(screen.queryByText('SQL Injection in Login')).not.toBeInTheDocument()
+  })
+
+  it('highlights the active scan in the sidebar after selection', async () => {
+    const user = userEvent.setup()
+    renderFindings()
+    await waitForLoad()
+
+    await waitFor(() => {
+      expect(screen.getByText('old.example.com')).toBeInTheDocument()
+    })
+
+    const scanButton = screen.getByText('old.example.com').closest('button')!
+    await user.click(scanButton)
+
+    await waitFor(() => {
+      expect(scanButton.className).toContain('border-rag-red')
+    })
   })
 })
