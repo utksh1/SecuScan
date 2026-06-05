@@ -162,6 +162,7 @@ export default function Sidebar() {
                 <NavSection label="Monitor" isExpanded={isExpanded} />
                 <NavItem to={routes.dashboard} icon="monitoring" label="Dashboard" isExpanded={isExpanded} />
                 <NavItem to={routes.scans} icon="history" label="Registry" isExpanded={isExpanded} />
+                <NavItem to={routes.audit} icon="fact_check" label="Audit" isExpanded={isExpanded} />
 
                 <NavSection label="Analyze" isExpanded={isExpanded} />
                 <NavItem to={routes.findings} icon="emergency_home" label="Findings" isExpanded={isExpanded} />

@@ -4,6 +4,7 @@ export const routes = {
   scanTool: '/toolkit/:toolId',
   findings: '/findings',
   scans: '/scans',
+  audit: '/audit',
   reports: '/reports',
   reportsCompare: '/reports/compare',
   workflows: '/workflows',

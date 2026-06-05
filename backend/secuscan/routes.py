@@ -3,14 +3,17 @@ API routes for SecuScan backend
 """
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request, Depends, Body, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from typing import Any, Optional, List, Dict, Callable
+import csv
+import io
 import json
 import logging
 import re
 import os
 import uuid
 import asyncio
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
@@ -127,6 +130,7 @@ from .reporting import reporting
 from .vault import VaultCrypto
 from .workflows import scheduler
 from .auth import require_api_key, get_current_owner
+from .audit import AuditEventType, log_event
 
 from sse_starlette.sse import EventSourceResponse
 
@@ -210,13 +214,66 @@ async def require_owned_task(db, task_id: str, owner: str, columns: str = "owner
 
 
 def iter_raw_output_chunks(path: str, chunk_size: int = SSE_RAW_OUTPUT_CHUNK_SIZE):
-    """Yield raw output in bounded chunks for completed-task SSE replay."""
     with open(path, "r", encoding="utf-8", errors="replace") as output_file:
         while True:
             chunk = output_file.read(chunk_size)
             if not chunk:
                 break
             yield chunk
+
+
+AUDIT_SELECT_FIELDS = """
+    id, event_type, scan_id, plugin_id, target, actor, timestamp,
+    metadata, severity, message, context_json, task_id
+"""
+
+
+def _build_audit_where(
+    event_type: Optional[str] = None,
+    plugin_id: Optional[str] = None,
+    date: Optional[str] = None,
+    scan_id: Optional[str] = None,
+) -> tuple[str, List[Any]]:
+    where_clauses: List[str] = []
+    params: List[Any] = []
+    if event_type:
+        where_clauses.append("event_type = ?")
+        params.append(event_type)
+    if plugin_id:
+        where_clauses.append("plugin_id = ?")
+        params.append(plugin_id)
+    if scan_id:
+        where_clauses.append("(scan_id = ? OR task_id = ?)")
+        params.extend([scan_id, scan_id])
+    if date:
+        try:
+            start = datetime.strptime(date, "%Y-%m-%d")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="date must use YYYY-MM-DD") from exc
+        end = start + timedelta(days=1)
+        where_clauses.append("timestamp >= ? AND timestamp < ?")
+        params.extend([start.strftime("%Y-%m-%d %H:%M:%S"), end.strftime("%Y-%m-%d %H:%M:%S")])
+    if not where_clauses:
+        return "", params
+    return " WHERE " + " AND ".join(where_clauses), params
+
+
+def _normalize_audit_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    metadata_raw = row.get("metadata") or row.get("context_json") or "{}"
+    try:
+        metadata = json.loads(metadata_raw) if isinstance(metadata_raw, str) else metadata_raw
+    except json.JSONDecodeError:
+        metadata = {}
+    return {
+        "id": row.get("id"),
+        "event_type": row.get("event_type"),
+        "scan_id": row.get("scan_id") or row.get("task_id"),
+        "plugin_id": row.get("plugin_id"),
+        "target": row.get("target"),
+        "actor": row.get("actor"),
+        "timestamp": row.get("timestamp"),
+        "metadata": metadata if isinstance(metadata, dict) else {"value": metadata},
+    }
 
 
 def _report_generation_error_response(task_id: str, report_format: str) -> JSONResponse:
@@ -242,6 +299,112 @@ async def get_plugin_manager_for_request():
     if settings.debug:
         return await init_plugins(settings.plugins_dir)
     return get_plugin_manager()
+
+
+@router.get("/audit", dependencies=[Depends(read_heavy_limiter)])
+async def list_audit_events(
+    page: int = 1,
+    per_page: int = 25,
+    event_type: Optional[str] = None,
+    plugin_id: Optional[str] = None,
+    date: Optional[str] = None,
+    scan_id: Optional[str] = None,
+):
+    """List structured audit events with pagination and indexed filters."""
+    db = await get_db()
+    page = max(page, 1)
+    per_page = min(max(per_page, 1), 100)
+    where_sql, params = _build_audit_where(event_type, plugin_id, date, scan_id)
+
+    rows = await db.fetchall(
+        f"""
+        SELECT {AUDIT_SELECT_FIELDS}
+        FROM audit_log
+        {where_sql}
+        ORDER BY timestamp DESC, id DESC
+        LIMIT ? OFFSET ?
+        """,
+        tuple(params + [per_page, (page - 1) * per_page]),
+    )
+    total_row = await db.fetchone(
+        f"SELECT COUNT(*) AS total FROM audit_log {where_sql}",
+        tuple(params),
+    )
+    total = int(total_row["total"]) if total_row and total_row.get("total") is not None else 0
+    total_pages = (total + per_page - 1) // per_page
+
+    return {
+        "events": [_normalize_audit_row(row) for row in rows],
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total_pages": total_pages,
+            "total_items": total,
+        },
+    }
+
+
+@router.get("/audit/export", dependencies=[Depends(read_heavy_limiter)])
+async def export_audit_events(
+    format: str = "csv",
+    event_type: Optional[str] = None,
+    plugin_id: Optional[str] = None,
+    date: Optional[str] = None,
+    scan_id: Optional[str] = None,
+):
+    """Stream audit events as CSV or JSON without loading the full result set."""
+    if format not in {"csv", "json"}:
+        raise HTTPException(status_code=400, detail="format must be csv or json")
+
+    db = await get_db()
+    where_sql, params = _build_audit_where(event_type, plugin_id, date, scan_id)
+    query = f"""
+        SELECT {AUDIT_SELECT_FIELDS}
+        FROM audit_log
+        {where_sql}
+        ORDER BY timestamp DESC, id DESC
+    """
+
+    async def row_stream():
+        async with db.connection.execute(query, tuple(params)) as cursor:
+            while True:
+                row = await cursor.fetchone()
+                if row is None:
+                    break
+                yield _normalize_audit_row(dict(row))
+
+    async def csv_stream():
+        headers = ("id", "event_type", "scan_id", "plugin_id", "target", "actor", "timestamp", "metadata")
+        buffer = io.StringIO()
+        writer = csv.DictWriter(buffer, fieldnames=headers)
+        writer.writeheader()
+        yield buffer.getvalue()
+        buffer.seek(0)
+        buffer.truncate(0)
+
+        async for row in row_stream():
+            writer.writerow({key: json.dumps(row[key]) if key == "metadata" else row.get(key) for key in headers})
+            yield buffer.getvalue()
+            buffer.seek(0)
+            buffer.truncate(0)
+
+    async def json_stream():
+        yield "["
+        first = True
+        async for row in row_stream():
+            if not first:
+                yield ","
+            first = False
+            yield json.dumps(row, default=str)
+        yield "]"
+
+    media_type = "text/csv" if format == "csv" else "application/json"
+    extension = "csv" if format == "csv" else "json"
+    return StreamingResponse(
+        csv_stream() if format == "csv" else json_stream(),
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="secuscan_audit_log.{extension}"'},
+    )
 
 
 @router.get("/plugins", response_model=PluginListResponse)
@@ -1011,18 +1174,28 @@ async def delete_task_records(task_ids: List[str]):
 
     db = await get_db()
 
-    # Collect all raw_output_paths across chunks for file cleanup
+    # Collect raw output paths for file cleanup and log deletion events
     all_task_rows = []
     for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
         chunk = task_ids[i : i + SQLITE_CHUNK_SIZE]
         placeholders = ",".join(["?"] * len(chunk))
         rows = await db.fetchall(
-            f"SELECT raw_output_path FROM tasks WHERE id IN ({placeholders})",
+            f"SELECT id, raw_output_path, plugin_id, target FROM tasks WHERE id IN ({placeholders})",
             tuple(chunk)
         )
         all_task_rows.extend(rows)
+        for row in rows:
+            await log_event(
+                AuditEventType.SCAN_DELETED,
+                scan_id=row["id"],
+                plugin_id=row["plugin_id"],
+                target=row["target"],
+                actor="user",
+                metadata={"reason": "scan history cleanup"},
+            )
 
-    # Delete associated records in chunks, atomic within a transaction
+    # Delete associated records in chunks, atomic within a transaction.
+    # Audit rows are intentionally append-only and retained.
     await db.begin()
     try:
         # Re-check running status inside the transaction to prevent the
@@ -1039,7 +1212,6 @@ async def delete_task_records(task_ids: List[str]):
                     status_code=400,
                     detail="Cannot delete running tasks. Abort them first."
                 )
-
         for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
             chunk = task_ids[i : i + SQLITE_CHUNK_SIZE]
             placeholders = ",".join(["?"] * len(chunk))
@@ -1049,9 +1221,7 @@ async def delete_task_records(task_ids: List[str]):
             await db.execute_no_commit(
                 f"DELETE FROM reports    WHERE task_id IN ({placeholders})", tuple(chunk)
             )
-            await db.execute_no_commit(
-                f"DELETE FROM audit_log  WHERE task_id IN ({placeholders})", tuple(chunk)
-            )
+            # Audit log is NOT deleted — append-only retention
             await db.execute_no_commit(
                 f"DELETE FROM tasks      WHERE id       IN ({placeholders})", tuple(chunk)
             )

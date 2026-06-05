@@ -26,9 +26,9 @@ from .capabilities import CapabilityEnforcer, CapabilityDeniedError, build_enfor
 from .parser_sandbox import run_parser_in_sandbox, ParserSandboxError
 from .network_policy import get_policy_engine
 from .notification_service import process_task_notifications
+from .audit import AuditEventType, log_event
 
 def _parse_discovered_at(finding: dict) -> Optional[datetime]:
-    """Extract and parse discovered_at from a finding dict, or return current UTC time."""
     raw = finding.get("discovered_at")
     if raw:
         try:
@@ -42,21 +42,18 @@ def _parse_discovered_at(finding: dict) -> Optional[datetime]:
 
 
 def _validate_risk_fields(finding: dict) -> None:
-    """Validate exploitability, confidence, and asset_exposure bounds in-place."""
     exp = finding.get("exploitability")
     if exp is not None:
         if not isinstance(exp, (int, float)):
             raise ValueError(f"exploitability must be numeric, got {type(exp).__name__}")
         if exp < 0 or exp > 10:
             raise ValueError(f"exploitability must be in [0, 10], got {exp}")
-
     conf = finding.get("confidence")
     if conf is not None:
         if not isinstance(conf, (int, float)):
             raise ValueError(f"confidence must be numeric, got {type(conf).__name__}")
         if conf < 0 or conf > 1:
             raise ValueError(f"confidence must be in [0, 1], got {conf}")
-
     ae = finding.get("asset_exposure")
     if ae is not None and ae.lower() not in ("critical", "high", "medium", "low"):
         raise ValueError(f"asset_exposure must be one of critical/high/medium/low, got {ae}")
@@ -203,13 +200,13 @@ class TaskExecutor:
             )
         )
         
-        # Log audit event
-        await db.log_audit(
-            "task_created",
-            f"Task created for {plugin.name}",
-            context={"task_id": task_id, "plugin_id": plugin_id, "target": inputs.get("target")},
-            task_id=task_id,
-            plugin_id=plugin_id
+        await log_event(
+            AuditEventType.SCAN_CREATED,
+            scan_id=task_id,
+            plugin_id=plugin_id,
+            target=extract_target(inputs),
+            actor="system",
+            metadata={"status": TaskStatus.QUEUED.value, "tool": plugin.name, "preset": preset},
         )
         
         return task_id
@@ -224,6 +221,7 @@ class TaskExecutor:
             reason: Human-readable failure reason stored as error_message
         """
         db = await get_db()
+        task_row = await db.fetchone("SELECT plugin_id, target FROM tasks WHERE id = ?", (task_id,))
         await db.execute(
             """
             UPDATE tasks SET
@@ -241,12 +239,13 @@ class TaskExecutor:
                 task_id,
             )
         )
-        await db.log_audit(
-            "task_failed",
-            f"Task rejected before execution: {reason}",
-            severity="warning",
-            context={"task_id": task_id, "reason": reason},
-            task_id=task_id,
+        await log_event(
+            AuditEventType.SCAN_FAILED,
+            scan_id=task_id,
+            plugin_id=task_row.get("plugin_id") if task_row else None,
+            target=task_row.get("target") if task_row else None,
+            actor="system",
+            metadata={"reason": reason, "phase": "pre_execution", "severity": "warning"},
         )
 
     async def execute_task(self, task_id: str):
@@ -281,6 +280,14 @@ class TaskExecutor:
             inputs = json.loads(task_row["inputs_json"])
             safe_mode = bool(task_row["safe_mode"])
             target = extract_target(inputs)
+            await log_event(
+                AuditEventType.SCAN_RUNNING,
+                scan_id=task_id,
+                plugin_id=plugin_id,
+                target=target,
+                actor="system",
+                metadata={"status": TaskStatus.RUNNING.value, "safe_mode": safe_mode},
+            )
 
             # ── Safe Mode & Network policy enforcement ───────────────────────
             # Enforce Safe Mode target validation inside TaskExecutor to guarantee
@@ -545,13 +552,18 @@ class TaskExecutor:
             await self._broadcast(task_id, "status", final_status)
             await self._invalidate_cached_views()
 
-            # Log completion
-            await db.log_audit(
-                "task_completed",
-                f"Task completed in {duration:.2f}s",
-                context={"task_id": task_id, "exit_code": locals().get('exit_code', 0)},
-                task_id=task_id,
-                plugin_id=plugin_id
+            await log_event(
+                AuditEventType.SCAN_COMPLETED if final_status == TaskStatus.COMPLETED.value else AuditEventType.SCAN_FAILED,
+                scan_id=task_id,
+                plugin_id=plugin_id,
+                target=target,
+                actor="system",
+                metadata={
+                    "duration_seconds": duration,
+                    "exit_code": locals().get("exit_code", 0),
+                    "status": final_status,
+                    "error_message": locals().get("error_message"),
+                },
             )
 
             logger.info(f"Task {task_id} completed in {duration:.2f}s")
@@ -581,6 +593,14 @@ class TaskExecutor:
             )
             await self._broadcast(task_id, "status", TaskStatus.CANCELLED.value)
             await self._invalidate_cached_views()
+            await log_event(
+                AuditEventType.SCAN_CANCELLED,
+                scan_id=task_id,
+                plugin_id=locals().get("plugin_id"),
+                target=locals().get("target"),
+                actor="system",
+                metadata={"duration_seconds": duration},
+            )
             raise  # let asyncio complete the cancellation
 
         except CapabilityDeniedError as e:
@@ -643,12 +663,13 @@ class TaskExecutor:
             await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
             await self._invalidate_cached_views()
 
-            await db.log_audit(
-                "task_failed",
-                f"Task failed: {str(e)}",
-                severity="error",
-                context={"task_id": task_id, "error": str(e)},
-                task_id=task_id
+            await log_event(
+                AuditEventType.SCAN_FAILED,
+                scan_id=task_id,
+                plugin_id=locals().get("plugin_id"),
+                target=locals().get("target"),
+                actor="system",
+                metadata={"error": str(e), "duration_seconds": duration, "severity": "error"},
             )
         finally:
             # Always clean up: remove from the in-memory registry and
@@ -811,10 +832,14 @@ class TaskExecutor:
         await self._broadcast(task_id, "status", TaskStatus.CANCELLED.value)
         await self._invalidate_cached_views()
 
-        await db.log_audit(
-            "task_cancelled",
-            "Task cancelled by user",
-            task_id=task_id
+        status_row = await db.fetchone("SELECT plugin_id, target FROM tasks WHERE id = ?", (task_id,))
+        await log_event(
+            AuditEventType.SCAN_CANCELLED,
+            scan_id=task_id,
+            plugin_id=status_row.get("plugin_id") if status_row else None,
+            target=status_row.get("target") if status_row else None,
+            actor="user",
+            metadata={"reason": "Task cancelled by user"},
         )
 
         return True

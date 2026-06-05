@@ -29,3 +29,4 @@ CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status);
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_event_type ON audit_log(event_type);
 CREATE INDEX IF NOT EXISTS idx_audit_task_id ON audit_log(task_id);
+CREATE INDEX IF NOT EXISTS idx_audit_scan_id ON audit_log(scan_id);
