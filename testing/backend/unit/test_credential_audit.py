@@ -263,3 +263,34 @@ class TestConcurrentAccess:
         assert result["total"] == 12
         names = {e["credential_name"] for e in result["entries"]}
         assert all(f"cred-{i}" in names for i in range(12))
+
+
+class TestVaultUsageAllAccessControl:
+    """Route-level tests ensuring /vault/usage/all is admin-only."""
+
+    def test_non_admin_caller_rejected(self, test_client):
+        resp = test_client.get("/api/v1/vault/usage/all")
+        assert resp.status_code in (401, 403)
+
+    def test_wrong_admin_key_rejected(self, test_client):
+        resp = test_client.get(
+            "/api/v1/vault/usage/all",
+            headers={"X-Admin-Api-Key": "wrong-admin-key-xyz"},
+        )
+        assert resp.status_code in (401, 403)
+
+    def test_valid_admin_key_allowed(self, test_client):
+        from backend.secuscan.config import settings
+        resp = test_client.get(
+            "/api/v1/vault/usage/all",
+            headers={"X-Admin-Api-Key": settings.admin_api_key},
+        )
+        assert resp.status_code == 200
+        assert "entries" in resp.json()
+
+    def test_per_credential_usage_requires_api_key(self, test_client):
+        resp = test_client.get(
+            "/api/v1/vault/nonexistent-cred/usage",
+            headers={"X-Api-Key": "wrong-key"},
+        )
+        assert resp.status_code in (401, 403)

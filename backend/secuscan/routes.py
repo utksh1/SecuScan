@@ -1328,27 +1328,6 @@ async def get_credential_usage_history(
     return await db.get_credential_usage(credential_name=name, limit=limit, offset=offset)
 
 
-@router.get("/vault/usage/all", dependencies=[Depends(vault_limiter), Depends(admin_limiter)])
-async def get_all_credential_usage(
-    access_type: Optional[str] = None,
-    owner_id: Optional[str] = None,
-    limit: int = 100,
-    offset: int = 0,
-):
-    """Return the full credential access log filtered by access_type or owner (admin-level view)."""
-    if limit < 1 or limit > 1000:
-        raise HTTPException(status_code=400, detail="limit must be between 1 and 1000")
-    if offset < 0:
-        raise HTTPException(status_code=400, detail="offset must be non-negative")
-    if access_type and access_type not in ("read", "write", "delete", "list"):
-        raise HTTPException(
-            status_code=400,
-            detail="access_type must be one of: read, write, delete, list",
-        )
-    db = await get_db()
-    return await db.get_all_credential_usage(
-        access_type=access_type, owner_id=owner_id, limit=limit, offset=offset
-    )
 
 
 @router.get("/task/{task_id}/credentials")
@@ -1908,4 +1887,32 @@ async def export_audit_log(format: str = "json"):
         content=content,
         media_type=mime_type,
         headers={"Content-Disposition": f"attachment; filename=network-audit.{format}"}
+    )
+
+
+@router.get("/vault/usage/all", dependencies=[Depends(verify_admin_access), Depends(vault_limiter), Depends(admin_limiter)])
+async def get_all_credential_usage(
+    access_type: Optional[str] = None,
+    owner_id: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    """Return the full credential access log filtered by access_type or owner.
+
+    Admin-key gated: only callers with a valid X-Admin-Api-Key header can
+    query this view. This prevents API callers from reading access history
+    belonging to other owners.
+    """
+    if limit < 1 or limit > 1000:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 1000")
+    if offset < 0:
+        raise HTTPException(status_code=400, detail="offset must be non-negative")
+    if access_type and access_type not in ("read", "write", "delete", "list"):
+        raise HTTPException(
+            status_code=400,
+            detail="access_type must be one of: read, write, delete, list",
+        )
+    db = await get_db()
+    return await db.get_all_credential_usage(
+        access_type=access_type, owner_id=owner_id, limit=limit, offset=offset
     )
