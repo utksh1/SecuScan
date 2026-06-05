@@ -166,6 +166,20 @@ class Database:
                 updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
             );
 
+            CREATE TABLE IF NOT EXISTS credential_access_log (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                credential_name TEXT NOT NULL,
+                access_type  TEXT NOT NULL,
+                task_id      TEXT,
+                owner_id     TEXT NOT NULL DEFAULT 'default',
+                accessed_at  TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_cred_access_name        ON credential_access_log(credential_name);
+            CREATE INDEX IF NOT EXISTS idx_cred_access_task_id     ON credential_access_log(task_id);
+            CREATE INDEX IF NOT EXISTS idx_cred_access_accessed_at ON credential_access_log(accessed_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_cred_access_owner       ON credential_access_log(owner_id);
+
             CREATE TABLE IF NOT EXISTS workflows (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL UNIQUE,
@@ -445,6 +459,83 @@ class Database:
                 plugin_id,
             ),
         )
+
+
+    async def log_credential_access(
+        self,
+        credential_name: str,
+        access_type: str,
+        owner_id: str = "default",
+        task_id: Optional[str] = None,
+    ) -> None:
+        """Record a vault credential access event without storing the secret value.
+
+        access_type must be one of: read | write | delete | list.
+        credential_name is the human-readable vault key name, never the plaintext value.
+        """
+        await self.execute(
+            "INSERT INTO credential_access_log "
+            "(credential_name, access_type, task_id, owner_id) VALUES (?, ?, ?, ?)",
+            (credential_name, access_type, task_id, owner_id),
+        )
+
+    async def get_credential_usage(
+        self,
+        credential_name: str,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> Dict:
+        """Return paginated access history for a named credential (names only, no values)."""
+        count_row = await self.fetchone(
+            "SELECT COUNT(*) AS total FROM credential_access_log WHERE credential_name = ?",
+            (credential_name,),
+        )
+        total = count_row["total"] if count_row else 0
+        rows = await self.fetchall(
+            "SELECT id, credential_name, access_type, task_id, owner_id, accessed_at "
+            "FROM credential_access_log WHERE credential_name = ? "
+            "ORDER BY accessed_at DESC LIMIT ? OFFSET ?",
+            (credential_name, limit, offset),
+        )
+        return {"credential_name": credential_name, "total": total, "entries": rows}
+
+    async def get_task_credential_usage(self, task_id: str) -> Dict:
+        """Return all credential names accessed by a specific task (no values)."""
+        rows = await self.fetchall(
+            "SELECT credential_name, access_type, accessed_at "
+            "FROM credential_access_log WHERE task_id = ? ORDER BY accessed_at ASC",
+            (task_id,),
+        )
+        names = list({r["credential_name"] for r in rows})
+        return {"task_id": task_id, "credential_names": names, "access_events": rows}
+
+    async def get_all_credential_usage(
+        self,
+        access_type: Optional[str] = None,
+        owner_id: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> Dict:
+        """Return paginated credential access log, optionally filtered."""
+        filters: List[str] = []
+        params: List[Any] = []
+        if access_type:
+            filters.append("access_type = ?")
+            params.append(access_type)
+        if owner_id:
+            filters.append("owner_id = ?")
+            params.append(owner_id)
+        where = ("WHERE " + " AND ".join(filters)) if filters else ""
+        count_row = await self.fetchone(
+            f"SELECT COUNT(*) AS total FROM credential_access_log {where}", tuple(params)
+        )
+        total = count_row["total"] if count_row else 0
+        rows = await self.fetchall(
+            f"SELECT id, credential_name, access_type, task_id, owner_id, accessed_at "
+            f"FROM credential_access_log {where} ORDER BY accessed_at DESC LIMIT ? OFFSET ?",
+            tuple(params) + (limit, offset),
+        )
+        return {"total": total, "entries": rows}
 
 
 db: Optional[Database] = None
