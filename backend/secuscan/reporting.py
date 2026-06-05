@@ -284,17 +284,43 @@ class ReportGenerator:
         return value
 
     @classmethod
+    def _build_pdf_finding_markup(cls, finding: Dict[str, Any], target: str, critical_icon: str) -> str:
+        evidence_html = f"<h4>Evidence</h4><pre>{cls._escape_html(finding['proof'])}</pre>" if finding.get("proof") else ""
+        remediation_html = f"<div class='remediation'><h4>Recommended action</h4><p>{cls._escape_html(finding['remediation'])}</p></div>" if finding.get("remediation") else ""
+        cve_html = f"<p class='meta'>CVE: {cls._escape_html(finding['cve'])}</p>" if finding.get("cve") else ""
+
+        return f"""
+            <div class="finding">
+              <table class="finding-header">
+                <tr>
+                  <td class="severity severity-{finding['severity'].lower()}"><img class="severity-icon" src="{critical_icon}" alt=""> {cls._escape_html(finding['severity'])}</td>
+                  <td>
+                    <h3>{cls._escape_html(finding['title'])}</h3>
+                    <p>{cls._escape_html(finding['category'])} | {cls._escape_html_with_breaks(finding['target'] or target, " ")}</p>
+                  </td>
+                </tr>
+              </table>
+              <h4>Description</h4>
+              <p>{cls._escape_html(finding['description'])}</p>
+              {evidence_html}
+              {remediation_html}
+              {cve_html}
+            </div>
+            """
+
+    @classmethod
     def _generate_pdf_html_report(cls, task: Dict[str, Any], result: Dict[str, Any]) -> str:
         """Generate conservative HTML/CSS that xhtml2pdf can paginate reliably."""
         payload = cls._build_report_payload(task, result)
-        findings = payload["findings"]
         severity_counts = payload["severity_counts"]
+
         shield_icon = cls._icon_data_uri("shield", "1e3a5f")
         target_icon = cls._icon_data_uri("target", "2563eb")
         findings_icon = cls._icon_data_uri("findings", "0f172a")
         critical_icon = cls._icon_data_uri("critical", "991b1b")
         rows_icon = cls._icon_data_uri("rows", "2563eb")
         clock_icon = cls._icon_data_uri("clock", "475569")
+
         target_html = cls._escape_html_with_breaks(payload["target"], " ")
 
         summary_markup = "".join(
@@ -304,26 +330,10 @@ class ReportGenerator:
             f"<tr><td><label>{cls._escape_html(item['label'])}</label><strong>{cls._escape_html(item['value'])}</strong></td></tr>"
             for item in payload["scan_parameters"]
         )
+
         finding_markup = "".join(
-            f"""
-            <div class="finding">
-              <table class="finding-header">
-                <tr>
-                  <td class="severity severity-{finding['severity'].lower()}"><img class="severity-icon" src="{critical_icon}" alt=""> {cls._escape_html(finding['severity'])}</td>
-                  <td>
-                    <h3>{cls._escape_html(finding['title'])}</h3>
-                    <p>{cls._escape_html(finding['category'])} | {cls._escape_html_with_breaks(finding['target'] or payload['target'], " ")}</p>
-                  </td>
-                </tr>
-              </table>
-              <h4>Description</h4>
-              <p>{cls._escape_html(finding['description'])}</p>
-              {f"<h4>Evidence</h4><pre>{cls._escape_html(finding['proof'])}</pre>" if finding['proof'] else ""}
-              {f"<div class='remediation'><h4>Recommended action</h4><p>{cls._escape_html(finding['remediation'])}</p></div>" if finding['remediation'] else ""}
-              {f"<p class='meta'>CVE: {cls._escape_html(finding['cve'])}</p>" if finding['cve'] else ""}
-            </div>
-            """
-            for finding in findings
+            cls._build_pdf_finding_markup(finding, payload["target"], critical_icon)
+            for finding in payload["findings"]
         )
 
         if not finding_markup:
@@ -546,7 +556,7 @@ class ReportGenerator:
 
   <table class="stats">
     <tr>
-      <td><img class="stat-icon" src="{findings_icon}" alt=""><label>Total findings</label><strong>{len(findings)}</strong></td>
+      <td><img class="stat-icon" src="{findings_icon}" alt=""><label>Total findings</label><strong>{len(payload['findings'])}</strong></td>
       <td><img class="stat-icon" src="{critical_icon}" alt=""><label>Critical</label><strong>{severity_counts['CRITICAL']}</strong></td>
       <td><img class="stat-icon" src="{target_icon}" alt=""><label>High</label><strong>{severity_counts['HIGH']}</strong></td>
       <td><img class="stat-icon" src="{rows_icon}" alt=""><label>Structured rows</label><strong>{len(payload['rows'])}</strong></td>
@@ -590,17 +600,45 @@ class ReportGenerator:
         return output.getvalue()
 
     @classmethod
+    def _build_web_finding_markup(cls, finding: Dict[str, Any], target: str, critical_icon: str) -> str:
+        evidence_html = f"<section><h4>Evidence</h4><pre>{cls._escape_html(finding['proof'])}</pre></section>" if finding.get("proof") else ""
+        remediation_html = f"<section class='remediation'><h4>Recommended action</h4><p>{cls._escape_html(finding['remediation'])}</p></section>" if finding.get("remediation") else ""
+        cve_html = f"<section class='meta'><span>CVE: {cls._escape_html(finding['cve'])}</span></section>" if finding.get("cve") else ""
+
+        return f"""
+            <article class="finding-card">
+                <div class="finding-top">
+                    <span class="severity severity-{finding['severity'].lower()}"><img class="mini-icon" src="{critical_icon}" alt=""> {cls._escape_html(finding['severity'])}</span>
+                    <div class="finding-heading">
+                        <h3>{cls._escape_html(finding['title'])}</h3>
+                        <p>{cls._escape_html(finding['category'])} | {cls._escape_html_with_breaks(finding['target'] or target)}</p>
+                    </div>
+                </div>
+                <div class="finding-body">
+                    <section>
+                        <h4>Description</h4>
+                        <p>{cls._escape_html(finding['description'])}</p>
+                    </section>
+                    {evidence_html}
+                    {remediation_html}
+                    {cve_html}
+                </div>
+            </article>
+            """
+
+    @classmethod
     def generate_html_report(cls, task: Dict[str, Any], result: Dict[str, Any]) -> str:
         """Generate a modern HTML report suitable for direct download."""
         payload = cls._build_report_payload(task, result)
-        findings = payload["findings"]
         severity_counts = payload["severity_counts"]
+
         shield_icon = cls._icon_data_uri("shield", "1e3a5f")
         target_icon = cls._icon_data_uri("target", "2563eb")
         findings_icon = cls._icon_data_uri("findings", "0f172a")
         critical_icon = cls._icon_data_uri("critical", "991b1b")
         rows_icon = cls._icon_data_uri("rows", "2563eb")
         clock_icon = cls._icon_data_uri("clock", "475569")
+
         target_html = cls._escape_html_with_breaks(payload["target"])
 
         summary_markup = "".join(
@@ -610,28 +648,10 @@ class ReportGenerator:
             f"<div class=\"meta-card\"><label>{cls._escape_html(item['label'])}</label><strong>{cls._escape_html(item['value'])}</strong></div>"
             for item in payload["scan_parameters"]
         )
+
         finding_markup = "".join(
-            f"""
-            <article class="finding-card">
-                <div class="finding-top">
-                    <span class="severity severity-{finding['severity'].lower()}"><img class="mini-icon" src="{critical_icon}" alt=""> {cls._escape_html(finding['severity'])}</span>
-                    <div class="finding-heading">
-                        <h3>{cls._escape_html(finding['title'])}</h3>
-                        <p>{cls._escape_html(finding['category'])} | {cls._escape_html_with_breaks(finding['target'] or payload['target'])}</p>
-                    </div>
-                </div>
-                <div class="finding-body">
-                    <section>
-                        <h4>Description</h4>
-                        <p>{cls._escape_html(finding['description'])}</p>
-                    </section>
-                    {f"<section><h4>Evidence</h4><pre>{cls._escape_html(finding['proof'])}</pre></section>" if finding['proof'] else ""}
-                    {f"<section class='remediation'><h4>Recommended action</h4><p>{cls._escape_html(finding['remediation'])}</p></section>" if finding['remediation'] else ""}
-                    {f"<section class='meta'><span>CVE: {cls._escape_html(finding['cve'])}</span></section>" if finding['cve'] else ""}
-                </div>
-            </article>
-            """
-            for finding in findings
+            cls._build_web_finding_markup(finding, payload["target"], critical_icon)
+            for finding in payload["findings"]
         )
 
         if not finding_markup:
@@ -914,7 +934,7 @@ class ReportGenerator:
     </div>
 
     <div class="stat-grid">
-      <div class="stat-card" style="--accent: #0f172a;"><div class="stat-card-header"><label>Total findings</label><span class="card-icon"><img src="{findings_icon}" alt=""></span></div><strong>{len(findings)}</strong></div>
+      <div class="stat-card" style="--accent: #0f172a;"><div class="stat-card-header"><label>Total findings</label><span class="card-icon"><img src="{findings_icon}" alt=""></span></div><strong>{len(payload['findings'])}</strong></div>
       <div class="stat-card" style="--accent: #991b1b;"><div class="stat-card-header"><label>Critical</label><span class="card-icon"><img src="{critical_icon}" alt=""></span></div><strong>{severity_counts['CRITICAL']}</strong></div>
       <div class="stat-card" style="--accent: #dc2626;"><div class="stat-card-header"><label>High</label><span class="card-icon"><img src="{target_icon}" alt=""></span></div><strong>{severity_counts['HIGH']}</strong></div>
       <div class="stat-card" style="--accent: #2563eb;"><div class="stat-card-header"><label>Structured rows</label><span class="card-icon"><img src="{rows_icon}" alt=""></span></div><strong>{len(payload['rows'])}</strong></div>
@@ -977,12 +997,57 @@ class ReportGenerator:
         return output.getvalue()
 
     @classmethod
+    def _extract_sarif_rule_id(cls, finding: Dict[str, Any]) -> str:
+        """Extract a stable, deterministic rule ID for SARIF."""
+        raw_rule_id = None
+
+        cve = finding.get("cve")
+        if cve and isinstance(cve, str) and cve.strip():
+            raw_rule_id = cve.strip()
+
+        if not raw_rule_id:
+            cwe = finding.get("cwe") or finding.get("metadata", {}).get("cwe")
+            if cwe and isinstance(cwe, str) and cwe.strip():
+                raw_rule_id = cwe.strip()
+
+        if not raw_rule_id:
+            for key in ["check_id", "plugin_rule_id", "rule_id", "id"]:
+                val = finding.get(key) or finding.get("metadata", {}).get(key)
+                if val and isinstance(val, str) and val.strip():
+                    raw_rule_id = val.strip()
+                    break
+
+        if not raw_rule_id:
+            raw_rule_id = finding.get("title") or "security-finding"
+
+        rule_id = re.sub(r"[^a-zA-Z0-9\-]", "-", raw_rule_id).lower()
+        rule_id = re.sub(r"-+", "-", rule_id).strip("-")
+        return rule_id if rule_id else "security-finding"
+
+    @classmethod
+    def _extract_sarif_locations(cls, finding: Dict[str, Any], default_target: str) -> List[Dict[str, Any]]:
+        """Extract location data for a SARIF finding."""
+        target = finding.get("target") or default_target
+        if not target:
+            return []
+
+        is_url = "://" in target or target.startswith(("http://", "https://"))
+        location = {"physicalLocation": {"artifactLocation": {"uri": target}}}
+
+        if not is_url and ":" in target:
+            parts = target.split(":")
+            if parts[-1].isdigit():
+                location["physicalLocation"]["artifactLocation"]["uri"] = ":".join(parts[:-1])
+                location["physicalLocation"]["region"] = {"startLine": int(parts[-1])}
+
+        return [location]
+
+    @classmethod
     def generate_sarif_report(cls, task: Dict[str, Any], result: Dict[str, Any]) -> str:
         """Generate a SARIF v2.1.0 report for GitHub Code Scanning."""
         payload = cls._build_report_payload(task, result)
         tool_name = payload["tool_name"]
 
-        # Define severity mapping to SARIF levels
         severity_map = {
             "CRITICAL": "error",
             "HIGH": "error",
@@ -996,37 +1061,7 @@ class ReportGenerator:
         results = []
 
         for finding in payload["findings"]:
-            # Derive a stable, deterministic rule ID from finding-specific identifiers
-            raw_rule_id = None
-
-            # 1. Check CVE
-            cve = finding.get("cve")
-            if cve and isinstance(cve, str) and cve.strip():
-                raw_rule_id = cve.strip()
-
-            # 2. Check CWE (direct or in metadata)
-            if not raw_rule_id:
-                cwe = finding.get("cwe") or finding.get("metadata", {}).get("cwe")
-                if cwe and isinstance(cwe, str) and cwe.strip():
-                    raw_rule_id = cwe.strip()
-
-            # 3. Check specific check/plugin/finding identifiers
-            if not raw_rule_id:
-                for key in ["check_id", "plugin_rule_id", "rule_id", "id"]:
-                    val = finding.get(key) or finding.get("metadata", {}).get(key)
-                    if val and isinstance(val, str) and val.strip():
-                        raw_rule_id = val.strip()
-                        break
-
-            # 4. Fallback to sanitized title
-            if not raw_rule_id:
-                raw_rule_id = finding.get("title") or "security-finding"
-
-            # Sanitize raw rule ID (lowercase, replace non-alphanumeric with hyphens)
-            rule_id = re.sub(r"[^a-zA-Z0-9\-]", "-", raw_rule_id).lower()
-            rule_id = re.sub(r"-+", "-", rule_id).strip("-")
-            if not rule_id:
-                rule_id = "security-finding"
+            rule_id = cls._extract_sarif_rule_id(finding)
 
             if rule_id not in rule_indices:
                 rule_indices[rule_id] = len(rules)
@@ -1054,34 +1089,8 @@ class ReportGenerator:
                     "text": finding.get("description", "Security finding detected")
                 },
                 "level": severity_map.get(finding["severity"], "note"),
-                "locations": []
+                "locations": cls._extract_sarif_locations(finding, payload["target"])
             }
-
-            # Attempt to extract location if available
-            target = finding.get("target") or payload["target"]
-            # Check if target looks like a file path or URI
-            if target:
-                is_url = "://" in target or target.startswith(("http://", "https://"))
-
-                location = {
-                    "physicalLocation": {
-                        "artifactLocation": {
-                            "uri": target
-                        }
-                    }
-                }
-
-                # If target has a line number like file.py:123 and is NOT a web URL
-                if not is_url and ":" in target:
-                    parts = target.split(":")
-                    if parts[-1].isdigit():
-                        location["physicalLocation"]["artifactLocation"]["uri"] = ":".join(parts[:-1])
-                        location["physicalLocation"]["region"] = {
-                            "startLine": int(parts[-1])
-                        }
-
-                sarif_result["locations"].append(location)
-
             results.append(sarif_result)
 
         sarif_output = {
