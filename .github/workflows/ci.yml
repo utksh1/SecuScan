@@ -43,6 +43,16 @@ jobs:
           git fetch origin "${{ github.base_ref }}" --depth=1
           git diff --check "origin/${{ github.base_ref }}"...HEAD
 
+  issue-template-label-validation:
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: Validate issue template labels
+      run: python scripts/validate_issue_template_labels.py
+
   backend-lint:
     needs: detect-changes
     if: needs.detect-changes.outputs.run_backend == 'true'
