@@ -55,6 +55,12 @@ The project is designed to be:
 - `frontend/testing/`: frontend unit and end-to-end test files
 - `docs/`: supporting project documentation
 - `scripts/`: helper scripts for signing, benchmarking, and maintenance
+- `.github/`: GitHub Actions workflows, issue templates, and contributor automation
+- `assets/`: project branding assets and images
+- `data/`: shared raw and generated project data
+- `output/`: generated reports and exported scan artifacts (runtime-generated)
+- `wordlists/`: wordlists used by scanning and enumeration plugins
+- `scratch/`: experimental utilities and temporary development helpers
 
 ## Prerequisites
 
