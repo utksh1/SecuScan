@@ -59,6 +59,26 @@ class Settings(BaseSettings):
     enforce_plugin_signatures: bool = False
     vault_key: Optional[str] = None
     denied_capabilities: List[str] = []
+    admin_api_key: Optional[str] = None
+
+    # Network Policy Configuration
+    network_allowlist: List[str] = []  # IPs/networks to allow (CIDR)
+    network_denylist: List[str] = [    # IPs/networks to deny (CIDR)
+        "169.254.169.254/32",          # AWS metadata
+        "169.254.0.0/16",              # Reserved/metadata
+        "127.0.0.0/8",                 # Loopback (for remote execution)
+        "10.0.0.0/8",                  # Private RFC 1918
+        "172.16.0.0/12",               # Private RFC 1918
+        "192.168.0.0/16",              # Private RFC 1918
+        "100.64.0.0/10",               # Carrier-grade NAT (RFC 6598)
+        "fc00::/7",                    # IPv6 Unique Local Address
+        "fe80::/10",                   # IPv6 Link-local
+        "::1/128",                     # IPv6 Loopback
+    ]
+    network_audit_log_file: str = str(PROJECT_ROOT / "logs" / "network.audit.log")
+    network_audit_retention_days: int = 90
+    enforce_network_policy: bool = True
+    network_policy_failure_mode: str = "block"  # "block" or "log_only"
 
     # Rate Limiting
     max_concurrent_tasks: int = 3
@@ -78,6 +98,12 @@ class Settings(BaseSettings):
     rate_limit_read_heavy_limit: int = 100
     rate_limit_read_heavy_window: int = 60
 
+    # Scheduler tick: one trigger per 10 seconds allows legitimate external
+    # callers while preventing a tight loop from forcing continuous workflow
+    # execution and exhausting scan quotas.
+    rate_limit_scheduler_tick_limit: int = 1
+    rate_limit_scheduler_tick_window: int = 10
+
     trusted_proxies: List[str] = ["127.0.0.1", "::1"]
 
     # Sandbox
@@ -85,6 +111,7 @@ class Settings(BaseSettings):
     sandbox_timeout: int = 600  # seconds
     sandbox_cpu_quota: float = 0.5
     sandbox_memory_mb: int = 512
+    docker_network: str = "restricted"  # Docker network name for sandboxed containers
 
     # Task-start payload limits (tunable via env vars)
     task_start_max_body_bytes: int = 64_000       # 64 KB total JSON body
@@ -103,7 +130,15 @@ class Settings(BaseSettings):
         env_prefix = "SECUSCAN_"
         case_sensitive = False
 
-    @field_validator("cors_allowed_origins", "cors_allowed_methods", "cors_allowed_headers", "trusted_proxies", mode="before")
+    @field_validator(
+        "cors_allowed_origins",
+        "cors_allowed_methods",
+        "cors_allowed_headers",
+        "trusted_proxies",
+        "network_allowlist",
+        "network_denylist",
+        mode="before",
+    )
     @classmethod
     def parse_csv_or_list(cls, value: Any) -> Any:
         """Allow comma-separated env values in addition to JSON arrays."""
@@ -148,7 +183,6 @@ class Settings(BaseSettings):
         # Create gitkeep files
         (Path(self.raw_output_dir) / ".gitkeep").touch()
         (Path(self.reports_dir) / ".gitkeep").touch()
-
 
 # Global settings instance
 settings = Settings()

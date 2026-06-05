@@ -9,11 +9,10 @@ import json
 import logging
 import re
 import os
-import shutil
 import uuid
 import asyncio
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 
 def parse_json_fields(rows: List[Dict], fields: List[str]) -> List[Dict]:
     """Helper to parse stringified JSON fields from SQLite."""
@@ -109,7 +108,7 @@ from .models import (
     TaskCreateRequest, TaskResponse, TaskResult,
     PluginListResponse, ErrorResponse, BulkDeleteRequest,
     NotificationRuleCreate, NotificationRuleUpdate,
-    NotificationChannelType,
+    NotificationChannelType, TaskStatus,
 )
 from .config import settings
 from .database import get_db
@@ -120,13 +119,14 @@ from .ratelimit import (
     rate_limiter, concurrent_limiter,
     task_start_limiter, vault_limiter,
     report_download_limiter, read_heavy_limiter,
-    resolve_client_identity,
+    resolve_client_identity, admin_limiter,
+    scheduler_tick_limiter,
 )
 from .validation import validate_target, validate_task_start_payload, validate_url
 from .reporting import reporting
 from .vault import VaultCrypto
 from .workflows import scheduler
-from .auth import require_api_key
+from .auth import require_api_key, get_current_owner
 
 from sse_starlette.sse import EventSourceResponse
 
@@ -192,6 +192,21 @@ async def invalidate_view_cache():
     cache = await get_cache()
     for prefix in ["summary:", "findings:", "reports:", "tasks:"]:
         await cache.delete_prefix(prefix)
+
+
+async def require_owned_task(db, task_id: str, owner: str, columns: str = "owner_id") -> Dict[str, Any]:
+    """Fetch a task and enforce that it belongs to ``owner`` (issue #401).
+
+    Returns the selected row on success. Raises 404 when the task does not
+    exist and 403 when it is owned by a different user/workspace. ``columns``
+    must include ``owner_id`` so the ownership comparison can be made.
+    """
+    row = await db.fetchone(f"SELECT {columns} FROM tasks WHERE id = ?", (task_id,))
+    if row is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if row.get("owner_id") != owner:
+        raise HTTPException(status_code=403, detail="You do not have access to this task")
+    return row
 
 
 def iter_raw_output_chunks(path: str, chunk_size: int = SSE_RAW_OUTPUT_CHUNK_SIZE):
@@ -298,6 +313,7 @@ async def start_task(
     request: TaskCreateRequest,
     background_tasks: BackgroundTasks,
     raw_request: Request,
+    owner: str = Depends(get_current_owner),
 ):
     """
     Start a new scan task.
@@ -388,6 +404,7 @@ async def start_task(
             safe_mode=safe_mode,
             preset=request.preset,
             consent_granted=request.consent_granted,
+            owner_id=owner,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -418,8 +435,11 @@ async def start_task(
     }
 
 @router.get("/task/{task_id}/status")
-async def get_task_status(task_id: str):
+async def get_task_status(task_id: str, owner: str = Depends(get_current_owner)):
     """Get task status"""
+    db = await get_db()
+    await require_owned_task(db, task_id, owner)
+
     status = await executor.get_task_status(task_id)
 
     if not status:
@@ -428,9 +448,12 @@ async def get_task_status(task_id: str):
     return status
 
 @router.get("/task/{task_id}/stream")
-async def stream_task_output(task_id: str):
+async def stream_task_output(task_id: str, owner: str = Depends(get_current_owner)):
     """Stream task output via Server-Sent Events (SSE)"""
     import asyncio
+
+    db = await get_db()
+    await require_owned_task(db, task_id, owner)
 
     status = await executor.get_task_status(task_id)
     if not status:
@@ -490,16 +513,19 @@ async def stream_task_output(task_id: str):
     return EventSourceResponse(event_generator())
 
 @router.get("/task/{task_id}/report/csv", dependencies=[Depends(report_download_limiter)])
-async def download_csv_report(task_id: str):
+async def download_csv_report(task_id: str, owner: str = Depends(get_current_owner)):
     """Download task results as a CSV report."""
     db = await get_db()
     task_row = await db.fetchone(
-        "SELECT id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
+        "SELECT id, owner_id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
         (task_id,)
     )
 
     if not task_row:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    if task_row["owner_id"] != owner:
+        raise HTTPException(status_code=403, detail="You do not have access to this task")
 
     if task_row["status"] not in ["completed", "failed"]:
         raise HTTPException(status_code=400, detail="Task is not finished yet")
@@ -525,16 +551,19 @@ async def download_csv_report(task_id: str):
     )
 
 @router.get("/task/{task_id}/report/html", dependencies=[Depends(report_download_limiter)])
-async def download_html_report(task_id: str):
+async def download_html_report(task_id: str, owner: str = Depends(get_current_owner)):
     """Download task results as an HTML report."""
     db = await get_db()
     task_row = await db.fetchone(
-        "SELECT id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
+        "SELECT id, owner_id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
         (task_id,)
     )
 
     if not task_row:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    if task_row["owner_id"] != owner:
+        raise HTTPException(status_code=403, detail="You do not have access to this task")
 
     if task_row["status"] not in ["completed", "failed"]:
         raise HTTPException(status_code=400, detail="Task is not finished yet")
@@ -560,16 +589,19 @@ async def download_html_report(task_id: str):
     )
 
 @router.get("/task/{task_id}/report/pdf", dependencies=[Depends(report_download_limiter)])
-async def download_pdf_report(task_id: str):
+async def download_pdf_report(task_id: str, owner: str = Depends(get_current_owner)):
     """Download task results as a PDF report."""
     db = await get_db()
     task_row = await db.fetchone(
-        "SELECT id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
+        "SELECT id, owner_id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
         (task_id,)
     )
 
     if not task_row:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    if task_row["owner_id"] != owner:
+        raise HTTPException(status_code=403, detail="You do not have access to this task")
 
     if task_row["status"] not in ["completed", "failed"]:
         raise HTTPException(status_code=400, detail="Task is not finished yet")
@@ -596,16 +628,19 @@ async def download_pdf_report(task_id: str):
 
 
 @router.get("/task/{task_id}/report/sarif", dependencies=[Depends(report_download_limiter)])
-async def download_sarif_report(task_id: str):
+async def download_sarif_report(task_id: str, owner: str = Depends(get_current_owner)):
     """Download task results as a SARIF report."""
     db = await get_db()
     task_row = await db.fetchone(
-        "SELECT id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
+        "SELECT id, owner_id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
         (task_id,)
     )
 
     if not task_row:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    if task_row["owner_id"] != owner:
+        raise HTTPException(status_code=403, detail="You do not have access to this task")
 
     if task_row["status"] not in ["completed", "failed"]:
         raise HTTPException(status_code=400, detail="Task is not finished yet")
@@ -632,13 +667,13 @@ async def download_sarif_report(task_id: str):
 
 
 @router.get("/task/{task_id}/result")
-async def get_task_result(task_id: str):
+async def get_task_result(task_id: str, owner: str = Depends(get_current_owner)):
     """Get task execution result"""
     db = await get_db()
 
     task_row = await db.fetchone(
         """
-        SELECT id, plugin_id, tool_name, target, status,
+        SELECT id, owner_id, plugin_id, tool_name, target, status,
                created_at, duration_seconds, structured_json, preset, inputs_json,
                raw_output_path, command_used, error_message, exit_code
         FROM tasks WHERE id = ?
@@ -648,6 +683,9 @@ async def get_task_result(task_id: str):
 
     if not task_row:
         raise HTTPException(status_code=404, detail="Task not found")
+
+    if task_row["owner_id"] != owner:
+        raise HTTPException(status_code=403, detail="You do not have access to this task")
 
     structured = {}
     if task_row["structured_json"]:
@@ -718,8 +756,11 @@ async def get_task_result(task_id: str):
 
 
 @router.post("/task/{task_id}/cancel")
-async def cancel_task(task_id: str):
+async def cancel_task(task_id: str, owner: str = Depends(get_current_owner)):
     """Cancel a running task"""
+    db = await get_db()
+    await require_owned_task(db, task_id, owner)
+
     cancelled = await executor.cancel_task(task_id)
 
     if not cancelled:
@@ -733,20 +774,24 @@ async def cancel_task(task_id: str):
 
 
 @router.get("/dashboard/summary", dependencies=[Depends(read_heavy_limiter)])
-async def get_dashboard_summary():
-    """Return aggregate dashboard data from the primary store, cached in Redis."""
+async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
+    """Return the caller's aggregate dashboard data, cached per owner."""
 
     async def build():
         db = await get_db()
 
         # Get data
-        # Push severity aggregation to DB — avoids full table scan in Python
+        # Push severity aggregation to DB — avoids full table scan in Python.
+        # Every aggregate below is scoped to the caller so the dashboard never
+        # surfaces another user/workspace's tasks or findings (issue #401).
         severity_rows = await db.fetchall(
             """
             SELECT severity, COUNT(*) AS cnt
             FROM findings
+            WHERE owner_id = ?
             GROUP BY severity
-            """
+            """,
+            (owner,),
         )
         severity_counts = {row["severity"]: row["cnt"] for row in severity_rows}
 
@@ -757,10 +802,14 @@ async def get_dashboard_summary():
                 COUNT(*) FILTER (WHERE status = 'completed') AS completed,
                 COUNT(*) FILTER (WHERE status = 'running') AS running
             FROM tasks
-            """
+            WHERE owner_id = ?
+            """,
+            (owner,),
         )
 
-        total_findings_row = await db.fetchone("SELECT COUNT(*) AS total FROM findings")
+        total_findings_row = await db.fetchone(
+            "SELECT COUNT(*) AS total FROM findings WHERE owner_id = ?", (owner,)
+        )
         total_findings = total_findings_row["total"] if total_findings_row else 0
 
         critical_findings: int = severity_counts.get("critical", 0)
@@ -776,9 +825,11 @@ async def get_dashboard_summary():
                 remediation, proof, cvss, cve, discovered_at,
                 risk_score, risk_factors_json, metadata_json
             FROM findings
+            WHERE owner_id = ?
             ORDER BY discovered_at DESC
             LIMIT 5
-            """
+            """,
+            (owner,),
         )
         recent_findings: List[Dict] = parse_json_fields(recent_rows, ["metadata_json"])
 
@@ -805,47 +856,57 @@ async def get_dashboard_summary():
             },
             "running_tasks": parse_json_fields(
                 await db.fetchall(
-                    "SELECT id, plugin_id, tool_name, target, status, created_at FROM tasks WHERE status = 'running' ORDER BY created_at DESC LIMIT 5"
+                    "SELECT id, plugin_id, tool_name, target, status, created_at FROM tasks WHERE owner_id = ? AND status = 'running' ORDER BY created_at DESC LIMIT 5",
+                    (owner,),
                 ),
                 []
             ),
             "recent_tasks": parse_json_fields(
                 await db.fetchall(
-                    "SELECT id, plugin_id, tool_name, target, status, created_at, duration_seconds FROM tasks ORDER BY created_at DESC LIMIT 5"
+                    "SELECT id, plugin_id, tool_name, target, status, created_at, duration_seconds FROM tasks WHERE owner_id = ? ORDER BY created_at DESC LIMIT 5",
+                    (owner,),
                 ),
                 []
             )
         }
 
-    return await get_or_set_cached("summary:dashboard", build)
+    return await get_or_set_cached(f"summary:dashboard:{owner}", build)
 
 
 @router.get("/findings", dependencies=[Depends(read_heavy_limiter)])
-async def get_findings():
-    """Return vulnerability findings."""
+async def get_findings(owner: str = Depends(get_current_owner)):
+    """Return the caller's vulnerability findings."""
 
     async def build():
         db = await get_db()
-        rows = await db.fetchall("SELECT * FROM findings ORDER BY discovered_at DESC")
+        rows = await db.fetchall(
+            "SELECT * FROM findings WHERE owner_id = ? ORDER BY discovered_at DESC",
+            (owner,),
+        )
         findings = parse_json_fields(rows, ["metadata_json", "risk_factors_json"])
         for f in findings:
             if "risk_factors_json" in f:
                 f["risk_factors"] = f.pop("risk_factors_json")
         return {"findings": findings}
 
-    return await get_or_set_cached("findings:list", build)
+    # Cache key is namespaced by owner so one user's list is never served to
+    # another (issue #401).
+    return await get_or_set_cached(f"findings:list:{owner}", build)
 
 
 @router.get("/reports", dependencies=[Depends(read_heavy_limiter)])
-async def get_reports():
-    """Return generated reports."""
+async def get_reports(owner: str = Depends(get_current_owner)):
+    """Return the caller's generated reports."""
 
     async def build():
         db = await get_db()
-        rows = await db.fetchall("SELECT * FROM reports ORDER BY generated_at DESC")
+        rows = await db.fetchall(
+            "SELECT * FROM reports WHERE owner_id = ? ORDER BY generated_at DESC",
+            (owner,),
+        )
         return {"reports": parse_json_fields(rows, ["metadata_json"])}
 
-    return await get_or_set_cached("reports:list", build)
+    return await get_or_set_cached(f"reports:list:{owner}", build)
 
 
 @router.get("/tasks", dependencies=[Depends(read_heavy_limiter)])
@@ -853,25 +914,35 @@ async def list_tasks(
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
     plugin_id: Optional[str] = None,
-    status: Optional[str] = None
+    status: Optional[str] = None,
+    owner: str = Depends(get_current_owner),
 ):
-    """List all tasks with pagination"""
+    """List the caller's tasks with pagination"""
     db = await get_db()
 
-    # Build query
+    # Build query — always scoped to the caller so listing can never enumerate
+    # another user/workspace's tasks (issue #401).
     query = "SELECT id, plugin_id, tool_name, target, status, created_at, duration_seconds, inputs_json, preset, error_message, exit_code FROM tasks"
-    params = []
+    params = [owner]
 
-    where_clauses = []
+    where_clauses = ["owner_id = ?"]
     if plugin_id:
         where_clauses.append("plugin_id = ?")
         params.append(plugin_id)
     if status:
+        try:
+            status = TaskStatus(status).value
+        except ValueError:
+            allowed_values = ", ".join([s.value for s in TaskStatus])
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid task status '{status}'. Allowed values: {allowed_values}"
+            )
+
         where_clauses.append("status = ?")
         params.append(status)
 
-    if where_clauses:
-        query += " WHERE " + " AND ".join(where_clauses)
+    query += " WHERE " + " AND ".join(where_clauses)
 
     query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
     params.extend([per_page, (page - 1) * per_page])
@@ -899,19 +970,18 @@ async def list_tasks(
     next_page = page + 1 if page < total_pages else None
     prev_page = page - 1 if page > 1 else None
 
-    # Function to build URL with all query parameters
     def build_page_url(page_num):
         if page_num is None:
             return None
-        # Start with page and per_page
-        params_list = [f"page={page_num}", f"per_page={per_page}"]
-        # Add filters if they exist
+        query_params = {
+            "page": page_num,
+            "per_page": per_page,
+        }
         if plugin_id:
-            params_list.append(f"plugin_id={plugin_id}")
+            query_params["plugin_id"] = plugin_id
         if status:
-            params_list.append(f"status={status}")
-        # Join with & and return
-        return f"/api/v1/tasks?{'&'.join(params_list)}"
+            query_params["status"] = status
+        return f"/api/v1/tasks?{urlencode(query_params)}"
     return {
         "tasks": tasks_list,
         "pagination": {
@@ -932,6 +1002,9 @@ async def delete_task_records(task_ids: List[str]):
 
     Processes IDs in chunks of SQLITE_CHUNK_SIZE to stay under
     SQLite's SQLITE_LIMIT_VARIABLE_NUMBER = 999 limit.
+
+    The deletion is wrapped in a transaction so that a failure mid-way
+    (e.g. crash, constraint violation) does not leave orphaned records.
     """
     if not task_ids:
         return
@@ -949,16 +1022,50 @@ async def delete_task_records(task_ids: List[str]):
         )
         all_task_rows.extend(rows)
 
-    # Delete associated records in chunks
-    for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
-        chunk = task_ids[i : i + SQLITE_CHUNK_SIZE]
-        placeholders = ",".join(["?"] * len(chunk))
-        await db.execute(f"DELETE FROM findings   WHERE task_id IN ({placeholders})", tuple(chunk))
-        await db.execute(f"DELETE FROM reports    WHERE task_id IN ({placeholders})", tuple(chunk))
-        await db.execute(f"DELETE FROM audit_log  WHERE task_id IN ({placeholders})", tuple(chunk))
-        await db.execute(f"DELETE FROM tasks      WHERE id       IN ({placeholders})", tuple(chunk))
+    # Delete associated records in chunks, atomic within a transaction
+    await db.begin()
+    try:
+        # Re-check running status inside the transaction to prevent the
+        # race where a task starts running between the check and the delete.
+        for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
+            chunk = task_ids[i : i + SQLITE_CHUNK_SIZE]
+            placeholders = ",".join(["?"] * len(chunk))
+            running = await db.fetchone(
+                f"SELECT 1 FROM tasks WHERE id IN ({placeholders}) AND status = 'running' LIMIT 1",
+                tuple(chunk)
+            )
+            if running:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cannot delete running tasks. Abort them first."
+                )
 
-    # Cleanup files on disk
+        for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
+            chunk = task_ids[i : i + SQLITE_CHUNK_SIZE]
+            placeholders = ",".join(["?"] * len(chunk))
+            await db.execute_no_commit(
+                f"DELETE FROM findings   WHERE task_id IN ({placeholders})", tuple(chunk)
+            )
+            await db.execute_no_commit(
+                f"DELETE FROM reports    WHERE task_id IN ({placeholders})", tuple(chunk)
+            )
+            await db.execute_no_commit(
+                f"DELETE FROM audit_log  WHERE task_id IN ({placeholders})", tuple(chunk)
+            )
+            await db.execute_no_commit(
+                f"DELETE FROM tasks      WHERE id       IN ({placeholders})", tuple(chunk)
+            )
+        await db.commit()
+    except HTTPException:
+        await db.rollback()
+        raise
+    except Exception:
+        await db.rollback()
+        raise
+
+    # Cleanup files on disk (outside the transaction — file deletion is not
+    # transactional; a failure here does not leave the DB in an inconsistent
+    # state).
     for row in all_task_rows:
         if row and row["raw_output_path"]:
             try:
@@ -969,9 +1076,16 @@ async def delete_task_records(task_ids: List[str]):
                 logger.error(f"Failed to delete raw output file {row['raw_output_path']}: {e}")
 
 @router.delete("/task/{task_id}")
-async def delete_task(task_id: str):
+async def delete_task(task_id: str, owner: str = Depends(get_current_owner)):
     """Delete a task and its associated data (findings, reports, audit logs, and files)"""
     db = await get_db()
+
+    # Deleting a non-existent task stays idempotent (200, deletes zero rows),
+    # but a task owned by another user/workspace is rejected with 403 so it
+    # cannot be deleted across owners (issue #401).
+    existing = await db.fetchone("SELECT owner_id FROM tasks WHERE id = ?", (task_id,))
+    if existing is not None and existing["owner_id"] != owner:
+        raise HTTPException(status_code=403, detail="You do not have access to this task")
 
     # Check if task is running
     status = await executor.get_task_status(task_id)
@@ -988,7 +1102,7 @@ async def delete_task(task_id: str):
 
 
 @router.delete("/tasks/bulk")
-async def bulk_delete_tasks(request: BulkDeleteRequest):
+async def bulk_delete_tasks(request: BulkDeleteRequest, owner: str = Depends(get_current_owner)):
     """Delete multiple tasks at once (max 500 IDs per request)"""
     task_ids = request.root  # RootModel exposes data via .root
     db = await get_db()
@@ -997,58 +1111,65 @@ async def bulk_delete_tasks(request: BulkDeleteRequest):
     if not task_ids:
         return {"deleted_count": 0, "success": True}
 
-    # Check running tasks — safe: len(task_ids) <= 500 guaranteed by Pydantic
+    # Scope to tasks owned by the caller. IDs owned by another user/workspace
+    # are silently ignored so cross-user enumeration and deletion are
+    # impossible (issue #401). len(task_ids) <= 500 guaranteed by Pydantic.
     placeholders = ",".join(["?"] * len(task_ids))
+    owned_rows = await db.fetchall(
+        f"SELECT id FROM tasks WHERE id IN ({placeholders}) AND owner_id = ?",
+        tuple(task_ids) + (owner,),
+    )
+    owned_ids = [row["id"] for row in owned_rows]
+    if not owned_ids:
+        return {"deleted_count": 0, "success": True}
+
+    # Check running tasks among the caller's own tasks
+    placeholders = ",".join(["?"] * len(owned_ids))
     running_tasks = await db.fetchone(
         f"SELECT id FROM tasks WHERE id IN ({placeholders}) AND status = 'running' LIMIT 1",
-        tuple(task_ids)
+        tuple(owned_ids)
     )
     if running_tasks:
         raise HTTPException(status_code=400, detail="Cannot delete running tasks. Abort them first.")
 
     # If the task is currently executing but the DB hasn't been updated yet, fail closed.
-    if any(tid in executor.running_tasks for tid in task_ids):
+    if any(tid in executor.running_tasks for tid in owned_ids):
         raise HTTPException(status_code=400, detail="Cannot delete running tasks. Abort them first.")
 
-    await delete_task_records(task_ids)
+    await delete_task_records(owned_ids)
     await invalidate_view_cache()
 
     return {
-        "deleted_count": len(task_ids),
+        "deleted_count": len(owned_ids),
         "success": True
     }
 
 @router.delete("/tasks/clear")
-async def clear_all_tasks():
-    """Wipe all scan history and associated data (findings, reports, assets, attack surface)"""
+async def clear_all_tasks(owner: str = Depends(get_current_owner)):
+    """Wipe the caller's scan history and associated data (findings, reports).
+
+    Scoped to the requesting user/workspace so one owner cannot purge another
+    owner's history (issue #401).
+    """
     db = await get_db()
 
-    # Prevent clearing if any tasks are running
-    running_tasks = await db.fetchone("SELECT id FROM tasks WHERE status = 'running' LIMIT 1")
+    # Prevent clearing if any of the caller's tasks are running
+    running_tasks = await db.fetchone(
+        "SELECT id FROM tasks WHERE owner_id = ? AND status = 'running' LIMIT 1",
+        (owner,),
+    )
     if running_tasks:
         raise HTTPException(status_code=400, detail="Cannot clear history while tasks are running.")
 
-    # Get all task IDs to cleanup files
-    all_tasks = await db.fetchall("SELECT id FROM tasks")
-    task_ids = [t["id"] for t in all_tasks]
+    # Get the caller's task IDs to delete records and cleanup files
+    own_tasks = await db.fetchall("SELECT id FROM tasks WHERE owner_id = ?", (owner,))
+    task_ids = [t["id"] for t in own_tasks]
     if task_ids:
         await delete_task_records(task_ids)
 
-    # Purge other tables
-    await db.execute("DELETE FROM findings")
-
-    # Fallback cleanup for any orphaned files in data directories
-    for subdir in ["raw", "reports"]:
-        dir_path = Path(settings.data_dir) / subdir
-        if dir_path.exists():
-            for item in dir_path.iterdir():
-                try:
-                    if item.is_file():
-                        item.unlink()
-                    elif item.is_dir():
-                        shutil.rmtree(item)
-                except Exception as e:
-                    logger.error(f"Failed to cleanup {item}: {e}")
+    # Sweep up any of the caller's findings not linked to a task (task_id was
+    # set NULL by ON DELETE) so nothing of theirs is left behind.
+    await db.execute("DELETE FROM findings WHERE owner_id = ?", (owner,))
 
     await invalidate_view_cache()
 
@@ -1176,10 +1297,17 @@ async def create_workflow(payload: Dict[str, Any]):
 @router.post("/workflows/{workflow_id}/run")
 async def run_workflow_once(workflow_id: str):
     db = await get_db()
-    row = await db.fetchone("SELECT steps_json FROM workflows WHERE id = ?", (workflow_id,))
+    row = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
     if not row:
         raise HTTPException(status_code=404, detail="Workflow not found")
     steps = json.loads(row["steps_json"] or "[]")
+    active_version = await db.fetchone(
+        "SELECT id, version_number FROM workflow_versions "
+        "WHERE workflow_id = ? ORDER BY version_number DESC LIMIT 1",
+        (workflow_id,),
+    )
+    version_id = active_version["id"] if active_version else None
+    version_number = active_version["version_number"] if active_version else None
     created_task_ids: List[str] = []
     for step in steps:
         safe_mode = bool(settings.safe_mode_default)
@@ -1196,17 +1324,125 @@ async def run_workflow_once(workflow_id: str):
         asyncio.create_task(executor.execute_task(task_id))
         created_task_ids.append(task_id)
     await db.execute("UPDATE workflows SET last_run_at = datetime('now') WHERE id = ?", (workflow_id,))
+    run_id = await db.record_workflow_run(
+        workflow_id=workflow_id,
+        version_id=version_id,
+        version_number=version_number,
+        task_ids=created_task_ids,
+        triggered_by="manual",
+    )
+    asyncio.create_task(_finalize_workflow_run(run_id))
     return {
         "workflow_id": workflow_id,
+        "run_id": run_id,
+        "version_number": version_number,
         "queued_task_ids": created_task_ids,
         "queued_tasks": created_task_ids,
+    }
+
+
+async def _finalize_workflow_run(run_id: str, poll_interval: float = 5.0, max_polls: int = 720) -> None:
+    """Background task that polls task statuses and marks the run terminal.
+
+    Polls every *poll_interval* seconds for up to *max_polls* iterations
+    (default: 5 s × 720 = 1 hour). If tasks are still running after the
+    limit, the run is marked failed with a timeout message so it never stays
+    permanently in the 'queued' state.
+    """
+    from .database import get_db as _get_db
+    for _ in range(max_polls):
+        await asyncio.sleep(poll_interval)
+        try:
+            db = await _get_db()
+            terminal_status = await db.check_workflow_run_tasks(run_id)
+            if terminal_status is not None:
+                await db.finalize_workflow_run(run_id, terminal_status)
+                return
+        except Exception as exc:
+            logger.warning("workflow run finalization error for %s: %s", run_id, exc)
+            return
+    try:
+        db = await _get_db()
+        await db.finalize_workflow_run(
+            run_id, "failed", "Run finalization timed out — check individual task statuses"
+        )
+    except Exception as exc:
+        logger.warning("workflow run timeout finalization failed for %s: %s", run_id, exc)
+
+
+@router.get("/workflows/{workflow_id}/runs")
+async def list_workflow_runs(workflow_id: str, limit: int = 50, offset: int = 0):
+    """Return paginated run history for a workflow."""
+    if limit < 1 or limit > 500:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 500")
+    if offset < 0:
+        raise HTTPException(status_code=400, detail="offset must be non-negative")
+    db = await get_db()
+    wf = await db.fetchone("SELECT id FROM workflows WHERE id = ?", (workflow_id,))
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    return await db.get_workflow_runs(workflow_id=workflow_id, limit=limit, offset=offset)
+
+
+@router.get("/workflows/{workflow_id}/versions")
+async def list_workflow_versions(workflow_id: str):
+    """Return all saved version snapshots for a workflow, newest first."""
+    db = await get_db()
+    wf = await db.fetchone("SELECT id FROM workflows WHERE id = ?", (workflow_id,))
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    versions = await db.get_workflow_versions(workflow_id=workflow_id)
+    return {"workflow_id": workflow_id, "versions": versions, "total": len(versions)}
+
+
+@router.post("/workflows/{workflow_id}/rollback/{version_number}")
+async def rollback_workflow(workflow_id: str, version_number: int):
+    """Restore a workflow to a previously saved version.
+
+    The target version's full definition replaces the live workflow fields.
+    A new version snapshot is recorded so the rollback itself is auditable
+    and can be rolled back in turn.
+    """
+    db = await get_db()
+    wf = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    target = await db.get_workflow_version(workflow_id, version_number)
+    if target is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Version {version_number} not found for this workflow",
+        )
+    defn = target["definition"]
+    name = defn.get("name", wf["name"])
+    steps = defn.get("steps", [])
+    schedule_seconds = defn.get("schedule_seconds")
+    enabled = bool(defn.get("enabled", True))
+    await db.execute(
+        "UPDATE workflows SET name = ?, steps_json = ?, schedule_seconds = ?, enabled = ? WHERE id = ?",
+        (name, json.dumps(steps), schedule_seconds, 1 if enabled else 0, workflow_id),
+    )
+    new_version = await db.snapshot_workflow_version(
+        workflow_id=workflow_id,
+        name=name,
+        schedule_seconds=schedule_seconds,
+        enabled=enabled,
+        steps=steps,
+        created_by=f"rollback_to_v{version_number}",
+    )
+    updated = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
+    return {
+        "workflow_id": workflow_id,
+        "rolled_back_to_version": version_number,
+        "new_version_number": new_version["version_number"],
+        "workflow": _serialize_workflow(updated) if updated else None,
     }
 
 
 @router.patch("/workflows/{workflow_id}")
 async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
     db = await get_db()
-    row = await db.fetchone("SELECT id FROM workflows WHERE id = ?", (workflow_id,))
+    row = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
     if not row:
         raise HTTPException(status_code=404, detail="Workflow not found")
 
@@ -1232,7 +1468,17 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
     params.append(workflow_id)
     await db.execute(f"UPDATE workflows SET {', '.join(updates)} WHERE id = ?", tuple(params))
     updated = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
-    return _serialize_workflow(updated) if updated else {"workflow_id": workflow_id, "updated": True}
+    if updated is None:
+        return {"workflow_id": workflow_id, "updated": True}
+    await db.snapshot_workflow_version(
+        workflow_id=workflow_id,
+        name=updated["name"],
+        schedule_seconds=updated["schedule_seconds"],
+        enabled=bool(updated["enabled"]),
+        steps=json.loads(updated["steps_json"] or "[]"),
+        created_by="patch",
+    )
+    return _serialize_workflow(updated)
 
 
 @router.delete("/workflows/{workflow_id}")
@@ -1242,7 +1488,7 @@ async def delete_workflow(workflow_id: str):
     return {"workflow_id": workflow_id, "deleted": True}
 
 
-@router.post("/workflows/scheduler/tick")
+@router.post("/workflows/scheduler/tick", dependencies=[Depends(scheduler_tick_limiter)])
 async def trigger_workflow_tick():
     await scheduler.tick()
     return {"tick": "ok"}
@@ -1421,7 +1667,7 @@ async def list_notification_history(
 
 
 @router.get("/finding/{finding_id}")
-async def get_finding_details(finding_id: str):
+async def get_finding_details(finding_id: str, owner: str = Depends(get_current_owner)):
     """Get detailed information for a specific finding"""
     db = await get_db()
 
@@ -1437,6 +1683,9 @@ async def get_finding_details(finding_id: str):
 
     if not finding_row:
         raise HTTPException(status_code=404, detail="Finding not found")
+
+    if finding_row["owner_id"] != owner:
+        raise HTTPException(status_code=403, detail="You do not have access to this finding")
 
     metadata = {}
     if finding_row["metadata_json"]:
@@ -1477,13 +1726,19 @@ async def get_finding_details(finding_id: str):
 
 
 @router.get("/attack-surface")
-async def get_attack_surface():
-    """Return an aggregated view of the monitored attack surface."""
+async def get_attack_surface(owner: str = Depends(get_current_owner)):
+    """Return an aggregated view of the caller's monitored attack surface."""
     db = await get_db()
 
-    # We aggregate unique targets from tasks and findings
-    tasks = await db.fetchall("SELECT DISTINCT target, tool_name, created_at FROM tasks ORDER BY created_at DESC")
-    findings = await db.fetchall("SELECT DISTINCT target, category, severity, discovered_at FROM findings ORDER BY discovered_at DESC")
+    # We aggregate unique targets from the caller's own tasks and findings
+    tasks = await db.fetchall(
+        "SELECT DISTINCT target, tool_name, created_at FROM tasks WHERE owner_id = ? ORDER BY created_at DESC",
+        (owner,),
+    )
+    findings = await db.fetchall(
+        "SELECT DISTINCT target, category, severity, discovered_at FROM findings WHERE owner_id = ? ORDER BY discovered_at DESC",
+        (owner,),
+    )
 
     entries = []
     seen_targets = set()
@@ -1522,10 +1777,149 @@ async def get_attack_surface():
 
 
 @router.get("/assets")
-async def get_assets():
-    """Return a list of tracked assets."""
+async def get_assets(owner: str = Depends(get_current_owner)):
+    """Return a list of the caller's tracked assets."""
     db = await get_db()
-    # For now, we use unique targets as assets
-    rows = await db.fetchall("SELECT DISTINCT target FROM tasks UNION SELECT DISTINCT target FROM findings")
+    # For now, we use unique targets as assets, scoped to the caller (issue #401)
+    rows = await db.fetchall(
+        """
+        SELECT DISTINCT target FROM tasks WHERE owner_id = ?
+        UNION
+        SELECT DISTINCT target FROM findings WHERE owner_id = ?
+        """,
+        (owner, owner),
+    )
     assets = [{"id": str(uuid.uuid4()), "name": row["target"]} for row in rows]
     return {"assets": assets}
+
+# ── Network Policy Management Endpoints ─────────────────────────────────────
+
+from fastapi.security import APIKeyHeader
+from fastapi import Security, status
+from .network_policy import get_policy_engine, PolicyAction
+from dataclasses import asdict
+
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+def verify_admin_access(
+    api_key: Optional[str] = Security(api_key_header),
+    request: Request = None,
+) -> Optional[str]:
+    """Verify admin API key is provided and valid."""
+    import hmac
+
+    # Secure-by-default: If admin_api_key setting is not configured, block all access
+    if not settings.admin_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Admin API Key is not configured on the server. Please set SECUSCAN_ADMIN_API_KEY."
+        )
+
+    # Entropy check: enforce a strong API key
+    if len(settings.admin_api_key) < 16:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Admin API Key is too weak. It must be at least 16 characters long."
+        )
+
+    candidate = api_key
+    if request:
+        auth_header = request.headers.get("authorization")
+        if auth_header:
+            if auth_header.lower().startswith("bearer "):
+                token = auth_header[7:]
+            else:
+                token = auth_header
+            # If the Authorization header matches the admin API key, prefer it.
+            # This is important when the client automatically includes the general X-Api-Key in headers.
+            if hmac.compare_digest(token, settings.admin_api_key):
+                candidate = token
+            elif not candidate:
+                candidate = token
+
+    if not candidate or not hmac.compare_digest(candidate, settings.admin_api_key):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing Admin API Key"
+        )
+    return candidate
+
+@router.get("/admin/network-policy", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
+async def get_network_policy():
+    """Get current network policy configuration"""
+    engine = get_policy_engine()
+
+    return {
+        "allowlist": [asdict(p) for net, p in engine.allowlist],
+        "denylist": [asdict(p) for net, p in engine.denylist],
+        "audit_entries_count": len(engine.audit_entries),
+    }
+
+@router.post("/admin/network-policy/allow", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
+async def add_allow_rule(request: dict):
+    """Add network to allowlist"""
+    engine = get_policy_engine()
+
+    try:
+        engine.add_allow_rule(
+            cidr=request["cidr"],
+            reason=request.get("reason", "Operator added"),
+        )
+        return {"status": "success", "cidr": request["cidr"]}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/admin/network-policy/deny", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
+async def add_deny_rule(request: dict):
+    """Add network to denylist"""
+    engine = get_policy_engine()
+
+    try:
+        engine.add_deny_rule(
+            cidr=request["cidr"],
+            reason=request.get("reason", "Operator added"),
+        )
+        return {"status": "success", "cidr": request["cidr"]}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/admin/network-audit-log", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
+async def get_audit_log(
+    plugin_id: Optional[str] = None,
+    action: Optional[str] = None,
+    limit: int = 100
+):
+    """Retrieve network audit log entries"""
+    engine = get_policy_engine()
+
+    policy_action = None
+    if action and action.upper() in ["ALLOW", "DENY"]:
+        policy_action = PolicyAction[action.upper()]
+
+    entries = engine.get_audit_entries(
+        plugin_id=plugin_id,
+        action=policy_action,
+        limit=limit
+    )
+
+    return {
+        "entries": [asdict(e) for e in entries],
+        "total": len(entries),
+    }
+
+@router.get("/admin/network-audit-log/export", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
+async def export_audit_log(format: str = "json"):
+    """Export audit log in specified format"""
+    engine = get_policy_engine()
+
+    if format not in ["json", "csv"]:
+        raise HTTPException(status_code=400, detail="Format must be 'json' or 'csv'")
+
+    content = engine.export_audit_log(format)
+
+    mime_type = "application/json" if format == "json" else "text/csv"
+    return Response(
+        content=content,
+        media_type=mime_type,
+        headers={"Content-Disposition": f"attachment; filename=network-audit.{format}"}
+    )

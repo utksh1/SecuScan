@@ -34,6 +34,14 @@ git clone https://github.com/utksh1/SecuScan.git
 cd SecuScan
 ```
 
+If you are contributing from a fork, add the main repository as `upstream` so
+you can rebase on the latest `main` before opening a pull request:
+
+```powershell
+git remote add upstream https://github.com/utksh1/SecuScan.git
+git fetch upstream
+```
+
 ---
 
 ## Backend Setup
@@ -87,6 +95,14 @@ Swagger documentation:
 http://127.0.0.1:8000/docs
 ```
 
+If you prefer the repository helper scripts, run them from Git Bash instead of
+PowerShell because they are shell scripts:
+
+```bash
+./setup.sh
+./start.sh
+```
+
 ---
 
 ## Frontend Setup
@@ -117,6 +133,35 @@ http://127.0.0.1:5173
 
 ---
 
+## Backend Test Workflow
+
+Use the repository test script to create the isolated `venv_tests` environment
+and install test dependencies:
+
+```bash
+./testing/test_python.sh
+```
+
+After the first run, you can execute a single backend test file directly.
+
+#### PowerShell
+
+```powershell
+.\venv_tests\Scripts\Activate.ps1
+python -m pytest testing/backend/test_task_pagination.py -v
+deactivate
+```
+
+#### Git Bash
+
+```bash
+source venv_tests/Scripts/activate
+python -m pytest testing/backend/test_task_pagination.py -v
+deactivate
+```
+
+---
+
 ## Docker Setup (Optional)
 
 Install Docker Desktop for Windows:
@@ -140,6 +185,9 @@ Run the project stack:
 ```powershell
 docker compose up --build
 ```
+
+If `docker compose` fails even though Docker Desktop is installed, open Docker
+Desktop first and wait until the engine reports it is running.
 
 ---
 
@@ -208,6 +256,52 @@ Reinstall dependencies:
 npm install
 ```
 
+If Vite still fails to start after dependency updates, remove the existing
+install and reinstall from scratch:
+
+```powershell
+Remove-Item -Recurse -Force node_modules
+Remove-Item package-lock.json
+npm install
+```
+
+---
+
+### Git Bash vs PowerShell Command Mismatch
+
+Use Git Bash for commands that rely on Unix shell syntax:
+
+```bash
+source venv/Scripts/activate
+./testing/test_python.sh
+```
+
+Use PowerShell for Windows-native commands:
+
+```powershell
+.\venv\Scripts\Activate.ps1
+```
+
+---
+
+### Port Already In Use
+
+If the backend or frontend fails to start because the port is already in use,
+find the conflicting process and stop it.
+
+Check which process is using the port:
+
+```powershell
+netstat -ano | findstr :8000
+netstat -ano | findstr :5173
+```
+
+Stop the process by PID:
+
+```powershell
+taskkill /PID <PID> /F
+```
+
 ---
 
 ## Git Workflow Basics
@@ -250,6 +344,12 @@ Update your branch with the latest upstream changes:
 
 ```powershell
 git pull --rebase upstream main
+```
+
+If `upstream` does not exist yet, confirm your remotes first:
+
+```powershell
+git remote -v
 ```
 
 If conflicts appear:
