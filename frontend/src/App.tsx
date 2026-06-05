@@ -12,6 +12,7 @@ import Scans from './pages/Scans'
 import TaskDetails from './pages/TaskDetails'
 import Workflows from './pages/Workflows'
 import ApiKeySetupScreen from './components/ApiKeySetupScreen'
+import AuditLog from './pages/AuditLog'
 
 import { ThemeProvider } from './components/ThemeContext'
 import { ToastProvider } from './components/ToastContext'
@@ -27,6 +28,7 @@ export function AppRoutes() {
       <Route path={routes.scanTool} element={<ToolConfig />} />
       <Route path={routes.findings} element={<Findings />} />
       <Route path={routes.scans} element={<Scans />} />
+      <Route path={routes.audit} element={<AuditLog />} />
       <Route path={routes.reports} element={<Reports />} />
       <Route path={routes.reportsCompare} element={<ReportCompare />} />
       <Route path={routes.workflows} element={<Workflows />} />

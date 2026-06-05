@@ -105,9 +105,28 @@ function getApiKey(): string | null {
   return getStoredApiKey()
 }
 
-/** Fired on the window when any API request receives HTTP 401. */
 export const AUTH_REQUIRED_EVENT = 'secuscan:auth-required'
 
+export interface AuditEvent {
+  id: number
+  event_type: string
+  scan_id?: string | null
+  plugin_id?: string | null
+  target?: string | null
+  actor?: string | null
+  timestamp: string
+  metadata: Record<string, unknown>
+}
+
+export interface AuditListResponse {
+  events: AuditEvent[]
+  pagination: {
+    page: number
+    per_page: number
+    total_pages: number
+    total_items: number
+  }
+}
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = new AbortController()
   const timeoutId = window.setTimeout(() => controller.abort(), 10000)
@@ -177,6 +196,19 @@ export function getTasks(params?: URLSearchParams) {
 }
 
 export type ScanPhase = 'queued' | 'running_command' | 'parsing' | 'reporting' | 'finished'
+
+export function getAuditEvents(params?: URLSearchParams) {
+  const suffix = params ? `?${params.toString()}` : ''
+  return request<AuditListResponse>(`/audit${suffix}`)
+}
+
+export function getAuditExportUrl(params: URLSearchParams, format: 'csv' | 'json') {
+  const exportParams = new URLSearchParams(params)
+  exportParams.set('format', format)
+  exportParams.delete('page')
+  exportParams.delete('per_page')
+  return `${API_BASE}/audit/export?${exportParams.toString()}`
+}
 
 export function getTaskStatus(taskId: string): Promise<any> {
   return request<any>(`/task/${taskId}/status`)

@@ -136,15 +136,19 @@ class Database:
 
             CREATE TABLE IF NOT EXISTS audit_log (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TIMESTAMP NOT NULL DEFAULT (datetime('now')),
                 event_type TEXT NOT NULL,
+                scan_id TEXT,
+                plugin_id TEXT,
+                target TEXT,
+                actor TEXT,
+                timestamp TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                metadata TEXT NOT NULL DEFAULT '{}',
                 severity TEXT NOT NULL,
                 user_id TEXT,
                 ip_address TEXT,
                 message TEXT NOT NULL,
                 context_json TEXT,
-                task_id TEXT,
-                plugin_id TEXT
+                task_id TEXT
             );
 
             CREATE TABLE IF NOT EXISTS presets (
@@ -228,6 +232,7 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp DESC);
             CREATE INDEX IF NOT EXISTS idx_audit_event_type ON audit_log(event_type);
             CREATE INDEX IF NOT EXISTS idx_audit_task_id ON audit_log(task_id);
+            CREATE INDEX IF NOT EXISTS idx_audit_scan_id ON audit_log(scan_id);
 
             -- Workflows index (existing)
             CREATE INDEX IF NOT EXISTS idx_workflows_enabled ON workflows(enabled);
@@ -326,6 +331,24 @@ class Database:
                     f"Migration {migration_file.name} failed — startup aborted: {exc}"
                 ) from exc
 
+        # Audit log migration: ensure target, actor, metadata columns exist
+        try:
+            audit_columns = await self.fetchall("PRAGMA table_info(audit_log)")
+            existing_audit_cols = {col["name"] for col in audit_columns}
+            audit_needed_cols = {
+                "target": "TEXT",
+                "actor": "TEXT",
+                "metadata": "TEXT NOT NULL DEFAULT '{}'",
+            }
+            for col_name, col_type in audit_needed_cols.items():
+                if col_name not in existing_audit_cols:
+                    try:
+                        await self.execute(f"ALTER TABLE audit_log ADD COLUMN {col_name} {col_type}")
+                    except Exception as e:
+                        print(f"Failed to add column {col_name}: {e}")
+        except Exception:
+            pass
+
         await self._backfill_risk_scores()
 
     async def _backfill_risk_scores(self):
@@ -363,6 +386,22 @@ class Database:
                 (score, json.dumps(factors), row["id"]),
             )
         print(f"Backfilled risk scores for {len(rows)} existing finding(s).")
+
+        audit_columns = await self.fetchall("PRAGMA table_info(audit_log)")
+        existing_audit_cols = {col["name"] for col in audit_columns}
+        audit_needed_cols = {
+            "scan_id": "TEXT",
+            "target": "TEXT",
+            "actor": "TEXT",
+            "metadata": "TEXT NOT NULL DEFAULT '{}'",
+        }
+        for col_name, col_type in audit_needed_cols.items():
+            if col_name not in existing_audit_cols:
+                try:
+                    await self.execute(f"ALTER TABLE audit_log ADD COLUMN {col_name} {col_type}")
+                    print(f"Added missing column {col_name} to audit_log table.")
+                except Exception as e:
+                    print(f"Failed to add audit_log column {col_name}: {e}")
 
     async def execute(self, query: str, params: tuple = ()):
         """Execute a write query."""
@@ -417,29 +456,29 @@ class Database:
         from .request_context import get_request_id
 
         request_id = request_id or get_request_id()
-
         context = context or {}
         context["request_id"] = request_id
 
+        scan_id = task_id or context.get("scan_id") or context.get("task_id")
         await self.execute(
             """
             INSERT INTO audit_log (
-                event_type,
-                severity,
-                message,
-                context_json,
-                task_id,
-                plugin_id
+                event_type, scan_id, plugin_id, target, actor, metadata,
+                severity, message, context_json, task_id
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 event_type,
+                scan_id,
+                plugin_id,
+                context.get("target"),
+                context.get("actor"),
+                json.dumps(context),
                 severity,
                 message,
                 json.dumps(context),
                 task_id,
-                plugin_id,
             ),
         )
 
