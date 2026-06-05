@@ -6,7 +6,7 @@ This guide describes how the dependency vulnerability audit system functions, th
 
 ## 1. Exception Configuration Format
 
-Vulnerability exceptions are maintained in the root directory under [.audit-config.yaml](../../.audit-config.yaml).
+Vulnerability exceptions are maintained in the root directory under [.audit-config.yaml](../.audit-config.yaml).
 
 To document a new exception (to temporarily allow a dependency vulnerability that blocks deployment in CI), add an entry under the `exceptions` block using the following format:
 
