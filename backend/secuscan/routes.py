@@ -120,6 +120,7 @@ from .ratelimit import (
     task_start_limiter, vault_limiter,
     report_download_limiter, read_heavy_limiter,
     resolve_client_identity, admin_limiter,
+    scheduler_tick_limiter,
 )
 from .validation import validate_target, validate_task_start_payload, validate_url
 from .reporting import reporting
@@ -1362,7 +1363,7 @@ async def delete_workflow(workflow_id: str):
     return {"workflow_id": workflow_id, "deleted": True}
 
 
-@router.post("/workflows/scheduler/tick")
+@router.post("/workflows/scheduler/tick", dependencies=[Depends(scheduler_tick_limiter)])
 async def trigger_workflow_tick():
     await scheduler.tick()
     return {"tick": "ok"}
