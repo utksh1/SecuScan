@@ -49,10 +49,13 @@ The project is designed to be:
 ## Repository Map
 
 - `backend/`: FastAPI app, execution logic, database/config, plugin loading, workflows
+- `backend/data/`: backend-specific datasets and resources used by scanners
+- `backend/wordlists/`: backend scanning wordlists and supporting resources
 - `frontend/`: React + Vite app, routes, pages, shared components, and test config
 - `plugins/`: scanner metadata, parser code, and plugin-specific helpers
-- `testing/backend/`: Python unit and integration tests plus backend test scripts
-- `frontend/testing/`: frontend unit and end-to-end test files
+- `testing/`: shared test utilities, backend test scripts, and validation helpers
+- `frontend/testing/`: frontend unit and integration test files
+- `frontend/e2e/`: Playwright end-to-end test suites
 - `docs/`: supporting project documentation
 - `scripts/`: helper scripts for signing, benchmarking, and maintenance
 - `.github/`: GitHub Actions workflows, issue templates, and contributor automation
