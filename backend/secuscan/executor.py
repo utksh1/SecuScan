@@ -21,7 +21,7 @@ from .auth import DEFAULT_OWNER_ID
 from .redaction import redact
 from .cache import get_cache
 from .config import settings
-from .database import get_db
+from .database import get_db, Database
 from .plugins import get_plugin_manager
 from .models import NotificationDeliveryStatus, TaskStatus, ScanPhase
 from .ratelimit import concurrent_limiter
@@ -1399,7 +1399,7 @@ class TaskExecutor:
 
 
 
-async def recover_tasks_on_startup(db: "Database") -> dict:
+async def recover_tasks_on_startup(db: Database) -> dict:
     """
     Recover tasks that were interrupted by a backend restart.
 

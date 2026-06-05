@@ -1925,4 +1925,3 @@ async def get_startup_recovery_result():
         "task_ids_requeued": result["task_ids_requeued"],
         "recovered_at": result["recovered_at"],
     }
-
