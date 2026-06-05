@@ -115,44 +115,60 @@ Example schema:
 
 ```json
 {
-  "inputs": [
+  "fields": [
     {
-      "key": "target",
+      "id": "target",
       "label": "Target URL",
-      "type": "text",
+      "type": "string",
       "required": true,
-      "placeholder": "https://example.com"
+      "placeholder": "https://example.com",
+      "help": "Full URL of the target including scheme.",
+      "validation": {
+        "validation_type": "url",
+        "message": "Enter a valid URL starting with http:// or https://"
+      }
     },
     {
-      "key": "scan_type",
+      "id": "scan_type",
       "label": "Scan Type",
       "type": "select",
       "required": true,
-      "options": ["quick", "full"]
+      "options": [
+        { "value": "quick", "label": "Quick" },
+        { "value": "full",  "label": "Full"  }
+      ]
     },
     {
-      "key": "checks",
+      "id": "checks",
       "label": "Checks",
       "type": "multiselect",
       "required": false,
-      "options": ["headers", "ssl", "cookies"]
+      "options": [
+        { "value": "headers", "label": "Headers" },
+        { "value": "ssl",     "label": "SSL"     },
+        { "value": "cookies", "label": "Cookies" }
+      ]
     },
     {
-      "key": "recursive",
+      "id": "recursive",
       "label": "Enable Recursive Scan",
-      "type": "checkbox",
+      "type": "boolean",
       "required": false,
       "default": false
     },
     {
-      "key": "timeout",
+      "id": "timeout",
       "label": "Timeout (seconds)",
-      "type": "number",
+      "type": "integer",
       "required": false,
-      "default": 30
+      "default": 30,
+      "validation": {
+        "min": 1,
+        "max": 3600
+      }
     },
     {
-      "key": "wordlist_path",
+      "id": "wordlist_path",
       "label": "Wordlist Path",
       "type": "path",
       "required": false
@@ -160,6 +176,19 @@ Example schema:
   ]
 }
 ```
+
+### Field Types
+
+| Type Value | Input Rendered | Notes |
+| --- | --- | --- |
+| `string` | Text input | Use `validation.validation_type` for URL, hostname, IP, etc. |
+| `integer` | Number input | Use `validation.min` / `validation.max` for range |
+| `boolean` | Toggle / checkbox | `default` should be `true` or `false` |
+| `select` | Dropdown (single) | `options` must be `[{ "value": ..., "label": ... }]` |
+| `multiselect` | Checkbox group | Same options shape as `select` |
+| `path` | File-path text input | No validation block needed |
+
+For the full list of named validation presets (e.g. `url`, `hostname`, `domain`, `ipv4`, `port`, `cidr`) and range rules, see [plugin-validation.md](docs/plugin-validation.md).
 
 ### Required vs Optional Fields
 
@@ -171,20 +200,27 @@ Example schema:
 
 Plugin presets shall map directly to schema keys.
 
-Example preset:
+Example presets:
 
 ```json
 {
-  "preset": {
-    "target": "https://example.com",
-    "scan_type": "quick",
-    "recursive": true,
-    "timeout": 60
+  "presets": {
+    "quick": {
+      "target": "https://example.com",
+      "scan_type": "quick",
+      "recursive": false,
+      "timeout": 30
+    },
+    "thorough": {
+      "scan_type": "full",
+      "recursive": true,
+      "timeout": 300
+    }
   }
 }
 ```
 
-Each preset key shall exactly match a corresponding schema `"key"` value.
+Each preset key shall exactly match a corresponding field `"id"` value.
 
 ## Maintenance Notes
 
