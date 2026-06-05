@@ -3,8 +3,10 @@ SQLite database access for SecuScan.
 """
 
 import asyncio
+import hashlib
 import json
 import sqlite3
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional, List, Dict
 
@@ -12,16 +14,57 @@ import aiosqlite
 from .config import settings
 from .risk_scoring import compute_risk_score, compute_risk_factors
 
+_GENESIS_HASH = "0" * 64
+
+
+def _compute_entry_hash(
+    row_id: int,
+    timestamp: str,
+    event_type: str,
+    severity: str,
+    user_id: Optional[str],
+    ip_address: Optional[str],
+    message: str,
+    context_json: Optional[str],
+    task_id: Optional[str],
+    plugin_id: Optional[str],
+    prev_hash: str,
+) -> str:
+    parts = "|".join([
+        str(row_id),
+        timestamp or "",
+        event_type or "",
+        severity or "",
+        user_id or "",
+        ip_address or "",
+        message or "",
+        context_json or "",
+        task_id or "",
+        plugin_id or "",
+        prev_hash,
+    ])
+    return hashlib.sha256(parts.encode("utf-8")).hexdigest()
+
+
+@dataclass
+class ChainBreak:
+    row_id: int
+    reason: str
+    expected_hash: Optional[str]
+    stored_hash: Optional[str]
+
 
 class Database:
     """SQLite database manager with an async-friendly interface."""
 
     db_path: str
     _connection: Optional[aiosqlite.Connection]
+    _audit_lock: asyncio.Lock
 
     def __init__(self, db_path: str):
         self.db_path = db_path
         self._connection = None
+        self._audit_lock = asyncio.Lock()
 
     @property
     def connection(self) -> aiosqlite.Connection:
@@ -144,7 +187,9 @@ class Database:
                 message TEXT NOT NULL,
                 context_json TEXT,
                 task_id TEXT,
-                plugin_id TEXT
+                plugin_id TEXT,
+                prev_hash  TEXT NOT NULL DEFAULT '0000000000000000000000000000000000000000000000000000000000000000',
+                entry_hash TEXT NOT NULL DEFAULT '0000000000000000000000000000000000000000000000000000000000000000'
             );
 
             CREATE TABLE IF NOT EXISTS presets (
@@ -308,6 +353,26 @@ class Database:
             except Exception as e:
                 print(f"Failed to add 'owner_id' to reports: {e}")
 
+        # Audit log hash-chain migration: add columns for existing installations
+        # that created the table before migration 004 was applied.  The SQL
+        # migration file handles fresh installs; these ALTER TABLE calls guard
+        # databases that already have the table without the new columns.
+        audit_columns = await self.fetchall("PRAGMA table_info(audit_log)")
+        existing_audit_cols = {col["name"] for col in audit_columns}
+        audit_chain_cols = {
+            "prev_hash": f"TEXT NOT NULL DEFAULT '{_GENESIS_HASH}'",
+            "entry_hash": f"TEXT NOT NULL DEFAULT '{_GENESIS_HASH}'",
+        }
+        for col_name, col_type in audit_chain_cols.items():
+            if col_name not in existing_audit_cols:
+                try:
+                    await self.execute(
+                        f"ALTER TABLE audit_log ADD COLUMN {col_name} {col_type}"
+                    )
+                    print(f"Added missing column {col_name} to audit_log table.")
+                except Exception as e:
+                    print(f"Failed to add column {col_name} to audit_log: {e}")
+
     async def _run_migrations(self):
         migrations_dir = Path(__file__).parent / "migrations"
 
@@ -412,36 +477,202 @@ class Database:
         plugin_id: Optional[str] = None,
         request_id: Optional[str] = None,
     ):
-        """Log an audit event."""
-
+        """Insert an audit event and update the hash chain atomically."""
         from .request_context import get_request_id
 
         request_id = request_id or get_request_id()
-
         context = context or {}
         context["request_id"] = request_id
+        context_json = json.dumps(context)
 
-        await self.execute(
-            """
-            INSERT INTO audit_log (
-                event_type,
-                severity,
-                message,
-                context_json,
-                task_id,
-                plugin_id
+        # Serialise hash-chain writes so concurrent coroutines cannot interleave
+        # their prev_hash lookups and produce a forked chain.
+        async with self._audit_lock:
+            prev_row = await self.fetchone(
+                "SELECT id, entry_hash FROM audit_log ORDER BY id DESC LIMIT 1"
             )
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (
-                event_type,
-                severity,
-                message,
-                json.dumps(context),
-                task_id,
-                plugin_id,
-            ),
+            prev_hash = (
+                prev_row.get("entry_hash", _GENESIS_HASH)
+                if prev_row
+                else _GENESIS_HASH
+            )
+
+            # Obtain the timestamp SQLite will assign so we can include it in
+            # the hash before the INSERT.  Using strftime keeps it identical
+            # to what the DEFAULT expression would produce.
+            ts_row = await self.fetchone("SELECT strftime('%Y-%m-%d %H:%M:%S', 'now') AS ts")
+            timestamp = ts_row.get("ts", "") if ts_row else ""
+
+            # We need the row id before we can finalise the hash, so insert
+            # with a placeholder and update immediately after.
+            cursor = await self.connection.execute(
+                """
+                INSERT INTO audit_log (
+                    timestamp, event_type, severity, message,
+                    context_json, task_id, plugin_id,
+                    prev_hash, entry_hash
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    timestamp, event_type, severity, message,
+                    context_json, task_id, plugin_id,
+                    prev_hash, _GENESIS_HASH,
+                ),
+            )
+            row_id = cursor.lastrowid
+
+            entry_hash = _compute_entry_hash(
+                row_id=row_id,
+                timestamp=timestamp,
+                event_type=event_type,
+                severity=severity,
+                user_id=None,
+                ip_address=None,
+                message=message,
+                context_json=context_json,
+                task_id=task_id,
+                plugin_id=plugin_id,
+                prev_hash=prev_hash,
+            )
+
+            await self.connection.execute(
+                "UPDATE audit_log SET entry_hash = ? WHERE id = ?",
+                (entry_hash, row_id),
+            )
+            await self.connection.commit()
+
+    async def get_audit_log(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        event_type: Optional[str] = None,
+        severity: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ) -> Dict:
+        """Return a paginated slice of the audit log together with total count."""
+        filters: List[str] = []
+        params: List[Any] = []
+        if event_type:
+            filters.append("event_type = ?")
+            params.append(event_type)
+        if severity:
+            filters.append("severity = ?")
+            params.append(severity)
+        if task_id:
+            filters.append("task_id = ?")
+            params.append(task_id)
+        where = ("WHERE " + " AND ".join(filters)) if filters else ""
+        count_row = await self.fetchone(
+            f"SELECT COUNT(*) AS total FROM audit_log {where}", tuple(params)
         )
+        total = count_row["total"] if count_row else 0
+        rows = await self.fetchall(
+            f"SELECT * FROM audit_log {where} ORDER BY id DESC LIMIT ? OFFSET ?",
+            tuple(params) + (limit, offset),
+        )
+        for row in rows:
+            if row.get("context_json"):
+                try:
+                    row["context"] = json.loads(row["context_json"])
+                except (json.JSONDecodeError, TypeError):
+                    row["context"] = {}
+        return {"total": total, "entries": rows}
+
+    async def verify_audit_chain(self) -> Dict:
+        """Walk the full audit chain and report every integrity violation.
+
+        Three classes of violation are detected:
+          - modified  : stored entry_hash does not match a locally recomputed hash.
+          - gap       : prev_hash of a row does not equal the entry_hash of the
+                        immediately preceding row (catches deleted rows).
+          - sentinel  : a row written after the migration still carries the
+                        all-zeros placeholder (insert-hash update never committed).
+
+        Rows with both prev_hash and entry_hash equal to the all-zeros genesis
+        sentinel are classified as pre-migration and skipped so existing data
+        does not produce false positives.
+        """
+        rows = await self.fetchall(
+            "SELECT id, timestamp, event_type, severity, user_id, ip_address, "
+            "message, context_json, task_id, plugin_id, prev_hash, entry_hash "
+            "FROM audit_log ORDER BY id ASC"
+        )
+        breaks: List[ChainBreak] = []
+        prev_entry_hash: Optional[str] = None
+
+        for row in rows:
+            stored_prev = row["prev_hash"]
+            stored_hash = row["entry_hash"]
+            is_sentinel = stored_hash == _GENESIS_HASH and stored_prev == _GENESIS_HASH
+
+            if is_sentinel:
+                # Pre-migration row — skip, update chain anchor to genesis so
+                # the first real row can anchor correctly.
+                prev_entry_hash = _GENESIS_HASH
+                continue
+
+            if stored_hash == _GENESIS_HASH:
+                breaks.append(ChainBreak(
+                    row_id=row["id"],
+                    reason="sentinel",
+                    expected_hash=None,
+                    stored_hash=stored_hash,
+                ))
+                prev_entry_hash = stored_hash
+                continue
+
+            expected_prev = prev_entry_hash if prev_entry_hash is not None else _GENESIS_HASH
+            if stored_prev != expected_prev:
+                breaks.append(ChainBreak(
+                    row_id=row["id"],
+                    reason="gap",
+                    expected_hash=expected_prev,
+                    stored_hash=stored_prev,
+                ))
+
+            recomputed = _compute_entry_hash(
+                row_id=row["id"],
+                timestamp=row["timestamp"] or "",
+                event_type=row["event_type"] or "",
+                severity=row["severity"] or "",
+                user_id=row.get("user_id"),
+                ip_address=row.get("ip_address"),
+                message=row["message"] or "",
+                context_json=row.get("context_json"),
+                task_id=row.get("task_id"),
+                plugin_id=row.get("plugin_id"),
+                prev_hash=stored_prev,
+            )
+            if recomputed != stored_hash:
+                breaks.append(ChainBreak(
+                    row_id=row["id"],
+                    reason="modified",
+                    expected_hash=recomputed,
+                    stored_hash=stored_hash,
+                ))
+
+            prev_entry_hash = stored_hash
+
+        total_checked = sum(
+            1 for r in rows
+            if not (r["entry_hash"] == _GENESIS_HASH and r["prev_hash"] == _GENESIS_HASH)
+        )
+        return {
+            "ok": len(breaks) == 0,
+            "total_rows": len(rows),
+            "rows_checked": total_checked,
+            "pre_migration_rows": len(rows) - total_checked,
+            "chain_breaks": [
+                {
+                    "row_id": b.row_id,
+                    "reason": b.reason,
+                    "expected_hash": b.expected_hash,
+                    "stored_hash": b.stored_hash,
+                }
+                for b in breaks
+            ],
+        }
 
 
 db: Optional[Database] = None

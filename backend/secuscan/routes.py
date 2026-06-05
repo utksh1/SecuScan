@@ -1798,3 +1798,47 @@ async def export_audit_log(format: str = "json"):
         media_type=mime_type,
         headers={"Content-Disposition": f"attachment; filename=network-audit.{format}"}
     )
+
+
+@router.get("/admin/audit-log", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
+async def list_audit_log(
+    limit: int = 100,
+    offset: int = 0,
+    event_type: Optional[str] = None,
+    severity: Optional[str] = None,
+    task_id: Optional[str] = None,
+):
+    """Return a paginated list of application audit log entries."""
+    if limit < 1 or limit > 1000:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 1000")
+    if offset < 0:
+        raise HTTPException(status_code=400, detail="offset must be non-negative")
+    db = await get_db()
+    result = await db.get_audit_log(
+        limit=limit,
+        offset=offset,
+        event_type=event_type,
+        severity=severity,
+        task_id=task_id,
+    )
+    return result
+
+
+@router.get("/admin/audit-log/verify", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
+async def verify_audit_log_chain():
+    """Walk the full audit log chain and report every integrity violation.
+
+    Returns ok=true when no breaks are detected. Violations are classified as:
+      - modified : the stored entry_hash does not match the locally recomputed value,
+                   indicating the row content was altered after insertion.
+      - gap      : a row's prev_hash does not match the entry_hash of the immediately
+                   preceding row, indicating one or more rows were deleted between them.
+      - sentinel : a post-migration row still carries the all-zeros placeholder,
+                   meaning the hash update after INSERT never committed.
+
+    This endpoint never mutates any audit row — it is a read-only diagnostic.
+    """
+    db = await get_db()
+    report = await db.verify_audit_chain()
+    status_code = 200 if report["ok"] else 409
+    return JSONResponse(content=report, status_code=status_code)
