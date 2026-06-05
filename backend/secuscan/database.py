@@ -194,7 +194,7 @@ class Database:
                 version_id      TEXT REFERENCES workflow_versions(id) ON DELETE SET NULL,
                 version_number  INTEGER,
                 triggered_by    TEXT NOT NULL DEFAULT 'manual',
-                status          TEXT NOT NULL DEFAULT 'pending',
+                status          TEXT NOT NULL DEFAULT 'queued',
                 task_ids_json   TEXT NOT NULL DEFAULT '[]',
                 started_at      TIMESTAMP NOT NULL DEFAULT (datetime('now')),
                 completed_at    TIMESTAMP,
@@ -571,10 +571,56 @@ class Database:
         await self.execute(
             "INSERT INTO workflow_runs "
             "(id, workflow_id, version_id, version_number, triggered_by, status, task_ids_json) "
-            "VALUES (?, ?, ?, ?, ?, 'pending', ?)",
+            "VALUES (?, ?, ?, ?, ?, 'queued', ?)",
             (run_id, workflow_id, version_id, version_number, triggered_by, json.dumps(task_ids)),
         )
         return run_id
+
+    async def finalize_workflow_run(self, run_id: str, status: str, error_message: Optional[str] = None) -> None:
+        """Mark a workflow run as completed, failed, or cancelled with a timestamp.
+
+        status must be one of: completed | failed | cancelled.
+        This is called once all tasks in the run reach a terminal state.
+        """
+        await self.execute(
+            "UPDATE workflow_runs SET status = ?, completed_at = datetime('now'), error_message = ? "
+            "WHERE id = ?",
+            (status, error_message, run_id),
+        )
+
+    async def check_workflow_run_tasks(self, run_id: str) -> Optional[str]:
+        """Inspect the task statuses for a run and return the appropriate run status.
+
+        Returns:
+          'completed' if all tasks are completed.
+          'failed'    if any task failed and none are still running/queued.
+          'cancelled' if any task was cancelled and none are still running/queued.
+          None        if tasks are still in progress.
+        """
+        run_row = await self.fetchone("SELECT task_ids_json FROM workflow_runs WHERE id = ?", (run_id,))
+        if run_row is None:
+            return None
+        try:
+            task_ids = json.loads(run_row["task_ids_json"] or "[]")
+        except (json.JSONDecodeError, TypeError):
+            task_ids = []
+        if not task_ids:
+            return "completed"
+        statuses = []
+        for tid in task_ids:
+            row = await self.fetchone("SELECT status FROM tasks WHERE id = ?", (tid,))
+            if row:
+                statuses.append(row["status"])
+        if not statuses:
+            return None
+        in_progress = {"queued", "running"}
+        if any(s in in_progress for s in statuses):
+            return None
+        if all(s == "completed" for s in statuses):
+            return "completed"
+        if any(s == "cancelled" for s in statuses):
+            return "cancelled"
+        return "failed"
 
     async def get_workflow_runs(self, workflow_id: str, limit: int = 50, offset: int = 0) -> Dict:
         """Return paginated run history for a workflow."""

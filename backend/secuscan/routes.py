@@ -1331,6 +1331,7 @@ async def run_workflow_once(workflow_id: str):
         task_ids=created_task_ids,
         triggered_by="manual",
     )
+    asyncio.create_task(_finalize_workflow_run(run_id))
     return {
         "workflow_id": workflow_id,
         "run_id": run_id,
@@ -1338,6 +1339,35 @@ async def run_workflow_once(workflow_id: str):
         "queued_task_ids": created_task_ids,
         "queued_tasks": created_task_ids,
     }
+
+
+async def _finalize_workflow_run(run_id: str, poll_interval: float = 5.0, max_polls: int = 720) -> None:
+    """Background task that polls task statuses and marks the run terminal.
+
+    Polls every *poll_interval* seconds for up to *max_polls* iterations
+    (default: 5 s × 720 = 1 hour). If tasks are still running after the
+    limit, the run is marked failed with a timeout message so it never stays
+    permanently in the 'queued' state.
+    """
+    from .database import get_db as _get_db
+    for _ in range(max_polls):
+        await asyncio.sleep(poll_interval)
+        try:
+            db = await _get_db()
+            terminal_status = await db.check_workflow_run_tasks(run_id)
+            if terminal_status is not None:
+                await db.finalize_workflow_run(run_id, terminal_status)
+                return
+        except Exception as exc:
+            logger.warning("workflow run finalization error for %s: %s", run_id, exc)
+            return
+    try:
+        db = await _get_db()
+        await db.finalize_workflow_run(
+            run_id, "failed", "Run finalization timed out — check individual task statuses"
+        )
+    except Exception as exc:
+        logger.warning("workflow run timeout finalization failed for %s: %s", run_id, exc)
 
 
 @router.get("/workflows/{workflow_id}/runs")

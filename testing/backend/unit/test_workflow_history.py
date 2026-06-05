@@ -159,11 +159,11 @@ class TestRecordWorkflowRun:
         assert rows[0]["triggered_by"] == "scheduler"
 
     @pytest.mark.asyncio
-    async def test_default_status_is_pending(self, db):
+    async def test_default_status_is_queued(self, db):
         wf_id = await _insert_workflow(db)
         await db.record_workflow_run(wf_id, None, None, [])
         rows = await db.fetchall("SELECT * FROM workflow_runs WHERE workflow_id = ?", (wf_id,))
-        assert rows[0]["status"] == "pending"
+        assert rows[0]["status"] == "queued"
 
 
 class TestGetWorkflowRuns:
@@ -254,3 +254,71 @@ class TestRollbackIntegration:
         assert len(versions) == 5
         assert versions[0]["version_number"] == 5
         assert versions[4]["version_number"] == 1
+
+
+class TestWorkflowRunLifecycle:
+    @pytest.mark.asyncio
+    async def test_finalize_run_marks_completed(self, db):
+        wf_id = await _insert_workflow(db)
+        run_id = await db.record_workflow_run(wf_id, None, None, [])
+        await db.finalize_workflow_run(run_id, "completed")
+        rows = await db.fetchall("SELECT * FROM workflow_runs WHERE id = ?", (run_id,))
+        assert rows[0]["status"] == "completed"
+        assert rows[0]["completed_at"] is not None
+
+    @pytest.mark.asyncio
+    async def test_finalize_run_marks_failed_with_message(self, db):
+        wf_id = await _insert_workflow(db)
+        run_id = await db.record_workflow_run(wf_id, None, None, [])
+        await db.finalize_workflow_run(run_id, "failed", "Task crashed")
+        rows = await db.fetchall("SELECT * FROM workflow_runs WHERE id = ?", (run_id,))
+        assert rows[0]["status"] == "failed"
+        assert rows[0]["error_message"] == "Task crashed"
+
+    @pytest.mark.asyncio
+    async def test_finalize_run_marks_cancelled(self, db):
+        wf_id = await _insert_workflow(db)
+        run_id = await db.record_workflow_run(wf_id, None, None, [])
+        await db.finalize_workflow_run(run_id, "cancelled")
+        rows = await db.fetchall("SELECT * FROM workflow_runs WHERE id = ?", (run_id,))
+        assert rows[0]["status"] == "cancelled"
+
+    @pytest.mark.asyncio
+    async def test_check_workflow_run_tasks_empty_completes(self, db):
+        wf_id = await _insert_workflow(db)
+        run_id = await db.record_workflow_run(wf_id, None, None, [])
+        status = await db.check_workflow_run_tasks(run_id)
+        assert status == "completed"
+
+    @pytest.mark.asyncio
+    async def test_check_workflow_run_tasks_in_progress_returns_none(self, db):
+        wf_id = await _insert_workflow(db)
+        await db.execute(
+            "INSERT INTO tasks (id, owner_id, plugin_id, tool_name, target, status, inputs_json) "
+            "VALUES ('t1', 'u1', 'p1', 'p1', 'tgt', 'running', '{}')"
+        )
+        run_id = await db.record_workflow_run(wf_id, None, None, ["t1"])
+        status = await db.check_workflow_run_tasks(run_id)
+        assert status is None
+
+    @pytest.mark.asyncio
+    async def test_check_workflow_run_tasks_all_completed(self, db):
+        wf_id = await _insert_workflow(db)
+        await db.execute(
+            "INSERT INTO tasks (id, owner_id, plugin_id, tool_name, target, status, inputs_json) "
+            "VALUES ('t2', 'u1', 'p1', 'p1', 'tgt', 'completed', '{}')"
+        )
+        run_id = await db.record_workflow_run(wf_id, None, None, ["t2"])
+        status = await db.check_workflow_run_tasks(run_id)
+        assert status == "completed"
+
+    @pytest.mark.asyncio
+    async def test_check_workflow_run_tasks_one_failed(self, db):
+        wf_id = await _insert_workflow(db)
+        await db.execute(
+            "INSERT INTO tasks (id, owner_id, plugin_id, tool_name, target, status, inputs_json) "
+            "VALUES ('t3', 'u1', 'p1', 'p1', 'tgt', 'failed', '{}')"
+        )
+        run_id = await db.record_workflow_run(wf_id, None, None, ["t3"])
+        status = await db.check_workflow_run_tasks(run_id)
+        assert status == "failed"

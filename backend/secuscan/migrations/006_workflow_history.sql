@@ -10,7 +10,9 @@
 --
 -- workflow_runs  — one row per run_workflow_once() invocation, recording which
 --   version was active at run time, the task IDs that were queued, and the
---   final status (pending → running → completed | failed | cancelled).
+--   final status (queued → completed | failed | cancelled).
+--   A background finalizer polls task statuses and updates completed_at when
+--   all tasks reach a terminal state.
 
 CREATE TABLE IF NOT EXISTS workflow_versions (
     id              TEXT PRIMARY KEY,
@@ -30,7 +32,7 @@ CREATE TABLE IF NOT EXISTS workflow_runs (
     version_id      TEXT REFERENCES workflow_versions(id) ON DELETE SET NULL,
     version_number  INTEGER,
     triggered_by    TEXT NOT NULL DEFAULT 'manual',
-    status          TEXT NOT NULL DEFAULT 'pending',
+    status          TEXT NOT NULL DEFAULT 'queued',
     task_ids_json   TEXT NOT NULL DEFAULT '[]',
     started_at      TIMESTAMP NOT NULL DEFAULT (datetime('now')),
     completed_at    TIMESTAMP,
