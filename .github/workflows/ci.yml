@@ -181,7 +181,7 @@ jobs:
       - name: Run npm audit
         id: npm_audit
         run: |
-          npm audit --json > npm-audit-report.json || {
+          npm audit --json > ${{ github.workspace }}/frontend/npm-audit-report.json || {
             EXIT_CODE=$?
             echo "EXIT_CODE=$EXIT_CODE" >> $GITHUB_OUTPUT
             exit 0  # Check severity next
@@ -190,7 +190,7 @@ jobs:
       - name: Install Python YAML library
         run: pip install pyyaml
       - name: Check npm audit results
-        run: python ${{ github.workspace }}/scripts/check_npm_audit.py --report npm-audit-report.json --config ${{ github.workspace }}/.audit-config.yaml
+        run: python ${{ github.workspace }}/scripts/check_npm_audit.py --report ${{ github.workspace }}/frontend/npm-audit-report.json --config ${{ github.workspace }}/.audit-config.yaml
       - name: Upload npm-audit report
         if: always()
         uses: actions/upload-artifact@v4
