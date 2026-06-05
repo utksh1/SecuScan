@@ -43,17 +43,24 @@ async def app_client(db_path):
         from backend.secuscan.main import app
         from backend.secuscan import database as db_module
         from backend.secuscan import cache as cache_module
+        from backend.secuscan import auth as auth_module
 
         await cache_module.init_cache()
         test_db = await db_module.init_db(db_path)
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
-            client._mock_executor = mock_executor
-            client._db = test_db
-            client._db_path = db_path
-            yield client
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as tmp_data_dir:
+            api_key = auth_module.init_api_key(tmp_data_dir)
+
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+                headers={"X-Api-Key": api_key},
+            ) as client:
+                client._mock_executor = mock_executor
+                client._db = test_db
+                client._db_path = db_path
+                yield client
 
         await test_db.disconnect()
         db_module.db = None
@@ -179,9 +186,13 @@ class TestDeleteTaskRecordsChunking:
 
         mock_db = AsyncMock()
         mock_db.fetchall = AsyncMock(return_value=[])
+        mock_db.fetchone = AsyncMock(return_value=None)
+        mock_db.begin = AsyncMock()
+        mock_db.commit = AsyncMock()
+        mock_db.rollback = AsyncMock()
         async def capture_execute(sql, params=()):
             captured_sql.append(sql)
-        mock_db.execute = capture_execute
+        mock_db.execute_no_commit = capture_execute
 
         with patch("backend.secuscan.routes.get_db", return_value=mock_db):
             await delete_task_records(ids)
@@ -211,10 +222,14 @@ class TestDeleteTaskRecordsChunking:
 
         mock_db = AsyncMock()
         mock_db.fetchall = AsyncMock(return_value=[])
+        mock_db.fetchone = AsyncMock(return_value=None)
+        mock_db.begin = AsyncMock()
+        mock_db.commit = AsyncMock()
+        mock_db.rollback = AsyncMock()
         async def capture_execute(sql, params=()):
             captured_sql.append(sql)
             captured_params.append(params)
-        mock_db.execute = capture_execute
+        mock_db.execute_no_commit = capture_execute
 
         with patch("backend.secuscan.routes.get_db", return_value=mock_db):
             await delete_task_records(ids)
@@ -249,4 +264,9 @@ class TestDeleteTaskRecordsChunking:
             await delete_task_records([])
 
         mock_db.execute.assert_not_called()
+        mock_db.execute_no_commit.assert_not_called()
         mock_db.fetchall.assert_not_called()
+        mock_db.fetchone.assert_not_called()
+        mock_db.begin.assert_not_called()
+        mock_db.commit.assert_not_called()
+        mock_db.rollback.assert_not_called()

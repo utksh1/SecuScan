@@ -42,6 +42,8 @@ async def app_client(db_path):
         from backend.secuscan.main import app
         from backend.secuscan import database as db_module
         from backend.secuscan import cache as cache_module
+        from backend.secuscan import auth as auth_module
+        import tempfile
 
         # Initialise a real in-memory cache (it's just a dict, no external deps)
         await cache_module.init_cache()
@@ -49,13 +51,19 @@ async def app_client(db_path):
         # Initialise a fresh DB pointing at our temp file
         test_db = await db_module.init_db(db_path)
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
-            client._mock_executor = mock_executor
-            client._db = test_db
-            client._db_path = db_path
-            yield client
+        # Initialise API key in a temporary directory so the dependency resolves
+        with tempfile.TemporaryDirectory() as tmp_auth_dir:
+            api_key = auth_module.init_api_key(tmp_auth_dir)
+
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+                headers={"X-Api-Key": api_key},
+            ) as client:
+                client._mock_executor = mock_executor
+                client._db = test_db
+                client._db_path = db_path
+                yield client
 
         # Teardown
         await test_db.disconnect()
@@ -332,6 +340,67 @@ async def test_bulk_delete_with_running_task_returns_400(app_client):
     for tid in (task_ok, task_running):
         rows = await db_fetchall(db_path, "SELECT id FROM tasks WHERE id = ?", (tid,))
         assert len(rows) == 1, f"Task {tid} should NOT have been deleted after 400"
+
+
+@pytest.mark.asyncio
+async def test_bulk_delete_atomicity_no_partial_delete_with_running_task(app_client):
+    """Atomicity: running-task rejection rolls back ALL deletes — no orphaned records."""
+    db = app_client._db
+    db_path = app_client._db_path
+
+    task_ok = await insert_task(db, status="completed")
+    finding_id = await insert_finding(db, task_ok)
+    report_id = await insert_report(db, task_ok)
+    await insert_audit_log(db, task_ok)
+
+    task_running = await insert_task(db, status="running")
+
+    resp = await app_client.request(
+        "DELETE", "/api/v1/tasks/bulk", json=[task_ok, task_running],
+    )
+    assert resp.status_code == 400, resp.text
+
+    # Task rows must survive
+    for tid in (task_ok, task_running):
+        rows = await db_fetchall(db_path, "SELECT id FROM tasks WHERE id = ?", (tid,))
+        assert len(rows) == 1, f"Task {tid} should NOT have been deleted"
+
+    # Associated records must survive
+    rows = await db_fetchall(db_path, "SELECT id FROM findings WHERE id = ?", (finding_id,))
+    assert len(rows) == 1, "Finding should NOT have been deleted"
+
+    rows = await db_fetchall(db_path, "SELECT id FROM reports WHERE id = ?", (report_id,))
+    assert len(rows) == 1, "Report should NOT have been deleted"
+
+    rows = await db_fetchall(db_path, "SELECT id FROM audit_log WHERE task_id = ?", (task_ok,))
+    assert len(rows) >= 1, "Audit log should NOT have been deleted"
+
+
+@pytest.mark.asyncio
+async def test_bulk_delete_cascades_to_associated_records(app_client):
+    """Bulk delete removes findings, reports, and audit_log for each deleted task."""
+    db = app_client._db
+    db_path = app_client._db_path
+
+    task_id = await insert_task(db, status="completed")
+    finding_id = await insert_finding(db, task_id)
+    report_id = await insert_report(db, task_id)
+    await insert_audit_log(db, task_id)
+
+    resp = await app_client.request(
+        "DELETE", "/api/v1/tasks/bulk", json=[task_id],
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["deleted_count"] == 1
+
+    rows = await db_fetchall(db_path, "SELECT id FROM findings WHERE id = ?", (finding_id,))
+    assert len(rows) == 0, "Finding should have been deleted"
+
+    rows = await db_fetchall(db_path, "SELECT id FROM reports WHERE id = ?", (report_id,))
+    assert len(rows) == 0, "Report should have been deleted"
+
+    rows = await db_fetchall(db_path, "SELECT id FROM audit_log WHERE task_id = ?", (task_id,))
+    assert len(rows) == 0, "Audit log should have been deleted"
 
 
 # ---------------------------------------------------------------------------

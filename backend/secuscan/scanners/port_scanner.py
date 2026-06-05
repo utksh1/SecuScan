@@ -4,7 +4,6 @@ from typing import Dict, Any, List, Optional, Tuple
 from .base import BaseScanner
 from ..plugins import get_plugin_manager
 
-
 class PortScanner(BaseScanner):
     """
     Orchestrates Nmap scanning with refined result parsing.
@@ -104,25 +103,6 @@ class PortScanner(BaseScanner):
             "open_ports": [f["metadata"]["port"] for f in findings],
             "status": "completed" if exit_code == 0 else "failed",
         }
-
-    async def _execute_command(self, command: List[str]) -> tuple:
-        """Executes the command and returns (output, exit_code)"""
-        import asyncio.subprocess
-        process = await asyncio.create_subprocess_exec(
-            *command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-        )
-        try:
-            stdout, _ = await process.communicate()
-            return stdout.decode("utf-8", errors="replace"), process.returncode
-        except asyncio.CancelledError:
-            try:
-                process.kill()
-                await process.wait()
-            except Exception:
-                pass
-            raise
 
     def _parse_nmap_output(self, output: str, target: str) -> List[Dict[str, Any]]:
         findings = []

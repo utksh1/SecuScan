@@ -203,6 +203,15 @@ securityContext:
   readOnlyRootFilesystem: true
 ```
 
+### Docker Sandbox Network Isolation
+
+When running in Docker-sandboxed mode (`SECUSCAN_DOCKER_ENABLED=true`), SecuScan executes standard plugins inside isolated container sandboxes.
+
+To ensure strict network isolation and prevent lateral movement or inter-container communication (ICC):
+* SecuScan uses a dedicated Docker bridge network defined by the environment variable `SECUSCAN_DOCKER_NETWORK` (defaults to `restricted`).
+* If this network does not exist, the Task Executor will **automatically create it** on first use with `--opt com.docker.network.bridge.enable_icc=false` (Inter-Container Communication disabled). This ensures sandbox containers cannot talk to each other or the host's private endpoints.
+* If ICC-disabled network creation fails, it will attempt a standard bridge fallback before failing with a fatal runtime error.
+
 ---
 
 # Hardening Checklist

@@ -145,21 +145,3 @@ class WebScanner(BaseScanner):
                 "metadata": {"status": status}
             })
         return findings
-
-    async def _execute_command(self, command: List[str]) -> tuple:
-        import asyncio.subprocess
-        process = await asyncio.create_subprocess_exec(
-            *command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT
-        )
-        try:
-            stdout, _ = await process.communicate()
-            return stdout.decode('utf-8', errors='replace'), process.returncode
-        except asyncio.CancelledError:
-            try:
-                process.kill()
-                await process.wait()
-            except Exception:
-                pass
-            raise

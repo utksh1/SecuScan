@@ -36,13 +36,12 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     volumes:
-      - ./backend:/app
-      - ./plugins:/app/plugins
+      - ./plugins:/app/plugins   # plugins only — don't overwrite /app wholesale
       - ./data:/app/data
     ports:
       - "127.0.0.1:8081:8081"
     environment:
-      - SECUSCAN_BIND_ADDRESS=127.0.0.1
+      - SECUSCAN_BIND_ADDRESS=0.0.0.0   # fix: was 127.0.0.1, unreachable inside Docker
       - SECUSCAN_BIND_PORT=8081
       - SECUSCAN_POSTGRES_DSN=postgresql://secuscan:secuscan@postgres:5432/secuscan
       - SECUSCAN_REDIS_URL=redis://redis:6379/0
@@ -52,12 +51,19 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8081/api/v1/health')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
     restart: unless-stopped
 
   frontend:
-    image: node:20-alpine
+    image: node:20-alpine          # intentional: dev mode uses node directly
     working_dir: /app
-    command: sh -c "npm ci && npm run dev"
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0"  # fix: expose to Docker network
     ports:
       - "127.0.0.1:5173:5173"
     environment:
@@ -65,7 +71,8 @@ services:
     volumes:
       - ./frontend:/app
     depends_on:
-      - api
+      api:
+        condition: service_healthy   # wait for api to be ready, not just started
     restart: unless-stopped
 
 volumes:

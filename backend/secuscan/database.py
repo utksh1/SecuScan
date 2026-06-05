@@ -34,11 +34,12 @@ class Database:
         """Establish database connection and ensure schema exists."""
         # Ensure data directory exists
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        
+
         conn = await aiosqlite.connect(self.db_path)
         self._connection = conn
         conn.row_factory = aiosqlite.Row
         await self._create_schema()
+        await self._run_migrations()
 
     async def disconnect(self):
         """Close the current database connection."""
@@ -53,6 +54,7 @@ class Database:
             """
             CREATE TABLE IF NOT EXISTS tasks (
                 id TEXT PRIMARY KEY,
+                owner_id TEXT NOT NULL DEFAULT 'default',
                 plugin_id TEXT NOT NULL,
                 tool_name TEXT NOT NULL,
                 target TEXT NOT NULL,
@@ -94,6 +96,7 @@ class Database:
 
             CREATE TABLE IF NOT EXISTS findings (
                 id TEXT PRIMARY KEY,
+                owner_id TEXT NOT NULL DEFAULT 'default',
                 task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
                 plugin_id TEXT NOT NULL,
                 title TEXT NOT NULL,
@@ -112,6 +115,7 @@ class Database:
 
             CREATE TABLE IF NOT EXISTS reports (
                 id TEXT PRIMARY KEY,
+                owner_id TEXT NOT NULL DEFAULT 'default',
                 task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
                 name TEXT NOT NULL,
                 type TEXT NOT NULL DEFAULT 'technical',
@@ -171,6 +175,35 @@ class Database:
                 created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
                 last_run_at TIMESTAMP
             );
+
+            CREATE TABLE IF NOT EXISTS workflow_versions (
+                id              TEXT PRIMARY KEY,
+                workflow_id     TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+                version_number  INTEGER NOT NULL,
+                definition_json TEXT NOT NULL,
+                created_at      TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                created_by      TEXT NOT NULL DEFAULT 'system',
+                UNIQUE(workflow_id, version_number)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_wf_versions_workflow ON workflow_versions(workflow_id, version_number DESC);
+
+            CREATE TABLE IF NOT EXISTS workflow_runs (
+                id              TEXT PRIMARY KEY,
+                workflow_id     TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+                version_id      TEXT REFERENCES workflow_versions(id) ON DELETE SET NULL,
+                version_number  INTEGER,
+                triggered_by    TEXT NOT NULL DEFAULT 'manual',
+                status          TEXT NOT NULL DEFAULT 'queued',
+                task_ids_json   TEXT NOT NULL DEFAULT '[]',
+                started_at      TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                completed_at    TIMESTAMP,
+                error_message   TEXT
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_wf_runs_workflow   ON workflow_runs(workflow_id, started_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_wf_runs_status     ON workflow_runs(status);
+            CREATE INDEX IF NOT EXISTS idx_wf_runs_version_id ON workflow_runs(version_id);
 
             CREATE TABLE IF NOT EXISTS notification_rules (
                 id TEXT PRIMARY KEY,
@@ -234,6 +267,10 @@ class Database:
         existing_cols = {col["name"] for col in tasks_columns}
         
         needed_cols = {
+            # Per-user ownership for BOLA prevention (issue #401). NOT NULL with a
+            # constant default backfills every existing row to the shared default
+            # owner, preserving single-user deployments' access to their history.
+            "owner_id": "TEXT NOT NULL DEFAULT 'default'",
             "exit_code": "INTEGER",
             "scan_phase": "TEXT",
             "structured_json": "TEXT",
@@ -265,13 +302,14 @@ class Database:
                 print("Added missing column 'proof' to findings table.")
             except Exception as e:
                 print(f"Failed to add 'proof' to findings: {e}")
-
         risk_cols = {
             "exploitability": "REAL",
             "confidence": "REAL",
             "asset_exposure": "TEXT",
             "risk_score": "REAL",
             "risk_factors_json": "TEXT NOT NULL DEFAULT '[]'",
+            # Per-user ownership for BOLA prevention (issue #401).
+            "owner_id": "TEXT NOT NULL DEFAULT 'default'",
         }
         for col_name, col_type in risk_cols.items():
             if col_name not in existing_finding_cols:
@@ -280,6 +318,45 @@ class Database:
                     print(f"Added missing column {col_name} to findings table.")
                 except Exception as e:
                     print(f"Failed to add column {col_name}: {e}")
+
+        # Reports table migration: ensure owner_id exists (issue #401)
+        reports_columns = await self.fetchall("PRAGMA table_info(reports)")
+        existing_report_cols = {col["name"] for col in reports_columns}
+        if "owner_id" not in existing_report_cols:
+            try:
+                await self.execute(
+                    "ALTER TABLE reports ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'default'"
+                )
+                print("Added missing column 'owner_id' to reports table.")
+            except Exception as e:
+                print(f"Failed to add 'owner_id' to reports: {e}")
+
+        # Owner indexes must run after ALTER TABLE backfills owner_id on legacy DBs.
+        await self.connection.executescript(
+            """
+            CREATE INDEX IF NOT EXISTS idx_tasks_owner ON tasks(owner_id);
+            CREATE INDEX IF NOT EXISTS idx_findings_owner ON findings(owner_id);
+            CREATE INDEX IF NOT EXISTS idx_reports_owner ON reports(owner_id);
+            """
+        )
+
+    async def _run_migrations(self):
+        migrations_dir = Path(__file__).parent / "migrations"
+
+        if not migrations_dir.exists():
+            raise RuntimeError(
+            f"Migrations directory not found at {migrations_dir} — "
+            "ensure the backend package is installed correctly."
+        )
+
+        for migration_file in sorted(migrations_dir.glob("*.sql")):
+            sql = migration_file.read_text(encoding="utf-8")
+            try:
+                await self.connection.executescript(sql)
+            except Exception as exc:
+                raise RuntimeError(
+                    f"Migration {migration_file.name} failed — startup aborted: {exc}"
+                ) from exc
 
         await self._backfill_risk_scores()
 
@@ -324,15 +401,31 @@ class Database:
         await self.connection.execute(query, params)
         await self.connection.commit()
 
+    async def execute_no_commit(self, query: str, params: tuple = ()):
+        """Execute a write query without committing (for use inside transactions)."""
+        await self.connection.execute(query, params)
+
+    async def begin(self):
+        """Begin a transaction."""
+        await self.connection.execute("BEGIN")
+
+    async def commit(self):
+        """Commit the current transaction."""
+        await self.connection.commit()
+
+    async def rollback(self):
+        """Roll back the current transaction."""
+        await self.connection.rollback()
+
     async def fetchone(self, query: str, params: tuple = ()) -> Optional[Dict]:
         """Fetch one row."""
-        async with self.connection.execute(query, params) as cursor:
+        async with await self.connection.execute(query, params) as cursor:
             row = await cursor.fetchone()
             return dict(row) if row else None
 
     async def fetchall(self, query: str, params: tuple = ()) -> List[Dict]:
         """Fetch all rows."""
-        async with self.connection.execute(query, params) as cursor:
+        async with await self.connection.execute(query, params) as cursor:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
 
@@ -381,6 +474,187 @@ class Database:
                 plugin_id,
             ),
         )
+
+
+    async def snapshot_workflow_version(
+        self,
+        workflow_id: str,
+        name: str,
+        schedule_seconds: Optional[int],
+        enabled: bool,
+        steps: List[Dict],
+        created_by: str = "system",
+    ) -> Dict:
+        """Snapshot the current workflow definition as a new version row.
+
+        Returns the new version record including its auto-assigned version_number.
+        The version_number is the next integer in the per-workflow sequence.
+        """
+        version_id = json.dumps(None)
+        row = await self.fetchone(
+            "SELECT MAX(version_number) AS max_v FROM workflow_versions WHERE workflow_id = ?",
+            (workflow_id,),
+        )
+        next_version = (row["max_v"] or 0) + 1 if row else 1
+        version_id = __import__("uuid").uuid4().hex
+        definition = {
+            "name": name,
+            "schedule_seconds": schedule_seconds,
+            "enabled": enabled,
+            "steps": steps,
+        }
+        await self.execute(
+            "INSERT INTO workflow_versions (id, workflow_id, version_number, definition_json, created_by) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (version_id, workflow_id, next_version, json.dumps(definition), created_by),
+        )
+        return {
+            "id": version_id,
+            "workflow_id": workflow_id,
+            "version_number": next_version,
+            "definition": definition,
+            "created_by": created_by,
+        }
+
+    async def get_workflow_versions(self, workflow_id: str) -> List[Dict]:
+        """Return all versions for a workflow ordered newest first."""
+        rows = await self.fetchall(
+            "SELECT id, workflow_id, version_number, definition_json, created_at, created_by "
+            "FROM workflow_versions WHERE workflow_id = ? ORDER BY version_number DESC",
+            (workflow_id,),
+        )
+        result = []
+        for row in rows:
+            try:
+                defn = json.loads(row["definition_json"])
+            except (json.JSONDecodeError, TypeError):
+                defn = {}
+            result.append({
+                "id": row["id"],
+                "workflow_id": row["workflow_id"],
+                "version_number": row["version_number"],
+                "definition": defn,
+                "created_at": row["created_at"],
+                "created_by": row["created_by"],
+            })
+        return result
+
+    async def get_workflow_version(self, workflow_id: str, version_number: int) -> Optional[Dict]:
+        """Return a specific version record or None if it does not exist."""
+        row = await self.fetchone(
+            "SELECT id, workflow_id, version_number, definition_json, created_at, created_by "
+            "FROM workflow_versions WHERE workflow_id = ? AND version_number = ?",
+            (workflow_id, version_number),
+        )
+        if row is None:
+            return None
+        try:
+            defn = json.loads(row["definition_json"])
+        except (json.JSONDecodeError, TypeError):
+            defn = {}
+        return {
+            "id": row["id"],
+            "workflow_id": row["workflow_id"],
+            "version_number": row["version_number"],
+            "definition": defn,
+            "created_at": row["created_at"],
+            "created_by": row["created_by"],
+        }
+
+    async def record_workflow_run(
+        self,
+        workflow_id: str,
+        version_id: Optional[str],
+        version_number: Optional[int],
+        task_ids: List[str],
+        triggered_by: str = "manual",
+    ) -> str:
+        """Insert a workflow run record and return the run ID."""
+        run_id = __import__("uuid").uuid4().hex
+        await self.execute(
+            "INSERT INTO workflow_runs "
+            "(id, workflow_id, version_id, version_number, triggered_by, status, task_ids_json) "
+            "VALUES (?, ?, ?, ?, ?, 'queued', ?)",
+            (run_id, workflow_id, version_id, version_number, triggered_by, json.dumps(task_ids)),
+        )
+        return run_id
+
+    async def finalize_workflow_run(self, run_id: str, status: str, error_message: Optional[str] = None) -> None:
+        """Mark a workflow run as completed, failed, or cancelled with a timestamp.
+
+        status must be one of: completed | failed | cancelled.
+        This is called once all tasks in the run reach a terminal state.
+        """
+        await self.execute(
+            "UPDATE workflow_runs SET status = ?, completed_at = datetime('now'), error_message = ? "
+            "WHERE id = ?",
+            (status, error_message, run_id),
+        )
+
+    async def check_workflow_run_tasks(self, run_id: str) -> Optional[str]:
+        """Inspect the task statuses for a run and return the appropriate run status.
+
+        Returns:
+          'completed' if all tasks are completed.
+          'failed'    if any task failed and none are still running/queued.
+          'cancelled' if any task was cancelled and none are still running/queued.
+          None        if tasks are still in progress.
+        """
+        run_row = await self.fetchone("SELECT task_ids_json FROM workflow_runs WHERE id = ?", (run_id,))
+        if run_row is None:
+            return None
+        try:
+            task_ids = json.loads(run_row["task_ids_json"] or "[]")
+        except (json.JSONDecodeError, TypeError):
+            task_ids = []
+        if not task_ids:
+            return "completed"
+        statuses = []
+        for tid in task_ids:
+            row = await self.fetchone("SELECT status FROM tasks WHERE id = ?", (tid,))
+            if row:
+                statuses.append(row["status"])
+        if not statuses:
+            return None
+        in_progress = {"queued", "running"}
+        if any(s in in_progress for s in statuses):
+            return None
+        if all(s == "completed" for s in statuses):
+            return "completed"
+        if any(s == "cancelled" for s in statuses):
+            return "cancelled"
+        return "failed"
+
+    async def get_workflow_runs(self, workflow_id: str, limit: int = 50, offset: int = 0) -> Dict:
+        """Return paginated run history for a workflow."""
+        count_row = await self.fetchone(
+            "SELECT COUNT(*) AS total FROM workflow_runs WHERE workflow_id = ?", (workflow_id,)
+        )
+        total = count_row["total"] if count_row else 0
+        rows = await self.fetchall(
+            "SELECT * FROM workflow_runs WHERE workflow_id = ? "
+            "ORDER BY started_at DESC LIMIT ? OFFSET ?",
+            (workflow_id, limit, offset),
+        )
+        entries = []
+        for row in rows:
+            try:
+                task_ids = json.loads(row["task_ids_json"] or "[]")
+            except (json.JSONDecodeError, TypeError):
+                task_ids = []
+            entries.append({
+                "id": row["id"],
+                "workflow_id": row["workflow_id"],
+                "version_id": row["version_id"],
+                "version_number": row["version_number"],
+                "triggered_by": row["triggered_by"],
+                "status": row["status"],
+                "task_ids": task_ids,
+                "started_at": row["started_at"],
+                "completed_at": row["completed_at"],
+                "error_message": row["error_message"],
+            })
+        return {"total": total, "runs": entries}
 
 
 db: Optional[Database] = None

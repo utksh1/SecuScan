@@ -100,6 +100,66 @@ async def test_sliding_window_reset():
     assert res.headers["X-RateLimit-Remaining"] == "1"
 
 
+@pytest.mark.asyncio
+async def test_endpoint_rate_limiter_prunes_expired_identity_buckets():
+    """Expired identities should not stay resident forever."""
+    limiter = EndpointRateLimiter("test_bucket", limit=5, window_seconds=10)
+    await limiter.reset()
+
+    class MockRequest:
+        def __init__(self, user_id):
+            self.client = type("Client", (), {"host": "127.0.0.1"})()
+            self.headers = {"x-user-id": user_id}
+            self.state = type("State", (), {})()
+
+    class MockResponse:
+        def __init__(self):
+            self.headers = {}
+
+    now = datetime.now()
+    async with limiter.lock:
+        limiter.history["user:expired_a"] = [now - timedelta(seconds=30)]
+        limiter.history["user:expired_b"] = [now - timedelta(seconds=20)]
+        limiter.history["user:active"] = [now - timedelta(seconds=2)]
+        limiter.last_cleanup = now - timedelta(seconds=11)
+
+    await limiter(MockRequest("current"), MockResponse())
+
+    async with limiter.lock:
+        assert "user:expired_a" not in limiter.history
+        assert "user:expired_b" not in limiter.history
+        assert "user:active" in limiter.history
+        assert "user:current" in limiter.history
+
+
+@pytest.mark.asyncio
+async def test_endpoint_rate_limiter_cleanup_is_interval_bounded():
+    """Cleanup should not scan every request inside the cleanup interval."""
+    limiter = EndpointRateLimiter("test_bucket", limit=5, window_seconds=10)
+    await limiter.reset()
+
+    class MockRequest:
+        def __init__(self, user_id):
+            self.client = type("Client", (), {"host": "127.0.0.1"})()
+            self.headers = {"x-user-id": user_id}
+            self.state = type("State", (), {})()
+
+    class MockResponse:
+        def __init__(self):
+            self.headers = {}
+
+    now = datetime.now()
+    async with limiter.lock:
+        limiter.history["user:expired"] = [now - timedelta(seconds=30)]
+        limiter.last_cleanup = now
+
+    await limiter(MockRequest("current"), MockResponse())
+
+    async with limiter.lock:
+        assert "user:expired" in limiter.history
+        assert "user:current" in limiter.history
+
+
 def test_priority_client_identity_resolution():
     """
     Verify client identity resolves correctly in priority order:
@@ -213,6 +273,39 @@ def test_route_level_integration_and_independent_buckets(test_client, monkeypatc
     assert resp_vault1.status_code == 200
     assert resp_vault1.headers["X-RateLimit-Limit"] == "2"
     assert resp_vault1.headers["X-RateLimit-Remaining"] == "1"
+
+
+def test_scheduler_tick_is_rate_limited(test_client, monkeypatch):
+    """The scheduler tick endpoint must throttle rapid repeated calls.
+
+    Without a limiter, any API key holder could call the tick endpoint in a
+    tight loop and force continuous workflow execution. This test confirms the
+    limiter is wired: with a limit of 1, the second call within the window is
+    rejected with 429.
+    """
+    from backend.secuscan import workflows
+    from backend.secuscan.ratelimit import scheduler_tick_limiter
+
+    # Avoid any real scheduling side effects; only the limiter is under test.
+    async def _noop_tick():
+        return None
+
+    monkeypatch.setattr(workflows.scheduler, "tick", _noop_tick)
+
+    # Tighten the limiter to one call per window for a deterministic assertion.
+    scheduler_tick_limiter.limit = 1
+    scheduler_tick_limiter.window_seconds = 10
+    asyncio.run(scheduler_tick_limiter.reset())
+
+    first = test_client.post("/api/v1/workflows/scheduler/tick")
+    assert first.status_code == 200
+    assert first.json() == {"tick": "ok"}
+    assert first.headers["X-RateLimit-Limit"] == "1"
+    assert first.headers["X-RateLimit-Remaining"] == "0"
+
+    second = test_client.post("/api/v1/workflows/scheduler/tick")
+    assert second.status_code == 429
+    assert "Retry-After" in second.headers
 
 
 # ── RateLimiter per-client keying tests ───────────────────────────────────────
