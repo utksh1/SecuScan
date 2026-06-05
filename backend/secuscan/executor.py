@@ -743,6 +743,7 @@ class TaskExecutor:
             try:
                 await asyncio.wait_for(read_stream(), timeout=timeout)
                 await process.wait()
+                self._process_pids.pop(task_id, None)
                 return "".join(output_lines), process.returncode if process.returncode is not None else -1
 
             except asyncio.TimeoutError:
@@ -755,6 +756,7 @@ class TaskExecutor:
                     await asyncio.wait_for(process.wait(), timeout=3)
                 except asyncio.TimeoutError:
                     pass
+                self._process_pids.pop(task_id, None)
                 return "".join(output_lines) + "\nTask timed out", -1
 
             except asyncio.CancelledError:
@@ -767,9 +769,14 @@ class TaskExecutor:
                     await asyncio.wait_for(process.wait(), timeout=3)
                 except asyncio.TimeoutError:
                     pass
+                self._process_pids.pop(task_id, None)
                 raise
 
+        except asyncio.CancelledError:
+            self._process_pids.pop(task_id, None)
+            raise
         except Exception as e:
+            self._process_pids.pop(task_id, None)
             logger.error(f"Failed to execute command: {e}")
             return f"Execution error: {str(e)}", -1
 

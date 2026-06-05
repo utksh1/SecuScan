@@ -192,7 +192,7 @@ class TestExecuteCommandProcessGroup:
         mock_term.assert_awaited_once_with(4001, "task-cancel")
 
     @pytest.mark.asyncio
-    async def test_process_pid_populated_then_cleared_by_task_finally(self):
+    async def test_process_pid_cleared_after_successful_command(self):
         from backend.secuscan.executor import TaskExecutor
         executor = TaskExecutor()
 
@@ -203,13 +203,31 @@ class TestExecuteCommandProcessGroup:
         mock_proc.stdout.at_eof.return_value = True
         mock_proc.wait = AsyncMock(return_value=0)
 
-        assert "task-pid-clear" not in executor._process_pids
-
         with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
             await executor._execute_command(["echo", "done"], "task-pid-clear")
 
-        executor._process_pids.pop("task-pid-clear", None)
         assert "task-pid-clear" not in executor._process_pids
+
+    @pytest.mark.asyncio
+    async def test_process_pid_cleared_after_timeout(self):
+        from backend.secuscan.executor import TaskExecutor
+        executor = TaskExecutor()
+
+        mock_proc = AsyncMock()
+        mock_proc.pid = 6001
+        mock_proc.returncode = -1
+        mock_proc.stdout = AsyncMock()
+        mock_proc.stdout.at_eof.return_value = False
+        mock_proc.wait = AsyncMock(return_value=-1)
+
+        with (
+            patch("asyncio.create_subprocess_exec", return_value=mock_proc),
+            patch("asyncio.wait_for", side_effect=asyncio.TimeoutError),
+            patch("backend.secuscan.executor._terminate_process_group", new_callable=AsyncMock),
+        ):
+            await executor._execute_command(["sleep", "99"], "task-pid-timeout", timeout=1)
+
+        assert "task-pid-timeout" not in executor._process_pids
 
 
 class TestCancelTaskProcessGroup:
