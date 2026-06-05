@@ -2,7 +2,7 @@
 name: Documentation task
 about: Propose a documentation improvement contributors can pick up directly
 title: '[DOCS] '
-labels: documentation
+labels: type:docs, area:docs, priority:medium
 assignees: ''
 
 ---
