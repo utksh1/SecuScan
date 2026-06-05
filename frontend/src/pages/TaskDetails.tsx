@@ -200,6 +200,8 @@ export default function TaskDetails() {
     const { addToast } = useToast()
 
     const [task, setTask] = useState<Task | null>(null)
+    const isMounted = useRef(true)
+    const loadTaskSeqRef = useRef(0)
     const [result, setResult] = useState<TaskResult | null>(null)
     const [schema, setSchema] = useState<PluginSchemaResponse | null>(null)
     const [rawOutput, setRawOutput] = useState<string>('')
@@ -213,9 +215,31 @@ export default function TaskDetails() {
     const [rawSearch, setRawSearch] = useState('')
     const [wrapRawOutput, setWrapRawOutput] = useState(true)
 
+    // ✅ FIX: isMounted cleanup belongs here in TaskDetails, not in FindingDrawer.
+    // The ref is owned by this component — its teardown must live here too.
+    useEffect(() => {
+        return () => {
+            isMounted.current = false
+        }
+    }, [])
+
+    const copyTaskId = async () => {
+        if (!taskId) return
+
+        try {
+            await navigator.clipboard.writeText(taskId)
+            addToast('Task ID copied to clipboard', 'success')
+        } catch (error) {
+            console.error('Failed to copy task ID:', error)
+            addToast('Failed to copy task ID', 'error')
+        }
+    }
+
     const FindingDrawer = ({ finding, onClose }: { finding: Finding, onClose: () => void }) => {
         const drawerRef = useRef<HTMLDivElement>(null)
 
+        // ✅ FIX: Only focus + keydown logic here. No isMounted teardown —
+        // that ref belongs to TaskDetails and must not be touched by a child component.
         useEffect(() => {
             drawerRef.current?.focus()
 
@@ -364,80 +388,85 @@ export default function TaskDetails() {
         loadTask()
     }, [taskId])
 
+    const handleRescan = async () => {
+        if (!task || !taskId) return
+
+        try {
+            const nextTask = await startTask(
+                task.plugin_id,
+                task.inputs || {},
+                true,
+                task.preset
+            )
+
+            if (!isMounted.current) return
+
+            addToast('Rescan started successfully', 'success')
+            navigate(routePath.task(nextTask.task_id))
+        } catch (error) {
+            console.error('Failed to start rescan:', error)
+            if (isMounted.current) {
+                addToast('Failed to start rescan', 'error')
+            }
+        }
+    }
+
     useTaskSubscription({
         taskId: taskId!,
         onStatus: (status) => {
+            if (!isMounted.current) return
             setTask((prev: Task | null) => prev ? { ...prev, status } : null)
             if (['completed', 'failed', 'cancelled'].includes(status)) {
                 loadTask()
             }
         },
         onPhase: (phase) => {
+            if (!isMounted.current) return
             setScanPhase(phase)
         },
         onOutput: (chunk) => {
+            if (!isMounted.current) return
             setRawOutput((prev) => prev + chunk)
         },
     })
 
     async function loadTask() {
+        const seq = ++loadTaskSeqRef.current
+        if (!isMounted.current) return
+
         try {
             setError(null)
             const [statusData, resultData] = await Promise.all([
                 getTaskStatus(taskId!) as Promise<Task>,
                 getTaskResult(taskId!).catch(() => null) as Promise<TaskResult | null>
             ])
+
+            if (seq !== loadTaskSeqRef.current || !isMounted.current) return
+
             setTask(statusData)
             if (statusData.scan_phase) {
                 setScanPhase(statusData.scan_phase)
             }
-            getPluginSchema(statusData.plugin_id).then(setSchema).catch(() => setSchema(null))
 
-            if (resultData) {
-                // The backend returns the result fields at the top level
+            getPluginSchema(statusData.plugin_id)
+                .then(schema => isMounted.current && setSchema(schema))
+                .catch(() => isMounted.current && setSchema(null))
+
+            if (resultData && isMounted.current) {
                 setResult(resultData)
-                // Use the full output if available
                 if (resultData.raw_output) {
                     setRawOutput(resultData.raw_output)
                 }
             }
         } catch (err) {
-            console.error('Failed to load task:', err)
-            setError(err instanceof Error ? err.message : 'Unable to load task details')
+            if (isMounted.current && seq === loadTaskSeqRef.current) {
+                console.error('Failed to load task:', err)
+                setError(err instanceof Error ? err.message : 'Unable to load task details')
+            }
         } finally {
-            setLoading(false)
-        }
-    }
-
-    const copyTaskId = async () => {
-        if (!taskId) {
-            addToast('No Task ID available', 'warning')
-            return
-        }
-        try {
-            await navigator.clipboard.writeText(taskId || '')
-            addToast('Task ID copied successfully', 'success')
-        } catch (err) {
-            console.error('Failed to copy task ID:', err)
-            addToast('Unable to copy Task ID', 'error')
-        }
-    }
-    const handleRescan = async () => {
-        if (!task) return
-        try {
-            setLoading(true)
-            const res = await startTask(
-                task.plugin_id,
-                task.inputs || {},
-                true, // Assuming consent was already granted for previous task
-                task.preset
-            )
-            navigate(routePath.task(res.task_id))
-        } catch (err) {
-            console.error('Rescan failed:', err)
-            // Error handling UI can go here
-        } finally {
-            setLoading(false)
+            if (isMounted.current && seq === loadTaskSeqRef.current) {
+                setLoading(false)
+            }
         }
     }
 
@@ -642,8 +671,6 @@ export default function TaskDetails() {
         setExpandedFindingRows(prev => ({ ...prev, [index]: !prev[index] }))
     }
 
-
-
     const DetailCard = ({ label, value, subValue }: { label: string, value: string, subValue?: string }) => (
         <div className="bg-charcoal border border-white/5 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] min-h-[118px] flex flex-col justify-between">
             <div className="space-y-3">
@@ -688,7 +715,6 @@ export default function TaskDetails() {
                                     <span className="material-symbols-outlined text-sm">
                                         content_copy
                                     </span>
-
                                     Copy ID
                                 </button>
                                 <span className={`px-3 py-1 text-[10px] uppercase tracking-[0.3em] border ${statusTone}`}>
