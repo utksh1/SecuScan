@@ -171,6 +171,92 @@ export function getReports() {
   return request('/reports')
 }
 
+export type NotificationChannelType = 'webhook' | 'email'
+export type NotificationSeverityThreshold = 'critical' | 'high' | 'medium' | 'low' | 'info'
+
+export interface NotificationRule {
+  id: string
+  name: string
+  severity_threshold: NotificationSeverityThreshold | string
+  channel_type: NotificationChannelType | string
+  target_url_or_email: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface NotificationHistoryRow {
+  id: string
+  rule_id: string
+  finding_id: string
+  status: 'success' | 'failed' | string
+  error_message?: string | null
+  sent_at: string
+}
+
+export interface NotificationRuleCreatePayload {
+  name: string
+  severity_threshold: NotificationSeverityThreshold
+  channel_type: NotificationChannelType
+  target_url_or_email: string
+  is_active: boolean
+}
+
+export interface NotificationRuleUpdatePayload {
+  name?: string
+  severity_threshold?: NotificationSeverityThreshold
+  channel_type?: NotificationChannelType
+  target_url_or_email?: string
+  is_active?: boolean
+}
+
+export async function listNotificationRules(): Promise<NotificationRule[]> {
+  const data: any = await request('/notifications/rules')
+  const rules = Array.isArray(data) ? data : data?.rules
+  return Array.isArray(rules) ? (rules as NotificationRule[]) : []
+}
+
+export async function createNotificationRule(payload: NotificationRuleCreatePayload): Promise<NotificationRule> {
+  return request<NotificationRule>('/notifications/rules', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updateNotificationRule(ruleId: string, payload: NotificationRuleUpdatePayload): Promise<NotificationRule> {
+  return request<NotificationRule>(`/notifications/rules/${ruleId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function deleteNotificationRule(ruleId: string): Promise<{ rule_id: string; deleted: boolean }> {
+  return request<{ rule_id: string; deleted: boolean }>(`/notifications/rules/${ruleId}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function listNotificationHistory(params?: {
+  rule_id?: string
+  limit?: number
+  offset?: number
+}): Promise<{ history: NotificationHistoryRow[]; total: number; limit: number; offset: number }> {
+  const sp = new URLSearchParams()
+  if (params?.rule_id) sp.set('rule_id', params.rule_id)
+  if (typeof params?.limit === 'number') sp.set('limit', String(params.limit))
+  if (typeof params?.offset === 'number') sp.set('offset', String(params.offset))
+  const suffix = sp.toString() ? `?${sp.toString()}` : ''
+  const data: any = await request(`/notifications/history${suffix}`)
+  return {
+    history: Array.isArray(data?.history) ? (data.history as NotificationHistoryRow[]) : [],
+    total: Number(data?.total ?? 0),
+    limit: Number(data?.limit ?? (params?.limit ?? 50)),
+    offset: Number(data?.offset ?? (params?.offset ?? 0)),
+  }
+}
+
 export function getTasks(params?: URLSearchParams) {
   const suffix = params ? `?${params.toString()}` : ''
   return request(`/tasks${suffix}`)
