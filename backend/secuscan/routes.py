@@ -1297,10 +1297,17 @@ async def create_workflow(payload: Dict[str, Any]):
 @router.post("/workflows/{workflow_id}/run")
 async def run_workflow_once(workflow_id: str):
     db = await get_db()
-    row = await db.fetchone("SELECT steps_json FROM workflows WHERE id = ?", (workflow_id,))
+    row = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
     if not row:
         raise HTTPException(status_code=404, detail="Workflow not found")
     steps = json.loads(row["steps_json"] or "[]")
+    active_version = await db.fetchone(
+        "SELECT id, version_number FROM workflow_versions "
+        "WHERE workflow_id = ? ORDER BY version_number DESC LIMIT 1",
+        (workflow_id,),
+    )
+    version_id = active_version["id"] if active_version else None
+    version_number = active_version["version_number"] if active_version else None
     created_task_ids: List[str] = []
     for step in steps:
         safe_mode = bool(settings.safe_mode_default)
@@ -1317,17 +1324,125 @@ async def run_workflow_once(workflow_id: str):
         asyncio.create_task(executor.execute_task(task_id))
         created_task_ids.append(task_id)
     await db.execute("UPDATE workflows SET last_run_at = datetime('now') WHERE id = ?", (workflow_id,))
+    run_id = await db.record_workflow_run(
+        workflow_id=workflow_id,
+        version_id=version_id,
+        version_number=version_number,
+        task_ids=created_task_ids,
+        triggered_by="manual",
+    )
+    asyncio.create_task(_finalize_workflow_run(run_id))
     return {
         "workflow_id": workflow_id,
+        "run_id": run_id,
+        "version_number": version_number,
         "queued_task_ids": created_task_ids,
         "queued_tasks": created_task_ids,
+    }
+
+
+async def _finalize_workflow_run(run_id: str, poll_interval: float = 5.0, max_polls: int = 720) -> None:
+    """Background task that polls task statuses and marks the run terminal.
+
+    Polls every *poll_interval* seconds for up to *max_polls* iterations
+    (default: 5 s × 720 = 1 hour). If tasks are still running after the
+    limit, the run is marked failed with a timeout message so it never stays
+    permanently in the 'queued' state.
+    """
+    from .database import get_db as _get_db
+    for _ in range(max_polls):
+        await asyncio.sleep(poll_interval)
+        try:
+            db = await _get_db()
+            terminal_status = await db.check_workflow_run_tasks(run_id)
+            if terminal_status is not None:
+                await db.finalize_workflow_run(run_id, terminal_status)
+                return
+        except Exception as exc:
+            logger.warning("workflow run finalization error for %s: %s", run_id, exc)
+            return
+    try:
+        db = await _get_db()
+        await db.finalize_workflow_run(
+            run_id, "failed", "Run finalization timed out — check individual task statuses"
+        )
+    except Exception as exc:
+        logger.warning("workflow run timeout finalization failed for %s: %s", run_id, exc)
+
+
+@router.get("/workflows/{workflow_id}/runs")
+async def list_workflow_runs(workflow_id: str, limit: int = 50, offset: int = 0):
+    """Return paginated run history for a workflow."""
+    if limit < 1 or limit > 500:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 500")
+    if offset < 0:
+        raise HTTPException(status_code=400, detail="offset must be non-negative")
+    db = await get_db()
+    wf = await db.fetchone("SELECT id FROM workflows WHERE id = ?", (workflow_id,))
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    return await db.get_workflow_runs(workflow_id=workflow_id, limit=limit, offset=offset)
+
+
+@router.get("/workflows/{workflow_id}/versions")
+async def list_workflow_versions(workflow_id: str):
+    """Return all saved version snapshots for a workflow, newest first."""
+    db = await get_db()
+    wf = await db.fetchone("SELECT id FROM workflows WHERE id = ?", (workflow_id,))
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    versions = await db.get_workflow_versions(workflow_id=workflow_id)
+    return {"workflow_id": workflow_id, "versions": versions, "total": len(versions)}
+
+
+@router.post("/workflows/{workflow_id}/rollback/{version_number}")
+async def rollback_workflow(workflow_id: str, version_number: int):
+    """Restore a workflow to a previously saved version.
+
+    The target version's full definition replaces the live workflow fields.
+    A new version snapshot is recorded so the rollback itself is auditable
+    and can be rolled back in turn.
+    """
+    db = await get_db()
+    wf = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
+    if not wf:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    target = await db.get_workflow_version(workflow_id, version_number)
+    if target is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Version {version_number} not found for this workflow",
+        )
+    defn = target["definition"]
+    name = defn.get("name", wf["name"])
+    steps = defn.get("steps", [])
+    schedule_seconds = defn.get("schedule_seconds")
+    enabled = bool(defn.get("enabled", True))
+    await db.execute(
+        "UPDATE workflows SET name = ?, steps_json = ?, schedule_seconds = ?, enabled = ? WHERE id = ?",
+        (name, json.dumps(steps), schedule_seconds, 1 if enabled else 0, workflow_id),
+    )
+    new_version = await db.snapshot_workflow_version(
+        workflow_id=workflow_id,
+        name=name,
+        schedule_seconds=schedule_seconds,
+        enabled=enabled,
+        steps=steps,
+        created_by=f"rollback_to_v{version_number}",
+    )
+    updated = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
+    return {
+        "workflow_id": workflow_id,
+        "rolled_back_to_version": version_number,
+        "new_version_number": new_version["version_number"],
+        "workflow": _serialize_workflow(updated) if updated else None,
     }
 
 
 @router.patch("/workflows/{workflow_id}")
 async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
     db = await get_db()
-    row = await db.fetchone("SELECT id FROM workflows WHERE id = ?", (workflow_id,))
+    row = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
     if not row:
         raise HTTPException(status_code=404, detail="Workflow not found")
 
@@ -1353,7 +1468,17 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
     params.append(workflow_id)
     await db.execute(f"UPDATE workflows SET {', '.join(updates)} WHERE id = ?", tuple(params))
     updated = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
-    return _serialize_workflow(updated) if updated else {"workflow_id": workflow_id, "updated": True}
+    if updated is None:
+        return {"workflow_id": workflow_id, "updated": True}
+    await db.snapshot_workflow_version(
+        workflow_id=workflow_id,
+        name=updated["name"],
+        schedule_seconds=updated["schedule_seconds"],
+        enabled=bool(updated["enabled"]),
+        steps=json.loads(updated["steps_json"] or "[]"),
+        created_by="patch",
+    )
+    return _serialize_workflow(updated)
 
 
 @router.delete("/workflows/{workflow_id}")
