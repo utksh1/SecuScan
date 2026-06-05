@@ -23,6 +23,8 @@ echo "Checking for tracked generated artifacts in git history..."
 TRACKED_FOUND=()
 for pattern in "${BLOCKED_PATTERNS[@]}"; do
   while IFS= read -r match; do
+    # Allow .gitkeep placeholder files — they are intentional empty markers
+    [[ "$match" == *".gitkeep" ]] && continue
     TRACKED_FOUND+=("$match")
   done < <(git ls-files "${pattern}" 2>/dev/null || true)
 done
@@ -49,6 +51,7 @@ fi
 FOUND=()
 for pattern in "${BLOCKED_PATTERNS[@]}"; do
   while IFS= read -r match; do
+    [[ "$match" == *".gitkeep" ]] && continue
     FOUND+=("$match")
   done < <(echo "$CHANGED_FILES" | grep -E "^${pattern}" 2>/dev/null || true)
 done
