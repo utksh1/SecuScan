@@ -10,6 +10,8 @@ import logging
 import re
 import os
 import uuid
+import csv
+import io
 import asyncio
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
@@ -1019,14 +1021,22 @@ async def delete_task_records(task_ids: List[str]):
         )
         all_task_rows.extend(rows)
 
-    # Delete associated records in chunks
+    # Log deletion before removing records
+    for tid in task_ids:
+        await db.log_audit(
+            event_type="task_deleted",
+            message=f"Task {tid} deleted with all associated findings and reports",
+            severity="info",
+            task_id=tid,
+        )
+
+    # Delete associated records in chunks (preserve audit_log for accountability)
     for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
         chunk = task_ids[i : i + SQLITE_CHUNK_SIZE]
         placeholders = ",".join(["?"] * len(chunk))
-        await db.execute(f"DELETE FROM findings   WHERE task_id IN ({placeholders})", tuple(chunk))
-        await db.execute(f"DELETE FROM reports    WHERE task_id IN ({placeholders})", tuple(chunk))
-        await db.execute(f"DELETE FROM audit_log  WHERE task_id IN ({placeholders})", tuple(chunk))
-        await db.execute(f"DELETE FROM tasks      WHERE id       IN ({placeholders})", tuple(chunk))
+        await db.execute(f"DELETE FROM findings WHERE task_id IN ({placeholders})", tuple(chunk))
+        await db.execute(f"DELETE FROM reports  WHERE task_id IN ({placeholders})", tuple(chunk))
+        await db.execute(f"DELETE FROM tasks    WHERE id       IN ({placeholders})", tuple(chunk))
 
     # Cleanup files on disk
     for row in all_task_rows:
@@ -1140,6 +1150,115 @@ async def clear_all_tasks(owner: str = Depends(get_current_owner)):
         "cleared": True,
         "message": "All scan history and associated data has been purged."
     }
+
+
+@router.get("/audit")
+async def get_audit_logs(
+    event_type: Optional[str] = None,
+    plugin_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    page: int = 1,
+    per_page: int = 50,
+):
+    """Return paginated audit log entries, filterable by event_type, plugin_id, and date range."""
+    db = await get_db()
+    where_clauses: List[str] = []
+    params: List[Any] = []
+
+    if event_type:
+        where_clauses.append("event_type = ?")
+        params.append(event_type)
+    if plugin_id:
+        where_clauses.append("plugin_id = ?")
+        params.append(plugin_id)
+    if date_from:
+        where_clauses.append("timestamp >= ?")
+        params.append(date_from)
+    if date_to:
+        where_clauses.append("timestamp <= ?")
+        params.append(date_to)
+
+    where_sql = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+    # Total count
+    count_row = await db.fetchone(f"SELECT COUNT(*) as cnt FROM audit_log{where_sql}", tuple(params))
+    total = count_row["cnt"] if count_row else 0
+
+    # Paginated results
+    offset = (page - 1) * per_page
+    rows = await db.fetchall(
+        f"SELECT * FROM audit_log{where_sql} ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+        tuple(params) + (per_page, offset),
+    )
+
+    entries = parse_json_fields(rows, ["context_json"])
+
+    return {
+        "entries": entries,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": max(1, (total + per_page - 1) // per_page),
+    }
+
+
+@router.get("/audit/export")
+async def export_audit_logs(
+    format: str = "json",
+    event_type: Optional[str] = None,
+    plugin_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+):
+    """Export audit log as CSV or JSON."""
+    db = await get_db()
+    where_clauses: List[str] = []
+    params: List[Any] = []
+
+    if event_type:
+        where_clauses.append("event_type = ?")
+        params.append(event_type)
+    if plugin_id:
+        where_clauses.append("plugin_id = ?")
+        params.append(plugin_id)
+    if date_from:
+        where_clauses.append("timestamp >= ?")
+        params.append(date_from)
+    if date_to:
+        where_clauses.append("timestamp <= ?")
+        params.append(date_to)
+
+    where_sql = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+    rows = await db.fetchall(
+        f"SELECT id, timestamp, event_type, severity, message, task_id, plugin_id, context_json FROM audit_log{where_sql} ORDER BY timestamp DESC",
+        tuple(params),
+    )
+
+    if format == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["id", "timestamp", "event_type", "severity", "message", "task_id", "plugin_id", "context"])
+        for row in rows:
+            writer.writerow([
+                row["id"], row["timestamp"], row["event_type"],
+                row["severity"], row["message"], row["task_id"],
+                row["plugin_id"], row.get("context_json", "{}"),
+            ])
+        csv_bytes = output.getvalue().encode("utf-8")
+        return Response(
+            content=csv_bytes,
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=secuscan-audit-log.csv"},
+        )
+
+    # Default JSON
+    entries = parse_json_fields(rows, ["context_json"])
+    return Response(
+        content=json.dumps(entries, indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": "attachment; filename=secuscan-audit-log.json"},
+    )
 
 
 @router.get("/settings")

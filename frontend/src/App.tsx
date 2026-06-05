@@ -11,6 +11,7 @@ import Settings from './pages/Settings'
 import Scans from './pages/Scans'
 import TaskDetails from './pages/TaskDetails'
 import Workflows from './pages/Workflows'
+import AuditLog from './pages/AuditLog'
 import ApiKeySetupScreen from './components/ApiKeySetupScreen'
 
 import { ThemeProvider } from './components/ThemeContext'
@@ -30,6 +31,7 @@ export function AppRoutes() {
       <Route path={routes.reports} element={<Reports />} />
       <Route path={routes.reportsCompare} element={<ReportCompare />} />
       <Route path={routes.workflows} element={<Workflows />} />
+      <Route path={routes.audit} element={<AuditLog />} />
       <Route path={routes.settings} element={<Settings />} />
       <Route path={routes.task} element={<TaskDetails />} />
 

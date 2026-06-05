@@ -168,6 +168,7 @@ export default function Sidebar() {
 
                 <NavItem to={routes.reports} icon="summarize" label="Reports" isExpanded={isExpanded} />
                 <NavItem to={routes.workflows} icon="account_tree" label="Workflows" isExpanded={isExpanded} />
+                <NavItem to={routes.audit} icon="history" label="Audit Log" isExpanded={isExpanded} />
 
             </div>
 

@@ -341,3 +341,57 @@ export function deleteWorkflow(workflowId: string): Promise<{ deleted: boolean }
     method: 'DELETE',
   })
 }
+/* ─── Audit Log ─────────────────────────────────────────── */
+
+export interface AuditEntry {
+  id: number
+  timestamp: string
+  event_type: string
+  severity: string
+  user_id: string | null
+  ip_address: string | null
+  message: string
+  context_json: Record<string, unknown>
+  task_id: string | null
+  plugin_id: string | null
+}
+
+export interface AuditListResponse {
+  entries: AuditEntry[]
+  total: number
+  page: number
+  per_page: number
+  total_pages: number
+}
+
+export interface AuditQueryParams {
+  event_type?: string
+  plugin_id?: string
+  date_from?: string
+  date_to?: string
+  page?: number
+  per_page?: number
+}
+
+export function getAuditLogs(params?: AuditQueryParams): Promise<AuditListResponse> {
+  const qs = new URLSearchParams()
+  if (params?.event_type) qs.set('event_type', params.event_type)
+  if (params?.plugin_id) qs.set('plugin_id', params.plugin_id)
+  if (params?.date_from) qs.set('date_from', params.date_from)
+  if (params?.date_to) qs.set('date_to', params.date_to)
+  if (params?.page) qs.set('page', String(params.page))
+  if (params?.per_page) qs.set('per_page', String(params.per_page))
+  return request<AuditListResponse>(`/audit?${qs.toString()}`)
+}
+
+export async function exportAuditLogs(params?: AuditQueryParams, format: 'csv' | 'json' = 'csv'): Promise<Blob> {
+  const qs = new URLSearchParams()
+  qs.set('format', format)
+  if (params?.event_type) qs.set('event_type', params.event_type)
+  if (params?.plugin_id) qs.set('plugin_id', params.plugin_id)
+  if (params?.date_from) qs.set('date_from', params.date_from)
+  if (params?.date_to) qs.set('date_to', params.date_to)
+  const response = await fetch(`${API_BASE}/audit/export?${qs.toString()}`)
+  if (!response.ok) throw new Error(`Export failed: ${response.status}`)
+  return response.blob()
+}
