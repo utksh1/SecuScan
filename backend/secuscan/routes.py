@@ -1798,3 +1798,36 @@ async def export_audit_log(format: str = "json"):
         media_type=mime_type,
         headers={"Content-Disposition": f"attachment; filename=network-audit.{format}"}
     )
+
+
+@router.get("/admin/schema-version", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
+async def get_schema_version():
+    """Return the current schema version and the full migration history.
+
+    Response shape
+    --------------
+    ``version``
+        Integer count of applied migration files.  Equivalent to the highest
+        migration sequence number when files are named sequentially (001, 002 …).
+    ``migrations``
+        Ordered list of applied migration records.  Each entry contains
+        ``filename``, ``applied_at`` (ISO-8601 UTC), and ``checksum``
+        (SHA-256 hex digest recorded at application time).
+    ``integrity``
+        List of discrepancy objects for any applied migration whose on-disk
+        content no longer matches the recorded checksum.  An empty list means
+        all applied migrations are intact.  Each discrepancy contains
+        ``filename``, ``status`` (``"missing"`` or ``"modified"``),
+        ``stored_checksum``, and ``current_checksum``.
+    """
+    db = await get_db()
+    version_info = await db.get_schema_version()
+    integrity_issues = await db.verify_migration_checksums()
+
+    return {
+        "version": version_info["version"],
+        "migrations": version_info.get("migrations", []),
+        "integrity": integrity_issues,
+        "healthy": len(integrity_issues) == 0,
+        "warning": version_info.get("warning"),
+    }
