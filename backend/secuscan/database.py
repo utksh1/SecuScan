@@ -203,8 +203,6 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_tasks_plugin ON tasks(plugin_id);
             -- Composite index for dashboard running tasks query
             CREATE INDEX IF NOT EXISTS idx_tasks_status_created ON tasks(status, created_at DESC);
-            -- Owner scoping (BOLA prevention, issue #401)
-            CREATE INDEX IF NOT EXISTS idx_tasks_owner ON tasks(owner_id);
 
             -- Findings indexes (new)
             CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
@@ -214,15 +212,11 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_findings_target ON findings(target);
             -- Composite index for severity counting by task
             CREATE INDEX IF NOT EXISTS idx_findings_task_severity ON findings(task_id, severity);
-            -- Owner scoping (BOLA prevention, issue #401)
-            CREATE INDEX IF NOT EXISTS idx_findings_owner ON findings(owner_id);
 
             -- Reports indexes (new)
             CREATE INDEX IF NOT EXISTS idx_reports_task_id ON reports(task_id);
             CREATE INDEX IF NOT EXISTS idx_reports_generated_at ON reports(generated_at DESC);
             CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status);
-            -- Owner scoping (BOLA prevention, issue #401)
-            CREATE INDEX IF NOT EXISTS idx_reports_owner ON reports(owner_id);
 
             -- Audit log indexes (new)
             CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp DESC);
@@ -307,6 +301,15 @@ class Database:
                 print("Added missing column 'owner_id' to reports table.")
             except Exception as e:
                 print(f"Failed to add 'owner_id' to reports: {e}")
+
+        # Owner indexes must run after ALTER TABLE backfills owner_id on legacy DBs.
+        await self.connection.executescript(
+            """
+            CREATE INDEX IF NOT EXISTS idx_tasks_owner ON tasks(owner_id);
+            CREATE INDEX IF NOT EXISTS idx_findings_owner ON findings(owner_id);
+            CREATE INDEX IF NOT EXISTS idx_reports_owner ON reports(owner_id);
+            """
+        )
 
     async def _run_migrations(self):
         migrations_dir = Path(__file__).parent / "migrations"
