@@ -1,9 +1,7 @@
 """
 Structured append-only audit log helpers.
 
-The runtime database layer in SecuScan is currently aiosqlite-backed. The
-SQLAlchemy model below documents the intended table contract for future ORM
-adapters while the async helper writes through the existing database manager.
+The runtime database layer in SecuScan is aiosqlite-backed.
 """
 
 from __future__ import annotations
@@ -12,20 +10,6 @@ import enum
 import json
 from datetime import datetime
 from typing import Any, Optional
-
-try:  # pragma: no cover - exercised only when SQLAlchemy is installed.
-    from sqlalchemy import DateTime, Enum as SAEnum, Index, Integer, JSON, String
-    from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-except Exception:  # pragma: no cover
-    DateTime = Integer = JSON = String = SAEnum = None  # type: ignore
-    DeclarativeBase = object  # type: ignore
-    Mapped = Any  # type: ignore
-
-    def mapped_column(*args: Any, **kwargs: Any) -> Any:  # type: ignore
-        return None
-
-    def Index(*args: Any, **kwargs: Any) -> None:  # type: ignore
-        return None
 
 
 class AuditEventType(str, enum.Enum):
@@ -37,29 +21,6 @@ class AuditEventType(str, enum.Enum):
     SCAN_CANCELLED = "scan_cancelled"
     SCAN_DELETED = "scan_deleted"
     REPORT_DOWNLOADED = "report_downloaded"
-
-
-class AuditBase(DeclarativeBase):
-    pass
-
-
-class AuditLogEntry(AuditBase):
-    """SQLAlchemy model proposal for the append-only audit_log table."""
-
-    __tablename__ = "audit_log"
-    __table_args__ = (
-        Index("idx_audit_timestamp", "timestamp"),
-        Index("idx_audit_event_type", "event_type"),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    event_type: Mapped[AuditEventType] = mapped_column(SAEnum(AuditEventType), nullable=False)
-    scan_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
-    plugin_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    target: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    actor: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    timestamp: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    metadata_: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False, default=dict)
 
 
 async def log_event(

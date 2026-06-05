@@ -183,7 +183,7 @@ async def test_delete_task_returns_200_and_removes_row(app_client):
 
 @pytest.mark.asyncio
 async def test_delete_task_also_removes_associated_records(app_client):
-    """Deleting a task cascades to findings, reports, and audit_log."""
+    """Deleting a task cascades to findings, reports, but audit_log is append-only and retained."""
     db = app_client._db
     db_path = app_client._db_path
     task_id = await insert_task(db, status="completed")
@@ -201,7 +201,7 @@ async def test_delete_task_also_removes_associated_records(app_client):
     assert len(rows) == 0, "Report should have been deleted"
 
     rows = await db_fetchall(db_path, "SELECT id FROM audit_log WHERE task_id = ?", (task_id,))
-    assert len(rows) == 0, "Audit log rows should have been deleted"
+    assert len(rows) == 2, "Audit log rows are append-only: the original + SCAN_DELETED event should remain"
 
 
 @pytest.mark.asyncio
@@ -426,9 +426,12 @@ async def test_clear_all_tasks_removes_everything(app_client):
     assert body["cleared"] is True
     assert "message" in body
 
-    for table in ("tasks", "findings", "reports", "audit_log"):
+    for table in ("tasks", "findings", "reports"):
         rows = await db_fetchall(db_path, f"SELECT 1 FROM {table}")
         assert len(rows) == 0, f"Table '{table}' should be empty after /clear"
+
+    audit_rows = await db_fetchall(db_path, "SELECT 1 FROM audit_log")
+    assert len(audit_rows) == 6, "Audit log is append-only: 3 original inserts + 3 SCAN_DELETED events should remain"
 
 
 @pytest.mark.asyncio
