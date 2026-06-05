@@ -501,7 +501,7 @@ class Database:
             # the hash before the INSERT.  Using strftime keeps it identical
             # to what the DEFAULT expression would produce.
             ts_row = await self.fetchone("SELECT strftime('%Y-%m-%d %H:%M:%S', 'now') AS ts")
-            timestamp = ts_row["ts"] if ts_row else ""
+            timestamp = ts_row.get("ts", "") if ts_row else ""
 
             # We need the row id before we can finalise the hash, so insert
             # with a placeholder and update immediately after.
