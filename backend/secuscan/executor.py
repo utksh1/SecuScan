@@ -4,6 +4,8 @@ Task execution engine with Docker sandboxing
 
 import asyncio
 from asyncio import subprocess
+import os
+import signal
 import uuid
 import json
 import time
@@ -13,11 +15,13 @@ from typing import Optional, Dict, Any, List
 import logging
 import re
 
+_CANCEL_GRACE_SECONDS = 5
+
 from .auth import DEFAULT_OWNER_ID
 from .redaction import redact
 from .cache import get_cache
 from .config import settings
-from .database import get_db
+from .database import get_db, Database
 from .plugins import get_plugin_manager
 from .models import NotificationDeliveryStatus, TaskStatus, ScanPhase
 from .ratelimit import concurrent_limiter
@@ -26,6 +30,42 @@ from .capabilities import CapabilityEnforcer, CapabilityDeniedError, build_enfor
 from .parser_sandbox import run_parser_in_sandbox, ParserSandboxError
 from .network_policy import get_policy_engine
 from .notification_service import process_task_notifications
+
+async def _terminate_process_group(pid: int, task_id: str, grace_seconds: int = _CANCEL_GRACE_SECONDS) -> None:
+    """Send SIGTERM to the process group of *pid*, wait *grace_seconds*, then SIGKILL.
+
+    Using a process group (via start_new_session=True on subprocess creation)
+    ensures every child and grandchild spawned by the scanner receives the
+    signal, leaving no orphan processes after cancellation or timeout.
+
+    Errors are logged but never re-raised so callers can always proceed to
+    update task status regardless of OS-level kill failures.
+    """
+    try:
+        pgid = os.getpgid(pid)
+    except (ProcessLookupError, PermissionError) as exc:
+        logger.debug("process group for pid %d already gone: %s", pid, exc)
+        return
+
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError) as exc:
+        logger.debug("SIGTERM to pgid %d failed (already exited?): %s", pgid, exc)
+        return
+
+    for _ in range(grace_seconds * 10):
+        await asyncio.sleep(0.1)
+        try:
+            os.killpg(pgid, 0)
+        except (ProcessLookupError, PermissionError):
+            return
+
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+        logger.warning("process group %d did not exit within %ds grace — SIGKILL sent (task %s)", pgid, grace_seconds, task_id)
+    except (ProcessLookupError, PermissionError) as exc:
+        logger.debug("SIGKILL to pgid %d failed: %s", pgid, exc)
+
 
 def _parse_discovered_at(finding: dict) -> Optional[datetime]:
     """Extract and parse discovered_at from a finding dict, or return current UTC time."""
@@ -90,6 +130,7 @@ class TaskExecutor:
 
     def __init__(self):
         self.running_tasks: Dict[str, asyncio.Task] = {}
+        self._process_pids: Dict[str, int] = {}
         # PubSub: Map of task_id to list of active async queues listening for output/status updates
         self._listeners: Dict[str, List[asyncio.Queue]] = {}
         self._capability_enforcer: CapabilityEnforcer = build_enforcer_from_settings()
@@ -654,6 +695,7 @@ class TaskExecutor:
             # Always clean up: remove from the in-memory registry and
             # release the concurrency slot regardless of how the task ended.
             self.running_tasks.pop(task_id, None)
+            self._process_pids.pop(task_id, None)
             await concurrent_limiter.release(task_id)
     
     async def _execute_command(
@@ -677,8 +719,10 @@ class TaskExecutor:
             process = await asyncio.create_subprocess_exec(
                 *command,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
             )
+            self._process_pids[task_id] = process.pid
 
             output_lines = []
 
@@ -686,11 +730,10 @@ class TaskExecutor:
                 stdout = process.stdout
                 if stdout is None:
                     return
-                    
                 while not stdout.at_eof():
                     line = await stdout.readline()
                     if line:
-                        decoded_line = line.decode('utf-8', errors='replace')
+                        decoded_line = line.decode("utf-8", errors="replace")
                         output_lines.append(decoded_line)
                         await self._broadcast(task_id, "output", decoded_line)
 
@@ -700,20 +743,31 @@ class TaskExecutor:
                 return "".join(output_lines), process.returncode if process.returncode is not None else -1
 
             except asyncio.TimeoutError:
-                process.kill()
-                await process.wait()
+                logger.warning(
+                    "Task %s timed out after %ds — terminating process group (pid=%d)",
+                    task_id, timeout, process.pid,
+                )
+                await _terminate_process_group(process.pid, task_id)
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=3)
+                except asyncio.TimeoutError:
+                    pass
                 return "".join(output_lines) + "\nTask timed out", -1
 
             except asyncio.CancelledError:
-                # Handle task cancellation by killing the subprocess
-                logger.warning(f"Task {task_id} cancelled. Killing process {process.pid}")
+                logger.warning(
+                    "Task %s cancelled — terminating process group (pid=%d)",
+                    task_id, process.pid,
+                )
+                await _terminate_process_group(process.pid, task_id)
                 try:
-                    process.kill()
-                    await process.wait()
-                except Exception as e:
-                    logger.error(f"Error killing process for cancelled task {task_id}: {e}")
+                    await asyncio.wait_for(process.wait(), timeout=3)
+                except asyncio.TimeoutError:
+                    pass
                 raise
 
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logger.error(f"Failed to execute command: {e}")
             return f"Execution error: {str(e)}", -1
@@ -788,6 +842,11 @@ class TaskExecutor:
         if task_id not in self.running_tasks:
             return False
         task = self.running_tasks[task_id]
+
+        pid = self._process_pids.get(task_id)
+        if pid is not None:
+            await _terminate_process_group(pid, task_id)
+
         task.cancel()
 
         # If docker is enabled, forcefully kill the sandbox container
@@ -1339,5 +1398,141 @@ class TaskExecutor:
             logger.warning("Cache invalidation skipped: %s", exc)
 
 
+
+async def recover_tasks_on_startup(db: Optional[Database] = None) -> dict:
+    """
+    Recover tasks that were interrupted by a backend restart.
+
+    Tasks with status='running' were mid-execution when the process was killed;
+    they can never complete now, so we mark them failed with a clear error message
+    and set completed_at to the current time.
+
+    Tasks with status='queued' were waiting in the executor's in-memory queue;
+    since that queue is ephemeral they vanished with the process, so we re-enqueue
+    them so they resume processing without any operator intervention.
+
+    This function must be called after the database is initialised but before the
+    HTTP server starts accepting requests.  That ordering guarantees that:
+      - No new tasks can arrive that would race with the status updates.
+      - The executor object is fully constructed before tasks are pushed onto it.
+
+    Returns a summary dict that is stored at module level so the
+    ``/admin/startup-recovery`` endpoint can expose it to operators.
+
+    Args:
+        db: The connected Database instance. If None, get_db() is used so the
+            caller does not need to pass the module-level global (which may still
+            be None if imported before init_db() ran).
+
+    Returns:
+        dict with keys:
+            recovered_running  - number of tasks transitioned to 'failed'
+            recovered_queued   - number of tasks re-submitted to the executor
+            task_ids_failed    - list of task IDs that were marked failed
+            task_ids_requeued  - list of task IDs that were re-enqueued
+            recovered_at       - ISO-8601 timestamp of when recovery ran
+    """
+    if db is None:
+        db = await get_db()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    restart_error = "Backend restarted while task was running"
+
+    running_rows = await db.fetchall(
+        "SELECT id, plugin_id FROM tasks WHERE status = ?",
+        (TaskStatus.RUNNING.value,),
+    )
+    task_ids_failed: List[str] = []
+
+    for row in running_rows:
+        task_id = row["id"]
+        plugin_id = row.get("plugin_id")
+
+        await db.execute(
+            """
+            UPDATE tasks
+               SET status         = ?,
+                   completed_at   = ?,
+                   error_message  = ?
+             WHERE id = ?
+            """,
+            (
+                TaskStatus.FAILED.value,
+                now_iso,
+                restart_error,
+                task_id,
+            ),
+        )
+
+        await db.log_audit(
+            "task_recovery_failed",
+            f"Task {task_id} marked failed due to backend restart",
+            severity="warning",
+            context={
+                "task_id": task_id,
+                "previous_status": TaskStatus.RUNNING.value,
+                "recovery_action": "marked_failed",
+                "reason": restart_error,
+            },
+            task_id=task_id,
+            plugin_id=plugin_id,
+        )
+
+        task_ids_failed.append(task_id)
+        logger.warning(
+            "Recovery: task %s was running at shutdown — marked as failed.", task_id
+        )
+
+    queued_rows = await db.fetchall(
+        "SELECT id, plugin_id FROM tasks WHERE status = ? ORDER BY created_at ASC",
+        (TaskStatus.QUEUED.value,),
+    )
+    task_ids_requeued: List[str] = []
+
+    for row in queued_rows:
+        task_id = row["id"]
+        plugin_id = row.get("plugin_id")
+
+        asyncio.get_event_loop().create_task(executor.execute_task(task_id))
+
+        await db.log_audit(
+            "task_recovery_requeued",
+            f"Task {task_id} re-enqueued after backend restart",
+            severity="info",
+            context={
+                "task_id": task_id,
+                "previous_status": TaskStatus.QUEUED.value,
+                "recovery_action": "requeued",
+            },
+            task_id=task_id,
+            plugin_id=plugin_id,
+        )
+
+        task_ids_requeued.append(task_id)
+        logger.info(
+            "Recovery: task %s was queued at shutdown — re-enqueued for execution.", task_id
+        )
+
+    summary: Dict[str, Any] = {
+        "recovered_running": len(task_ids_failed),
+        "recovered_queued": len(task_ids_requeued),
+        "task_ids_failed": task_ids_failed,
+        "task_ids_requeued": task_ids_requeued,
+        "recovered_at": now_iso,
+    }
+
+    logger.info(
+        "Startup recovery complete: %d running task(s) marked failed, "
+        "%d queued task(s) re-enqueued.",
+        len(task_ids_failed),
+        len(task_ids_requeued),
+    )
+
+    return summary
+
+
 # Global executor instance
 executor = TaskExecutor()
+
+# Populated by recover_tasks_on_startup() during the startup lifespan event;
+# served read-only by GET /admin/startup-recovery for operator visibility.
+_last_recovery_result: Optional[Dict[str, Any]] = None
