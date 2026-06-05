@@ -31,6 +31,7 @@ describe('offlineQueue', () => {
       writable: true,
     })
     mockNavigatorOnline(true)
+    offlineQueue.setAutoReplay(false)
     offlineQueue.clear()
   })
 
