@@ -8,6 +8,12 @@ BLOCKED_PATTERNS=(
   "frontend/.vite/"
   "frontend/node_modules/"
   ".vite/deps/"
+  "output/"
+  "data/raw/"
+  "data/reports/"
+  "backend/data/raw/"
+  "backend/data/reports/"
+  "logs/"
 )
 
 # ── Check 1: files already tracked in git history ─────────────────────────────
