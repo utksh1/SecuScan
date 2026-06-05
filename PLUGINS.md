@@ -188,7 +188,7 @@ Example schema:
 | `multiselect` | Checkbox group | Same options shape as `select` |
 | `path` | File-path text input | No validation block needed |
 
-For the full list of named validation presets (e.g. `url`, `hostname`, `domain`, `ipv4`, `port`, `cidr`) and range rules, see [plugin-validation.md](file:///d:/GSSoC/utksh1-SecuScan/%23550/SecuScan/docs/plugin-validation.md).
+For the full list of named validation presets (e.g. `url`, `hostname`, `domain`, `ipv4`, `port`, `cidr`) and range rules, see [plugin-validation.md](docs/plugin-validation.md).
 
 ### Required vs Optional Fields
 
