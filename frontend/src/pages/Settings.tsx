@@ -764,6 +764,7 @@ export default function Settings() {
                                     <select
                                         value={config.theme}
                                         onChange={(e) => setConfig({ ...config, theme: e.target.value })}
+                                        aria-label="Visual spectrum theme"
                                         className="w-full bg-black/40 border-4 border-black p-4 text-xs font-mono text-silver-bright focus:outline-none focus:ring-2 focus:ring-rag-blue"
                                     >
                                         <option value="dark" className="bg-charcoal text-silver-bright">Dark (Obsidian)</option>
