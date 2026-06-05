@@ -1233,6 +1233,15 @@ async def delete_task_records(task_ids: List[str]):
         await db.rollback()
         raise
 
+    # Log SCAN_DELETED events (append-only: audit rows survive deletion)
+    for task_id in task_ids:
+        await db.log_audit(
+            "scan_deleted",
+            f"Scan {task_id} deleted",
+            context={"task_id": task_id},
+            task_id=task_id,
+        )
+
     # Cleanup files on disk (outside the transaction — file deletion is not
     # transactional; a failure here does not leave the DB in an inconsistent
     # state).

@@ -331,6 +331,24 @@ class Database:
                     f"Migration {migration_file.name} failed — startup aborted: {exc}"
                 ) from exc
 
+        # Audit log migration: ensure target, actor, metadata columns exist
+        try:
+            audit_columns = await self.fetchall("PRAGMA table_info(audit_log)")
+            existing_audit_cols = {col["name"] for col in audit_columns}
+            audit_needed_cols = {
+                "target": "TEXT",
+                "actor": "TEXT",
+                "metadata": "TEXT NOT NULL DEFAULT '{}'",
+            }
+            for col_name, col_type in audit_needed_cols.items():
+                if col_name not in existing_audit_cols:
+                    try:
+                        await self.execute(f"ALTER TABLE audit_log ADD COLUMN {col_name} {col_type}")
+                    except Exception as e:
+                        print(f"Failed to add column {col_name}: {e}")
+        except Exception:
+            pass
+
         await self._backfill_risk_scores()
 
     async def _backfill_risk_scores(self):
