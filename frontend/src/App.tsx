@@ -11,7 +11,12 @@ import Settings from './pages/Settings'
 import Scans from './pages/Scans'
 import TaskDetails from './pages/TaskDetails'
 import Workflows from './pages/Workflows'
+<<<<<<< feat/asset-inventory-38
+import ReportCompare from './pages/ReportCompare'
+import AssetInventory from './pages/AssetInventory'
+=======
 import ApiKeySetupScreen from './components/ApiKeySetupScreen'
+>>>>>>> main
 
 import { ThemeProvider } from './components/ThemeContext'
 import { ToastProvider } from './components/ToastContext'
@@ -30,9 +35,10 @@ export function AppRoutes() {
       <Route path={routes.reports} element={<Reports />} />
       <Route path={routes.reportsCompare} element={<ReportCompare />} />
       <Route path={routes.workflows} element={<Workflows />} />
-      <Route path={routes.settings} element={<Settings />} />
+      <Route path={routes.inventory} element={<AssetInventory />} />
+      <Route path={routes.reportsCompare} element={<ReportCompare />} />
       <Route path={routes.task} element={<TaskDetails />} />
-
+      <Route path={routes.settings} element={<Settings />} />
       <Route path="*" element={<Navigate to={routes.dashboard} replace />} />
     </Routes>
   )

@@ -41,6 +41,8 @@ export interface PluginFieldSchema {
   help?: string
   options?: PluginFieldOption[]
   validation?: Record<string, unknown>
+  /** Explicit opt-in: always redact this field in command previews */
+  sensitive?: boolean
 }
 export interface PluginAvailability {
   runnable: boolean
@@ -74,6 +76,8 @@ export interface PluginSchemaResponse {
   fields: PluginFieldSchema[]
   presets: Record<string, Record<string, unknown>>
   safety: Record<string, unknown>
+  /** Raw command_template from plugin metadata, used for local command preview */
+  command_template?: string[]
 }
 
 export interface TaskStartResponse {
@@ -279,7 +283,9 @@ export function startTask(plugin_id: string, inputs: Record<string, unknown>, co
     body: JSON.stringify({ plugin_id, inputs, consent_granted, preset }),
   })
 }
-
+export function getAssets() {
+  return request('/assets')
+}
 export function deleteTask(taskId: string) {
   return request<{ task_id: string; deleted: boolean }>(`/task/${taskId}`, {
     method: 'DELETE',

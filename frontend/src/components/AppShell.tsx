@@ -54,6 +54,7 @@ export default function AppShell({ children }: AppShellProps) {
         { to: routes.reports, label: 'Reports' },
         { to: routes.workflows, label: 'Workflows' },
         { to: routes.toolkit, label: 'Toolkit' },
+        { to: routes.inventory, label: 'Inventory' },
         { to: routes.settings, label: 'Settings' },
     ]
 

@@ -1777,149 +1777,36 @@ async def get_attack_surface(owner: str = Depends(get_current_owner)):
 
 
 @router.get("/assets")
-async def get_assets(owner: str = Depends(get_current_owner)):
-    """Return a list of the caller's tracked assets."""
+async def get_assets():
+    """Return discovered assets aggregated from scan findings and tasks."""
     db = await get_db()
-    # For now, we use unique targets as assets, scoped to the caller (issue #401)
     rows = await db.fetchall(
         """
-        SELECT DISTINCT target FROM tasks WHERE owner_id = ?
-        UNION
-        SELECT DISTINCT target FROM findings WHERE owner_id = ?
-        """,
-        (owner, owner),
+        SELECT
+            t.target                          AS host,
+            t.target                          AS ip,
+            t.tool_name                       AS scanner,
+            COUNT(DISTINCT f.id)              AS findings_count,
+            MAX(f.severity)                   AS severity,
+            MIN(t.created_at)                 AS first_seen,
+            MAX(t.created_at)                 AS last_seen
+        FROM tasks t
+        LEFT JOIN findings f ON f.task_id = t.id
+        GROUP BY t.target
+        ORDER BY last_seen DESC
+        """
     )
-    assets = [{"id": str(uuid.uuid4()), "name": row["target"]} for row in rows]
-    return {"assets": assets}
-
-# ── Network Policy Management Endpoints ─────────────────────────────────────
-
-from fastapi.security import APIKeyHeader
-from fastapi import Security, status
-from .network_policy import get_policy_engine, PolicyAction
-from dataclasses import asdict
-
-api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
-
-def verify_admin_access(
-    api_key: Optional[str] = Security(api_key_header),
-    request: Request = None,
-) -> Optional[str]:
-    """Verify admin API key is provided and valid."""
-    import hmac
-
-    # Secure-by-default: If admin_api_key setting is not configured, block all access
-    if not settings.admin_api_key:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Admin API Key is not configured on the server. Please set SECUSCAN_ADMIN_API_KEY."
-        )
-
-    # Entropy check: enforce a strong API key
-    if len(settings.admin_api_key) < 16:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Admin API Key is too weak. It must be at least 16 characters long."
-        )
-
-    candidate = api_key
-    if request:
-        auth_header = request.headers.get("authorization")
-        if auth_header:
-            if auth_header.lower().startswith("bearer "):
-                token = auth_header[7:]
-            else:
-                token = auth_header
-            # If the Authorization header matches the admin API key, prefer it.
-            # This is important when the client automatically includes the general X-Api-Key in headers.
-            if hmac.compare_digest(token, settings.admin_api_key):
-                candidate = token
-            elif not candidate:
-                candidate = token
-
-    if not candidate or not hmac.compare_digest(candidate, settings.admin_api_key):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing Admin API Key"
-        )
-    return candidate
-
-@router.get("/admin/network-policy", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
-async def get_network_policy():
-    """Get current network policy configuration"""
-    engine = get_policy_engine()
-
-    return {
-        "allowlist": [asdict(p) for net, p in engine.allowlist],
-        "denylist": [asdict(p) for net, p in engine.denylist],
-        "audit_entries_count": len(engine.audit_entries),
-    }
-
-@router.post("/admin/network-policy/allow", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
-async def add_allow_rule(request: dict):
-    """Add network to allowlist"""
-    engine = get_policy_engine()
-
-    try:
-        engine.add_allow_rule(
-            cidr=request["cidr"],
-            reason=request.get("reason", "Operator added"),
-        )
-        return {"status": "success", "cidr": request["cidr"]}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@router.post("/admin/network-policy/deny", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
-async def add_deny_rule(request: dict):
-    """Add network to denylist"""
-    engine = get_policy_engine()
-
-    try:
-        engine.add_deny_rule(
-            cidr=request["cidr"],
-            reason=request.get("reason", "Operator added"),
-        )
-        return {"status": "success", "cidr": request["cidr"]}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@router.get("/admin/network-audit-log", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
-async def get_audit_log(
-    plugin_id: Optional[str] = None,
-    action: Optional[str] = None,
-    limit: int = 100
-):
-    """Retrieve network audit log entries"""
-    engine = get_policy_engine()
-
-    policy_action = None
-    if action and action.upper() in ["ALLOW", "DENY"]:
-        policy_action = PolicyAction[action.upper()]
-
-    entries = engine.get_audit_entries(
-        plugin_id=plugin_id,
-        action=policy_action,
-        limit=limit
-    )
-
-    return {
-        "entries": [asdict(e) for e in entries],
-        "total": len(entries),
-    }
-
-@router.get("/admin/network-audit-log/export", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
-async def export_audit_log(format: str = "json"):
-    """Export audit log in specified format"""
-    engine = get_policy_engine()
-
-    if format not in ["json", "csv"]:
-        raise HTTPException(status_code=400, detail="Format must be 'json' or 'csv'")
-
-    content = engine.export_audit_log(format)
-
-    mime_type = "application/json" if format == "json" else "text/csv"
-    return Response(
-        content=content,
-        media_type=mime_type,
-        headers={"Content-Disposition": f"attachment; filename=network-audit.{format}"}
-    )
+    return [
+        {
+            "host": row["host"],
+            "ip": row["ip"],
+            "ports": [],
+            "scanner": row["scanner"] or "unknown",
+            "findings": row["findings_count"] or 0,
+            "severity": row["severity"] or "none",
+            "tags": [],
+            "first": row["first_seen"],
+            "last": row["last_seen"],
+        }
+        for row in rows
+    ]
