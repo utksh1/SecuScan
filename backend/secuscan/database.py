@@ -54,6 +54,7 @@ class Database:
             """
             CREATE TABLE IF NOT EXISTS tasks (
                 id TEXT PRIMARY KEY,
+                owner_id TEXT NOT NULL DEFAULT 'default',
                 plugin_id TEXT NOT NULL,
                 tool_name TEXT NOT NULL,
                 target TEXT NOT NULL,
@@ -95,6 +96,7 @@ class Database:
 
             CREATE TABLE IF NOT EXISTS findings (
                 id TEXT PRIMARY KEY,
+                owner_id TEXT NOT NULL DEFAULT 'default',
                 task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
                 plugin_id TEXT NOT NULL,
                 title TEXT NOT NULL,
@@ -113,6 +115,7 @@ class Database:
 
             CREATE TABLE IF NOT EXISTS reports (
                 id TEXT PRIMARY KEY,
+                owner_id TEXT NOT NULL DEFAULT 'default',
                 task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
                 name TEXT NOT NULL,
                 type TEXT NOT NULL DEFAULT 'technical',
@@ -200,6 +203,8 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_tasks_plugin ON tasks(plugin_id);
             -- Composite index for dashboard running tasks query
             CREATE INDEX IF NOT EXISTS idx_tasks_status_created ON tasks(status, created_at DESC);
+            -- Owner scoping (BOLA prevention, issue #401)
+            CREATE INDEX IF NOT EXISTS idx_tasks_owner ON tasks(owner_id);
 
             -- Findings indexes (new)
             CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
@@ -209,11 +214,15 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_findings_target ON findings(target);
             -- Composite index for severity counting by task
             CREATE INDEX IF NOT EXISTS idx_findings_task_severity ON findings(task_id, severity);
+            -- Owner scoping (BOLA prevention, issue #401)
+            CREATE INDEX IF NOT EXISTS idx_findings_owner ON findings(owner_id);
 
             -- Reports indexes (new)
             CREATE INDEX IF NOT EXISTS idx_reports_task_id ON reports(task_id);
             CREATE INDEX IF NOT EXISTS idx_reports_generated_at ON reports(generated_at DESC);
             CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status);
+            -- Owner scoping (BOLA prevention, issue #401)
+            CREATE INDEX IF NOT EXISTS idx_reports_owner ON reports(owner_id);
 
             -- Audit log indexes (new)
             CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp DESC);
@@ -235,6 +244,10 @@ class Database:
         existing_cols = {col["name"] for col in tasks_columns}
         
         needed_cols = {
+            # Per-user ownership for BOLA prevention (issue #401). NOT NULL with a
+            # constant default backfills every existing row to the shared default
+            # owner, preserving single-user deployments' access to their history.
+            "owner_id": "TEXT NOT NULL DEFAULT 'default'",
             "exit_code": "INTEGER",
             "scan_phase": "TEXT",
             "structured_json": "TEXT",
@@ -272,6 +285,8 @@ class Database:
             "asset_exposure": "TEXT",
             "risk_score": "REAL",
             "risk_factors_json": "TEXT NOT NULL DEFAULT '[]'",
+            # Per-user ownership for BOLA prevention (issue #401).
+            "owner_id": "TEXT NOT NULL DEFAULT 'default'",
         }
         for col_name, col_type in risk_cols.items():
             if col_name not in existing_finding_cols:
@@ -280,6 +295,18 @@ class Database:
                     print(f"Added missing column {col_name} to findings table.")
                 except Exception as e:
                     print(f"Failed to add column {col_name}: {e}")
+
+        # Reports table migration: ensure owner_id exists (issue #401)
+        reports_columns = await self.fetchall("PRAGMA table_info(reports)")
+        existing_report_cols = {col["name"] for col in reports_columns}
+        if "owner_id" not in existing_report_cols:
+            try:
+                await self.execute(
+                    "ALTER TABLE reports ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'default'"
+                )
+                print("Added missing column 'owner_id' to reports table.")
+            except Exception as e:
+                print(f"Failed to add 'owner_id' to reports: {e}")
 
     async def _run_migrations(self):
         migrations_dir = Path(__file__).parent / "migrations"
@@ -341,6 +368,22 @@ class Database:
         """Execute a write query."""
         await self.connection.execute(query, params)
         await self.connection.commit()
+
+    async def execute_no_commit(self, query: str, params: tuple = ()):
+        """Execute a write query without committing (for use inside transactions)."""
+        await self.connection.execute(query, params)
+
+    async def begin(self):
+        """Begin a transaction."""
+        await self.connection.execute("BEGIN")
+
+    async def commit(self):
+        """Commit the current transaction."""
+        await self.connection.commit()
+
+    async def rollback(self):
+        """Roll back the current transaction."""
+        await self.connection.rollback()
 
     async def fetchone(self, query: str, params: tuple = ()) -> Optional[Dict]:
         """Fetch one row."""

@@ -6,6 +6,7 @@ export const routes = {
   scans: '/scans',
   analytics: '/analytics',
   reports: '/reports',
+  reportsCompare: '/reports/compare',
   workflows: '/workflows',
   settings: '/settings',
   task: '/task/:taskId',
