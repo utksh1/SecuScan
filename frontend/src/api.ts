@@ -144,23 +144,6 @@ async function request<T>(path: string, init?: RequestOptions): Promise<T> {
   const apiKey = getApiKey()
   const authHeaders: Record<string, string> = apiKey ? { 'X-Api-Key': apiKey } : {}
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      ...authHeaders,
-      ...(init?.headers as Record<string, string> | undefined),
-    },
-    signal: controller.signal,
-  })
-  window.clearTimeout(timeoutId)
-
-  if (response.status === 401) {
-    window.dispatchEvent(new CustomEvent(AUTH_REQUIRED_EVENT))
-    throw new Error('AUTH_REQUIRED')
-  }
-
-  if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`)
   try {
     const response = await fetch(`${API_BASE}${path}`, {
       ...init,
@@ -172,8 +155,6 @@ async function request<T>(path: string, init?: RequestOptions): Promise<T> {
     })
 
     if (response.status === 401) {
-      // Notify the app so it can show the API-key setup UI without every
-      // caller needing to handle auth independently.
       window.dispatchEvent(new CustomEvent(AUTH_REQUIRED_EVENT))
       throw new Error('AUTH_REQUIRED')
     }
