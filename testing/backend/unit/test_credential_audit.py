@@ -288,10 +288,11 @@ class TestVaultUsageAllAccessControl:
 
     def test_valid_admin_key_with_sufficient_length(self, test_client, monkeypatch):
         from backend.secuscan.config import settings
-        monkeypatch.setattr(settings, "admin_api_key", "a-strong-admin-key-32chars!!")
+        strong_key = "a-strong-admin-key-32chars-long!!"
+        monkeypatch.setattr(settings, "admin_api_key", strong_key)
         resp = test_client.get(
             "/api/v1/vault/usage/all",
-            headers={"X-Admin-Api-Key": "a-strong-admin-key-32chars!!"},
+            headers={"X-API-Key": strong_key},
         )
         assert resp.status_code == 200
         body = resp.json()
