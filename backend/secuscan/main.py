@@ -110,7 +110,7 @@ async def lifespan(app: FastAPI):
     # Recover tasks that were mid-flight or queued when the backend last stopped.
     # This runs synchronously (before yield) so the HTTP server only starts
     # accepting traffic after every interrupted task has been accounted for.
-    _recovery_result = await recover_tasks_on_startup(global_db)
+    _recovery_result = await recover_tasks_on_startup()
     _executor_module._last_recovery_result = _recovery_result
     logger.info(
         "✓ Startup recovery: %d running->failed, %d queued re-enqueued",

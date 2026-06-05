@@ -1399,7 +1399,7 @@ class TaskExecutor:
 
 
 
-async def recover_tasks_on_startup(db: Database) -> dict:
+async def recover_tasks_on_startup(db: Optional[Database] = None) -> dict:
     """
     Recover tasks that were interrupted by a backend restart.
 
@@ -1420,7 +1420,9 @@ async def recover_tasks_on_startup(db: Database) -> dict:
     ``/admin/startup-recovery`` endpoint can expose it to operators.
 
     Args:
-        db: The connected Database instance returned by init_db().
+        db: The connected Database instance. If None, get_db() is used so the
+            caller does not need to pass the module-level global (which may still
+            be None if imported before init_db() ran).
 
     Returns:
         dict with keys:
@@ -1430,6 +1432,8 @@ async def recover_tasks_on_startup(db: Database) -> dict:
             task_ids_requeued  - list of task IDs that were re-enqueued
             recovered_at       - ISO-8601 timestamp of when recovery ran
     """
+    if db is None:
+        db = await get_db()
     now_iso = datetime.now(timezone.utc).isoformat()
     restart_error = "Backend restarted while task was running"
 
