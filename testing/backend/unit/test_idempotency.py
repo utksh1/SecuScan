@@ -16,13 +16,14 @@ import tempfile
 from pathlib import Path
 
 import pytest
+import pytest_asyncio
 
 # ---------------------------------------------------------------------------
 # Shared async fixture for an isolated Database instance
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def isolated_db(tmp_path):
     """Yield an isolated Database instance wired to a temp file.
 
