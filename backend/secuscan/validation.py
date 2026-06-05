@@ -428,7 +428,11 @@ def match_pattern(value: str, pattern: str) -> bool:
 # Task-start payload size/length validation
 # ---------------------------------------------------------------------------
 
-def validate_task_start_payload(raw_body: bytes, inputs: Dict[str, Any]) -> Tuple[bool, int, str]:
+def validate_task_start_payload(
+    raw_body: bytes,
+    inputs: Dict[str, Any],
+    execution_context: Optional[Dict[str, Any]] = None,
+) -> Tuple[bool, int, str]:
     """
     Enforce size and field-length limits on POST /task/start payloads.
 
@@ -467,6 +471,14 @@ def validate_task_start_payload(raw_body: bytes, inputs: Dict[str, Any]) -> Tupl
         if not ok:
             return ok, status, msg
 
+    if execution_context is not None:
+        if not isinstance(execution_context, dict):
+            return False, 400, "'execution_context' must be a JSON object."
+        for key, value in execution_context.items():
+            ok, status, msg = _check_field(f"execution_context.{key}", value)
+            if not ok:
+                return ok, status, msg
+
     return True, 0, ""
 
 
@@ -499,6 +511,15 @@ def _check_field(key: str, value: Any) -> Tuple[bool, int, str]:
                     f"maximum allowed length of "
                     f"{settings.task_start_max_field_length} characters.",
                 )
+            ok, status, msg = _check_field(f"{key}[{idx}]", item)
+            if not ok:
+                return ok, status, msg
+
+    elif isinstance(value, dict):
+        for child_key, child_value in value.items():
+            ok, status, msg = _check_field(f"{key}.{child_key}", child_value)
+            if not ok:
+                return ok, status, msg
 
     return True, 0, ""
 

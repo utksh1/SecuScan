@@ -10,7 +10,10 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udee0\ufe0f",
+  "icon": "🛠️",
+  "implementation_status": "native",
+  "supports_authenticated_crawling": true,
+  "supports_session_reuse": true,
   "engine": {
     "type": "cli",
     "binary": "nuclei"
@@ -50,6 +53,11 @@
       "max_concurrent": 1
     }
   },
+  "capabilities": [
+    "network",
+    "intrusive",
+    "credentials"
+  ],
   "dependencies": {
     "binaries": [
       "nuclei"
@@ -57,5 +65,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "21271574173b2881599dd103a10c678456031d36fab90cc7b35683413613d154"
+  "checksum": "90ba2af201a01543cc1064b4d489cfe2c4a5e94e9d7fb0750e18779ffb280a99"
 }
