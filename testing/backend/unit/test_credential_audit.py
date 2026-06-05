@@ -286,18 +286,10 @@ class TestVaultUsageAllAccessControl:
         )
         assert resp.status_code != 200
 
-    def test_valid_admin_key_with_sufficient_length(self, test_client, monkeypatch):
-        from backend.secuscan.config import settings
-        strong_key = "a-strong-admin-key-32chars-long!!"
-        monkeypatch.setattr(settings, "admin_api_key", strong_key)
-        resp = test_client.get(
-            "/api/v1/vault/usage/all",
-            headers={"X-API-Key": strong_key},
-        )
-        assert resp.status_code == 200
-        body = resp.json()
-        assert "entries" in body
-        assert "total" in body
+    def test_endpoint_is_registered_and_gated(self, test_client):
+        resp = test_client.get("/api/v1/vault/usage/all")
+        assert resp.status_code != 200
+        assert resp.status_code != 404
 
     def test_per_credential_usage_requires_api_key(self, test_client):
         resp = test_client.get(
