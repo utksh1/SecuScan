@@ -215,6 +215,14 @@ export default function TaskDetails() {
     const [rawSearch, setRawSearch] = useState('')
     const [wrapRawOutput, setWrapRawOutput] = useState(true)
 
+    // ✅ FIX: isMounted cleanup belongs here in TaskDetails, not in FindingDrawer.
+    // The ref is owned by this component — its teardown must live here too.
+    useEffect(() => {
+        return () => {
+            isMounted.current = false
+        }
+    }, [])
+
     const copyTaskId = async () => {
         if (!taskId) return
 
@@ -229,10 +237,9 @@ export default function TaskDetails() {
 
     const FindingDrawer = ({ finding, onClose }: { finding: Finding, onClose: () => void }) => {
         const drawerRef = useRef<HTMLDivElement>(null)
-        useEffect(() => {
-  return () => { isMounted.current = false }
-}, [])
 
+        // ✅ FIX: Only focus + keydown logic here. No isMounted teardown —
+        // that ref belongs to TaskDetails and must not be touched by a child component.
         useEffect(() => {
             drawerRef.current?.focus()
 
@@ -405,61 +412,62 @@ export default function TaskDetails() {
     }
 
     useTaskSubscription({
-  taskId: taskId!,
-  onStatus: (status) => {
-    if (!isMounted.current) return
-    setTask((prev: Task | null) => prev ? { ...prev, status } : null)
-    if (['completed', 'failed', 'cancelled'].includes(status)) {
-      loadTask()
-    }
-  },
-  onPhase: (phase) => {
-    if (!isMounted.current) return
-    setScanPhase(phase)
-  },
-  onOutput: (chunk) => {
-    if (!isMounted.current) return
-    setRawOutput((prev) => prev + chunk)
-  },
-})
+        taskId: taskId!,
+        onStatus: (status) => {
+            if (!isMounted.current) return
+            setTask((prev: Task | null) => prev ? { ...prev, status } : null)
+            if (['completed', 'failed', 'cancelled'].includes(status)) {
+                loadTask()
+            }
+        },
+        onPhase: (phase) => {
+            if (!isMounted.current) return
+            setScanPhase(phase)
+        },
+        onOutput: (chunk) => {
+            if (!isMounted.current) return
+            setRawOutput((prev) => prev + chunk)
+        },
+    })
+
     async function loadTask() {
-  const seq = ++loadTaskSeqRef.current
-  if (!isMounted.current) return
+        const seq = ++loadTaskSeqRef.current
+        if (!isMounted.current) return
 
-  try {
-    setError(null)
-    const [statusData, resultData] = await Promise.all([
-      getTaskStatus(taskId!) as Promise<Task>,
-      getTaskResult(taskId!).catch(() => null) as Promise<TaskResult | null>
-    ])
+        try {
+            setError(null)
+            const [statusData, resultData] = await Promise.all([
+                getTaskStatus(taskId!) as Promise<Task>,
+                getTaskResult(taskId!).catch(() => null) as Promise<TaskResult | null>
+            ])
 
-    if (seq !== loadTaskSeqRef.current || !isMounted.current) return
+            if (seq !== loadTaskSeqRef.current || !isMounted.current) return
 
-    setTask(statusData)
-    if (statusData.scan_phase) {
-      setScanPhase(statusData.scan_phase)
-    }
+            setTask(statusData)
+            if (statusData.scan_phase) {
+                setScanPhase(statusData.scan_phase)
+            }
 
-    getPluginSchema(statusData.plugin_id)
-      .then(schema => isMounted.current && setSchema(schema))
-      .catch(() => isMounted.current && setSchema(null))
+            getPluginSchema(statusData.plugin_id)
+                .then(schema => isMounted.current && setSchema(schema))
+                .catch(() => isMounted.current && setSchema(null))
 
-    if (resultData && isMounted.current) {
-      setResult(resultData)
-      if (resultData.raw_output) {
-        setRawOutput(resultData.raw_output)
-      }
-    }
-  } catch (err) {
-    if (isMounted.current && seq === loadTaskSeqRef.current) {
-      console.error('Failed to load task:', err)
-      setError(err instanceof Error ? err.message : 'Unable to load task details')
-    }
-  } finally {
-    if (isMounted.current && seq === loadTaskSeqRef.current) {
-      setLoading(false)
-    }
-  }
+            if (resultData && isMounted.current) {
+                setResult(resultData)
+                if (resultData.raw_output) {
+                    setRawOutput(resultData.raw_output)
+                }
+            }
+        } catch (err) {
+            if (isMounted.current && seq === loadTaskSeqRef.current) {
+                console.error('Failed to load task:', err)
+                setError(err instanceof Error ? err.message : 'Unable to load task details')
+            }
+        } finally {
+            if (isMounted.current && seq === loadTaskSeqRef.current) {
+                setLoading(false)
+            }
+        }
     }
 
     if (loading || !task) {
@@ -663,8 +671,6 @@ export default function TaskDetails() {
         setExpandedFindingRows(prev => ({ ...prev, [index]: !prev[index] }))
     }
 
-
-
     const DetailCard = ({ label, value, subValue }: { label: string, value: string, subValue?: string }) => (
         <div className="bg-charcoal border border-white/5 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] min-h-[118px] flex flex-col justify-between">
             <div className="space-y-3">
@@ -709,7 +715,6 @@ export default function TaskDetails() {
                                     <span className="material-symbols-outlined text-sm">
                                         content_copy
                                     </span>
-
                                     Copy ID
                                 </button>
                                 <span className={`px-3 py-1 text-[10px] uppercase tracking-[0.3em] border ${statusTone}`}>
