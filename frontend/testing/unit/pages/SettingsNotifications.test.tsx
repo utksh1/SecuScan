@@ -89,4 +89,3 @@ describe('Settings notifications rules panel', () => {
     })
   })
 })
-
