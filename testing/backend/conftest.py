@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
@@ -21,7 +20,6 @@ from backend.secuscan.main import app
 from backend.secuscan.plugins import init_plugins
 from backend.secuscan.ratelimit import concurrent_limiter, rate_limiter
 from backend.secuscan import auth as auth_module
-
 
 @pytest.fixture(autouse=True)
 def setup_test_environment(monkeypatch):
@@ -52,8 +50,6 @@ def anyio_backend():
     """Force AnyIO tests to run on asyncio (trio is not a dependency in CI)."""
     return "asyncio"
 
-
-
 @pytest.fixture
 def test_client(setup_test_environment):
     """Provides a synchronous test client backed by initialized async services."""
@@ -68,7 +64,6 @@ def test_client(setup_test_environment):
             await reset_all_endpoint_limiters()
         except ImportError:
             pass
-        await init_db(settings.database_path)
         await init_plugins(settings.plugins_dir)
 
     asyncio.run(setup())
@@ -92,7 +87,12 @@ def test_client(setup_test_environment):
 
     asyncio.run(teardown())
 
-def pytest_sessionfinish(session, exitstatus):
-    """Force exit after all tests run to prevent hanging on Windows due to background threads/loops."""
-    import os
-    os._exit(exitstatus)
+@pytest.fixture(autouse=True)
+def db_cleanup_fixture():
+    yield
+    if database_module.db:
+        import asyncio
+        try:
+            asyncio.run(database_module.db.disconnect())
+        except Exception:
+            pass

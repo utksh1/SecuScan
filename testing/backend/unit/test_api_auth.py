@@ -19,8 +19,6 @@ from backend.secuscan.plugins import init_plugins
 @pytest.fixture()
 def client_with_key(setup_test_environment):
     """TestClient with a valid API key pre-seeded."""
-    asyncio.run(init_db(settings.database_path))
-    asyncio.run(init_plugins(settings.plugins_dir))
     api_key = auth_module.init_api_key(settings.data_dir)
     with TestClient(app) as c:
         yield c, api_key
