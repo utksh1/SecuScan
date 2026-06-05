@@ -38,9 +38,13 @@ class TestApiKeyInit:
         assert k1 == k2
 
     def test_key_file_permissions(self, tmp_path):
+        import sys
         auth_module.init_api_key(str(tmp_path))
         mode = (tmp_path / ".api_key").stat().st_mode & 0o777
-        assert mode == 0o600
+        if sys.platform == "win32":
+            assert mode == 0o666
+        else:
+            assert mode == 0o600
 
     def test_secuscan_api_key_file_env_var(self, tmp_path, monkeypatch):
         custom_path = tmp_path / "secrets" / "my_api_key"

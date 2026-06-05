@@ -194,6 +194,7 @@ from .platform_resources import (
     get_session_profile,
     get_target_policy,
 )
+from .request_context import get_request_id
 
 from sse_starlette.sse import EventSourceResponse
 
@@ -297,6 +298,7 @@ def _report_generation_error_response(task_id: str, report_format: str) -> JSONR
                 "task_id": task_id,
                 "format": report_format,
             },
+            "request_id": get_request_id(),
         },
     )
 

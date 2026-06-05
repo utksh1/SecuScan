@@ -91,3 +91,8 @@ def test_client(setup_test_environment):
             await database_module.db.disconnect()
 
     asyncio.run(teardown())
+
+def pytest_sessionfinish(session, exitstatus):
+    """Force exit after all tests run to prevent hanging on Windows due to background threads/loops."""
+    import os
+    os._exit(exitstatus)

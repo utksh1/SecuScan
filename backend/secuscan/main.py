@@ -9,9 +9,13 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from .request_middleware import RequestIDMiddleware
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from fastapi.responses import JSONResponse
+from .request_context import get_request_id
 
 from .config import settings
 from .auth import init_api_key
@@ -163,6 +167,27 @@ app.add_middleware(
     allow_headers=settings.cors_allowed_headers,
 )
 app.add_middleware(RequestIDMiddleware)
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": exc.errors(),
+            "request_id": get_request_id()
+        }
+    )
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "detail": exc.detail,
+            "request_id": get_request_id()
+        },
+        headers=getattr(exc, "headers", None)
+    )
 
 # Include API routes
 app.include_router(router)
