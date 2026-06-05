@@ -18,7 +18,7 @@ from .auth import init_api_key
 from .cache import init_cache, cache as global_cache
 from .database import init_db, db as global_db
 from .plugins import init_plugins
-from .routes import router
+from .routes import router, public_router
 from .saved_views import saved_views_router
 from .workflows import scheduler
 
@@ -166,6 +166,7 @@ app.add_middleware(RequestIDMiddleware)
 
 # Include API routes
 app.include_router(router)
+app.include_router(public_router)
 app.include_router(saved_views_router)
 
 

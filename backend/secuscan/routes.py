@@ -137,6 +137,9 @@ from .report_tokens import (
 from sse_starlette.sse import EventSourceResponse
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
+# Unauthenticated router: endpoints that authenticate via self-contained
+# signed tokens instead of the long-lived API key.
+public_router = APIRouter(prefix="/api/v1")
 SSE_RAW_OUTPUT_CHUNK_SIZE = 64 * 1024
 
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -722,7 +725,7 @@ async def generate_report_download_token(
     return {"token": token, "expires_in_seconds": ttl, "format": fmt}
 
 
-@router.get(
+@public_router.get(
     "/task/{task_id}/report/{fmt}/download",
     dependencies=[Depends(report_download_limiter)],
 )
@@ -730,24 +733,34 @@ async def download_report_with_token(
     task_id: str,
     fmt: str,
     token: str,
-    owner: str = Depends(get_current_owner),
 ):
     """Download a report artifact using a previously issued signed token.
 
-    The token must be valid (unmodified, unexpired), bound to this exact
-    task_id and format, and issued to the currently authenticated owner.
-    Any mismatch returns 401 so callers cannot distinguish between an
-    expired, wrong-format, or wrong-task token.
+    No API key is required — the signed token is the sole credential.
+    The token encodes task_id, format, owner_id, and an expiry epoch;
+    the HMAC signature over all four fields prevents forgery.
+
+    Returns 401 for any token problem (expired, mismatched, tampered) so
+    callers cannot distinguish failure modes from the HTTP status alone.
     """
     if fmt not in _REPORT_TOKEN_FORMATS:
         raise HTTPException(status_code=400, detail=f"Unknown format '{fmt}'")
+
+    from .report_tokens import _b64_decode as _tok_decode
+    try:
+        parts = token.split(".")
+        if len(parts) != 5:
+            raise ValueError("wrong segment count")
+        owner_from_token = _tok_decode(parts[2])
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid download token")
 
     try:
         validate_token(
             token=token,
             expected_task_id=task_id,
             expected_fmt=fmt,
-            expected_owner_id=owner,
+            expected_owner_id=owner_from_token,
         )
     except TokenExpiredError:
         raise HTTPException(status_code=401, detail="Download token has expired")
@@ -763,8 +776,8 @@ async def download_report_with_token(
     )
     if task_row is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    if task_row["owner_id"] != owner:
-        raise HTTPException(status_code=403, detail="You do not have access to this task")
+    if task_row["owner_id"] != owner_from_token:
+        raise HTTPException(status_code=401, detail="Invalid download token")
     if task_row["status"] not in ("completed", "failed"):
         raise HTTPException(status_code=400, detail="Task is not finished yet")
 

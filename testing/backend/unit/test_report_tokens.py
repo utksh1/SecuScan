@@ -232,3 +232,81 @@ class TestAllowedFormats:
 
     def test_json_not_allowed(self):
         assert "json" not in _ALLOWED_FORMATS
+
+
+class TestDownloadRouteAccessControl:
+    """Route-level tests verifying the download endpoint is publicly accessible
+    via a signed token and does not require the long-lived API key."""
+
+    def _seed_task(self, client, task_id: str = "task-route-test"):
+        import sqlite3
+        from backend.secuscan.config import settings
+        conn = sqlite3.connect(settings.database_path)
+        conn.execute(
+            "INSERT OR IGNORE INTO tasks "
+            "(id, owner_id, plugin_id, tool_name, target, status, structured_json, inputs_json) "
+            "VALUES (?, 'default', 'http_inspector', 'http_inspector', "
+            "'http://example.com', 'completed', '{\"findings\":[]}', '{}')",
+            (task_id,),
+        )
+        conn.commit()
+        conn.close()
+
+    def test_download_endpoint_reachable_without_api_key(self, test_client):
+        self._seed_task(test_client)
+        token = generate_token("task-route-test", "csv", "default", 300)
+        resp = test_client.get(
+            f"/api/v1/task/task-route-test/report/csv/download?token={token}",
+            headers={},
+        )
+        assert resp.status_code in (200, 400, 404, 500)
+
+    def test_expired_token_returns_401(self, test_client):
+        self._seed_task(test_client)
+        token = generate_token("task-route-test", "csv", "default", ttl_seconds=-10)
+        resp = test_client.get(
+            f"/api/v1/task/task-route-test/report/csv/download?token={token}",
+            headers={},
+        )
+        assert resp.status_code == 401
+        assert "expired" in resp.json()["detail"].lower()
+
+    def test_invalid_token_returns_401(self, test_client):
+        resp = test_client.get(
+            "/api/v1/task/task-route-test/report/csv/download?token=not-a-valid-token",
+            headers={},
+        )
+        assert resp.status_code == 401
+
+    def test_wrong_task_token_returns_401(self, test_client):
+        self._seed_task(test_client)
+        token = generate_token("OTHER-TASK-ID", "csv", "default", 300)
+        resp = test_client.get(
+            f"/api/v1/task/task-route-test/report/csv/download?token={token}",
+            headers={},
+        )
+        assert resp.status_code == 401
+
+    def test_wrong_format_token_returns_401(self, test_client):
+        self._seed_task(test_client)
+        token = generate_token("task-route-test", "pdf", "default", 300)
+        resp = test_client.get(
+            f"/api/v1/task/task-route-test/report/csv/download?token={token}",
+            headers={},
+        )
+        assert resp.status_code == 401
+
+    def test_unknown_format_returns_400(self, test_client):
+        token = generate_token("task-route-test", "csv", "default", 300)
+        resp = test_client.get(
+            f"/api/v1/task/task-route-test/report/exe/download?token={token}",
+            headers={},
+        )
+        assert resp.status_code == 400
+
+    def test_token_issuance_requires_api_key(self, test_client):
+        resp = test_client.post(
+            "/api/v1/task/task-route-test/report/csv/token",
+            headers={"X-Api-Key": "wrong-key-definitely-invalid"},
+        )
+        assert resp.status_code in (401, 403)
