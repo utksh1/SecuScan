@@ -10,8 +10,8 @@ vi.mock('../../../src/api', () => ({
   getFindings: vi.fn(),
 }))
 
-vi.mock('../../../src/utils/date', async (importOriginal) => {
-  const actual = await importOriginal()
+vi.mock('../../../src/utils/date', async (importOriginal: any) => {
+  const actual = await importOriginal() as typeof import('../../../src/utils/date')
   return {
     ...actual,
     formatLocaleDate: (d: any) => (d ? '2024-01-01' : ''),
@@ -19,21 +19,14 @@ vi.mock('../../../src/utils/date', async (importOriginal) => {
 })
 
 // @tanstack/react-virtual needs ResizeObserver + scrollHeight in jsdom
-global.ResizeObserver = class {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
+if (typeof global.ResizeObserver === 'undefined') {
+  global.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as any
 }
 
-global.ResizeObserverEntry = class {}
-
-global.ResizeObserverSize = class {}
-
-global.ResizeObserverBoxOptions = class {}
-
-global.ResizeObserverDimension = class {}
-
-global.ResizeObserverCallback = class {}
 
 Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, value: 800 })
 Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 600 })
