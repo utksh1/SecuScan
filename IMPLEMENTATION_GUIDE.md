@@ -26,7 +26,7 @@ This implementation adds scheduled, recurring scan capabilities to SecuScan with
 
 ### Frontend
 
-1. **`frontend/src/components/ScanScheduleForm.jsx`** (New Component)
+1. **`frontend/src/components/ScanScheduleForm.tsx`** (New Component)
    - React form component with:
      - Cron expression input with 5-part validation
      - Timezone dropdown (common IANA timezones)
@@ -40,7 +40,7 @@ This implementation adds scheduled, recurring scan capabilities to SecuScan with
    - Professional UI with proper spacing and typography
    - Mobile-optimized layout
 
-3. **`frontend/src/components/ScanScheduleForm.test.jsx`** (New Tests)
+3. **`frontend/testing/unit/components/ScanScheduleForm.test.tsx`** (New Tests)
    - Jest + React Testing Library tests
    - 40+ test cases covering rendering, validation, submission, errors, accessibility
 
@@ -360,7 +360,7 @@ pytest testing/test_scheduler.py -v
 
 ```bash
 cd frontend
-npm run test -- ScanScheduleForm.test.jsx
+npm run test -- ScanScheduleForm.test.tsx
 ```
 
 ---

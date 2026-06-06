@@ -85,7 +85,7 @@ This document summarizes the complete implementation of recurring scheduled scan
 
 ### New Files Created
 
-#### 1. **`frontend/src/components/ScanScheduleForm.jsx`** ⭐ React Component
+#### 1. **`frontend/src/components/ScanScheduleForm.tsx`** ⭐ React Component
 
 **Features:**
 - Cron expression input with 5-part validation
@@ -142,9 +142,9 @@ interface Props {
 - Tablet: 480px–640px (side-by-side with separator)
 - Desktop: > 640px (full layout)
 
-#### 3. **`frontend/src/components/ScanScheduleForm.test.jsx`** ✅ Test Suite
+#### 3. **`frontend/testing/unit/components/ScanScheduleForm.test.tsx`** ✅ Test Suite
 
-**Test Framework:** Jest + React Testing Library
+**Test Framework:** Vitest + React Testing Library
 **Test Count:** 40+ comprehensive tests across 9 suites
 
 **Test Suites:**
@@ -192,7 +192,7 @@ interface Props {
 **Run Tests:**
 ```bash
 cd frontend
-npm run test -- ScanScheduleForm.test.jsx
+npm run test -- ScanScheduleForm.test.tsx
 # Result: All tests pass ✅
 ```
 
@@ -372,9 +372,9 @@ git status                                    # Verify changes
 git diff                                      # Review changes
 git add backend/secuscan/utils/scheduler.py \
         backend/secuscan/utils/__init__.py \
-        frontend/src/components/ScanScheduleForm.jsx \
+        frontend/src/components/ScanScheduleForm.tsx \
         frontend/src/components/ScanScheduleForm.module.css \
-        frontend/src/components/ScanScheduleForm.test.jsx \
+        frontend/testing/unit/components/ScanScheduleForm.test.tsx \
         testing/test_scheduler.py \
         IMPLEMENTATION_GUIDE.md \
         pyproject.toml
@@ -404,9 +404,9 @@ git push -u origin feature/recurring-scans-253
 | `backend/secuscan/utils/scheduler.py` | Module | ✅ | 19/19 pass |
 | `backend/secuscan/utils/__init__.py` | Init | ✅ | - |
 | `testing/test_scheduler.py` | Tests | ✅ | - |
-| `frontend/src/components/ScanScheduleForm.jsx` | Component | ✅ | 40+ ready |
+| `frontend/src/components/ScanScheduleForm.tsx` | Component | ✅ | 40+ ready |
 | `frontend/src/components/ScanScheduleForm.module.css` | Styles | ✅ | - |
-| `frontend/src/components/ScanScheduleForm.test.jsx` | Tests | ✅ | - |
+| `frontend/testing/unit/components/ScanScheduleForm.test.tsx` | Tests | ✅ | - |
 | `pyproject.toml` | Config | ✅ Modified | - |
 | `IMPLEMENTATION_GUIDE.md` | Docs | ✅ | - |
 

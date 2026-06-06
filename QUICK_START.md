@@ -9,7 +9,7 @@ Core scheduling engine with:
 - **Blackout Windows** - Skip scans during maintenance windows (supports overnight windows like 23:00–06:00)
 - **Missed-Run Recovery** - Execute queued scans after system recovery (safely avoids double-execution)
 
-### Frontend (`frontend/src/components/ScanScheduleForm.jsx`)
+### Frontend (`frontend/src/components/ScanScheduleForm.tsx`)
 React form component with:
 - Cron expression input (5-part validation)
 - Timezone dropdown (13 common IANA timezones)
@@ -35,7 +35,7 @@ cd c:\Users\yerra\OneDrive\Desktop\SecuScan253
 ### Run Frontend Tests
 ```bash
 cd frontend
-npm run test -- ScanScheduleForm.test.jsx
+npm run test -- ScanScheduleForm.test.tsx
 ```
 **Result:** Ready to run (all tests should pass)
 
@@ -123,9 +123,9 @@ See `IMPLEMENTATION_GUIDE.md` for full implementation.
 |------|---------|-------|
 | `backend/secuscan/utils/scheduler.py` | Core scheduling engine | 170 |
 | `backend/secuscan/utils/__init__.py` | Package init | 1 |
-| `frontend/src/components/ScanScheduleForm.jsx` | React form | 330 |
+| `frontend/src/components/ScanScheduleForm.tsx` | React form | 330 |
 | `frontend/src/components/ScanScheduleForm.module.css` | Styling | 460 |
-| `frontend/src/components/ScanScheduleForm.test.jsx` | Tests | 450 |
+| `frontend/testing/unit/components/ScanScheduleForm.test.tsx` | Tests | 450 |
 | `testing/test_scheduler.py` | Backend tests | 320 |
 | `IMPLEMENTATION_GUIDE.md` | Detailed integration guide | 450 |
 | `PHASE_4_IMPLEMENTATION_SUMMARY.md` | Overview & summary | 400 |
