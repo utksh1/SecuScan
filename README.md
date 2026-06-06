@@ -49,12 +49,21 @@ The project is designed to be:
 ## Repository Map
 
 - `backend/`: FastAPI app, execution logic, database/config, plugin loading, workflows
+- `backend/data/`: backend-specific datasets and resources used by scanners
+- `backend/wordlists/`: backend scanning wordlists and supporting resources
 - `frontend/`: React + Vite app, routes, pages, shared components, and test config
 - `plugins/`: scanner metadata, parser code, and plugin-specific helpers
-- `testing/backend/`: Python unit and integration tests plus backend test scripts
-- `frontend/testing/`: frontend unit and end-to-end test files
+- `testing/`: shared test utilities, backend test scripts, and validation helpers
+- `frontend/testing/`: frontend unit and integration test files
+- `frontend/e2e/`: Playwright end-to-end test suites
 - `docs/`: supporting project documentation
 - `scripts/`: helper scripts for signing, benchmarking, and maintenance
+- `.github/`: GitHub Actions workflows, issue templates, and contributor automation
+- `assets/`: project branding assets and images
+- `data/`: shared raw and generated project data
+- `output/`: generated reports and exported scan artifacts (runtime-generated)
+- `wordlists/`: wordlists used by scanning and enumeration plugins
+- `scratch/`: experimental utilities and temporary development helpers
 
 ## Prerequisites
 
@@ -105,6 +114,121 @@ After startup:
 
 - Frontend: `http://127.0.0.1:5173`
 - Backend API: `http://127.0.0.1:8081`
+
+### Troubleshooting / Common Issues
+
+For more detailed Windows-specific setup and troubleshooting instructions, see the [Windows Contributor Development Guide](docs/windows_contributor_guide.md).
+
+#### Python version issues
+
+This project requires Python 3.11 or newer.
+
+Check your Python version:
+
+```bash
+python --version
+```
+
+or:
+
+```bash
+python3 --version
+```
+
+Install Python 3.11+ if your current version is older.
+
+Python downloads: https://www.python.org/downloads/
+
+#### Virtual environment activation issues
+
+Create a virtual environment:
+
+```bash
+python -m venv venv
+```
+
+Activate it:
+
+**Windows PowerShell**
+
+```powershell
+venv\Scripts\Activate.ps1
+```
+
+**Windows Git Bash**
+
+```bash
+source venv/Scripts/activate
+```
+
+**Linux/macOS**
+
+```bash
+source venv/bin/activate
+```
+
+If PowerShell blocks activation, run:
+
+```powershell
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
+
+Then reopen the terminal and activate the virtual environment again.
+
+#### Node.js version issues
+
+This project requires Node.js 20 or newer.
+
+Check your Node.js version:
+
+```bash
+node -v
+```
+
+Install Node.js 20+ if your current version is older.
+
+Node.js downloads: https://nodejs.org/
+
+#### Dependency installation issues
+
+If dependency installation fails, try reinstalling dependencies:
+
+```bash
+npm install
+```
+
+If installation still fails, try clearing the npm cache:
+
+```bash
+npm cache clean --force
+```
+
+Then reinstall dependencies again:
+
+```bash
+npm install
+```
+
+For complete contributor workflow and coding guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+#### Environment variable issues
+
+If the app fails because environment variables are missing, copy the example environment file if available:
+
+```bash
+cp .env.example .env
+```
+
+Then update the required values before starting the project.
+
+#### Still stuck?
+
+Before opening a setup issue, check:
+
+* Python 3.11+
+* Node.js 20+
+* virtual environment is activated
+* required `.env` files exist
 
 ## Manual Development Commands
 
@@ -185,6 +309,9 @@ Long-form product and planning material lives outside the main README so onboard
 
 - [SecuScan Product Specification](docs/PRODUCT_SPEC.md)
 - [Plugin Catalogue](PLUGINS.md)
+- [Secure Deployment Guide](docs/SECURE_DEPLOYMENT.md)
+- [Windows Contributor Development Guide](docs/windows_contributor_guide.md)
+
 
 ## Tech Stack
 
@@ -211,3 +338,59 @@ This project is released under the [MIT License](LICENSE).
 - `LICENSE` is the canonical legal text for this repository.
 - Contributions merged into this repository are distributed under the same MIT License unless explicitly stated otherwise.
 - Third-party tools, libraries, and external scanners referenced by SecuScan may have their own licenses and usage terms. Check upstream projects before redistributing bundled integrations.
+
+
+---
+
+## Troubleshooting & Local Setup Failsafe
+
+Use these checks when local installation or launch fails.
+
+### 1. Stale Local Vite Module Cache
+
+**Symptoms:** Frontend changes do not appear in the browser, or Vite reports internal parsing or bundling errors.
+
+**Fix:** Force Vite to ignore its stale cache and run a fresh reload:
+
+```bash
+cd frontend
+npm run dev -- --force
+```
+
+### 2. Node Dependency Resolution Loops (`npm i` hanging/failing)
+
+**Symptoms:** `npm install` reports dependency tree conflicts, peer dependency errors, or hangs indefinitely.
+
+**Fix:** Retry with the legacy peer dependency resolver:
+
+```bash
+npm install --legacy-peer-deps
+```
+
+### 3. Missing or Mismatched Environment Variables
+
+**Symptoms:** The frontend loads, but API requests fail or scans cannot connect to the backend.
+
+**Fix:** Create a local `.env` file from the example file:
+
+```bash
+cp .env.example .env
+```
+
+### 4. Port 5173 Already in Use
+
+**Symptoms:** Vite reports that port `5173` is already in use and switches to another port.
+
+**Fix:** Stop the process using that port.
+
+Windows PowerShell:
+
+```powershell
+Stop-Process -Id (Get-NetTCPConnection -LocalPort 5173).OwningProcess -Force
+```
+
+Linux or macOS:
+
+```bash
+kill "$(lsof -t -i:5173)"
+```
