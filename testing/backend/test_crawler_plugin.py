@@ -187,7 +187,6 @@ def test_crawler_command_respects_explicit_depth(setup_test_environment):
     )
 
 
-<<<<<<< HEAD
 def test_crawler_drops_target_token_when_absent(setup_test_environment):
     """
     When the 'target' field is omitted, the renderer drops the unresolved
@@ -206,15 +205,6 @@ def test_crawler_drops_target_token_when_absent(setup_test_environment):
     populated = manager.build_command("crawler", {"target": "https://example.com"})
     assert "https://example.com" in populated
     assert len(populated) == len(rendered) + 1
-=======
-def test_crawler_requires_target_field(setup_test_environment):
-    """build_command must return None when the required 'target' field is absent."""
-    manager = PluginManager(str(PLUGINS_DIR))
-    asyncio.run(manager.load_plugins())
-
-    result = manager.build_command("crawler", {})
-    assert result is None
->>>>>>> ac1eabf (test(crawler): add contract and parser coverage for crawler plugin)
 
 
 def test_crawler_loaded_by_plugin_manager(setup_test_environment):
