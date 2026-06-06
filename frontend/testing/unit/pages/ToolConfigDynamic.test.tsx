@@ -25,9 +25,9 @@ describe('ToolConfig dynamic schema flow', () => {
   beforeEach(() => {
     addToast.mockReset()
     vi.mocked(getSettings).mockResolvedValue({ sandbox: { default_timeout: 600 } })
-    vi.mocked(listTargetPolicies).mockResolvedValue({ items: [] })
-    vi.mocked(listCredentialProfiles).mockResolvedValue({ items: [] })
-    vi.mocked(listSessionProfiles).mockResolvedValue({ items: [] })
+    vi.mocked(listTargetPolicies).mockResolvedValue({ items: [], total: 0 })
+    vi.mocked(listCredentialProfiles).mockResolvedValue({ items: [], total: 0 })
+    vi.mocked(listSessionProfiles).mockResolvedValue({ items: [], total: 0 })
     vi.mocked(listPlugins).mockResolvedValue({
       total: 1,
       plugins: [
