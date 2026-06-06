@@ -136,13 +136,27 @@ def test_cloud_scanner_command_full_token_sequence(setup_test_environment):
     )
 
 
-def test_cloud_scanner_requires_target_field(setup_test_environment):
-    """build_command must return None when the required 'target' field is absent."""
+def test_cloud_scanner_drops_target_token_when_absent(setup_test_environment):
+    """
+    When the 'target' field is omitted, the trailing {target} token is dropped
+    rather than emitting an empty value or literal placeholder. The python3 -c
+    scaffold (which references sys.argv[1]) is preserved.
+    """
     manager = PluginManager(str(PLUGINS_DIR))
     asyncio.run(manager.load_plugins())
 
-    result = manager.build_command("cloud_scanner", {})
-    assert result is None
+    rendered = manager.build_command("cloud_scanner", {})
+
+    assert rendered is not None
+    assert not any("{" in token for token in rendered), "Unresolved placeholder leaked"
+    assert rendered[0] == "python3"
+    assert "-c" in rendered
+    # The trailing positional target argument is absent
+    assert "my-org" not in rendered
+
+    populated = manager.build_command("cloud_scanner", {"target": "my-org"})
+    assert populated[-1] == "my-org"
+    assert len(populated) == len(rendered) + 1
 
 
 def test_cloud_scanner_loaded_by_plugin_manager(setup_test_environment):
