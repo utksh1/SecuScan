@@ -71,7 +71,7 @@ jobs:
       - name: Run backend lint baseline
         run: ruff check backend testing/backend
 
-  backend-tests:
+  backend-unit-tests:
     needs: [detect-changes, backend-lint, formatting-hygiene]
     if: |
       always() &&
@@ -90,8 +90,30 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt -r backend/requirements-dev.txt
-      - name: Run backend tests
-        run: pytest testing/backend -q -m "not benchmark"
+      - name: Run unit tests
+        run: pytest testing/backend/unit -q -m "not benchmark"
+
+  backend-integration-tests:
+    needs: [detect-changes, backend-lint, formatting-hygiene]
+    if: |
+      always() &&
+      needs.detect-changes.outputs.run_backend == 'true' &&
+      (needs.backend-lint.result == 'success' || needs.backend-lint.result == 'skipped') &&
+      (needs.formatting-hygiene.result == 'success' || needs.formatting-hygiene.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+      - name: Run integration tests
+        run: pytest testing/backend/integration -q -m "not benchmark"
 
   backend-audit:
     runs-on: ubuntu-latest
