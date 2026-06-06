@@ -45,6 +45,16 @@ def test_plugin_manager_build_command(setup_test_environment):
     assert "http://127.0.0.1" in command
 
 
+def test_plugin_interpolation_sanitizes_user_controlled_values():
+    manager = PluginManager("plugins")
+
+    assert manager._interpolate("{templates}", {"templates": "--debug;$(whoami)"}) == "debugwhoami"
+    assert (
+        manager._interpolate("--user-agent={user_agent}", {"user_agent": "--verbose|curl"})
+        == "--user-agent=verbosecurl"
+    )
+
+
 def test_plugin_list_exposes_runtime_capabilities(setup_test_environment, monkeypatch):
     """Plugin list payload includes consent and availability details."""
     manager = PluginManager(settings.plugins_dir)
