@@ -48,7 +48,7 @@ Add the `ScanSchedule` model to `backend/secuscan/database.py`:
 ```python
 class ScanSchedule(Base):
     __tablename__ = "scan_schedules"
-    
+
     id = Column(Integer, primary_key=True)
     scan_id = Column(String, nullable=False)
     cron_expression = Column(String, nullable=False)
@@ -232,7 +232,7 @@ git push -u origin feature/recurring-scans-253
 ```jsx
 import ScanScheduleForm from './components/ScanScheduleForm';
 
-<ScanScheduleForm 
+<ScanScheduleForm
   onSubmit={handleSubmit}
   onCancel={() => navigate('/dashboard')}
 />
@@ -242,12 +242,12 @@ import ScanScheduleForm from './components/ScanScheduleForm';
 
 ## Current Branch Status
 
-**Branch**: `feature/recurring-scans-253`  
-**Status**: ✅ Feature Complete  
-**Tests**: ✅ Passing (19/19 backend)  
+**Branch**: `feature/recurring-scans-253`
+**Status**: ✅ Feature Complete
+**Tests**: ✅ Passing (19/19 backend)
 **Ready for**: Integration & PR
 
 ---
 
-**Last Updated**: June 3, 2026  
+**Last Updated**: June 3, 2026
 **Implemented by**: GitHub Copilot

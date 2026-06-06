@@ -66,7 +66,7 @@ Base = declarative_base()
 
 class ScanSchedule(Base):
     __tablename__ = "scan_schedules"
-    
+
     id = Column(Integer, primary_key=True)
     scan_id = Column(String, index=True, nullable=False)
     cron_expression = Column(String, nullable=False)
@@ -118,33 +118,33 @@ class ScheduleResponse(BaseModel):
 @router.post("/create", response_model=ScheduleResponse)
 async def create_schedule(request: CreateScheduleRequest, db: Session = Depends(get_db)):
     """Create a new recurring scan schedule."""
-    
+
     # Validate inputs
     if not validate_cron_expression(request.cron_expression):
         raise HTTPException(status_code=400, detail="Invalid cron expression")
-    
+
     if request.blackout_start and not validate_time_format(request.blackout_start):
         raise HTTPException(status_code=400, detail="Invalid blackout start time")
-    
+
     if request.blackout_end and not validate_time_format(request.blackout_end):
         raise HTTPException(status_code=400, detail="Invalid blackout end time")
-    
+
     if (request.blackout_start and not request.blackout_end) or \
        (not request.blackout_start and request.blackout_end):
         raise HTTPException(status_code=400, detail="Both blackout times required or neither")
-    
+
     # Validate timezone
     try:
         ZoneInfo(request.timezone)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid timezone")
-    
+
     # Calculate next run time
     try:
         next_run = get_next_run_time(request.cron_expression, request.timezone)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-    
+
     # Create schedule in database
     schedule = ScanSchedule(
         scan_id=request.scan_id,
@@ -155,11 +155,11 @@ async def create_schedule(request: CreateScheduleRequest, db: Session = Depends(
         next_run_time=next_run,
         is_enabled=True
     )
-    
+
     db.add(schedule)
     db.commit()
     db.refresh(schedule)
-    
+
     return schedule
 
 @router.get("/{schedule_id}", response_model=ScheduleResponse)
@@ -176,21 +176,21 @@ async def update_schedule(schedule_id: int, request: CreateScheduleRequest, db: 
     schedule = db.query(ScanSchedule).filter(ScanSchedule.id == schedule_id).first()
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
-    
+
     # Validate inputs (same as create)
     if not validate_cron_expression(request.cron_expression):
         raise HTTPException(status_code=400, detail="Invalid cron expression")
-    
+
     # Update fields
     schedule.cron_expression = request.cron_expression
     schedule.timezone = request.timezone
     schedule.blackout_start = request.blackout_start
     schedule.blackout_end = request.blackout_end
     schedule.next_run_time = get_next_run_time(request.cron_expression, request.timezone)
-    
+
     db.commit()
     db.refresh(schedule)
-    
+
     return schedule
 
 @router.delete("/{schedule_id}")
@@ -199,10 +199,10 @@ async def delete_schedule(schedule_id: int, db: Session = Depends(get_db)):
     schedule = db.query(ScanSchedule).filter(ScanSchedule.id == schedule_id).first()
     if not schedule:
         raise HTTPException(status_code=404, detail="Schedule not found")
-    
+
     db.delete(schedule)
     db.commit()
-    
+
     return {"message": "Schedule deleted"}
 ```
 
@@ -221,17 +221,17 @@ async def execute_scheduled_scans(db: Session):
     Run periodically (e.g., every minute via APScheduler or similar).
     """
     now = datetime.now(ZoneInfo("UTC"))
-    
+
     due_schedules = db.query(ScanSchedule).filter(
         ScanSchedule.is_enabled == True,
         ScanSchedule.next_run_time <= now
     ).all()
-    
+
     for schedule in due_schedules:
         # Check if currently in blackout window
         tz = ZoneInfo(schedule.timezone)
         current_time = now.astimezone(tz)
-        
+
         if is_in_blackout_window(current_time, schedule.blackout_start, schedule.blackout_end):
             # Skip execution, reschedule for next cycle
             schedule.next_run_time = get_next_run_time(
@@ -240,7 +240,7 @@ async def execute_scheduled_scans(db: Session):
             )
             db.commit()
             continue
-        
+
         # Execute the scan
         try:
             await execute_scan(schedule.scan_id)
@@ -248,7 +248,7 @@ async def execute_scheduled_scans(db: Session):
         except Exception as e:
             # Log error but continue
             logger.error(f"Failed to execute scheduled scan {schedule.scan_id}: {e}")
-        
+
         # Calculate next run time
         schedule.next_run_time = get_next_run_time(
             schedule.cron_expression,
@@ -319,9 +319,9 @@ const SchedulesPage: React.FC = () => {
   return (
     <div>
       <h1>Recurring Scans</h1>
-      
+
       <ScanScheduleForm onSubmit={handleSubmit} />
-      
+
       {/* Display existing schedules */}
       <div>
         <h2>Active Schedules</h2>
@@ -435,7 +435,7 @@ curl -X DELETE http://localhost:8000/api/schedules/1
 ```jsx
 import ScanScheduleForm from './components/ScanScheduleForm';
 
-<ScanScheduleForm 
+<ScanScheduleForm
   onSubmit={async (payload) => {
     const response = await fetch('/api/schedules/create', {
       method: 'POST',
