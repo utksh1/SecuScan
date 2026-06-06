@@ -1,5 +1,4 @@
 name: Plugin Checksum Verification
-
 on:
   pull_request:
     paths:
@@ -8,22 +7,18 @@ on:
     branches: [main]
     paths:
       - 'plugins/**'
-
 jobs:
   verify-checksums:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
+      - name: Install system dependencies
+        run: sudo apt-get install -y libcairo2-dev pkg-config python3-dev
       - name: Install dependencies
-        run: |
-          pip install -r backend/requirements.txt
-
+        run: pip install -r backend/requirements.txt
       - name: Verify plugin checksums
-        run: |
-          python scripts/refresh_plugin_checksums.py --dry-run
+        run: python scripts/refresh_plugin_checksums.py --dry-run
