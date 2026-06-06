@@ -108,6 +108,11 @@ describe('ToolConfig dynamic schema flow', () => {
         }),
         true,
         'quick',
+        {
+          scan_profile: 'standard',
+          validation_mode: 'proof',
+          evidence_level: 'standard',
+        },
       )
     })
   })
