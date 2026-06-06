@@ -168,7 +168,6 @@ app.add_middleware(RequestIDMiddleware)
 app.include_router(router)
 app.include_router(saved_views_router)
 
-
 # Health check endpoint
 @app.get("/api/v1/health")
 async def health_check():

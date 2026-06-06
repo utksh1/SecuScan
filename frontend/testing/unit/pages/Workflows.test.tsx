@@ -17,7 +17,17 @@ const mockWorkflow = {
   name: 'Nightly Scan',
   schedule_seconds: 3600,
   enabled: true,
-  steps: [{ plugin_id: 'nmap', inputs: {} }],
+  steps: [
+    {
+      plugin_id: 'nmap',
+      inputs: {},
+      execution_context: {
+        evidence_level: 'standard'as const,
+        scan_profile: 'standard',
+        validation_mode: 'proof' as const,
+      },
+    },
+  ],
   last_run_at: null,
   queued_task_ids: [],
 }
@@ -130,8 +140,18 @@ describe('Workflows — create action', () => {
       name: 'Nightly Scan',
       schedule_seconds: 7200,
       enabled: true,
-      steps: [{ plugin_id: '', inputs: {} }],
-    })
+      steps: [
+        {
+          plugin_id: '',
+          inputs: {},
+          execution_context: {
+            evidence_level: 'standard',
+            scan_profile: 'standard',
+            validation_mode: 'proof' as const,
+          },
+        },
+       ],
+      })
   })
 })
 
