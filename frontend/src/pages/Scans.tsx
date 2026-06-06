@@ -10,6 +10,7 @@ import {
 } from "../utils/date";
 import { ConfirmModal } from "../components/ConfirmModal";
 import Pagination from "../components/Pagination";
+import { useToast } from "../components/ToastContext";
 
 interface Task {
   task_id: string;
@@ -57,6 +58,7 @@ const itemVariants = {
 
 export default function Scans() {
   const navigate = useNavigate();
+  const { addToast } = useToast();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
@@ -66,7 +68,7 @@ export default function Scans() {
   const [total, setTotal] = useState(0);
   const PAGE_LIMIT = 10;
 
-  // Modal state for confirm dialogs
+
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
     title: string;
@@ -77,11 +79,11 @@ export default function Scans() {
     isOpen: false,
     title: "",
     message: "",
-    onConfirm: () => {},
+    onConfirm: () => { },
     type: "warning",
   });
 
-  // Ref so the visibilitychange handler always sees the current interval id
+
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const requestSeqRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
@@ -196,9 +198,14 @@ export default function Scans() {
           setTasks((prev) => prev.filter((t) => t.task_id !== taskId));
           if (expandedId === taskId) setExpandedId(null);
           setModalState(prev => ({ ...prev, isOpen: false }));
+
+          addToast('Record purged cleanly.', 'success');
+
         } catch (err) {
           console.error("Failed to delete task:", err);
-          alert("Failed to delete task. It might still be running.");
+
+          addToast('Failed to delete task. It might still be running.', 'error');
+
           setModalState(prev => ({ ...prev, isOpen: false }));
         }
       },
@@ -218,16 +225,18 @@ export default function Scans() {
           setSelectedIds([]);
           setExpandedId(null);
           setModalState(prev => ({ ...prev, isOpen: false }));
+          addToast("Operational history cleared successfully.", "success");
         } catch (err) {
           console.error("Failed to clear history:", err);
-          alert("Failed to clear history. Ensure no tasks are currently running.");
+          addToast("Failed to clear history. Ensure no tasks are currently running.", "error");
+
           setModalState(prev => ({ ...prev, isOpen: false }));
         }
       },
     });
   }
 
-  async function handleBulkDelete() {
+async function handleBulkDelete() {
     if (selectedIds.length === 0) return;
     setModalState({
       isOpen: true,
@@ -236,13 +245,15 @@ export default function Scans() {
       type: "danger",
       onConfirm: async () => {
         try {
+          const deletedCount = selectedIds.length;
           await bulkDeleteTasks(selectedIds);
           setTasks((prev) => prev.filter((t) => !selectedIds.includes(t.task_id)));
           setSelectedIds([]);
           setModalState(prev => ({ ...prev, isOpen: false }));
+          addToast(`Successfully deleted ${deletedCount} records.`, "success");
         } catch (err) {
           console.error("Bulk delete failed:", err);
-          alert("Failed to delete some tasks. Ensure they are not currently running.");
+          addToast("Failed to delete some tasks. Ensure they are not currently running.", "error");
           setModalState(prev => ({ ...prev, isOpen: false }));
         }
       },
@@ -316,11 +327,10 @@ export default function Scans() {
         <div className="flex flex-wrap items-center gap-4">
           <button
             onClick={toggleSelectAll}
-            className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-3 ${
-              selectedIds.length === tasks.length && tasks.length > 0
+            className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-3 ${selectedIds.length === tasks.length && tasks.length > 0
                 ? "bg-rag-blue text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
                 : "bg-charcoal-dark text-silver/30 border-silver-bright/5 hover:border-silver-bright/20"
-            }`}
+              }`}
           >
             <span className="material-symbols-outlined text-sm">
               {selectedIds.length === tasks.length && tasks.length > 0
@@ -334,11 +344,10 @@ export default function Scans() {
             <button
               key={f.value}
               onClick={() => handleFilterChange(f.value)}
-              className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-2 ${
-                filter === f.value
+              className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-2 ${filter === f.value
                   ? "bg-silver-bright text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-x-0.5 -translate-y-0.5"
                   : "bg-charcoal-dark text-silver/30 border-silver-bright/5 hover:border-silver-bright/20"
-              }`}
+                }`}
             >
               {f.label}
               {filter === f.value && <span className="w-1 h-3 bg-black"></span>}
@@ -395,23 +404,21 @@ export default function Scans() {
                   >
                     {/* Timeline Node */}
                     <div
-                      className={`absolute left-[31px] top-12 w-5 h-5 border-4 border-black z-10 hidden md:block transition-all duration-500 ${
-                        task.status === "completed"
+                      className={`absolute left-[31px] top-12 w-5 h-5 border-4 border-black z-10 hidden md:block transition-all duration-500 ${task.status === "completed"
                           ? "bg-rag-green shadow-[0_0_15px_rgba(34,197,94,0.3)]"
                           : task.status === "failed"
                             ? "bg-rag-red"
                             : task.status === "running"
                               ? "bg-rag-amber animate-pulse"
                               : "bg-silver/10"
-                      }`}
+                        }`}
                     ></div>
 
                     <div
-                      className={`bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer relative overflow-hidden group/card ${
-                        expandedId === task.task_id
+                      className={`bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer relative overflow-hidden group/card ${expandedId === task.task_id
                           ? "border-rag-blue/40 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]"
                           : ""
-                      }`}
+                        }`}
                       onClick={() =>
                         setExpandedId(
                           expandedId === task.task_id ? null : task.task_id,
@@ -423,11 +430,10 @@ export default function Scans() {
                           <div className="flex flex-wrap items-center gap-4">
                             <div
                               onClick={(e) => toggleSelection(task.task_id, e)}
-                              className={`w-10 h-10 border-4 border-black flex items-center justify-center transition-all ${
-                                selectedIds.includes(task.task_id)
+                              className={`w-10 h-10 border-4 border-black flex items-center justify-center transition-all ${selectedIds.includes(task.task_id)
                                   ? "bg-rag-blue text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-x-1 -translate-y-1"
                                   : "bg-charcoal-dark text-silver/10 hover:border-rag-blue/40"
-                              }`}
+                                }`}
                             >
                               <span className="material-symbols-outlined text-base font-black">
                                 {selectedIds.includes(task.task_id)
@@ -436,13 +442,12 @@ export default function Scans() {
                               </span>
                             </div>
                             <span
-                              className={`px-2 py-0.5 text-[9px] font-black uppercase italic border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
-                                task.status === "completed"
+                              className={`px-2 py-0.5 text-[9px] font-black uppercase italic border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${task.status === "completed"
                                   ? "bg-rag-green text-black"
                                   : task.status === "failed"
                                     ? "bg-rag-red text-black"
                                     : "bg-charcoal-dark text-silver-bright/50"
-                              }`}
+                                }`}
                             >
                               {task.status}
                             </span>
@@ -562,34 +567,34 @@ export default function Scans() {
                                 {(task.status === "completed" ||
                                   task.status === "failed" ||
                                   task.status === "cancelled") && (
-                                  <button
-                                    className="bg-rag-red/20 text-rag-red border-2 border-rag-red/20 hover:bg-rag-red hover:text-black hover:border-black px-6 py-4 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 italic"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleTaskDelete(task.task_id);
-                                    }}
-                                  >
-                                    Delete_Record
-                                    <span className="material-symbols-outlined text-sm">
-                                      delete
-                                    </span>
-                                  </button>
-                                )}
+                                    <button
+                                      className="bg-rag-red/20 text-rag-red border-2 border-rag-red/20 hover:bg-rag-red hover:text-black hover:border-black px-6 py-4 text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 italic"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleTaskDelete(task.task_id);
+                                      }}
+                                    >
+                                      Delete_Record
+                                      <span className="material-symbols-outlined text-sm">
+                                        delete
+                                      </span>
+                                    </button>
+                                  )}
                                 {(task.status === "completed" ||
                                   task.status === "failed") && (
-                                  <button
-                                    className="bg-rag-blue text-black px-8 py-4 text-[10px] font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3 group/btn italic"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleRescan(task);
-                                    }}
-                                  >
-                                    Rescan_Signal
-                                    <span className="material-symbols-outlined text-sm group-hover/btn:translate-x-1 transition-transform">
-                                      replay
-                                    </span>
-                                  </button>
-                                )}
+                                    <button
+                                      className="bg-rag-blue text-black px-8 py-4 text-[10px] font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3 group/btn italic"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRescan(task);
+                                      }}
+                                    >
+                                      Rescan_Signal
+                                      <span className="material-symbols-outlined text-sm group-hover/btn:translate-x-1 transition-transform">
+                                        replay
+                                      </span>
+                                    </button>
+                                  )}
                                 <button
                                   className="bg-silver-bright text-black px-8 py-4 text-[10px] font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3 group/btn italic"
                                   onClick={(e) => {

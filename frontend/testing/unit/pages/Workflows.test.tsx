@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import Workflows from '../../../src/pages/Workflows'
+import { ToastProvider } from '../../../src/components/ToastContext'
 import { getWorkflows, createWorkflow, runWorkflow, updateWorkflow, deleteWorkflow } from '../../../src/api'
 
 vi.mock('../../../src/api', () => ({
@@ -32,34 +33,36 @@ const disabledWorkflow = {
 function renderPage() {
   return render(
     <MemoryRouter>
-      <Workflows />
+      <ToastProvider>
+        <Workflows />
+      </ToastProvider>
     </MemoryRouter>
   )
 }
 
 describe('Workflows — loading and empty states', () => {
-    beforeEach(() => {
+  beforeEach(() => {
     vi.mocked(getWorkflows).mockClear()
-})
+  })
 
   it('shows loading spinner while fetching', () => {
-    vi.mocked(getWorkflows).mockReturnValue(new Promise(() => {}))
+    vi.mocked(getWorkflows).mockReturnValue(new Promise(() => { }))
     renderPage()
     expect(screen.getByText(/Loading Workflows/i)).toBeInTheDocument()
   })
 
   it('shows empty state when no workflows exist', async () => {
-  vi.mocked(getWorkflows).mockResolvedValue([])
-  renderPage()
-  expect(await screen.findByText(/No Workflows/i)).toBeInTheDocument()
-  expect(screen.getByText(/Create a workflow to automate recurring scans/i)).toBeInTheDocument()
+    vi.mocked(getWorkflows).mockResolvedValue([])
+    renderPage()
+    expect(await screen.findByText(/No Workflows/i)).toBeInTheDocument()
+    expect(screen.getByText(/Create a workflow to automate recurring scans/i)).toBeInTheDocument()
   })
 
   it('shows error state when fetch fails', async () => {
-  vi.mocked(getWorkflows).mockRejectedValue(new Error('Network error'))
-  renderPage()
-  expect(await screen.findByText('Failed to load')).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: /Retry/i })).toBeInTheDocument()
+    vi.mocked(getWorkflows).mockRejectedValue(new Error('Network error'))
+    renderPage()
+    expect(await screen.findByText('Failed to load')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Retry/i })).toBeInTheDocument()
   })
 
   it('retries fetch when retry button is clicked', async () => {
