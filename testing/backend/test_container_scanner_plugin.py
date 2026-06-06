@@ -130,13 +130,26 @@ def test_container_scanner_command_full_token_sequence(setup_test_environment):
     )
 
 
-def test_container_scanner_requires_target_field(setup_test_environment):
-    """build_command must return None when the required 'target' field is absent."""
+def test_container_scanner_drops_target_token_when_absent(setup_test_environment):
+    """
+    When the 'target' field is omitted, the renderer drops the unresolved
+    {target} token rather than emitting an empty or literal placeholder.
+
+    This proves no image argument is fabricated when nothing is supplied, and
+    contrasts with the populated render where the image is the final argument.
+    """
     manager = PluginManager(str(PLUGINS_DIR))
     asyncio.run(manager.load_plugins())
 
-    result = manager.build_command("container_scanner", {})
-    assert result is None, "Expected None when required 'target' field is missing"
+    rendered = manager.build_command("container_scanner", {})
+
+    assert rendered is not None
+    assert not any("{" in token for token in rendered), "Unresolved placeholder leaked"
+    assert rendered == ["trivy", "image", "-f", "json", "--no-progress"]
+
+    populated = manager.build_command("container_scanner", {"target": "ubuntu:latest"})
+    assert populated[-1] == "ubuntu:latest"
+    assert len(populated) == len(rendered) + 1
 
 
 def test_container_scanner_loaded_by_plugin_manager(setup_test_environment):
