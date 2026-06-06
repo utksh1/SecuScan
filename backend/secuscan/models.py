@@ -47,6 +47,70 @@ class PluginFieldType(str, Enum):
     KEYVALUE = "keyvalue"
 
 
+class PluginImplementationStatus(str, Enum):
+    """How production-ready a plugin integration currently is."""
+    NATIVE = "native"
+    INTEGRATED = "integrated"
+    PLACEHOLDER = "placeholder"
+
+
+class ValidationMode(str, Enum):
+    """How far SecuScan is allowed to validate a suspected issue."""
+    DETECT_ONLY = "detect_only"
+    PROOF = "proof"
+    CONTROLLED_EXTRACT = "controlled_extract"
+
+
+class EvidenceLevel(str, Enum):
+    """How much evidence the platform should retain per finding."""
+    MINIMAL = "minimal"
+    STANDARD = "standard"
+    FULL = "full"
+
+
+class FindingKind(str, Enum):
+    """Normalized finding classification."""
+    OBSERVATION = "observation"
+    SUSPECTED_ISSUE = "suspected_issue"
+    VALIDATED_ISSUE = "validated_issue"
+
+
+class AnalystStatus(str, Enum):
+    """Analyst review state for a finding."""
+    NEW = "new"
+    CONFIRMED = "confirmed"
+    NEEDS_REVIEW = "needs_review"
+    FALSE_POSITIVE = "false_positive"
+    ACCEPTED_RISK = "accepted_risk"
+    FIXED = "fixed"
+
+
+class RetestStatus(str, Enum):
+    """Retest lifecycle state for a finding."""
+    NOT_REQUESTED = "not_requested"
+    PENDING = "pending"
+    PASSED = "passed"
+    FAILED = "failed"
+
+
+class ExecutionContext(BaseModel):
+    """Task/workflow execution policy selected by the operator."""
+    target_policy_id: Optional[str] = None
+    scan_profile: str = "standard"
+    credential_profile_id: Optional[str] = None
+    session_profile_id: Optional[str] = None
+    validation_mode: ValidationMode = ValidationMode.PROOF
+    evidence_level: EvidenceLevel = EvidenceLevel.STANDARD
+
+
+class WorkflowStep(BaseModel):
+    """Single workflow step."""
+    plugin_id: str
+    inputs: Dict[str, Any]
+    preset: Optional[str] = None
+    execution_context: ExecutionContext = Field(default_factory=ExecutionContext)
+
+
 class PluginField(BaseModel):
     """Plugin input field definition"""
     id: str
@@ -80,6 +144,9 @@ class PluginMetadata(BaseModel):
     output: Dict[str, Any]
     safety: Dict[str, Any]
     capabilities: Optional[List[str]] = None
+    implementation_status: Optional[PluginImplementationStatus] = None
+    supports_authenticated_crawling: bool = False
+    supports_session_reuse: bool = False
     learning: Optional[Dict[str, Any]] = None
     dependencies: Optional[Dict[str, List[str]]] = None
     docker_image: Optional[str] = None
@@ -94,6 +161,7 @@ class TaskCreateRequest(BaseModel):
     preset: Optional[str] = None
     inputs: Dict[str, Any]
     consent_granted: bool = False
+    execution_context: ExecutionContext = Field(default_factory=ExecutionContext)
 
 
 class TaskResponse(BaseModel):
@@ -109,6 +177,7 @@ class TaskResponse(BaseModel):
     duration_seconds: Optional[float] = None
     inputs: Optional[Dict[str, Any]] = None
     preset: Optional[str] = None
+    execution_context: ExecutionContext = Field(default_factory=ExecutionContext)
     error_message: Optional[str] = None
     exit_code: Optional[int] = None
 
@@ -129,9 +198,27 @@ class Finding(BaseModel):
     metadata: Dict[str, Any] = Field(default_factory=dict)
     exploitability: Optional[float] = None
     confidence: Optional[float] = None
+    validated: bool = False
+    validation_method: Optional[str] = None
+    confidence_reason: Optional[str] = None
+    evidence: List[Dict[str, Any]] = Field(default_factory=list)
+    asset_refs: List[str] = Field(default_factory=list)
+    service_fingerprint: Optional[str] = None
+    cpe: Optional[str] = None
+    references: List[Dict[str, Any]] = Field(default_factory=list)
     asset_exposure: Optional[str] = None
     risk_score: Optional[float] = None
     risk_factors: List[Dict[str, Any]] = Field(default_factory=list)
+    finding_kind: FindingKind = FindingKind.OBSERVATION
+    finding_group_id: Optional[str] = None
+    asset_id: Optional[str] = None
+    first_seen_at: Optional[datetime] = None
+    last_seen_at: Optional[datetime] = None
+    occurrence_count: int = 1
+    corroborating_sources: List[str] = Field(default_factory=list)
+    evidence_count: int = 0
+    analyst_status: AnalystStatus = AnalystStatus.NEW
+    retest_status: RetestStatus = RetestStatus.NOT_REQUESTED
 
 
 class TaskResult(BaseModel):
@@ -143,10 +230,14 @@ class TaskResult(BaseModel):
     timestamp: datetime
     duration_seconds: Optional[float]
     status: TaskStatus
+    execution_context: ExecutionContext = Field(default_factory=ExecutionContext)
     
     summary: List[str] = []
     severity_counts: Dict[str, int] = Field(default_factory=dict)
     findings: List[Finding] = Field(default_factory=list)
+    finding_groups: List[Dict[str, Any]] = Field(default_factory=list)
+    asset_summary: List[Dict[str, Any]] = Field(default_factory=list)
+    scan_diff: Dict[str, Any] = Field(default_factory=dict)
     structured: Dict[str, Any] = Field(default_factory=dict)
     raw_output_path: Optional[str] = None
     raw_output_excerpt: Optional[str] = None
