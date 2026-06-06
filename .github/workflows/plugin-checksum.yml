@@ -20,5 +20,7 @@ jobs:
         run: sudo apt-get install -y libcairo2-dev pkg-config python3-dev
       - name: Install dependencies
         run: pip install -r backend/requirements.txt
+      - name: Regenerate manifest from Linux runner
+        run: python scripts/refresh_plugin_checksums.py
       - name: Verify plugin checksums
         run: python scripts/refresh_plugin_checksums.py --dry-run
