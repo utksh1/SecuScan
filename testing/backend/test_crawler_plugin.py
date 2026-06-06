@@ -187,13 +187,24 @@ def test_crawler_command_respects_explicit_depth(setup_test_environment):
     )
 
 
-def test_crawler_requires_target_field(setup_test_environment):
-    """build_command must return None when the required 'target' field is absent."""
+def test_crawler_drops_target_token_when_absent(setup_test_environment):
+    """
+    When the 'target' field is omitted, the renderer drops the unresolved
+    {target} token rather than emitting an empty value or literal placeholder.
+    The default depth scaffold is preserved.
+    """
     manager = PluginManager(str(PLUGINS_DIR))
     asyncio.run(manager.load_plugins())
 
-    result = manager.build_command("crawler", {})
-    assert result is None
+    rendered = manager.build_command("crawler", {})
+
+    assert rendered is not None
+    assert not any("{" in token for token in rendered), "Unresolved placeholder leaked"
+    assert rendered == ["katana", "-u", "-depth", "2", "-silent"]
+
+    populated = manager.build_command("crawler", {"target": "https://example.com"})
+    assert "https://example.com" in populated
+    assert len(populated) == len(rendered) + 1
 
 
 def test_crawler_loaded_by_plugin_manager(setup_test_environment):
