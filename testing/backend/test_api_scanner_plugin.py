@@ -147,13 +147,23 @@ def test_api_scanner_command_full_token_sequence(setup_test_environment):
     )
 
 
-def test_api_scanner_requires_target_field(setup_test_environment):
-    """build_command must return None when the required 'target' field is absent."""
+def test_api_scanner_drops_target_token_when_absent(setup_test_environment):
+    """
+    When the 'target' field is omitted, the renderer drops the unresolved
+    {target} token rather than emitting an empty value or literal placeholder.
+    """
     manager = PluginManager(str(PLUGINS_DIR))
     asyncio.run(manager.load_plugins())
 
-    result = manager.build_command("api_scanner", {})
-    assert result is None
+    rendered = manager.build_command("api_scanner", {})
+
+    assert rendered is not None
+    assert not any("{" in token for token in rendered), "Unresolved placeholder leaked"
+    assert rendered == ["nuclei", "-u", "-silent"]
+
+    populated = manager.build_command("api_scanner", {"target": "https://api.example.com"})
+    assert "https://api.example.com" in populated
+    assert len(populated) == len(rendered) + 1
 
 
 def test_api_scanner_loaded_by_plugin_manager(setup_test_environment):
