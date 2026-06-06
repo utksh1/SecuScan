@@ -234,6 +234,10 @@ export interface Workflow {
   id: string
   name: string
   schedule_seconds: number | null
+  cron_expression?: string | null
+  timezone?: string
+  blackout_start?: string | null
+  blackout_end?: string | null
   enabled: boolean
   steps: WorkflowStep[]
   last_run_at?: string | null
@@ -244,6 +248,10 @@ export interface Workflow {
 export interface WorkflowCreatePayload {
   name: string
   schedule_seconds?: number | null
+  cron_expression?: string | null
+  timezone?: string
+  blackout_start?: string | null
+  blackout_end?: string | null
   enabled: boolean
   steps: WorkflowStep[]
 }
@@ -251,6 +259,10 @@ export interface WorkflowCreatePayload {
 export interface WorkflowUpdatePayload {
   name?: string
   schedule_seconds?: number | null
+  cron_expression?: string | null
+  timezone?: string
+  blackout_start?: string | null
+  blackout_end?: string | null
   enabled?: boolean
   steps?: WorkflowStep[]
 }
@@ -283,6 +295,10 @@ function normalizeWorkflow(raw: any): Workflow {
     id: String(raw.id),
     name: String(raw.name ?? ''),
     schedule_seconds: parseScheduleSeconds(raw.schedule_seconds),
+    cron_expression: raw.cron_expression ?? null,
+    timezone: raw.timezone ?? 'UTC',
+    blackout_start: raw.blackout_start ?? null,
+    blackout_end: raw.blackout_end ?? null,
     enabled: Boolean(raw.enabled),
     steps: parseWorkflowSteps(raw.steps ?? raw.steps_json),
     last_run_at: raw.last_run_at ?? null,

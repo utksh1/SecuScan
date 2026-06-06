@@ -46,11 +46,52 @@ def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]
         "id": row["id"],
         "name": row["name"],
         "schedule_seconds": row.get("schedule_seconds"),
+        "cron_expression": row.get("cron_expression"),
+        "timezone": row.get("timezone") or "UTC",
+        "blackout_start": row.get("blackout_start"),
+        "blackout_end": row.get("blackout_end"),
         "enabled": bool(row.get("enabled")),
         "steps": _parse_workflow_steps(row.get("steps_json")),
         "created_at": row.get("created_at"),
         "last_run_at": row.get("last_run_at"),
         "queued_task_ids": queued_task_ids or [],
+    }
+
+
+def _normalize_workflow_schedule_fields(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Extract and validate schedule fields from a workflow create/update payload."""
+    from .utils.scheduler import validate_workflow_schedule
+
+    schedule_seconds = payload.get("schedule_seconds")
+    if schedule_seconds is not None and schedule_seconds != "":
+        schedule_seconds = int(schedule_seconds)
+        if schedule_seconds <= 0:
+            schedule_seconds = None
+    else:
+        schedule_seconds = None
+
+    cron_expression = str(payload.get("cron_expression") or "").strip() or None
+    timezone = str(payload.get("timezone") or "UTC").strip() or "UTC"
+    blackout_start = str(payload.get("blackout_start") or "").strip() or None
+    blackout_end = str(payload.get("blackout_end") or "").strip() or None
+
+    try:
+        validate_workflow_schedule(
+            schedule_seconds,
+            cron_expression,
+            timezone,
+            blackout_start,
+            blackout_end,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return {
+        "schedule_seconds": schedule_seconds,
+        "cron_expression": cron_expression,
+        "timezone": timezone,
+        "blackout_start": blackout_start,
+        "blackout_end": blackout_end,
     }
 
 
@@ -1153,18 +1194,25 @@ async def create_workflow(payload: Dict[str, Any]):
         raise HTTPException(status_code=400, detail="Workflow requires at least one step")
 
     workflow_id = str(uuid.uuid4())
-    schedule_seconds = payload.get("schedule_seconds")
+    schedule_fields = _normalize_workflow_schedule_fields(payload)
     enabled = bool(payload.get("enabled", True))
     db = await get_db()
     await db.execute(
         """
-        INSERT INTO workflows (id, name, schedule_seconds, enabled, steps_json)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO workflows (
+            id, name, schedule_seconds, cron_expression, timezone,
+            blackout_start, blackout_end, enabled, steps_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             workflow_id,
             name,
-            int(schedule_seconds) if schedule_seconds else None,
+            schedule_fields["schedule_seconds"],
+            schedule_fields["cron_expression"],
+            schedule_fields["timezone"],
+            schedule_fields["blackout_start"],
+            schedule_fields["blackout_end"],
             1 if enabled else 0,
             json.dumps(steps),
         ),
@@ -1218,10 +1266,36 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
     if "steps" in payload:
         updates.append("steps_json = ?")
         params.append(json.dumps(payload["steps"]))
-    if "schedule_seconds" in payload:
-        val = payload["schedule_seconds"]
-        updates.append("schedule_seconds = ?")
-        params.append(int(val) if val else None)
+    schedule_keys = (
+        "schedule_seconds",
+        "cron_expression",
+        "timezone",
+        "blackout_start",
+        "blackout_end",
+    )
+    if any(key in payload for key in schedule_keys):
+        existing = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
+        merged = dict(existing or {})
+        merged.update(payload)
+        schedule_fields = _normalize_workflow_schedule_fields(merged)
+        updates.extend(
+            [
+                "schedule_seconds = ?",
+                "cron_expression = ?",
+                "timezone = ?",
+                "blackout_start = ?",
+                "blackout_end = ?",
+            ]
+        )
+        params.extend(
+            [
+                schedule_fields["schedule_seconds"],
+                schedule_fields["cron_expression"],
+                schedule_fields["timezone"],
+                schedule_fields["blackout_start"],
+                schedule_fields["blackout_end"],
+            ]
+        )
     if "enabled" in payload:
         updates.append("enabled = ?")
         params.append(1 if payload["enabled"] else 0)

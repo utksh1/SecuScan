@@ -1,0 +1,3 @@
+-- Migration: 003_add_workflow_cron_schedule
+-- Extends workflows with cron-based recurring scan fields (Issue #253).
+-- schedule_seconds remains supported for interval-based workflows.
