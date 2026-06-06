@@ -839,3 +839,4 @@ async def get_db() -> Database:
     """Get the global database instance."""
     if db is None:
         raise RuntimeError("Database not initialized")
+    return db

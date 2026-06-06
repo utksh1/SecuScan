@@ -73,6 +73,7 @@ class WorkflowScheduler:
         elapsed = (now - last).total_seconds()
         return elapsed >= schedule_seconds
     async def _run_workflow(self, workflow_id: str, steps: List[Dict[str, Any]]):
+        db = await get_db()
         logger.info("Running workflow %s with %d step(s)", workflow_id, len(steps))
         for step in steps:
             plugin_id = step.get("plugin_id")
@@ -80,13 +81,33 @@ class WorkflowScheduler:
             if not plugin_id:
                 continue
             request_id = get_request_id()
+            execution_context = normalize_execution_context(
+                step.get("execution_context") or {}
+                )
+            target_policy = await get_target_policy(
+                db,
+                "default",
+                execution_context.get("target_policy_id")
+                )
+            safe_mode = bool(
+                settings.safe_mode_default
+                and not (
+                    target_policy
+                    and target_policy.get("allow_public_targets")
+                    )
+                    )
+            effective_inputs = dict(inputs)
+            effective_inputs.pop("safe_mode", None)
+            effective_inputs["safe_mode"] = safe_mode
 
             task_id = await executor.create_task(
-                plugin_id,
-                inputs,
-                preset=step.get("preset"),
-                consent_granted=True
-            )
+               plugin_id,
+               effective_inputs,
+               safe_mode=safe_mode,
+               preset=step.get("preset"),
+               execution_context=execution_context,
+               consent_granted=True,
+               )
             async def run_task():
                 set_request_id(request_id)
                 await executor.execute_task(task_id)
