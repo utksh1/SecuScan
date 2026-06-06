@@ -178,13 +178,26 @@ def test_cloud_storage_auditor_command_respects_explicit_limit(setup_test_enviro
     assert command[limit_idx + 1] == "50"
 
 
-def test_cloud_storage_auditor_requires_query_field(setup_test_environment):
-    """build_command must return None when the required 'query' field is absent."""
+def test_cloud_storage_auditor_drops_query_token_when_absent(setup_test_environment):
+    """
+    When the 'query' field is omitted, the renderer drops the unresolved
+    {query} token rather than emitting an empty value or literal placeholder.
+    The default limit scaffold is preserved.
+    """
     manager = PluginManager(str(PLUGINS_DIR))
     asyncio.run(manager.load_plugins())
 
-    result = manager.build_command("cloud_storage_auditor", {})
-    assert result is None
+    rendered = manager.build_command("cloud_storage_auditor", {})
+
+    assert rendered is not None
+    assert not any("{" in token for token in rendered), "Unresolved placeholder leaked"
+    assert rendered == ["uncover", "-q", "-limit", "100", "-silent"]
+
+    populated = manager.build_command(
+        "cloud_storage_auditor", {"query": "s3.amazonaws.com"}
+    )
+    assert "s3.amazonaws.com" in populated
+    assert len(populated) == len(rendered) + 1
 
 
 def test_cloud_storage_auditor_loaded_by_plugin_manager(setup_test_environment):
