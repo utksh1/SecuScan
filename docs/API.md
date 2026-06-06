@@ -1,5 +1,7 @@
 # SecuScan API Documentation
 
+All API requests support Request Tracing. For details on how request IDs are generated, passed through, and correlated, see [Request ID Documentation](request-id.md).
+
 ## Tasks API
 
 ### List Tasks with Pagination

@@ -1,3 +1,8 @@
+"""
+Request ID middleware to extract/generate request IDs for FastAPI requests.
+For a detailed guide on the Request ID tracking contract and correlation,
+refer to the developer documentation: docs/request-id.md
+"""
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi import Request
 from .request_context import set_request_id
