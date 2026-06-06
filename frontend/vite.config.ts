@@ -18,6 +18,30 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              // Group React and React-DOM
+              if (id.includes('react/') || id.includes('react-dom/')) {
+                return 'vendor-react'
+              }
+              // Group React Router
+              if (id.includes('react-router')) {
+                return 'vendor-router'
+              }
+              // Group Framer Motion
+              if (id.includes('framer-motion')) {
+                return 'vendor-framer'
+              }
+              // Catch-all for remaining dependencies
+              return 'vendor-core'
+            }
+          }
+        }
+      }
+    },
     test: {
       environment: 'jsdom',
       setupFiles: ['./vitest.setup.ts'],

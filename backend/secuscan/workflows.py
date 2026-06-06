@@ -7,7 +7,12 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 from .database import get_db
+from .config import settings
 from .executor import executor
+
+from .execution_context import normalize_execution_context
+from .platform_resources import get_target_policy
+
 logger = logging.getLogger(__name__)
 class WorkflowScheduler:
     def __init__(self):
@@ -59,6 +64,12 @@ class WorkflowScheduler:
         if not last_run_at:
             return True
         last = datetime.fromisoformat(last_run_at.replace("Z", "+00:00"))
+        # SQLite's datetime('now') produces "2026-05-25 08:02:28" — no Z and
+        # no +00:00 suffix — so fromisoformat() returns a naive datetime.
+        # Subtracting a naive datetime from an aware one raises TypeError.
+        # Treat any naive timestamp from the DB as UTC.
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
         elapsed = (now - last).total_seconds()
         return elapsed >= schedule_seconds
     async def _run_workflow(self, workflow_id: str, steps: List[Dict[str, Any]]):
@@ -69,6 +80,7 @@ class WorkflowScheduler:
             if not plugin_id:
                 continue
             request_id = get_request_id()
+
             task_id = await executor.create_task(
                 plugin_id,
                 inputs,
@@ -79,4 +91,5 @@ class WorkflowScheduler:
                 set_request_id(request_id)
                 await executor.execute_task(task_id)
             asyncio.create_task(run_task())
+
 scheduler = WorkflowScheduler()
