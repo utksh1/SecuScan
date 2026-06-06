@@ -14,12 +14,25 @@ def test_workflow_create_list_update_contract(test_client):
     create_response = test_client.post("/api/v1/workflows", json=_workflow_payload())
     assert create_response.status_code == 200
     created = create_response.json()
+    expected_step = {
+        "plugin_id": "http_inspector",
+        "inputs": {"url": "http://127.0.0.1:8000"},
+        "preset": None,
+        "execution_context": {
+            "target_policy_id": None,
+            "scan_profile": "standard",
+            "credential_profile_id": None,
+            "session_profile_id": None,
+            "validation_mode": "proof",
+            "evidence_level": "standard",
+        },
+    }
 
     assert created["id"]
     assert created["name"] == "Nightly Scan"
     assert created["schedule_seconds"] == 3600
     assert created["enabled"] is True
-    assert created["steps"] == [{"plugin_id": "http_inspector", "inputs": {"url": "http://127.0.0.1:8000"}}]
+    assert created["steps"] == [expected_step]
     assert created["queued_task_ids"] == []
     assert "steps_json" not in created
 

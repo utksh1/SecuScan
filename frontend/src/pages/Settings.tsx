@@ -2,7 +2,19 @@ import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from '../components/ThemeContext'
 import { useToast } from '../components/ToastContext'
-import { getStoredApiKey, setStoredApiKey } from '../api'
+import {
+  createNotificationRule,
+  deleteNotificationRule,
+  getStoredApiKey,
+  listNotificationHistory,
+  listNotificationRules,
+  setStoredApiKey,
+  updateNotificationRule,
+  type NotificationChannelType,
+  type NotificationHistoryRow,
+  type NotificationRule,
+  type NotificationSeverityThreshold,
+} from '../api'
 import { ConfirmModal } from '../components/ConfirmModal'
 
 function getSystemThemeForSettings(): string {
@@ -46,6 +58,152 @@ export default function Settings() {
 
     const [apiKey, setApiKey] = useState(() => getStoredApiKey() ?? '')
     const [apiKeyVisible, setApiKeyVisible] = useState(false)
+    const [notificationRules, setNotificationRules] = useState<NotificationRule[]>([])
+    const [notificationRulesLoading, setNotificationRulesLoading] = useState(false)
+    const [notificationRulesError, setNotificationRulesError] = useState<string | null>(null)
+    const [notificationHistory, setNotificationHistory] = useState<Record<string, NotificationHistoryRow[]>>({})
+    const [notificationHistoryLoading, setNotificationHistoryLoading] = useState<Record<string, boolean>>({})
+
+    const [newRule, setNewRule] = useState<{
+        name: string
+        severity_threshold: NotificationSeverityThreshold
+        channel_type: NotificationChannelType
+        target_url_or_email: string
+        is_active: boolean
+    }>({
+        name: '',
+        severity_threshold: 'high',
+        channel_type: 'webhook',
+        target_url_or_email: '',
+        is_active: true,
+    })
+
+    const [editRules, setEditRules] = useState<Record<string, Partial<NotificationRule>>>({})
+
+    async function refreshNotificationRules() {
+        setNotificationRulesLoading(true)
+        setNotificationRulesError(null)
+        try {
+            const rules = await listNotificationRules()
+            setNotificationRules(rules)
+        } catch {
+            setNotificationRulesError('Failed to load notification rules')
+        } finally {
+            setNotificationRulesLoading(false)
+        }
+    }
+
+    async function submitNewRule() {
+        const trimmedName = newRule.name.trim()
+        const trimmedTarget = newRule.target_url_or_email.trim()
+        if (!trimmedName) {
+            addToast('Rule name is required', 'error')
+            return
+        }
+        if (!trimmedTarget) {
+            addToast('Target (webhook URL or email) is required', 'error')
+            return
+        }
+        try {
+            await createNotificationRule({
+                ...newRule,
+                name: trimmedName,
+                target_url_or_email: trimmedTarget,
+            })
+            addToast('Notification rule created', 'success')
+            setNewRule((prev) => ({ ...prev, name: '', target_url_or_email: '' }))
+            await refreshNotificationRules()
+        } catch {
+            addToast('Failed to create notification rule', 'error')
+        }
+    }
+
+    function startEditRule(rule: NotificationRule) {
+        setEditRules((prev) => ({
+            ...prev,
+            [rule.id]: { ...rule },
+        }))
+    }
+
+    function cancelEditRule(ruleId: string) {
+        setEditRules((prev) => {
+            const next = { ...prev }
+            delete next[ruleId]
+            return next
+        })
+    }
+
+    async function saveEditRule(ruleId: string) {
+        const draft = editRules[ruleId]
+        if (!draft) return
+        const name = String(draft.name ?? '').trim()
+        const target = String(draft.target_url_or_email ?? '').trim()
+        if (!name) {
+            addToast('Rule name is required', 'error')
+            return
+        }
+        if (!target) {
+            addToast('Target is required', 'error')
+            return
+        }
+        try {
+            await updateNotificationRule(ruleId, {
+                name,
+                target_url_or_email: target,
+                severity_threshold: draft.severity_threshold as NotificationSeverityThreshold,
+                channel_type: draft.channel_type as NotificationChannelType,
+                is_active: Boolean(draft.is_active),
+            })
+            addToast('Notification rule updated', 'success')
+            cancelEditRule(ruleId)
+            await refreshNotificationRules()
+        } catch {
+            addToast('Failed to update notification rule', 'error')
+        }
+    }
+
+    async function toggleRuleActive(rule: NotificationRule) {
+        try {
+            await updateNotificationRule(rule.id, { is_active: !rule.is_active })
+            setNotificationRules((prev) =>
+                prev.map((r) => (r.id === rule.id ? { ...r, is_active: !r.is_active } : r)),
+            )
+        } catch {
+            addToast('Failed to update rule', 'error')
+        }
+    }
+
+    async function removeRule(ruleId: string) {
+        setModalState({
+            isOpen: true,
+            title: 'Delete rule',
+            message: 'Delete this notification rule? This cannot be undone.',
+            type: 'danger',
+            onConfirm: async () => {
+                try {
+                    await deleteNotificationRule(ruleId)
+                    addToast('Notification rule deleted', 'info')
+                    await refreshNotificationRules()
+                } catch {
+                    addToast('Failed to delete notification rule', 'error')
+                } finally {
+                    setModalState(prev => ({ ...prev, isOpen: false }))
+                }
+            },
+        })
+    }
+
+    async function loadRuleHistory(ruleId: string) {
+        setNotificationHistoryLoading((prev) => ({ ...prev, [ruleId]: true }))
+        try {
+            const data = await listNotificationHistory({ rule_id: ruleId, limit: 10, offset: 0 })
+            setNotificationHistory((prev) => ({ ...prev, [ruleId]: data.history }))
+        } catch {
+            addToast('Failed to load notification history', 'error')
+        } finally {
+            setNotificationHistoryLoading((prev) => ({ ...prev, [ruleId]: false }))
+        }
+    }
 
     const handleSaveApiKey = () => {
         const trimmed = apiKey.trim()
@@ -100,6 +258,10 @@ export default function Settings() {
         } catch (e) {
             setSystemTimezone('UTC')
         }
+    }, [])
+
+    useEffect(() => {
+        refreshNotificationRules()
     }, [])
 
     const handleSave = () => {
@@ -182,9 +344,11 @@ export default function Settings() {
         </div>
     )
 
-    const Toggle = ({ checked, onChange, label, description }: any) => (
+    const Toggle = ({ checked, onChange, label, description, ariaLabel }: any) => (
         <button
+            type="button"
             onClick={() => onChange(!checked)}
+            aria-label={ariaLabel ?? label}
             className={`flex items-center justify-between p-8 bg-charcoal border-4 border-black transition-all group hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-0.5 ${
                 checked ? 'shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' : 'shadow-none'
             }`}
@@ -279,6 +443,256 @@ export default function Settings() {
                         </div>
                     </section>
 
+                    <section className="space-y-8" aria-label="Notification rules">
+                        <div className="flex items-center gap-4">
+                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Notification_Rules</h3>
+                            <div className="h-0.5 flex-1 bg-black/10"></div>
+                            <button
+                                type="button"
+                                onClick={refreshNotificationRules}
+                                className="px-4 py-2 bg-charcoal border-4 border-black text-[10px] font-black uppercase tracking-widest text-silver/60 hover:text-silver-bright hover:bg-black/40 transition-all"
+                                aria-label="Refresh notification rules"
+                            >
+                                Refresh
+                            </button>
+                        </div>
+
+                        <div className="bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-8">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-silver-bright uppercase tracking-widest block italic">Create_Rule</label>
+                                <p className="text-[10px] text-silver/40 uppercase font-bold italic mb-4 leading-relaxed">
+                                    Configure alerts for high-risk findings via webhook or email placeholder.
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                <div className="bg-charcoal-dark border-4 border-black p-6 space-y-4">
+                                    <label className="text-[10px] font-black text-silver/50 uppercase tracking-widest">Rule_Name</label>
+                                    <input
+                                        value={newRule.name}
+                                        onChange={(e) => setNewRule((p) => ({ ...p, name: e.target.value }))}
+                                        className="w-full bg-black/40 border-4 border-black p-4 text-xs font-mono text-silver-bright font-bold focus:outline-none focus:border-rag-blue/50 transition-colors"
+                                        placeholder="High risk webhook"
+                                        aria-label="New rule name"
+                                    />
+                                </div>
+                                <div className="bg-charcoal-dark border-4 border-black p-6 space-y-4">
+                                    <label className="text-[10px] font-black text-silver/50 uppercase tracking-widest">Target</label>
+                                    <input
+                                        value={newRule.target_url_or_email}
+                                        onChange={(e) => setNewRule((p) => ({ ...p, target_url_or_email: e.target.value }))}
+                                        className="w-full bg-black/40 border-4 border-black p-4 text-xs font-mono text-silver-bright font-bold focus:outline-none focus:border-rag-blue/50 transition-colors"
+                                        placeholder={newRule.channel_type === 'webhook' ? 'https://example.com/hook' : 'alerts@example.com'}
+                                        aria-label="New rule target"
+                                    />
+                                </div>
+                                <div className="bg-charcoal-dark border-4 border-black p-6 space-y-4">
+                                    <label className="text-[10px] font-black text-silver/50 uppercase tracking-widest">Severity_Threshold</label>
+                                    <select
+                                        value={newRule.severity_threshold}
+                                        onChange={(e) => setNewRule((p) => ({ ...p, severity_threshold: e.target.value as NotificationSeverityThreshold }))}
+                                        className="w-full bg-black/40 border-4 border-black p-4 text-xs font-mono text-rag-blue font-bold focus:outline-none focus:border-rag-blue/50 transition-colors uppercase appearance-none"
+                                        aria-label="New rule severity threshold"
+                                    >
+                                        {(['critical','high','medium','low','info'] as NotificationSeverityThreshold[]).map((s) => (
+                                            <option key={s} value={s} className="bg-charcoal text-silver-bright">{s}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="bg-charcoal-dark border-4 border-black p-6 space-y-4">
+                                    <label className="text-[10px] font-black text-silver/50 uppercase tracking-widest">Channel</label>
+                                    <select
+                                        value={newRule.channel_type}
+                                        onChange={(e) => setNewRule((p) => ({ ...p, channel_type: e.target.value as NotificationChannelType }))}
+                                        className="w-full bg-black/40 border-4 border-black p-4 text-xs font-mono text-rag-blue font-bold focus:outline-none focus:border-rag-blue/50 transition-colors uppercase appearance-none"
+                                        aria-label="New rule channel type"
+                                    >
+                                        {(['webhook','email'] as NotificationChannelType[]).map((c) => (
+                                            <option key={c} value={c} className="bg-charcoal text-silver-bright">{c}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                                <Toggle
+                                    checked={newRule.is_active}
+                                    onChange={(val: boolean) => setNewRule((p) => ({ ...p, is_active: val }))}
+                                    label="Active"
+                                    description="RULE_ENABLED"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={submitNewRule}
+                                    className="bg-rag-blue text-black px-10 py-4 text-[10px] font-black uppercase tracking-[0.35em] shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all italic"
+                                >
+                                    CREATE_RULE
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            {notificationRulesLoading && (
+                                <p className="text-[10px] font-black uppercase tracking-widest text-silver/30">Loading rules...</p>
+                            )}
+                            {notificationRulesError && (
+                                <div className="border-4 border-rag-red bg-rag-red/10 p-6 text-rag-red text-[10px] font-black uppercase tracking-widest">
+                                    {notificationRulesError}
+                                </div>
+                            )}
+                            {!notificationRulesLoading && !notificationRulesError && notificationRules.length === 0 && (
+                                <p className="text-[10px] font-black uppercase tracking-widest text-silver/30 italic">No rules yet.</p>
+                            )}
+
+                            {notificationRules.map((rule) => {
+                                const draft = editRules[rule.id]
+                                const isEditing = Boolean(draft)
+                                const row = (draft ?? rule) as NotificationRule
+                                const history = notificationHistory[rule.id] ?? []
+                                const histLoading = Boolean(notificationHistoryLoading[rule.id])
+                                return (
+                                    <div key={rule.id} className="bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] space-y-6">
+                                        <div className="flex flex-col lg:flex-row gap-6 lg:items-start lg:justify-between">
+                                            <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-silver/50 uppercase tracking-widest">Name</label>
+                                                    <input
+                                                        value={row.name}
+                                                        disabled={!isEditing}
+                                                        onChange={(e) => setEditRules((p) => ({ ...p, [rule.id]: { ...(p[rule.id] ?? {}), name: e.target.value } }))}
+                                                        className={`w-full border-4 border-black p-3 text-xs font-mono font-bold focus:outline-none transition-colors ${
+                                                            isEditing ? 'bg-black/40 text-silver-bright focus:border-rag-blue/50' : 'bg-black/20 text-silver/60'
+                                                        }`}
+                                                        aria-label={`Rule name ${rule.id}`}
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-silver/50 uppercase tracking-widest">Target</label>
+                                                    <input
+                                                        value={row.target_url_or_email}
+                                                        disabled={!isEditing}
+                                                        onChange={(e) => setEditRules((p) => ({ ...p, [rule.id]: { ...(p[rule.id] ?? {}), target_url_or_email: e.target.value } }))}
+                                                        className={`w-full border-4 border-black p-3 text-xs font-mono font-bold focus:outline-none transition-colors ${
+                                                            isEditing ? 'bg-black/40 text-silver-bright focus:border-rag-blue/50' : 'bg-black/20 text-silver/60'
+                                                        }`}
+                                                        aria-label={`Rule target ${rule.id}`}
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-silver/50 uppercase tracking-widest">Severity</label>
+                                                    <select
+                                                        value={row.severity_threshold}
+                                                        disabled={!isEditing}
+                                                        onChange={(e) => setEditRules((p) => ({ ...p, [rule.id]: { ...(p[rule.id] ?? {}), severity_threshold: e.target.value } }))}
+                                                        className={`w-full border-4 border-black p-3 text-xs font-mono font-bold focus:outline-none transition-colors uppercase appearance-none ${
+                                                            isEditing ? 'bg-black/40 text-rag-blue focus:border-rag-blue/50' : 'bg-black/20 text-silver/60'
+                                                        }`}
+                                                        aria-label={`Rule severity ${rule.id}`}
+                                                    >
+                                                        {(['critical','high','medium','low','info'] as NotificationSeverityThreshold[]).map((s) => (
+                                                            <option key={s} value={s} className="bg-charcoal text-silver-bright">{s}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-silver/50 uppercase tracking-widest">Channel</label>
+                                                    <select
+                                                        value={row.channel_type}
+                                                        disabled={!isEditing}
+                                                        onChange={(e) => setEditRules((p) => ({ ...p, [rule.id]: { ...(p[rule.id] ?? {}), channel_type: e.target.value } }))}
+                                                        className={`w-full border-4 border-black p-3 text-xs font-mono font-bold focus:outline-none transition-colors uppercase appearance-none ${
+                                                            isEditing ? 'bg-black/40 text-rag-blue focus:border-rag-blue/50' : 'bg-black/20 text-silver/60'
+                                                        }`}
+                                                        aria-label={`Rule channel ${rule.id}`}
+                                                    >
+                                                        {(['webhook','email'] as NotificationChannelType[]).map((c) => (
+                                                            <option key={c} value={c} className="bg-charcoal text-silver-bright">{c}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-3 shrink-0">
+                                                <Toggle
+                                                    checked={rule.is_active}
+                                                    onChange={() => toggleRuleActive(rule)}
+                                                    label={rule.is_active ? 'Active' : 'Inactive'}
+                                                    description="TOGGLE_RULE"
+                                                    ariaLabel={`Toggle rule ${rule.id}`}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="flex flex-wrap items-center gap-3">
+                                            {!isEditing ? (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => startEditRule(rule)}
+                                                        className="px-6 py-3 bg-charcoal-dark border-4 border-black text-[10px] font-black uppercase tracking-widest text-silver/60 hover:text-silver-bright hover:bg-black/40 transition-all"
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removeRule(rule.id)}
+                                                        className="px-6 py-3 bg-rag-red border-4 border-black text-[10px] font-black uppercase tracking-widest text-black hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all"
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => saveEditRule(rule.id)}
+                                                        className="px-6 py-3 bg-rag-blue border-4 border-black text-[10px] font-black uppercase tracking-widest text-black hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all"
+                                                    >
+                                                        Save
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => cancelEditRule(rule.id)}
+                                                        className="px-6 py-3 bg-charcoal-dark border-4 border-black text-[10px] font-black uppercase tracking-widest text-silver/60 hover:text-silver-bright hover:bg-black/40 transition-all"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </>
+                                            )}
+
+                                            <button
+                                                type="button"
+                                                onClick={() => loadRuleHistory(rule.id)}
+                                                className="px-6 py-3 bg-charcoal-dark border-4 border-black text-[10px] font-black uppercase tracking-widest text-silver/60 hover:text-silver-bright hover:bg-black/40 transition-all"
+                                                aria-label={`Load history ${rule.id}`}
+                                            >
+                                                {histLoading ? 'Loading history…' : 'Load history'}
+                                            </button>
+                                        </div>
+
+                                        {history.length > 0 && (
+                                            <div className="border-t-4 border-black/20 pt-6 space-y-3">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-silver/40">Recent history</p>
+                                                <div className="space-y-2">
+                                                    {history.map((h) => (
+                                                        <div key={h.id} className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 bg-black/20 border-2 border-black p-3">
+                                                            <div className="text-[10px] font-mono text-silver/60">
+                                                                <span className="text-silver-bright">{h.status}</span> · finding {h.finding_id}
+                                                            </div>
+                                                            <div className="text-[10px] font-mono text-silver/40">
+                                                                {h.error_message ? `error: ${h.error_message}` : ''} {h.sent_at ? `· ${h.sent_at}` : ''}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </section>
+
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
                             <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Engine_Parameters</h3>
@@ -350,6 +764,7 @@ export default function Settings() {
                                     <select
                                         value={config.theme}
                                         onChange={(e) => setConfig({ ...config, theme: e.target.value })}
+                                        aria-label="Visual spectrum theme"
                                         className="w-full bg-black/40 border-4 border-black p-4 text-xs font-mono text-silver-bright focus:outline-none focus:ring-2 focus:ring-rag-blue"
                                     >
                                         <option value="dark" className="bg-charcoal text-silver-bright">Dark (Obsidian)</option>
