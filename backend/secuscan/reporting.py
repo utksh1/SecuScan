@@ -119,7 +119,15 @@ class ReportGenerator:
             "cve": cls._clean_text(finding.get("cve")),
             "cwe": cls._clean_text(finding.get("cwe")),
             "cvss": finding.get("cvss"),
+            "validated": bool(finding.get("validated", False)),
+            "validation_method": cls._clean_text(finding.get("validation_method")),
+            "confidence_reason": redact(cls._clean_text(finding.get("confidence_reason"))),
+            "service_fingerprint": cls._clean_text(finding.get("service_fingerprint")),
+            "cpe": cls._clean_text(finding.get("cpe")),
             "discovered_at": cls._clean_text(finding.get("discovered_at")),
+            "evidence": finding.get("evidence", []) if isinstance(finding.get("evidence"), list) else [],
+            "asset_refs": finding.get("asset_refs", []) if isinstance(finding.get("asset_refs"), list) else [],
+            "references": finding.get("references", []) if isinstance(finding.get("references"), list) else [],
             "metadata": redact_dict({cls._clean_text(key): cls._clean_text(val) for key, val in metadata.items()}),
         }
         if normalized["severity"] not in cls.SEVERITY_COLORS:
@@ -170,6 +178,20 @@ class ReportGenerator:
         preset = cls._clean_text(task.get("preset"))
         if preset:
             parameters.append({"label": "Preset", "value": preset})
+
+        execution_context = task.get("execution_context")
+        if not execution_context:
+            raw_context = task.get("execution_context_json")
+            if isinstance(raw_context, str):
+                try:
+                    execution_context = json.loads(raw_context)
+                except json.JSONDecodeError:
+                    execution_context = {}
+        if isinstance(execution_context, dict):
+            for key in ("target_policy_id", "scan_profile", "credential_profile_id", "session_profile_id", "validation_mode", "evidence_level"):
+                value = cls._clean_text(execution_context.get(key))
+                if value:
+                    parameters.append({"label": key.replace("_", " ").title(), "value": value})
 
         for key, value in cls._normalize_task_inputs(task).items():
             label = key.replace("_", " ").title()
@@ -319,6 +341,10 @@ class ReportGenerator:
               <h4>Description</h4>
               <p>{cls._escape_html(finding['description'])}</p>
               {f"<h4>Evidence</h4><pre>{cls._escape_html(finding['proof'])}</pre>" if finding['proof'] else ""}
+              {f"<p class='meta'>Validated: {'YES' if finding['validated'] else 'NO'}</p>" if finding['validated'] or finding['validation_method'] else ""}
+              {f"<p class='meta'>Validation method: {cls._escape_html(finding['validation_method'])}</p>" if finding['validation_method'] else ""}
+              {f"<p class='meta'>CPE: {cls._escape_html(finding['cpe'])}</p>" if finding['cpe'] else ""}
+              {f"<p class='meta'>Evidence items: {len(finding['evidence'])}</p>" if finding['evidence'] else ""}
               {f"<div class='remediation'><h4>Recommended action</h4><p>{cls._escape_html(finding['remediation'])}</p></div>" if finding['remediation'] else ""}
               {f"<p class='meta'>CVE: {cls._escape_html(finding['cve'])}</p>" if finding['cve'] else ""}
             </div>
@@ -626,6 +652,10 @@ class ReportGenerator:
                         <p>{cls._escape_html(finding['description'])}</p>
                     </section>
                     {f"<section><h4>Evidence</h4><pre>{cls._escape_html(finding['proof'])}</pre></section>" if finding['proof'] else ""}
+                    {f"<section class='meta'><span>Validated: {'YES' if finding['validated'] else 'NO'}</span></section>" if finding['validated'] or finding['validation_method'] else ""}
+                    {f"<section class='meta'><span>Validation method: {cls._escape_html(finding['validation_method'])}</span></section>" if finding['validation_method'] else ""}
+                    {f"<section class='meta'><span>CPE: {cls._escape_html(finding['cpe'])}</span></section>" if finding['cpe'] else ""}
+                    {f"<section class='meta'><span>Evidence items: {len(finding['evidence'])}</span></section>" if finding['evidence'] else ""}
                     {f"<section class='remediation'><h4>Recommended action</h4><p>{cls._escape_html(finding['remediation'])}</p></section>" if finding['remediation'] else ""}
                     {f"<section class='meta'><span>CVE: {cls._escape_html(finding['cve'])}</span></section>" if finding['cve'] else ""}
                 </div>
@@ -955,6 +985,10 @@ class ReportGenerator:
                 "Target",
                 "CVSS",
                 "CVE",
+                "CPE",
+                "Validated",
+                "Validation Method",
+                "Confidence Reason",
                 "Description",
                 "Evidence",
                 "Remediation",
@@ -969,6 +1003,10 @@ class ReportGenerator:
                     finding["target"] or payload["target"],
                     finding["cvss"] if finding["cvss"] is not None else "",
                     finding["cve"],
+                    finding["cpe"],
+                    "yes" if finding["validated"] else "no",
+                    finding["validation_method"],
+                    finding["confidence_reason"],
                     finding["description"],
                     finding["proof"],
                     finding["remediation"],
@@ -1043,7 +1081,10 @@ class ReportGenerator:
                         "text": finding.get("remediation", "No remediation provided.")
                     },
                     "properties": {
-                        "precision": "high"
+                        "precision": "high",
+                        "cpe": finding.get("cpe"),
+                        "validated": finding.get("validated"),
+                        "validation_method": finding.get("validation_method"),
                     }
                 })
 
@@ -1054,7 +1095,13 @@ class ReportGenerator:
                     "text": finding.get("description", "Security finding detected")
                 },
                 "level": severity_map.get(finding["severity"], "note"),
-                "locations": []
+                "locations": [],
+                "properties": {
+                    "confidenceReason": finding.get("confidence_reason"),
+                    "cpe": finding.get("cpe"),
+                    "validated": finding.get("validated"),
+                    "assetRefs": finding.get("asset_refs", []),
+                },
             }
 
             # Attempt to extract location if available
