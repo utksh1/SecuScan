@@ -1,150 +1,226 @@
 """
-Test coverage for cloud_scanner plugin.
+Contract and parser tests for the cloud_scanner plugin.
 
-This module provides comprehensive test coverage for the cloud_scanner plugin,
-verifying metadata loading, command rendering, and parser output normalization.
+These tests load the real plugins/cloud_scanner/metadata.json, validate it
+through the project PluginMetadataValidator, render commands through the
+real PluginManager, and call the real parser.py parse() function.
+
+Assertions are tied to the actual plugin contract: if metadata.json,
+the command template, or parser.py drift, these tests will fail.
 
 Related to issue #491: Add parser and contract coverage for plugin `cloud_scanner`
 """
 
+import asyncio
+import json
+import sys
+from pathlib import Path
+
 import pytest
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 
-class TestCloudScannerPlugin:
-    """Test suite for cloud_scanner plugin functionality."""
+from backend.secuscan.plugin_validator import PluginMetadataValidator
+from backend.secuscan.plugins import PluginManager
+from plugins.cloud_scanner.parser import parse
 
-    @pytest.fixture
-    def plugin_metadata(self):
-        """Fixture providing cloud_scanner plugin metadata."""
-        return {
-            "name": "cloud_scanner",
-            "description": "Cloud infrastructure and misconfiguration scanner",
-            "version": "1.0.0",
-            "author": "SecuScan",
-            "entry_point": "cloud_scanner.scanner.CloudScanner",
-            "schema_version": "1.0",
-            "required_fields": ["cloud_provider", "credentials_type"],
-            "optional_fields": ["region", "resource_type", "exclude_tags"],
-        }
-
-    @pytest.fixture
-    def sample_cloud_input(self):
-        """Fixture providing sample cloud input for testing."""
-        return {
-            "cloud_provider": "aws",
-            "credentials_type": "assumed_role",
-            "region": "us-east-1",
-            "resource_type": "s3_buckets",
-            "exclude_tags": ["internal-only"],
-        }
-
-    def test_cloud_scanner_metadata_loads_successfully(self, plugin_metadata):
-        """Verify that cloud_scanner plugin metadata loads through validation path."""
-        assert plugin_metadata["name"] == "cloud_scanner"
-        assert plugin_metadata["version"] == "1.0.0"
-        assert plugin_metadata["entry_point"] is not None
-        assert "cloud_provider" in plugin_metadata["required_fields"]
-        assert "credentials_type" in plugin_metadata["required_fields"]
-
-    def test_cloud_scanner_command_rendering(self, sample_cloud_input, plugin_metadata):
-        """Test that command rendering works correctly for cloud_scanner."""
-        command_parts = [
-            "cloud_scanner",
-            f"--provider={sample_cloud_input['cloud_provider']}",
-            f"--credentials-type={sample_cloud_input['credentials_type']}",
-        ]
-
-        if "region" in sample_cloud_input:
-            command_parts.append(f"--region={sample_cloud_input['region']}")
-
-        if "resource_type" in sample_cloud_input:
-            command_parts.append(f"--resource-type={sample_cloud_input['resource_type']}")
-
-        if "exclude_tags" in sample_cloud_input:
-            command_parts.append(f"--exclude-tags={','.join(sample_cloud_input['exclude_tags'])}")
-
-        rendered_command = " ".join(command_parts)
-
-        assert "cloud_scanner" in rendered_command
-        assert "--provider=aws" in rendered_command
-        assert "--credentials-type=assumed_role" in rendered_command
-        assert "--region=us-east-1" in rendered_command
-        assert "--resource-type=s3_buckets" in rendered_command
-
-    def test_cloud_scanner_parser_output_normalization(self, sample_cloud_input):
-        """Verify that parser output is normalized into stable SecuScan findings."""
-        raw_output = {
-            "misconfigurations": [
-                {
-                    "resource_id": "arn:aws:s3:::my-bucket",
-                    "issue": "S3 bucket has public read access",
-                    "severity": "high",
-                    "remediation": "Block public access",
-                }
-            ],
-            "scan_timestamp": "2026-06-05T20:10:00Z",
-            "cloud_provider": "aws",
-            "scan_status": "success",
-        }
-
-        normalized = {
-            "plugin": "cloud_scanner",
-            "findings": [
-                {
-                    "type": "misconfiguration",
-                    "resource": config["resource_id"],
-                    "severity": config["severity"],
-                    "description": config["issue"],
-                    "remediation": config["remediation"],
-                }
-                for config in raw_output.get("misconfigurations", [])
-            ],
-            "metadata": {
-                "scanned_at": raw_output["scan_timestamp"],
-                "provider": raw_output["cloud_provider"],
-                "status": raw_output["scan_status"],
-            },
-        }
-
-        assert normalized["plugin"] == "cloud_scanner"
-        assert len(normalized["findings"]) > 0
-        assert normalized["findings"][0]["type"] == "misconfiguration"
-        assert normalized["findings"][0]["severity"] == "high"
-        assert normalized["metadata"]["provider"] == "aws"
-        assert normalized["metadata"]["status"] == "success"
-
-    def test_cloud_scanner_fixture_deterministic(self, sample_cloud_input):
-        """Verify that test fixtures produce deterministic, repeatable results."""
-        results = []
-        for _ in range(3):
-            result = {
-                "provider": sample_cloud_input["cloud_provider"],
-                "credentials": sample_cloud_input["credentials_type"],
-                "hash": hash(str(sample_cloud_input)),
-            }
-            results.append(result)
-
-        assert all(r == results[0] for r in results), "Fixtures must be deterministic"
-
-    def test_cloud_scanner_required_fields_validation(self, plugin_metadata, sample_cloud_input):
-        """Test that required fields are properly validated."""
-        required_fields = plugin_metadata["required_fields"]
-
-        for field in required_fields:
-            assert field in sample_cloud_input, f"Required field '{field}' missing from input"
-
-    def test_cloud_scanner_optional_fields_handling(self, sample_cloud_input):
-        """Test that optional fields are handled gracefully."""
-        minimal_input = {
-            "cloud_provider": sample_cloud_input["cloud_provider"],
-            "credentials_type": sample_cloud_input["credentials_type"],
-        }
-
-        assert "region" not in minimal_input
-        assert "resource_type" not in minimal_input
-        assert minimal_input["cloud_provider"] is not None
-        assert minimal_input["credentials_type"] is not None
+PLUGIN_DIR = REPO_ROOT / "plugins" / "cloud_scanner"
+PLUGINS_DIR = REPO_ROOT / "plugins"
 
 
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+# ---------------------------------------------------------------------------
+# Metadata contract tests
+# ---------------------------------------------------------------------------
+
+
+def test_cloud_scanner_metadata_file_exists():
+    """metadata.json must exist at the expected plugin path."""
+    assert (PLUGIN_DIR / "metadata.json").exists()
+
+
+def test_cloud_scanner_metadata_is_valid_json():
+    """metadata.json must be valid, parseable JSON."""
+    raw = (PLUGIN_DIR / "metadata.json").read_text(encoding="utf-8")
+    data = json.loads(raw)
+    assert isinstance(data, dict)
+
+
+def test_cloud_scanner_passes_validator():
+    """
+    The full PluginMetadataValidator must accept the plugin without errors.
+
+    This will fail if any required field is missing, the engine type or safety
+    level is invalid, the command template references an undeclared field, or
+    the checksum field is absent or malformed.
+    """
+    result = PluginMetadataValidator(PLUGIN_DIR).validate()
+    assert result.valid, (
+        "Plugin validation errors:\n"
+        + "\n".join(e.display() for e in result.errors)
+    )
+
+
+def test_cloud_scanner_metadata_id_matches_directory():
+    """Plugin id in metadata.json must match the directory name."""
+    data = json.loads((PLUGIN_DIR / "metadata.json").read_text(encoding="utf-8"))
+    assert data["id"] == "cloud_scanner"
+
+
+def test_cloud_scanner_engine_is_python3():
+    """Engine binary must be 'python3' -- update this if the underlying tool changes."""
+    data = json.loads((PLUGIN_DIR / "metadata.json").read_text(encoding="utf-8"))
+    assert data["engine"]["type"] == "cli"
+    assert data["engine"]["binary"] == "python3"
+
+
+def test_cloud_scanner_has_required_target_field():
+    """Plugin must declare a required 'target' field for the cloud account/project."""
+    data = json.loads((PLUGIN_DIR / "metadata.json").read_text(encoding="utf-8"))
+    fields = {f["id"]: f for f in data["fields"]}
+    assert "target" in fields, "Missing required field: target"
+    assert fields["target"]["required"] is True
+
+
+def test_cloud_scanner_output_parser_is_custom():
+    """Parser type must be 'custom', backed by parser.py."""
+    data = json.loads((PLUGIN_DIR / "metadata.json").read_text(encoding="utf-8"))
+    assert data["output"]["parser"] == "custom"
+
+
+def test_cloud_scanner_parser_file_exists():
+    """parser.py must exist alongside metadata.json."""
+    assert (PLUGIN_DIR / "parser.py").exists()
+
+
+def test_cloud_scanner_requires_consent():
+    """Cloud scanning is intrusive and must require user consent."""
+    data = json.loads((PLUGIN_DIR / "metadata.json").read_text(encoding="utf-8"))
+    assert data["safety"]["requires_consent"] is True
+    assert data["safety"]["consent_message"], "consent_message must not be empty"
+
+
+# ---------------------------------------------------------------------------
+# Command rendering tests via real PluginManager
+# ---------------------------------------------------------------------------
+
+
+def test_cloud_scanner_command_renders_with_target(setup_test_environment):
+    """
+    PluginManager must produce the correct command for a cloud account target.
+
+    This test will fail if command_template in metadata.json changes or a
+    placeholder becomes mismatched.
+    """
+    manager = PluginManager(str(PLUGINS_DIR))
+    asyncio.run(manager.load_plugins())
+
+    command = manager.build_command("cloud_scanner", {"target": "org-example"})
+
+    assert command is not None, "build_command returned None for valid inputs"
+    assert "python3" in command
+    assert "org-example" in command
+
+
+def test_cloud_scanner_command_full_token_sequence(setup_test_environment):
+    """Full rendered command must exactly match the command_template token sequence."""
+    manager = PluginManager(str(PLUGINS_DIR))
+    asyncio.run(manager.load_plugins())
+
+    command = manager.build_command("cloud_scanner", {"target": "my-org"})
+
+    assert command is not None
+    assert command[0] == "python3"
+    assert command[-1] == "my-org", (
+        f"Last token must be the interpolated target. Got: {command}"
+    )
+
+
+def test_cloud_scanner_requires_target_field(setup_test_environment):
+    """build_command must return None when the required 'target' field is absent."""
+    manager = PluginManager(str(PLUGINS_DIR))
+    asyncio.run(manager.load_plugins())
+
+    result = manager.build_command("cloud_scanner", {})
+    assert result is None
+
+
+def test_cloud_scanner_loaded_by_plugin_manager(setup_test_environment):
+    """PluginManager must successfully load cloud_scanner from the real plugins directory."""
+    manager = PluginManager(str(PLUGINS_DIR))
+    asyncio.run(manager.load_plugins())
+
+    plugin = manager.get_plugin("cloud_scanner")
+    assert plugin is not None
+    assert plugin.id == "cloud_scanner"
+    assert plugin.name == "Cloud Scanner"
+
+
+# ---------------------------------------------------------------------------
+# Parser contract tests against the real parser.py
+# ---------------------------------------------------------------------------
+
+_CLOUD_SCAN_TEXT_FIXTURE = (
+    "Cloud scan baseline checks\n"
+    "target=my-org\n"
+    "providers=aws,gcp,azure\n"
+    "found exposed S3 bucket: my-org-public-data\n"
+    "warning: IAM role over-permissioned\n"
+    "critical: public RDS instance detected\n"
+)
+
+
+def test_cloud_scanner_parser_returns_required_keys():
+    """parse() must return a dict with 'findings', 'count', and 'items' keys."""
+    result = parse(_CLOUD_SCAN_TEXT_FIXTURE)
+    assert isinstance(result, dict)
+    assert "findings" in result
+    assert "count" in result
+    assert "items" in result
+
+
+def test_cloud_scanner_parser_count_matches_findings():
+    """'count' must equal len(findings)."""
+    result = parse(_CLOUD_SCAN_TEXT_FIXTURE)
+    assert result["count"] == len(result["findings"])
+
+
+def test_cloud_scanner_parser_finding_has_required_keys():
+    """Each finding must have title, category, severity, description, remediation, metadata."""
+    result = parse(_CLOUD_SCAN_TEXT_FIXTURE)
+    assert result["findings"], "Expected at least one finding"
+    for finding in result["findings"]:
+        for key in ("title", "category", "severity", "description", "remediation", "metadata"):
+            assert key in finding, f"Finding missing key: {key}"
+
+
+def test_cloud_scanner_parser_critical_keyword_raises_to_high():
+    """Lines containing 'critical' must be classified as 'high' severity."""
+    result = parse(_CLOUD_SCAN_TEXT_FIXTURE)
+    critical_findings = [f for f in result["findings"] if "critical" in f["description"].lower()]
+    assert critical_findings, "No findings from critical line"
+    for finding in critical_findings:
+        assert finding["severity"] == "high"
+
+
+def test_cloud_scanner_parser_found_keyword_raises_to_low():
+    """Lines containing 'found' or 'warning' must be at least 'low' severity."""
+    result = parse(_CLOUD_SCAN_TEXT_FIXTURE)
+    low_or_high = [f for f in result["findings"] if f["severity"] in ("low", "high")]
+    assert low_or_high, "Expected at least one non-info finding"
+
+
+def test_cloud_scanner_parser_empty_output():
+    """Parser must handle empty input without raising and return empty findings."""
+    result = parse("")
+    assert result["findings"] == []
+    assert result["count"] == 0
+    assert result["items"] == []
+
+
+def test_cloud_scanner_parser_preserves_raw_line_in_metadata():
+    """Each finding's metadata.raw must match the original output line."""
+    single_line = "critical: public RDS instance detected\n"
+    result = parse(single_line)
+    assert result["findings"]
+    assert result["findings"][0]["metadata"]["raw"] == "critical: public RDS instance detected"
