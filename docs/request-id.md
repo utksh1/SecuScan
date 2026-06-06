@@ -72,7 +72,7 @@ grep '"request_id": "a1b2c3d4-..."' logs/secuscan.log | jq .
 
 ## 4. Audit Log Correlation
 
-Critical events are permanently recorded in the SQLite database by calling `db.log_audit()` in [database.py](file:///d:/GSSOC/utksh1/%23573/SecuScan/backend/secuscan/database.py). 
+Critical events are permanently recorded in the SQLite database by calling `db.log_audit()` in [database.py](file:///d:/GSSOC/utksh1/%23573/SecuScan/backend/secuscan/database.py).
 
 - `log_audit()` automatically reads the active Request ID from context: `request_id = request_id or get_request_id()`.
 - The request ID is saved inside the `context_json` column of the `audit_log` table under the `"request_id"` key.
