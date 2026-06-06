@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udee0\ufe0f",
+  "icon": "🛠️",
   "engine": {
     "type": "cli",
     "binary": "python3"
@@ -27,7 +27,8 @@
       "label": "Cluster Context",
       "type": "string",
       "required": true,
-      "placeholder": "prod-cluster"
+      "placeholder": "prod-cluster",
+      "help_text": "Enter the Kubernetes cluster context name from your kubeconfig, for example prod-cluster."
     }
   ],
   "presets": {
@@ -53,5 +54,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "830b2c5f4e397d2d2ad28f71ec8d1a3a5f9bd3e439d8318f71a5b8a371f7ccdb"
+  "checksum": "c1188c318df1eb9160074f26cb4d6bc02cec49b65c97b1da0d3456f96e22640b"
 }
