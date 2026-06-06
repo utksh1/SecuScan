@@ -130,7 +130,15 @@ describe('Workflows — create action', () => {
       name: 'Nightly Scan',
       schedule_seconds: 7200,
       enabled: true,
-      steps: [{ plugin_id: '', inputs: {} }],
+      steps: [{
+        plugin_id: '',
+        inputs: {},
+        execution_context: {
+          scan_profile: 'standard',
+          validation_mode: 'proof',
+          evidence_level: 'standard',
+        },
+      }],
     })
   })
 })
