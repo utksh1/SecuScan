@@ -4,13 +4,19 @@ import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Scans from '../../../src/pages/Scans';
 import { ToastProvider } from '../../../src/components/ToastContext'
 
-// ── Mocks ────────────────────────────────────────────────────────────────────
-
 vi.mock('../../../src/api', () => ({
   API_BASE: 'http://localhost',
   deleteTask: vi.fn(),
   clearAllTasks: vi.fn(),
   bulkDeleteTasks: vi.fn(),
+}));
+
+vi.mock('../../../src/components/ToastContext', () => ({
+  useToast: () => ({
+    addToast: vi.fn(),
+    removeToast: vi.fn(),
+  }),
+  ToastProvider: ({ children }: any) => children,
 }));
 
 vi.mock('react-router-dom', async (importOriginal) => {
@@ -50,10 +56,7 @@ beforeEach(() => {
     json: () => Promise.resolve(EMPTY_RESPONSE),
   });
   vi.stubGlobal('fetch', fetchSpy);
-
-  // Use fake timers; microtasks drained via Promise.resolve() chains in flush()/tickTime()
   vi.useFakeTimers();
-
   Object.defineProperty(document, 'visibilityState', {
     configurable: true,
     get: () => 'visible',
@@ -84,7 +87,6 @@ function setVisibility(state: 'visible' | 'hidden') {
   document.dispatchEvent(new Event('visibilitychange'));
 }
 
-// Drain pending microtasks — works with Vitest 2.1.x.
 async function flush() {
   await act(async () => {
     await Promise.resolve();
@@ -93,7 +95,6 @@ async function flush() {
   });
 }
 
-// Advance fake timers then drain microtasks so fetch callbacks settle.
 async function tickTime(ms: number) {
   await act(async () => {
     vi.advanceTimersByTime(ms);
@@ -116,8 +117,6 @@ function deferredResponse(body: unknown) {
     } as Response),
   };
 }
-
-// ── Tests ────────────────────────────────────────────────────────────────────
 
 describe('Scans — visibility-aware polling', () => {
   it('fires one fetch on mount', async () => {
@@ -202,13 +201,13 @@ describe('Scans — visibility-aware polling', () => {
 
     setVisibility('hidden');
     await tickTime(15_000);
-    expect(fetchSpy).toHaveBeenCalledTimes(1); // still paused
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
 
     setVisibility('visible');
-    await flush(); // immediate fetch on resume
+    await flush();
     expect(fetchSpy).toHaveBeenCalledTimes(2);
 
-    await tickTime(5_000); // interval restarts
+    await tickTime(5_000);
     expect(fetchSpy).toHaveBeenCalledTimes(3);
   });
 
@@ -220,7 +219,6 @@ describe('Scans — visibility-aware polling', () => {
     await tickTime(5_000);
     await tickTime(5_000);
     await tickTime(5_000);
-    // 1 mount + 3 ticks = exactly 4
     expect(fetchSpy).toHaveBeenCalledTimes(4);
   });
 
@@ -234,7 +232,6 @@ describe('Scans — visibility-aware polling', () => {
     unmount();
 
     await tickTime(15_000);
-    // No extra fetches after unmount
     expect(fetchSpy).toHaveBeenCalledTimes(callsAfterMount);
     expect(removeSpy).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
   });

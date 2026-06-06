@@ -10,6 +10,7 @@ import {
 } from "../utils/date";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { useToast } from "../components/ToastContext";
+import { useToast } from "../components/ToastContext";
 import Pagination from "../components/Pagination";
 
 interface Task {
@@ -59,6 +60,7 @@ const itemVariants: Variants = {
 
 export default function Scans() {
   const navigate = useNavigate();
+  const { addToast } = useToast();
   const { addToast } = useToast();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
