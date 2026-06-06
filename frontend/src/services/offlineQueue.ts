@@ -173,15 +173,16 @@ async function conflictCheck(action: QueuedAction): Promise<'no-conflict' | 'con
   if (!action.actionType) return 'no-conflict'
 
   try {
+    const getOptions: RequestInit = { method: 'GET', headers: action.headers }
     switch (action.actionType) {
       case 'updateWorkflow': {
-        const res = await fetch(action.url, { method: 'GET' })
+        const res = await fetch(action.url, getOptions)
         if (res.status === 404 || res.status === 410) return 'gone'
         return 'no-conflict'
       }
       case 'createWorkflow': {
         const listUrl = action.url.replace(/\/workflows(\/.*)?$/, '/workflows')
-        const res = await fetch(listUrl, { method: 'GET' })
+        const res = await fetch(listUrl, getOptions)
         if (!res.ok) return 'no-conflict'
         const body = action.body ? JSON.parse(action.body) : null
         if (!body?.name) return 'no-conflict'

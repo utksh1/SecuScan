@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import * as offlineQueue from '../../src/services/offlineQueue'
-import { OfflineQueueError } from '../../src/api'
+import { OfflineQueueError, setStoredApiKey } from '../../src/api'
 
 // The api module uses the offlineQueue service directly.
 // We test that calling retryable API functions while offline enqueues the action.
@@ -8,6 +8,8 @@ import { OfflineQueueError } from '../../src/api'
 async function getApi() {
   return await import('../../src/api')
 }
+
+const API_KEY_STORAGE_KEY = 'secuscan_api_key'
 
 describe('API offline integration', () => {
   beforeEach(() => {
@@ -20,6 +22,11 @@ describe('API offline integration', () => {
 
   afterEach(() => {
     offlineQueue.clear()
+    try {
+      localStorage.removeItem(API_KEY_STORAGE_KEY)
+    } catch {
+      // ignore
+    }
   })
 
   describe('retryable actions (safe/idempotent mutations only)', () => {
@@ -134,6 +141,48 @@ describe('API offline integration', () => {
 
       await expect(api.runWorkflow('wf-1')).rejects.toThrow()
       expect(offlineQueue.getQueue()).toHaveLength(0)
+    })
+  })
+
+  describe('replay includes auth headers', () => {
+    beforeEach(() => {
+      setStoredApiKey('test-api-key-999')
+    })
+
+    it('stores X-Api-Key in queued action when offline', async () => {
+      Object.defineProperty(navigator, 'onLine', { configurable: true, value: false })
+      const api = await getApi()
+
+      await expect(
+        api.createWorkflow({ name: 'auth-test', enabled: true, steps: [] }),
+      ).rejects.toThrow(OfflineQueueError)
+
+      const queue = offlineQueue.getQueue()
+      expect(queue).toHaveLength(1)
+      expect(queue[0].headers?.['X-Api-Key']).toBe('test-api-key-999')
+    })
+
+    it('replays with X-Api-Key header included', async () => {
+      Object.defineProperty(navigator, 'onLine', { configurable: true, value: false })
+      const api = await getApi()
+
+      await expect(
+        api.createWorkflow({ name: 'replay-auth', enabled: true, steps: [] }),
+      ).rejects.toThrow(OfflineQueueError)
+
+      const [queued] = offlineQueue.getQueue()
+
+      Object.defineProperty(navigator, 'onLine', { configurable: true, value: true })
+      global.fetch = vi.fn().mockResolvedValue({ ok: true })
+
+      const success = await offlineQueue.retry(queued.id)
+      expect(success).toBe(true)
+
+      const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls
+      expect(calls.length).toBeGreaterThanOrEqual(1)
+      for (const [, opts] of calls) {
+        expect(opts?.headers?.['X-Api-Key']).toBe('test-api-key-999')
+      }
     })
   })
 

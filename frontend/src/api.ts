@@ -125,12 +125,17 @@ export class OfflineQueueError extends Error {
 async function request<T>(path: string, init?: RequestOptions): Promise<T> {
   const method = (init?.method || 'GET').toUpperCase()
   const isSafe = method === 'GET' || method === 'HEAD'
+  const apiKey = getApiKey()
+  const authHeaders: Record<string, string> = apiKey ? { 'X-Api-Key': apiKey } : {}
 
   if (!offlineQueue.isOnline() && !isSafe && init?.retryable) {
     offlineQueue.enqueue({
       url: `${API_BASE}${path}`,
       method,
-      headers: init?.headers as Record<string, string> | undefined,
+      headers: {
+        ...authHeaders,
+        ...(init?.headers as Record<string, string> | undefined),
+      },
       body: init?.body as string | undefined,
       maxRetries: 3,
       label: init?.label || `${method} ${path}`,
@@ -140,9 +145,6 @@ async function request<T>(path: string, init?: RequestOptions): Promise<T> {
   }
   const controller = new AbortController()
   const timeoutId = window.setTimeout(() => controller.abort(), 10000)
-
-  const apiKey = getApiKey()
-  const authHeaders: Record<string, string> = apiKey ? { 'X-Api-Key': apiKey } : {}
 
   try {
     const response = await fetch(`${API_BASE}${path}`, {
