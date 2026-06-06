@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import ToolConfig from '../../../src/pages/ToolConfig'
-import { getPluginSchema, listPlugins, startTask } from '../../../src/api'
+import { getPluginSchema, listPlugins, startTask, getSettings, listTargetPolicies, listCredentialProfiles, listSessionProfiles } from '../../../src/api'
 import { routes } from '../../../src/routes'
 
 const addToast = vi.fn()
@@ -15,6 +15,10 @@ vi.mock('../../../src/api', () => ({
   listPlugins: vi.fn(),
   getPluginSchema: vi.fn(),
   startTask: vi.fn(),
+  getSettings: vi.fn(),
+  listTargetPolicies: vi.fn(),
+  listCredentialProfiles: vi.fn(),
+  listSessionProfiles: vi.fn(),
 }))
 
 describe('ToolConfig dynamic schema flow', () => {
@@ -74,6 +78,10 @@ describe('ToolConfig dynamic schema flow', () => {
       created_at: 'now',
       stream_url: '/api/v1/task/task-123/stream',
     })
+    vi.mocked(getSettings).mockResolvedValue({ sandbox: { default_timeout: 600 } })
+    vi.mocked(listTargetPolicies).mockResolvedValue({ items: [] })
+    vi.mocked(listCredentialProfiles).mockResolvedValue({ items: [] })
+    vi.mocked(listSessionProfiles).mockResolvedValue({ items: [] })
   })
 
   it('renders dynamic fields and submits startTask with consent', async () => {
@@ -108,6 +116,11 @@ describe('ToolConfig dynamic schema flow', () => {
         }),
         true,
         'quick',
+        expect.objectContaining({
+          scan_profile: 'standard',
+          validation_mode: 'proof',
+          evidence_level: 'standard',
+        }),
       )
     })
   })
