@@ -79,9 +79,9 @@ describe('ToolConfig dynamic schema flow', () => {
       stream_url: '/api/v1/task/task-123/stream',
     })
     vi.mocked(getSettings).mockResolvedValue(null)
-    vi.mocked(listTargetPolicies).mockResolvedValue({ items: [] })
-    vi.mocked(listCredentialProfiles).mockResolvedValue({ items: [] })
-    vi.mocked(listSessionProfiles).mockResolvedValue({ items: [] })
+    vi.mocked(listTargetPolicies).mockResolvedValue({ items: [], total: 0 })
+    vi.mocked(listCredentialProfiles).mockResolvedValue({ items: [], total: 0 })
+    vi.mocked(listSessionProfiles).mockResolvedValue({ items: [], total: 0 })
   })
 
   it('renders dynamic fields and submits startTask with consent', async () => {
