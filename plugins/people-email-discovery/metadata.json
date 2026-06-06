@@ -26,6 +26,7 @@
     {
       "id": "target",
       "label": "Target Domain",
+      "help": "Enter the domain name to search for associated email addresses and public profiles.",
       "type": "string",
       "required": true,
       "placeholder": "secuscan.in"
@@ -53,5 +54,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "0f0889733638a60dc134a94a668c6683cbdb435560d60f61e7735d47114334c6"
+  "checksum": "704b89c320e0ee31973d2375fb833adbb81741d07e2e3f96f67eabb9d6c0679c"
 }
