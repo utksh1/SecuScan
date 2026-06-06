@@ -87,11 +87,10 @@ def test_crawler_target_field_requires_http_url():
     data = json.loads((PLUGIN_DIR / "metadata.json").read_text(encoding="utf-8"))
     fields = {f["id"]: f for f in data["fields"]}
     target_validation = fields["target"].get("validation", {})
-    uses_preset = target_validation.get("validation_type") == "url"
-    uses_pattern = "https?" in target_validation.get("pattern", "") or \
-                   "http" in target_validation.get("pattern", "")
-    assert uses_preset or uses_pattern, \
+    pattern = target_validation.get("pattern", "")
+    assert "https?" in pattern or "http" in pattern, (
         "target field must validate for HTTP(S) URL format"
+    )
 
 
 def test_crawler_has_optional_depth_field_with_default():
@@ -188,6 +187,7 @@ def test_crawler_command_respects_explicit_depth(setup_test_environment):
     )
 
 
+<<<<<<< HEAD
 def test_crawler_drops_target_token_when_absent(setup_test_environment):
     """
     When the 'target' field is omitted, the renderer drops the unresolved
@@ -206,6 +206,15 @@ def test_crawler_drops_target_token_when_absent(setup_test_environment):
     populated = manager.build_command("crawler", {"target": "https://example.com"})
     assert "https://example.com" in populated
     assert len(populated) == len(rendered) + 1
+=======
+def test_crawler_requires_target_field(setup_test_environment):
+    """build_command must return None when the required 'target' field is absent."""
+    manager = PluginManager(str(PLUGINS_DIR))
+    asyncio.run(manager.load_plugins())
+
+    result = manager.build_command("crawler", {})
+    assert result is None
+>>>>>>> ac1eabf (test(crawler): add contract and parser coverage for crawler plugin)
 
 
 def test_crawler_loaded_by_plugin_manager(setup_test_environment):
