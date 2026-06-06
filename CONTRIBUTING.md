@@ -38,6 +38,11 @@ When issue labels are available, look for tags such as `good first issue`, `docu
 ./start.sh
 ```
 
+Windows contributors should also read the
+[`docs/windows_contributor_guide.md`](docs/windows_contributor_guide.md) guide
+for PowerShell activation, Git Bash equivalents, Docker Desktop notes, and
+Windows-specific troubleshooting.
+
 This starts:
 
 - Backend: `http://127.0.0.1:8000`

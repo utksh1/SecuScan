@@ -27,6 +27,10 @@ def test_generate_sarif_report_with_typical_findings():
                     "remediation": "Restrict access.",
                     "cve": "CVE-2026-0001",
                     "cvss": 8.1,
+                    "cpe": "cpe:/a:nginx:nginx:1.18.0",
+                    "validated": True,
+                    "validation_method": "service_fingerprint",
+                    "confidence_reason": "Matched live service banner and correlated local CPE intelligence.",
                 },
                 {
                     "title": "Cross-Site Scripting",
@@ -72,6 +76,8 @@ def test_generate_sarif_report_with_typical_findings():
     assert rules[0]["shortDescription"]["text"] == "Exposed admin panel"
     assert rules[0]["fullDescription"]["text"] == "Admin panel is reachable without restrictions."
     assert rules[0]["help"]["text"] == "Restrict access."
+    assert rules[0]["properties"]["cpe"] == "cpe:/a:nginx:nginx:1.18.0"
+    assert rules[0]["properties"]["validated"] is True
 
     # Rule 1 (CWE)
     assert rules[1]["id"] == "cwe-79"
@@ -88,6 +94,8 @@ def test_generate_sarif_report_with_typical_findings():
     # Result 0 (File with line)
     assert results[0]["ruleId"] == "cve-2026-0001"
     assert results[0]["level"] == "error"  # HIGH -> error
+    assert results[0]["properties"]["cpe"] == "cpe:/a:nginx:nginx:1.18.0"
+    assert results[0]["properties"]["validated"] is True
     loc0 = results[0]["locations"][0]["physicalLocation"]
     assert loc0["artifactLocation"]["uri"] == "src/admin.py"
     assert loc0["region"]["startLine"] == 45

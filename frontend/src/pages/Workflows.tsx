@@ -22,7 +22,15 @@ const itemVariants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.3 } },
 }
 
-const emptySteps = [{ plugin_id: '', inputs: {} }]
+const emptySteps = [{
+  plugin_id: '',
+  inputs: {},
+  execution_context: {
+    scan_profile: 'standard',
+    validation_mode: 'proof',
+    evidence_level: 'standard',
+  },
+}]
 
 function timeAgo(iso?: string | null) {
   if (!iso) return null

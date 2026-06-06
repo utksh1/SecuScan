@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     reports_dir: str = str(PROJECT_ROOT / "data" / "reports")
     plugins_dir: str = str(PROJECT_ROOT.parent / "plugins")
     wordlists_dir: str = str(PROJECT_ROOT / "wordlists")
+    knowledgebase_dir: str = str(PROJECT_ROOT / "data" / "knowledgebase")
 
     # Security
     safe_mode_default: bool = True
@@ -97,6 +98,12 @@ class Settings(BaseSettings):
 
     rate_limit_read_heavy_limit: int = 100
     rate_limit_read_heavy_window: int = 60
+
+    # Scheduler tick: one trigger per 10 seconds allows legitimate external
+    # callers while preventing a tight loop from forcing continuous workflow
+    # execution and exhausting scan quotas.
+    rate_limit_scheduler_tick_limit: int = 1
+    rate_limit_scheduler_tick_window: int = 10
 
     trusted_proxies: List[str] = ["127.0.0.1", "::1"]
 
@@ -170,6 +177,7 @@ class Settings(BaseSettings):
             self.raw_output_dir,
             self.reports_dir,
             self.wordlists_dir,
+            self.knowledgebase_dir,
             Path(self.log_file).parent,
         ]:
             Path(directory).mkdir(parents=True, exist_ok=True)

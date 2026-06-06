@@ -10,9 +10,14 @@ from typing import Any, Callable, Dict, List, Optional
 from .config import settings
 from .database import get_db
 from .executor import executor
+
 from .ratelimit import concurrent_limiter
 from .request_context import get_request_id, set_request_id
 from .utils.scheduler import should_run_cron_workflow
+
+
+from .execution_context import normalize_execution_context
+from .platform_resources import get_target_policy
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +117,12 @@ class WorkflowScheduler:
                 continue
 
             request_id = get_request_id()
-            safe_mode = bool(settings.safe_mode_default)
+            execution_context = normalize_execution_context(step.get("execution_context") or {})
+            target_policy = await get_target_policy(db, "default", execution_context.get("target_policy_id"))
+            safe_mode = bool(
+                settings.safe_mode_default
+                and not (target_policy and target_policy.get("allow_public_targets"))
+            )
             effective_inputs = dict(inputs)
             effective_inputs.pop("safe_mode", None)
             effective_inputs["safe_mode"] = safe_mode
@@ -122,6 +132,7 @@ class WorkflowScheduler:
                 effective_inputs,
                 safe_mode=safe_mode,
                 preset=step.get("preset"),
+                execution_context=execution_context,
                 consent_granted=True,
             )
 

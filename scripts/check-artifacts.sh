@@ -8,6 +8,12 @@ BLOCKED_PATTERNS=(
   "frontend/.vite/"
   "frontend/node_modules/"
   ".vite/deps/"
+  "output/"
+  "data/raw/"
+  "data/reports/"
+  "backend/data/raw/"
+  "backend/data/reports/"
+  "logs/"
 )
 
 # ── Check 1: files already tracked in git history ─────────────────────────────
@@ -17,6 +23,8 @@ echo "Checking for tracked generated artifacts in git history..."
 TRACKED_FOUND=()
 for pattern in "${BLOCKED_PATTERNS[@]}"; do
   while IFS= read -r match; do
+    # Allow .gitkeep placeholder files — they are intentional empty markers
+    [[ "$match" == *".gitkeep" ]] && continue
     TRACKED_FOUND+=("$match")
   done < <(git ls-files "${pattern}" 2>/dev/null || true)
 done
@@ -35,7 +43,7 @@ fi
 # ── Check 2: files newly added in this PR/branch ──────────────────────────────
 echo "Checking for generated artifacts in PR diff..."
 if git rev-parse --verify "${BASE_BRANCH}" >/dev/null 2>&1; then
-  CHANGED_FILES=$(git diff --name-only "${BASE_BRANCH}"...HEAD 2>/dev/null || git diff --name-only HEAD)
+  CHANGED_FILES=$(git diff --name-only --diff-filter=A "${BASE_BRANCH}"...HEAD 2>/dev/null || git diff --name-only --cached)
 else
   CHANGED_FILES=$(git diff --name-only --cached)
 fi
@@ -43,6 +51,7 @@ fi
 FOUND=()
 for pattern in "${BLOCKED_PATTERNS[@]}"; do
   while IFS= read -r match; do
+    [[ "$match" == *".gitkeep" ]] && continue
     FOUND+=("$match")
   done < <(echo "$CHANGED_FILES" | grep -E "^${pattern}" 2>/dev/null || true)
 done
