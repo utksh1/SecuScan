@@ -157,13 +157,6 @@ export default function Sidebar() {
         />
 
         <NavItem
-          to={routes.analytics}
-          icon="analytics"
-          label="Analytics"
-          isExpanded={isExpanded}
-        />
-
-        <NavItem
           to={routes.workflows}
           icon="account_tree"
           label="Workflows"
