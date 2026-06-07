@@ -4,7 +4,6 @@ Tests for workflow run/delete race conditions and disabled-workflow behavior.
 
 import asyncio
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 
 class _FakeDB:
