@@ -120,9 +120,11 @@
     "tutorial_url": "https://docs.secuscan.local/plugins/sqlmap"
   },
   "dependencies": {
-    "binaries": [],
+    "binaries": [
+      "sqlmap"
+    ],
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "7312d73eb00289dfe5bc1c2cdb6491054a3a348f198a65b36f69f125c9ae3d50"
+  "checksum": "109abd6dbca360a17bb9afbcbc5fb8d2493e76749f7e8d16d704fcb490b925c7"
 }
