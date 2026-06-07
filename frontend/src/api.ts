@@ -49,6 +49,201 @@ export interface PluginAvailability {
   guidance?: string | null
 }
 
+export interface ExecutionContext {
+  target_policy_id?: string | null
+  scan_profile: string
+  credential_profile_id?: string | null
+  session_profile_id?: string | null
+  validation_mode: 'detect_only' | 'proof' | 'controlled_extract'
+  evidence_level: 'minimal' | 'standard' | 'full'
+}
+
+export interface EvidenceRecord {
+  type: string
+  label?: string
+  value?: unknown
+  artifact_ref?: string | null
+  source?: string
+  observed_at?: string
+  confidence?: number
+}
+
+export interface FindingRecord {
+  [key: string]: unknown
+  id?: string
+  task_id?: string
+  plugin_id?: string
+  severity: string
+  category: string
+  title: string
+  target: string
+  description?: string
+  remediation?: string
+  discovered_at?: string
+  cvss?: number
+  cve?: string
+  cpe?: string
+  risk_score?: number
+  risk_factors?: Array<Record<string, unknown>>
+  exploitability?: number
+  confidence?: number
+  validated?: boolean
+  validation_method?: string
+  confidence_reason?: string
+  evidence?: EvidenceRecord[]
+  asset_refs?: string[]
+  asset_id?: string
+  finding_group_id?: string
+  finding_kind?: 'observation' | 'suspected_issue' | 'validated_issue'
+  occurrence_count?: number
+  corroborating_sources?: string[]
+  evidence_count?: number
+  analyst_status?: string
+  retest_status?: string
+  service_fingerprint?: string
+  references?: Array<Record<string, unknown>>
+  asset_exposure?: string
+  first_seen_at?: string
+  last_seen_at?: string
+  metadata?: Record<string, unknown>
+}
+
+export interface FindingGroup {
+  id: string
+  title: string
+  severity: string
+  category?: string
+  target?: string
+  asset_id?: string
+  finding_kind?: string
+  validated?: boolean
+  cve?: string
+  cpe?: string
+  confidence?: number
+  confidence_reason?: string
+  first_seen_at?: string
+  last_seen_at?: string
+  occurrence_count?: number
+  evidence_count?: number
+  corroborating_sources?: string[]
+  analyst_status?: string
+  retest_status?: string
+  latest_finding_id?: string
+  findings?: FindingRecord[]
+}
+
+export interface AssetServiceRecord {
+  id?: string
+  asset_id?: string
+  target?: string
+  host: string
+  ip?: string | null
+  port?: number | null
+  protocol?: string | null
+  service?: string | null
+  product?: string | null
+  version?: string | null
+  cpe?: string | null
+  confidence?: number | null
+  title?: string | null
+  banner?: string | null
+  cert_subject?: string | null
+  cert_san?: string[]
+  cert_expiry?: string | null
+  service_fingerprint?: string | null
+  metadata?: Record<string, unknown>
+}
+
+export interface AssetSummaryEntry {
+  asset_id: string
+  label?: string
+  target?: string
+  services?: AssetServiceRecord[]
+  finding_count?: number
+  validated_count?: number
+  highest_severity?: string
+}
+
+export interface ScanDiff {
+  new: FindingGroup[]
+  resolved: FindingGroup[]
+  changed: Array<{
+    group_id: string
+    before: FindingRecord
+    after: FindingRecord
+  }>
+  summary: {
+    new_count: number
+    resolved_count: number
+    changed_count: number
+  }
+}
+
+export interface FindingsResponse {
+  findings?: FindingRecord[]
+  finding_groups?: FindingGroup[]
+}
+
+export interface TaskResultResponse {
+  task_id: string
+  plugin_id: string
+  tool: string
+  target: string
+  timestamp: string
+  duration_seconds?: number
+  status: string
+  execution_context?: ExecutionContext
+  summary?: string[]
+  severity_counts?: Record<string, number>
+  findings?: FindingRecord[]
+  finding_groups?: FindingGroup[]
+  asset_summary?: AssetSummaryEntry[]
+  scan_diff?: ScanDiff
+  structured?: Record<string, unknown>
+  raw_output_path?: string
+  raw_output_excerpt?: string
+  raw_output?: string
+  command_used?: string
+  errors?: Array<{ message: string }>
+  error_message?: string
+  exit_code?: number
+  metadata?: Record<string, unknown>
+}
+
+export interface NamedResourceList<T> {
+  items: T[]
+  total: number
+}
+
+export interface TargetPolicy {
+  id: string
+  name: string
+  description?: string | null
+  allow_public_targets: boolean
+  allow_exploit_validation: boolean
+  allow_authenticated_scan: boolean
+  default_validation_mode: string
+  allowed_targets?: string[]
+  metadata?: Record<string, unknown>
+}
+
+export interface CredentialProfile {
+  id: string
+  name: string
+  username_secret_name?: string | null
+  password_secret_name?: string | null
+  extra_headers?: Record<string, unknown>
+  login_recipe?: Record<string, unknown>
+}
+
+export interface SessionProfile {
+  id: string
+  name: string
+  cookie_secret_name?: string | null
+  extra_headers?: Record<string, unknown>
+  notes?: string | null
+}
+
 export interface PluginListItem {
   id: string
   name: string
@@ -59,6 +254,10 @@ export interface PluginListItem {
   icon: string
   requires_consent: boolean
   consent_message?: string | null
+  capabilities?: string[]
+  implementation_status?: 'native' | 'integrated' | 'placeholder'
+  supports_authenticated_crawling?: boolean
+  supports_session_reuse?: boolean
   availability: PluginAvailability
 }
 
@@ -74,6 +273,9 @@ export interface PluginSchemaResponse {
   fields: PluginFieldSchema[]
   presets: Record<string, Record<string, unknown>>
   safety: Record<string, unknown>
+  implementation_status?: 'native' | 'integrated' | 'placeholder'
+  supports_authenticated_crawling?: boolean
+  supports_session_reuse?: boolean
 }
 
 export interface TaskStartResponse {
@@ -163,7 +365,11 @@ export function getDashboardSummary() {
 
 
 export function getFindings() {
-  return request('/findings')
+  return request<FindingsResponse>('/findings')
+}
+
+export function getFindingGroups() {
+  return request<{ groups: FindingGroup[]; total: number }>('/finding-groups')
 }
 
 
@@ -269,14 +475,35 @@ export function getTaskStatus(taskId: string): Promise<any> {
 }
 
 export function getTaskResult(taskId: string): Promise<any> {
-  return request<any>(`/task/${taskId}/result`)
+  return request<TaskResultResponse>(`/task/${taskId}/result`)
 }
 
-export function startTask(plugin_id: string, inputs: Record<string, unknown>, consent_granted: boolean, preset?: string) {
+export function getTaskDiff(taskId: string): Promise<ScanDiff> {
+  return request<ScanDiff>(`/task/${taskId}/diff`)
+}
+
+export function startTask(
+  plugin_id: string,
+  inputs: Record<string, unknown>,
+  consent_granted: boolean,
+  preset?: string,
+  execution_context?: Partial<ExecutionContext>,
+) {
   return request<TaskStartResponse>('/task/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ plugin_id, inputs, consent_granted, preset }),
+    body: JSON.stringify({
+      plugin_id,
+      inputs,
+      consent_granted,
+      preset,
+      execution_context: {
+        scan_profile: 'standard',
+        validation_mode: 'proof',
+        evidence_level: 'standard',
+        ...execution_context,
+      },
+    }),
   })
 }
 
@@ -317,6 +544,8 @@ export function streamTask(taskId: string, onEvent: (ev: MessageEvent) => void) 
 export interface WorkflowStep {
   plugin_id: string
   inputs: Record<string, unknown>
+  preset?: string
+  execution_context?: ExecutionContext
 }
 
 export interface Workflow {
@@ -426,4 +655,36 @@ export function deleteWorkflow(workflowId: string): Promise<{ deleted: boolean }
   return request<{ deleted: boolean }>(`/workflows/${workflowId}`, {
     method: 'DELETE',
   })
+}
+
+export function listTargetPolicies() {
+  return request<NamedResourceList<TargetPolicy>>('/target-policies')
+}
+
+export function createTargetPolicy(payload: Partial<TargetPolicy>) {
+  return request<TargetPolicy>('/target-policies', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export function listCredentialProfiles() {
+  return request<NamedResourceList<CredentialProfile>>('/credential-profiles')
+}
+
+export function listSessionProfiles() {
+  return request<NamedResourceList<SessionProfile>>('/session-profiles')
+}
+
+export function getCrawlRuns() {
+  return request('/crawl-runs')
+}
+
+export function getAssetServices() {
+  return request('/assets/services')
+}
+
+export function getKnowledgebaseStatus() {
+  return request('/knowledgebase/status')
 }

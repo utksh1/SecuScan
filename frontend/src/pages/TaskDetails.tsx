@@ -12,7 +12,7 @@ import {
     Pdf02Icon,
     Refresh01Icon,
 } from '@hugeicons/core-free-icons'
-import { API_BASE, getPluginSchema, getTaskResult, getTaskStatus, PluginFieldSchema, PluginSchemaResponse, startTask } from '../api'
+import { API_BASE, getPluginSchema, getTaskResult, getTaskStatus, PluginFieldSchema, PluginSchemaResponse, startTask, ExecutionContext } from '../api'
 import { useTaskSubscription } from '../hooks/useTaskSubscription'
 import { routes, routePath } from '../routes'
 import { parseDateSafe, formatDateLong, formatLocaleTime } from '../utils/date'
@@ -45,6 +45,7 @@ interface Task {
     error_message?: string
     inputs?: Record<string, any>
     preset?: string
+    execution_context?: ExecutionContext
     queue_position?: number
     pending_count?: number
 }
@@ -61,6 +62,8 @@ interface RiskFactor {
 
 interface Finding {
     id?: string
+    finding_group_id?: string
+    asset_id?: string
     title: string
     category: string
     severity: string
@@ -76,7 +79,59 @@ interface Finding {
     risk_factors?: RiskFactor[]
     exploitability?: number
     confidence?: number
+    validated?: boolean
+    validation_method?: string
+    confidence_reason?: string
+    evidence?: Array<Record<string, any>>
+    asset_refs?: string[]
+    finding_kind?: string
+    occurrence_count?: number
+    corroborating_sources?: string[]
+    evidence_count?: number
+    analyst_status?: string
+    retest_status?: string
+    first_seen_at?: string
+    last_seen_at?: string
+    service_fingerprint?: string
+    cpe?: string
+    references?: Array<Record<string, any>>
     asset_exposure?: string
+}
+
+interface FindingGroup {
+    id: string
+    title: string
+    severity: string
+    category?: string
+    finding_kind?: string
+    confidence?: number
+    validated?: boolean
+    occurrence_count?: number
+    evidence_count?: number
+    analyst_status?: string
+    corroborating_sources?: string[]
+    latest_finding_id?: string
+}
+
+interface AssetSummaryEntry {
+    asset_id: string
+    label?: string
+    target?: string
+    finding_count?: number
+    validated_count?: number
+    highest_severity?: string
+    services?: Array<Record<string, any>>
+}
+
+interface ScanDiff {
+    new?: FindingGroup[]
+    resolved?: FindingGroup[]
+    changed?: Array<{ group_id: string; before: Finding; after: Finding }>
+    summary?: {
+        new_count?: number
+        resolved_count?: number
+        changed_count?: number
+    }
 }
 
 interface TaskResult {
@@ -87,9 +142,13 @@ interface TaskResult {
     timestamp: string
     duration_seconds?: number
     status: string
+    execution_context?: ExecutionContext
     summary?: string[]
     severity_counts?: Record<string, number>
     findings?: Finding[]
+    finding_groups?: FindingGroup[]
+    asset_summary?: AssetSummaryEntry[]
+    scan_diff?: ScanDiff
     structured?: {
         rows?: Array<Record<string, any>>
         [key: string]: any
@@ -289,6 +348,11 @@ export default function TaskDetails() {
                     <div className="space-y-4">
                         <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Description</h3>
                         <p className="text-sm leading-8 text-silver/85 whitespace-pre-wrap">{finding.description}</p>
+                        {finding.confidence_reason && (
+                            <p className="text-[11px] font-mono uppercase tracking-[0.12em] text-silver/45">
+                                {finding.confidence_reason}
+                            </p>
+                        )}
                     </div>
 
                     {finding.proof && (
@@ -336,6 +400,20 @@ export default function TaskDetails() {
                                 <p className="text-sm font-mono text-rag-blue/80 underline cursor-pointer">{finding.cve}</p>
                             </div>
                         )}
+                        {(finding.validated !== undefined || finding.validation_method) && (
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Validation</h3>
+                                <p className="text-sm font-mono text-silver-bright uppercase">
+                                    {finding.validated ? 'Validated' : finding.validation_method || 'Unvalidated'}
+                                </p>
+                            </div>
+                        )}
+                        {finding.cpe && (
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">CPE</h3>
+                                <p className="text-[11px] font-mono text-silver-bright break-all">{finding.cpe}</p>
+                            </div>
+                        )}
                         <div className="space-y-4">
                             <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.36em] pb-2 border-b border-white/5">Detected At</h3>
                             <p className="text-xs text-silver/60 font-mono italic">
@@ -343,6 +421,19 @@ export default function TaskDetails() {
                             </p>
                         </div>
                     </div>
+
+                    {finding.evidence && finding.evidence.length > 0 && (
+                        <div className="space-y-4">
+                            <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Structured Evidence</h3>
+                            <div className="space-y-2">
+                                {finding.evidence.slice(0, 6).map((item, index) => (
+                                    <div key={`${finding.id ?? finding.title}-evidence-${index}`} className="bg-black/25 border border-white/5 p-4 text-[11px] font-mono text-silver/80 break-words">
+                                        {String(item.type || 'evidence').toUpperCase()}: {String(item.value ?? '')}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {finding.risk_factors && finding.risk_factors.length > 0 && (
                         <div className="space-y-4">
@@ -396,7 +487,8 @@ export default function TaskDetails() {
                 task.plugin_id,
                 task.inputs || {},
                 true,
-                task.preset
+                task.preset,
+                task.execution_context
             )
 
             if (!isMounted.current) return
@@ -501,7 +593,10 @@ export default function TaskDetails() {
         )
     }
 
-    const findings = result?.structured?.findings || []
+    const findings = result?.findings || result?.structured?.findings || []
+    const findingGroups = result?.finding_groups || []
+    const assetSummary = result?.asset_summary || []
+    const scanDiff = result?.scan_diff || { new: [], resolved: [], changed: [], summary: { new_count: 0, resolved_count: 0, changed_count: 0 } }
     const tableRows = result?.structured?.rows || []
     const summaryItems = result?.summary || []
     const resultEntryCount = tableRows.length || findings.length
@@ -518,7 +613,7 @@ export default function TaskDetails() {
             ? `${Math.floor(task.duration_seconds / 60)}M ${Math.floor(task.duration_seconds % 60)}S`
             : (task.status === 'completed' ? '0M 0S' : 'TERMINATED'))
         : 'ACTIVE'
-    const severityCounts = findings.reduce((acc: Record<string, number>, finding: any) => {
+    const severityCounts = result?.severity_counts || findings.reduce((acc: Record<string, number>, finding: any) => {
         const key = (finding.severity || 'info').toLowerCase()
         acc[key] = (acc[key] || 0) + 1
         return acc
@@ -608,6 +703,9 @@ export default function TaskDetails() {
         ['Path', parsedTarget?.pathname || '/'],
         ['Port', parsedTarget?.port || (parsedTarget?.protocol === 'https:' ? '443' : parsedTarget?.protocol === 'http:' ? '80' : 'N/A')],
         ['Findings', String(result?.structured?.total_count || findings.length).padStart(2, '0')],
+        ['Validation Mode', result?.execution_context?.validation_mode || task.execution_context?.validation_mode || 'N/A'],
+        ['Evidence Level', result?.execution_context?.evidence_level || task.execution_context?.evidence_level || 'N/A'],
+        ['Scan Profile', result?.execution_context?.scan_profile || task.execution_context?.scan_profile || 'N/A'],
         ...Object.entries(task.inputs || {}).map(([key, val]) => [formatKeyLabel(key), formatValue(val)] as [string, string]),
     ]
     const uniqueParameterEntries = Array.from(
@@ -957,6 +1055,73 @@ export default function TaskDetails() {
                                         <p className="text-sm text-silver/55 italic">No findings identified for this target profile.</p>
                                     )}
                                 </motion.div>
+
+                                <motion.div variants={itemVariants} className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                                    <section className="border border-white/8 bg-charcoal p-6">
+                                        <div className="flex items-center gap-4 mb-5">
+                                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Attack Surface Summary</h3>
+                                            <div className="h-px flex-1 bg-white/8" />
+                                            <span className="text-[10px] uppercase tracking-[0.24em] text-silver/40">{assetSummary.length} Assets</span>
+                                        </div>
+                                        {assetSummary.length > 0 ? (
+                                            <div className="space-y-3">
+                                                {assetSummary.slice(0, 6).map((asset) => (
+                                                    <div key={asset.asset_id} className="border border-white/6 bg-black/20 p-4">
+                                                        <div className="flex items-center justify-between gap-4">
+                                                            <div>
+                                                                <p className="text-xs font-black uppercase tracking-[0.18em] text-silver-bright break-all">
+                                                                    {asset.label || asset.target || asset.asset_id}
+                                                                </p>
+                                                                <p className="mt-1 text-[10px] font-mono uppercase tracking-[0.16em] text-silver/35">
+                                                                    {asset.services?.length || 0} services // {asset.finding_count || 0} findings // {asset.validated_count || 0} validated
+                                                                </p>
+                                                            </div>
+                                                            <span className={`px-2 py-1 text-[9px] font-black uppercase tracking-[0.16em] border ${severityTone(asset.highest_severity)}`}>
+                                                                {asset.highest_severity || 'info'}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm text-silver/55 italic">No normalized asset summary is available for this scan.</p>
+                                        )}
+                                    </section>
+
+                                    <section className="border border-white/8 bg-charcoal p-6">
+                                        <div className="flex items-center gap-4 mb-5">
+                                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Scan Delta</h3>
+                                            <div className="h-px flex-1 bg-white/8" />
+                                            <span className="text-[10px] uppercase tracking-[0.24em] text-silver/40">Previous vs Current</span>
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-3 mb-4">
+                                            {[
+                                                ['New', scanDiff.summary?.new_count || 0, 'text-rag-red'],
+                                                ['Resolved', scanDiff.summary?.resolved_count || 0, 'text-rag-green'],
+                                                ['Changed', scanDiff.summary?.changed_count || 0, 'text-rag-blue'],
+                                            ].map(([label, value, tone]) => (
+                                                <div key={String(label)} className="border border-white/6 bg-black/20 p-4 text-center">
+                                                    <p className="text-[9px] font-black uppercase tracking-[0.18em] text-silver/35">{label}</p>
+                                                    <p className={`mt-2 text-3xl font-black italic ${tone}`}>{value}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {(scanDiff.new?.length || 0) > 0 ? (
+                                            <div className="space-y-2">
+                                                {scanDiff.new!.slice(0, 4).map((group) => (
+                                                    <div key={group.id} className="border border-white/6 bg-black/20 p-3">
+                                                        <p className="text-xs font-black uppercase tracking-[0.16em] text-silver-bright">{group.title}</p>
+                                                        <p className="mt-1 text-[10px] font-mono uppercase tracking-[0.16em] text-silver/35">
+                                                            {group.severity} // {group.finding_kind || 'observation'} // {(group.confidence || 0).toFixed(2)} confidence
+                                                        </p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm text-silver/55 italic">No previous scan baseline is available yet for this target and scanner pairing.</p>
+                                        )}
+                                    </section>
+                                </motion.div>
                             </motion.section>
                         )}
 
@@ -969,6 +1134,52 @@ export default function TaskDetails() {
                                 exit="hidden"
                                 className="space-y-6"
                             >
+                                <motion.div variants={itemVariants} className="border border-white/8 bg-charcoal p-6">
+                                    <div className="flex items-center gap-4 mb-5">
+                                        <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Finding Queue</h3>
+                                        <div className="h-px flex-1 bg-white/8" />
+                                        <span className="text-[10px] uppercase tracking-[0.24em] text-silver/40">{findingGroups.length} Groups</span>
+                                    </div>
+                                    {findingGroups.length > 0 ? (
+                                        <div className="space-y-3">
+                                            {findingGroups.slice(0, 10).map((group) => (
+                                                <button
+                                                    key={group.id}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const match = findings.find((finding: Finding) => finding.finding_group_id === group.id) || findings.find((finding: Finding) => finding.id === group.latest_finding_id)
+                                                        if (match) setSelectedFinding(match)
+                                                    }}
+                                                    className="w-full border border-white/6 bg-black/20 p-4 text-left transition-colors hover:bg-white/[0.04]"
+                                                >
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <span className={`px-2 py-1 text-[9px] font-black uppercase tracking-[0.16em] border ${severityTone(group.severity)}`}>
+                                                            {group.severity}
+                                                        </span>
+                                                        <span className="border border-silver-bright/10 bg-charcoal-dark px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-silver/70">
+                                                            {group.finding_kind || 'observation'}
+                                                        </span>
+                                                        <span className="border border-silver-bright/10 bg-charcoal-dark px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-silver/70">
+                                                            {group.occurrence_count || 1} seen
+                                                        </span>
+                                                        {group.validated ? (
+                                                            <span className="border border-rag-green/20 bg-rag-green/10 px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-rag-green">
+                                                                validated
+                                                            </span>
+                                                        ) : null}
+                                                    </div>
+                                                    <p className="mt-3 text-sm font-black uppercase tracking-[0.14em] text-silver-bright">{group.title}</p>
+                                                    <p className="mt-1 text-[10px] font-mono uppercase tracking-[0.16em] text-silver/35">
+                                                        {(group.confidence || 0).toFixed(2)} confidence // {group.evidence_count || 0} evidence // {group.analyst_status || 'new'}
+                                                    </p>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-sm text-silver/55 italic">No grouped findings are available for this task.</p>
+                                    )}
+                                </motion.div>
+
                                 <motion.div variants={itemVariants} className="border border-white/8 bg-charcoal p-6">
                                     <div className="flex items-center gap-4 mb-5">
                                         <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Discovery Results</h3>

@@ -18,6 +18,8 @@ type RiskFactor = {
 
 type Finding = {
   id: string
+  finding_group_id?: string
+  asset_id?: string
   severity: string
   category: string
   title: string
@@ -32,6 +34,22 @@ type Finding = {
   risk_factors?: RiskFactor[]
   exploitability?: number
   confidence?: number
+  validated?: boolean
+  validation_method?: string
+  confidence_reason?: string
+  evidence?: Array<Record<string, unknown>>
+  asset_refs?: string[]
+  finding_kind?: 'observation' | 'suspected_issue' | 'validated_issue'
+  occurrence_count?: number
+  corroborating_sources?: string[]
+  evidence_count?: number
+  analyst_status?: string
+  retest_status?: string
+  first_seen_at?: string
+  last_seen_at?: string
+  service_fingerprint?: string
+  cpe?: string
+  references?: Array<Record<string, unknown>>
   asset_exposure?: string
 }
 
@@ -128,6 +146,11 @@ export default function Findings() {
   const [filterSeverity, setFilterSeverity] = useState('all')
   const [filterTarget, setFilterTarget] = useState('all')
   const [filterScanner, setFilterScanner] = useState('all')
+  const [filterKind, setFilterKind] = useState('all')
+  const [filterAnalystStatus, setFilterAnalystStatus] = useState('all')
+  const [filterAsset, setFilterAsset] = useState('all')
+  const [filterValidatedOnly, setFilterValidatedOnly] = useState(false)
+  const [filterHighConfidence, setFilterHighConfidence] = useState(false)
   const [sortMode, setSortMode] = useState<SortMode>('severity')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -189,7 +212,13 @@ export default function Findings() {
       findings.map((finding) => ({
         ...finding,
         severity: normalizeSeverity(finding.severity),
-        status: reviewState[finding.id] || ('new' as FindingStatus),
+        status: reviewState[finding.id] || (
+          finding.analyst_status === 'confirmed'
+            ? 'reviewed'
+            : finding.analyst_status === 'false_positive'
+              ? 'suppressed'
+              : 'new'
+        ),
       })),
     [findings, reviewState],
   )
@@ -212,6 +241,31 @@ export default function Findings() {
     return Array.from(seen).sort()
   }, [enrichedFindings])
 
+  const uniqueAssets = useMemo(() => {
+    const seen = new Set<string>()
+    for (const finding of enrichedFindings) {
+      const label = finding.asset_id || finding.asset_refs?.[0] || finding.target
+      if (label) seen.add(label)
+    }
+    return Array.from(seen).sort()
+  }, [enrichedFindings])
+
+  const uniqueKinds = useMemo(() => {
+    const seen = new Set<string>()
+    for (const finding of enrichedFindings) {
+      if (finding.finding_kind) seen.add(finding.finding_kind)
+    }
+    return Array.from(seen).sort()
+  }, [enrichedFindings])
+
+  const uniqueAnalystStatuses = useMemo(() => {
+    const seen = new Set<string>()
+    for (const finding of enrichedFindings) {
+      if (finding.analyst_status) seen.add(finding.analyst_status)
+    }
+    return Array.from(seen).sort()
+  }, [enrichedFindings])
+
   const filteredFindings = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
 
@@ -222,6 +276,12 @@ export default function Findings() {
       const matchesSeverity = filterSeverity === 'all' || finding.severity === filterSeverity
       const matchesTarget = filterTarget === 'all' || finding.target === filterTarget
       const matchesScanner = filterScanner === 'all' || finding.plugin_id === filterScanner
+      const assetLabel = finding.asset_id || finding.asset_refs?.[0] || finding.target
+      const matchesAsset = filterAsset === 'all' || assetLabel === filterAsset
+      const matchesKind = filterKind === 'all' || finding.finding_kind === filterKind
+      const matchesAnalystStatus = filterAnalystStatus === 'all' || finding.analyst_status === filterAnalystStatus
+      const matchesValidated = !filterValidatedOnly || Boolean(finding.validated)
+      const matchesHighConfidence = !filterHighConfidence || Number(finding.confidence || 0) >= 0.75
 
       if (dateFrom || dateTo) {
         const parsed = parseDateSafe(finding.discovered_at)
@@ -243,9 +303,19 @@ export default function Findings() {
         .join(' ')
         .toLowerCase()
 
-      return matchesSeverity && matchesTarget && matchesScanner && haystack.includes(query)
+      return (
+        matchesSeverity &&
+        matchesTarget &&
+        matchesScanner &&
+        matchesAsset &&
+        matchesKind &&
+        matchesAnalystStatus &&
+        matchesValidated &&
+        matchesHighConfidence &&
+        haystack.includes(query)
+      )
     })
-  }, [enrichedFindings, filterSeverity, filterTarget, filterScanner, searchQuery, dateFrom, dateTo])
+  }, [enrichedFindings, filterSeverity, filterTarget, filterScanner, filterAsset, filterKind, filterAnalystStatus, filterValidatedOnly, filterHighConfidence, searchQuery, dateFrom, dateTo])
 
   const sortedFindings = useMemo(() => {
     const items = [...filteredFindings]
@@ -340,16 +410,26 @@ export default function Findings() {
     if (searchQuery.trim())      chips.push({ key: 'search',  label: `Search: "${searchQuery.trim()}"` })
     if (filterTarget !== 'all')  chips.push({ key: 'target',  label: `Target: ${filterTarget}` })
     if (filterScanner !== 'all') chips.push({ key: 'scanner', label: `Scanner: ${filterScanner}` })
+    if (filterAsset !== 'all') chips.push({ key: 'asset', label: `Asset: ${filterAsset}` })
+    if (filterKind !== 'all') chips.push({ key: 'kind', label: `Kind: ${filterKind}` })
+    if (filterAnalystStatus !== 'all') chips.push({ key: 'analyst', label: `Analyst: ${filterAnalystStatus}` })
+    if (filterValidatedOnly) chips.push({ key: 'validated', label: 'Validated Only' })
+    if (filterHighConfidence) chips.push({ key: 'confidence', label: 'High Confidence' })
     if (sortMode !== 'severity') chips.push({ key: 'sort',    label: `Sort: ${sortMode}` })
     if (dateFrom)                chips.push({ key: 'from',    label: `From: ${dateFrom}` })
     if (dateTo)                  chips.push({ key: 'to',      label: `To: ${dateTo}` })
     return chips
-  }, [searchQuery, filterTarget, filterScanner, sortMode, dateFrom, dateTo])
+  }, [searchQuery, filterTarget, filterScanner, filterAsset, filterKind, filterAnalystStatus, filterValidatedOnly, filterHighConfidence, sortMode, dateFrom, dateTo])
 
   function resetAllFilters() {
     setFilterSeverity('all')
     setFilterTarget('all')
     setFilterScanner('all')
+    setFilterAsset('all')
+    setFilterKind('all')
+    setFilterAnalystStatus('all')
+    setFilterValidatedOnly(false)
+    setFilterHighConfidence(false)
     setSortMode('severity')
     setDateFrom('')
     setDateTo('')
@@ -513,7 +593,7 @@ export default function Findings() {
             </div>
 
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-8">
                 <div className="space-y-2">
                   <label className={filterLabelClass}>Target</label>
                   <select
@@ -538,6 +618,48 @@ export default function Findings() {
                     <option value="all">All Scanners</option>
                     {uniqueScanners.map((s) => (
                       <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className={filterLabelClass}>Asset</label>
+                  <select
+                    value={filterAsset}
+                    onChange={(e) => setFilterAsset(e.target.value)}
+                    className={filterControlClass}
+                  >
+                    <option value="all">All Assets</option>
+                    {uniqueAssets.map((asset) => (
+                      <option key={asset} value={asset}>{asset}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className={filterLabelClass}>Finding Kind</label>
+                  <select
+                    value={filterKind}
+                    onChange={(e) => setFilterKind(e.target.value)}
+                    className={filterControlClass}
+                  >
+                    <option value="all">All Kinds</option>
+                    {uniqueKinds.map((kind) => (
+                      <option key={kind} value={kind}>{kind}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className={filterLabelClass}>Analyst State</label>
+                  <select
+                    value={filterAnalystStatus}
+                    onChange={(e) => setFilterAnalystStatus(e.target.value)}
+                    className={filterControlClass}
+                  >
+                    <option value="all">All States</option>
+                    {uniqueAnalystStatuses.map((status) => (
+                      <option key={status} value={status}>{status}</option>
                     ))}
                   </select>
                 </div>
@@ -578,6 +700,24 @@ export default function Findings() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
+                <label className="inline-flex h-11 items-center gap-3 border border-silver-bright/10 bg-charcoal-dark px-4 text-[10px] font-black uppercase tracking-[0.18em] text-silver/75">
+                  <input
+                    type="checkbox"
+                    checked={filterValidatedOnly}
+                    onChange={(event) => setFilterValidatedOnly(event.target.checked)}
+                    className="h-4 w-4 accent-[var(--accent-rag-red)]"
+                  />
+                  Validated Only
+                </label>
+                <label className="inline-flex h-11 items-center gap-3 border border-silver-bright/10 bg-charcoal-dark px-4 text-[10px] font-black uppercase tracking-[0.18em] text-silver/75">
+                  <input
+                    type="checkbox"
+                    checked={filterHighConfidence}
+                    onChange={(event) => setFilterHighConfidence(event.target.checked)}
+                    className="h-4 w-4 accent-[var(--accent-rag-blue)]"
+                  />
+                  High Confidence
+                </label>
                 <SavedViewsPanel
                   views={views}
                   loading={viewsLoading}
@@ -708,9 +848,19 @@ export default function Findings() {
                                       <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-silver/35">
                                         {finding.category || 'Uncategorized'}
                                       </span>
+                                      {finding.finding_kind ? (
+                                        <span className="border border-silver-bright/10 bg-charcoal-dark px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-silver/70">
+                                          {finding.finding_kind.replace('_', ' ')}
+                                        </span>
+                                      ) : null}
                                       {finding.cve ? (
                                         <span className="border border-rag-blue/20 bg-rag-blue/10 px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-rag-blue">
                                           {finding.cve}
+                                        </span>
+                                      ) : null}
+                                      {typeof finding.confidence === 'number' ? (
+                                        <span className="border border-silver-bright/10 bg-charcoal-dark px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-silver-bright">
+                                          {(finding.confidence * 100).toFixed(0)}% confidence
                                         </span>
                                       ) : null}
                                     </div>
@@ -728,6 +878,14 @@ export default function Findings() {
                                   </div>
 
                                   <div className="flex flex-row items-end gap-6 lg:min-w-[140px] lg:flex-col lg:items-end">
+                                    {typeof finding.occurrence_count === 'number' && finding.occurrence_count > 1 ? (
+                                      <div className="text-right">
+                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Seen</p>
+                                        <p className="text-2xl font-black italic text-silver-bright">
+                                          {finding.occurrence_count}
+                                        </p>
+                                      </div>
+                                    ) : null}
                                     {typeof finding.cvss === 'number' ? (
                                       <div className="text-right">
                                         <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">CVSS</p>
@@ -785,8 +943,20 @@ export default function Findings() {
                         <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">{selectedFinding.target || 'Unknown'}</p>
                       </div>
                       <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Asset</p>
+                        <p className="mt-2 text-xs font-mono uppercase tracking-[0.14em] text-silver-bright break-all">
+                          {selectedFinding.asset_id || selectedFinding.asset_refs?.[0] || 'N/A'}
+                        </p>
+                      </div>
+                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
                         <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Category</p>
                         <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">{selectedFinding.category || 'Uncategorized'}</p>
+                      </div>
+                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Finding Kind</p>
+                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">
+                          {selectedFinding.finding_kind?.replace('_', ' ') || 'N/A'}
+                        </p>
                       </div>
                       <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
                         <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Observed</p>
@@ -798,6 +968,36 @@ export default function Findings() {
                         <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">CVSS</p>
                         <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">
                           {typeof selectedFinding.cvss === 'number' ? selectedFinding.cvss.toFixed(1) : 'N/A'}
+                        </p>
+                      </div>
+                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Validation</p>
+                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">
+                          {selectedFinding.validated ? 'Validated' : selectedFinding.validation_method || 'Unvalidated'}
+                        </p>
+                      </div>
+                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Analyst State</p>
+                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">
+                          {selectedFinding.analyst_status || 'N/A'}
+                        </p>
+                      </div>
+                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">CPE</p>
+                        <p className="mt-2 text-xs font-mono uppercase tracking-[0.14em] text-silver-bright">
+                          {selectedFinding.cpe || 'N/A'}
+                        </p>
+                      </div>
+                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Seen Across Scans</p>
+                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">
+                          {selectedFinding.occurrence_count || 1}
+                        </p>
+                      </div>
+                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Evidence Count</p>
+                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">
+                          {selectedFinding.evidence_count || selectedFinding.evidence?.length || 0}
                         </p>
                       </div>
                     </div>
@@ -843,8 +1043,47 @@ export default function Findings() {
                       <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-silver/35">Evidence Brief</p>
                       <div className="border-l-4 border-rag-red bg-charcoal-dark p-4">
                         <p className="text-sm leading-relaxed text-silver/78">{selectedFinding.description || 'No description provided.'}</p>
+                        {selectedFinding.confidence_reason ? (
+                          <p className="mt-3 text-[11px] font-mono uppercase tracking-[0.12em] text-silver/45">
+                            {selectedFinding.confidence_reason}
+                          </p>
+                        ) : null}
                       </div>
                     </div>
+
+                    {selectedFinding.evidence && selectedFinding.evidence.length > 0 ? (
+                      <div>
+                        <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-silver/35">Evidence Items</p>
+                        <div className="space-y-2">
+                          {selectedFinding.evidence.slice(0, 5).map((item, index) => (
+                            <div key={`${selectedFinding.id}-evidence-${index}`} className="border border-silver-bright/8 bg-charcoal-dark p-3 text-[11px] font-mono text-silver/72">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-silver/35">
+                                {String(item.label || item.type || 'evidence')}
+                              </p>
+                              <p className="mt-2 break-words whitespace-pre-wrap text-silver-bright">
+                                {String(item.value ?? '')}
+                              </p>
+                              <p className="mt-2 text-[9px] uppercase tracking-[0.16em] text-silver/30">
+                                {String(item.source || 'scanner')} {item.confidence ? `// ${(Number(item.confidence) * 100).toFixed(0)}%` : ''}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {selectedFinding.corroborating_sources && selectedFinding.corroborating_sources.length > 0 ? (
+                      <div>
+                        <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-silver/35">Corroborating Sources</p>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedFinding.corroborating_sources.map((source) => (
+                            <span key={source} className="border border-silver-bright/10 bg-charcoal-dark px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-silver-bright">
+                              {source}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
 
                     <div>
                       <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-silver/35">Remediation</p>

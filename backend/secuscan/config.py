@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     reports_dir: str = str(PROJECT_ROOT / "data" / "reports")
     plugins_dir: str = str(PROJECT_ROOT.parent / "plugins")
     wordlists_dir: str = str(PROJECT_ROOT / "wordlists")
+    knowledgebase_dir: str = str(PROJECT_ROOT / "data" / "knowledgebase")
 
     # Security
     safe_mode_default: bool = True
@@ -176,6 +177,7 @@ class Settings(BaseSettings):
             self.raw_output_dir,
             self.reports_dir,
             self.wordlists_dir,
+            self.knowledgebase_dir,
             Path(self.log_file).parent,
         ]:
             Path(directory).mkdir(parents=True, exist_ok=True)

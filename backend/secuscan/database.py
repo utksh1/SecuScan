@@ -59,8 +59,10 @@ class Database:
                 tool_name TEXT NOT NULL,
                 target TEXT NOT NULL,
                 inputs_json TEXT NOT NULL DEFAULT '{}',
+                execution_context_json TEXT NOT NULL DEFAULT '{}',
                 preset TEXT,
                 status TEXT NOT NULL DEFAULT 'queued',
+                scan_phase TEXT,
                 consent_granted BOOLEAN NOT NULL DEFAULT 0,
                 safe_mode BOOLEAN NOT NULL DEFAULT 1,
                 created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
@@ -108,6 +110,29 @@ class Database:
                 proof TEXT,
                 cvss REAL,
                 cve TEXT,
+                exploitability REAL,
+                confidence REAL,
+                validated BOOLEAN NOT NULL DEFAULT 0,
+                validation_method TEXT,
+                confidence_reason TEXT,
+                finding_kind TEXT NOT NULL DEFAULT 'observation',
+                finding_group_id TEXT,
+                asset_id TEXT,
+                first_seen_at TIMESTAMP,
+                last_seen_at TIMESTAMP,
+                occurrence_count INTEGER NOT NULL DEFAULT 1,
+                corroborating_sources_json TEXT NOT NULL DEFAULT '[]',
+                evidence_count INTEGER NOT NULL DEFAULT 0,
+                analyst_status TEXT NOT NULL DEFAULT 'new',
+                retest_status TEXT NOT NULL DEFAULT 'not_requested',
+                evidence_json TEXT NOT NULL DEFAULT '[]',
+                asset_refs_json TEXT NOT NULL DEFAULT '[]',
+                service_fingerprint TEXT,
+                cpe TEXT,
+                references_json TEXT NOT NULL DEFAULT '[]',
+                asset_exposure TEXT,
+                risk_score REAL,
+                risk_factors_json TEXT NOT NULL DEFAULT '[]',
                 discovered_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
                 metadata_json TEXT NOT NULL DEFAULT '{}'
             );
@@ -124,6 +149,87 @@ class Database:
                 findings INTEGER NOT NULL DEFAULT 0,
                 pages INTEGER NOT NULL DEFAULT 0,
                 file_path TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS target_policies (
+                id TEXT PRIMARY KEY,
+                owner_id TEXT NOT NULL DEFAULT 'default',
+                name TEXT NOT NULL,
+                description TEXT,
+                allow_public_targets BOOLEAN NOT NULL DEFAULT 0,
+                allow_exploit_validation BOOLEAN NOT NULL DEFAULT 0,
+                allow_authenticated_scan BOOLEAN NOT NULL DEFAULT 0,
+                default_validation_mode TEXT NOT NULL DEFAULT 'proof',
+                allowed_targets_json TEXT NOT NULL DEFAULT '[]',
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS credential_profiles (
+                id TEXT PRIMARY KEY,
+                owner_id TEXT NOT NULL DEFAULT 'default',
+                name TEXT NOT NULL,
+                username_secret_name TEXT,
+                password_secret_name TEXT,
+                extra_headers_json TEXT NOT NULL DEFAULT '{}',
+                login_recipe_json TEXT NOT NULL DEFAULT '{}',
+                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS session_profiles (
+                id TEXT PRIMARY KEY,
+                owner_id TEXT NOT NULL DEFAULT 'default',
+                name TEXT NOT NULL,
+                cookie_secret_name TEXT,
+                extra_headers_json TEXT NOT NULL DEFAULT '{}',
+                notes TEXT,
+                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS crawl_runs (
+                id TEXT PRIMARY KEY,
+                owner_id TEXT NOT NULL DEFAULT 'default',
+                task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
+                plugin_id TEXT NOT NULL,
+                target TEXT NOT NULL,
+                seed_url TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'completed',
+                summary_json TEXT NOT NULL DEFAULT '{}',
+                pages_json TEXT NOT NULL DEFAULT '[]',
+                forms_json TEXT NOT NULL DEFAULT '[]',
+                scripts_json TEXT NOT NULL DEFAULT '[]',
+                params_json TEXT NOT NULL DEFAULT '[]',
+                api_hints_json TEXT NOT NULL DEFAULT '[]',
+                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS asset_services (
+                id TEXT PRIMARY KEY,
+                owner_id TEXT NOT NULL DEFAULT 'default',
+                task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
+                plugin_id TEXT NOT NULL,
+                target TEXT NOT NULL,
+                asset_id TEXT,
+                host TEXT NOT NULL,
+                ip TEXT,
+                port INTEGER,
+                protocol TEXT,
+                service TEXT,
+                product TEXT,
+                version TEXT,
+                cpe TEXT,
+                confidence REAL,
+                title TEXT,
+                banner TEXT,
+                cert_subject TEXT,
+                cert_san_json TEXT NOT NULL DEFAULT '[]',
+                cert_expiry TEXT,
+                service_fingerprint TEXT,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
             );
 
             CREATE TABLE IF NOT EXISTS settings (
@@ -232,6 +338,9 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_tasks_plugin ON tasks(plugin_id);
             -- Composite index for dashboard running tasks query
             CREATE INDEX IF NOT EXISTS idx_tasks_status_created ON tasks(status, created_at DESC);
+            -- Owner scoping (BOLA prevention, issue #401)
+            CREATE INDEX IF NOT EXISTS idx_tasks_owner ON tasks(owner_id);
+            CREATE INDEX IF NOT EXISTS idx_tasks_execution_context ON tasks(owner_id, plugin_id, created_at DESC);
 
             -- Findings indexes (new)
             CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
@@ -241,6 +350,12 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_findings_target ON findings(target);
             -- Composite index for severity counting by task
             CREATE INDEX IF NOT EXISTS idx_findings_task_severity ON findings(task_id, severity);
+            -- Owner scoping (BOLA prevention, issue #401)
+            CREATE INDEX IF NOT EXISTS idx_findings_owner ON findings(owner_id);
+            CREATE INDEX IF NOT EXISTS idx_findings_cpe ON findings(cpe);
+            CREATE INDEX IF NOT EXISTS idx_findings_validated ON findings(validated);
+            CREATE INDEX IF NOT EXISTS idx_findings_group_id ON findings(owner_id, finding_group_id);
+            CREATE INDEX IF NOT EXISTS idx_findings_asset_id ON findings(owner_id, asset_id);
 
             -- Reports indexes (new)
             CREATE INDEX IF NOT EXISTS idx_reports_task_id ON reports(task_id);
@@ -259,6 +374,14 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_notification_history_rule_id ON notification_history(rule_id);
             CREATE INDEX IF NOT EXISTS idx_notification_history_finding_id ON notification_history(finding_id);
             CREATE INDEX IF NOT EXISTS idx_notification_history_sent_at ON notification_history(sent_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_target_policies_owner ON target_policies(owner_id);
+            CREATE INDEX IF NOT EXISTS idx_credential_profiles_owner ON credential_profiles(owner_id);
+            CREATE INDEX IF NOT EXISTS idx_session_profiles_owner ON session_profiles(owner_id);
+            CREATE INDEX IF NOT EXISTS idx_crawl_runs_task_id ON crawl_runs(task_id);
+            CREATE INDEX IF NOT EXISTS idx_crawl_runs_owner_created ON crawl_runs(owner_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_asset_services_task_id ON asset_services(task_id);
+            CREATE INDEX IF NOT EXISTS idx_asset_services_owner_created ON asset_services(owner_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_asset_services_asset_id ON asset_services(owner_id, asset_id);
             """
         )
 
@@ -281,6 +404,7 @@ class Database:
             "cpu_seconds": "REAL",
             "memory_peak_mb": "REAL",
             "inputs_json": "TEXT NOT NULL DEFAULT '{}'",
+            "execution_context_json": "TEXT NOT NULL DEFAULT '{}'",
             "preset": "TEXT",
             "safe_mode": "BOOLEAN NOT NULL DEFAULT 1"
         }
@@ -305,6 +429,24 @@ class Database:
         risk_cols = {
             "exploitability": "REAL",
             "confidence": "REAL",
+            "validated": "BOOLEAN NOT NULL DEFAULT 0",
+            "validation_method": "TEXT",
+            "confidence_reason": "TEXT",
+            "finding_kind": "TEXT NOT NULL DEFAULT 'observation'",
+            "finding_group_id": "TEXT",
+            "asset_id": "TEXT",
+            "first_seen_at": "TIMESTAMP",
+            "last_seen_at": "TIMESTAMP",
+            "occurrence_count": "INTEGER NOT NULL DEFAULT 1",
+            "corroborating_sources_json": "TEXT NOT NULL DEFAULT '[]'",
+            "evidence_count": "INTEGER NOT NULL DEFAULT 0",
+            "analyst_status": "TEXT NOT NULL DEFAULT 'new'",
+            "retest_status": "TEXT NOT NULL DEFAULT 'not_requested'",
+            "evidence_json": "TEXT NOT NULL DEFAULT '[]'",
+            "asset_refs_json": "TEXT NOT NULL DEFAULT '[]'",
+            "service_fingerprint": "TEXT",
+            "cpe": "TEXT",
+            "references_json": "TEXT NOT NULL DEFAULT '[]'",
             "asset_exposure": "TEXT",
             "risk_score": "REAL",
             "risk_factors_json": "TEXT NOT NULL DEFAULT '[]'",
@@ -318,6 +460,26 @@ class Database:
                     print(f"Added missing column {col_name} to findings table.")
                 except Exception as e:
                     print(f"Failed to add column {col_name}: {e}")
+
+        asset_service_columns = await self.fetchall("PRAGMA table_info(asset_services)")
+        existing_asset_service_cols = {col["name"] for col in asset_service_columns}
+        asset_service_needed = {
+            "asset_id": "TEXT",
+            "ip": "TEXT",
+            "title": "TEXT",
+            "banner": "TEXT",
+            "cert_subject": "TEXT",
+            "cert_san_json": "TEXT NOT NULL DEFAULT '[]'",
+            "cert_expiry": "TEXT",
+            "service_fingerprint": "TEXT",
+        }
+        for col_name, col_type in asset_service_needed.items():
+            if col_name not in existing_asset_service_cols:
+                try:
+                    await self.execute(f"ALTER TABLE asset_services ADD COLUMN {col_name} {col_type}")
+                    print(f"Added missing column {col_name} to asset_services table.")
+                except Exception as e:
+                    print(f"Failed to add column {col_name} to asset_services: {e}")
 
         # Reports table migration: ensure owner_id exists (issue #401)
         reports_columns = await self.fetchall("PRAGMA table_info(reports)")
