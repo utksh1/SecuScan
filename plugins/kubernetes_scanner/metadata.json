@@ -28,7 +28,7 @@
       "type": "string",
       "required": true,
       "placeholder": "prod-cluster",
-      "help_text": "Enter the Kubernetes cluster context name from your kubeconfig, for example prod-cluster."
+      "help": "Enter the Kubernetes cluster context name from your kubeconfig, for example prod-cluster."
     }
   ],
   "presets": {
