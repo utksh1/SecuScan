@@ -180,16 +180,22 @@ class TestRunDeleteRace:
             await runner_open.run_workflow_once("wf-1")
 
     @pytest.mark.asyncio
-    async def test_delete_after_run_tasks_still_exist(self, runner_open, db, executor):
-        db._workflows["wf-1"]["steps"].append(
-            {"plugin_id": "nikto", "inputs": {"target": "127.0.0.1"}}
-        )
-        task_ids = await runner_open.run_workflow_once("wf-1")
-        db.delete_workflow("wf-1")
+    async def test_delete_after_run_tasks_still_exist(self, executor, limiter_open):
+        fresh_db = _FakeDB(workflows=[{
+            "id": "wf-2",
+            "name": "Two Step",
+            "enabled": True,
+            "steps": [
+                {"plugin_id": "nmap", "inputs": {}},
+                {"plugin_id": "nikto", "inputs": {}},
+            ],
+        }])
+        runner = WorkflowRunner(fresh_db, executor, limiter_open)
+        task_ids = await runner.run_workflow_once("wf-2")
+        fresh_db.delete_workflow("wf-2")
         assert len(task_ids) == 2
         for tid in task_ids:
-            assert db.get_task(tid) is not None
-
+            assert fresh_db.get_task(tid) is not None
 
 class TestToggleRace:
 
