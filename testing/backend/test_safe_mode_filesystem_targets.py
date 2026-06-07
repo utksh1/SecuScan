@@ -16,6 +16,7 @@ Validation logic (validation.py):
 """
 
 import pytest
+from unittest.mock import AsyncMock, patch
 
 ENDPOINT = "/api/v1/task/start"
 
@@ -55,6 +56,15 @@ def assert_not_blocked_by_host_validation(r):
         assert "not allowed" not in detail.lower() and "invalid" not in detail.lower(), (
             f"Path target incorrectly blocked by host validation: {r.text}"
         )
+
+
+@pytest.fixture(autouse=True)
+def _mock_task_execution():
+    with patch(
+        "backend.secuscan.executor.TaskExecutor._execute_command",
+        new=AsyncMock(return_value=("mocked output", 0)),
+    ):
+        yield
 
 
 # ---------------------------------------------------------------------------

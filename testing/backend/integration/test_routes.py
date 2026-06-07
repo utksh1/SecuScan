@@ -25,6 +25,9 @@ def test_list_plugins(test_client):
         assert "availability" in first
         assert "runnable" in first["availability"]
         assert "missing_binaries" in first["availability"]
+        assert "implementation_status" in first
+        assert "supports_authenticated_crawling" in first
+        assert "supports_session_reuse" in first
 
 def test_plugin_summary(test_client):
     """Test plugin summary endpoint."""
@@ -79,6 +82,9 @@ def test_start_task(test_client):
         assert result_response.status_code == 200
         result_data = result_response.json()
         assert "Mocked successful output" in result_data["raw_output_excerpt"]
+        assert "finding_groups" in result_data
+        assert "asset_summary" in result_data
+        assert "scan_diff" in result_data
 
 def test_missing_consent(test_client):
     """Test starting a task without consent."""
@@ -100,6 +106,7 @@ def test_get_settings(test_client):
     assert "network" in data
     assert "sandbox" in data
     assert "safety" in data
+    assert "execution_context" in data
 
 def test_start_task_missing_plugin(test_client):
     """Starting a task with a missing plugin should return 404 and helpful detail."""

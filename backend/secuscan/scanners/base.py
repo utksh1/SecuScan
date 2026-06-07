@@ -11,11 +11,39 @@ class BaseScanner(ABC):
     Each scanner orchestrates one or more CLI tools to achieve a higher-level goal.
     """
 
-    def __init__(self, task_id: str, db: Any):
+    def __init__(self, task_id: str, db: Any, safe_mode: bool = True):
         self.task_id = task_id
         self.db = db
+        self.safe_mode = safe_mode
         self.start_time = datetime.now()
         self._progress = 0.0
+
+    async def _execute_command(self, command: List[str]) -> tuple:
+        """Executes the command after validating egress policies at the boundary."""
+        import asyncio
+        from ..validation import validate_command_network_egress
+
+        ok, err = await asyncio.to_thread(validate_command_network_egress, command, self.safe_mode, self.name, self.task_id)
+        if not ok:
+            logger.error(f"Egress boundary check blocked command: {err}")
+            return f"Execution blocked by egress boundary check: {err}", -1
+
+        import asyncio.subprocess
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT
+        )
+        try:
+            stdout, _ = await process.communicate()
+            return stdout.decode('utf-8', errors='replace'), process.returncode
+        except asyncio.CancelledError:
+            try:
+                process.kill()
+                await process.wait()
+            except Exception:
+                pass
+            raise
 
     @property
     @abstractmethod

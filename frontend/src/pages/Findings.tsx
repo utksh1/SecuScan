@@ -1,10 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { getFindings } from '../api'
 import { formatLocaleDate, parseDateSafe, getCurrentTimeZone } from '../utils/date'
 import ScanHistory from "../components/ScanHistory"
 import SavedViewsPanel from '../components/SavedViewsPanel'
 import { useSavedViews, FilterPreset } from '../hooks/useSavedViews'
+
 type RiskFactor = {
   factor: string
   label: string
@@ -17,6 +19,8 @@ type RiskFactor = {
 
 type Finding = {
   id: string
+  finding_group_id?: string
+  asset_id?: string
   severity: string
   category: string
   title: string
@@ -31,6 +35,22 @@ type Finding = {
   risk_factors?: RiskFactor[]
   exploitability?: number
   confidence?: number
+  validated?: boolean
+  validation_method?: string
+  confidence_reason?: string
+  evidence?: Array<Record<string, unknown>>
+  asset_refs?: string[]
+  finding_kind?: 'observation' | 'suspected_issue' | 'validated_issue'
+  occurrence_count?: number
+  corroborating_sources?: string[]
+  evidence_count?: number
+  analyst_status?: string
+  retest_status?: string
+  first_seen_at?: string
+  last_seen_at?: string
+  service_fingerprint?: string
+  cpe?: string
+  references?: Array<Record<string, unknown>>
   asset_exposure?: string
 }
 
@@ -107,6 +127,18 @@ const filterControlClass =
 
 type SortMode = 'severity' | 'newest' | 'oldest' | 'target'
 
+// ─── Virtual row types ────────────────────────────────────────────────────────
+
+type HeaderRow = { kind: 'header'; severity: string; count: number }
+type FindingRow = { kind: 'finding'; finding: Finding & { status: FindingStatus }; isLastInGroup: boolean }
+type VirtualRow = HeaderRow | FindingRow
+
+// Estimated heights for virtualizer
+const ROW_HEIGHTS: Record<VirtualRow['kind'], number> = {
+  header: 72,
+  finding: 140,
+}
+
 export default function Findings() {
   const [findings, setFindings] = useState<Finding[]>([])
   const [loading, setLoading] = useState(true)
@@ -114,6 +146,11 @@ export default function Findings() {
   const [filterSeverity, setFilterSeverity] = useState('all')
   const [filterTarget, setFilterTarget] = useState('all')
   const [filterScanner, setFilterScanner] = useState('all')
+  const [filterKind, setFilterKind] = useState('all')
+  const [filterAnalystStatus, setFilterAnalystStatus] = useState('all')
+  const [filterAsset, setFilterAsset] = useState('all')
+  const [filterValidatedOnly, setFilterValidatedOnly] = useState(false)
+  const [filterHighConfidence, setFilterHighConfidence] = useState(false)
   const [sortMode, setSortMode] = useState<SortMode>('severity')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -195,7 +232,13 @@ export default function Findings() {
       findings.map((finding) => ({
         ...finding,
         severity: normalizeSeverity(finding.severity),
-        status: reviewState[finding.id] || 'new',
+        status: reviewState[finding.id] || (
+          finding.analyst_status === 'confirmed'
+            ? 'reviewed'
+            : finding.analyst_status === 'false_positive'
+              ? 'suppressed'
+              : 'new'
+        ),
       })),
     [findings, reviewState],
   )
@@ -216,8 +259,34 @@ export default function Findings() {
     return Array.from(seen).sort()
   }, [enrichedFindings])
 
+  const uniqueAssets = useMemo(() => {
+    const seen = new Set<string>()
+    for (const finding of enrichedFindings) {
+      const label = finding.asset_id || finding.asset_refs?.[0] || finding.target
+      if (label) seen.add(label)
+    }
+    return Array.from(seen).sort()
+  }, [enrichedFindings])
+
+  const uniqueKinds = useMemo(() => {
+    const seen = new Set<string>()
+    for (const finding of enrichedFindings) {
+      if (finding.finding_kind) seen.add(finding.finding_kind)
+    }
+    return Array.from(seen).sort()
+  }, [enrichedFindings])
+
+  const uniqueAnalystStatuses = useMemo(() => {
+    const seen = new Set<string>()
+    for (const finding of enrichedFindings) {
+      if (finding.analyst_status) seen.add(finding.analyst_status)
+    }
+    return Array.from(seen).sort()
+  }, [enrichedFindings])
+
   const filteredFindings = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
+
     const tz = getCurrentTimeZone()
     const dateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: tz })
 
@@ -225,6 +294,12 @@ export default function Findings() {
       const matchesSeverity = filterSeverity === 'all' || finding.severity === filterSeverity
       const matchesTarget = filterTarget === 'all' || finding.target === filterTarget
       const matchesScanner = filterScanner === 'all' || finding.plugin_id === filterScanner
+      const assetLabel = finding.asset_id || finding.asset_refs?.[0] || finding.target
+      const matchesAsset = filterAsset === 'all' || assetLabel === filterAsset
+      const matchesKind = filterKind === 'all' || finding.finding_kind === filterKind
+      const matchesAnalystStatus = filterAnalystStatus === 'all' || finding.analyst_status === filterAnalystStatus
+      const matchesValidated = !filterValidatedOnly || Boolean(finding.validated)
+      const matchesHighConfidence = !filterHighConfidence || Number(finding.confidence || 0) >= 0.75
 
       if (dateFrom || dateTo) {
         const parsed = parseDateSafe(finding.discovered_at)
@@ -246,9 +321,19 @@ export default function Findings() {
         .join(' ')
         .toLowerCase()
 
-      return matchesSeverity && matchesTarget && matchesScanner && haystack.includes(query)
+      return (
+        matchesSeverity &&
+        matchesTarget &&
+        matchesScanner &&
+        matchesAsset &&
+        matchesKind &&
+        matchesAnalystStatus &&
+        matchesValidated &&
+        matchesHighConfidence &&
+        haystack.includes(query)
+      )
     })
-  }, [enrichedFindings, filterSeverity, filterTarget, filterScanner, searchQuery, dateFrom, dateTo])
+  }, [enrichedFindings, filterSeverity, filterTarget, filterScanner, filterAsset, filterKind, filterAnalystStatus, filterValidatedOnly, filterHighConfidence, searchQuery, dateFrom, dateTo])
 
   const sortedFindings = useMemo(() => {
     const items = [...filteredFindings]
@@ -273,30 +358,35 @@ export default function Findings() {
     }
   }, [filteredFindings, sortMode])
 
-  const groupedFindings = useMemo(
-    () =>
-      severityOrder.map((severity) => ({
-        severity,
-        items: sortedFindings.filter((finding) => finding.severity === severity),
-      })),
-    [sortedFindings],
-  )
-
-  const selectedFinding =
-    filteredFindings.find((finding) => finding.id === selectedFindingId) ??
-    filteredFindings[0] ??
-    null
-
-  useEffect(() => {
-    if (!selectedFinding) {
-      setSelectedFindingId(null)
-      return
+  // Build the flat virtual row list: header + findings per severity group
+  // For non-severity sort modes, all findings appear in a single flat list
+  const virtualRows = useMemo<VirtualRow[]>(() => {
+    const rows: VirtualRow[] = []
+    if (sortMode === 'severity') {
+      for (const severity of severityOrder) {
+        const items = filteredFindings.filter((f) => f.severity === severity)
+        if (items.length === 0) continue
+        rows.push({ kind: 'header', severity, count: items.length })
+        items.forEach((finding, idx) => {
+          rows.push({
+            kind: 'finding',
+            finding,
+            isLastInGroup: idx === items.length - 1,
+          })
+        })
+      }
+    } else {
+      // For newest/oldest/target sort — single flat list, no headers
+      sortedFindings.forEach((finding, idx) => {
+        rows.push({
+          kind: 'finding',
+          finding,
+          isLastInGroup: idx === sortedFindings.length - 1,
+        })
+      })
     }
-
-    if (!filteredFindings.some((finding) => finding.id === selectedFinding.id)) {
-      setSelectedFindingId(filteredFindings[0]?.id ?? null)
-    }
-  }, [filteredFindings, selectedFinding])
+    return rows
+  }, [filteredFindings, sortedFindings, sortMode])
 
   const countsBySeverity = useMemo(() => {
     return severityOrder.reduce<Record<string, number>>((acc, severity) => {
@@ -315,21 +405,47 @@ export default function Findings() {
     [enrichedFindings, filteredFindings, countsBySeverity],
   )
 
+  const selectedFinding =
+    sortedFindings.find((finding) => finding.id === selectedFindingId) ??
+    sortedFindings[0] ??
+    null
+
+  useEffect(() => {
+    if (!selectedFinding) {
+      setSelectedFindingId(null)
+      return
+    }
+    if (!sortedFindings.some((finding) => finding.id === selectedFinding.id)) {
+      setSelectedFindingId(sortedFindings[0]?.id ?? null)
+    }
+  }, [sortedFindings, selectedFinding])
+
+  // Derives a flat list of active filter chips from non-default filter state.
   const activeFilters = useMemo(() => {
     const chips: { key: string; label: string }[] = []
     if (searchQuery.trim())      chips.push({ key: 'search',  label: `Search: "${searchQuery.trim()}"` })
     if (filterTarget !== 'all')  chips.push({ key: 'target',  label: `Target: ${filterTarget}` })
     if (filterScanner !== 'all') chips.push({ key: 'scanner', label: `Scanner: ${filterScanner}` })
+    if (filterAsset !== 'all') chips.push({ key: 'asset', label: `Asset: ${filterAsset}` })
+    if (filterKind !== 'all') chips.push({ key: 'kind', label: `Kind: ${filterKind}` })
+    if (filterAnalystStatus !== 'all') chips.push({ key: 'analyst', label: `Analyst: ${filterAnalystStatus}` })
+    if (filterValidatedOnly) chips.push({ key: 'validated', label: 'Validated Only' })
+    if (filterHighConfidence) chips.push({ key: 'confidence', label: 'High Confidence' })
     if (sortMode !== 'severity') chips.push({ key: 'sort',    label: `Sort: ${sortMode}` })
     if (dateFrom)                chips.push({ key: 'from',    label: `From: ${dateFrom}` })
     if (dateTo)                  chips.push({ key: 'to',      label: `To: ${dateTo}` })
     return chips
-  }, [searchQuery, filterTarget, filterScanner, sortMode, dateFrom, dateTo])
+  }, [searchQuery, filterTarget, filterScanner, filterAsset, filterKind, filterAnalystStatus, filterValidatedOnly, filterHighConfidence, sortMode, dateFrom, dateTo])
 
   function resetAllFilters() {
     setFilterSeverity('all')
     setFilterTarget('all')
     setFilterScanner('all')
+    setFilterAsset('all')
+    setFilterKind('all')
+    setFilterAnalystStatus('all')
+    setFilterValidatedOnly(false)
+    setFilterHighConfidence(false)
     setSortMode('severity')
     setDateFrom('')
     setDateTo('')
@@ -363,70 +479,46 @@ export default function Findings() {
     }
   }
 
-  function renderFindingRow(finding: Finding & { severity: string; status: FindingStatus }) {
-    const isSelected = selectedFinding?.id === finding.id
-    const cfg = severityConfig[finding.severity]
+  // ─── Keyboard navigation ────────────────────────────────────────────────────
+  const listRef = useRef<HTMLDivElement>(null)
 
-    return (
-      <button
-        key={finding.id}
-        type="button"
-        onClick={() => setSelectedFindingId(finding.id)}
-        className={`relative block w-full px-5 py-5 text-left transition-all ${
-          isSelected ? 'bg-silver-bright/6' : 'hover:bg-silver-bright/3'
-        }`}
-      >
-        <span className={`absolute inset-y-0 left-0 w-1 ${cfg.rail}`} />
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0 flex-1 space-y-3 pl-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={`px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${cfg.chip}`}>
-                {cfg.label}
-              </span>
-              <span className={`border px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${getStatusTone(finding.status)}`}>
-                {finding.status}
-              </span>
-              <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-silver/35">
-                {finding.category || 'Uncategorized'}
-              </span>
-              {finding.cve ? (
-                <span className="border border-rag-blue/20 bg-rag-blue/10 px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-rag-blue">
-                  {finding.cve}
-                </span>
-              ) : null}
-            </div>
+  function handleListKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (!sortedFindings.length) return
+    const currentIdx = selectedFinding
+      ? sortedFindings.findIndex((f) => f.id === selectedFinding.id)
+      : -1
 
-            <div>
-              <h3 className="text-xl font-black uppercase tracking-tight text-silver-bright">{finding.title}</h3>
-              <p className="mt-2 text-[11px] font-mono uppercase tracking-[0.16em] text-silver/45">
-                Target // {finding.target || 'Unknown'} // Observed // {formatLocaleDate(finding.discovered_at)}
-              </p>
-            </div>
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      const next = sortedFindings[Math.min(currentIdx + 1, sortedFindings.length - 1)]
+      if (next) setSelectedFindingId(next.id)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      const prev = sortedFindings[Math.max(currentIdx - 1, 0)]
+      if (prev) setSelectedFindingId(prev.id)
+    }
+}
 
-            <p className="max-w-4xl text-sm leading-relaxed text-silver/70">
-              {finding.description || 'No description provided.'}
-            </p>
-          </div>
+  // ─── Virtualizer ────────────────────────────────────────────────────────────
+  const parentRef = useRef<HTMLDivElement>(null)
 
-          <div className="flex flex-row items-end gap-6 lg:min-w-[140px] lg:flex-col lg:items-end">
-            {typeof finding.cvss === 'number' ? (
-              <div className="text-right">
-                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">CVSS</p>
-                <p className={`text-3xl font-black italic ${finding.cvss >= 9 ? 'text-rag-red' : 'text-silver-bright'}`}>
-                  {finding.cvss.toFixed(1)}
-                </p>
-              </div>
-            ) : null}
+  const virtualizer = useVirtualizer({
+    count: virtualRows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: (index) => ROW_HEIGHTS[virtualRows[index]?.kind ?? 'finding'],
+    overscan: 6,
+  })
 
-            <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-silver-bright' : 'text-silver/30'}`} aria-hidden="true">
-              east
-            </span>
-          </div>
-        </div>
-      </button>
+  // Scroll selected finding into view when it changes
+  useEffect(() => {
+    if (!selectedFinding) return
+    const rowIdx = virtualRows.findIndex(
+      (row) => row.kind === 'finding' && row.finding.id === selectedFinding.id,
     )
-  }
-
+    if (rowIdx !== -1) {
+      virtualizer.scrollToIndex(rowIdx, { align: 'auto', behavior: 'smooth' })
+    }
+  }, [selectedFindingId]) // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <div className="min-h-screen bg-charcoal-dark text-silver px-4 py-6 md:px-8 md:py-10">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4">
@@ -711,8 +803,20 @@ export default function Findings() {
                         <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">{selectedFinding.target || 'Unknown'}</p>
                       </div>
                       <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Asset</p>
+                        <p className="mt-2 text-xs font-mono uppercase tracking-[0.14em] text-silver-bright break-all">
+                          {selectedFinding.asset_id || selectedFinding.asset_refs?.[0] || 'N/A'}
+                        </p>
+                      </div>
+                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
                         <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Category</p>
                         <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">{selectedFinding.category || 'Uncategorized'}</p>
+                      </div>
+                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Finding Kind</p>
+                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">
+                          {selectedFinding.finding_kind?.replace('_', ' ') || 'N/A'}
+                        </p>
                       </div>
                       <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
                         <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Observed</p>
@@ -724,6 +828,36 @@ export default function Findings() {
                         <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">CVSS</p>
                         <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">
                           {typeof selectedFinding.cvss === 'number' ? selectedFinding.cvss.toFixed(1) : 'N/A'}
+                        </p>
+                      </div>
+                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Validation</p>
+                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">
+                          {selectedFinding.validated ? 'Validated' : selectedFinding.validation_method || 'Unvalidated'}
+                        </p>
+                      </div>
+                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Analyst State</p>
+                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">
+                          {selectedFinding.analyst_status || 'N/A'}
+                        </p>
+                      </div>
+                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">CPE</p>
+                        <p className="mt-2 text-xs font-mono uppercase tracking-[0.14em] text-silver-bright">
+                          {selectedFinding.cpe || 'N/A'}
+                        </p>
+                      </div>
+                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Seen Across Scans</p>
+                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">
+                          {selectedFinding.occurrence_count || 1}
+                        </p>
+                      </div>
+                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Evidence Count</p>
+                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">
+                          {selectedFinding.evidence_count || selectedFinding.evidence?.length || 0}
                         </p>
                       </div>
                     </div>

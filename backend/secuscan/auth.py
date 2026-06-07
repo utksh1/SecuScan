@@ -11,7 +11,7 @@ import os
 import secrets
 from pathlib import Path
 
-from fastapi import Depends, HTTPException, Security, status
+from fastapi import Depends, HTTPException, Security, status, Request
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -42,6 +42,7 @@ def init_api_key(data_dir: str) -> str:
 
 
 async def require_api_key(
+    request: Request = None,
     bearer: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
     x_api_key: str | None = Security(_api_key_header),
 ) -> str:
@@ -52,6 +53,11 @@ async def require_api_key(
     - ``Authorization: Bearer <key>``
     - ``X-Api-Key: <key>``
     """
+    if request is not None and request.url.path.startswith("/api/v1/admin"):
+        # Admin endpoints have their own separate verify_admin_access dependency.
+        # We bypass require_api_key verification to avoid blocking valid admin key requests.
+        return ""
+
     if _api_key is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -77,3 +83,41 @@ async def require_api_key(
 def get_api_key() -> str | None:
     """Return the current API key, or None if not yet initialised."""
     return _api_key
+
+
+# ── Per-user / per-workspace ownership ──────────────────────────────────────
+#
+# SecuScan authenticates the deployment with a single shared API key (above).
+# That gate does not, by itself, distinguish between the different users or
+# workspaces that share a deployment, which is what allowed any caller to read,
+# delete, or export any task/report by guessing its ID (BOLA, issue #401).
+#
+# ``resolve_owner_id`` derives a stable owner identity for the request and is
+# persisted as ``owner_id`` on tasks/findings/reports at creation time and
+# compared on every read/delete/report access. It deliberately prioritises the
+# explicit authenticated-user header (``X-User-Id``) — the same header
+# ``resolve_client_identity`` already treats as the authenticated user — so that
+# multiple workspaces sharing the deployment API key remain isolated. In a
+# production deployment the header is expected to be set by an upstream auth
+# proxy / SSO layer; deployments that do not send it fall back to a single
+# shared ``DEFAULT_OWNER_ID`` and keep their existing (single-user) behaviour.
+#
+# This value is duplicated as the SQL column default ('default') in
+# database.py — keep the two in sync.
+DEFAULT_OWNER_ID = "default"
+
+_OWNER_HEADER = "x-user-id"
+
+
+def resolve_owner_id(request: Request | None) -> str:
+    """Resolve the owning user/workspace identity for the current request."""
+    if request is not None:
+        user_id = request.headers.get(_OWNER_HEADER)
+        if user_id and user_id.strip():
+            return f"user:{user_id.strip()}"
+    return DEFAULT_OWNER_ID
+
+
+async def get_current_owner(request: Request) -> str:
+    """FastAPI dependency yielding the owner identity for the request."""
+    return resolve_owner_id(request)
