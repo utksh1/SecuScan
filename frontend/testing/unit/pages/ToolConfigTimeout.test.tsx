@@ -81,6 +81,6 @@ describe('ToolConfig timeout control', () => {
     // min from field.validation
     expect(input).toHaveAttribute('min', '30')
     // max is min(field.validation.max, server default_timeout)
-    expect(input).toHaveAttribute('max', '7200')
+    expect(input).toHaveAttribute('max', '600')
   })
 })
