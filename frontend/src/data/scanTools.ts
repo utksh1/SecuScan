@@ -25,7 +25,7 @@ export const scanTools: ScanTool[] = [
     { id: 'dns_enum', name: 'DNS Enumeration', purpose: 'Detailed DNS record analysis and zone transfers', riskLevel: 'active', presetCompatibility: 'quick-recon', requiresConsent: false, category: 'recon' },
     { id: 'http_inspector', name: 'HTTP Inspector', purpose: 'Read-only analysis of web endpoints and headers', riskLevel: 'passive', presetCompatibility: 'quick-recon', requiresConsent: false, category: 'recon' },
     { id: 'scapy_recon', name: 'Scapy Recon', purpose: 'Low-level network probing and packet crafting', riskLevel: 'active', presetCompatibility: 'none', requiresConsent: true, category: 'recon', subcategory: 'network' },
-    
+
     // --- VULNERABILITY SCANNERS ---
     { id: 'nikto', name: 'Nikto', purpose: 'Tunable web server vulnerability scanning with Nikto presets', riskLevel: 'active', presetCompatibility: 'deep-scan', requiresConsent: true, category: 'vulnerability', isQuickStart: true },
     { id: 'wpscan', name: 'WPScan', purpose: 'Specialized WordPress vulnerability auditor', riskLevel: 'active', presetCompatibility: 'none', requiresConsent: true, category: 'vulnerability', isQuickStart: true },
@@ -70,7 +70,7 @@ export const scanTools: ScanTool[] = [
     { id: 'sharepoint_scanner', name: 'Sharepoint Scanner', purpose: 'Check SharePoint for security issues, misconfigs, and more', riskLevel: 'active', presetCompatibility: 'none', requiresConsent: true, category: 'vulnerability', subcategory: 'web' },
     { id: 'network_scanner', name: 'Network Scanner', purpose: 'Check for 10,000+ CVEs and server misconfigurations', riskLevel: 'active', presetCompatibility: 'deep-scan', requiresConsent: true, category: 'vulnerability', subcategory: 'network' },
     { id: 'password_auditor', name: 'Password Auditor', purpose: 'Discover weak credentials in network services and web apps', riskLevel: 'active', presetCompatibility: 'none', requiresConsent: true, category: 'vulnerability', subcategory: 'network' },
-    
+
     // --- ADVANCED PROSPECTIVE SCANNERS ---
     { id: 'zap_scanner', name: 'DAST Web Proxy (ZAP)', purpose: 'Dynamic proxy spidering and payload injection', riskLevel: 'aggressive', presetCompatibility: 'deep-scan', requiresConsent: true, category: 'vulnerability', subcategory: 'web' },
     { id: 'container_scanner', name: 'Container Scan (Trivy)', purpose: 'Scan Docker images and registries for known vulnerabilities', riskLevel: 'passive', presetCompatibility: 'none', requiresConsent: true, category: 'vulnerability', subcategory: 'network' },

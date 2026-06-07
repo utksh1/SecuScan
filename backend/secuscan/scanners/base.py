@@ -33,7 +33,7 @@ class BaseScanner(ABC):
     async def run(self, target: str, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute the scanning logic.
-        
+
         Returns:
             Dictionary containing findings, summary, and other structured data.
         """

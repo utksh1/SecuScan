@@ -31,7 +31,7 @@ class ReconScanner(BaseScanner):
         findings = []
         summary = []
         rows = []
-        
+
         # 1. Subdomain Discovery (if applicable)
         if "." in target and not target.replace(".", "").isdigit():
             self.update_progress(0.1)
@@ -102,7 +102,7 @@ class ReconScanner(BaseScanner):
         pm = get_plugin_manager()
         cmd = pm.build_command("subdomain_discovery", {"target": target})
         if not cmd: return []
-        
+
         output, _ = await self._execute_command(cmd)
         findings = []
         for line in output.splitlines():
@@ -121,16 +121,16 @@ class ReconScanner(BaseScanner):
         pm = get_plugin_manager()
         cmd = pm.build_command("whois_lookup", {"target": target})
         if not cmd: return []
-        
+
         output, _ = await self._execute_command(cmd)
-        
+
         try:
             data = json.loads(output)
             registrar = data.get("registrar") or data.get("registrar_name", "Unknown")
             expiry = data.get("expiration_date")
             if isinstance(expiry, list):
                 expiry = expiry[0]
-            
+
             return [{
                 "title": "WHOIS Registration Data",
                 "category": "Domain Intelligence",
@@ -143,7 +143,7 @@ class ReconScanner(BaseScanner):
             # Fallback to regex if JSON parsing fails (e.g. legacy output)
             registrar = re.search(r"Registrar:\s*(.*)", output, re.IGNORECASE)
             expiry = re.search(r"Registry Expiry Date:\s*(.*)", output, re.IGNORECASE)
-            
+
             return [{
                 "title": "WHOIS Registration Data",
                 "category": "Domain Intelligence",
@@ -158,7 +158,7 @@ class ReconScanner(BaseScanner):
         pm = get_plugin_manager()
         cmd = pm.build_command("dns_enum", {"target": target})
         if not cmd: return []
-        
+
         output, _ = await self._execute_command(cmd)
         findings = []
         # Look for A, MX, NS records
@@ -167,7 +167,7 @@ class ReconScanner(BaseScanner):
             "MX Record": r"(?i)MX\s+(.*)",
             "NS Record": r"(?i)NS\s+(.*)"
         }
-        
+
         for name, pattern in patterns.items():
             for match in re.finditer(pattern, output):
                 findings.append({

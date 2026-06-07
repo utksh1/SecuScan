@@ -233,7 +233,7 @@ class Database:
         # Migration logic: ensure latest columns exist in 'tasks' table
         tasks_columns = await self.fetchall("PRAGMA table_info(tasks)")
         existing_cols = {col["name"] for col in tasks_columns}
-        
+
         needed_cols = {
             "exit_code": "INTEGER",
             "scan_phase": "TEXT",

@@ -28,7 +28,7 @@ class WebScanner(BaseScanner):
         intensity = inputs.get("scan_intensity", "light")
         findings = []
         summary = [f"Performing {intensity} web scan on {target}"]
-        
+
         # 1. HTTP Inspection (Technology Fingerprinting)
         self.update_progress(0.1)
         tech_findings = await self._run_http_inspector(target)
@@ -71,7 +71,7 @@ class WebScanner(BaseScanner):
         cmd = pm.build_command("http_inspector", {"target": target})
         if not cmd: return []
         output, _ = await self._execute_command(cmd)
-        
+
         findings = []
         if match := re.search(r"(?i)Server:\s*(.*)", output):
             findings.append({
@@ -89,7 +89,7 @@ class WebScanner(BaseScanner):
         # Ensure we use JSON output for easier parsing if available
         cmd = pm.build_command("nuclei", {"target": target, "silent": True})
         if not cmd: return []
-        
+
         output, _ = await self._execute_command(cmd)
         findings = []
         # Nuclei result pattern: [template-id] [severity] [url] [message]
@@ -111,7 +111,7 @@ class WebScanner(BaseScanner):
         cmd = pm.build_command("nikto", {"target": target})
         if not cmd: return []
         output, _ = await self._execute_command(cmd)
-        
+
         findings = []
         for line in output.splitlines():
             if "+ " in line:
@@ -131,7 +131,7 @@ class WebScanner(BaseScanner):
         cmd = pm.build_command("dir_discovery", {"target": target})
         if not cmd: return []
         output, _ = await self._execute_command(cmd)
-        
+
         findings = []
         # Extract 200/301 results
         for match in re.finditer(r"\[Status: (\d+), Size: \d+, Words: \d+, Lines: \d+, Duration: \d+ms\]\s*\|\s*URL: (.*)", output):

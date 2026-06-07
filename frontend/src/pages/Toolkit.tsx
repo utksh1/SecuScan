@@ -96,7 +96,7 @@ function getToolAccessibilityLabel(tool: CatalogTool): string {
 
 function mapPluginCategoryToLegacyTab(category: string, pluginId?: string): UITab {
   const pinnedTool = scanTools.find(t => t.id === pluginId);
-  
+
   if (pinnedTool) {
     return pinnedTool.category as UITab;
   }
@@ -124,7 +124,7 @@ function mapPluginCategoryToLegacyTab(category: string, pluginId?: string): UITa
 function mapPluginToCatalogTool(plugin: PluginListItem): CatalogTool {
   const normalizedCategory = normalizeCategoryId(plugin.category)
   const pinnedTool = scanTools.find(t => t.id === plugin.id);
-  
+
   return {
     id: plugin.id,
     name: pinnedTool ? pinnedTool.name : plugin.name,

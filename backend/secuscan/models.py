@@ -71,12 +71,12 @@ class PluginMetadata(BaseModel):
     author: Optional[Dict[str, str]] = None
     license: Optional[str] = "MIT"
     icon: Optional[str] = "🔧"
-    
+
     engine: Dict[str, str]
     command_template: List[str]
     fields: List[PluginField]
     presets: Dict[str, Dict[str, Any]]
-    
+
     output: Dict[str, Any]
     safety: Dict[str, Any]
     capabilities: Optional[List[str]] = None
@@ -143,14 +143,14 @@ class TaskResult(BaseModel):
     timestamp: datetime
     duration_seconds: Optional[float]
     status: TaskStatus
-    
+
     summary: List[str] = []
     severity_counts: Dict[str, int] = Field(default_factory=dict)
     findings: List[Finding] = Field(default_factory=list)
     structured: Dict[str, Any] = Field(default_factory=dict)
     raw_output_path: Optional[str] = None
     raw_output_excerpt: Optional[str] = None
-    
+
     errors: List[Dict[str, Any]] = []
     error_message: Optional[str] = None
     exit_code: Optional[int] = None
