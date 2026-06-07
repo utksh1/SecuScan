@@ -27,7 +27,8 @@
       "label": "Target",
       "type": "string",
       "required": true,
-      "placeholder": "secuscan.in"
+      "placeholder": "secuscan.in",
+      "help": "Enter the hostname, domain, or service endpoint to review for weak credential and password policy risks."
     }
   ],
   "presets": {
@@ -53,5 +54,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "d3606fc8426a11a890874be7159b75b534da6c0f5aa56f8291578feb29934358"
+  "checksum": "e4806b82ed17444385bee8f2c9c1beae8cb7113fdb37368937589f32c8be1183"
 }
