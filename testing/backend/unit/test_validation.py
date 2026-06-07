@@ -1,6 +1,7 @@
-# pyrefly: ignore [missing-import]
 import pytest
 import socket
+import ipaddress
+from backend.secuscan import validation as validation_module
 from backend.secuscan.config import settings
 from backend.secuscan.validation import (
     validate_target, validate_port, validate_port_range, validate_url,
@@ -72,15 +73,21 @@ def test_validate_target_ipv6_with_ipv4_allowed_network_does_not_crash(monkeypat
     ok, msg = validate_target("::1", safe_mode=True)
 
     assert ok is False
-    assert msg in {
-        "Public IPs/networks not allowed in safe mode (SecuScan Guardrail)",
-        "Target not within allowed networks in safe mode (SecuScan Guardrail)",
-    }
+    assert msg == "Public IPs/networks not allowed in safe mode (SecuScan Guardrail)"
 
 
 def test_validate_target_mixed_allowed_networks_uses_later_same_version_entry(monkeypatch):
     monkeypatch.setattr(settings, "allowed_networks", ["fc00::/7", "127.0.0.0/8"])
     ok, msg = validate_target("127.0.0.1", safe_mode=True)
+
+    assert ok is True
+    assert msg == ""
+
+def test_validate_target_mixed_allowed_networks_uses_later_same_version_ipv6_entry(monkeypatch):
+    monkeypatch.setattr(validation_module, "ALLOWED_PRIVATE", [ipaddress.ip_network("fc00::/7")])
+    monkeypatch.setattr(settings, "allowed_networks", ["127.0.0.0/8", "fc00::/7"])
+
+    ok, msg = validate_target("fd00::1", safe_mode=True)
 
     assert ok is True
     assert msg == ""
