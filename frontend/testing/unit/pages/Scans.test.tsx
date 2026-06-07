@@ -5,13 +5,19 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import Scans from '../../../src/pages/Scans'
 
-// ── Mocks ────────────────────────────────────────────────────────────────────
-
 vi.mock('../../../src/api', () => ({
   API_BASE: 'http://localhost:5000',
   deleteTask: vi.fn().mockResolvedValue({}),
   clearAllTasks: vi.fn().mockResolvedValue({}),
   bulkDeleteTasks: vi.fn().mockResolvedValue({}),
+}))
+
+vi.mock('../../../src/components/ToastContext', () => ({
+  useToast: () => ({
+    addToast: vi.fn(),
+    removeToast: vi.fn(),
+  }),
+  ToastProvider: ({ children }: any) => children,
 }))
 
 vi.mock('../../../src/routes', () => ({
@@ -53,8 +59,6 @@ global.ResizeObserver = vi.fn().mockImplementation(() => ({
 Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, value: 800 })
 Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 600 })
 
-// ── Fixtures ─────────────────────────────────────────────────────────────────
-
 function makeTask(overrides: any = {}) {
   const id = overrides.task_id ?? `task-${Math.random().toString(36).slice(2)}`
   return {
@@ -86,8 +90,6 @@ function renderScans() {
     </MemoryRouter>
   )
 }
-
-// ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('Scans — task list', () => {
   beforeEach(() => {

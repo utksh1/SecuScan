@@ -1,60 +1,56 @@
-import { render, act } from '@testing-library/react';
+import { render, act, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import TaskDetails from '../../../src/pages/TaskDetails';
-import * as api from '../../../src/api';
+import Scans from '../../../src/pages/Scans';
 
 vi.mock('../../../src/api', () => ({
   API_BASE: 'http://localhost',
-  getTaskStatus: vi.fn(),
-  getTaskResult: vi.fn(),
-  getPluginSchema: vi.fn().mockResolvedValue(null),
-  startTask: vi.fn(),
+  deleteTask: vi.fn(),
+  clearAllTasks: vi.fn(),
+  bulkDeleteTasks: vi.fn(),
+}));
+
+vi.mock('../../../src/components/ToastContext', () => ({
+  useToast: () => ({
+    addToast: vi.fn(),
+    removeToast: vi.fn(),
+  }),
+  ToastProvider: ({ children }: any) => children,
 }));
 
 vi.mock('react-router-dom', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react-router-dom')>();
-  return {
-    ...actual,
-    useParams: () => ({ taskId: 'test-task-123' }),
-    useNavigate: () => vi.fn(),
-  };
+  return { ...actual, useNavigate: () => vi.fn() };
 });
 
-vi.mock('../../../src/components/ToastContext', () => ({
-  useToast: () => ({ addToast: vi.fn() }),
-}));
-
-const RUNNING_TASK = {
-  task_id: 'test-task-123',
-  plugin_id: 'nmap',
-  tool: 'Nmap',
-  target: '127.0.0.1',
-  status: 'running',
-  scan_phase: 'running_command',
-  created_at: '2026-01-01T00:00:00',
-  started_at: '2026-01-01T00:00:01',
-};
-
-const RESULT_EMPTY = {
-  task_id: 'test-task-123',
-  plugin_id: 'nmap',
-  tool: 'Nmap',
-  target: '127.0.0.1',
-  timestamp: '2026-01-01T00:00:00',
-  status: 'running',
-  summary: [],
-  findings: [],
-  structured: {},
-};
-
-function renderTaskDetails() {
-  return render(
-    <MemoryRouter>
-      <TaskDetails />
-    </MemoryRouter>,
-  );
+function makeTask(id: string, status: string, scan_phase?: string) {
+  return {
+    task_id: id,
+    plugin_id: 'nmap',
+    tool: 'Nmap',
+    target: '127.0.0.1',
+    status,
+    scan_phase: scan_phase || null,
+    created_at: '2026-01-01T00:00:00',
+    started_at: status === 'running' ? '2026-01-01T00:00:01' : null,
+    completed_at: null,
+    duration_seconds: null,
+    preset: null,
+    inputs: { target: '127.0.0.1' },
+  };
 }
+
+const RUNNING_WITH_PHASE_RESPONSE = {
+  tasks: [makeTask('task-1', 'running', 'running_command')],
+  pagination: { total_items: 1 },
+};
+
+const QUEUED_RESPONSE = {
+  tasks: [makeTask('task-2', 'queued')],
+  pagination: { total_items: 1 },
+};
+
+let fetchSpy: ReturnType<typeof vi.fn>;
 
 async function flush() {
   await act(async () => {
@@ -64,85 +60,94 @@ async function flush() {
   });
 }
 
-describe('TaskDetails — scan phase display', () => {
-  let currentEventSource: any;
+async function tickTime(ms: number) {
+  await act(async () => {
+    vi.advanceTimersByTime(ms);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
 
+function renderScans() {
+  return render(
+    <MemoryRouter>
+      <Scans />
+    </MemoryRouter>,
+  );
+}
+
+describe('Scans — phase display', () => {
   beforeEach(() => {
     vi.useFakeTimers();
 
-    currentEventSource = undefined;
-    // Mock EventSource before rendering
-    class MockEventSource {
-      url: string;
-      _onerror: any;
-      listeners: Record<string, Function[]> = {};
-      constructor(url: string) { this.url = url; currentEventSource = this; }
-      addEventListener(event: string, handler: Function) {
-        if (!this.listeners[event]) this.listeners[event] = [];
-        this.listeners[event].push(handler);
-      }
-      set onerror(handler: any) { this._onerror = handler; }
-      close() {}
-    }
-    vi.stubGlobal('EventSource', MockEventSource);
+    fetchSpy = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(RUNNING_WITH_PHASE_RESPONSE),
+    });
+    vi.stubGlobal('fetch', fetchSpy);
 
-    vi.mocked(api.getTaskStatus).mockResolvedValue(RUNNING_TASK);
-    vi.mocked(api.getTaskResult).mockResolvedValue(RESULT_EMPTY);
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
   });
 
   afterEach(() => {
+    vi.runOnlyPendingTimers();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
-  it('shows loading screen with phase label while task is loading', async () => {
-    vi.mocked(api.getTaskStatus).mockImplementation(() => new Promise(() => {}));
+  function clickExpand() {
+    const card = screen.getByText('Nmap').closest('[class*="cursor-pointer"]') as HTMLElement;
+    act(() => { card.click(); });
+  }
 
-    renderTaskDetails();
+  it('shows phase for a running task in expanded details', async () => {
+    renderScans();
     await flush();
 
-    expect(document.body.textContent).toContain('DECRYPTING_BRIEFING');
+    clickExpand();
+    await flush();
+
+    expect(screen.getByText(/RUNNING COMMAND/i)).toBeTruthy();
   });
 
-  it('shows phase progress for running_command phase', async () => {
-    renderTaskDetails();
-    await flush();
-    await flush();
-
-    expect(document.body.textContent).toContain('Executing security scan');
-  });
-
-  it('shows phase progress when phase changes via SSE', async () => {
-    renderTaskDetails();
-    await flush();
-    await flush();
-
-    expect(currentEventSource).toBeTruthy();
-    expect(currentEventSource.listeners['phase']).toBeTruthy();
-    act(() => {
-      currentEventSource.listeners['phase'].forEach((fn: Function) =>
-        fn({ data: JSON.stringify({ scan_phase: 'parsing' }) }),
-      );
+  it('does not show phase for queued task', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(QUEUED_RESPONSE),
     });
 
+    renderScans();
     await flush();
-    expect(document.body.textContent).toContain('Parsing scan results');
+    await tickTime(5000);
+
+    clickExpand();
+    await flush();
+
+    expect(screen.queryByText(/PHASE/i)).toBeNull();
   });
 
-  it('shows reporting phase label', async () => {
-    renderTaskDetails();
-    await flush();
+  it('updates phase when polling returns a running task with phase', async () => {
+    renderScans();
     await flush();
 
-    expect(currentEventSource).toBeTruthy();
-    expect(currentEventSource.listeners['phase']).toBeTruthy();
-    act(() => {
-      currentEventSource.listeners['phase'].forEach((fn: Function) =>
-        fn({ data: JSON.stringify({ scan_phase: 'reporting' }) }),
-      );
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          tasks: [makeTask('task-1', 'running', 'parsing')],
+          pagination: { total_items: 1 },
+        }),
     });
 
+    await tickTime(5000);
+
+    clickExpand();
     await flush();
-    expect(document.body.textContent).toContain('Generating reports');
+
+    expect(screen.getByText(/PARSING/i)).toBeTruthy();
   });
 });
