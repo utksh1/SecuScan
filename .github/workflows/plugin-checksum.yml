@@ -20,7 +20,39 @@ jobs:
         run: sudo apt-get install -y libcairo2-dev pkg-config python3-dev
       - name: Install dependencies
         run: pip install -r backend/requirements.txt
-      - name: Regenerate manifest from Linux runner
-        run: python scripts/refresh_plugin_checksums.py
-      - name: Verify plugin checksums
+      - name: Verify plugin checksums match committed manifest
         run: python scripts/refresh_plugin_checksums.py --dry-run
+
+  drift-detection-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install system dependencies
+        run: sudo apt-get install -y libcairo2-dev pkg-config python3-dev
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+      - name: Seed manifest from current state
+        run: python scripts/refresh_plugin_checksums.py
+      - name: Simulate plugin drift
+        run: |
+          FIRST=$(python - <<'PYEOF'
+import os, json
+with open("plugins/checksums.json") as f:
+    data = json.load(f)
+print(next(k for k in data if k.endswith("metadata.json")))
+PYEOF
+)
+          echo "# drifted" >> "$FIRST"
+          echo "Mutated: $FIRST"
+      - name: Assert drift is detected (must exit 1)
+        run: |
+          if python scripts/refresh_plugin_checksums.py --dry-run; then
+            echo "ERROR: drift was not detected — script should have exited 1"
+            exit 1
+          else
+            echo "OK: drift correctly detected"
+          fi
