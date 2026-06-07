@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import ToolConfig from '../../../src/pages/ToolConfig'
-import { getPluginSchema, listPlugins, startTask, getSettings, listTargetPolicies, listCredentialProfiles, listSessionProfiles } from '../../../src/api'
+import { getPluginSchema, listPlugins, startTask } from '../../../src/api'
 import { routes } from '../../../src/routes'
 
 const addToast = vi.fn()
@@ -15,19 +15,11 @@ vi.mock('../../../src/api', () => ({
   listPlugins: vi.fn(),
   getPluginSchema: vi.fn(),
   startTask: vi.fn(),
-  getSettings: vi.fn(),
-  listTargetPolicies: vi.fn(),
-  listCredentialProfiles: vi.fn(),
-  listSessionProfiles: vi.fn(),
 }))
 
 describe('ToolConfig dynamic schema flow', () => {
   beforeEach(() => {
     addToast.mockReset()
-    vi.mocked(getSettings).mockResolvedValue({ sandbox: { default_timeout: 600 } })
-    vi.mocked(listTargetPolicies).mockResolvedValue({ items: [], total: 0 })
-    vi.mocked(listCredentialProfiles).mockResolvedValue({ items: [], total: 0 })
-    vi.mocked(listSessionProfiles).mockResolvedValue({ items: [], total: 0 })
     vi.mocked(listPlugins).mockResolvedValue({
       total: 1,
       plugins: [
@@ -90,7 +82,6 @@ describe('ToolConfig dynamic schema flow', () => {
       <MemoryRouter initialEntries={['/toolkit/subdomain_discovery']}>
         <Routes>
           <Route path={routes.scanTool} element={<ToolConfig />} />
-          <Route path={routes.task} element={<div>Task Details</div>} />
         </Routes>
       </MemoryRouter>,
     )
