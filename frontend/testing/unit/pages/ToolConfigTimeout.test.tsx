@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import ToolConfig from '../../../src/pages/ToolConfig'
-import { getPluginSchema, listPlugins, startTask, getSettings } from '../../../src/api'
+import { getPluginSchema, listPlugins, startTask, getSettings, listTargetPolicies, listCredentialProfiles, listSessionProfiles } from '../../../src/api'
 import { routes } from '../../../src/routes'
 
 const addToast = vi.fn()
@@ -16,6 +16,9 @@ vi.mock('../../../src/api', () => ({
   getPluginSchema: vi.fn(),
   startTask: vi.fn(),
   getSettings: vi.fn(),
+  listTargetPolicies: vi.fn(),
+  listCredentialProfiles: vi.fn(),
+  listSessionProfiles: vi.fn(),
 }))
 
 describe('ToolConfig timeout control', () => {
@@ -60,6 +63,9 @@ describe('ToolConfig timeout control', () => {
 
     vi.mocked(getSettings).mockResolvedValue({ sandbox: { default_timeout: 600 } })
     vi.mocked(startTask).mockResolvedValue({ task_id: 'task-1', status: 'queued', created_at: 'now', stream_url: '' })
+    vi.mocked(listTargetPolicies).mockResolvedValue({ items: [], total: 0 })
+    vi.mocked(listCredentialProfiles).mockResolvedValue({ items: [], total: 0 })
+    vi.mocked(listSessionProfiles).mockResolvedValue({ items: [], total: 0 })
   })
 
   it('renders integer input with constrained min/max', async () => {
