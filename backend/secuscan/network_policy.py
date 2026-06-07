@@ -398,11 +398,9 @@ def _init_default_policies(engine: NetworkPolicyEngine) -> None:
         except ValueError:
             logger.warning(f"Skipping invalid allowlist CIDR: {cidr}")
 
-    # Add system defaults (if allowlist is empty, add public internet)
+    # Warn if allowlist is empty ? network policy defaults to deny-all egress
     if not settings.network_allowlist:
         logger.warning(
-            "SECUSCAN_NETWORK_ALLOWLIST is empty. Allowing all public IPs. "
-            "Configure this environment variable to restrict egress."
+            "SECUSCAN_NETWORK_ALLOWLIST is empty. All external network egress is blocked. "
+            "Configure this environment variable with CIDR ranges to allow outbound traffic."
         )
-        engine.add_allow_rule("0.0.0.0/0", reason="Default allow all (configure SECUSCAN_NETWORK_ALLOWLIST)")
-        engine.add_allow_rule("::/0", reason="Default allow all IPv6")

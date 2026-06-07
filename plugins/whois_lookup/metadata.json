@@ -51,12 +51,14 @@
     "tutorial_url": "https://docs.secuscan.local/plugins/whois_lookup"
   },
   "dependencies": {
-    "binaries": [],
+    "binaries": [
+      "python3"
+    ],
     "python_packages": [
       "python-whois"
     ],
     "system_packages": []
   },
   "docker_image": "alpine:latest",
-  "checksum": "ecda30e7a979e1a0200d6f58c6c01fe6bae7dbe985cc0f47c5047165c46f3a53"
+  "checksum": "6d4436abc7bb499843ec8d46a7100565631ff35a368885017c4a5f3136fbfaa1"
 }

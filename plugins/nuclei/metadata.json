@@ -126,9 +126,11 @@
     "tutorial_url": "https://docs.secuscan.local/plugins/nuclei"
   },
   "dependencies": {
-    "binaries": [],
+    "binaries": [
+      "nuclei"
+    ],
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "ecdacab5d26ebd95d07fe61cc781768e046ab004438a254f2ed80efd167c728d"
+  "checksum": "8304cb4226938c354aa831943de4da3dfa57e2fe4cc9c200d448f49b56f74590"
 }
