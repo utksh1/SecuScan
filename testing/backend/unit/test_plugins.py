@@ -55,6 +55,25 @@ def test_plugin_interpolation_sanitizes_user_controlled_values():
     )
 
 
+def test_plugin_interpolation_preserves_legitimate_argv_values():
+    manager = PluginManager("plugins")
+
+    assert (
+        manager._interpolate(
+            "--url={target}",
+            {"target": "https://api-v1.example.com:8443/health-check"},
+        )
+        == "--url=https://api-v1.example.com:8443/health-check"
+    )
+    assert (
+        manager._interpolate(
+            "--user-agent={user_agent}",
+            {"user_agent": "SecuScan-CLI/1.0 api-health-check"},
+        )
+        == "--user-agent=SecuScan-CLI/1.0 api-health-check"
+    )
+
+
 def test_plugin_list_exposes_runtime_capabilities(setup_test_environment, monkeypatch):
     """Plugin list payload includes consent and availability details."""
     manager = PluginManager(settings.plugins_dir)
