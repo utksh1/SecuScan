@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Background from './Background'
 import { useShortcuts } from '../hooks/useShortcuts'
+import { useSidebar } from '../context/SidebarContext'
 import { routes } from '../routes'
 
 interface AppShellProps {
@@ -11,28 +12,10 @@ interface AppShellProps {
 
 export default function AppShell({ children }: AppShellProps) {
     const { pathname } = useLocation()
-
-    useShortcuts()
+    const { isExpanded: sidebarExpanded, toggleSidebar } = useSidebar()
+    
+    useShortcuts(toggleSidebar)
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-
-    const [sidebarExpanded, setSidebarExpanded] = useState(() => {
-        const saved = localStorage.getItem('sidebar-expanded')
-        return saved !== null ? JSON.parse(saved) : true
-    })
-
-    // Brief hack to sync sidebar state without a full context provider
-    useEffect(() => {
-        const handleStorage = () => {
-            const saved = localStorage.getItem('sidebar-expanded')
-            if (saved !== null) setSidebarExpanded(JSON.parse(saved))
-        }
-        window.addEventListener('storage', handleStorage)
-        const interval = setInterval(handleStorage, 100)
-        return () => {
-            window.removeEventListener('storage', handleStorage)
-            clearInterval(interval)
-        }
-    }, [])
 
     useEffect(() => {
         setMobileMenuOpen(false)
