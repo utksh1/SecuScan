@@ -2,6 +2,7 @@ import time
 from unittest.mock import patch
 
 from backend.secuscan.models import TaskStatus
+from backend.secuscan.config import settings
 
 PHASE3_PLUGIN_IDS = {
     "wpscan",
@@ -15,7 +16,23 @@ PHASE3_PLUGIN_IDS = {
 }
 
 
-def run_plugin_test(test_client, plugin_id, inputs, mock_output):
+def _create_target_policy(test_client, **overrides):
+    payload = {
+        "name": "Authorized Offensive Scope",
+        "description": "Allows approved exploit validation during tests.",
+        "allow_public_targets": True,
+        "allow_exploit_validation": True,
+        "allow_authenticated_scan": True,
+        "default_validation_mode": "proof",
+        "allowed_targets": ["10.0.0.10", "https://api.lab", "https://wp.lab", "https://joomla.lab", "https://drupal.lab"],
+    }
+    payload.update(overrides)
+    response = test_client.post("/api/v1/target-policies", json=payload)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def run_plugin_test(test_client, plugin_id, inputs, mock_output, execution_context=None):
     """Helper to run a plugin test with mocked execution."""
     with patch("backend.secuscan.executor.TaskExecutor._execute_command") as mock_exec:
         mock_exec.return_value = (mock_output, 0)
@@ -25,6 +42,8 @@ def run_plugin_test(test_client, plugin_id, inputs, mock_output):
             "inputs": inputs,
             "consent_granted": True,
         }
+        if execution_context is not None:
+            payload["execution_context"] = execution_context
 
         response = test_client.post("/api/v1/task/start", json=payload)
         assert response.status_code == 200, f"Failed to start {plugin_id}: {response.text}"
@@ -65,7 +84,8 @@ def test_phase3_plugins_discoverable_and_schema_accessible(test_client):
         assert schema.status_code == 200
 
 
-def test_wpscan(test_client):
+def test_wpscan(test_client, monkeypatch):
+    monkeypatch.setattr(settings, "safe_mode_default", False)
     mock_out = '{"plugins":{"sample-plugin":{"vulnerabilities":[{"title":"CVE-2026-1000"}]}}}'
     result = run_plugin_test(
         test_client,
@@ -76,15 +96,27 @@ def test_wpscan(test_client):
     assert any("WordPress Plugin Vulnerability" in f["title"] for f in result["structured"]["findings"])
 
 
-def test_joomscan(test_client):
+def test_joomscan(test_client, monkeypatch):
+    monkeypatch.setattr(settings, "safe_mode_default", False)
     mock_out = "[+] Vulnerable to: CVE-2015-8562\n[+] Joomla! version: 3.4.5"
-    result = run_plugin_test(test_client, "joomscan", {"target": "https://joomla.lab"}, mock_out)
+    result = run_plugin_test(
+        test_client,
+        "joomscan",
+        {"target": "https://joomla.lab"},
+        mock_out,
+    )
     assert any("Joomla Vulnerability" in f["title"] for f in result["structured"]["findings"])
 
 
-def test_droopescan(test_client):
+def test_droopescan(test_client, monkeypatch):
+    monkeypatch.setattr(settings, "safe_mode_default", False)
     mock_out = '{"vulnerabilities":[{"description":"CVE-2025-0001"}],"interesting urls":[{"description":"/admin"}]}'
-    result = run_plugin_test(test_client, "droopescan", {"target": "https://drupal.lab"}, mock_out)
+    result = run_plugin_test(
+        test_client,
+        "droopescan",
+        {"target": "https://drupal.lab"},
+        mock_out,
+    )
     assert any("DroopeScan vulnerabilities" in f["title"] for f in result["structured"]["findings"])
 
 
@@ -111,17 +143,25 @@ def test_volatility(test_client):
 
 
 def test_hashcat(test_client):
+    policy = _create_target_policy(test_client)
     mock_out = "5f4dcc3b5aa765d61d8327deb882cf99:password"
     result = run_plugin_test(
         test_client,
         "hashcat",
-        {"target": "/tmp/hashes.txt", "hash_type": 0, "attack_mode": 0, "wordlist": "/tmp/words.txt"},
+        {"target": "/tmp/hashes.txt", "hash_type": 0, "attack_mode": 0, "wordlist": "words.txt"},
         mock_out,
+        execution_context={
+            "target_policy_id": policy["id"],
+            "scan_profile": "standard",
+            "validation_mode": "proof",
+            "evidence_level": "standard",
+        },
     )
     assert any("Hash Recovered" in f["title"] for f in result["structured"]["findings"])
 
 
 def test_metasploit(test_client):
+    policy = _create_target_policy(test_client)
     mock_out = "[*] Handler started\n[*] Meterpreter session 2 opened"
     result = run_plugin_test(
         test_client,
@@ -132,17 +172,36 @@ def test_metasploit(test_client):
             "payload": "generic/shell_reverse_tcp",
         },
         mock_out,
+        execution_context={
+            "target_policy_id": policy["id"],
+            "scan_profile": "standard",
+            "validation_mode": "proof",
+            "evidence_level": "standard",
+        },
     )
     assert any("Metasploit Session Opened" in f["title"] for f in result["structured"]["findings"])
 
 
-def test_sqli_checker(test_client):
+def test_sqli_checker(test_client, monkeypatch):
+    monkeypatch.setattr(settings, "safe_mode_default", False)
+    policy = _create_target_policy(test_client)
     mock_out = "Payload: ' OR 1=1 --\navailable databases [2]:\nmain\naudit"
     result = run_plugin_test(
         test_client,
         "sqli_checker",
-        {"target": "https://api.lab/user?id=1", "level": 1, "risk": 1, "technique": "BEUSTQ"},
+        {
+            "target": "https://api.lab/user?id=1",
+            "level": 1,
+            "risk": 1,
+            "technique": "BEUSTQ",
+        },
         mock_out,
+        execution_context={
+            "target_policy_id": policy["id"],
+            "scan_profile": "standard",
+            "validation_mode": "proof",
+            "evidence_level": "standard",
+        },
     )
     findings = result["structured"]["findings"]
     assert any("SQL Injection Found" in f["title"] for f in findings)

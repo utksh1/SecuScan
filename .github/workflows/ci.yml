@@ -8,7 +8,54 @@ permissions:
   contents: read
 
 jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      run_backend: ${{ steps.filter.outputs.run_backend }}
+      run_frontend: ${{ steps.filter.outputs.run_frontend }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Fetch base branch for diff
+        if: github.event_name == 'pull_request'
+        run: git fetch origin "${{ github.base_ref }}" --depth=1
+      - name: Determine test selection
+        id: filter
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+        run: python3 scripts/select_tests.py
+
+  formatting-hygiene:
+    needs: detect-changes
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check formatting hygiene on changed files
+        run: |
+          git fetch origin "${{ github.base_ref }}" --depth=1
+          git diff --check "origin/${{ github.base_ref }}"...HEAD
+
+  issue-template-label-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate issue template labels
+        run: python scripts/validate_issue_template_labels.py
+
   backend-lint:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.run_backend == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,6 +72,12 @@ jobs:
         run: ruff check backend testing/backend
 
   backend-tests:
+    needs: [detect-changes, backend-lint, formatting-hygiene]
+    if: |
+      always() &&
+      needs.detect-changes.outputs.run_backend == 'true' &&
+      (needs.backend-lint.result == 'success' || needs.backend-lint.result == 'skipped') &&
+      (needs.formatting-hygiene.result == 'success' || needs.formatting-hygiene.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,6 +92,54 @@ jobs:
           pip install -r backend/requirements.txt -r backend/requirements-dev.txt
       - name: Run backend tests
         run: pytest testing/backend -q -m "not benchmark"
+
+  backend-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+
+      - name: Run pip-audit on backend
+        id: pip_audit
+        run: |
+          mkdir -p ${{ github.workspace }}/backend
+          pip-audit -r backend/requirements.txt --desc --format json > ${{ github.workspace }}/backend/pip-audit-report.json || {
+            EXIT_CODE=$?
+            echo "EXIT_CODE=$EXIT_CODE" >> $GITHUB_OUTPUT
+            exit 0  # Check severity next
+          }
+        continue-on-error: true
+
+      - name: Check pip-audit results
+        run: |
+          python ${{ github.workspace }}/scripts/check_pip_audit.py \
+            --report ${{ github.workspace }}/backend/pip-audit-report.json \
+            --config ${{ github.workspace }}/.audit-config.yaml
+
+      - name: Generate CycloneDX SBOM
+        run: |
+          python ${{ github.workspace }}/scripts/generate_sbom.py --output ${{ github.workspace }}/sbom.json --include-dev
+
+      - name: Upload pip-audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pip-audit-report
+          path: ${{ github.workspace }}/backend/pip-audit-report.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: ${{ github.workspace }}/sbom.json
 
   benchmark:
     runs-on: ubuntu-latest
@@ -69,6 +170,11 @@ jobs:
           echo "::warning::Performance benchmark thresholds exceeded or benchmarks failed to run. Check the job logs for details."
 
   frontend-checks:
+    needs: [detect-changes, formatting-hygiene]
+    if: |
+      always() &&
+      needs.detect-changes.outputs.run_frontend == 'true' &&
+      (needs.formatting-hygiene.result == 'success' || needs.formatting-hygiene.result == 'skipped')
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -82,6 +188,25 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install frontend dependencies
         run: npm ci
+      - name: Run npm audit
+        id: npm_audit
+        run: |
+          npm audit --json > ${{ github.workspace }}/frontend/npm-audit-report.json || {
+            EXIT_CODE=$?
+            echo "EXIT_CODE=$EXIT_CODE" >> $GITHUB_OUTPUT
+            exit 0  # Check severity next
+          }
+        continue-on-error: true
+      - name: Install Python YAML library
+        run: pip install pyyaml
+      - name: Check npm audit results
+        run: python ${{ github.workspace }}/scripts/check_npm_audit.py --report ${{ github.workspace }}/frontend/npm-audit-report.json --config ${{ github.workspace }}/.audit-config.yaml
+      - name: Upload npm-audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit-report
+          path: frontend/npm-audit-report.json
       - name: Run frontend TypeScript typecheck
         run: npm run typecheck
       - name: Note TypeScript typecheck in job summary
@@ -94,15 +219,3 @@ jobs:
         run: npm run test
       - name: Build frontend
         run: npm run build
-
-  formatting-hygiene:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Check formatting hygiene on changed files
-        run: |
-          git fetch origin "${{ github.base_ref }}" --depth=1
-          git diff --check "origin/${{ github.base_ref }}"...HEAD
