@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { API_BASE, deleteTask, clearAllTasks, bulkDeleteTasks } from "../api";
+import { API_BASE, deleteTask, clearAllTasks, bulkDeleteTasks, startTask, ExecutionContext } from "../api";
 import { routePath } from "../routes";
 import {
   parseDateSafe,
@@ -24,6 +24,7 @@ interface Task {
   duration_seconds?: number;
   inputs?: any;
   preset?: string;
+  execution_context?: ExecutionContext;
   queue_position?: number;
   pending_count?: number;
 }
@@ -168,17 +169,13 @@ export default function Scans() {
 
   async function handleRescan(task: Task) {
     try {
-      const res = await fetch(`${API_BASE}/task/start`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          plugin_id: task.plugin_id,
-          inputs: task.inputs || {},
-          consent_granted: true,
-          preset: task.preset,
-        }),
-      });
-      const data = await res.json();
+      const data = await startTask(
+        task.plugin_id,
+        task.inputs || {},
+        true,
+        task.preset,
+        task.execution_context,
+      );
       if (data.task_id) {
         navigate(routePath.task(data.task_id));
       }

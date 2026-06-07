@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     reports_dir: str = str(PROJECT_ROOT / "data" / "reports")
     plugins_dir: str = str(PROJECT_ROOT.parent / "plugins")
     wordlists_dir: str = str(PROJECT_ROOT / "wordlists")
+    knowledgebase_dir: str = str(PROJECT_ROOT / "data" / "knowledgebase")
 
     # Security
     safe_mode_default: bool = True
@@ -62,7 +63,7 @@ class Settings(BaseSettings):
     admin_api_key: Optional[str] = None
 
     # Network Policy Configuration
-    network_allowlist: List[str] = []  # IPs/networks to allow (CIDR)
+    network_allowlist: List[str] = []  # IPs/networks to allow (CIDR); empty = deny all egress
     network_denylist: List[str] = [    # IPs/networks to deny (CIDR)
         "169.254.169.254/32",          # AWS metadata
         "169.254.0.0/16",              # Reserved/metadata
@@ -176,6 +177,7 @@ class Settings(BaseSettings):
             self.raw_output_dir,
             self.reports_dir,
             self.wordlists_dir,
+            self.knowledgebase_dir,
             Path(self.log_file).parent,
         ]:
             Path(directory).mkdir(parents=True, exist_ok=True)
