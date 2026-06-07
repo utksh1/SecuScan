@@ -72,6 +72,7 @@ class WorkflowScheduler:
         return elapsed >= schedule_seconds
     async def _run_workflow(self, workflow_id: str, steps: List[Dict[str, Any]]):
         logger.info("Running workflow %s with %d step(s)", workflow_id, len(steps))
+        db = await get_db()
         for step in steps:
             plugin_id = step.get("plugin_id")
             inputs = step.get("inputs") or {}
