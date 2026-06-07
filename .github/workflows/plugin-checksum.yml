@@ -39,13 +39,7 @@ jobs:
         run: python scripts/refresh_plugin_checksums.py
       - name: Simulate plugin drift
         run: |
-          FIRST=$(python - <<'PYEOF'
-import os, json
-with open("plugins/checksums.json") as f:
-    data = json.load(f)
-print(next(k for k in data if k.endswith("metadata.json")))
-PYEOF
-)
+          FIRST=$(python3 -c "import json; d=json.load(open('plugins/checksums.json')); print(next(k for k in d if k.endswith('metadata.json')))")
           echo "# drifted" >> "$FIRST"
           echo "Mutated: $FIRST"
       - name: Assert drift is detected (must exit 1)
