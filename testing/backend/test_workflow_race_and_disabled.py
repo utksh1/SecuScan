@@ -180,7 +180,7 @@ class TestRunDeleteRace:
             await runner_open.run_workflow_once("wf-1")
 
     @pytest.mark.asyncio
-    async def test_delete_after_run_tasks_still_exist(self, executor, limiter_open):
+    async def test_delete_after_run_tasks_still_exist(self, limiter_open):
         fresh_db = _FakeDB(workflows=[{
             "id": "wf-2",
             "name": "Two Step",
@@ -190,13 +190,13 @@ class TestRunDeleteRace:
                 {"plugin_id": "nikto", "inputs": {}},
             ],
         }])
-        runner = WorkflowRunner(fresh_db, executor, limiter_open)
+        fresh_executor = _FakeExecutor(fresh_db)
+        runner = WorkflowRunner(fresh_db, fresh_executor, limiter_open)
         task_ids = await runner.run_workflow_once("wf-2")
         fresh_db.delete_workflow("wf-2")
         assert len(task_ids) == 2
         for tid in task_ids:
             assert fresh_db.get_task(tid) is not None
-
 class TestToggleRace:
 
     @pytest.mark.asyncio
