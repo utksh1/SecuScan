@@ -2,7 +2,7 @@
 name: Bug report
 about: Create a report to help us improve SecuScan
 title: '[BUG] '
-labels: bug
+labels: type:bug, priority:medium
 assignees: ''
 
 ---

@@ -5,6 +5,13 @@ import {
   getPluginSchema,
   listPlugins,
   getSettings,
+  listTargetPolicies,
+  listCredentialProfiles,
+  listSessionProfiles,
+  ExecutionContext,
+  TargetPolicy,
+  CredentialProfile,
+  SessionProfile,
   PluginFieldSchema,
   PluginListItem,
   PluginSchemaResponse,
@@ -64,6 +71,14 @@ export default function ToolConfig() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [serverLimits, setServerLimits] = useState<any | null>(null)
+  const [targetPolicies, setTargetPolicies] = useState<TargetPolicy[]>([])
+  const [credentialProfiles, setCredentialProfiles] = useState<CredentialProfile[]>([])
+  const [sessionProfiles, setSessionProfiles] = useState<SessionProfile[]>([])
+  const [executionContext, setExecutionContext] = useState<ExecutionContext>({
+    scan_profile: 'standard',
+    validation_mode: 'proof',
+    evidence_level: 'standard',
+  })
   const fieldRefs = useRef<Record<string, HTMLElement | null>>({})
 
   useEffect(() => {
@@ -97,8 +112,19 @@ export default function ToolConfig() {
         setInputs(initialInputs)
         setConsentGranted(!matchedPlugin.requires_consent)
         try {
-          const s = await getSettings()
+          const [s, policies, credentials, sessions] = await Promise.all([
+            getSettings(),
+            listTargetPolicies(),
+            listCredentialProfiles(),
+            listSessionProfiles(),
+          ])
           setServerLimits(s || null)
+          if (s?.execution_context?.default) {
+            setExecutionContext(s.execution_context.default)
+          }
+          setTargetPolicies(policies.items || [])
+          setCredentialProfiles(credentials.items || [])
+          setSessionProfiles(sessions.items || [])
         } catch (e) {
           // non-fatal; default to null
         }
@@ -137,6 +163,10 @@ export default function ToolConfig() {
     setInputs((prev) => ({ ...prev, [field.id]: value }))
   }
 
+  const handleExecutionContextChange = <K extends keyof ExecutionContext>(key: K, value: ExecutionContext[K]) => {
+    setExecutionContext((prev) => ({ ...prev, [key]: value }))
+  }
+
   const handlePresetChange = (preset: string) => {
     if (!schema) return
     setSelectedPreset(preset)
@@ -165,6 +195,7 @@ export default function ToolConfig() {
         inputs,
         plugin.requires_consent ? consentGranted : true,
         selectedPreset || undefined,
+        executionContext,
       )
       addToast(`Task queued: ${plugin.name}`, 'success')
       navigate(routePath.task(task.task_id))
@@ -450,6 +481,84 @@ export default function ToolConfig() {
                 ? `${invalidFieldCount} field${invalidFieldCount > 1 ? 's' : ''} need${invalidFieldCount === 1 ? 's' : ''} attention before scan start`
                 : 'All fields valid'}
             </p>
+            <div className="space-y-4 border-4 border-black bg-charcoal p-5">
+              <p className="text-[10px] text-silver-bright uppercase tracking-[0.3em] font-black">Execution Context</p>
+              <div className="space-y-2">
+                <label className="text-[10px] text-silver/60 uppercase tracking-widest font-black">Target Policy</label>
+                <select
+                  value={executionContext.target_policy_id ?? ''}
+                  onChange={(event) => handleExecutionContextChange('target_policy_id', event.target.value || null)}
+                  className="w-full bg-charcoal-dark border-4 border-black px-3 py-3 text-[11px] text-silver-bright uppercase tracking-widest"
+                >
+                  <option value="">Default Local Policy</option>
+                  {targetPolicies.map((policy) => (
+                    <option key={policy.id} value={policy.id}>{policy.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] text-silver/60 uppercase tracking-widest font-black">Scan Profile</label>
+                <select
+                  value={executionContext.scan_profile}
+                  onChange={(event) => handleExecutionContextChange('scan_profile', event.target.value)}
+                  className="w-full bg-charcoal-dark border-4 border-black px-3 py-3 text-[11px] text-silver-bright uppercase tracking-widest"
+                >
+                  <option value="standard">Standard Profile</option>
+                  <option value="authenticated">Authenticated Profile</option>
+                  <option value="aggressive">Aggressive Profile</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] text-silver/60 uppercase tracking-widest font-black">Validation Mode</label>
+                <select
+                  value={executionContext.validation_mode}
+                  onChange={(event) => handleExecutionContextChange('validation_mode', event.target.value as ExecutionContext['validation_mode'])}
+                  className="w-full bg-charcoal-dark border-4 border-black px-3 py-3 text-[11px] text-silver-bright uppercase tracking-widest"
+                >
+                  <option value="detect_only">Detect Only</option>
+                  <option value="proof">Proof</option>
+                  <option value="controlled_extract">Controlled Extract</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] text-silver/60 uppercase tracking-widest font-black">Evidence Level</label>
+                <select
+                  value={executionContext.evidence_level}
+                  onChange={(event) => handleExecutionContextChange('evidence_level', event.target.value as ExecutionContext['evidence_level'])}
+                  className="w-full bg-charcoal-dark border-4 border-black px-3 py-3 text-[11px] text-silver-bright uppercase tracking-widest"
+                >
+                  <option value="minimal">Minimal</option>
+                  <option value="standard">Standard</option>
+                  <option value="full">Full</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] text-silver/60 uppercase tracking-widest font-black">Credential Profile</label>
+                <select
+                  value={executionContext.credential_profile_id ?? ''}
+                  onChange={(event) => handleExecutionContextChange('credential_profile_id', event.target.value || null)}
+                  className="w-full bg-charcoal-dark border-4 border-black px-3 py-3 text-[11px] text-silver-bright uppercase tracking-widest"
+                >
+                  <option value="">None</option>
+                  {credentialProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>{profile.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] text-silver/60 uppercase tracking-widest font-black">Session Profile</label>
+                <select
+                  value={executionContext.session_profile_id ?? ''}
+                  onChange={(event) => handleExecutionContextChange('session_profile_id', event.target.value || null)}
+                  className="w-full bg-charcoal-dark border-4 border-black px-3 py-3 text-[11px] text-silver-bright uppercase tracking-widest"
+                >
+                  <option value="">None</option>
+                  {sessionProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>{profile.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
             {plugin.requires_consent && (
               <div className="space-y-4 border-4 border-black bg-charcoal p-5">
                 <p className="text-[10px] text-silver/60 uppercase tracking-widest leading-6">
