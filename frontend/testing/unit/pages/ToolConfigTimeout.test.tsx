@@ -66,6 +66,9 @@ describe('ToolConfig timeout control', () => {
     vi.mocked(listCredentialProfiles).mockResolvedValue({ total: 0, items: [] })
     vi.mocked(listSessionProfiles).mockResolvedValue({ total: 0, items: [] })
     vi.mocked(startTask).mockResolvedValue({ task_id: 'task-1', status: 'queued', created_at: 'now', stream_url: '' })
+    vi.mocked(listTargetPolicies).mockResolvedValue({ items: [], total: 0 })
+    vi.mocked(listCredentialProfiles).mockResolvedValue({ items: [], total: 0 })
+    vi.mocked(listSessionProfiles).mockResolvedValue({ items: [], total: 0 })
   })
 
   it('renders integer input with constrained min/max', async () => {
