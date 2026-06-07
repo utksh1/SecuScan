@@ -70,38 +70,38 @@ class WorkflowScheduler:
             last = last.replace(tzinfo=timezone.utc)
         elapsed = (now - last).total_seconds()
         return elapsed >= schedule_seconds
-    async def _run_workflow(self, workflow_id: str, steps: List[Dict[str, Any]]):
-        logger.info("Running workflow %s with %d step(s)", workflow_id, len(steps))
-        for step in steps:
-            plugin_id = step.get("plugin_id")
-            inputs = step.get("inputs") or {}
-            if not plugin_id:
-                continue
-            request_id = get_request_id()
-            execution_context = normalize_execution_context(step.get("execution_context") or {})
-            target_policy = await get_target_policy(db, "default", execution_context.get("target_policy_id"))
-            safe_mode = bool(
-                settings.safe_mode_default
-                and not (target_policy and target_policy.get("allow_public_targets"))
-            )
-            effective_inputs = dict(inputs)
-            effective_inputs.pop("safe_mode", None)
-            effective_inputs["safe_mode"] = safe_mode
+async def _run_workflow(self, workflow_id: str, steps: List[Dict[str, Any]]):
+    logger.info(
+        "Running workflow %s with %d step(s)",
+        workflow_id,
+        len(steps),
+    )
 
-            task_id = await executor.create_task(
-                plugin_id,
-                effective_inputs,
-                safe_mode=safe_mode,
-                preset=step.get("preset"),
-                execution_context=execution_context,
-                consent_granted=True,
-            )
+    for step in steps:
+        plugin_id = step.get("plugin_id")
+        inputs = step.get("inputs") or {}
 
-            async def run_task(task_id: str) -> None:
-                set_request_id(request_id)
-                await executor.execute_task(task_id)
+        if not plugin_id:
+            continue
 
-            asyncio.create_task(run_task(task_id))
+        request_id = get_request_id()
 
+        safe_mode = bool(settings.safe_mode_default)
 
-scheduler = WorkflowScheduler()
+        effective_inputs = dict(inputs)
+        effective_inputs.pop("safe_mode", None)
+        effective_inputs["safe_mode"] = safe_mode
+
+        task_id = await executor.create_task(
+            plugin_id,
+            effective_inputs,
+            safe_mode=safe_mode,
+            preset=step.get("preset"),
+            consent_granted=True,
+        )
+
+        async def run_task(task_id: str):
+            set_request_id(request_id)
+            await executor.execute_task(task_id)
+
+        asyncio.create_task(run_task(task_id))
