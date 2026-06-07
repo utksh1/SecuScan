@@ -13,36 +13,8 @@ import {
   YAxis,
 } from 'recharts'
 import { useEffect, useMemo, useState } from 'react'
+import { getDashboardSummary, getReports } from '../api'
 
-const vulnerabilityTrend = [
-  { day: 'Mon', critical: 4, high: 9, medium: 18 },
-  { day: 'Tue', critical: 6, high: 12, medium: 21 },
-  { day: 'Wed', critical: 3, high: 10, medium: 16 },
-  { day: 'Thu', critical: 8, high: 14, medium: 24 },
-  { day: 'Fri', critical: 5, high: 11, medium: 19 },
-   { day: 'Sat', critical: 7, high: 13, medium: 22 },
-  { day: 'Sun', critical: 4, high: 8, medium: 15 },
-]
-
-const severityData = [
-  { name: 'Critical', value: 18 },
-  { name: 'High', value: 42 },
-  { name: 'Medium', value: 76 },
-  { name: 'Low', value: 55 },
-]
-
-const targetRisk = [
-  { target: 'api.secuscan.local', risk: 94 },
-  { target: 'admin.panel', risk: 87 },
-  { target: 'auth.gateway', risk: 72 },
-  { target: 'cdn.edge', risk: 51 },
-]
-
-const scanStats = [
-  { name: 'Success', value: 72 },
-  { name: 'Failed', value: 18 },
-  { name: 'Aborted', value: 10 },
-]
 
 const COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e']
 
@@ -69,21 +41,70 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
 export default function Analytics() {
 
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d'>('7d')
+   const [summary, setSummary] = useState<any>(null)
+const [reports, setReports] = useState<any[]>([])
+const [loading, setLoading] = useState(true)
   const [lastUpdated, setLastUpdated] = useState(new Date())
 
-  useEffect(() => {
-    const interval = window.setInterval(() => {
-      setLastUpdated(new Date())
-    }, 30000)
+ useEffect(() => {
+  async function loadAnalytics() {
+    try {
+     const [reportData, summaryData]: any = await Promise.all([
+        getReports(),
+        getDashboardSummary(),
+      ])
 
-    return () => window.clearInterval(interval)
-  }, [])
+      setReports(reportData.reports || [])
+      setSummary(summaryData || {})
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
+    }
+  }
 
-  const filteredTrend = useMemo(() => {
-    if (timeRange === '7d') return vulnerabilityTrend.slice(-7)
-    if (timeRange === '30d') return vulnerabilityTrend
-    return vulnerabilityTrend
-  }, [timeRange])
+  loadAnalytics()
+
+  const interval = setInterval(loadAnalytics, 30000)
+
+  return () => clearInterval(interval)
+}, [])
+
+ const filteredTrend = useMemo(() => {
+ return reports.slice(0, 7).map((r: any, i: number) => ({
+   day: `D${i + 1}`,
+   critical: r.critical_findings || 0,
+   high: r.high_findings || 0,
+   medium: r.findings || 0,
+ }))
+}, [reports])
+
+const severityData = [
+  { name: 'Critical', value: summary?.critical_findings || 0 },
+  { name: 'High', value: summary?.high_findings || 0 },
+  { name: 'Medium', value: summary?.medium_findings || 0 },
+  { name: 'Low', value: summary?.low_findings || 0 },
+]
+
+const targetRisk = reports.slice(0, 4).map((report: any) => ({
+  target: report.name || report.task_id || 'Unknown target',
+  risk: report.findings || 0,
+}))
+
+const scanStats = [
+  {
+    name: 'Ready',
+    value: reports.filter((report: any) => report.status === 'ready').length,
+  },
+  {
+    name: 'Generating',
+    value: reports.filter((report: any) => report.status === 'generating').length,
+  },
+  {
+    name: 'Failed',
+    value: reports.filter((report: any) => report.status === 'failed').length,
+  },
+]
 
   return (
     <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 pb-32 space-y-10">
@@ -123,10 +144,23 @@ export default function Analytics() {
 </header>
 
      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
-        <MetricCard label="Total Vulnerabilities" value="191" detail="+12 this week" />
-        <MetricCard label="Critical Findings" value="18" detail="Immediate action" />
-        <MetricCard label="Scan Success Rate" value="72%" detail="Last 30 days" />
-        <MetricCard label="High Risk Targets" value="04" detail="Ranked by exposure" />
+        <MetricCard
+ label="Total Vulnerabilities"
+ value={String(summary?.total_findings || 0)}
+ detail="Live data"
+/>
+
+<MetricCard
+ label="Critical Findings"
+ value={String(summary?.critical_findings || 0)}
+ detail="API"
+/>
+
+<MetricCard
+ label="High Risk Targets"
+ value={String(summary?.total_assets || 0)}
+ detail="API"
+/>
       </section>
 
       <section className="grid grid-cols-1 xl:grid-cols-2 gap-8">

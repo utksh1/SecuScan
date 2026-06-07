@@ -43,14 +43,19 @@ export default function AppShell({ children }: AppShellProps) {
         { to: routes.dashboard, icon: 'monitoring', label: 'Dashboard' },
         { to: routes.scans, icon: 'history', label: 'Scans' },
         { to: routes.findings, icon: 'emergency_home', label: 'Findings' },
-        { to: routes.reports, icon: 'summarize', label: 'Reports' },
-        { to: routes.workflows, icon: 'account_tree', label: 'Workflows' },
+       { to: routes.reports, icon: 'summarize', label: 'Reports' },
+{ to: routes.analytics, icon: 'analytics', label: 'Analytics' },
+{ to: routes.workflows, icon: 'account_tree', label: 'Workflows' },
         { to: routes.toolkit, icon: 'add_circle', label: 'Toolkit' },
-     ]; const mobileDrawerNav = [
+     ]
+      const mobileDrawerNav = [
         { to: routes.dashboard, label: 'Dashboard' },
         { to: routes.scans, label: 'Scans' },
         { to: routes.findings, label: 'Findings' },
         { to: routes.reports, label: 'Reports' },
+        { to: routes.reports, label: 'Reports' },
+        { to: routes.analytics, label: 'Analytics' },
+        { to: routes.workflows, label: 'Workflows' },
         { to: routes.workflows, label: 'Workflows' },
         { to: routes.toolkit, label: 'Toolkit' },
         { to: routes.settings, label: 'Settings' },
@@ -110,7 +115,7 @@ export default function AppShell({ children }: AppShellProps) {
                     {children}
                 </main>
 
-             <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 h-16 bg-secondary border-t border-accent-silver/10 grid grid-cols-6">
+             <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 h-16 bg-secondary border-t border-accent-silver/10 grid grid-cols-7">
   {mobilePrimaryNav.map((item) => (
     <NavLink
       key={item.to}
