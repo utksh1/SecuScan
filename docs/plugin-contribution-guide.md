@@ -63,7 +63,7 @@ A minimal, valid `metadata.json` has the following shape:
 > [!IMPORTANT]
 > The `checksum` field in `metadata.json` secures the integrity of the plugin definition. You should **never manually edit this field**. It is calculated and populated using helper scripts.
 
-For detailed documentation on field types, options, validation keys, and custom pattern presets, see [docs/plugin-validation.md](file:///d:/GSSOC/utksh1-SecuScan/%23577/SecuScan/docs/plugin-validation.md).
+For detailed documentation on field types, options, validation keys, and custom pattern presets, see [docs/plugin-validation.md](plugin-validation.md).
 
 ---
 
@@ -154,7 +154,7 @@ python scripts/refresh_plugin_checksum.py --plugin <your_plugin_id>
 ```
 
 ### Step 5d: Register & Validate
-Add your new plugin details to the index in [PLUGINS.md](file:///d:/GSSOC/utksh1-SecuScan/%23577/SecuScan/PLUGINS.md). Then validate and test it.
+Add your new plugin details to the index in [PLUGINS.md](../PLUGINS.md). Then validate and test it.
 
 ---
 
@@ -168,7 +168,7 @@ This design makes testing extremely fast, reproducible, and runnable in a basic 
 ### Writing a New Parser Test
 When adding or updating a custom parser, write a corresponding unit test file: `testing/backend/unit/test_<plugin_id>_parser.py`.
 
-Follow the inline-fixture pattern used in [test_dns_enum_parser.py](file:///d:/GSSOC/utksh1-SecuScan/%23577/SecuScan/testing/backend/unit/test_dns_enum_parser.py):
+Follow the inline-fixture pattern used in [test_dns_enum_parser.py](../testing/backend/unit/test_dns_enum_parser.py):
 1. **Import the parse function:**
    ```python
    from plugins.my_plugin.parser import parse
@@ -179,7 +179,7 @@ Follow the inline-fixture pattern used in [test_dns_enum_parser.py](file:///d:/G
 5. **Handle edge cases:** Write a test asserting that empty input (`""`) or malformed/garbage input doesn't crash the parser.
 
 ### Core Validator Fixtures
-Under [testing/backend/unit/fixtures/plugins/](file:///d:/GSSOC/utksh1-SecuScan/%23577/SecuScan/testing/backend/unit/fixtures/plugins/), you will find:
+Under [testing/backend/unit/fixtures/plugins/](../testing/backend/unit/fixtures/plugins/), you will find:
 * `valid_plugin/`: Contains a schema-perfect `metadata.json` demonstrating required structures. Used by validator tests to prove valid layouts pass.
 * `invalid_plugin/`: Deliberately violates rules (invalid safety level, missing name, duplicate field IDs, custom parser without a file). Used to assert validator error reporting.
 
@@ -194,9 +194,9 @@ When you submit a PR, the CI runner verifies plugin health across three primary 
 
 | Test File | Verification Goal | Reason for Failure |
 |---|---|---|
-| [test_plugin_integrity.py](file:///d:/GSSOC/utksh1-SecuScan/%23577/SecuScan/testing/backend/unit/test_plugin_integrity.py) | Checks that checksums match and IDs/names are globally unique. | Outdated checksum, forgotten checksum generation, or duplicated plugin metadata ID/Name. |
-| [test_plugin_validator.py](file:///d:/GSSOC/utksh1-SecuScan/%23577/SecuScan/testing/backend/unit/test_plugin_validator.py) | Asserts the validation rules correctly validate metadata rules against fixtures. | A regression in validation logic (rarely triggered by simple plugin edits). |
-| [test_parser_output_contract.py](file:///d:/GSSOC/utksh1-SecuScan/%23577/SecuScan/testing/backend/integration/test_parser_output_contract.py) | Verifies custom parser imports and output compliance on empty and raw structures. | A custom parser does not export a callable `parse()` function, crashes on load, or returns a dictionary missing mandatory output keys. |
+| [test_plugin_integrity.py](../testing/backend/unit/test_plugin_integrity.py) | Checks that checksums match and IDs/names are globally unique. | Outdated checksum, forgotten checksum generation, or duplicated plugin metadata ID/Name. |
+| [test_plugin_validator.py](../testing/backend/unit/test_plugin_validator.py) | Asserts the validation rules correctly validate metadata rules against fixtures. | A regression in validation logic (rarely triggered by simple plugin edits). |
+| [test_parser_output_contract.py](../testing/backend/integration/test_parser_output_contract.py) | Verifies custom parser imports and output compliance on empty and raw structures. | A custom parser does not export a callable `parse()` function, crashes on load, or returns a dictionary missing mandatory output keys. |
 
 ---
 
@@ -210,4 +210,4 @@ Prior to committing and opening a Pull Request for a plugin change, run through 
 - [ ] Local validator exits cleanly: `python scripts/validate_plugin.py --plugin <id>`.
 - [ ] A dedicated parser test file exists under `testing/backend/unit/test_<id>_parser.py` and covers happy/unhappy paths.
 - [ ] All python backend tests pass: `./testing/test_python.sh`.
-- [ ] The plugin index in [PLUGINS.md](file:///d:/GSSOC/utksh1-SecuScan/%23577/SecuScan/PLUGINS.md) has been updated (if adding a new plugin).
+- [ ] The plugin index in [PLUGINS.md](../PLUGINS.md) has been updated (if adding a new plugin).
