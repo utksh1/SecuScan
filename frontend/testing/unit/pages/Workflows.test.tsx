@@ -139,6 +139,7 @@ describe('Workflows — create action', () => {
           evidence_level: 'standard',
         },
       }],
+      steps: [{ plugin_id: '', inputs: {}, execution_context: { scan_profile: 'standard', validation_mode: 'proof', evidence_level: 'standard' } }],
     })
   })
 })
