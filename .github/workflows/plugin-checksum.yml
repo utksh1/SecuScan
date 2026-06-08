@@ -12,16 +12,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install system dependencies
-        run: sudo apt-get install -y libcairo2-dev pkg-config python3-dev
-      - name: Install dependencies
-        run: pip install -r backend/requirements.txt
-      - name: Verify plugin checksums match committed manifest
-        run: python scripts/refresh_plugin_checksums.py --dry-run
+      - name: Detect changed plugin directories
+        id: changed
+        run: |
+          BASE=${{ github.event.pull_request.base.sha || github.event.before }}
+          CHANGED=$(git diff --name-only "$BASE" HEAD -- 'plugins/**/metadata.json' 'plugins/**/parser.py' \
+            | sed 's|/[^/]*$||' | sort -u | tr '\n' ' ')
+          echo "dirs=$CHANGED" >> "$GITHUB_OUTPUT"
+          echo "Changed plugin dirs: $CHANGED"
+      - name: Verify checksums for changed plugins
+        if: steps.changed.outputs.dirs != ''
+        run: |
+          python scripts/refresh_plugin_checksums.py --verify ${{ steps.changed.outputs.dirs }}
+      - name: No plugin files changed
+        if: steps.changed.outputs.dirs == ''
+        run: echo "No plugin metadata or parser files changed — skipping checksum verification."
 
   drift-detection-test:
     runs-on: ubuntu-latest
@@ -31,21 +42,16 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install system dependencies
-        run: sudo apt-get install -y libcairo2-dev pkg-config python3-dev
-      - name: Install dependencies
-        run: pip install -r backend/requirements.txt
-      - name: Seed manifest from current state
-        run: python scripts/refresh_plugin_checksums.py
-      - name: Simulate plugin drift
-        run: |
-          FIRST=$(python3 -c "import json; d=json.load(open('plugins/checksums.json')); print(next(k for k in d if k.endswith('metadata.json')))")
-          echo "# drifted" >> "$FIRST"
-          echo "Mutated: $FIRST"
+      - name: Seed checksum into test plugin metadata
+        run: python scripts/refresh_plugin_checksums.py --update plugins/fuzzer
+      - name: Verify passes when checksum is current
+        run: python scripts/refresh_plugin_checksums.py --verify plugins/fuzzer
+      - name: Simulate drift by mutating parser.py
+        run: echo "# drifted" >> plugins/fuzzer/parser.py
       - name: Assert drift is detected (must exit 1)
         run: |
-          if python scripts/refresh_plugin_checksums.py --dry-run; then
-            echo "ERROR: drift was not detected — script should have exited 1"
+          if python scripts/refresh_plugin_checksums.py --verify plugins/fuzzer; then
+            echo "ERROR: drift was not detected"
             exit 1
           else
             echo "OK: drift correctly detected"
