@@ -19,9 +19,6 @@ vi.mock('../../../src/api', () => ({
   listTargetPolicies: vi.fn().mockResolvedValue([]),
   listCredentialProfiles: vi.fn().mockResolvedValue([]),
   listSessionProfiles: vi.fn().mockResolvedValue([]),
-  listTargetPolicies: vi.fn(),
-  listCredentialProfiles: vi.fn(),
-  listSessionProfiles: vi.fn(),
 }))
 
 describe('ToolConfig timeout control', () => {
