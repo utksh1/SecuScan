@@ -71,7 +71,7 @@ jobs:
       - name: Run backend lint baseline
         run: ruff check backend testing/backend
 
-  backend-unit-tests:
+  backend-unit:
     needs: [detect-changes, backend-lint, formatting-hygiene]
     if: |
       always() &&
@@ -93,7 +93,7 @@ jobs:
       - name: Run unit tests
         run: pytest testing/backend/unit -q -m "not benchmark"
 
-  backend-integration-tests:
+  backend-integration:
     needs: [detect-changes, backend-lint, formatting-hygiene]
     if: |
       always() &&
