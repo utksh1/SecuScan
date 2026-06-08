@@ -66,10 +66,10 @@ sequenceDiagram
     Operator->>API: POST /api/v1/tasks (Create Task)
     API->>DB: Write Task (QUEUED)
     API-->>Operator: Return task_id
-    
+
     Operator->>API: POST /api/v1/tasks/{id}/start
     API->>Exec: execute_task(task_id)
-    
+
     rect rgb(240, 240, 240)
         Note over Exec, Val: Phase: running_command
         Exec->>Val: validate_target(target) / validate_command_network_egress()
@@ -77,7 +77,7 @@ sequenceDiagram
         Exec->>Sub: Spawns scanner process (CLI or sandboxed Docker container)
         Sub-->>Exec: Raw tool stdout/stderr output
     end
-    
+
     rect rgb(230, 240, 250)
         Note over Exec, Sandbox: Phase: parsing
         Exec->>Sandbox: run_parser_in_sandbox() (Executes parser.py script)
@@ -90,13 +90,13 @@ sequenceDiagram
         Intel-->>Exec: Enriched findings, assets, groups & risk scores
         Exec->>DB: Save findings, assets, and update task status (COMPLETED)
     end
-    
+
     rect rgb(250, 240, 230)
         Note over Exec, Report: Phase: reporting
         Exec->>Report: Generate Report (PDF, HTML, CSV, SARIF)
         Report->>DB: Save report path references
     end
-    
+
     Exec-->>API: Task Finished
 ```
 

@@ -44,4 +44,3 @@ curl "http://localhost:8000/api/v1/tasks?status=completed&plugin_id=nmap&page=1&
 ## See Also
 
 * [Backend Architecture](backend-architecture.md) — For a detailed overview of the backend's module structure, routing, execution engine, and scanners.
-
