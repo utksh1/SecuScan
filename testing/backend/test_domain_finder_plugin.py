@@ -12,6 +12,7 @@ Related to issue #496: Add parser and contract coverage for plugin `domain-finde
 """
 
 import asyncio
+import importlib.util
 import json
 import sys
 from pathlib import Path
@@ -23,10 +24,15 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from backend.secuscan.plugin_validator import PluginMetadataValidator
 from backend.secuscan.plugins import PluginManager
-from plugins.domain_finder.parser import parse
 
 PLUGIN_DIR = REPO_ROOT / "plugins" / "domain-finder"
 PLUGINS_DIR = REPO_ROOT / "plugins"
+
+# Import parser from domain-finder (hyphenated directory name requires importlib)
+spec = importlib.util.spec_from_file_location("domain_finder_parser", str(PLUGIN_DIR / "parser.py"))
+_parser_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(_parser_module)
+parse = _parser_module.parse
 
 
 # ---------------------------------------------------------------------------
