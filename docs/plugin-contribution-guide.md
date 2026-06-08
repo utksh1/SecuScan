@@ -60,7 +60,7 @@ A minimal, valid `metadata.json` has the following shape:
 }
 ```
 
-> [!IMPORTANT]  
+> [!IMPORTANT]
 > The `checksum` field in `metadata.json` secures the integrity of the plugin definition. You should **never manually edit this field**. It is calculated and populated using helper scripts.
 
 For detailed documentation on field types, options, validation keys, and custom pattern presets, see [docs/plugin-validation.md](file:///d:/GSSOC/utksh1-SecuScan/%23577/SecuScan/docs/plugin-validation.md).
@@ -183,7 +183,7 @@ Under [testing/backend/unit/fixtures/plugins/](file:///d:/GSSOC/utksh1-SecuScan/
 * `valid_plugin/`: Contains a schema-perfect `metadata.json` demonstrating required structures. Used by validator tests to prove valid layouts pass.
 * `invalid_plugin/`: Deliberately violates rules (invalid safety level, missing name, duplicate field IDs, custom parser without a file). Used to assert validator error reporting.
 
-> [!NOTE]  
+> [!NOTE]
 > Do not modify these core fixtures unless you are explicitly changing the parser validation or schema rules in the backend validator.
 
 ---
