@@ -29,14 +29,16 @@
       "label": "Search Query",
       "type": "string",
       "required": true,
-      "placeholder": "s3.amazonaws.com org:example"
+      "placeholder": "s3.amazonaws.com org:example",
+      "help_text": "Enter an Uncover search query to identify exposed cloud storage assets. Examples include bucket names, domains, or organization filters."
     },
     {
       "id": "limit",
       "label": "Result Limit",
       "type": "integer",
       "required": false,
-      "default": 100
+      "default": 100,
+      "help_text": "Maximum number of results to return. Increase for broader discovery or reduce to limit output volume."
     }
   ],
   "presets": {
@@ -64,5 +66,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "8327c42108570fc0b7b5379661f811d3c36b26abf904182e6634bd22145b9c7a"
+  "checksum": "f698051486cb29f90cbc0d913c53efb55bfac9f7eb34aabd196e0b6bfd73fb69"
 }
