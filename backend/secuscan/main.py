@@ -21,6 +21,7 @@ from .plugins import init_plugins
 from .routes import router
 from .saved_views import saved_views_router
 from .workflows import scheduler
+from backend.routes.history import router as history_router
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level),
@@ -45,7 +46,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     # Startup
     logger.info("🚀 Starting SecuScan backend...")
-    
+
     # Ensure directories exist
     settings.ensure_directories()
     logger.info("✓ Directories initialized")
@@ -53,14 +54,14 @@ async def lifespan(app: FastAPI):
     # Initialize API key authentication
     api_key = init_api_key(settings.data_dir)
     logger.info("✓ API key authentication ready (key file: %s/.api_key)", settings.data_dir)
-    
+
     # Initialize database
     await init_db(settings.database_path)
     logger.info("✓ SQLite connected")
 
     await init_cache()
     logger.info("✓ In-memory cache initialized")
-    
+
     # Load plugins
     await init_plugins(settings.plugins_dir)
     logger.info("✓ Plugins loaded")
@@ -107,11 +108,11 @@ async def lifespan(app: FastAPI):
 
     await scheduler.start()
     logger.info("✓ Workflow scheduler started")
-    
+
     logger.info("✓ Ready to serve on %s:%d", settings.bind_address, settings.bind_port)
-    
+
     yield
-    
+
     # Shutdown
     logger.info("🛑 Shutting down SecuScan backend...")
     if global_db:
@@ -166,6 +167,7 @@ app.add_middleware(RequestIDMiddleware)
 
 # Include API routes
 app.include_router(router)
+app.include_router(history_router)
 app.include_router(saved_views_router)
 
 
@@ -175,7 +177,7 @@ async def health_check():
     """Health check endpoint"""
     import platform
     import sys
-    
+
     return {
         "status": "operational",
         "version": "0.1.0-alpha",
@@ -201,7 +203,7 @@ async def root():
 def main():
     """Main entry point"""
     import uvicorn
-    
+
     logger.info("""
     ╔═══════════════════════════════════════════════════════╗
     ║                                                       ║
@@ -212,7 +214,7 @@ def main():
     ║                                                       ║
     ╚═══════════════════════════════════════════════════════╝
     """)
-    
+
     uvicorn.run(
         "backend.secuscan.main:app",
         host=settings.bind_address,

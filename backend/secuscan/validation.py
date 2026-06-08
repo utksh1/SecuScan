@@ -172,11 +172,11 @@ def _validate_resolved_ips_safe_mode(resolved_ips: list[ipaddress._BaseAddress])
 def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
     """
     Validate scan target address (IP, Hostname, URL, or CIDR).
-    
+
     Args:
         target: IP address, hostname, or network range to validate
         safe_mode: Whether to enforce safe mode restrictions
-    
+
     Returns:
         Tuple of (is_valid, error_message)
     """
@@ -187,7 +187,7 @@ def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
     # Try parsing as IP network (handles single IP and CIDR)
     try:
         net = ipaddress.ip_network(target, strict=False)
-        
+
         # Check blocked networks (Broadcast, Link-local, Multicast)
         if any(net.overlaps(blocked) for blocked in BLOCKED_NETWORKS):
             return False, "Target overlaps with blocked network range"
@@ -344,10 +344,10 @@ def validate_port_range(port_range: str) -> Tuple[bool, str]:
 def validate_url(url: str) -> Tuple[bool, str]:
     """
     Validate URL format.
-    
+
     Args:
         url: URL to validate
-    
+
     Returns:
         Tuple of (is_valid, error_message)
     """
@@ -377,10 +377,10 @@ def validate_url(url: str) -> Tuple[bool, str]:
 def sanitize_input(value: str) -> str:
     """
     Sanitize user input to prevent command injection.
-    
+
     Args:
         value: Input value to sanitize
-    
+
     Returns:
         Sanitized value
     """
@@ -388,18 +388,18 @@ def sanitize_input(value: str) -> str:
     dangerous_chars = [';', '|', '&', '$', '`', '(', ')', '<', '>', '\n', '\r', "'", '"', '\\', '!', '{', '}', '\t', '\x00']
     for char in dangerous_chars:
         value = value.replace(char, '')
-    
+
     return value.strip()
 
 
 def is_safe_path(path: str, base_dir: str) -> bool:
     """
     Check if a path is safe (no directory traversal).
-    
+
     Args:
         path: Path to check
         base_dir: Base directory to restrict to
-    
+
     Returns:
         True if path is safe
     """
@@ -415,11 +415,11 @@ def is_safe_path(path: str, base_dir: str) -> bool:
 def match_pattern(value: str, pattern: str) -> bool:
     """
     Match value against wildcard pattern.
-    
+
     Args:
         value: Value to match
         pattern: Pattern with wildcards (* and ?)
-    
+
     Returns:
         True if value matches pattern
     """

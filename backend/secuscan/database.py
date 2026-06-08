@@ -388,7 +388,7 @@ class Database:
         # Migration logic: ensure latest columns exist in 'tasks' table
         tasks_columns = await self.fetchall("PRAGMA table_info(tasks)")
         existing_cols = {col["name"] for col in tasks_columns}
-        
+
         needed_cols = {
             # Per-user ownership for BOLA prevention (issue #401). NOT NULL with a
             # constant default backfills every existing row to the shared default

@@ -4,7 +4,7 @@ import { routes } from '../routes'
 
 /**
  * Global keyboard shortcuts hook for SecuScan.
- * 
+ *
  * g + d : Dashboard
  * g + s : Scanners
  * g + h : History
@@ -18,7 +18,7 @@ export function useShortcuts() {
 
     useEffect(() => {
         let lastChar = ''
-        
+
         const handleKeyDown = (e: KeyboardEvent) => {
             // Ignore if user is typing in an input
             const target = e.target as HTMLElement
