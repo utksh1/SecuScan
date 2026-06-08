@@ -29,14 +29,16 @@
       "label": "Search Query",
       "type": "string",
       "required": true,
-      "placeholder": "org:secuscan.in"
+      "placeholder": "org:secuscan.in",
+      "help": "Enter search queries using Uncover syntax. Supported operators: org:, domain:, port:, asn:, etc. Example: 'org:secuscan.in' searches for assets belonging to that organization."
     },
     {
       "id": "limit",
       "label": "Result Limit",
       "type": "integer",
       "required": false,
-      "default": 100
+      "default": 100,
+      "help": "Maximum number of results to fetch(default: 100). Higher limits may increase query time and resource usage."
     }
   ],
   "presets": {
@@ -63,5 +65,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "f66a6bcd537fe6a4c23d38fe7daeac3174e088c158de8dbf98230dd7891c5026"
+  "checksum": "db1e801d6a027a09ce9c726d593f9dda4b79ab2775a5e824bdeb43df3ba9364d"
 }

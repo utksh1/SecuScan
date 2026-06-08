@@ -275,6 +275,39 @@ def test_route_level_integration_and_independent_buckets(test_client, monkeypatc
     assert resp_vault1.headers["X-RateLimit-Remaining"] == "1"
 
 
+def test_scheduler_tick_is_rate_limited(test_client, monkeypatch):
+    """The scheduler tick endpoint must throttle rapid repeated calls.
+
+    Without a limiter, any API key holder could call the tick endpoint in a
+    tight loop and force continuous workflow execution. This test confirms the
+    limiter is wired: with a limit of 1, the second call within the window is
+    rejected with 429.
+    """
+    from backend.secuscan import workflows
+    from backend.secuscan.ratelimit import scheduler_tick_limiter
+
+    # Avoid any real scheduling side effects; only the limiter is under test.
+    async def _noop_tick():
+        return None
+
+    monkeypatch.setattr(workflows.scheduler, "tick", _noop_tick)
+
+    # Tighten the limiter to one call per window for a deterministic assertion.
+    scheduler_tick_limiter.limit = 1
+    scheduler_tick_limiter.window_seconds = 10
+    asyncio.run(scheduler_tick_limiter.reset())
+
+    first = test_client.post("/api/v1/workflows/scheduler/tick")
+    assert first.status_code == 200
+    assert first.json() == {"tick": "ok"}
+    assert first.headers["X-RateLimit-Limit"] == "1"
+    assert first.headers["X-RateLimit-Remaining"] == "0"
+
+    second = test_client.post("/api/v1/workflows/scheduler/tick")
+    assert second.status_code == 429
+    assert "Retry-After" in second.headers
+
+
 # ── RateLimiter per-client keying tests ───────────────────────────────────────
 
 

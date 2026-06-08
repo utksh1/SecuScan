@@ -3,13 +3,12 @@ import userEvent from '@testing-library/user-event'
 import Settings from '../../../src/pages/Settings'
 import { ThemeProvider } from '../../../src/components/ThemeContext'
 import { ToastProvider } from '../../../src/components/ToastContext'
-import { vi } from 'vitest'
-
 
 describe('Settings theme wiring', () => {
   beforeEach(() => {
     window.localStorage.removeItem('secuscan-theme')
     document.documentElement.classList.remove('theme-light')
+    vi.mocked(listNotificationRules).mockResolvedValue([])
   })
 describe('Settings management tools', () => {
   it('saves configuration to localStorage', async () => {
@@ -61,14 +60,14 @@ describe('Settings management tools', () => {
       </ThemeProvider>,
     )
 
-    const themeSelect = screen.getAllByRole('combobox')[3]
+    const themeSelect = screen.getByRole('combobox', { name: /visual spectrum theme/i })
     await user.selectOptions(themeSelect, 'light')
     await user.click(screen.getByRole('button', { name: /COMMIT_ENGINE_CHANGES/i }))
 
     expect(document.documentElement.classList.contains('theme-light')).toBe(true)
     expect(window.localStorage.getItem('secuscan-theme')).toBe('light')
 
-    await user.selectOptions(screen.getAllByRole('combobox')[3], 'dark')
+    await user.selectOptions(themeSelect, 'dark')
     await user.click(screen.getByRole('button', { name: /COMMIT_ENGINE_CHANGES/i }))
 
     expect(document.documentElement.classList.contains('theme-light')).toBe(false)

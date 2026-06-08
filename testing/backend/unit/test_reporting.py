@@ -78,7 +78,10 @@ def test_generate_pdf_report_handles_long_wrapping_content():
 def test_generate_csv_report_includes_new_columns():
     csv_output = ReportGenerator.generate_csv_report(sample_task(), sample_result())
 
-    assert "Severity,Title,Category,Target,CVSS,CVE,Description,Evidence,Remediation" in csv_output
+    assert (
+        "Severity,Title,Category,Target,CVSS,CVE,CPE,Validated,Validation Method,"
+        "Confidence Reason,Description,Evidence,Remediation"
+    ) in csv_output
     assert "Exposed admin panel" in csv_output
     assert "CVE-2026-0001" in csv_output
 

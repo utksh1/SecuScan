@@ -30,7 +30,7 @@ function mockResponse(status: number, body: unknown = {}) {
     ok: status >= 200 && status < 300,
     status,
     json: () => Promise.resolve(body),
-  } as Response)
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -152,6 +152,47 @@ describe('request() 401 handling', () => {
 
     window.removeEventListener(AUTH_REQUIRED_EVENT, handler)
     expect(fired).toHaveLength(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// request() — timeout cleanup
+// ---------------------------------------------------------------------------
+
+describe('request() timeout cleanup', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  it('clears the timeout when fetch rejects', async () => {
+    const timeoutId = 1 as unknown as ReturnType<typeof setTimeout>
+vi.spyOn(window, 'setTimeout').mockImplementation(() => timeoutId)
+    const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout')
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fetch failed')))
+
+    await expect(listPlugins()).rejects.toThrow('fetch failed')
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(timeoutId)
+  })
+
+  it('clears the timeout when request is aborted', async () => {
+    vi.useFakeTimers()
+    const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout')
+
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((_, init) => {
+      const signal = (init as any)?.signal
+      return new Promise((_resolve, reject) => {
+        signal?.addEventListener('abort', () => {
+          reject(new DOMException('Aborted', 'AbortError'))
+        })
+      })
+    }))
+
+    const promise = listPlugins()
+    vi.runAllTimers()
+    await expect(promise).rejects.toThrow('Aborted')
+    expect(clearTimeoutSpy).toHaveBeenCalled()
   })
 })
 

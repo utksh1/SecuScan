@@ -23,6 +23,24 @@ def test_plugins_have_checksums():
         assert data.get("checksum"), f"Missing checksum in {path}"
 
 
+def test_cli_plugins_declare_engine_binary_as_dependency():
+    metadata_files = list(Path(settings.plugins_dir).glob("*/metadata.json"))
+    assert metadata_files, "Expected plugin metadata files"
+
+    for path in metadata_files:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        engine = data.get("engine", {})
+        if engine.get("type") != "cli":
+            continue
+
+        binary = engine.get("binary")
+        dependency_binaries = data.get("dependencies", {}).get("binaries", [])
+        assert binary in dependency_binaries, (
+            f"{path.parent.name} must declare engine binary {binary!r} "
+            "in dependencies.binaries"
+        )
+
+
 def test_plugin_metadata_ids_and_names_are_unique():
     metadata_files = list(Path(settings.plugins_dir).glob("*/metadata.json"))
     assert metadata_files, "Expected plugin metadata files"
