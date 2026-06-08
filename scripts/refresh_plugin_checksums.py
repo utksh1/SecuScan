@@ -1,77 +1,103 @@
 #!/usr/bin/env python3
-"""Refresh or verify plugin checksums based on current metadata and parser files."""
+"""
+Verify or refresh checksums for specified plugin directories.
+
+The checksum covers parser.py and metadata.json content with the
+'checksum' field stripped, so updating the stored value does not
+invalidate the hash.
+
+Usage:
+  python scripts/refresh_plugin_checksums.py --verify plugins/amass plugins/fuzzer
+  python scripts/refresh_plugin_checksums.py --update plugins/amass plugins/fuzzer
+  python scripts/refresh_plugin_checksums.py --update-all
+"""
+import argparse
 import hashlib
 import json
-import os
 import sys
-
-PLUGINS_DIR = "plugins"
-MANIFEST_FILE = os.path.join(PLUGINS_DIR, "checksums.json")
+from pathlib import Path
 
 
-def compute_checksum(filepath):
+def compute_plugin_checksum(plugin_dir: Path) -> str:
+    """
+    Compute SHA-256 over parser.py and metadata.json (checksum field stripped).
+    Sorting filenames ensures a stable, platform-independent order.
+    """
     sha256 = hashlib.sha256()
-    with open(filepath, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            sha256.update(chunk)
+    for filename in sorted(["metadata.json", "parser.py"]):
+        filepath = plugin_dir / filename
+        if not filepath.exists():
+            continue
+        if filename == "metadata.json":
+            # Strip the checksum field so updating it doesn't change the hash
+            data = json.loads(filepath.read_text(encoding="utf-8"))
+            data.pop("checksum", None)
+            content = json.dumps(data, sort_keys=True, separators=(",", ":")).encode()
+        else:
+            content = filepath.read_bytes()
+        sha256.update(content)
     return sha256.hexdigest()
 
 
-def collect_live_checksums():
-    checksums = {}
-    for plugin in sorted(os.listdir(PLUGINS_DIR)):
-        plugin_path = os.path.join(PLUGINS_DIR, plugin)
-        if not os.path.isdir(plugin_path):
+def verify_plugins(plugin_dirs: list) -> bool:
+    drift = False
+    for plugin_dir in plugin_dirs:
+        metadata_path = plugin_dir / "metadata.json"
+        if not metadata_path.exists():
+            print(f"MISSING:  {plugin_dir}/metadata.json")
+            drift = True
             continue
-        for filename in ("metadata.json", "parser.py"):
-            filepath = os.path.join(plugin_path, filename)
-            if os.path.exists(filepath):
-                checksums[filepath] = compute_checksum(filepath)
-    return checksums
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        stored = metadata.get("checksum", "")
+        computed = compute_plugin_checksum(plugin_dir)
+        if stored != computed:
+            print(f"DRIFT:    {plugin_dir.name}  stored={stored[:12]}  computed={computed[:12]}")
+            drift = True
+        else:
+            print(f"OK:       {plugin_dir.name}")
+    return not drift
+
+
+def update_plugins(plugin_dirs: list) -> None:
+    for plugin_dir in plugin_dirs:
+        metadata_path = plugin_dir / "metadata.json"
+        if not metadata_path.exists():
+            print(f"SKIP:     {plugin_dir} (no metadata.json)")
+            continue
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        checksum = compute_plugin_checksum(plugin_dir)
+        metadata["checksum"] = checksum
+        metadata_path.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+        print(f"UPDATED:  {plugin_dir.name}  checksum={checksum[:12]}")
 
 
 def main():
-    dry_run = "--dry-run" in sys.argv
+    parser = argparse.ArgumentParser(description="Plugin checksum verifier/updater")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("--verify", nargs="+", metavar="PLUGIN_DIR",
+                       help="Verify checksums for given plugin directories")
+    group.add_argument("--update", nargs="+", metavar="PLUGIN_DIR",
+                       help="Update checksums for given plugin directories")
+    group.add_argument("--update-all", action="store_true",
+                       help="Update checksums for all plugins")
+    args = parser.parse_args()
 
-    live = collect_live_checksums()
+    plugins_root = Path("plugins")
 
-    if not dry_run:
-        with open(MANIFEST_FILE, "w") as f:
-            json.dump(live, f, indent=2)
-            f.write("\n")
-        print(f"Updated {MANIFEST_FILE} ({len(live)} entries)")
+    if args.update_all:
+        dirs = sorted(p for p in plugins_root.iterdir() if p.is_dir())
+        update_plugins(dirs)
         sys.exit(0)
 
-    # --dry-run: verify mode — compare live against committed manifest
-    if not os.path.exists(MANIFEST_FILE):
-        print(f"ERROR: No manifest found at {MANIFEST_FILE}.")
-        print("Run without --dry-run first to generate it.")
-        sys.exit(1)
+    if args.update:
+        dirs = [Path(d) for d in args.update]
+        update_plugins(dirs)
+        sys.exit(0)
 
-    with open(MANIFEST_FILE) as f:
-        committed = json.load(f)
-
-    drift = False
-
-    for path, sha in committed.items():
-        if path not in live:
-            print(f"MISSING:  {path}")
-            drift = True
-        elif live[path] != sha:
-            print(f"CHANGED:  {path}")
-            drift = True
-
-    for path in live:
-        if path not in committed:
-            print(f"EXTRA:    {path}  (not in manifest)")
-            drift = True
-
-    if drift:
-        print("\nDrift detected. Run: python scripts/refresh_plugin_checksums.py")
-        sys.exit(1)
-
-    print(f"OK: all {len(live)} plugin checksums match the manifest.")
-    sys.exit(0)
+    if args.verify:
+        dirs = [Path(d) for d in args.verify]
+        ok = verify_plugins(dirs)
+        sys.exit(0 if ok else 1)
 
 
 if __name__ == "__main__":
