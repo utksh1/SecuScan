@@ -1,0 +1,213 @@
+name: Onboarding Smoke Test
+
+# Verifies the contributor setup path:
+#   fresh clone → ./setup.sh → ./start.sh → services respond
+# Catches onboarding regressions before they hit contributors.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "setup.sh"
+      - "start.sh"
+      - "backend/**"
+      - "frontend/**"
+      - "backend/requirements.txt"
+      - "backend/requirements-dev.txt"
+      - ".github/workflows/smoke-test.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "setup.sh"
+      - "start.sh"
+      - "backend/**"
+      - "frontend/**"
+      - "backend/requirements.txt"
+      - "backend/requirements-dev.txt"
+      - ".github/workflows/smoke-test.yml"
+  workflow_dispatch:
+
+jobs:
+  smoke-test:
+    name: Fresh-clone smoke test (Ubuntu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # ── 1. Checkout ────────────────────────────────────────────────────────
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ── 2. Set up Python 3.11 ──────────────────────────────────────────────
+      # setup.sh requires Python 3.11+. We pin it explicitly so the runner
+      # never silently falls back to an older system Python.
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # ── 3. Set up Node.js ──────────────────────────────────────────────────
+      # setup.sh checks for node + npm; frontend uses Vite on port 5173.
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # ── 4. Make scripts executable ─────────────────────────────────────────
+      # Git on some clients strips execute bits — enforce them explicitly.
+      - name: Make scripts executable
+        run: chmod +x setup.sh start.sh
+
+      # ── 5. Run setup.sh ────────────────────────────────────────────────────
+      # setup.sh: creates venv, pip installs backend/requirements.txt +
+      # httpx[cli], npm installs frontend, writes .env, creates data/logs dirs.
+      # lsof is used by start.sh; install it here so setup.sh can't fail on it.
+      - name: Install system dependencies
+        run: sudo apt-get install -y lsof libcairo2-dev pkg-config python3-dev
+
+      - name: Run setup.sh
+        run: |
+          echo "::group::setup.sh output"
+          bash setup.sh
+          echo "::endgroup::"
+
+      # ── 6. Verify setup produced expected artifacts ────────────────────────
+      # Fails fast with a clear message if setup.sh silently skipped something.
+      - name: Verify setup artifacts
+        run: |
+          echo "Checking venv..."
+          test -f venv/bin/python3        || { echo "FAIL: venv/bin/python3 missing"; exit 1; }
+          test -f venv/bin/activate       || { echo "FAIL: venv/bin/activate missing"; exit 1; }
+
+          echo "Checking backend deps..."
+          source venv/bin/activate
+          python3 -c "import fastapi"     || { echo "FAIL: fastapi not installed"; exit 1; }
+          python3 -c "import uvicorn"     || { echo "FAIL: uvicorn not installed"; exit 1; }
+          python3 -c "import httpx"       || { echo "FAIL: httpx not installed"; exit 1; }
+          deactivate
+
+          echo "Checking frontend node_modules..."
+          test -f frontend/node_modules/.bin/vite \
+            || { echo "FAIL: frontend/node_modules/.bin/vite missing"; exit 1; }
+
+          echo "Checking directories..."
+          for d in data data/raw data/reports logs wordlists; do
+            test -d "$d" || { echo "FAIL: directory '$d' missing"; exit 1; }
+          done
+
+          echo "Checking .env..."
+          test -f .env || { echo "FAIL: .env not created"; exit 1; }
+          grep -q "SECUSCAN_BIND_PORT=8000" .env \
+            || { echo "FAIL: expected port config missing from .env"; exit 1; }
+
+          echo "All artifact checks passed."
+
+      # ── 7. Start services via start.sh ─────────────────────────────────────
+      # start.sh launches uvicorn on 127.0.0.1:8000 and Vite on 127.0.0.1:5173.
+      # We background the whole script and capture its PID for cleanup.
+      - name: Start services via start.sh
+        run: |
+          bash start.sh &
+          echo "START_SH_PID=$!" >> "$GITHUB_ENV"
+
+      # ── 8. Wait for backend (uvicorn on :8000) ─────────────────────────────
+      # start.sh starts uvicorn on 127.0.0.1:8000.
+      # /openapi.json is always present in FastAPI without any auth — safer
+      # than /health which may not exist.
+      - name: Wait for backend to be ready
+        run: |
+          MAX_WAIT=60
+          INTERVAL=3
+          ELAPSED=0
+          URL="http://127.0.0.1:8000/openapi.json"
+
+          echo "Polling $URL ..."
+          until curl --silent --fail --max-time 2 "$URL" > /dev/null 2>&1; do
+            if [ "$ELAPSED" -ge "$MAX_WAIT" ]; then
+              echo "ERROR: Backend did not become ready within ${MAX_WAIT}s"
+              echo "--- Active processes ---"
+              ps aux | grep -E "uvicorn|python" || true
+              echo "--- Port 8000 status ---"
+              lsof -i :8000 || true
+              exit 1
+            fi
+            echo "  Not ready (${ELAPSED}s elapsed) — retrying in ${INTERVAL}s ..."
+            sleep "$INTERVAL"
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+          echo "Backend ready after ${ELAPSED}s."
+
+      # ── 9. Wait for frontend (Vite on :5173) ──────────────────────────────
+      - name: Wait for frontend to be ready
+        run: |
+          MAX_WAIT=60
+          INTERVAL=3
+          ELAPSED=0
+          URL="http://127.0.0.1:5173"
+
+          echo "Polling $URL ..."
+          until curl --silent --fail --max-time 2 "$URL" > /dev/null 2>&1; do
+            if [ "$ELAPSED" -ge "$MAX_WAIT" ]; then
+              echo "ERROR: Frontend did not become ready within ${MAX_WAIT}s"
+              echo "--- Active processes ---"
+              ps aux | grep -E "vite|node" || true
+              echo "--- Port 5173 status ---"
+              lsof -i :5173 || true
+              exit 1
+            fi
+            echo "  Not ready (${ELAPSED}s elapsed) — retrying in ${INTERVAL}s ..."
+            sleep "$INTERVAL"
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+          echo "Frontend ready after ${ELAPSED}s."
+
+      # ── 10. Smoke-check backend API ────────────────────────────────────────
+      # /openapi.json must contain "openapi" and "SecuScan" (the app title).
+      # /docs must return HTTP 200 (Swagger UI).
+      # These require zero auth and prove the real app stack loaded correctly.
+      - name: Smoke-check backend API
+        run: |
+          echo "--- GET /openapi.json ---"
+          OAS=$(curl --silent --fail --max-time 5 "http://127.0.0.1:8000/openapi.json")
+          echo "$OAS" | python3 -c "import sys, json; d=json.load(sys.stdin); assert 'openapi' in d, 'missing openapi key'" \
+            || { echo "FAIL: /openapi.json invalid JSON or missing openapi key"; exit 1; }
+          echo "openapi.json OK"
+
+          echo "--- GET /docs ---"
+          curl --silent --fail --max-time 5 "http://127.0.0.1:8000/docs" > /dev/null \
+            || { echo "FAIL: /docs did not return 200"; exit 1; }
+          echo "/docs OK"
+
+          echo "Backend smoke checks passed."
+
+      # ── 11. Smoke-check frontend ───────────────────────────────────────────
+      - name: Smoke-check frontend
+        run: |
+          echo "--- GET http://127.0.0.1:5173 ---"
+          BODY=$(curl --silent --fail --max-time 5 "http://127.0.0.1:5173")
+          echo "$BODY" | grep -qi "html" \
+            || { echo "FAIL: frontend did not return an HTML page"; exit 1; }
+          echo "Frontend smoke check passed."
+
+      # ── 12. Teardown ───────────────────────────────────────────────────────
+      - name: Stop services
+        if: always()
+        run: |
+          [ -n "${START_SH_PID:-}" ] && kill "$START_SH_PID" 2>/dev/null || true
+          pkill -f "uvicorn"   2>/dev/null || true
+          pkill -f "vite"      2>/dev/null || true
+          pkill -f "npm"       2>/dev/null || true
+          echo "Teardown complete."
+
+      # ── 13. Upload logs on failure ─────────────────────────────────────────
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-logs
+          path: |
+            logs/
+            **/*.log
+            nohup.out
+          if-no-files-found: ignore
+          retention-days: 7
