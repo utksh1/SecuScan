@@ -127,7 +127,6 @@ jobs:
     steps:
       - name: Backend test suites completed
         run: echo "backend-unit and backend-integration completed"
-        
   backend-audit:
     runs-on: ubuntu-latest
     steps:
