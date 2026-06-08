@@ -61,7 +61,7 @@ The project is designed to be:
 - `.github/`: GitHub Actions workflows, issue templates, and contributor automation
 - `assets/`: project branding assets and images
 - `data/`: shared raw and generated project data
-- `output/`: generated reports and exported scan artifacts (runtime-generated)
+- `output/`: runtime-generated reports and exported scan artifacts; created during scans and not part of the checked-in repository tree
 - `wordlists/`: wordlists used by scanning and enumeration plugins
 - `scratch/`: experimental utilities and temporary development helpers
 
