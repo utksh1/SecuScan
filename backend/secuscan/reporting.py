@@ -37,7 +37,10 @@ class ReportGenerator:
         ai_summary_api_key are both configured in settings.
         All LLM failures are caught and return '' so reports always generate.
         """
-        from .config import settings as _settings  # local to avoid circular at import time
+        from .config import (
+            settings as _settings,
+        )  # local to avoid circular at import time
+
         if not _settings.ai_summary_enabled:
             return ""
         if not _settings.ai_summary_api_key:
@@ -52,11 +55,13 @@ class ReportGenerator:
     @staticmethod
     def _hex_to_rgb(value: str) -> tuple[int, int, int]:
         value = value.strip("#")
-        return tuple(int(value[index:index + 2], 16) for index in (0, 2, 4))
+        return tuple(int(value[index : index + 2], 16) for index in (0, 2, 4))
 
     @staticmethod
     @lru_cache(maxsize=32)
-    def _icon_data_uri(name: str, background: str = "1e3a5f", foreground: str = "ffffff") -> str:
+    def _icon_data_uri(
+        name: str, background: str = "1e3a5f", foreground: str = "ffffff"
+    ) -> str:
         """Return a tiny embedded PNG icon that works in both HTML and xhtml2pdf."""
         bg = ReportGenerator._hex_to_rgb(background)
         fg = ReportGenerator._hex_to_rgb(foreground)
@@ -64,7 +69,11 @@ class ReportGenerator:
         draw = ImageDraw.Draw(image)
 
         if name == "shield":
-            draw.line([(24, 8), (36, 13), (34, 28), (24, 39), (14, 28), (12, 13), (24, 8)], fill=fg, width=3)
+            draw.line(
+                [(24, 8), (36, 13), (34, 28), (24, 39), (14, 28), (12, 13), (24, 8)],
+                fill=fg,
+                width=3,
+            )
             draw.line([(19, 24), (23, 28), (30, 19)], fill=fg, width=3)
         elif name == "findings":
             draw.rectangle((12, 11, 36, 37), outline=fg, width=3)
@@ -134,7 +143,10 @@ class ReportGenerator:
             "category": cls._clean_text(finding.get("category")) or "General",
             "severity": cls._clean_text(finding.get("severity") or "info").upper(),
             "target": cls._clean_text(finding.get("target")),
-            "description": redact(cls._clean_text(finding.get("description")) or "No description was provided."),
+            "description": redact(
+                cls._clean_text(finding.get("description"))
+                or "No description was provided."
+            ),
             "remediation": redact(cls._clean_text(finding.get("remediation"))),
             "proof": redact(cls._clean_text(finding.get("proof"))),
             "cve": cls._clean_text(finding.get("cve")),
@@ -142,14 +154,27 @@ class ReportGenerator:
             "cvss": finding.get("cvss"),
             "validated": bool(finding.get("validated", False)),
             "validation_method": cls._clean_text(finding.get("validation_method")),
-            "confidence_reason": redact(cls._clean_text(finding.get("confidence_reason"))),
+            "confidence_reason": redact(
+                cls._clean_text(finding.get("confidence_reason"))
+            ),
             "service_fingerprint": cls._clean_text(finding.get("service_fingerprint")),
             "cpe": cls._clean_text(finding.get("cpe")),
             "discovered_at": cls._clean_text(finding.get("discovered_at")),
-            "evidence": finding.get("evidence", []) if isinstance(finding.get("evidence"), list) else [],
-            "asset_refs": finding.get("asset_refs", []) if isinstance(finding.get("asset_refs"), list) else [],
-            "references": finding.get("references", []) if isinstance(finding.get("references"), list) else [],
-            "metadata": redact_dict({cls._clean_text(key): cls._clean_text(val) for key, val in metadata.items()}),
+            "evidence": finding.get("evidence", [])
+            if isinstance(finding.get("evidence"), list)
+            else [],
+            "asset_refs": finding.get("asset_refs", [])
+            if isinstance(finding.get("asset_refs"), list)
+            else [],
+            "references": finding.get("references", [])
+            if isinstance(finding.get("references"), list)
+            else [],
+            "metadata": redact_dict(
+                {
+                    cls._clean_text(key): cls._clean_text(val)
+                    for key, val in metadata.items()
+                }
+            ),
         }
         if normalized["severity"] not in cls.SEVERITY_COLORS:
             normalized["severity"] = "INFO"
@@ -184,7 +209,9 @@ class ReportGenerator:
         if value is False:
             return "OFF"
         if isinstance(value, list):
-            return ", ".join(cls._clean_text(item) for item in value if cls._clean_text(item))
+            return ", ".join(
+                cls._clean_text(item) for item in value if cls._clean_text(item)
+            )
         if isinstance(value, dict):
             return json.dumps(value, sort_keys=True)
         return cls._clean_text(value)
@@ -192,8 +219,14 @@ class ReportGenerator:
     @classmethod
     def _build_scan_parameters(cls, task: Dict[str, Any]) -> List[Dict[str, str]]:
         parameters = [
-            {"label": "Target", "value": cls._clean_text(task.get("target")) or "Unknown"},
-            {"label": "Plugin", "value": cls._clean_text(task.get("plugin_id")) or "Unknown"},
+            {
+                "label": "Target",
+                "value": cls._clean_text(task.get("target")) or "Unknown",
+            },
+            {
+                "label": "Plugin",
+                "value": cls._clean_text(task.get("plugin_id")) or "Unknown",
+            },
         ]
 
         preset = cls._clean_text(task.get("preset"))
@@ -209,10 +242,19 @@ class ReportGenerator:
                 except json.JSONDecodeError:
                     execution_context = {}
         if isinstance(execution_context, dict):
-            for key in ("target_policy_id", "scan_profile", "credential_profile_id", "session_profile_id", "validation_mode", "evidence_level"):
+            for key in (
+                "target_policy_id",
+                "scan_profile",
+                "credential_profile_id",
+                "session_profile_id",
+                "validation_mode",
+                "evidence_level",
+            ):
                 value = cls._clean_text(execution_context.get(key))
                 if value:
-                    parameters.append({"label": key.replace("_", " ").title(), "value": value})
+                    parameters.append(
+                        {"label": key.replace("_", " ").title(), "value": value}
+                    )
 
         for key, value in cls._normalize_task_inputs(task).items():
             label = key.replace("_", " ").title()
@@ -235,11 +277,15 @@ class ReportGenerator:
         task: Dict[str, Any],
     ) -> List[str]:
         total_findings = len(findings)
-        critical_high = severity_counts.get("CRITICAL", 0) + severity_counts.get("HIGH", 0)
+        critical_high = severity_counts.get("CRITICAL", 0) + severity_counts.get(
+            "HIGH", 0
+        )
         summary: List[str] = []
 
         if total_findings == 0:
-            summary.append("No structured findings were recorded for this assessment run.")
+            summary.append(
+                "No structured findings were recorded for this assessment run."
+            )
         elif critical_high > 0:
             summary.append(
                 f"The assessment identified {total_findings} findings, including "
@@ -250,44 +296,64 @@ class ReportGenerator:
                 f"The assessment identified {total_findings} findings with no critical or high severity items."
             )
 
-        tool_name = cls._clean_text(task.get("tool_name")) or cls._clean_text(task.get("plugin_id")) or "scan engine"
+        tool_name = (
+            cls._clean_text(task.get("tool_name"))
+            or cls._clean_text(task.get("plugin_id"))
+            or "scan engine"
+        )
         summary.append(f"Scan execution was performed with {tool_name}.")
 
         open_ports = structured.get("open_ports")
         if isinstance(open_ports, list) and open_ports:
-            summary.append(f"Observed {len(open_ports)} exposed network ports during this run.")
+            summary.append(
+                f"Observed {len(open_ports)} exposed network ports during this run."
+            )
 
         technologies = structured.get("technologies")
         if isinstance(technologies, list) and technologies:
-            summary.append(f"Detected {len(technologies)} technology fingerprints in the target surface.")
+            summary.append(
+                f"Detected {len(technologies)} technology fingerprints in the target surface."
+            )
 
         rows = structured.get("rows")
         if isinstance(rows, list) and rows:
-            summary.append(f"Structured output included {len(rows)} tabular result rows for analyst review.")
+            summary.append(
+                f"Structured output included {len(rows)} tabular result rows for analyst review."
+            )
 
         return summary
 
     @classmethod
-    def _build_report_payload(cls, task: Dict[str, Any], result: Dict[str, Any]) -> Dict[str, Any]:
+    def _build_report_payload(
+        cls, task: Dict[str, Any], result: Dict[str, Any]
+    ) -> Dict[str, Any]:
         structured = result.get("structured")
         if not isinstance(structured, dict):
             structured = result if isinstance(result, dict) else {}
 
         raw_findings = result.get("findings")
         if not isinstance(raw_findings, list):
-            raw_findings = structured.get("findings", []) if isinstance(structured, dict) else []
+            raw_findings = (
+                structured.get("findings", []) if isinstance(structured, dict) else []
+            )
 
         findings = [cls._normalize_finding(item) for item in raw_findings]
 
         severity_counts = {severity: 0 for severity in cls.SEVERITY_ORDER}
         for finding in findings:
-            severity_counts[finding["severity"]] = severity_counts.get(finding["severity"], 0) + 1
+            severity_counts[finding["severity"]] = (
+                severity_counts.get(finding["severity"], 0) + 1
+            )
 
         raw_summary = result.get("summary")
         if isinstance(raw_summary, list) and raw_summary:
-            summary = [cls._clean_text(item) for item in raw_summary if cls._clean_text(item)]
+            summary = [
+                cls._clean_text(item) for item in raw_summary if cls._clean_text(item)
+            ]
         else:
-            summary = cls._build_summary_lines(findings, severity_counts, structured, task)
+            summary = cls._build_summary_lines(
+                findings, severity_counts, structured, task
+            )
 
         rows = structured.get("rows")
         if not isinstance(rows, list):
@@ -299,7 +365,9 @@ class ReportGenerator:
 
         return {
             "task_id": cls._clean_text(task.get("id")),
-            "tool_name": cls._clean_text(task.get("tool_name")) or cls._clean_text(task.get("plugin_id")) or "Unknown tool",
+            "tool_name": cls._clean_text(task.get("tool_name"))
+            or cls._clean_text(task.get("plugin_id"))
+            or "Unknown tool",
             "target": cls._clean_text(task.get("target")) or "Unknown target",
             "status": cls._clean_text(task.get("status")) or "unknown",
             "created_at": cls._clean_text(task.get("created_at")),
@@ -321,13 +389,17 @@ class ReportGenerator:
             return "Unknown"
         for fmt in ("%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
             try:
-                return datetime.strptime(value.replace("Z", ""), fmt).strftime("%b %d, %Y %H:%M")
+                return datetime.strptime(value.replace("Z", ""), fmt).strftime(
+                    "%b %d, %Y %H:%M"
+                )
             except ValueError:
                 continue
         return value
 
     @classmethod
-    def _generate_pdf_html_report(cls, task: Dict[str, Any], result: Dict[str, Any]) -> str:
+    def _generate_pdf_html_report(
+        cls, task: Dict[str, Any], result: Dict[str, Any]
+    ) -> str:
         """Generate conservative HTML/CSS that xhtml2pdf can paginate reliably."""
         payload = cls._build_report_payload(task, result)
         findings = payload["findings"]
@@ -353,22 +425,22 @@ class ReportGenerator:
             <div class="finding">
               <table class="finding-header">
                 <tr>
-                  <td class="severity severity-{finding['severity'].lower()}"><img class="severity-icon" src="{critical_icon}" alt=""> {cls._escape_html(finding['severity'])}</td>
+                  <td class="severity severity-{finding["severity"].lower()}"><img class="severity-icon" src="{critical_icon}" alt=""> {cls._escape_html(finding["severity"])}</td>
                   <td>
-                    <h3>{cls._escape_html(finding['title'])}</h3>
-                    <p>{cls._escape_html(finding['category'])} | {cls._escape_html_with_breaks(finding['target'] or payload['target'], " ")}</p>
+                    <h3>{cls._escape_html(finding["title"])}</h3>
+                    <p>{cls._escape_html(finding["category"])} | {cls._escape_html_with_breaks(finding["target"] or payload["target"], " ")}</p>
                   </td>
                 </tr>
               </table>
               <h4>Description</h4>
-              <p>{cls._escape_html(finding['description'])}</p>
-              {f"<h4>Evidence</h4><pre>{cls._escape_html(finding['proof'])}</pre>" if finding['proof'] else ""}
-              {f"<p class='meta'>Validated: {'YES' if finding['validated'] else 'NO'}</p>" if finding['validated'] or finding['validation_method'] else ""}
-              {f"<p class='meta'>Validation method: {cls._escape_html(finding['validation_method'])}</p>" if finding['validation_method'] else ""}
-              {f"<p class='meta'>CPE: {cls._escape_html(finding['cpe'])}</p>" if finding['cpe'] else ""}
-              {f"<p class='meta'>Evidence items: {len(finding['evidence'])}</p>" if finding['evidence'] else ""}
-              {f"<div class='remediation'><h4>Recommended action</h4><p>{cls._escape_html(finding['remediation'])}</p></div>" if finding['remediation'] else ""}
-              {f"<p class='meta'>CVE: {cls._escape_html(finding['cve'])}</p>" if finding['cve'] else ""}
+              <p>{cls._escape_html(finding["description"])}</p>
+              {f"<h4>Evidence</h4><pre>{cls._escape_html(finding['proof'])}</pre>" if finding["proof"] else ""}
+              {f"<p class='meta'>Validated: {'YES' if finding['validated'] else 'NO'}</p>" if finding["validated"] or finding["validation_method"] else ""}
+              {f"<p class='meta'>Validation method: {cls._escape_html(finding['validation_method'])}</p>" if finding["validation_method"] else ""}
+              {f"<p class='meta'>CPE: {cls._escape_html(finding['cpe'])}</p>" if finding["cpe"] else ""}
+              {f"<p class='meta'>Evidence items: {len(finding['evidence'])}</p>" if finding["evidence"] else ""}
+              {f"<div class='remediation'><h4>Recommended action</h4><p>{cls._escape_html(finding['remediation'])}</p></div>" if finding["remediation"] else ""}
+              {f"<p class='meta'>CVE: {cls._escape_html(finding['cve'])}</p>" if finding["cve"] else ""}
             </div>
             """
             for finding in findings
@@ -386,7 +458,7 @@ class ReportGenerator:
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>SecuScan Report - {cls._escape_html(payload['target'])}</title>
+  <title>SecuScan Report - {cls._escape_html(payload["target"])}</title>
   <style>
     @page {{
       size: a4 portrait;
@@ -590,14 +662,14 @@ class ReportGenerator:
       </td>
     </tr>
   </table>
-  <p class="muted">Tool: {cls._escape_html(payload['tool_name'])} | Status: {cls._escape_html(payload['status'].upper())} | Exported: {cls._escape_html(payload['generated_at'])}</p>
+  <p class="muted">Tool: {cls._escape_html(payload["tool_name"])} | Status: {cls._escape_html(payload["status"].upper())} | Exported: {cls._escape_html(payload["generated_at"])}</p>
 
   <table class="stats">
     <tr>
       <td><img class="stat-icon" src="{findings_icon}" alt=""><label>Total findings</label><strong>{len(findings)}</strong></td>
-      <td><img class="stat-icon" src="{critical_icon}" alt=""><label>Critical</label><strong>{severity_counts['CRITICAL']}</strong></td>
-      <td><img class="stat-icon" src="{target_icon}" alt=""><label>High</label><strong>{severity_counts['HIGH']}</strong></td>
-      <td><img class="stat-icon" src="{rows_icon}" alt=""><label>Structured rows</label><strong>{len(payload['rows'])}</strong></td>
+      <td><img class="stat-icon" src="{critical_icon}" alt=""><label>Critical</label><strong>{severity_counts["CRITICAL"]}</strong></td>
+      <td><img class="stat-icon" src="{target_icon}" alt=""><label>High</label><strong>{severity_counts["HIGH"]}</strong></td>
+      <td><img class="stat-icon" src="{rows_icon}" alt=""><label>Structured rows</label><strong>{len(payload["rows"])}</strong></td>
     </tr>
   </table>
 
@@ -608,12 +680,12 @@ class ReportGenerator:
   <h2><img class="stat-icon" src="{clock_icon}" alt=""> Assessment Details</h2>
   <table class="meta-table">
     <tr>
-      <td><label>Task ID</label><strong>{cls._escape_html(payload['task_id'] or 'Unknown')}</strong></td>
-      <td><label>Started</label><strong>{cls._escape_html(cls._format_timestamp(payload['created_at']))}</strong></td>
+      <td><label>Task ID</label><strong>{cls._escape_html(payload["task_id"] or "Unknown")}</strong></td>
+      <td><label>Started</label><strong>{cls._escape_html(cls._format_timestamp(payload["created_at"]))}</strong></td>
     </tr>
     <tr>
-      <td><label>Tool</label><strong>{cls._escape_html(payload['tool_name'])}</strong></td>
-      <td><label>Status</label><strong>{cls._escape_html(payload['status'].upper())}</strong></td>
+      <td><label>Tool</label><strong>{cls._escape_html(payload["tool_name"])}</strong></td>
+      <td><label>Status</label><strong>{cls._escape_html(payload["status"].upper())}</strong></td>
     </tr>
   </table>
 
@@ -657,31 +729,31 @@ class ReportGenerator:
             f"<li>{cls._escape_html(line)}</li>" for line in payload["summary"]
         )
         parameter_markup = "".join(
-            f"<div class=\"meta-card\"><label>{cls._escape_html(item['label'])}</label><strong>{cls._escape_html(item['value'])}</strong></div>"
+            f'<div class="meta-card"><label>{cls._escape_html(item["label"])}</label><strong>{cls._escape_html(item["value"])}</strong></div>'
             for item in payload["scan_parameters"]
         )
         finding_markup = "".join(
             f"""
             <article class="finding-card">
                 <div class="finding-top">
-                    <span class="severity severity-{finding['severity'].lower()}"><img class="mini-icon" src="{critical_icon}" alt=""> {cls._escape_html(finding['severity'])}</span>
+                    <span class="severity severity-{finding["severity"].lower()}"><img class="mini-icon" src="{critical_icon}" alt=""> {cls._escape_html(finding["severity"])}</span>
                     <div class="finding-heading">
-                        <h3>{cls._escape_html(finding['title'])}</h3>
-                        <p>{cls._escape_html(finding['category'])} | {cls._escape_html_with_breaks(finding['target'] or payload['target'])}</p>
+                        <h3>{cls._escape_html(finding["title"])}</h3>
+                        <p>{cls._escape_html(finding["category"])} | {cls._escape_html_with_breaks(finding["target"] or payload["target"])}</p>
                     </div>
                 </div>
                 <div class="finding-body">
                     <section>
                         <h4>Description</h4>
-                        <p>{cls._escape_html(finding['description'])}</p>
+                        <p>{cls._escape_html(finding["description"])}</p>
                     </section>
-                    {f"<section><h4>Evidence</h4><pre>{cls._escape_html(finding['proof'])}</pre></section>" if finding['proof'] else ""}
-                    {f"<section class='meta'><span>Validated: {'YES' if finding['validated'] else 'NO'}</span></section>" if finding['validated'] or finding['validation_method'] else ""}
-                    {f"<section class='meta'><span>Validation method: {cls._escape_html(finding['validation_method'])}</span></section>" if finding['validation_method'] else ""}
-                    {f"<section class='meta'><span>CPE: {cls._escape_html(finding['cpe'])}</span></section>" if finding['cpe'] else ""}
-                    {f"<section class='meta'><span>Evidence items: {len(finding['evidence'])}</span></section>" if finding['evidence'] else ""}
-                    {f"<section class='remediation'><h4>Recommended action</h4><p>{cls._escape_html(finding['remediation'])}</p></section>" if finding['remediation'] else ""}
-                    {f"<section class='meta'><span>CVE: {cls._escape_html(finding['cve'])}</span></section>" if finding['cve'] else ""}
+                    {f"<section><h4>Evidence</h4><pre>{cls._escape_html(finding['proof'])}</pre></section>" if finding["proof"] else ""}
+                    {f"<section class='meta'><span>Validated: {'YES' if finding['validated'] else 'NO'}</span></section>" if finding["validated"] or finding["validation_method"] else ""}
+                    {f"<section class='meta'><span>Validation method: {cls._escape_html(finding['validation_method'])}</span></section>" if finding["validation_method"] else ""}
+                    {f"<section class='meta'><span>CPE: {cls._escape_html(finding['cpe'])}</span></section>" if finding["cpe"] else ""}
+                    {f"<section class='meta'><span>Evidence items: {len(finding['evidence'])}</span></section>" if finding["evidence"] else ""}
+                    {f"<section class='remediation'><h4>Recommended action</h4><p>{cls._escape_html(finding['remediation'])}</p></section>" if finding["remediation"] else ""}
+                    {f"<section class='meta'><span>CVE: {cls._escape_html(finding['cve'])}</span></section>" if finding["cve"] else ""}
                 </div>
             </article>
             """
@@ -703,7 +775,7 @@ class ReportGenerator:
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SecuScan Report - {cls._escape_html(payload['target'])}</title>
+  <title>SecuScan Report - {cls._escape_html(payload["target"])}</title>
   <style>
     :root {{
       --ink: #0f172a;
@@ -961,17 +1033,17 @@ class ReportGenerator:
     </section>
 
     <div class="meta-grid">
-      <div class="meta-card"><div class="stat-card-header"><label>Tool</label><span class="card-icon"><img src="{target_icon}" alt=""></span></div><strong>{cls._escape_html(payload['tool_name'])}</strong></div>
-      <div class="meta-card"><div class="stat-card-header"><label>Status</label><span class="card-icon"><img src="{shield_icon}" alt=""></span></div><strong>{cls._escape_html(payload['status'].upper())}</strong></div>
-      <div class="meta-card"><div class="stat-card-header"><label>Task Started</label><span class="card-icon"><img src="{clock_icon}" alt=""></span></div><strong>{cls._escape_html(cls._format_timestamp(payload['created_at']))}</strong></div>
-      <div class="meta-card"><div class="stat-card-header"><label>Exported</label><span class="card-icon"><img src="{rows_icon}" alt=""></span></div><strong>{cls._escape_html(payload['generated_at'])}</strong></div>
+      <div class="meta-card"><div class="stat-card-header"><label>Tool</label><span class="card-icon"><img src="{target_icon}" alt=""></span></div><strong>{cls._escape_html(payload["tool_name"])}</strong></div>
+      <div class="meta-card"><div class="stat-card-header"><label>Status</label><span class="card-icon"><img src="{shield_icon}" alt=""></span></div><strong>{cls._escape_html(payload["status"].upper())}</strong></div>
+      <div class="meta-card"><div class="stat-card-header"><label>Task Started</label><span class="card-icon"><img src="{clock_icon}" alt=""></span></div><strong>{cls._escape_html(cls._format_timestamp(payload["created_at"]))}</strong></div>
+      <div class="meta-card"><div class="stat-card-header"><label>Exported</label><span class="card-icon"><img src="{rows_icon}" alt=""></span></div><strong>{cls._escape_html(payload["generated_at"])}</strong></div>
     </div>
 
     <div class="stat-grid">
       <div class="stat-card" style="--accent: #0f172a;"><div class="stat-card-header"><label>Total findings</label><span class="card-icon"><img src="{findings_icon}" alt=""></span></div><strong>{len(findings)}</strong></div>
-      <div class="stat-card" style="--accent: #991b1b;"><div class="stat-card-header"><label>Critical</label><span class="card-icon"><img src="{critical_icon}" alt=""></span></div><strong>{severity_counts['CRITICAL']}</strong></div>
-      <div class="stat-card" style="--accent: #dc2626;"><div class="stat-card-header"><label>High</label><span class="card-icon"><img src="{target_icon}" alt=""></span></div><strong>{severity_counts['HIGH']}</strong></div>
-      <div class="stat-card" style="--accent: #2563eb;"><div class="stat-card-header"><label>Structured rows</label><span class="card-icon"><img src="{rows_icon}" alt=""></span></div><strong>{len(payload['rows'])}</strong></div>
+      <div class="stat-card" style="--accent: #991b1b;"><div class="stat-card-header"><label>Critical</label><span class="card-icon"><img src="{critical_icon}" alt=""></span></div><strong>{severity_counts["CRITICAL"]}</strong></div>
+      <div class="stat-card" style="--accent: #dc2626;"><div class="stat-card-header"><label>High</label><span class="card-icon"><img src="{target_icon}" alt=""></span></div><strong>{severity_counts["HIGH"]}</strong></div>
+      <div class="stat-card" style="--accent: #2563eb;"><div class="stat-card-header"><label>Structured rows</label><span class="card-icon"><img src="{rows_icon}" alt=""></span></div><strong>{len(payload["rows"])}</strong></div>
     </div>
 
     <section class="section">
@@ -1051,7 +1123,7 @@ class ReportGenerator:
             "HIGH": "error",
             "MEDIUM": "warning",
             "LOW": "note",
-            "INFO": "note"
+            "INFO": "note",
         }
 
         rules = []
@@ -1093,25 +1165,31 @@ class ReportGenerator:
 
             if rule_id not in rule_indices:
                 rule_indices[rule_id] = len(rules)
-                rules.append({
-                    "id": rule_id,
-                    "name": finding.get("title", "Security Finding"),
-                    "shortDescription": {
-                        "text": finding.get("title", "Security Finding")
-                    },
-                    "fullDescription": {
-                        "text": finding.get("description", "No detailed description available.")
-                    },
-                    "help": {
-                        "text": finding.get("remediation", "No remediation provided.")
-                    },
-                    "properties": {
-                        "precision": "high",
-                        "cpe": finding.get("cpe"),
-                        "validated": finding.get("validated"),
-                        "validation_method": finding.get("validation_method"),
+                rules.append(
+                    {
+                        "id": rule_id,
+                        "name": finding.get("title", "Security Finding"),
+                        "shortDescription": {
+                            "text": finding.get("title", "Security Finding")
+                        },
+                        "fullDescription": {
+                            "text": finding.get(
+                                "description", "No detailed description available."
+                            )
+                        },
+                        "help": {
+                            "text": finding.get(
+                                "remediation", "No remediation provided."
+                            )
+                        },
+                        "properties": {
+                            "precision": "high",
+                            "cpe": finding.get("cpe"),
+                            "validated": finding.get("validated"),
+                            "validation_method": finding.get("validation_method"),
+                        },
                     }
-                })
+                )
 
             sarif_result = {
                 "ruleId": rule_id,
@@ -1135,19 +1213,15 @@ class ReportGenerator:
             if target:
                 is_url = "://" in target or target.startswith(("http://", "https://"))
 
-                location = {
-                    "physicalLocation": {
-                        "artifactLocation": {
-                            "uri": target
-                        }
-                    }
-                }
+                location = {"physicalLocation": {"artifactLocation": {"uri": target}}}
 
                 # If target has a line number like file.py:123 and is NOT a web URL
                 if not is_url and ":" in target:
                     parts = target.split(":")
                     if parts[-1].isdigit():
-                        location["physicalLocation"]["artifactLocation"]["uri"] = ":".join(parts[:-1])
+                        location["physicalLocation"]["artifactLocation"]["uri"] = (
+                            ":".join(parts[:-1])
+                        )
                         location["physicalLocation"]["region"] = {
                             "startLine": int(parts[-1])
                         }
@@ -1166,12 +1240,12 @@ class ReportGenerator:
                             "name": tool_name,
                             "version": "1.0.0",
                             "informationUri": "https://github.com/utksh1/SecuScan",
-                            "rules": rules
+                            "rules": rules,
                         }
                     },
-                    "results": results
+                    "results": results,
                 }
-            ]
+            ],
         }
 
         return json.dumps(sarif_output, indent=2)

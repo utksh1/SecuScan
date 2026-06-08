@@ -50,10 +50,7 @@ def _build_prompt(findings: list[dict]) -> str:
         sev = str(f.get("severity", "")).lower()
         if sev in priority_sevs and len(top_findings) < 5:
             title = (
-                f.get("title")
-                or f.get("name")
-                or f.get("check")
-                or "Unnamed finding"
+                f.get("title") or f.get("name") or f.get("check") or "Unnamed finding"
             )
             top_findings.append(f"[{sev.upper()}] {title}")
 
