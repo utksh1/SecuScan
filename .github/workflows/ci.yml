@@ -115,6 +115,19 @@ jobs:
       - name: Run integration tests
         run: pytest testing/backend/integration -q -m "not benchmark"
 
+  backend-tests:
+    needs:
+      - backend-unit
+      - backend-integration
+    runs-on: ubuntu-latest
+    if: |
+      always() &&
+      (needs.backend-unit.result == 'success' || needs.backend-unit.result == 'skipped') &&
+      (needs.backend-integration.result == 'success' || needs.backend-integration.result == 'skipped')
+    steps:
+      - name: Backend test suites completed
+        run: echo "backend-unit and backend-integration completed"
+        
   backend-audit:
     runs-on: ubuntu-latest
     steps:
