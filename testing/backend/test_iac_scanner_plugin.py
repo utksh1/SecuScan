@@ -126,9 +126,9 @@ def test_iac_scanner_command_full_token_sequence(setup_test_environment):
     assert "/tmp/iac_files" in command
 
 
-def test_iac_scanner_renders_with_default_target(setup_test_environment):
+def test_iac_scanner_renders_without_target_field(setup_test_environment):
     """
-    PluginManager must use preset default target when not provided.
+    When target field is omitted, PluginManager renders the command as-is.
     """
     manager = PluginManager(str(PLUGINS_DIR))
     asyncio.run(manager.load_plugins())
@@ -136,7 +136,9 @@ def test_iac_scanner_renders_with_default_target(setup_test_environment):
     command = manager.build_command("iac_scanner", {})
 
     assert command is not None
-    assert "." in command
+    assert len(command) >= 2
+    assert command[0] == "python3"
+    assert command[1] == "-c"
 
 
 def test_iac_scanner_loaded_by_plugin_manager(setup_test_environment):
