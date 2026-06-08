@@ -33,7 +33,7 @@
       "required": true,
       "placeholder": "https://secuscan.in",
       "validation": {
-        "pattern": "^https?://",
+        "validation_type": "url",
         "message": "Must be a valid HTTP(S) URL"
       }
     },
@@ -74,5 +74,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "92487e75582ea0ca9680f5626a2aa93bcb8ecc72c64a35a78f8704175033ddc5"
+  "checksum": "4fada9f7e171899e44ddccdb66be22500f086a7afe1c69b46a01c16e5803e66c"
 }
