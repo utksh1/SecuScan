@@ -121,7 +121,6 @@ describe('ToolConfig dynamic schema flow', () => {
           validation_mode: 'proof',
           evidence_level: 'standard',
         }),
-        expect.any(Object),
       )
     })
   })
