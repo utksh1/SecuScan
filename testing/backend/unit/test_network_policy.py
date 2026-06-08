@@ -7,7 +7,7 @@ from unittest.mock import patch, MagicMock
 
 from backend.secuscan.network_policy import (
     NetworkPolicyEngine, NetworkPolicy, PolicyAction, AuditLogEntry,
-    get_policy_engine
+    get_policy_engine, _init_default_policies
 )
 from backend.secuscan.config import settings
 
@@ -42,6 +42,30 @@ class TestDenyByDefault:
 
         assert not allowed
         assert "denylist" in reason.lower()
+
+
+class TestInitDefaultPolicies:
+    """Test _init_default_policies logic"""
+
+    def test_empty_allowlist_does_not_add_allow_all(self, tmp_path):
+        """Empty allowlist must NOT create 0.0.0.0/0 or ::/0 rules"""
+        audit_log = tmp_path / "audit.log"
+        engine = NetworkPolicyEngine(audit_log_path=str(audit_log))
+        _init_default_policies(engine)
+        assert len(engine.allowlist) == 0
+        allowed, _, _ = engine.check_access("8.8.8.8", plugin_id="test")
+        assert not allowed
+
+    def test_explicit_allowlist_entries_are_loaded(self, monkeypatch, tmp_path):
+        """Entries in SECUSCAN_NETWORK_ALLOWLIST should appear in engine.allowlist"""
+        monkeypatch.setattr(
+            "backend.secuscan.config.settings.network_allowlist",
+            ["8.8.8.8/32", "1.1.1.1/32"],
+        )
+        audit_log = tmp_path / "audit.log"
+        engine = NetworkPolicyEngine(audit_log_path=str(audit_log))
+        _init_default_policies(engine)
+        assert len(engine.allowlist) == 2
 
 
 class TestAllowlistPrecedence:

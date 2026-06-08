@@ -1,5 +1,8 @@
 import pytest
 import socket
+import ipaddress
+from backend.secuscan import validation as validation_module
+from backend.secuscan.config import settings
 from backend.secuscan.validation import (
     validate_target, validate_port, validate_port_range, validate_url,
     sanitize_input, is_safe_path, match_pattern
@@ -56,6 +59,38 @@ def test_validate_target_safe_mode_blocks_dns_rebinding_union(monkeypatch):
 
 def test_validate_target_safe_mode_blocks_url_ip_literal():
     assert validate_target("http://8.8.8.8", safe_mode=True)[0] is False
+
+def test_validate_target_ipv4_with_ipv6_allowed_network_does_not_crash(monkeypatch):
+    monkeypatch.setattr(settings, "allowed_networks", ["fc00::/7"])
+    ok, msg = validate_target("127.0.0.1", safe_mode=True)
+
+    assert ok is False
+    assert msg == "Target not within allowed networks in safe mode (SecuScan Guardrail)"
+
+
+def test_validate_target_ipv6_with_ipv4_allowed_network_does_not_crash(monkeypatch):
+    monkeypatch.setattr(settings, "allowed_networks", ["127.0.0.0/8"])
+    ok, msg = validate_target("::1", safe_mode=True)
+
+    assert ok is False
+    assert msg == "Public IPs/networks not allowed in safe mode (SecuScan Guardrail)"
+
+
+def test_validate_target_mixed_allowed_networks_uses_later_same_version_entry(monkeypatch):
+    monkeypatch.setattr(settings, "allowed_networks", ["fc00::/7", "127.0.0.0/8"])
+    ok, msg = validate_target("127.0.0.1", safe_mode=True)
+
+    assert ok is True
+    assert msg == ""
+
+def test_validate_target_mixed_allowed_networks_uses_later_same_version_ipv6_entry(monkeypatch):
+    monkeypatch.setattr(validation_module, "ALLOWED_PRIVATE", [ipaddress.ip_network("fc00::/7")])
+    monkeypatch.setattr(settings, "allowed_networks", ["127.0.0.0/8", "fc00::/7"])
+
+    ok, msg = validate_target("fd00::1", safe_mode=True)
+
+    assert ok is True
+    assert msg == ""
 
 def test_validate_port():
     assert validate_port(80) == (True, "")

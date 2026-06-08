@@ -70,6 +70,8 @@ def _net_within_allowed_networks(net: ipaddress._BaseNetwork) -> bool:
         for pattern in patterns:
             try:
                 allowed_net = ipaddress.ip_network(pattern, strict=False)
+                if net.version != allowed_net.version:
+                    continue
                 if net.subnet_of(allowed_net) or net.overlaps(allowed_net):
                     return True
             except ValueError:
