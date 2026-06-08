@@ -5,6 +5,7 @@ import io
 import json
 import re
 from .redaction import redact, redact_dict
+from .ai_summary import generate_summary
 from datetime import datetime
 from functools import lru_cache
 from typing import Any, Dict, List
@@ -27,6 +28,26 @@ class ReportGenerator:
         "LOW": (37, 99, 235),
         "INFO": (71, 85, 105),
     }
+
+    @classmethod
+    def _get_ai_summary(cls, findings: List[Dict[str, Any]]) -> str:
+        """Return an AI executive summary, or '' when the feature is disabled.
+
+        No API call is made unless ai_summary_enabled=true and
+        ai_summary_api_key are both configured in settings.
+        All LLM failures are caught and return '' so reports always generate.
+        """
+        from .config import settings as _settings  # local to avoid circular at import time
+        if not _settings.ai_summary_enabled:
+            return ""
+        if not _settings.ai_summary_api_key:
+            return ""
+        return generate_summary(
+            findings=findings,
+            model=_settings.ai_summary_model,
+            api_key=_settings.ai_summary_api_key,
+            base_url=_settings.ai_summary_base_url or None,
+        )
 
     @staticmethod
     def _hex_to_rgb(value: str) -> tuple[int, int, int]:
@@ -311,6 +332,7 @@ class ReportGenerator:
         payload = cls._build_report_payload(task, result)
         findings = payload["findings"]
         severity_counts = payload["severity_counts"]
+        ai_summary = cls._get_ai_summary(findings)
         shield_icon = cls._icon_data_uri("shield", "1e3a5f")
         target_icon = cls._icon_data_uri("target", "2563eb")
         findings_icon = cls._icon_data_uri("findings", "0f172a")
@@ -580,6 +602,7 @@ class ReportGenerator:
   </table>
 
   <h2><img class="stat-icon" src="{shield_icon}" alt=""> Executive Overview</h2>
+  {f'''<div style="margin-bottom:12px;padding:10px 12px;background:#f0f4ff;border-left:4px solid #2563eb;border-radius:3px;"><strong style="display:block;margin-bottom:4px;font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#1e3a8a;">&#129302; AI Executive Summary</strong><p style="margin:0;font-size:9px;line-height:1.55;color:#1e293b;">{cls._escape_html(ai_summary)}</p></div>''' if ai_summary else ""}
   <ul>{summary_markup}</ul>
 
   <h2><img class="stat-icon" src="{clock_icon}" alt=""> Assessment Details</h2>
@@ -621,6 +644,7 @@ class ReportGenerator:
         payload = cls._build_report_payload(task, result)
         findings = payload["findings"]
         severity_counts = payload["severity_counts"]
+        ai_summary = cls._get_ai_summary(findings)
         shield_icon = cls._icon_data_uri("shield", "1e3a5f")
         target_icon = cls._icon_data_uri("target", "2563eb")
         findings_icon = cls._icon_data_uri("findings", "0f172a")
@@ -953,6 +977,7 @@ class ReportGenerator:
     <section class="section">
       <h2><img class="section-icon" src="{shield_icon}" alt="">Executive Overview</h2>
       <p class="section-copy">Key takeaways generated from the parsed assessment data.</p>
+      {f'''<div style="margin:0 0 18px;padding:16px 20px;background:#eff6ff;border-left:4px solid #2563eb;border-radius:14px;"><p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#1d4ed8;">&#129302; AI Executive Summary</p><p style="margin:0;color:#1e293b;line-height:1.65;">{cls._escape_html(ai_summary)}</p></div>''' if ai_summary else ""}
       <ul class="summary-list">{summary_markup}</ul>
     </section>
 
