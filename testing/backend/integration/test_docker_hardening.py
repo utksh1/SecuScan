@@ -11,7 +11,6 @@ Run with:
     pytest testing/backend/test_docker_hardening.py -v
 """
 
-
 import json
 import subprocess
 import shutil
@@ -43,8 +42,11 @@ def _run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
 
 
 def _docker_available() -> bool:
-    result = _run(["docker", "info"])
-    return result.returncode == 0
+    try:
+        result = _run(["docker", "info"])
+        return result.returncode == 0
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return False
 
 
 def _trivy_available() -> bool:
@@ -64,15 +66,16 @@ def _build_image(service: str) -> str:
     info = IMAGES[service]
     result = _run(
         [
-            "docker", "build",
-            "-t", info["tag"],
-            "-f", info["dockerfile"],
+            "docker",
+            "build",
+            "-t",
+            info["tag"],
+            "-f",
+            info["dockerfile"],
             info["context"],
         ]
     )
-    assert result.returncode == 0, (
-        f"Failed to build {service} image:\n{result.stderr}"
-    )
+    assert result.returncode == 0, f"Failed to build {service} image:\n{result.stderr}"
     return info["tag"]
 
 
@@ -84,17 +87,32 @@ def _container_uid(tag: str) -> int:
 
 def _container_user(tag: str) -> str:
     result = _run(["docker", "run", "--rm", tag, "whoami"])
-    assert result.returncode == 0, f"Could not get username from container: {result.stderr}"
+    assert result.returncode == 0, (
+        f"Could not get username from container: {result.stderr}"
+    )
     return result.stdout.strip()
 
 
 def _suid_files(tag: str) -> list[str]:
     result = _run(
         [
-            "docker", "run", "--rm", "--entrypoint", "find",
+            "docker",
+            "run",
+            "--rm",
+            "--entrypoint",
+            "find",
             tag,
-            "/", "-xdev", "(", "-perm", "-4000", "-o", "-perm", "-2000", ")",
-            "-type", "f",
+            "/",
+            "-xdev",
+            "(",
+            "-perm",
+            "-4000",
+            "-o",
+            "-perm",
+            "-2000",
+            ")",
+            "-type",
+            "f",
         ]
     )
     lines = [l for l in result.stdout.splitlines() if l.strip()]
@@ -105,9 +123,12 @@ def _trivy_critical_count(tag: str) -> int:
     """Return number of CRITICAL CVEs found by Trivy."""
     result = _run(
         [
-            "trivy", "image",
-            "--format", "json",
-            "--severity", "CRITICAL",
+            "trivy",
+            "image",
+            "--format",
+            "json",
+            "--severity",
+            "CRITICAL",
             "--ignore-unfixed",
             "--quiet",
             tag,
@@ -145,6 +166,7 @@ def frontend_image():
 
 
 # Tests: non-root user
+
 
 @requires_docker
 class TestNonRootUser:
@@ -220,6 +242,7 @@ class TestSUIDFiles:
 
 # Tests: Dockerfile structural checks (static analysis)
 
+
 class TestDockerfileStructure:
     """Parse Dockerfiles to confirm structural hardening without Docker."""
 
@@ -282,6 +305,7 @@ class TestDockerfileStructure:
         content = self._read_dockerfile("backend")
         # Any RUN apt-get install line must be paired with cleanup in the same RUN
         import re
+
         run_blocks = re.findall(
             r"RUN (.+?)(?=\nRUN |\nCOPY |\nUSER |\nFROM |\Z)", content, re.DOTALL
         )
@@ -293,6 +317,7 @@ class TestDockerfileStructure:
 
 
 # Tests: Trivy CVE gate
+
 
 @requires_docker
 @requires_trivy
@@ -325,9 +350,12 @@ class TestTrivyCVEGate:
 
         result = subprocess.run(
             [
-                "trivy", "image",
-                "--format", "json",
-                "--severity", "CRITICAL",
+                "trivy",
+                "image",
+                "--format",
+                "json",
+                "--severity",
+                "CRITICAL",
                 "--quiet",
                 vulnerable_tag,
             ],
@@ -340,8 +368,7 @@ class TestTrivyCVEGate:
             pytest.skip("Trivy returned non-JSON output for vulnerable image.")
 
         count = sum(
-            len(t.get("Vulnerabilities") or [])
-            for t in data.get("Results", [])
+            len(t.get("Vulnerabilities") or []) for t in data.get("Results", [])
         )
         assert count > 0, (
             "Expected to find CRITICAL CVEs in the known-vulnerable image "
