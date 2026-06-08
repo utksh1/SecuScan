@@ -67,6 +67,15 @@ The project is designed to be:
 
 ## Prerequisites
 
+## Runtime Support
+
+SecuScan CI validates the following runtime baselines:
+
+- Python 3.11
+- Node.js 20 and 22
+
+Runtime compatibility changes should keep these CI checks passing.
+
 For a fresh local setup, make sure your machine has:
 
 - `python3` 3.11 or newer

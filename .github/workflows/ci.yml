@@ -175,47 +175,67 @@ jobs:
       always() &&
       needs.detect-changes.outputs.run_frontend == 'true' &&
       (needs.formatting-hygiene.result == 'success' || needs.formatting-hygiene.result == 'skipped')
+
+    strategy:
+      fail-fast: false
+      matrix:
+       node-version:
+           - "20"
+           - "22"
+
     runs-on: ubuntu-latest
+
     defaults:
       run:
         working-directory: frontend
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: ${{ matrix.node-version }}
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
+
       - name: Install frontend dependencies
         run: npm ci
+
       - name: Run npm audit
         id: npm_audit
         run: |
           npm audit --json > ${{ github.workspace }}/frontend/npm-audit-report.json || {
             EXIT_CODE=$?
             echo "EXIT_CODE=$EXIT_CODE" >> $GITHUB_OUTPUT
-            exit 0  # Check severity next
+            exit 0
           }
         continue-on-error: true
+
       - name: Install Python YAML library
         run: pip install pyyaml
+
       - name: Check npm audit results
         run: python ${{ github.workspace }}/scripts/check_npm_audit.py --report ${{ github.workspace }}/frontend/npm-audit-report.json --config ${{ github.workspace }}/.audit-config.yaml
+
       - name: Upload npm-audit report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: npm-audit-report
           path: frontend/npm-audit-report.json
+
       - name: Run frontend TypeScript typecheck
         run: npm run typecheck
+
       - name: Note TypeScript typecheck in job summary
         if: always()
         run: |
           echo "Frontend TypeScript typecheck: npm run typecheck" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Run frontend quality gate
         run: npm run quality
+
       - name: Run unit tests
         run: npm run test
+
       - name: Build frontend
         run: npm run build
