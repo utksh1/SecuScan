@@ -9,6 +9,7 @@ import {
   type Workflow,
   type WorkflowCreatePayload,
 } from '../api'
+import ScanScheduleForm, { type SchedulePayload } from '../components/ScanScheduleForm'
 import { formatDateLong } from '../utils/date'
 
 const containerVariants = {
@@ -42,7 +43,13 @@ function timeAgo(iso?: string | null) {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-function formatSchedule(scheduleSeconds?: number | null) {
+function formatSchedule(workflow: Workflow) {
+  if (workflow.cron_expression) {
+    const tz = workflow.timezone && workflow.timezone !== 'UTC' ? ` (${workflow.timezone})` : ''
+    return `Cron: ${workflow.cron_expression}${tz}`
+  }
+
+  const scheduleSeconds = workflow.schedule_seconds
   if (!scheduleSeconds || scheduleSeconds <= 0) return 'Manual'
   if (scheduleSeconds < 60) return `Every ${scheduleSeconds}s`
 
@@ -107,41 +114,36 @@ interface CreateSheetProps {
   onCreated: (w: Workflow) => void
 }
 
+type ScheduleMode = 'interval' | 'cron' | 'manual'
+
 function CreateSheet({ onClose, onCreated }: CreateSheetProps) {
   const [name, setName] = useState('')
+  const [scheduleMode, setScheduleMode] = useState<ScheduleMode>('interval')
   const [scheduleSeconds, setScheduleSeconds] = useState('3600')
+  const [cronSchedule, setCronSchedule] = useState<SchedulePayload>({
+    cron_expression: '0 2 * * *',
+    timezone: 'UTC',
+    blackout_start: null,
+    blackout_end: null,
+  })
   const [enabled, setEnabled] = useState(true)
   const [stepsJson, setStepsJson] = useState(JSON.stringify(emptySteps, null, 2))
   const [jsonError, setJsonError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setJsonError(null)
-    setError(null)
-
-    let steps
+  function parseSteps(): WorkflowCreatePayload['steps'] | null {
     try {
-      steps = JSON.parse(stepsJson)
+      return JSON.parse(stepsJson)
     } catch {
       setJsonError('Invalid JSON in steps field')
-      return
+      return null
     }
+  }
 
-    const trimmedSchedule = scheduleSeconds.trim()
-    const parsedSchedule = trimmedSchedule === '' ? null : Number(trimmedSchedule)
-    if (
-      parsedSchedule !== null &&
-      (!Number.isInteger(parsedSchedule) || parsedSchedule <= 0)
-    ) {
-      setError('Schedule must be a positive whole number of seconds')
-      return
-    }
-
+  async function submitWorkflow(payload: WorkflowCreatePayload) {
     setLoading(true)
     try {
-      const payload: WorkflowCreatePayload = { name, schedule_seconds: parsedSchedule, enabled, steps }
       const created = await createWorkflow(payload)
       onCreated(created)
     } catch {
@@ -149,6 +151,49 @@ function CreateSheet({ onClose, onCreated }: CreateSheetProps) {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function handleSubmit() {
+    setJsonError(null)
+    setError(null)
+
+    const steps = parseSteps()
+    if (!steps) return
+
+    if (scheduleMode === 'interval') {
+      const trimmedSchedule = scheduleSeconds.trim()
+      const parsedSchedule = trimmedSchedule === '' ? null : Number(trimmedSchedule)
+      if (
+        parsedSchedule !== null &&
+        (!Number.isInteger(parsedSchedule) || parsedSchedule <= 0)
+      ) {
+        setError('Schedule must be a positive whole number of seconds')
+        return
+      }
+      await submitWorkflow({ name, schedule_seconds: parsedSchedule, enabled, steps })
+      return
+    }
+
+    if (scheduleMode === 'manual') {
+      await submitWorkflow({ name, schedule_seconds: null, enabled, steps })
+    }
+  }
+
+  async function handleCronSubmit(schedule: SchedulePayload) {
+    setJsonError(null)
+    setError(null)
+    const steps = parseSteps()
+    if (!steps) return
+
+    await submitWorkflow({
+      name,
+      cron_expression: schedule.cron_expression,
+      timezone: schedule.timezone,
+      blackout_start: schedule.blackout_start,
+      blackout_end: schedule.blackout_end,
+      enabled,
+      steps,
+    })
   }
 
   return (
@@ -161,7 +206,7 @@ function CreateSheet({ onClose, onCreated }: CreateSheetProps) {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 space-y-6">
+        <div className="p-8 space-y-6">
           <div className="space-y-2">
             <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em]">Name</label>
             <input
@@ -173,16 +218,50 @@ function CreateSheet({ onClose, onCreated }: CreateSheetProps) {
             />
           </div>
 
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em]">Schedule (seconds)</label>
-            <input
-              value={scheduleSeconds}
-              onChange={e => setScheduleSeconds(e.target.value)}
-              placeholder="3600"
-              inputMode="numeric"
-              className="w-full bg-charcoal-dark border-4 border-black px-4 py-3 text-sm text-silver-bright font-mono placeholder:text-silver/30 focus:outline-none focus:border-rag-red transition-colors"
-            />
+          <div className="space-y-3">
+            <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em]">Schedule Type</label>
+            <div className="grid grid-cols-3 gap-2">
+              {(['interval', 'cron', 'manual'] as ScheduleMode[]).map(mode => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setScheduleMode(mode)}
+                  className={`border-4 border-black px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-colors ${
+                    scheduleMode === mode
+                      ? 'bg-rag-blue text-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]'
+                      : 'bg-charcoal-dark text-silver/50 hover:text-silver-bright'
+                  }`}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
           </div>
+
+          {scheduleMode === 'interval' && (
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em]">Schedule (seconds)</label>
+              <input
+                value={scheduleSeconds}
+                onChange={e => setScheduleSeconds(e.target.value)}
+                placeholder="3600"
+                inputMode="numeric"
+                className="w-full bg-charcoal-dark border-4 border-black px-4 py-3 text-sm text-silver-bright font-mono placeholder:text-silver/30 focus:outline-none focus:border-rag-red transition-colors"
+              />
+            </div>
+          )}
+
+          {scheduleMode === 'cron' && (
+            <ScanScheduleForm
+              embedded
+              submitLabel={loading ? 'Creating...' : 'Create Workflow'}
+              initialValues={cronSchedule}
+              onSubmit={async schedule => {
+                setCronSchedule(schedule)
+                await handleCronSubmit(schedule)
+              }}
+            />
+          )}
 
           <div className="flex items-center justify-between">
             <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em]">Enabled</label>
@@ -208,23 +287,26 @@ function CreateSheet({ onClose, onCreated }: CreateSheetProps) {
 
           {error && <p className="text-[10px] text-rag-red font-black uppercase tracking-widest">{error}</p>}
 
-          <div className="flex gap-4 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 border-4 border-black px-4 py-3 text-[10px] font-black uppercase tracking-widest text-silver/60 hover:text-silver-bright transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 bg-silver-bright border-4 border-black px-4 py-3 text-[10px] font-black uppercase tracking-widest text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-40"
-            >
-              {loading ? 'Creating...' : 'Create'}
-            </button>
-          </div>
-        </form>
+          {scheduleMode !== 'cron' && (
+            <div className="flex gap-4 pt-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 border-4 border-black px-4 py-3 text-[10px] font-black uppercase tracking-widest text-silver/60 hover:text-silver-bright transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={loading}
+                className="flex-1 bg-silver-bright border-4 border-black px-4 py-3 text-[10px] font-black uppercase tracking-widest text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-40"
+              >
+                {loading ? 'Creating...' : 'Create'}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -251,7 +333,7 @@ function WorkflowCard({ workflow, onToggle, onRun, onDelete, running, toggling }
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1 min-w-0">
             <h3 className="text-xl font-black text-silver-bright uppercase tracking-tight truncate">{workflow.name}</h3>
-            <p className="text-[10px] font-mono text-silver/40 uppercase tracking-widest">{formatSchedule(workflow.schedule_seconds)}</p>
+            <p className="text-[10px] font-mono text-silver/40 uppercase tracking-widest">{formatSchedule(workflow)}</p>
           </div>
           <span className={`shrink-0 px-2 py-1 text-[9px] font-black uppercase tracking-widest border-2 border-black ${workflow.enabled ? 'bg-rag-green text-black' : 'bg-charcoal-dark text-silver/40'}`}>
             {workflow.enabled ? 'Enabled' : 'Disabled'}

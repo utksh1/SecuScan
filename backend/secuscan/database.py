@@ -461,6 +461,23 @@ class Database:
                 except Exception as e:
                     print(f"Failed to add column {col_name}: {e}")
 
+
+        workflow_columns = await self.fetchall("PRAGMA table_info(workflows)")
+        existing_workflow_cols = {col["name"] for col in workflow_columns}
+        workflow_cron_cols = {
+            "cron_expression": "TEXT",
+            "timezone": "TEXT DEFAULT 'UTC'",
+            "blackout_start": "TEXT",
+            "blackout_end": "TEXT",
+        }
+        for col_name, col_type in workflow_cron_cols.items():
+            if col_name not in existing_workflow_cols:
+                try:
+                    await self.execute(f"ALTER TABLE workflows ADD COLUMN {col_name} {col_type}")
+                    print(f"Added missing column {col_name} to workflows table.")
+                except Exception as e:
+                    print(f"Failed to add column {col_name}: {e}")
+
         asset_service_columns = await self.fetchall("PRAGMA table_info(asset_services)")
         existing_asset_service_cols = {col["name"] for col in asset_service_columns}
         asset_service_needed = {
@@ -501,6 +518,7 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_reports_owner ON reports(owner_id);
             """
         )
+
 
     async def _run_migrations(self):
         migrations_dir = Path(__file__).parent / "migrations"
