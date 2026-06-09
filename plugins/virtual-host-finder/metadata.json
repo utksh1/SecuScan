@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd0e",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
     "binary": "ffuf"
@@ -33,14 +33,16 @@
       "label": "Target Host/IP",
       "type": "string",
       "required": true,
-      "placeholder": "secuscan.in"
+      "placeholder": "secuscan.in",
+      "help": "Enter the target domain or IP address to probe for virtual hosts. Example: secuscan.in or 192.168.1.1. Ensure you have authorization before scanning."
     },
     {
       "id": "wordlist",
       "label": "Subdomain Wordlist",
       "type": "string",
       "required": false,
-      "default": "/usr/share/seclists/Discovery/DNS/subdomains-top1million-110000.txt"
+      "default": "/usr/share/seclists/Discovery/DNS/subdomains-top1million-110000.txt",
+      "help": "Absolute path to a wordlist file containing subdomain names to fuzz. Defaults to the SecLists top 1 million subdomains list. Use a smaller list for faster scans."
     }
   ],
   "presets": {
@@ -66,5 +68,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "4f1b41fc1b9a02462f05122f660660cb096b8762a9a7986064e4acf6da9c5175"
+  "checksum": "9bf5ebb201ca600cf5a103bbe5b0256382c583461b0e9dfaf9e9c788315d1665"
 }
