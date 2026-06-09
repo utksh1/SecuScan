@@ -1,31 +1,40 @@
+import json
 from typing import Any, Dict, List
+
+SEVERITY_MAP = {
+    "high": "high",
+    "critical": "critical",
+    "medium": "medium",
+    "low": "low",
+    "info": "info",
+}
 
 
 def parse(output: str) -> Dict[str, Any]:
-    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    try:
+        data = json.loads(output)
+    except (json.JSONDecodeError, ValueError):
+        return {"findings": [], "count": 0, "items": []}
+
+    raw_findings: List[Dict[str, Any]] = data.get("findings", data.get("items", []))
     findings: List[Dict[str, Any]] = []
 
-    for line in lines[:300]:
-        severity = "info"
-        low_line = line.lower()
-        if any(keyword in low_line for keyword in ["open", "found", "vuln", "warning", "detected", "exposed"]):
-            severity = "low"
-        if any(keyword in low_line for keyword in ["critical", "exploit", "injection", "compromised"]):
-            severity = "high"
-
-        findings.append(
-            {
-                "title": "Recon/Scan Observation",
-                "category": "Security Scan",
-                "severity": severity,
-                "description": line,
-                "remediation": "Review scan output and validate findings before remediation planning.",
-                "metadata": {"raw": line},
-            }
-        )
+    for item in raw_findings:
+        if not isinstance(item, dict):
+            continue
+        severity_raw = item.get("severity", "info") or "info"
+        severity = SEVERITY_MAP.get(severity_raw.lower(), "info")
+        findings.append({
+            "title": item.get("title", "Security Observation"),
+            "category": "DAST",
+            "severity": severity,
+            "description": item.get("description", ""),
+            "remediation": item.get("remediation", "Review scan output and validate findings before remediation."),
+            "metadata": item.get("metadata", {}),
+        })
 
     return {
         "findings": findings,
         "count": len(findings),
-        "items": lines[:300],
+        "items": raw_findings,
     }

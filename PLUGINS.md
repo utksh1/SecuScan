@@ -8,7 +8,7 @@ docs/plugins/plugin-development-walkthrough.md
 
 This file is a human-readable index of the plugins currently present in `plugins/*/metadata.json`.
 
-Last synced: 2026-05-11
+Last synced: 2026-06-09
 
 ## At a Glance
 
@@ -107,7 +107,7 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | WordPress Security Scan | `wpscan` | `vulnerability` | `intrusive` | `wpscan` | WordPress security scanner for plugin, theme, and core risk visibility. |
 | XSS Exploiter | `xss_exploiter` | `exploit` | `exploit` | `python3` | Exploit XSS in real-life attacks to extract cookies and data. |
 | Binary Signature Scan | `yara_scan` | `forensics` | `intrusive` | `yara` | Binary and file-system signature matching with YARA rules. |
-| DAST Web Proxy (ZAP) | `zap_scanner` | `vulnerability` | `exploit` | `python3` | Dynamic proxy spidering and payload injection. |
+| DAST Web Proxy (ZAP) | `zap_scanner` | `vulnerability` | `exploit` | `python3` | Dynamic application security testing via OWASP ZAP Docker container. |
 
 ### Hashcat Output Artifacts
 
@@ -369,3 +369,12 @@ Before submitting a Pull Request that adds, removes, or modifies a plugin, ensur
 
 ```bash
 python scripts/validate_plugins_catalog.py
+```
+
+## Runtime Dependencies
+
+Some plugins require external runtimes beyond standard CLI binaries. The following table documents these special requirements:
+
+| Plugin | Dependency | Notes |
+| --- | --- | --- |
+| `zap_scanner` | Docker | Launches OWASP ZAP via `ghcr.io/zaproxy/zaproxy:stable`. Docker must be installed on the host and the current user must have permission to run containers. |
