@@ -211,6 +211,7 @@ async def health_check():
     import platform
     import sys
     
+    logger.info("Health check endpoint accessed")
     return {
         "status": "operational",
         "version": "0.1.0-alpha",
