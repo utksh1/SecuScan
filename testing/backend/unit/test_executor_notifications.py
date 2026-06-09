@@ -39,7 +39,7 @@ async def test_execute_task_dispatches_notifications_after_findings(setup_test_e
     executor = TaskExecutor()
 
     async def fake_command(*args, **kwargs):
-        return "80/tcp open http", 0
+        return "80/tcp open http", 0, None
 
     mock_dispatch = AsyncMock(return_value=[])
 
@@ -52,6 +52,7 @@ async def test_execute_task_dispatches_notifications_after_findings(setup_test_e
             mock_dispatch,
         ),
     ):
+
         mock_limiter.release = AsyncMock()
 
         mock_plugin = MagicMock()
@@ -110,7 +111,7 @@ async def test_execute_task_survives_notification_dispatch_failure(setup_test_en
     executor = TaskExecutor()
 
     async def fake_command(*args, **kwargs):
-        return "80/tcp open http", 0
+        return "80/tcp open http", 0, None
 
     with (
         patch.object(executor, "_execute_command", side_effect=fake_command),
