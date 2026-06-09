@@ -15,6 +15,7 @@ import hmac
 from .models import PluginMetadata, PluginFieldType
 from .config import settings
 from .capabilities import validate_capability_list, ALL_CAPABILITIES
+from .validation import sanitize_input
 
 # Port specifications: one or more comma-separated port numbers or port ranges.
 # Valid: "22", "80,443", "1-1000", "22,80,1000-2000"
@@ -378,7 +379,7 @@ class PluginManager:
                 return None
 
             placeholder = "{" + var_name + (f":{default_value}" if default_value else "") + "}"
-            rendered = rendered.replace(placeholder, str(value))
+            rendered = rendered.replace(placeholder, sanitize_input(str(value)))
 
         return rendered
 
