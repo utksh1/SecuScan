@@ -59,27 +59,6 @@ class Settings(BaseSettings):
     plugin_signature_key: Optional[str] = None
     enforce_plugin_signatures: bool = False
     vault_key: Optional[str] = None
-    denied_capabilities: List[str] = []
-    admin_api_key: Optional[str] = None
-
-    # Network Policy Configuration
-    network_allowlist: List[str] = []  # IPs/networks to allow (CIDR); empty = deny all egress
-    network_denylist: List[str] = [    # IPs/networks to deny (CIDR)
-        "169.254.169.254/32",          # AWS metadata
-        "169.254.0.0/16",              # Reserved/metadata
-        "127.0.0.0/8",                 # Loopback (for remote execution)
-        "10.0.0.0/8",                  # Private RFC 1918
-        "172.16.0.0/12",               # Private RFC 1918
-        "192.168.0.0/16",              # Private RFC 1918
-        "100.64.0.0/10",               # Carrier-grade NAT (RFC 6598)
-        "fc00::/7",                    # IPv6 Unique Local Address
-        "fe80::/10",                   # IPv6 Link-local
-        "::1/128",                     # IPv6 Loopback
-    ]
-    network_audit_log_file: str = str(PROJECT_ROOT / "logs" / "network.audit.log")
-    network_audit_retention_days: int = 90
-    enforce_network_policy: bool = True
-    network_policy_failure_mode: str = "block"  # "block" or "log_only"
 
     # Rate Limiting
     max_concurrent_tasks: int = 3
@@ -119,9 +98,14 @@ class Settings(BaseSettings):
     task_start_max_field_length: int = 1_000      # max chars per string input value
     task_start_max_array_length: int = 50         # max items in any list/multiselect input
 
-    # Parser sandbox limits
-    parser_sandbox_timeout_seconds: int = 30
-    parser_sandbox_max_output_bytes: int = 8 * 1024 * 1024  # 8 MB
+    # Artifact Retention
+    # max_age_days=0 disables age-based cleanup; max_task_count=0 disables count-based cleanup.
+    retention_max_age_days: int = 0
+    retention_max_task_count: int = 0
+    # Comma-separated statuses that are never automatically purged.
+    retention_keep_statuses: str = "running,queued"
+    # How often (seconds) the background retention loop runs.
+    retention_interval_seconds: int = 3600
 
     # Logging
     log_level: str = "INFO"
@@ -146,6 +130,11 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
+
+    @property
+    def retention_keep_statuses_set(self) -> set:
+        """Return retention_keep_statuses as a Python set for easy membership tests."""
+        return {s.strip() for s in self.retention_keep_statuses.split(",") if s.strip()}
 
     @property
     def base_url(self) -> str:
