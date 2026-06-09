@@ -84,10 +84,9 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | SQLi Exploiter | `sqli_exploiter` | `exploit` | `exploit` | `sqlmap` | Exploit SQL injection in web apps to extract data. |
 | SQL Injection Testing | `sqlmap` | `web` | `exploit` | `sqlmap` | Automatic SQL injection and database takeover tool. |
 | SSH Runner | `ssh_runner` | `execution` | `intrusive` | `ssh` | Remote command execution via SSH. |
-| Subdomain Finder | `subdomain-finder` | `recon` | `safe` | `subfinder` | Discover subdomains of a domain. |
-| Subdomain Scanner | `subdomain_discovery` | `recon` | `safe` | `subfinder` | Enumerate subdomains using passive sources. |
+| Subdomain Discovery (Configurable) | `subdomain_discovery` | `recon` | `safe` | `subfinder` | Comprehensive configurable subdomain enumeration via passive sources. Thread count and source coverage tunable via presets. |
 | Subdomain Takeover | `subdomain_takeover` | `exploit` | `intrusive` | `subfinder` | Discover dangling DNS entries pointing to external services. |
-| Subfinder | `subfinder` | `recon` | `safe` | `subfinder` | Fast passive subdomain enumeration. |
+| Subfinder (Quick) | `subfinder` | `recon` | `safe` | `subfinder` | Quick passive subdomain enumeration with minimal configuration — just provide a root domain. |
 | theHarvester | `theharvester` | `recon` | `safe` | `theHarvester` | OSINT collection for emails, domains, and hosts. |
 | TLS Security Analysis | `tls_inspector` | `security` | `safe` | `openssl` | Examine TLS/SSL certificates and cipher configurations. |
 | Uncover | `uncover` | `recon` | `safe` | `uncover` | Discover internet-exposed assets from external search sources. |
