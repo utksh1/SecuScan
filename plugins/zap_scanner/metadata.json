@@ -2,8 +2,8 @@
   "id": "zap_scanner",
   "name": "DAST Web Proxy (ZAP)",
   "version": "1.0.0",
-  "description": "Dynamic proxy spidering and payload injection.",
-  "long_description": "Dynamic proxy spidering and payload injection.",
+  "description": "Dynamic application security testing via OWASP ZAP Docker container.",
+  "long_description": "Runs OWASP ZAP in a Docker container to perform automated DAST scans against web applications. Supports full spidering, active scanning, and AJAX crawling for JavaScript-heavy apps. Generates HTML and JSON reports with categorized findings.\n\nRequires Docker to be installed on the host machine.",
   "category": "vulnerability",
   "author": {
     "name": "SecuScan Contributors",
@@ -11,17 +11,13 @@
   },
   "license": "MIT",
   "icon": "🛠️",
-  "implementation_status": "integrated",
-  "supports_authenticated_crawling": true,
-  "supports_session_reuse": true,
   "engine": {
     "type": "cli",
     "binary": "python3"
   },
   "command_template": [
     "python3",
-    "-c",
-    "import sys;print('ZAP connector placeholder scan');print('target='+sys.argv[1]);print('mode=dast')",
+    "plugins/zap_scanner/run.py",
     "{target}"
   ],
   "fields": [
@@ -30,11 +26,12 @@
       "label": "Target URL",
       "type": "string",
       "required": true,
-      "placeholder": "https://secuscan.in",
+      "placeholder": "https://example.com",
       "validation": {
         "pattern": "^https?://",
         "message": "Must be a valid HTTP(S) URL"
-      }
+      },
+      "help": "The full URL (including scheme) of the web application to scan."
     }
   ],
   "presets": {
@@ -47,7 +44,7 @@
   "safety": {
     "level": "exploit",
     "requires_consent": true,
-    "consent_message": "DAST payload injection should only run in authorized environments.",
+    "consent_message": "DAST payload injection should only run in authorized environments. Active scanning may disrupt target services.",
     "rate_limit": {
       "max_per_hour": 20,
       "max_concurrent": 1
@@ -62,10 +59,11 @@
   ],
   "dependencies": {
     "binaries": [
+      "docker",
       "python3"
     ],
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "6546eca4549d40f188c84e9be46b7e992aa6a025d25a9e7ba1e2420387108819"
+  "checksum": "4b57127fff0b0ef3f667658a02673e8f47bd87ea0ee8296e9126c372f138b088"
 }
