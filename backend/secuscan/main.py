@@ -21,6 +21,7 @@ from .plugins import init_plugins
 from .routes import router
 from .saved_views import saved_views_router
 from .workflows import scheduler
+from .retention import retention_scheduler
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level),
@@ -107,6 +108,15 @@ async def lifespan(app: FastAPI):
 
     await scheduler.start()
     logger.info("✓ Workflow scheduler started")
+
+    # Start artifact retention background loop (no-op when all limits are 0)
+    await retention_scheduler.start(
+        interval_seconds=settings.retention_interval_seconds,
+        max_age_days=settings.retention_max_age_days,
+        max_task_count=settings.retention_max_task_count,
+        keep_statuses=settings.retention_keep_statuses_set,
+    )
+    logger.info("✓ Retention scheduler started")
     
     logger.info("✓ Ready to serve on %s:%d", settings.bind_address, settings.bind_port)
     
@@ -119,6 +129,7 @@ async def lifespan(app: FastAPI):
     if global_cache:
         await global_cache.disconnect()
     await scheduler.stop()
+    await retention_scheduler.stop()
     logger.info("✓ Shutdown complete")
 
 # Create FastAPI application
