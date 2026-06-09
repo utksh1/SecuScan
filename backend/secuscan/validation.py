@@ -542,6 +542,73 @@ def _is_filesystem_target(target: str) -> bool:
         return True
     return False
 
+def resolve_and_validate_target(url: str) -> Tuple[bool, str]:
+    """Resolve a webhook URL and validate it against SSRF protections.
+
+    Performs DNS resolution, IP range validation, and port checks
+    to prevent Server-Side Request Forgery attacks.
+    """
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False, "Invalid URL"
+
+    if parsed.scheme not in ("http", "https"):
+        return False, f"Scheme '{parsed.scheme}' not allowed for webhooks"
+
+    hostname = parsed.hostname
+    if not hostname:
+        return False, "URL must have a hostname"
+
+    port = parsed.port
+    if port is not None and port not in settings.notification_allowed_ports:
+        return False, f"Port {port} not in allowed ports: {settings.notification_allowed_ports}"
+
+    # Reject raw IP addresses in webhook URLs
+    try:
+        ipaddress.ip_address(hostname)
+        return False, "Raw IP addresses are not allowed in webhook URLs; use a hostname"
+    except ValueError:
+        pass
+
+    # Resolve hostname to IPs
+    try:
+        resolved = socket.getaddrinfo(hostname, port or 443, proto=socket.IPPROTO_TCP)
+    except OSError:
+        return False, f"Could not resolve hostname: {hostname}"
+
+    for family, _socktype, _proto, _canonname, sockaddr in resolved:
+        try:
+            ip = ipaddress.ip_address(sockaddr[0])
+        except ValueError:
+            continue
+
+        # Check against blocked ranges
+        for blocked_cidr in settings.notification_blocked_ip_ranges:
+            try:
+                blocked_net = ipaddress.ip_network(blocked_cidr, strict=False)
+                if ip in blocked_net:
+                    return False, f"Resolved IP {ip} falls in blocked range {blocked_cidr}"
+            except ValueError:
+                continue
+
+        # Check allowed ranges if configured
+        if settings.notification_allowed_ip_ranges:
+            in_allowed = False
+            for allowed_cidr in settings.notification_allowed_ip_ranges:
+                try:
+                    allowed_net = ipaddress.ip_network(allowed_cidr, strict=False)
+                    if ip in allowed_net:
+                        in_allowed = True
+                        break
+                except ValueError:
+                    continue
+            if not in_allowed:
+                return False, f"Resolved IP {ip} not in allowed ranges"
+
+    return True, ""
+
+
 def validate_command_network_egress(command: list[str], safe_mode: bool, plugin_id: str, task_id: str) -> Tuple[bool, str]:
     """
     Inspect all command arguments. If any argument represents an outbound network
