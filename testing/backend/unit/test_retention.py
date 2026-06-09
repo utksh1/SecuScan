@@ -300,7 +300,7 @@ async def test_custom_keep_statuses_are_respected(db):
     """Custom keep_statuses set prevents deletion of those statuses."""
     old = datetime.now(timezone.utc) - timedelta(days=10)
     tid_pending = db.add_task(status="pending", created_at=old)
-    tid_failed  = db.add_task(status="failed",  created_at=old)
+    tid_failed = db.add_task(status="failed", created_at=old)
 
     result = await run_cleanup(
         db, max_age_days=5, keep_statuses={"pending", "running", "queued"}
