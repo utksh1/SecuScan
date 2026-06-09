@@ -3,11 +3,11 @@ Artifact retention — background cleanup for scan tasks and their raw files.
 
 Policy (all knobs live in Settings, prefixed SECUSCAN_RETENTION_*):
 
-  max_age_days        – delete tasks older than N days (0 = disabled)
-  max_task_count      – keep only the N most-recent tasks (0 = disabled)
-  keep_statuses       – comma-separated list of statuses to *preserve*
-                         (default: "running,queued" — never auto-delete live tasks)
-  interval_seconds    – how often the background loop runs (default: 3600)
+  max_age_days        - delete tasks older than N days (0 = disabled)
+  max_task_count      - keep only the N most-recent tasks (0 = disabled)
+  keep_statuses       - comma-separated list of statuses to preserve
+                        (default: "running,queued" - never auto-delete live tasks)
+  interval_seconds    - how often the background loop runs (default: 3600)
 
 Dry-run mode: pass dry_run=True to run_cleanup(); nothing is written/deleted,
 but the function returns what *would* have been removed.
@@ -138,7 +138,7 @@ async def run_cleanup(
     for task_id in result.tasks_removed:
         try:
             await _delete_task(db, task_id)
-        except Exception as exc:  # pragma: no cover — covered via error path test
+        except Exception as exc:  # pragma: no cover
             msg = f"retention: failed to delete task {task_id}: {exc}"
             logger.error(msg)
             result.errors.append(msg)
@@ -203,7 +203,7 @@ class RetentionScheduler:
     # ------------------------------------------------------------------
 
     async def start(self, *, interval_seconds: int, **cleanup_kwargs) -> None:
-        """Start the background loop.  Safe to call multiple times."""
+        """Start the background loop. Safe to call multiple times."""
         if self._task and not self._task.done():
             return
         self._running = True
