@@ -16,7 +16,7 @@ SecuScan is built for learning, defensive security workflows, and ethical testin
 
 - Documentation fixes, setup clarification, and onboarding polish
 - Frontend UX improvements in `frontend/src`
-- Backend validation, test coverage, and API consistency in `backend/secuscan`
+- Backend validation, test coverage, and API consistency in `backend/secuscan` (see [docs/backend-architecture.md](docs/backend-architecture.md) for a module-by-module reference)
 - Plugin metadata cleanup and parser improvements in `plugins`
 - CI, test reliability, and developer experience
 
