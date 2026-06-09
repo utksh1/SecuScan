@@ -53,20 +53,8 @@ class Settings(BaseSettings):
         "http://localhost:4173",
         "http://127.0.0.1:4173",
     ]
-    cors_allowed_methods: List[str] = [
-        "GET",
-        "POST",
-        "PUT",
-        "PATCH",
-        "DELETE",
-        "OPTIONS",
-    ]
-    cors_allowed_headers: List[str] = [
-        "Content-Type",
-        "Authorization",
-        "Accept",
-        "Origin",
-    ]
+    cors_allowed_methods: List[str] = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+    cors_allowed_headers: List[str] = ["Content-Type", "Authorization", "Accept", "Origin"]
     cors_allow_credentials: bool = True
     plugin_signature_key: Optional[str] = None
     enforce_plugin_signatures: bool = False
@@ -75,20 +63,18 @@ class Settings(BaseSettings):
     admin_api_key: Optional[str] = None
 
     # Network Policy Configuration
-    network_allowlist: List[
-        str
-    ] = []  # IPs/networks to allow (CIDR); empty = deny all egress
-    network_denylist: List[str] = [  # IPs/networks to deny (CIDR)
-        "169.254.169.254/32",  # AWS metadata
-        "169.254.0.0/16",  # Reserved/metadata
-        "127.0.0.0/8",  # Loopback (for remote execution)
-        "10.0.0.0/8",  # Private RFC 1918
-        "172.16.0.0/12",  # Private RFC 1918
-        "192.168.0.0/16",  # Private RFC 1918
-        "100.64.0.0/10",  # Carrier-grade NAT (RFC 6598)
-        "fc00::/7",  # IPv6 Unique Local Address
-        "fe80::/10",  # IPv6 Link-local
-        "::1/128",  # IPv6 Loopback
+    network_allowlist: List[str] = []  # IPs/networks to allow (CIDR); empty = deny all egress
+    network_denylist: List[str] = [    # IPs/networks to deny (CIDR)
+        "169.254.169.254/32",          # AWS metadata
+        "169.254.0.0/16",              # Reserved/metadata
+        "127.0.0.0/8",                 # Loopback (for remote execution)
+        "10.0.0.0/8",                  # Private RFC 1918
+        "172.16.0.0/12",               # Private RFC 1918
+        "192.168.0.0/16",              # Private RFC 1918
+        "100.64.0.0/10",               # Carrier-grade NAT (RFC 6598)
+        "fc00::/7",                    # IPv6 Unique Local Address
+        "fe80::/10",                   # IPv6 Link-local
+        "::1/128",                     # IPv6 Loopback
     ]
     network_audit_log_file: str = str(PROJECT_ROOT / "logs" / "network.audit.log")
     network_audit_retention_days: int = 90
@@ -129,9 +115,9 @@ class Settings(BaseSettings):
     docker_network: str = "restricted"  # Docker network name for sandboxed containers
 
     # Task-start payload limits (tunable via env vars)
-    task_start_max_body_bytes: int = 64_000  # 64 KB total JSON body
-    task_start_max_field_length: int = 1_000  # max chars per string input value
-    task_start_max_array_length: int = 50  # max items in any list/multiselect input
+    task_start_max_body_bytes: int = 64_000       # 64 KB total JSON body
+    task_start_max_field_length: int = 1_000      # max chars per string input value
+    task_start_max_array_length: int = 50         # max items in any list/multiselect input
 
     # Parser sandbox limits
     parser_sandbox_timeout_seconds: int = 30
@@ -186,7 +172,7 @@ class Settings(BaseSettings):
                 "SECUSCAN_VAULT_KEY is not set. "
                 "Set a strong random value in your environment or .env file before "
                 "starting the server. "
-                'Example: python -c "import secrets; print(secrets.token_hex(32))"'
+                "Example: python -c \"import secrets; print(secrets.token_hex(32))\""
             )
         digest = hashlib.sha256(seed.encode("utf-8")).digest()
         return base64.urlsafe_b64encode(digest)
@@ -205,7 +191,6 @@ class Settings(BaseSettings):
         # Create gitkeep files
         (Path(self.raw_output_dir) / ".gitkeep").touch()
         (Path(self.reports_dir) / ".gitkeep").touch()
-
 
 # Global settings instance
 settings = Settings()
