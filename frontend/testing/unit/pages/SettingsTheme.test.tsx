@@ -1,6 +1,5 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { vi, describe, it, expect, beforeEach } from 'vitest'
 import Settings from '../../../src/pages/Settings'
 import { ThemeProvider } from '../../../src/components/ThemeContext'
 import { ToastProvider } from '../../../src/components/ToastContext'
