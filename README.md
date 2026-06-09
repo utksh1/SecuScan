@@ -65,8 +65,6 @@ The project is designed to be:
 - `wordlists/`: wordlists used by scanning and enumeration plugins
 - `scratch/`: experimental utilities and temporary development helpers
 
-## Prerequisites
-
 ## Runtime Support
 
 SecuScan CI validates the following runtime baselines:
@@ -75,6 +73,8 @@ SecuScan CI validates the following runtime baselines:
 - Node.js 20 and 22
 
 Runtime compatibility changes should keep these CI checks passing.
+
+## Prerequisites
 
 For a fresh local setup, make sure your machine has:
 
