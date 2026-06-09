@@ -133,6 +133,44 @@ async def run_scan(target: str, plugin_id: str, output_format: str, output_file:
 
     return 0
 
+async def run_retention_cleanup(
+    max_age_days: int,
+    max_task_count: int,
+    keep_statuses: str,
+    dry_run: bool,
+) -> int:
+    """Perform a one-shot retention cleanup run and print a summary."""
+    settings.ensure_directories()
+    await init_db(settings.database_path)
+
+    from backend.secuscan.database import get_db
+    from backend.secuscan.retention import run_cleanup
+
+    db = await get_db()
+    keep_set = {s.strip() for s in keep_statuses.split(",") if s.strip()}
+
+    result = await run_cleanup(
+        db,
+        max_age_days=max_age_days,
+        max_task_count=max_task_count,
+        keep_statuses=keep_set,
+        dry_run=dry_run,
+    )
+
+    label = "[DRY-RUN] " if dry_run else ""
+    print(f"{label}Tasks {'would be ' if dry_run else ''}removed: {result.task_count}")
+    print(f"{label}Files  {'would be ' if dry_run else ''}removed: {result.file_count}")
+    if result.tasks_removed:
+        for tid in result.tasks_removed:
+            print(f"  {'would remove' if dry_run else 'removed'}: {tid}")
+    if result.errors:
+        print(f"Errors ({len(result.errors)}):")
+        for err in result.errors:
+            print(f"  {err}")
+        return 1
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description="SecuScan CLI - Local-First Pentesting Toolkit")
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
@@ -147,10 +185,45 @@ def main():
     # List plugins command
     subparsers.add_parser("plugins", help="List available plugins")
 
+    # Cleanup command
+    cleanup_parser = subparsers.add_parser(
+        "cleanup",
+        help="Run artifact retention cleanup (supports --dry-run)",
+    )
+    cleanup_parser.add_argument(
+        "--max-age-days",
+        type=int,
+        default=settings.retention_max_age_days,
+        help="Remove tasks older than N days (0 = disabled)",
+    )
+    cleanup_parser.add_argument(
+        "--max-task-count",
+        type=int,
+        default=settings.retention_max_task_count,
+        help="Keep only the N most-recent tasks (0 = disabled)",
+    )
+    cleanup_parser.add_argument(
+        "--keep-statuses",
+        default=settings.retention_keep_statuses,
+        help="Comma-separated list of statuses to never purge (default: running,queued)",
+    )
+    cleanup_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print what would be deleted without making any changes",
+    )
+
     args = parser.parse_args()
 
     if args.command == "scan":
         sys.exit(asyncio.run(run_scan(args.target, args.plugin, args.format, args.output)))
+    elif args.command == "cleanup":
+        sys.exit(asyncio.run(run_retention_cleanup(
+            max_age_days=args.max_age_days,
+            max_task_count=args.max_task_count,
+            keep_statuses=args.keep_statuses,
+            dry_run=args.dry_run,
+        )))
     elif args.command == "plugins":
         # Synchronous shortcut for listing
         async def list_plugins():
