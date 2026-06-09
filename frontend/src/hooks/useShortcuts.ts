@@ -4,21 +4,22 @@ import { routes } from '../routes'
 
 /**
  * Global keyboard shortcuts hook for SecuScan.
- * 
+ *
  * g + d : Dashboard
  * g + s : Scanners
  * g + h : History
  * g + f : Findings
  * g + r : Reports
  * g + t : Settings (Tools)
+ * g + b : Toggle Sidebar
  * Esc   : Close focus/modals
  */
-export function useShortcuts() {
+export function useShortcuts(onToggleSidebar?: () => void) {
     const navigate = useNavigate()
 
     useEffect(() => {
         let lastChar = ''
-        
+
         const handleKeyDown = (e: KeyboardEvent) => {
             // Ignore if user is typing in an input
             const target = e.target as HTMLElement
@@ -44,6 +45,10 @@ export function useShortcuts() {
                     case 'f': navigate(routes.findings); break
                     case 'r': navigate(routes.reports); break
                     case 't': navigate(routes.settings); break
+                    case 'b': {
+                        onToggleSidebar?.()
+                        break
+                    }
                 }
                 lastChar = ''
             } else if (key === 'g') {
@@ -57,5 +62,5 @@ export function useShortcuts() {
 
         window.addEventListener('keydown', handleKeyDown)
         return () => window.removeEventListener('keydown', handleKeyDown)
-    }, [navigate])
+    }, [navigate, onToggleSidebar])
 }
