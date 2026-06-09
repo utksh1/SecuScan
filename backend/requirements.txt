@@ -12,3 +12,4 @@ aiosqlite>=0.20.0
 python-whois>=0.9.4
 cryptography>=40.0.0
 httpx>=0.28.1
+openai>=1.0.0
