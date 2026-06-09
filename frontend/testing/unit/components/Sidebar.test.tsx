@@ -1,5 +1,6 @@
 import React from 'react';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Sidebar from '../../../src/components/Sidebar';
@@ -10,15 +11,14 @@ import Sidebar from '../../../src/components/Sidebar';
 
 // Mock framer-motion to render plain elements so tests focus on behavior,
 // not animation internals.
-vi.mock('framer-motion', () => {
-  const React = require('react');
-
+vi.mock('framer-motion', async () => {
+  const ReactModule = await import('react');
   const createMotionProxy = () =>
     new Proxy(
       {},
       {
         get(_target: unknown, prop: string) {
-          return React.forwardRef((props: Record<string, unknown>, ref: React.Ref<unknown>) => {
+          return ReactModule.forwardRef((props: Record<string, unknown>, ref: React.Ref<unknown>) => {
             // Strip framer-specific props so they don't leak to the DOM
             const {
               initial: _initial,
@@ -30,7 +30,7 @@ vi.mock('framer-motion', () => {
               whileTap: _whileTap,
               ...rest
             } = props;
-            return React.createElement(prop, { ...rest, ref });
+            return ReactModule.createElement(prop, { ...rest, ref });
           });
         },
       },
@@ -118,37 +118,36 @@ describe('Sidebar', () => {
       ).toBeInTheDocument();
     });
 
-    it('persists collapsed state to localStorage after toggling', () => {
+    it('persists collapsed state to localStorage after toggling', async () => {
+      const user = userEvent.setup();
       renderSidebar();
 
       // Initially expanded (default)
       expect(localStorage.getItem('sidebar-expanded')).toBe('true');
 
       // Click the sidebar to toggle collapse
-      const aside = document.querySelector('aside')!;
-      fireEvent.click(aside);
+      await user.click(screen.getByRole('complementary'));
 
       expect(localStorage.getItem('sidebar-expanded')).toBe('false');
     });
 
-    it('persists expanded state when toggling back open', () => {
+    it('persists expanded state when toggling back open', async () => {
+      const user = userEvent.setup();
       localStorage.setItem('sidebar-expanded', 'false');
       renderSidebar();
 
-      const aside = document.querySelector('aside')!;
-      fireEvent.click(aside);
+      await user.click(screen.getByRole('complementary'));
 
       expect(localStorage.getItem('sidebar-expanded')).toBe('true');
     });
 
-    it('toggles via the dedicated toggle button', () => {
+    it('toggles via the dedicated toggle button', async () => {
+      const user = userEvent.setup();
       renderSidebar();
 
-      // Find the toggle button by its arrow icon text
-      const collapseArrow = screen.getByText('keyboard_double_arrow_left');
-      const toggleButton = collapseArrow.closest('button')!;
-
-      fireEvent.click(toggleButton);
+      await user.click(
+        screen.getByRole('button', { name: 'keyboard_double_arrow_left' }),
+      );
 
       // After clicking the toggle button, the sidebar should be collapsed
       expect(localStorage.getItem('sidebar-expanded')).toBe('false');
@@ -167,9 +166,7 @@ describe('Sidebar', () => {
 
       const dashboardLink = screen.getByText('Dashboard').closest('a')!;
       expect(dashboardLink).toHaveAttribute('href', '/');
-      // React-Router's NavLink applies the active class
-      expect(dashboardLink.className).toContain('bg-accent-silver/10');
-      expect(dashboardLink.className).toContain('text-primary');
+      expect(dashboardLink).toHaveAttribute('aria-current', 'page');
     });
 
     it('marks Toolkit link as active on "/toolkit"', () => {
@@ -177,8 +174,7 @@ describe('Sidebar', () => {
 
       const toolkitLink = screen.getByText('Toolkit').closest('a')!;
       expect(toolkitLink).toHaveAttribute('href', '/toolkit');
-      expect(toolkitLink.className).toContain('bg-accent-silver/10');
-      expect(toolkitLink.className).toContain('text-primary');
+      expect(toolkitLink).toHaveAttribute('aria-current', 'page');
     });
 
     it('marks Settings link as active on "/settings"', () => {
@@ -186,8 +182,7 @@ describe('Sidebar', () => {
 
       const settingsLink = screen.getByText('Settings').closest('a')!;
       expect(settingsLink).toHaveAttribute('href', '/settings');
-      expect(settingsLink.className).toContain('bg-accent-silver/10');
-      expect(settingsLink.className).toContain('text-primary');
+      expect(settingsLink).toHaveAttribute('aria-current', 'page');
     });
 
     it('marks Registry link as active on "/scans"', () => {
@@ -195,15 +190,14 @@ describe('Sidebar', () => {
 
       const scansLink = screen.getByText('Registry').closest('a')!;
       expect(scansLink).toHaveAttribute('href', '/scans');
-      expect(scansLink.className).toContain('bg-accent-silver/10');
+      expect(scansLink).toHaveAttribute('aria-current', 'page');
     });
 
     it('does not mark non-active links with active styling', () => {
       renderSidebar('/settings');
 
       const dashboardLink = screen.getByText('Dashboard').closest('a')!;
-      // Dashboard should NOT carry the active indicator class
-      expect(dashboardLink.className).not.toContain('bg-accent-silver/10');
+      expect(dashboardLink).not.toHaveAttribute('aria-current');
     });
 
     it('renders active indicator elements for the active link', () => {
@@ -212,9 +206,7 @@ describe('Sidebar', () => {
       const dashboardLink = screen.getByText('Dashboard').closest('a')!;
       // The active link contains the glow div (layoutId="activeGlow") and
       // the side bar div (layoutId="activeBar")
-      const glowDiv = within(dashboardLink).getByText((_content, el) => {
-        return el?.className?.includes('bg-rag-red/5') ?? false;
-      });
+      const glowDiv = dashboardLink.querySelector('[class*="bg-rag-red/5"]');
       expect(glowDiv).toBeInTheDocument();
     });
 
@@ -263,9 +255,7 @@ describe('Sidebar', () => {
       renderSidebar('/toolkit');
 
       const toolkitLink = screen.getByText('Toolkit').closest('a')!;
-      // Active styling takes precedence over highlight
-      expect(toolkitLink.className).toContain('bg-accent-silver/10');
-      expect(toolkitLink.className).toContain('text-primary');
+      expect(toolkitLink).toHaveAttribute('aria-current', 'page');
       // Highlight-specific classes should NOT be present
       expect(toolkitLink.className).not.toContain('bg-rag-blue/15');
     });
