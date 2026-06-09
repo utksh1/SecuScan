@@ -433,7 +433,7 @@ async def test_execute_task_allowed_by_network_policy(setup_test_environment):
     mock_engine.check_access.return_value = (True, "Allowed by allowlist rule: test", None)
 
     async def fake_command(*args, **kwargs):
-        return "80/tcp open http", 0
+        return "80/tcp open http", 0, None
 
     with patch("backend.secuscan.executor.settings") as mock_settings, \
          patch("backend.secuscan.executor.get_policy_engine", return_value=mock_engine), \
@@ -502,7 +502,7 @@ async def test_execute_task_network_policy_log_only(setup_test_environment):
     mock_engine.check_access.return_value = (False, "Blocked by denylist rule: test", None)
 
     async def fake_command(*args, **kwargs):
-        return "80/tcp open http", 0
+        return "80/tcp open http", 0, None
 
     with patch("backend.secuscan.executor.settings") as mock_settings, \
          patch("backend.secuscan.executor.get_policy_engine", return_value=mock_engine), \
@@ -582,7 +582,7 @@ async def test_docker_network_autocreated_when_missing(setup_test_environment):
 
     # Stub the actually executed command to not actually run docker/nmap
     async def fake_command(*args, **kwargs):
-        return "80/tcp open http", 0
+        return "80/tcp open http", 0, None
 
     with patch("backend.secuscan.executor.settings") as mock_settings, \
          patch("backend.secuscan.executor.get_policy_engine", return_value=mock_engine), \
