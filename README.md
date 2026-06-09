@@ -23,6 +23,24 @@
   </a>
 </p>
 
+## Table of Content
+
+- [Project Purpose](#project-purpose)
+- [Who It Is For](#who-it-is-for)
+- [Core Areas](#core-areas)
+- [Repository Map](#repository-map)
+- [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
+- [Manual Development Commands](#manual-development-commands)
+- [New Contributors Start Here](#new-contributors-start-here)
+- [Detailed Documentation](#detailed-documentation)
+- [Tech Stack](#tech-stack)
+- [Contact](#contact)
+- [Responsible Use](#responsible-use)
+- [License](#license)
+- [Troubleshooting & Local Setup Failsafe](#troubleshooting--local-setup-failsafe)
+- [Contributors](#contributors)
+
 ## Project Purpose
 
 SecuScan is an open source, plugin-driven platform for running security scans from your own machine. It combines a FastAPI backend, a React frontend, and a growing plugin system for recon, web, cloud, container, and reporting workflows.
@@ -394,3 +412,10 @@ Linux or macOS:
 ```bash
 kill "$(lsof -t -i:5173)"
 ```
+
+
+## Contributors
+
+Thanks to all the contributors who help improve SecuScan! ❤️
+
+[![Contributors](https://contrib.rocks/image?repo=utksh1/SecuScan)](https://github.com/utksh1/SecuScan/graphs/contributors)
