@@ -394,3 +394,7 @@ Linux or macOS:
 ```bash
 kill "$(lsof -t -i:5173)"
 ```
+
+## Backend/frontend port configuration
+
+- Resolve the README/frontend README port mismatch described by the issue. Keep the change docs-only and limited to README files. [ ] Root and frontend READMEs agree on backend port guidance. [ ] Docker/local differences are explicit. [ ] New contributors no longer get conflicting instructions.
