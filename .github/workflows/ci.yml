@@ -212,6 +212,14 @@ jobs:
       always() &&
       needs.detect-changes.outputs.run_frontend == 'true' &&
       (needs.formatting-hygiene.result == 'success' || needs.formatting-hygiene.result == 'skipped')
+
+    strategy:
+     fail-fast: false
+     matrix:
+       node-version:
+        - "20"
+        - "22"
+
     runs-on: ubuntu-latest
     defaults:
       run:
