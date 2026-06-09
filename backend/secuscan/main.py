@@ -46,7 +46,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     # Startup
     logger.info("🚀 Starting SecuScan backend...")
-    
+
     # Ensure directories exist
     settings.ensure_directories()
     logger.info("✓ Directories initialized")
@@ -54,14 +54,14 @@ async def lifespan(app: FastAPI):
     # Initialize API key authentication
     api_key = init_api_key(settings.data_dir)
     logger.info("✓ API key authentication ready (key file: %s/.api_key)", settings.data_dir)
-    
+
     # Initialize database
     await init_db(settings.database_path)
     logger.info("✓ SQLite connected")
 
     await init_cache()
     logger.info("✓ In-memory cache initialized")
-    
+
     # Load plugins
     await init_plugins(settings.plugins_dir)
     logger.info("✓ Plugins loaded")
@@ -117,11 +117,11 @@ async def lifespan(app: FastAPI):
         keep_statuses=settings.retention_keep_statuses_set,
     )
     logger.info("✓ Retention scheduler started")
-    
+
     logger.info("✓ Ready to serve on %s:%d", settings.bind_address, settings.bind_port)
-    
+
     yield
-    
+
     # Shutdown
     logger.info("🛑 Shutting down SecuScan backend...")
     if global_db:
@@ -186,7 +186,7 @@ async def health_check():
     """Health check endpoint"""
     import platform
     import sys
-    
+
     return {
         "status": "operational",
         "version": "0.1.0-alpha",
@@ -212,7 +212,7 @@ async def root():
 def main():
     """Main entry point"""
     import uvicorn
-    
+
     logger.info("""
     ╔═══════════════════════════════════════════════════════╗
     ║                                                       ║
@@ -223,7 +223,7 @@ def main():
     ║                                                       ║
     ╚═══════════════════════════════════════════════════════╝
     """)
-    
+
     uvicorn.run(
         "backend.secuscan.main:app",
         host=settings.bind_address,
