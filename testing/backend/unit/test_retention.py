@@ -519,7 +519,6 @@ async def test_scheduler_tick_error_does_not_crash_loop():
     assert tick_count["n"] >= 1, "tick should have been called at least once"
     assert not sched.is_running
 
-
 # ---------------------------------------------------------------------------
 # RetentionResult helpers
 # ---------------------------------------------------------------------------
