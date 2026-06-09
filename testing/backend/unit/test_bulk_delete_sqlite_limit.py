@@ -186,9 +186,13 @@ class TestDeleteTaskRecordsChunking:
 
         mock_db = AsyncMock()
         mock_db.fetchall = AsyncMock(return_value=[])
+        mock_db.fetchone = AsyncMock(return_value=None)
+        mock_db.begin = AsyncMock()
+        mock_db.commit = AsyncMock()
+        mock_db.rollback = AsyncMock()
         async def capture_execute(sql, params=()):
             captured_sql.append(sql)
-        mock_db.execute = capture_execute
+        mock_db.execute_no_commit = capture_execute
 
         with patch("backend.secuscan.routes.get_db", return_value=mock_db):
             await delete_task_records(ids)
@@ -218,10 +222,14 @@ class TestDeleteTaskRecordsChunking:
 
         mock_db = AsyncMock()
         mock_db.fetchall = AsyncMock(return_value=[])
+        mock_db.fetchone = AsyncMock(return_value=None)
+        mock_db.begin = AsyncMock()
+        mock_db.commit = AsyncMock()
+        mock_db.rollback = AsyncMock()
         async def capture_execute(sql, params=()):
             captured_sql.append(sql)
             captured_params.append(params)
-        mock_db.execute = capture_execute
+        mock_db.execute_no_commit = capture_execute
 
         with patch("backend.secuscan.routes.get_db", return_value=mock_db):
             await delete_task_records(ids)
@@ -256,4 +264,9 @@ class TestDeleteTaskRecordsChunking:
             await delete_task_records([])
 
         mock_db.execute.assert_not_called()
+        mock_db.execute_no_commit.assert_not_called()
         mock_db.fetchall.assert_not_called()
+        mock_db.fetchone.assert_not_called()
+        mock_db.begin.assert_not_called()
+        mock_db.commit.assert_not_called()
+        mock_db.rollback.assert_not_called()

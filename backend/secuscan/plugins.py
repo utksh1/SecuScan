@@ -15,6 +15,7 @@ import hmac
 from .models import PluginMetadata, PluginFieldType
 from .config import settings
 from .capabilities import validate_capability_list, ALL_CAPABILITIES
+from .validation import sanitize_input
 
 # Port specifications: one or more comma-separated port numbers or port ranges.
 # Valid: "22", "80,443", "1-1000", "22,80,1000-2000"
@@ -32,6 +33,20 @@ _INTERNAL_CONTROL_FIELDS: frozenset = frozenset({
 })
 
 logger = logging.getLogger(__name__)
+
+_PLACEHOLDER_PLUGIN_IDS = frozenset({
+    "zap_scanner",
+    "sniper",
+})
+
+_NATIVE_PLUGIN_IDS = frozenset({
+    "network_scanner",
+    "api_scanner",
+    "xss_exploiter",
+    "web_scanner",
+    "recon_scanner",
+    "port_scanner",
+})
 
 
 def _is_absolute_path(value: str) -> bool:
@@ -281,6 +296,9 @@ class PluginManager:
                     "requires_consent": bool(plugin.safety.get("requires_consent", False)),
                     "consent_message": plugin.safety.get("consent_message"),
                     "capabilities": plugin.capabilities or [],
+                    "implementation_status": self._resolve_implementation_status(plugin),
+                    "supports_authenticated_crawling": bool(getattr(plugin, "supports_authenticated_crawling", False)),
+                    "supports_session_reuse": bool(getattr(plugin, "supports_session_reuse", False)),
                     "availability": {
                         "runnable": len(missing_binaries) == 0,
                         "missing_binaries": missing_binaries,
@@ -325,10 +343,24 @@ class PluginManager:
                 "description": plugin.description,
                 "fields": [f.model_dump() for f in plugin.fields],
                 "presets": plugin.presets,
-                "safety": plugin.safety
+                "safety": plugin.safety,
+                "implementation_status": self._resolve_implementation_status(plugin),
+                "supports_authenticated_crawling": bool(getattr(plugin, "supports_authenticated_crawling", False)),
+                "supports_session_reuse": bool(getattr(plugin, "supports_session_reuse", False)),
             }
         else:
             return None
+
+    def _resolve_implementation_status(self, plugin: PluginMetadata) -> str:
+        """Resolve implementation maturity without requiring every plugin to be edited."""
+        explicit = getattr(plugin, "implementation_status", None)
+        if explicit:
+            return str(explicit)
+        if plugin.id in _PLACEHOLDER_PLUGIN_IDS:
+            return "placeholder"
+        if plugin.id in _NATIVE_PLUGIN_IDS:
+            return "native"
+        return "integrated"
 
     def _interpolate(self, token: str, inputs: Dict) -> Optional[str]:
         """Interpolate variables in a token string."""
@@ -347,7 +379,7 @@ class PluginManager:
                 return None
 
             placeholder = "{" + var_name + (f":{default_value}" if default_value else "") + "}"
-            rendered = rendered.replace(placeholder, str(value))
+            rendered = rendered.replace(placeholder, sanitize_input(str(value)))
 
         return rendered
 
@@ -485,7 +517,7 @@ class PluginManager:
 
         for field_id, raw_value in inputs.items():
             # Strip internal control fields — they are not part of the plugin schema
-            if field_id in _INTERNAL_CONTROL_FIELDS:
+            if field_id in _INTERNAL_CONTROL_FIELDS or field_id.startswith("__"):
                 continue
 
             field = field_map.get(field_id)
@@ -552,6 +584,12 @@ class PluginManager:
         plugin = self.get_plugin(plugin_id)
         if not plugin:
             return None
+
+        inputs = {
+            key: value
+            for key, value in inputs.items()
+            if key not in _INTERNAL_CONTROL_FIELDS and not str(key).startswith("__")
+        }
 
         # Validate before normalisation so SELECT checks run against raw user values
         self._validate_inputs_against_schema(plugin, inputs)
