@@ -30,7 +30,6 @@ _INTERNAL_CONTROL_FIELDS: frozenset = frozenset({
     "consent_granted",
     "dry_run",
     "debug_mode",
-    "_source",
 })
 
 logger = logging.getLogger(__name__)

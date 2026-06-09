@@ -4,7 +4,7 @@ API routes for SecuScan backend
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request, Depends, Body, Query
 from fastapi.responses import JSONResponse
-from typing import Any, Optional, List, Dict, Callable, Set
+from typing import Any, Optional, List, Dict, Callable
 import json
 import logging
 import re
@@ -13,22 +13,6 @@ import uuid
 import asyncio
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
-
-_pending_workflow_tasks: Set[asyncio.Task] = set()
-
-
-def _track_task(task: asyncio.Task) -> None:
-    _pending_workflow_tasks.add(task)
-    task.add_done_callback(_pending_workflow_tasks.discard)
-
-
-async def cancel_pending_workflow_tasks() -> None:
-    for task in list(_pending_workflow_tasks):
-        task.cancel()
-    if _pending_workflow_tasks:
-        await asyncio.gather(*_pending_workflow_tasks, return_exceptions=True)
-    _pending_workflow_tasks.clear()
-
 
 def parse_json_fields(rows: List[Dict], fields: List[str]) -> List[Dict]:
     """Helper to parse stringified JSON fields from SQLite."""
@@ -200,7 +184,7 @@ from .validation import validate_target, validate_task_start_payload, validate_u
 from .reporting import reporting
 from .vault import VaultCrypto
 from .workflows import scheduler
-from .auth import require_api_key, get_current_owner, DEFAULT_OWNER_ID
+from .auth import require_api_key, get_current_owner
 from .execution_context import is_offensive_validation, normalize_execution_context
 from .finding_intelligence import build_asset_summary, build_finding_groups
 from .knowledgebase import KnowledgeBase
@@ -317,99 +301,6 @@ def _report_generation_error_response(task_id: str, report_format: str) -> JSONR
     )
 
 
-async def _execute_scan_safe(
-    plugin_id: str,
-    inputs: Dict[str, Any],
-    consent_granted: bool,
-    preset: Optional[str] = None,
-    owner: str = DEFAULT_OWNER_ID,
-    source: str = "api",
-    client_id: Optional[str] = None,
-    target_policy: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """Shared scan execution that applies consent, safe mode, target validation,
-    rate limiting, and concurrency limits. Used by both the API route and the
-    workflow runner."""
-    if settings.require_consent and not consent_granted:
-        raise HTTPException(
-            status_code=400,
-            detail="Consent required. You must acknowledge the legal notice."
-        )
-
-    plugin_manager = await get_plugin_manager_for_request()
-    plugin = plugin_manager.get_plugin(plugin_id)
-
-    if not plugin:
-        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
-
-    safe_mode = bool(
-        settings.safe_mode_default
-        and not (target_policy and target_policy.get("allow_public_targets"))
-    )
-    effective_inputs = dict(inputs)
-    if "safe_mode" in effective_inputs:
-        effective_inputs.pop("safe_mode", None)
-    effective_inputs["safe_mode"] = safe_mode
-    effective_inputs["_source"] = source
-
-    for tkey in ("timeout", "max_scan_time"):
-        declared = any(getattr(f, "id", None) == tkey for f in (plugin.fields or []))
-        if not declared:
-            continue
-        if tkey in effective_inputs and effective_inputs[tkey] not in (None, ""):
-            try:
-                tval = int(effective_inputs[tkey])
-            except (TypeError, ValueError):
-                raise HTTPException(status_code=400, detail=f"Invalid value for {tkey}: must be an integer")
-            if tval <= 0 or tval > settings.sandbox_timeout:
-                raise HTTPException(status_code=400, detail=f"{tkey} must be between 1 and {settings.sandbox_timeout} seconds")
-
-    if target := effective_inputs.get("target"):
-        target_str = str(target)
-        should_validate = plugin.category != "code" and not is_filesystem_target(target_str)
-        if should_validate:
-            try:
-                is_valid, error_msg = await asyncio.wait_for(
-                    asyncio.to_thread(validate_target, target_str, safe_mode),
-                    timeout=float(settings.dns_resolution_timeout_seconds),
-                )
-            except asyncio.TimeoutError:
-                raise HTTPException(status_code=400, detail="Target validation timed out in safe mode (SecuScan Guardrail)")
-            if not is_valid:
-                raise HTTPException(status_code=400, detail=error_msg)
-
-    client = client_id or f"user:{owner}"
-    can_exec, err = await rate_limiter.can_execute(
-        plugin_id,
-        plugin.safety.get("rate_limit", {}).get("max_per_hour", settings.max_tasks_per_hour),
-        client_id=client,
-    )
-    if not can_exec:
-        raise HTTPException(status_code=429, detail=err)
-
-    task_id = await executor.create_task(
-        plugin_id,
-        effective_inputs,
-        safe_mode=safe_mode,
-        preset=preset,
-        consent_granted=consent_granted,
-        owner_id=owner,
-        source=source,
-    )
-
-    can_acquire, concurrency_err = await concurrent_limiter.acquire(task_id)
-    if not can_acquire:
-        await executor.mark_task_failed(task_id, reason="Concurrency limit reached")
-        raise HTTPException(status_code=503, detail=concurrency_err)
-
-    return {
-        "task_id": task_id,
-        "status": "queued",
-        "created_at": "now",
-        "stream_url": f"/api/v1/task/{task_id}/stream"
-    }
-
-
 async def get_plugin_manager_for_request():
     """
     In debug mode, refresh plugin metadata from disk on demand so frontend catalog
@@ -501,6 +392,22 @@ async def start_task(
     if not ok:
         raise HTTPException(status_code=status_code, detail=error_msg)
 
+    # Validate consent
+    if settings.require_consent and not request.consent_granted:
+        logger.warning(f"Task start failed: Consent not granted. Request: {request}")
+        raise HTTPException(
+            status_code=400,
+            detail="Consent required. You must acknowledge the legal notice."
+        )
+
+    # Get plugin
+    plugin_manager = await get_plugin_manager_for_request()
+    plugin = plugin_manager.get_plugin(request.plugin_id)
+
+    if not plugin:
+        logger.warning(f"Task start failed: Plugin not found: {request.plugin_id}")
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {request.plugin_id}")
+
     db = await get_db()
     target_policy = await get_target_policy(db, owner, execution_context.get("target_policy_id"))
     credential_profile = await get_credential_profile(db, owner, execution_context.get("credential_profile_id"))
@@ -519,11 +426,6 @@ async def start_task(
             detail="Authenticated scans require a target policy with authenticated scanning enabled.",
         )
 
-    plugin_manager = await get_plugin_manager_for_request()
-    plugin = plugin_manager.get_plugin(request.plugin_id)
-    if not plugin:
-        raise HTTPException(status_code=404, detail=f"Plugin not found: {request.plugin_id}")
-
     requires_exploit_policy = (
         plugin.safety.get("level") == "exploit"
         or execution_context.get("validation_mode") == ValidationMode.CONTROLLED_EXTRACT.value
@@ -535,22 +437,103 @@ async def start_task(
             detail="Offensive validation requires a target policy that explicitly allows exploit validation.",
         )
 
-    client_id = resolve_client_identity(raw_request)
-    result = await _execute_scan_safe(
-        plugin_id=request.plugin_id,
-        inputs=request.inputs or {},
-        consent_granted=request.consent_granted,
-        preset=request.preset,
-        owner=owner,
-        source="api",
-        client_id=client_id,
-        target_policy=target_policy,
+    # Server-controlled safe mode: public-target scans are opt-in via target policy.
+    safe_mode = bool(
+        settings.safe_mode_default
+        and not (target_policy and target_policy.get("allow_public_targets"))
     )
 
-    background_tasks.add_task(executor.execute_task, result["task_id"])
+    # Ensure downstream scanners/plugins see the effective safe-mode, but prevent client override.
+    effective_inputs = dict(request.inputs or {})
+    if "safe_mode" in effective_inputs:
+        effective_inputs.pop("safe_mode", None)
+    effective_inputs["safe_mode"] = safe_mode
+
+    # Validate numeric timeout inputs at request time to prevent unsafe values
+    for tkey in ("timeout", "max_scan_time"):
+        # Only enforce bounds if the plugin declares the field in its schema
+        declared = any(getattr(f, "id", None) == tkey for f in (plugin.fields or []))
+        if not declared:
+            continue
+        if tkey in effective_inputs and effective_inputs[tkey] not in (None, ""):
+            try:
+                tval = int(effective_inputs[tkey])
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail=f"Invalid value for {tkey}: must be an integer")
+            if tval <= 0 or tval > settings.sandbox_timeout:
+                raise HTTPException(status_code=400, detail=f"{tkey} must be between 1 and {settings.sandbox_timeout} seconds")
+
+    if target := effective_inputs.get("target"):
+        target_str = str(target)
+        should_validate_target = plugin.category != "code" and not is_filesystem_target(target_str)
+
+        if should_validate_target:
+            try:
+                is_valid, error_msg = await asyncio.wait_for(
+                    asyncio.to_thread(validate_target, target_str, safe_mode),
+                    timeout=float(settings.dns_resolution_timeout_seconds),
+                )
+            except asyncio.TimeoutError:
+                logger.warning("Task start failed: Target validation timed out for '%s'", target_str)
+                raise HTTPException(
+                    status_code=400,
+                    detail="Target validation timed out in safe mode (SecuScan Guardrail)",
+                )
+
+            if not is_valid:
+                logger.warning(f"Task start failed: Target validation failed for '{target}': {error_msg}")
+                raise HTTPException(status_code=400, detail=error_msg)
+
+    # Check rate limits per (client, plugin) so one client cannot exhaust
+    # the quota for all other users of the same plugin.
+    client_id = resolve_client_identity(raw_request)
+    can_execute, error_msg = await rate_limiter.can_execute(
+        request.plugin_id,
+        plugin.safety.get("rate_limit", {}).get("max_per_hour", settings.max_tasks_per_hour),
+        client_id=client_id,
+    )
+
+    if not can_execute:
+        raise HTTPException(status_code=429, detail=error_msg)
+
+    # Create task record first so we have a real task_id for the limiter
+    try:
+        task_id = await executor.create_task(
+            request.plugin_id,
+            effective_inputs,
+            safe_mode=safe_mode,
+            preset=request.preset,
+            execution_context=execution_context,
+            consent_granted=request.consent_granted,
+            owner_id=owner,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    # Atomically acquire a concurrency slot using the real task_id.
+    # acquire() is lock-protected internally, so the check and register
+    # happen in a single operation — no TOCTOU window between requests.
+    can_acquire, error_msg = await concurrent_limiter.acquire(task_id)
+    if not can_acquire:
+        # Roll back: mark the DB row failed so it isn't left orphaned
+        await executor.mark_task_failed(task_id, reason="Concurrency limit reached; task was not started")
+        raise HTTPException(status_code=503, detail=error_msg)
+
+    # Slot is held — schedule execution.
+    # execute_task releases the slot in its finally block on every exit path.
+    #
+    # Use BackgroundTasks so the response can be sent without waiting in real
+    # ASGI servers, while tests using TestClient still execute the task to keep
+    # contract tests deterministic.
+    background_tasks.add_task(executor.execute_task, task_id)
     await invalidate_view_cache()
 
-    return result
+    return {
+        "task_id": task_id,
+        "status": "queued",
+        "created_at": "now",
+        "stream_url": f"/api/v1/task/{task_id}/stream"
+    }
 
 @router.get("/task/{task_id}/status")
 async def get_task_status(task_id: str, owner: str = Depends(get_current_owner)):
@@ -1743,10 +1726,7 @@ async def create_workflow(payload: Dict[str, Any]):
 
 
 @router.post("/workflows/{workflow_id}/run")
-async def run_workflow_once(
-    workflow_id: str,
-    owner: str = Depends(get_current_owner),
-):
+async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_owner)):
     db = await get_db()
     row = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
     if not row:
@@ -1756,7 +1736,6 @@ async def run_workflow_once(
     )
     if not wf_rate_ok:
         raise HTTPException(status_code=429, detail=wf_rate_msg)
-
     steps = _parse_workflow_steps(row["steps_json"] or "[]")
     active_version = await db.fetchone(
         "SELECT id, version_number FROM workflow_versions "
@@ -1767,20 +1746,26 @@ async def run_workflow_once(
     version_number = active_version["version_number"] if active_version else None
     created_task_ids: List[str] = []
     for step in steps:
-        plugin_id = step.get("plugin_id")
-        if not plugin_id:
-            continue
-
-        result = await _execute_scan_safe(
-            plugin_id=plugin_id,
-            inputs=step.get("inputs", {}),
-            consent_granted=True,
-            preset=step.get("preset"),
-            owner=DEFAULT_OWNER_ID,
-            source="workflow",
+        execution_context = normalize_execution_context(step.get("execution_context") or {})
+        target_policy = await get_target_policy(db, owner, execution_context.get("target_policy_id"))
+        safe_mode = bool(
+            settings.safe_mode_default
+            and not (target_policy and target_policy.get("allow_public_targets"))
         )
-        created_task_ids.append(result["task_id"])
-        asyncio.create_task(executor.execute_task(result["task_id"]))
+        effective_inputs = dict(step.get("inputs", {}) or {})
+        effective_inputs.pop("safe_mode", None)
+        effective_inputs["safe_mode"] = safe_mode
+        task_id = await executor.create_task(
+            step.get("plugin_id"),
+            effective_inputs,
+            safe_mode=safe_mode,
+            preset=step.get("preset"),
+            execution_context=execution_context,
+            consent_granted=True,
+            owner_id=owner,
+        )
+        asyncio.create_task(executor.execute_task(task_id))
+        created_task_ids.append(task_id)
     await db.execute("UPDATE workflows SET last_run_at = datetime('now') WHERE id = ?", (workflow_id,))
     run_id = await db.record_workflow_run(
         workflow_id=workflow_id,
@@ -1789,7 +1774,7 @@ async def run_workflow_once(
         task_ids=created_task_ids,
         triggered_by="manual",
     )
-    _track_task(asyncio.create_task(_finalize_workflow_run(run_id)))
+    asyncio.create_task(_finalize_workflow_run(run_id))
     return {
         "workflow_id": workflow_id,
         "run_id": run_id,

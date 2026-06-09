@@ -2,11 +2,10 @@
 from __future__ import annotations
 from .request_context import get_request_id, set_request_id
 import asyncio
-from typing import Set
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 from .database import get_db
 from .config import settings
 from .ratelimit import workflow_rate_limiter, rate_limiter, concurrent_limiter
@@ -19,11 +18,6 @@ class WorkflowScheduler:
     def __init__(self):
         self._task: asyncio.Task | None = None
         self._running = False
-        self._child_tasks: Set[asyncio.Task] = set()
-
-    def _track_child(self, task: asyncio.Task) -> None:
-        self._child_tasks.add(task)
-        task.add_done_callback(self._child_tasks.discard)
 
     async def start(self):
         if self._task and not self._task.done():
@@ -40,11 +34,6 @@ class WorkflowScheduler:
             except asyncio.CancelledError:
                 pass
         self._task = None
-        for task in list(self._child_tasks):
-            task.cancel()
-        if self._child_tasks:
-            await asyncio.gather(*self._child_tasks, return_exceptions=True)
-        self._child_tasks.clear()
         logger.info("Workflow scheduler stopped")
     async def _run_loop(self):
         while self._running:
@@ -83,6 +72,10 @@ class WorkflowScheduler:
         if not last_run_at:
             return True
         last = datetime.fromisoformat(last_run_at.replace("Z", "+00:00"))
+        # SQLite's datetime('now') produces "2026-05-25 08:02:28" — no Z and
+        # no +00:00 suffix — so fromisoformat() returns a naive datetime.
+        # Subtracting a naive datetime from an aware one raises TypeError.
+        # Treat any naive timestamp from the DB as UTC.
         if last.tzinfo is None:
             last = last.replace(tzinfo=timezone.utc)
         elapsed = (now - last).total_seconds()
@@ -115,7 +108,6 @@ class WorkflowScheduler:
             effective_inputs = dict(inputs)
             effective_inputs.pop("safe_mode", None)
             effective_inputs["safe_mode"] = safe_mode
-            effective_inputs["_source"] = "scheduler"
 
             if target := effective_inputs.get("target"):
                 target_str = str(target)
@@ -157,7 +149,6 @@ class WorkflowScheduler:
                 execution_context=execution_context,
                 consent_granted=True,
                 owner_id=DEFAULT_OWNER_ID,
-                source="scheduler",
             )
 
             can_acquire, concurrency_err = await concurrent_limiter.acquire(task_id)
@@ -166,7 +157,11 @@ class WorkflowScheduler:
                 logger.warning("Workflow %s: concurrency limit reached for %s", workflow_id, plugin_id)
                 continue
 
-            self._track_child(asyncio.create_task(executor.execute_task(task_id)))
+            async def run_task(task_id: str) -> None:
+                set_request_id(request_id)
+                await executor.execute_task(task_id)
+
+            asyncio.create_task(run_task(task_id))
 
 
 scheduler = WorkflowScheduler()

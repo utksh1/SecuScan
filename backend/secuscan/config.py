@@ -124,9 +124,7 @@ class Settings(BaseSettings):
     parser_sandbox_max_output_bytes: int = 8 * 1024 * 1024  # 8 MB
 
     # Workflow Configuration
-    max_workflows_per_user: int = 50
     workflow_min_interval_seconds: int = 60
-    workflow_consent_refresh_days: int = 30
 
     # Logging
     log_level: str = "INFO"

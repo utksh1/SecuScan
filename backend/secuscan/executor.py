@@ -245,7 +245,6 @@ class TaskExecutor:
         execution_context: Optional[Dict[str, Any]] = None,
         consent_granted: bool = False,
         owner_id: str = DEFAULT_OWNER_ID,
-        source: str = "api",
     ) -> str:
         """
         Create a new scan task.
@@ -259,7 +258,6 @@ class TaskExecutor:
                 access (issue #401). Defaults to the shared default owner for
                 internal callers (workflows, scheduler, CLI) that are not tied
                 to a request.
-            source: Origin of this task (api|workflow|scheduler)
 
         Returns:
             Task ID
@@ -302,7 +300,7 @@ class TaskExecutor:
             )
         )
         
-        # Log audit event with source tracking
+        # Log audit event
         await db.log_audit(
             "task_created",
             f"Task created for {plugin.name}",
@@ -311,7 +309,6 @@ class TaskExecutor:
                 "plugin_id": plugin_id,
                 "target": inputs.get("target"),
                 "execution_context": normalize_execution_context(execution_context),
-                "source": source,
             },
             task_id=task_id,
             plugin_id=plugin_id
@@ -663,19 +660,11 @@ class TaskExecutor:
             await self._broadcast(task_id, "status", final_status)
             await self._invalidate_cached_views()
 
-            task_source_row = await db.fetchone("SELECT inputs_json FROM tasks WHERE id = ?", (task_id,))
-            source = "api"
-            if task_source_row:
-                try:
-                    tj = json.loads(task_source_row["inputs_json"])
-                    source = tj.get("_source", "api")
-                except (json.JSONDecodeError, TypeError):
-                    pass
-
+            # Log completion
             await db.log_audit(
                 "task_completed",
                 f"Task completed in {duration:.2f}s",
-                context={"task_id": task_id, "exit_code": locals().get('exit_code', 0), "source": source},
+                context={"task_id": task_id, "exit_code": locals().get('exit_code', 0)},
                 task_id=task_id,
                 plugin_id=plugin_id
             )
@@ -683,8 +672,11 @@ class TaskExecutor:
             logger.info(f"Task {task_id} completed in {duration:.2f}s")
 
         except asyncio.CancelledError:
-            self.running_tasks.pop(task_id, None)
-            self._process_pids.pop(task_id, None)
+            # CancelledError inherits from BaseException, not Exception —
+            # it bypasses the broad except below, so we handle it explicitly.
+            # Task.cancelled() returns False while the finally block is still
+            # executing, so this is the only reliable place to write the
+            # cancellation status to the DB.
             duration = (time.time() - start_time) if 'start_time' in locals() else 0
             await db.execute(
                 """
@@ -707,8 +699,6 @@ class TaskExecutor:
             raise  # let asyncio complete the cancellation
 
         except CapabilityDeniedError as e:
-            self.running_tasks.pop(task_id, None)
-            self._process_pids.pop(task_id, None)
             logger.warning("Task %s blocked by capability policy: %s", task_id, e)
             duration = (time.time() - start_time) if "start_time" in locals() else 0
             await db.execute(
@@ -743,10 +733,9 @@ class TaskExecutor:
             )
 
         except Exception as e:
-            self.running_tasks.pop(task_id, None)
-            self._process_pids.pop(task_id, None)
             logger.error(f"Task {task_id} failed: {e}", exc_info=True)
 
+            # Update task as failed
             duration = (time.time() - start_time) if 'start_time' in locals() else 0
             await db.execute(
                 """

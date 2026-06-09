@@ -1,8 +1,8 @@
 """
 Tests for workflow scheduler route-level security controls.
 
-Verifies that the scheduler path applies the same consent, target validation,
-rate limiting, and concurrency controls as the API path.
+Verifies that the scheduler path applies target validation, rate limiting,
+and concurrency controls consistent with the API path.
 """
 
 import pytest
@@ -44,26 +44,6 @@ class TestWorkflowRateLimiter:
     async def test_allows_different_workflows_independently(self, rate_limiter):
         await rate_limiter.check_workflow_rate_limit("wf-1", 60)
         ok, msg = await rate_limiter.check_workflow_rate_limit("wf-2", 60)
-        assert ok is True
-
-    @pytest.mark.asyncio
-    async def test_user_workflow_limit(self, rate_limiter):
-        ok, msg = await rate_limiter.check_user_workflow_limit("user-1", 5)
-        assert ok is True
-        await rate_limiter.register_user_workflow("user-1")
-        await rate_limiter.register_user_workflow("user-1")
-        await rate_limiter.register_user_workflow("user-1")
-        await rate_limiter.register_user_workflow("user-1")
-        await rate_limiter.register_user_workflow("user-1")
-        ok, msg = await rate_limiter.check_user_workflow_limit("user-1", 5)
-        assert ok is False
-        assert "limit reached" in msg.lower()
-
-    @pytest.mark.asyncio
-    async def test_unregister_user_workflow(self, rate_limiter):
-        await rate_limiter.register_user_workflow("user-1")
-        await rate_limiter.unregister_user_workflow("user-1")
-        ok, msg = await rate_limiter.check_user_workflow_limit("user-1", 1)
         assert ok is True
 
 
@@ -133,33 +113,6 @@ class TestSchedulerSecurityControls:
 
             await scheduler._run_workflow("wf-1", steps)
             mock_rate.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_applies_source_tag_in_inputs(self, scheduler):
-        steps = [{
-            "plugin_id": "nmap",
-            "inputs": {"target": "example.com"},
-        }]
-        with patch("backend.secuscan.workflows.get_db", new_callable=AsyncMock), \
-             patch("backend.secuscan.plugins.get_plugin_manager") as mock_get_pm, \
-             patch("backend.secuscan.validation.validate_target", return_value=(True, "")), \
-             patch("backend.secuscan.ratelimit.rate_limiter.can_execute", return_value=(True, "")), \
-             patch("backend.secuscan.ratelimit.concurrent_limiter.acquire", return_value=(True, "")), \
-             patch("backend.secuscan.executor.executor.create_task", new_callable=AsyncMock, return_value="task-1") as mock_create:
-
-            mock_pm = MagicMock()
-            plugin = MagicMock()
-            plugin.category = "network"
-            plugin.safety = {"rate_limit": {"max_per_hour": 50}}
-            plugin.fields = []
-            mock_pm.get_plugin.return_value = plugin
-            mock_get_pm.return_value = mock_pm
-
-            await scheduler._run_workflow("wf-1", steps)
-            args, kwargs = mock_create.call_args
-            assert kwargs.get("source") == "scheduler"
-            inputs = args[1] if len(args) > 1 else kwargs.get("inputs", {})
-            assert inputs.get("_source") == "scheduler"
 
     @pytest.mark.asyncio
     async def test_applies_safe_mode_consistently(self, scheduler):
