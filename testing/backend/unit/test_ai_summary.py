@@ -93,7 +93,7 @@ class TestGenerateSummary:
                 base_url="http://localhost:11434/v1",
             )
             mock_cls.assert_called_once_with(
-                api_key="ollama", base_url="http://localhost:11434/v1"
+                api_key="ollama", base_url="http://localhost:11434/v1", timeout=15.0
             )
 
     def test_returns_empty_string_on_llm_exception(self):

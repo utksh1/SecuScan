@@ -13,6 +13,7 @@ Supports any OpenAI-compatible endpoint:
 from __future__ import annotations
 
 import logging
+import re
 from collections import Counter
 from typing import Optional
 
@@ -25,13 +26,26 @@ try:
 except ImportError:  # pragma: no cover
     OpenAI = None  # type: ignore[misc,assignment]
 
+# Matches URLs, IPs, hostnames, and common credential patterns
+_SENSITIVE_RE = re.compile(
+    r"https?://\S+"  # URLs
+    r"|(?:\d{1,3}\.){3}\d{1,3}"  # IPv4
+    r"|(?:[a-zA-Z0-9-]+\.){2,}[a-zA-Z]{2,}"  # hostnames
+    r"|(?:password|passwd|token|secret|key|auth|credential)[:=]\S+",  # credentials
+    re.IGNORECASE,
+)
+
+
+def _sanitize_title(title: str) -> str:
+    """Remove hostnames, IPs, URLs, and credentials from a finding title."""
+    return _SENSITIVE_RE.sub("[redacted]", title).strip()
+
 
 def _build_prompt(findings: list[dict]) -> str:
     """Build a privacy-safe prompt from finding metadata only.
 
-    Never includes hostnames, IPs, URLs, or credentials — only severity
-    counts, categories, and finding titles so that no sensitive target
-    information is sent to an external LLM endpoint.
+    Titles are sanitized to remove any embedded hostnames, IPs, URLs, or
+    credentials before being included in the prompt.
     """
     total = len(findings)
 
@@ -49,9 +63,10 @@ def _build_prompt(findings: list[dict]) -> str:
     for f in findings:
         sev = str(f.get("severity", "")).lower()
         if sev in priority_sevs and len(top_findings) < 5:
-            title = (
+            raw_title = (
                 f.get("title") or f.get("name") or f.get("check") or "Unnamed finding"
             )
+            title = _sanitize_title(str(raw_title))
             top_findings.append(f"[{sev.upper()}] {title}")
 
     sev_summary = ", ".join(
@@ -85,6 +100,7 @@ def generate_summary(
     model: str,
     api_key: str,
     base_url: Optional[str] = None,
+    timeout: float = 15.0,
 ) -> str:
     """Generate an LLM executive summary from scan findings.
 
@@ -93,6 +109,8 @@ def generate_summary(
         model:    Model name e.g. ``"gpt-4o-mini"`` or ``"llama3"``.
         api_key:  API key for the OpenAI-compatible endpoint.
         base_url: Optional base URL override for non-OpenAI providers.
+        timeout:  HTTP timeout in seconds (default 15). Prevents LLM calls
+                  from stalling report generation.
 
     Returns:
         A plain-text executive summary string, or ``""`` on any failure so
@@ -109,7 +127,7 @@ def generate_summary(
         return ""
 
     prompt = _build_prompt(findings)
-    client_kwargs: dict = {"api_key": api_key}
+    client_kwargs: dict = {"api_key": api_key, "timeout": timeout}
     if base_url:
         client_kwargs["base_url"] = base_url
 
