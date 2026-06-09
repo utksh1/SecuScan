@@ -237,9 +237,46 @@ class EndpointRateLimiter:
             self.last_cleanup = None
 
 
+class WorkflowRateLimiter:
+    """Rate limiter for workflow-triggered scans."""
+
+    def __init__(self):
+        self._last_run: Dict[str, datetime] = {}
+        self._user_workflow_count: Dict[str, int] = {}
+        self.lock = asyncio.Lock()
+
+    async def check_workflow_rate_limit(self, workflow_id: str, min_interval_seconds: int) -> Tuple[bool, str]:
+        async with self.lock:
+            now = datetime.now()
+            last = self._last_run.get(workflow_id)
+            if last and (now - last).total_seconds() < min_interval_seconds:
+                remaining = min_interval_seconds - (now - last).total_seconds()
+                return False, f"Workflow rate limited: wait {remaining:.0f}s between runs"
+            self._last_run[workflow_id] = now
+            return True, ""
+
+    async def check_user_workflow_limit(self, user_id: str, max_workflows: int) -> Tuple[bool, str]:
+        async with self.lock:
+            count = self._user_workflow_count.get(user_id, 0)
+            if count >= max_workflows:
+                return False, f"User workflow limit reached ({max_workflows})"
+            return True, ""
+
+    async def register_user_workflow(self, user_id: str):
+        async with self.lock:
+            self._user_workflow_count[user_id] = self._user_workflow_count.get(user_id, 0) + 1
+
+    async def unregister_user_workflow(self, user_id: str):
+        async with self.lock:
+            current = self._user_workflow_count.get(user_id, 0)
+            if current > 0:
+                self._user_workflow_count[user_id] = current - 1
+
+
 # Global instances
 rate_limiter = RateLimiter()
 concurrent_limiter = ConcurrentTaskLimiter()
+workflow_rate_limiter = WorkflowRateLimiter()
 
 # Route-specific limiters
 task_start_limiter = EndpointRateLimiter(
