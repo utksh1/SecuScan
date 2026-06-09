@@ -20,10 +20,9 @@ import asyncio
 import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
-import pytest_asyncio
 
 from backend.secuscan.retention import RetentionResult, RetentionScheduler, run_cleanup
 
@@ -37,12 +36,10 @@ class FakeDB:
 
     def __init__(self):
         self.tasks: dict[str, dict] = {}
-        self.findings: dict[str, str] = {}   # finding_id -> task_id
-        self.reports: dict[str, str] = {}    # report_id  -> task_id
+        self.findings: dict[str, str] = {}
+        self.reports: dict[str, str] = {}
         self.audit_rows: list[dict] = []
         self.deleted_tasks: list[str] = []
-
-    # -- helpers used by test setup --
 
     def add_task(
         self,
@@ -72,30 +69,22 @@ class FakeDB:
         self.reports[rid] = task_id
         return rid
 
-    # -- Database interface used by retention.py --
-
     async def fetchall(self, query: str, params: tuple = ()) -> list[dict]:
         q = query.strip()
-        # Age query — tasks with created_at < cutoff and status NOT IN (...)
         if "created_at <" in q:
             cutoff_str = params[0]
-            # Both the stored created_at and the cutoff string use the same
-            # naive SQLite format ("%Y-%m-%d %H:%M:%S"), so plain string
-            # comparison is correct and avoids naive/aware TypeError.
             excluded = set(params[1:])
             return [
                 t for t in self.tasks.values()
                 if t["created_at"] < cutoff_str
                 and t["status"] not in excluded
             ]
-        # Count query — all tasks ordered by created_at DESC
         if "ORDER BY created_at DESC" in q:
             return sorted(
                 self.tasks.values(),
                 key=lambda t: t["created_at"],
                 reverse=True,
             )
-        # raw_output_path lookup — WHERE id IN (...)
         if "raw_output_path" in q and "IN" in q:
             ids = set(params)
             return [t for t in self.tasks.values() if t["id"] in ids]
@@ -153,7 +142,6 @@ async def test_dry_run_returns_correct_counts_without_deleting(db):
 
     assert result.dry_run is True
     assert tid in result.tasks_removed
-    # DB must be untouched
     assert tid in db.tasks, "dry_run must not delete from DB"
     assert len(db.deleted_tasks) == 0
 
@@ -192,7 +180,7 @@ async def test_age_policy_removes_old_tasks(db):
     """Tasks older than max_age_days are removed."""
     old = datetime.now(timezone.utc) - timedelta(days=91)
     tid_old = db.add_task(status="completed", created_at=old)
-    tid_new = db.add_task(status="completed")  # now
+    tid_new = db.add_task(status="completed")
 
     result = await run_cleanup(db, max_age_days=90)
 
@@ -205,7 +193,6 @@ async def test_age_policy_removes_old_tasks(db):
 @pytest.mark.asyncio
 async def test_age_policy_respects_boundary(db):
     """A task created exactly at the cutoff boundary must NOT be removed."""
-    # created_at == cutoff → NOT older, so should survive
     exactly_at = datetime.now(timezone.utc) - timedelta(days=90)
     tid = db.add_task(status="completed", created_at=exactly_at)
 
@@ -247,7 +234,7 @@ async def test_count_policy_keeps_newest_n(db):
 
 @pytest.mark.asyncio
 async def test_count_policy_no_removal_when_within_limit(db):
-    """When task count ≤ limit, nothing is deleted."""
+    """When task count <= limit, nothing is deleted."""
     for _ in range(3):
         db.add_task(status="completed")
 
@@ -273,7 +260,7 @@ async def test_count_policy_disabled_when_zero(db):
 
 @pytest.mark.asyncio
 async def test_running_tasks_never_deleted(db):
-    """Tasks with status 'running' must never be auto-purged."""
+    """Tasks with status running must never be auto-purged."""
     old = datetime.now(timezone.utc) - timedelta(days=9999)
     tid = db.add_task(status="running", created_at=old)
 
@@ -285,7 +272,7 @@ async def test_running_tasks_never_deleted(db):
 
 @pytest.mark.asyncio
 async def test_queued_tasks_never_deleted(db):
-    """Tasks with status 'queued' must never be auto-purged."""
+    """Tasks with status queued must never be auto-purged."""
     old = datetime.now(timezone.utc) - timedelta(days=9999)
     tid = db.add_task(status="queued", created_at=old)
 
@@ -345,7 +332,7 @@ async def test_raw_output_file_is_deleted(db, tmp_path):
 
 @pytest.mark.asyncio
 async def test_missing_file_does_not_raise(db):
-    """A non-existent raw_output_path must not raise; error is captured."""
+    """A non-existent raw_output_path must not raise."""
     old = datetime.now(timezone.utc) - timedelta(days=10)
     db.add_task(
         status="completed",
@@ -355,7 +342,6 @@ async def test_missing_file_does_not_raise(db):
 
     result = await run_cleanup(db, max_age_days=5)
 
-    # Should complete without raising; missing file is not an error (already gone)
     assert result.task_count == 1
 
 
@@ -371,7 +357,6 @@ async def test_failed_db_delete_is_captured_in_errors(db):
     tid_b = db.add_task(status="completed", created_at=old)
 
     original_execute = db.execute
-
     call_count = {"n": 0}
 
     async def flaky_execute(query, params=()):
@@ -385,9 +370,7 @@ async def test_failed_db_delete_is_captured_in_errors(db):
 
     result = await run_cleanup(db, max_age_days=5)
 
-    # tid_b should still be deleted; tid_a raised but that is caught
     assert any("disk full" in e for e in result.errors)
-    # tid_b must be gone
     assert tid_b not in db.tasks
 
 
@@ -397,7 +380,7 @@ async def test_failed_db_delete_is_captured_in_errors(db):
 
 @pytest.mark.asyncio
 async def test_audit_entry_written_for_each_deleted_task(db):
-    """A 'retention_purge' audit_log entry is written for every deleted task."""
+    """A retention_purge audit_log entry is written for every deleted task."""
     old = datetime.now(timezone.utc) - timedelta(days=10)
     tid_a = db.add_task(status="completed", created_at=old)
     tid_b = db.add_task(status="completed", created_at=old)
@@ -486,8 +469,8 @@ async def test_scheduler_start_is_idempotent():
     await sched.start(interval_seconds=3600)
     task_ref = sched._task
 
-    await sched.start(interval_seconds=3600)  # second call
-    assert sched._task is task_ref  # same task object
+    await sched.start(interval_seconds=3600)
+    assert sched._task is task_ref
 
     await sched.stop()
 
@@ -496,7 +479,7 @@ async def test_scheduler_start_is_idempotent():
 async def test_scheduler_stop_before_start_is_safe():
     """stop() on a never-started scheduler must not raise."""
     sched = RetentionScheduler()
-    await sched.stop()  # must not raise
+    await sched.stop()
     assert not sched.is_running
 
 
@@ -506,21 +489,15 @@ async def test_scheduler_tick_calls_run_cleanup():
     sched = RetentionScheduler()
     fake_db = FakeDB()
 
-    with patch("backend.secuscan.retention.run_cleanup", new=AsyncMock(return_value=RetentionResult(dry_run=False))) as mock_cleanup, \
-         patch("backend.secuscan.retention.RetentionScheduler._tick", wraps=sched._tick):
-
-        async def fake_get_db():
-            return fake_db
-
+    with patch("backend.secuscan.retention.run_cleanup", new=AsyncMock(return_value=RetentionResult(dry_run=False))):
         with patch("backend.secuscan.retention.RetentionScheduler._tick") as mock_tick:
             mock_tick.return_value = None
 
             await sched.start(interval_seconds=9999, max_age_days=30)
-            await asyncio.sleep(0.05)  # let the loop spin once
+            await asyncio.sleep(0.05)
             await sched.stop()
 
-            # The loop should have at least tried to tick
-            assert mock_tick.called or not sched.is_running  # stop may race; just no crash
+            assert mock_tick.called or not sched.is_running
 
 
 @pytest.mark.asyncio
@@ -535,7 +512,7 @@ async def test_scheduler_tick_error_does_not_crash_loop():
 
     sched._tick = bad_tick
 
-    await sched.start(interval_seconds=0)  # 0 = run as fast as possible
+    await sched.start(interval_seconds=0)
     await asyncio.sleep(0.05)
     await sched.stop()
 
