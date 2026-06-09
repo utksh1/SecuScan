@@ -70,6 +70,8 @@ def _net_within_allowed_networks(net: ipaddress._BaseNetwork) -> bool:
         for pattern in patterns:
             try:
                 allowed_net = ipaddress.ip_network(pattern, strict=False)
+                if net.version != allowed_net.version:
+                    continue
                 if net.subnet_of(allowed_net) or net.overlaps(allowed_net):
                     return True
             except ValueError:
@@ -382,11 +384,15 @@ def sanitize_input(value: str) -> str:
     Returns:
         Sanitized value
     """
-    # Remove shell metacharacters and non-printable control characters
+    # Remove shell metacharacters and non-printable control characters.
     dangerous_chars = [';', '|', '&', '$', '`', '(', ')', '<', '>', '\n', '\r', "'", '"', '\\', '!', '{', '}', '\t', '\x00']
     for char in dangerous_chars:
         value = value.replace(char, '')
-    
+
+    # User-controlled placeholders are passed as argv values, not through a
+    # shell, but leading dashes can still be interpreted as tool options.
+    value = value.lstrip("-")
+
     return value.strip()
 
 
