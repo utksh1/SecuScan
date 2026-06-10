@@ -1,14 +1,24 @@
-name: Check for Frontend Artifacts
+name: Check for Committed Artifacts
 
 on:
   pull_request:
     branches: [main, dev]
+    paths:
+      - "frontend/**"
+      - "output/**"
+      - "data/**"
+      - "backend/data/**"
+      - "logs/**"
+      - "scripts/check-artifacts.sh"
+      - ".github/workflows/check-artifacts.yml"
 
 jobs:
   artifact-check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Run artifact check
-        run: bash scripts/check-artifacts.sh
+      - name: Run artifact guard
+        run: bash scripts/check-artifacts.sh origin/main
