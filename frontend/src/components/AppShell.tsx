@@ -20,14 +20,22 @@ export default function AppShell({ children }: AppShellProps) {
         return saved !== null ? JSON.parse(saved) : true
     })
 
-    useEffect(() => {
-        const handleSidebarChange = (e: Event) => {
-            const detail = (e as CustomEvent).detail
-            if (typeof detail === 'boolean') setSidebarExpanded(detail)
-        }
-        window.addEventListener('sidebar-state-changed', handleSidebarChange)
-        return () => window.removeEventListener('sidebar-state-changed', handleSidebarChange)
-    }, [])
+useEffect(() => {
+    const handleStorage = () => {
+      const saved = localStorage.getItem('sidebar-expanded')
+      if (saved !== null) setSidebarExpanded(JSON.parse(saved))
+    }
+    window.addEventListener('storage', handleStorage)
+    return () => window.removeEventListener('storage', handleStorage)
+  }, [])
+  useEffect(() => {
+    const handleSidebarChange = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      if (typeof detail === 'boolean') setSidebarExpanded(detail)
+    }
+    window.addEventListener('sidebar-state-changed', handleSidebarChange)
+    return () => window.removeEventListener('sidebar-state-changed', handleSidebarChange)
+  }, [])
 
     useEffect(() => {
         setMobileMenuOpen(false)
