@@ -1,90 +1,140 @@
 <p align="center">
-  <img src="assets/logo.png" alt="SecuScan Logo" width="200">
+  <img src="assets/logo.png" alt="SecuScan logo" width="180">
 </p>
 
 <h1 align="center">SecuScan</h1>
 
 <p align="center">
-  <strong>Local-first security scanning for learning, experimentation, and ethical pentesting workflows.</strong>
+  <strong>Local-first security scanning workspace for authorized testing, learning, and extensible automation.</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/utksh1/SecuScan/blob/main/LICENSE">
-    <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT">
-  </a>
-  <a href="https://www.python.org/downloads/">
-    <img src="https://img.shields.io/badge/Python-3.11%2B-blue" alt="Python 3.11+">
-  </a>
-  <a href="https://github.com/utksh1/SecuScan/tree/main/frontend">
-    <img src="https://img.shields.io/badge/Frontend-React%20%2B%20Vite-61dafb" alt="React and Vite">
-  </a>
-  <a href="https://github.com/utksh1/SecuScan">
-    <img src="https://img.shields.io/badge/Status-Active%20Development-orange" alt="Active Development">
-  </a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.11%2B-blue" alt="Python 3.11+"></a>
+  <a href="frontend/"><img src="https://img.shields.io/badge/frontend-React%20%2B%20TypeScript-61dafb" alt="React and TypeScript"></a>
+  <a href="PLUGINS.md"><img src="https://img.shields.io/badge/plugins-60%20catalogued-brightgreen" alt="60 catalogued plugins"></a>
 </p>
 
-## Project Purpose
+> **Authorized use only:** Run SecuScan only against systems you own, systems you are explicitly permitted to assess, or deliberately vulnerable lab environments.
 
-SecuScan is an open source, plugin-driven platform for running security scans from your own machine. It combines a FastAPI backend, a React frontend, and a growing plugin system for recon, web, cloud, container, and reporting workflows.
+## Overview
 
-The project is designed to be:
+SecuScan is an open-source workspace for running and organizing authorized security scans. It combines a React frontend, a FastAPI backend, a metadata-driven plugin system, workflow automation, normalized findings, reports, and safety controls.
 
-- Local-first: scan data stays on infrastructure you control.
-- Contributor-friendly: frontend, backend, plugins, and docs all have clear entry points.
-- Safety-aware: the product is built around ethical and learning-oriented usage.
+It is useful for students, contributors, security learners, and practitioners who want one local place to configure scanners, run tasks, review output, and build new integrations. It is not a replacement for professional manual testing or a full penetration-testing distribution.
 
-## Who It Is For
+## At a Glance
 
-- Students and GSSoC contributors who want a real-world full-stack open source security project.
-- Security learners who want a UI-backed toolkit instead of only raw CLI flows.
-- Developers and researchers who want to extend scanners, parsers, reports, or workflow automation.
+- Local-first app with local scan history, reports, logs, and runtime data.
+- React + TypeScript frontend with plugin-driven forms.
+- FastAPI backend with API-key authentication and OpenAPI docs.
+- 60 catalogued plugin integrations from `plugins/*/metadata.json`.
+- Safety levels: 27 `safe`, 25 `intrusive`, and 8 `exploit`.
+- Task controls for consent, safe mode, rate limits, concurrency, network policy, and capabilities.
+- Real-time task status and output streaming.
+- Reports, finding normalization, grouping, workflows, and plugin validation helpers.
 
-## Core Areas
+## Architecture
 
-- Scan orchestration and API flows in `backend/secuscan`
-- React UI and dashboard experience in `frontend/src`
-- Plugin metadata and parser integrations in `plugins`
-- Reports, exports, and result normalization across backend and frontend
+```mermaid
+flowchart LR
+    U[User] --> UI[React Frontend]
+    UI -->|REST API| API[FastAPI Backend]
+    API -->|SSE task events| UI
+
+    API --> AUTH[API Key Auth]
+    API --> PM[Plugin Manager]
+    API --> WF[Workflow Scheduler]
+    API --> EX[Task Executor]
+
+    PM --> META[metadata.json]
+    PM --> PARSER[parser.py]
+
+    EX --> GUARD[Consent, Safe Mode, Rate, Capability, Network Policy]
+    GUARD --> ENGINE{Execution Engine}
+
+    ENGINE --> CLI[CLI Tools]
+    ENGINE --> PY[Python Scanners]
+    ENGINE --> DOCKER[Docker Execution]
+    PARSER --> SANDBOX[Parser Sandbox]
+
+    CLI --> NORM[Normalized Findings]
+    PY --> NORM
+    DOCKER --> NORM
+    SANDBOX --> NORM
+
+    NORM --> DB[(SQLite or PostgreSQL)]
+    EX --> CACHE[(Memory Cache or Redis)]
+    EX --> FS[(Reports and Artifacts)]
+```
+
+## Scan Flow
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as Frontend
+    participant API as Backend API
+    participant PM as Plugin Manager
+    participant EX as Executor
+    participant DB as Database
+    participant Tool as Scanner
+
+    User->>UI: Select plugin and target
+    UI->>API: Fetch plugin schema
+    API->>PM: Load metadata
+    PM-->>UI: Fields, presets, safety, availability
+    User->>UI: Confirm consent and start scan
+    UI->>API: Create task
+    API->>EX: Validate and queue
+    EX->>Tool: Run scanner
+    Tool-->>EX: Output and status
+    EX-->>UI: Stream updates
+    EX->>DB: Store normalized result
+```
+
+## Core Pieces
+
+- **Frontend:** scanner catalogue, plugin forms, task views, findings, reports, workflows, dashboard, settings, and API-key setup.
+- **Backend:** API routes, authentication, task lifecycle, reports, workflow scheduling, vault, notifications, cache, and database setup.
+- **Plugins:** metadata files define UI fields, engine type, safety level, dependencies, capabilities, presets, and output behavior.
+- **Executor:** validates tasks, runs scanners, streams output, normalizes results, writes audit data, and handles cancellation.
+- **Parser sandbox:** runs custom `parser.py` code in a separate process with integrity checks and output limits.
+- **Storage:** SQLite for simple local use, PostgreSQL and Redis in Docker Compose, filesystem for reports and artifacts.
+- **Security controls:** consent, safe mode, network policy, plugin checksums, capability denial, rate limits, and concurrency limits.
 
 ## Repository Map
 
-- `backend/`: FastAPI app, execution logic, database/config, plugin loading, workflows
-- `backend/data/`: backend-specific datasets and resources used by scanners
-- `backend/wordlists/`: backend scanning wordlists and supporting resources
-- `frontend/`: React + Vite app, routes, pages, shared components, and test config
-- `plugins/`: scanner metadata, parser code, and plugin-specific helpers
-- `testing/`: shared test utilities, backend test scripts, and validation helpers
-- `frontend/testing/`: frontend unit and integration test files
-- `frontend/e2e/`: Playwright end-to-end test suites
-- `docs/`: supporting project documentation
-- `scripts/`: helper scripts for signing, benchmarking, and maintenance
-- `.github/`: GitHub Actions workflows, issue templates, and contributor automation
-- `assets/`: project branding assets and images
-- `data/`: shared raw and generated project data
-- `output/`: runtime-generated reports and exported scan artifacts; created during scans and not part of the checked-in repository tree
-- `wordlists/`: wordlists used by scanning and enumeration plugins
-- `scratch/`: experimental utilities and temporary development helpers
+```text
+SecuScan/
+├── backend/          FastAPI app, scanners, config, database, executor
+├── frontend/         React, TypeScript, Vite UI
+├── plugins/          Plugin metadata, parsers, helpers
+├── testing/          Backend/shared test utilities
+├── docs/             Product, deployment, auth and contributor docs
+├── scripts/          Plugin validation, checksums, signing, benchmarks
+├── assets/           Logo and branding assets
+├── data/             Shared/runtime data
+├── wordlists/        Scanner wordlists
+└── .github/          CI, issue templates, automation
+```
 
-## Prerequisites
+## Requirements
 
-For a fresh local setup, make sure your machine has:
+- Python 3.11+
+- Node.js 20+
+- npm 10+
+- Docker Desktop or Docker Engine for Compose or Docker-backed scans
 
-- `python3` 3.11 or newer
-- Node.js 20 or newer
-- npm 10 or newer
-- Docker Desktop or Docker Engine if you want the Compose workflow
+If multiple Python versions are installed, `./setup.sh` tries to find a compatible `python3`. You can also force one:
 
-If your machine has multiple Python versions installed, `./setup.sh` now looks for a compatible `python3` automatically. You can also force one explicitly with `PYTHON=/path/to/python3.11 ./setup.sh`.
-
-The scripted local setup path was re-checked from a fresh clone with a compatible Python 3.11+ interpreter.
+```bash
+PYTHON=/path/to/python3.11 ./setup.sh
+```
 
 ## Quick Start
 
-Choose one local development path.
-
-### Option 1: Simple Local Dev
-
-This is the fastest way to get the app running for UI or backend contributions from a fresh clone.
+### Local Dev
 
 ```bash
 git clone https://github.com/utksh1/SecuScan.git
@@ -94,15 +144,20 @@ chmod +x setup.sh start.sh
 ./start.sh
 ```
 
-After startup:
+Open:
 
 - Frontend: `http://127.0.0.1:5173`
 - Backend API: `http://127.0.0.1:8000`
 - Swagger docs: `http://127.0.0.1:8000/docs`
+- ReDoc: `http://127.0.0.1:8000/redoc`
 
-### Option 2: Docker Compose Stack
+The backend creates an API key at `backend/data/.api_key`. If the frontend asks for it:
 
-Use this if you want the containerized app stack with Postgres and Redis.
+```bash
+cat backend/data/.api_key
+```
+
+### Docker Compose
 
 ```bash
 git clone https://github.com/utksh1/SecuScan.git
@@ -110,131 +165,16 @@ cd SecuScan
 docker compose up --build
 ```
 
-After startup:
+Open:
 
 - Frontend: `http://127.0.0.1:5173`
 - Backend API: `http://127.0.0.1:8081`
+- PostgreSQL: `127.0.0.1:5432`
+- Redis: `127.0.0.1:6379`
 
-### Troubleshooting / Common Issues
+## Manual Dev Commands
 
-For more detailed Windows-specific setup and troubleshooting instructions, see the [Windows Contributor Development Guide](docs/windows_contributor_guide.md).
-
-#### Python version issues
-
-This project requires Python 3.11 or newer.
-
-Check your Python version:
-
-```bash
-python --version
-```
-
-or:
-
-```bash
-python3 --version
-```
-
-Install Python 3.11+ if your current version is older.
-
-Python downloads: https://www.python.org/downloads/
-
-#### Virtual environment activation issues
-
-Create a virtual environment:
-
-```bash
-python -m venv venv
-```
-
-Activate it:
-
-**Windows PowerShell**
-
-```powershell
-venv\Scripts\Activate.ps1
-```
-
-**Windows Git Bash**
-
-```bash
-source venv/Scripts/activate
-```
-
-**Linux/macOS**
-
-```bash
-source venv/bin/activate
-```
-
-If PowerShell blocks activation, run:
-
-```powershell
-Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-```
-
-Then reopen the terminal and activate the virtual environment again.
-
-#### Node.js version issues
-
-This project requires Node.js 20 or newer.
-
-Check your Node.js version:
-
-```bash
-node -v
-```
-
-Install Node.js 20+ if your current version is older.
-
-Node.js downloads: https://nodejs.org/
-
-#### Dependency installation issues
-
-If dependency installation fails, try reinstalling dependencies:
-
-```bash
-npm install
-```
-
-If installation still fails, try clearing the npm cache:
-
-```bash
-npm cache clean --force
-```
-
-Then reinstall dependencies again:
-
-```bash
-npm install
-```
-
-For complete contributor workflow and coding guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md).
-
-#### Environment variable issues
-
-If the app fails because environment variables are missing, copy the example environment file if available:
-
-```bash
-cp .env.example .env
-```
-
-Then update the required values before starting the project.
-
-#### Still stuck?
-
-Before opening a setup issue, check:
-
-* Python 3.11+
-* Node.js 20+
-* virtual environment is activated
-* required `.env` files exist
-
-## Manual Development Commands
-
-### Backend
-
-> **Python version:** `python3` in these commands must resolve to 3.11 or newer. If your system default is older, substitute the full path (e.g. `python3.11`, `python3.12`) or use `PYTHON=/path/to/python3.11 ./setup.sh` instead. Run `python3 --version` to check.
+Backend:
 
 ```bash
 cp .env.example .env
@@ -245,7 +185,7 @@ pip install -r backend/requirements-dev.txt
 python3 -m uvicorn backend.secuscan.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-### Frontend
+Frontend:
 
 ```bash
 cd frontend
@@ -253,144 +193,162 @@ npm install
 npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
-## Running Tests
+## Configuration
 
-### Backend tests
+Copy `.env.example` before changing local settings:
+
+```bash
+cp .env.example .env
+```
+
+Common settings:
+
+| Variable | Purpose |
+| --- | --- |
+| `SECUSCAN_BIND_ADDRESS`, `SECUSCAN_BIND_PORT` | Backend host and port. |
+| `SECUSCAN_SAFE_MODE_DEFAULT` | Enables safer target validation defaults. |
+| `SECUSCAN_REQUIRE_CONSENT` | Requires consent before task creation. |
+| `SECUSCAN_VAULT_KEY` | Required seed for credential vault encryption. |
+| `SECUSCAN_DOCKER_ENABLED` | Enables Docker-backed task execution where supported. |
+| `SECUSCAN_NETWORK_ALLOWLIST`, `SECUSCAN_NETWORK_DENYLIST` | Network policy controls. |
+| `SECUSCAN_DENIED_CAPABILITIES` | Blocks plugins requiring selected capabilities. |
+| `VITE_API_BASE` | Frontend API base override. |
+
+See [docs/api-authentication.md](docs/api-authentication.md) and [docs/SECURE_DEPLOYMENT.md](docs/SECURE_DEPLOYMENT.md).
+
+## Tests
+
+Backend:
 
 ```bash
 ./testing/test_python.sh
 ```
 
-### Frontend tests
+Frontend:
 
 ```bash
 cd frontend
 npm run test
 ```
 
-### Frontend end-to-end tests
+End-to-end:
 
 ```bash
 cd frontend
 npm run e2e
 ```
 
-## New Contributors Start Here
+Plugin validation:
 
-If this is your first contribution, start with one of these areas:
+```bash
+python scripts/validate_plugins.py
+python scripts/validate_plugin.py --plugin nmap
+python scripts/refresh_plugin_checksum.py --plugin nmap
+```
 
-- Docs: improve setup steps, fix outdated instructions, or clarify contributor guidance.
-- Frontend polish: small UI fixes, loading states, empty states, and test coverage.
-- Backend cleanup: validation, API consistency, workflow edge cases, and unit tests.
-- Plugins: metadata fixes, parser improvements, and result normalization.
+## API Examples
 
-Good first places to read before coding:
+```bash
+API_KEY=$(cat backend/data/.api_key)
+curl http://127.0.0.1:8000/api/v1/health
+curl -H "X-API-Key: $API_KEY" http://127.0.0.1:8000/api/v1/plugins
+curl -H "X-API-Key: $API_KEY" http://127.0.0.1:8000/api/v1/plugin/nmap/schema
+```
 
-- [Contribution Guide](CONTRIBUTING.md)
-- [Code of Conduct](CODE_OF_CONDUCT.md)
-- [Security Policy](SECURITY.md)
-- [Plugin Catalogue](PLUGINS.md)
+Start a task:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/task/start \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
+  -d '{
+    "plugin_id": "nmap",
+    "inputs": {"target": "127.0.0.1"},
+    "consent_granted": true
+  }'
+```
+
+## Security Model
+
+SecuScan includes safety controls, but users still need judgment.
+
+- Use it only on owned, authorized, or lab systems.
+- Plugin safety labels are guidance, not a guarantee.
+- Docker improves isolation but is not a complete security boundary.
+- External tools keep their own risks, licenses, and behavior.
+- Automated findings need manual validation.
+- Remote databases, webhooks, cloud APIs, LLMs, or external targets can move data off your machine.
+- Do not expose the backend to untrusted networks without hardening.
+- Read [SECURITY.md](SECURITY.md) and [docs/SECURE_DEPLOYMENT.md](docs/SECURE_DEPLOYMENT.md).
+
+## Adding Plugins
+
+A typical plugin looks like:
+
+```text
+plugins/example_plugin/
+├── metadata.json
+└── parser.py
+```
+
+Before opening a plugin PR:
+
+1. Keep metadata accurate and scoped.
+2. Set the correct safety level.
+3. Declare required capabilities.
+4. Validate inputs and avoid shell interpolation.
+5. Add parser tests when parser behavior changes.
+6. Document required binaries.
+7. Refresh checksums.
+8. Update `PLUGINS.md` if the catalogue changes.
+
+Start with [PLUGINS.md](PLUGINS.md), [docs/plugin-validation.md](docs/plugin-validation.md), and [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Contributing
+
+Good contribution areas:
+
+- setup and documentation clarity;
+- frontend empty/loading/error states;
+- accessibility improvements;
+- backend validation and API consistency;
+- workflow and task lifecycle tests;
+- plugin metadata fixes;
+- parser normalization;
+- security hardening.
+
+Before a PR, branch from `main`, keep the change focused, add tests for behavior changes, update docs when needed, and avoid unrelated formatting churn.
+
+## Troubleshooting
+
+- Python must be 3.11+: `python3 --version`
+- If venv activation fails on Windows PowerShell, use `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
+- If frontend dependencies fail, run `cd frontend && npm install --legacy-peer-deps`
+- If Vite cache is stale, run `cd frontend && npm run dev -- --force`
+- If ports are busy, stop processes on `5173` and `8000`
+- If env vars are missing, run `cp .env.example .env`
+- For Windows setup, see [docs/windows_contributor_guide.md](docs/windows_contributor_guide.md)
+
+## More Docs
+
 - [Product Specification](docs/PRODUCT_SPEC.md)
-
-## Contribution Guidelines
-
-Before opening a pull request:
-
-1. Fork the repo and branch from `main`.
-2. Pick an issue or discuss the change before starting large work.
-3. Keep pull requests scoped and include tests when behavior changes.
-4. Update docs if you change setup, APIs, workflows, or contributor-facing behavior.
-
-Detailed contributor expectations live in [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Detailed Documentation
-
-Long-form product and planning material lives outside the main README so onboarding stays readable:
-
-- [SecuScan Product Specification](docs/PRODUCT_SPEC.md)
 - [Plugin Catalogue](PLUGINS.md)
+- [Plugin Validation](docs/plugin-validation.md)
+- [API Authentication](docs/api-authentication.md)
 - [Secure Deployment Guide](docs/SECURE_DEPLOYMENT.md)
 - [Windows Contributor Development Guide](docs/windows_contributor_guide.md)
+- [Frontend README](frontend/README.md)
 
+## Project Status
 
-## Tech Stack
-
-- Backend: FastAPI, Pydantic, Uvicorn, SQLite/Postgres, Redis
-- Frontend: React 18, TypeScript, Vite, Vitest, Playwright
-- Plugins: metadata-driven scanner integrations and parser modules
-
-## Contact
-
-For questions, contributor coordination, onboarding help, or setup issues, use [GitHub Issues](https://github.com/utksh1/SecuScan/issues).
-
-For responsible disclosure of security issues, follow the private reporting guidance in [SECURITY.md](SECURITY.md).
-
-## Responsible Use
-
-SecuScan is intended for authorized security testing, education, and research. Do not use it against systems you do not own or explicitly have permission to assess.
+SecuScan is under active development. APIs, plugin schemas, UI flows, and execution behavior may change before a stable release. Version values are not fully standardized across every surface yet.
 
 ## License
 
-This project is released under the [MIT License](LICENSE).
+SecuScan is licensed under the [MIT License](LICENSE). Third-party tools and scanners may use different licenses and usage terms.
 
-## Licensing Notes
+## Contributors
 
-- `LICENSE` is the canonical legal text for this repository.
-- Contributions merged into this repository are distributed under the same MIT License unless explicitly stated otherwise.
-- Third-party tools, libraries, and external scanners referenced by SecuScan may have their own licenses and usage terms. Check upstream projects before redistributing bundled integrations.
+Thanks to everyone contributing code, plugins, tests, docs, design, issue triage, and reviews.
 
-
----
-
-## Troubleshooting & Local Setup Failsafe
-
-Use these checks when local installation or launch fails.
-
-### 1. Stale Local Vite Module Cache
-
-**Symptoms:** Frontend changes do not appear in the browser, or Vite reports internal parsing or bundling errors.
-
-**Fix:** Force Vite to ignore its stale cache and run a fresh reload:
-
-```bash
-cd frontend
-npm run dev -- --force
-```
-
-### 2. Node Dependency Resolution Loops (`npm i` hanging/failing)
-
-**Symptoms:** `npm install` reports dependency tree conflicts, peer dependency errors, or hangs indefinitely.
-
-**Fix:** Retry with the legacy peer dependency resolver:
-
-```bash
-npm install --legacy-peer-deps
-```
-
-### 3. Missing or Mismatched Environment Variables
-
-**Symptoms:** The frontend loads, but API requests fail or scans cannot connect to the backend.
-
-**Fix:** Create a local `.env` file from the example file:
-
-```bash
-cp .env.example .env
-```
-
-### 4. Port 5173 Already in Use
-
-**Symptoms:** Vite reports that port `5173` is already in use and switches to another port.
-
-**Fix:** Stop the process using that port.
-
-Windows PowerShell:
-
-```powershell
-Stop-Process -Id (Get-NetTCPConnection -LocalPort 5173).OwningProcess -Force
-```
-
-Linux or macOS:
-
-```bash
-kill "$(lsof -t -i:5173)"
-```
+[View contributors](https://github.com/utksh1/SecuScan/graphs/contributors)

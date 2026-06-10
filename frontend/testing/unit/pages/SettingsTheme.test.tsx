@@ -13,6 +13,16 @@ vi.mock('../../../src/api', async () => {
   }
 })
 
+function renderSettings() {
+  render(
+    <ThemeProvider>
+      <ToastProvider>
+        <Settings />
+      </ToastProvider>
+    </ThemeProvider>,
+  )
+}
+
 describe('Settings theme wiring', () => {
   beforeEach(() => {
     window.localStorage.removeItem('secuscan-theme')
@@ -22,26 +32,29 @@ describe('Settings theme wiring', () => {
 
   it('applies selected theme globally and persists it', async () => {
     const user = userEvent.setup()
-
-    render(
-      <ThemeProvider>
-        <ToastProvider>
-          <Settings />
-        </ToastProvider>
-      </ThemeProvider>,
-    )
+    renderSettings()
 
     const themeSelect = screen.getByRole('combobox', { name: /visual spectrum theme/i })
+
     await user.selectOptions(themeSelect, 'light')
     await user.click(screen.getByRole('button', { name: /COMMIT_ENGINE_CHANGES/i }))
-
     expect(document.documentElement.classList.contains('theme-light')).toBe(true)
     expect(window.localStorage.getItem('secuscan-theme')).toBe('light')
 
     await user.selectOptions(themeSelect, 'dark')
     await user.click(screen.getByRole('button', { name: /COMMIT_ENGINE_CHANGES/i }))
-
     expect(document.documentElement.classList.contains('theme-light')).toBe(false)
     expect(window.localStorage.getItem('secuscan-theme')).toBe('dark')
+  })
+
+  it('opens reset confirmation modal when ENGINE_RESET is clicked', async () => {
+    const user = userEvent.setup()
+    renderSettings()
+
+    await user.click(screen.getByRole('button', { name: /ENGINE_RESET/i }))
+
+    expect(
+      screen.getByText(/Restore engine to factory specifications/i),
+    ).toBeInTheDocument()
   })
 })
