@@ -78,7 +78,7 @@ class Settings(BaseSettings):
     ]
     network_audit_log_file: str = str(PROJECT_ROOT / "logs" / "network.audit.log")
     network_audit_retention_days: int = 90
-    enforce_network_policy: bool = True
+    enforce_network_policy: bool = False
     network_policy_failure_mode: str = "block"  # "block" or "log_only"
 
     # Rate Limiting
