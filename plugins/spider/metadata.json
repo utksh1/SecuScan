@@ -2,8 +2,8 @@
   "id": "spider",
   "name": "Spider",
   "version": "1.0.0",
-  "description": "Advanced web spider with JS execution support.",
-  "long_description": "Advanced web spider with JS execution support.",
+  "description": "JavaScript-aware Katana spider for deeper client-side route discovery.",
+  "long_description": "Runs Katana with JavaScript crawling enabled and a configurable depth. Use this for applications where client-side links and JavaScript-rendered routes may expose additional paths.",
   "category": "robots",
   "author": {
     "name": "SecuScan Contributors",

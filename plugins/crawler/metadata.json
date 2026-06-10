@@ -2,8 +2,8 @@
   "id": "crawler",
   "name": "Crawler",
   "version": "1.0.0",
-  "description": "Recursive web crawler for link discovery.",
-  "long_description": "Recursive web crawler for link discovery.",
+  "description": "Depth-limited Katana crawl for recursive link discovery.",
+  "long_description": "Runs Katana with a configurable crawl depth to recursively discover links from a target URL. Use this for general active crawling where depth control matters.",
   "category": "robots",
   "author": {
     "name": "SecuScan Contributors",

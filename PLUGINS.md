@@ -49,7 +49,7 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | S3 / Blob Auditor | `cloud_storage_auditor` | `vulnerability` | `safe` | `uncover` | Find misconfigured S3 buckets and exposed cloud storage. |
 | Code Analyzer (Bandit) | `code_analyzer` | `code` | `safe` | `bandit` | Static analysis for Python code. |
 | Container Scan (Trivy) | `container_scanner` | `network` | `safe` | `trivy` | Scan Docker images and registries for known vulnerabilities. |
-| Crawler | `crawler` | `robots` | `intrusive` | `katana` | Recursive web crawler for link discovery. |
+| Crawler | `crawler` | `robots` | `intrusive` | `katana` | Depth-limited Katana crawl for recursive link discovery. |
 | Directory Discovery | `dir_discovery` | `web` | `intrusive` | `ffuf` | Discover hidden directories and files on web servers. |
 | DNS Reconnaissance | `dns_enum` | `recon` | `safe` | `dnsrecon` | Enumerate DNS records and configurations. |
 | dnsx | `dnsx` | `recon` | `safe` | `dnsx` | DNS resolution and wildcard-aware validation at scale. |
@@ -64,7 +64,7 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | IaC Scanner (Checkov) | `iac_scanner` | `vulnerability` | `safe` | `python3` | Analyze Terraform and CloudFormation code for flaws. |
 | ICMP Ping | `icmp_ping` | `utils` | `safe` | `ping` | Check if a server is live and responds to ICMP Echo requests. |
 | Joomla Security Scan | `joomscan` | `vulnerability` | `intrusive` | `joomscan` | Joomla security scanner for version and common weakness discovery. |
-| Katana | `katana` | `recon` | `intrusive` | `katana` | Web crawling for endpoint and route discovery. |
+| Katana | `katana` | `recon` | `intrusive` | `katana` | Baseline Katana URL discovery using the default crawl behavior. |
 | K8s Scanner | `kubernetes_scanner` | `vulnerability` | `intrusive` | `python3` | Kubernetes cluster security assessment. |
 | Exploitation Connector | `metasploit` | `expert` | `exploit` | `msfconsole` | Metasploit connector for controlled exploit-module execution. |
 | Network Scanner | `network_scanner` | `vulnerability` | `intrusive` | `nmap` | Check for 10,000+ CVEs and server misconfigurations. |
@@ -77,9 +77,9 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | Advanced Network Recon | `scapy_recon` | `network` | `safe` | `python3` | Advanced network probing using Scapy. |
 | Secret Scanner | `secret_scanner` | `code` | `safe` | `gitleaks` | Scan directories for hardcoded secrets. |
 | Sharepoint Scanner | `sharepoint_scanner` | `vulnerability` | `intrusive` | `nuclei` | Check SharePoint for security issues, misconfigs, and more. |
-| Sitemap Generator | `sitemap_gen` | `robots` | `intrusive` | `katana` | Build complete XML sitemaps by autonomously parsing targets. |
+| Sitemap Generator | `sitemap_gen` | `robots` | `intrusive` | `katana` | Depth-focused Katana crawl for sitemap-style URL inventory. |
 | Sniper: Auto-Exploiter | `sniper` | `exploit` | `exploit` | `python3` | Validate critical CVEs by automatic exploitation. |
-| Spider | `spider` | `robots` | `intrusive` | `katana` | Advanced web spider with JS execution support. |
+| Spider | `spider` | `robots` | `intrusive` | `katana` | JavaScript-aware Katana spider for deeper client-side route discovery. |
 | SQL Injection Feasibility | `sqli_checker` | `expert` | `intrusive` | `ghauri` | SQL injection feasibility scanner powered by Ghauri. |
 | SQLi Exploiter | `sqli_exploiter` | `exploit` | `exploit` | `sqlmap` | Exploit SQL injection in web apps to extract data. |
 | SQL Injection Testing | `sqlmap` | `web` | `exploit` | `sqlmap` | Automatic SQL injection and database takeover tool. |
