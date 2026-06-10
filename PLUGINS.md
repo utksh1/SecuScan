@@ -318,7 +318,7 @@ Two additional lint checks help maintain high-quality plugin metadata:
    ```json
    // Good — has help text
    { "id": "target", "label": "Target", "type": "text", "help": "IP address or hostname to scan" }
-   
+
    // Bad — missing help text (lint warning)
    { "id": "target", "label": "Target", "type": "text" }
    ```
