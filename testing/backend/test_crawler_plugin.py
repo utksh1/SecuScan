@@ -87,10 +87,11 @@ def test_crawler_target_field_requires_http_url():
     data = json.loads((PLUGIN_DIR / "metadata.json").read_text(encoding="utf-8"))
     fields = {f["id"]: f for f in data["fields"]}
     target_validation = fields["target"].get("validation", {})
-    pattern = target_validation.get("pattern", "")
-    assert "https?" in pattern or "http" in pattern, (
+    uses_preset = target_validation.get("validation_type") == "url"
+    uses_pattern = "https?" in target_validation.get("pattern", "") or \
+                   "http" in target_validation.get("pattern", "")
+    assert uses_preset or uses_pattern, \
         "target field must validate for HTTP(S) URL format"
-    )
 
 
 def test_crawler_has_optional_depth_field_with_default():
