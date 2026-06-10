@@ -237,9 +237,28 @@ class EndpointRateLimiter:
             self.last_cleanup = None
 
 
+class WorkflowRateLimiter:
+    """Rate limiter for scheduler-triggered workflow scans."""
+
+    def __init__(self):
+        self._last_run: Dict[str, datetime] = {}
+        self.lock = asyncio.Lock()
+
+    async def check_workflow_rate_limit(self, workflow_id: str, min_interval_seconds: int) -> Tuple[bool, str]:
+        async with self.lock:
+            now = datetime.now()
+            last = self._last_run.get(workflow_id)
+            if last and (now - last).total_seconds() < min_interval_seconds:
+                remaining = min_interval_seconds - (now - last).total_seconds()
+                return False, f"Workflow rate limited: wait {remaining:.0f}s between runs"
+            self._last_run[workflow_id] = now
+            return True, ""
+
+
 # Global instances
 rate_limiter = RateLimiter()
 concurrent_limiter = ConcurrentTaskLimiter()
+workflow_rate_limiter = WorkflowRateLimiter()
 
 # Route-specific limiters
 task_start_limiter = EndpointRateLimiter(
