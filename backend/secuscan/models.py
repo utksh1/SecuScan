@@ -24,6 +24,9 @@ class TaskStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    TERMINATED_TIMEOUT = "terminated:timeout"
+    TERMINATED_MEMORY = "terminated:memory_limit"
+    TERMINATED_OUTPUT = "terminated:output_limit"
 
 
 class SandboxConfig(BaseModel):
@@ -166,6 +169,8 @@ class PluginMetadata(BaseModel):
     learning: Optional[Dict[str, Any]] = None
     dependencies: Optional[Dict[str, List[str]]] = None
     docker_image: Optional[str] = None
+
+    sandbox: Optional[SandboxConfig] = None
 
     checksum: Optional[str] = None
     signature: Optional[str] = None
