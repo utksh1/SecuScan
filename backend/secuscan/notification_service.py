@@ -15,6 +15,7 @@ import uuid
 import ipaddress
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 import httpx
 
@@ -143,6 +144,26 @@ async def record_delivery(
 async def send_webhook(target_url: str, payload: Dict[str, Any]) -> tuple[bool, Optional[str]]:
     """POST a redacted alert payload to a webhook URL with SSRF protections."""
     from .config import settings
+
+    if settings.enforce_network_policy:
+        from .network_policy import get_policy_engine
+        hostname = urlparse(target_url).hostname
+        if hostname:
+            try:
+                addrs = socket.getaddrinfo(hostname, None)
+                engine = get_policy_engine()
+                for addr in addrs:
+                    ip_str = addr[4][0]
+                    allowed, reason, _ = engine.check_access(
+                        dest_ip=ip_str,
+                        plugin_id="notification_service",
+                        task_id="webhook_delivery",
+                        dest_hostname=hostname,
+                    )
+                    if not allowed:
+                        return False, f"Webhook blocked by network policy: {reason}"
+            except socket.gaierror:
+                return False, "Webhook URL hostname could not be resolved"
 
     timeout = httpx.Timeout(
         timeout=_WEBHOOK_TIMEOUT_SECONDS,

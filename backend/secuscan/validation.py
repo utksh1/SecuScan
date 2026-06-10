@@ -351,20 +351,17 @@ def validate_url(url: str) -> Tuple[bool, str]:
     Returns:
         Tuple of (is_valid, error_message)
     """
-    # Basic URL validation
     url_pattern = re.compile(
-        r'^https?://'  # http:// or https://
-        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'  # domain
-        r'localhost|'  # localhost
-        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # IP
-        r'(?::\d+)?'  # optional port
+        r'^https?://'
+        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'
+        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'
+        r'(?::\d+)?'
         r'(?:/?|[/?]\S+)$', re.IGNORECASE
     )
 
     if not url_pattern.match(url):
         return False, "Invalid URL format"
 
-    # Validate optional port range if provided
     port_match = re.search(r':(\d+)(?:/|\?|$)', url.split('://', 1)[1])
     if port_match:
         port = int(port_match.group(1))
@@ -372,6 +369,43 @@ def validate_url(url: str) -> Tuple[bool, str]:
             return False, "Invalid URL format"
 
     return True, ""
+
+
+def validate_webhook_target(url: str) -> Tuple[bool, Optional[str]]:
+    """
+    Validate webhook URL against SSRF attacks by resolving DNS and
+    checking resolved IPs against blocked/private networks.
+
+    Args:
+        url: Webhook URL to validate
+
+    Returns:
+        Tuple of (is_safe, error_message)
+    """
+    hostname = urlparse(url).hostname
+    if not hostname:
+        return False, "Webhook URL has no hostname"
+
+    try:
+        addrs = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        return False, "Webhook URL hostname could not be resolved"
+
+    blocked_networks = [
+        "127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+        "169.254.0.0/16", "::1/128", "fc00::/7", "fe80::/10",
+        "100.64.0.0/10", "198.18.0.0/15",
+    ]
+
+    for addr in addrs:
+        try:
+            ip = ipaddress.ip_address(addr[4][0])
+        except ValueError:
+            continue
+        for net_str in blocked_networks:
+            if ip in ipaddress.ip_network(net_str):
+                return False, f"Webhook URL resolves to blocked address ({ip})"
+    return True, None
 
 
 def sanitize_input(value: str) -> str:
