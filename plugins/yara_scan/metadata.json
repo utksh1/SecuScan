@@ -36,14 +36,16 @@
       "label": "YARA Rules Path",
       "type": "string",
       "required": true,
-      "placeholder": "/opt/rules/malware.yar"
+      "placeholder": "/opt/rules/malware.yar",
+      "help": "Path to a YARA rule file (.yar or .yara) used to match signatures against the target."
     },
     {
       "id": "print_strings",
       "label": "Print Matching Strings",
       "type": "boolean",
       "required": false,
-      "default": false
+      "default": false,
+      "help": "Include matching string values from triggered YARA rules in the scan output."
     }
   ],
   "presets": {
@@ -71,5 +73,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "411d3d894c61a405a16dcbe86ae9075720922b10e238161284def026f5e0baac"
+  "checksum": "5cbd915870a7bae34f6d1b9d960e654221a0236e805a300024f38297be956ac5"
 }

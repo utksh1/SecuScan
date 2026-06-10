@@ -28,6 +28,7 @@
       "type": "string",
       "required": true,
       "placeholder": "https://sharepoint.secuscan.in",
+      "help": "Enter the full SharePoint site URL to scan for security issues, misconfigurations, and exposed resources.",
       "validation": {
         "pattern": "^https?://",
         "message": "Must be a valid HTTP(S) URL"
@@ -57,5 +58,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "ba08df50150ea7d4df2784f4a5ba4d257a1669dd98d532f4fab6d84edc83fb0a"
+  "checksum": "5b12fe52ee58960818ec99ed5474703682075de7bf090bcd1e9288c9c4397806"
 }

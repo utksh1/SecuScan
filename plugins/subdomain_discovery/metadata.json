@@ -2,8 +2,8 @@
   "id": "subdomain_discovery",
   "name": "Subdomain Scanner",
   "version": "1.0.0",
-  "description": "Enumerate subdomains using passive sources",
-  "long_description": "Subfinder is a subdomain discovery tool that returns valid subdomains for websites by using passive online sources. It has a simple modular architecture and is optimized for speed.",
+  "description": "Comprehensive configurable subdomain enumeration via passive sources.",
+  "long_description": "An advanced subdomain discovery plugin built on ProjectDiscovery's subfinder with additional configuration options. Supports tuning thread count, toggling all passive sources on/off, and selecting between quick and comprehensive presets. Use this plugin when you need fine-grained control over the enumeration depth and source coverage.",
   "category": "recon",
   "author": {
     "name": "SecuScan Contributors",
@@ -88,5 +88,5 @@
     "system_packages": []
   },
   "docker_image": "projectdiscovery/subfinder:latest",
-  "checksum": "34c426cb7ea665b795595723b7f6f0b4bd302ebd69971268ee9eebde4fbac5d5"
+  "checksum": "36a62951d26ba2da37b777b21fc117f81b4125e88144688f43cc1beb0989cc0c"
 }

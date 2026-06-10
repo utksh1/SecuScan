@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import json
 import logging
+import socket
 import uuid
+import ipaddress
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -33,6 +35,7 @@ _SEVERITY_RANK: Dict[str, int] = {
 }
 
 _WEBHOOK_TIMEOUT_SECONDS = 10.0
+_WEBHOOK_CONNECT_TIMEOUT_SECONDS = 5.0
 _USER_AGENT = "SecuScan-Notifications/1.0"
 
 
@@ -138,9 +141,16 @@ async def record_delivery(
 
 
 async def send_webhook(target_url: str, payload: Dict[str, Any]) -> tuple[bool, Optional[str]]:
-    """POST a redacted alert payload to a webhook URL."""
+    """POST a redacted alert payload to a webhook URL with SSRF protections."""
+    from .config import settings
+
+    timeout = httpx.Timeout(
+        timeout=_WEBHOOK_TIMEOUT_SECONDS,
+        connect=_WEBHOOK_CONNECT_TIMEOUT_SECONDS,
+    )
+
     try:
-        async with httpx.AsyncClient(timeout=_WEBHOOK_TIMEOUT_SECONDS) as client:
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
             response = await client.post(
                 target_url,
                 json=payload,
@@ -149,8 +159,29 @@ async def send_webhook(target_url: str, payload: Dict[str, Any]) -> tuple[bool, 
                     "User-Agent": _USER_AGENT,
                 },
             )
+
         if response.status_code >= 400:
             return False, f"Webhook returned HTTP {response.status_code}"
+
+        if response.status_code in (301, 302, 303, 307, 308):
+            redirect_url = response.headers.get("location", "")
+            if redirect_url:
+                from urllib.parse import urlparse
+                parsed = urlparse(redirect_url)
+                if parsed.hostname:
+                    try:
+                        redirect_ips = socket.getaddrinfo(parsed.hostname, parsed.port or 443)
+                        for _family, _stype, _proto, _cname, sockaddr in redirect_ips:
+                            rip = ipaddress.ip_address(sockaddr[0])
+                            for blocked_cidr in settings.notification_blocked_ip_ranges:
+                                try:
+                                    if rip in ipaddress.ip_network(blocked_cidr, strict=False):
+                                        return False, f"Redirect to blocked IP range: {blocked_cidr}"
+                                except ValueError:
+                                    continue
+                    except OSError:
+                        return False, f"Could not resolve redirect target: {redirect_url}"
+
         return True, None
     except httpx.HTTPError as exc:
         return False, str(exc)
