@@ -1,3 +1,4 @@
+import CopyToClipboard from '../components/CopyToClipboard';
 import React, { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -11,7 +12,8 @@ import {
     Pdf02Icon,
     Refresh01Icon,
 } from '@hugeicons/core-free-icons'
-import { API_BASE, getPluginSchema, getTaskResult, getTaskStatus, PluginFieldSchema, PluginSchemaResponse, startTask } from '../api'
+import { API_BASE, getPluginSchema, getTaskResult, getTaskStatus, PluginFieldSchema, PluginSchemaResponse, startTask, ExecutionContext } from '../api'
+import { useTaskSubscription } from '../hooks/useTaskSubscription'
 import { routes, routePath } from '../routes'
 import { parseDateSafe, formatDateLong, formatLocaleTime } from '../utils/date'
 import {
@@ -34,6 +36,7 @@ interface Task {
     tool: string
     target: string
     status: string
+    scan_phase?: string
     created_at: string
     started_at?: string
     completed_at?: string
@@ -42,12 +45,25 @@ interface Task {
     error_message?: string
     inputs?: Record<string, any>
     preset?: string
+    execution_context?: ExecutionContext
     queue_position?: number
     pending_count?: number
 }
 
+interface RiskFactor {
+    factor: string
+    label: string
+    value: string | number
+    score: number
+    weight: number
+    contribution: number
+    detail: string
+}
+
 interface Finding {
     id?: string
+    finding_group_id?: string
+    asset_id?: string
     title: string
     category: string
     severity: string
@@ -59,6 +75,63 @@ interface Finding {
     proof?: string
     discovered_at?: string
     metadata?: Record<string, any>
+    risk_score?: number
+    risk_factors?: RiskFactor[]
+    exploitability?: number
+    confidence?: number
+    validated?: boolean
+    validation_method?: string
+    confidence_reason?: string
+    evidence?: Array<Record<string, any>>
+    asset_refs?: string[]
+    finding_kind?: string
+    occurrence_count?: number
+    corroborating_sources?: string[]
+    evidence_count?: number
+    analyst_status?: string
+    retest_status?: string
+    first_seen_at?: string
+    last_seen_at?: string
+    service_fingerprint?: string
+    cpe?: string
+    references?: Array<Record<string, any>>
+    asset_exposure?: string
+}
+
+interface FindingGroup {
+    id: string
+    title: string
+    severity: string
+    category?: string
+    finding_kind?: string
+    confidence?: number
+    validated?: boolean
+    occurrence_count?: number
+    evidence_count?: number
+    analyst_status?: string
+    corroborating_sources?: string[]
+    latest_finding_id?: string
+}
+
+interface AssetSummaryEntry {
+    asset_id: string
+    label?: string
+    target?: string
+    finding_count?: number
+    validated_count?: number
+    highest_severity?: string
+    services?: Array<Record<string, any>>
+}
+
+interface ScanDiff {
+    new?: FindingGroup[]
+    resolved?: FindingGroup[]
+    changed?: Array<{ group_id: string; before: Finding; after: Finding }>
+    summary?: {
+        new_count?: number
+        resolved_count?: number
+        changed_count?: number
+    }
 }
 
 interface TaskResult {
@@ -69,9 +142,13 @@ interface TaskResult {
     timestamp: string
     duration_seconds?: number
     status: string
+    execution_context?: ExecutionContext
     summary?: string[]
     severity_counts?: Record<string, number>
     findings?: Finding[]
+    finding_groups?: FindingGroup[]
+    asset_summary?: AssetSummaryEntry[]
+    scan_diff?: ScanDiff
     structured?: {
         rows?: Array<Record<string, any>>
         [key: string]: any
@@ -91,6 +168,57 @@ function defaultValueForField(field: PluginFieldSchema): unknown {
     return ''
 }
 
+
+const PHASE_LABELS: Record<string, string> = {
+    queued: 'QUEUED',
+    running_command: 'RUNNING_SCAN',
+    parsing: 'PARSING_RESULTS',
+    reporting: 'GENERATING_REPORT',
+    finished: 'FINALIZING',
+}
+
+const PHASE_MESSAGES: Record<string, string> = {
+    queued: 'Awaiting execution slot...',
+    running_command: 'Executing security scan...',
+    parsing: 'Parsing scan results...',
+    reporting: 'Generating reports...',
+    finished: 'Finalizing...',
+}
+
+function PhaseLabel({ phase }: { phase?: string }) {
+    const label = phase ? PHASE_LABELS[phase] : null
+    const message = phase ? PHASE_MESSAGES[phase] : 'Decrypting_Briefing...'
+    return (
+        <p className="text-xs font-black text-silver-bright uppercase tracking-[0.5em] italic">
+            {label || 'DECRYPTING_BRIEFING...'}
+        </p>
+    )
+}
+
+function PhaseProgress({ phase }: { phase?: string }) {
+    if (!phase || phase === 'finished') return null
+    const phases = ['queued', 'running_command', 'parsing', 'reporting']
+    const currentIdx = phases.indexOf(phase)
+    if (currentIdx === -1) return null
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center gap-2">
+                {phases.map((p, i) => (
+                    <React.Fragment key={p}>
+                        <div className={`w-3 h-3 border-2 ${i <= currentIdx ? 'bg-rag-blue border-rag-blue shadow-[0_0_8px_rgba(0,112,243,0.5)]' : 'bg-charcoal-dark border-silver/20'} transition-all duration-500`} />
+                        {i < phases.length - 1 && (
+                            <div className={`h-0.5 flex-1 ${i < currentIdx ? 'bg-rag-blue' : 'bg-silver/10'} transition-all duration-500`} />
+                        )}
+                    </React.Fragment>
+                ))}
+            </div>
+            <p className="text-[10px] font-mono text-rag-blue/80 uppercase tracking-[0.3em] italic">
+                {PHASE_MESSAGES[phase] || 'Processing...'}
+            </p>
+        </div>
+    )
+}
 
 function formatToolLabel(tool?: string, pluginId?: string) {
     const normalized = (tool || '').trim()
@@ -131,22 +259,46 @@ export default function TaskDetails() {
     const { addToast } = useToast()
 
     const [task, setTask] = useState<Task | null>(null)
+    const isMounted = useRef(true)
+    const loadTaskSeqRef = useRef(0)
     const [result, setResult] = useState<TaskResult | null>(null)
     const [schema, setSchema] = useState<PluginSchemaResponse | null>(null)
     const [rawOutput, setRawOutput] = useState<string>('')
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [scanPhase, setScanPhase] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<'summary' | 'results' | 'parameters' | 'raw'>('summary')
     const [expandedFindingRows, setExpandedFindingRows] = useState<Record<number, boolean>>({})
     const [expandedDiscoveryRows, setExpandedDiscoveryRows] = useState<Record<number, boolean>>({})
     const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null)
     const [rawSearch, setRawSearch] = useState('')
     const [wrapRawOutput, setWrapRawOutput] = useState(true)
-    const [copiedRawOutput, setCopiedRawOutput] = useState(false)
+
+    // ✅ FIX: isMounted cleanup belongs here in TaskDetails, not in FindingDrawer.
+    // The ref is owned by this component — its teardown must live here too.
+    useEffect(() => {
+        return () => {
+            isMounted.current = false
+        }
+    }, [])
+
+    const copyTaskId = async () => {
+        if (!taskId) return
+
+        try {
+            await navigator.clipboard.writeText(taskId)
+            addToast('Task ID copied to clipboard', 'success')
+        } catch (error) {
+            console.error('Failed to copy task ID:', error)
+            addToast('Failed to copy task ID', 'error')
+        }
+    }
 
     const FindingDrawer = ({ finding, onClose }: { finding: Finding, onClose: () => void }) => {
         const drawerRef = useRef<HTMLDivElement>(null)
 
+        // ✅ FIX: Only focus + keydown logic here. No isMounted teardown —
+        // that ref belongs to TaskDetails and must not be touched by a child component.
         useEffect(() => {
             drawerRef.current?.focus()
 
@@ -196,6 +348,11 @@ export default function TaskDetails() {
                     <div className="space-y-4">
                         <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Description</h3>
                         <p className="text-sm leading-8 text-silver/85 whitespace-pre-wrap">{finding.description}</p>
+                        {finding.confidence_reason && (
+                            <p className="text-[11px] font-mono uppercase tracking-[0.12em] text-silver/45">
+                                {finding.confidence_reason}
+                            </p>
+                        )}
                     </div>
 
                     {finding.proof && (
@@ -229,10 +386,32 @@ export default function TaskDetails() {
                                 </p>
                             </div>
                         )}
+                        {finding.risk_score !== undefined && finding.risk_score !== null && (
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Risk Score</h3>
+                                <p className={`text-sm font-black italic ${finding.risk_score >= 7 ? 'text-rag-red' : finding.risk_score >= 4 ? 'text-rag-amber' : 'text-rag-blue'}`}>
+                                    {finding.risk_score.toFixed(1)}
+                                </p>
+                            </div>
+                        )}
                         {finding.cve && (
                             <div className="space-y-4">
                                 <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">CVE Identifiers</h3>
                                 <p className="text-sm font-mono text-rag-blue/80 underline cursor-pointer">{finding.cve}</p>
+                            </div>
+                        )}
+                        {(finding.validated !== undefined || finding.validation_method) && (
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Validation</h3>
+                                <p className="text-sm font-mono text-silver-bright uppercase">
+                                    {finding.validated ? 'Validated' : finding.validation_method || 'Unvalidated'}
+                                </p>
+                            </div>
+                        )}
+                        {finding.cpe && (
+                            <div className="space-y-4">
+                                <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">CPE</h3>
+                                <p className="text-[11px] font-mono text-silver-bright break-all">{finding.cpe}</p>
                             </div>
                         )}
                         <div className="space-y-4">
@@ -242,6 +421,41 @@ export default function TaskDetails() {
                             </p>
                         </div>
                     </div>
+
+                    {finding.evidence && finding.evidence.length > 0 && (
+                        <div className="space-y-4">
+                            <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Structured Evidence</h3>
+                            <div className="space-y-2">
+                                {finding.evidence.slice(0, 6).map((item, index) => (
+                                    <div key={`${finding.id ?? finding.title}-evidence-${index}`} className="bg-black/25 border border-white/5 p-4 text-[11px] font-mono text-silver/80 break-words">
+                                        {String(item.type || 'evidence').toUpperCase()}: {String(item.value ?? '')}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {finding.risk_factors && finding.risk_factors.length > 0 && (
+                        <div className="space-y-4">
+                            <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Risk Factor Breakdown</h3>
+                            <div className="space-y-2">
+                                {finding.risk_factors.map((rf) => (
+                                    <div key={rf.factor} className="flex items-center justify-between text-[11px] border-b border-white/[0.03] pb-2">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-silver/40 uppercase tracking-wider">{rf.label}</span>
+                                            <span className="text-silver/25 text-[9px]">({(rf.weight * 100).toFixed(0)}%)</span>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-silver/70 font-mono">{rf.score.toFixed(1)}</span>
+                                            <span className={`text-[10px] font-mono ${rf.contribution >= 2 ? 'text-rag-red' : rf.contribution >= 1 ? 'text-rag-amber' : 'text-silver/40'}`}>
+                                                +{rf.contribution.toFixed(1)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {Object.keys(finding.metadata || {}).length > 0 && (
                         <div className="space-y-4">
@@ -263,94 +477,88 @@ export default function TaskDetails() {
 
     useEffect(() => {
         loadTask()
-
-        const es = new EventSource(`${API_BASE}/task/${taskId}/stream`)
-
-        es.addEventListener('status', (e) => {
-            try {
-                const data = JSON.parse(e.data)
-                setTask((prev: Task | null) => prev ? { ...prev, status: data.status } : null)
-                if (['completed', 'failed', 'cancelled'].includes(data.status)) {
-                    es.close()
-                    loadTask()
-                }
-            } catch (err) {
-                console.error("Status stream error", err)
-            }
-        })
-
-        es.addEventListener('output', (e) => {
-            try {
-                const data = JSON.parse(e.data)
-                setRawOutput(prev => prev + data.chunk)
-            } catch (err) {
-                console.error("Output stream error", err)
-            }
-        })
-
-        es.onerror = (err) => {
-            console.error("EventSource error:", err)
-            es.close()
-        }
-
-        return () => es.close()
     }, [taskId])
 
+    const handleRescan = async () => {
+        if (!task || !taskId) return
+
+        try {
+            const nextTask = await startTask(
+                task.plugin_id,
+                task.inputs || {},
+                true,
+                task.preset,
+                task.execution_context
+            )
+
+            if (!isMounted.current) return
+
+            addToast('Rescan started successfully', 'success')
+            navigate(routePath.task(nextTask.task_id))
+        } catch (error) {
+            console.error('Failed to start rescan:', error)
+            if (isMounted.current) {
+                addToast('Failed to start rescan', 'error')
+            }
+        }
+    }
+
+    useTaskSubscription({
+        taskId: taskId!,
+        onStatus: (status) => {
+            if (!isMounted.current) return
+            setTask((prev: Task | null) => prev ? { ...prev, status } : null)
+            if (['completed', 'failed', 'cancelled'].includes(status)) {
+                loadTask()
+            }
+        },
+        onPhase: (phase) => {
+            if (!isMounted.current) return
+            setScanPhase(phase)
+        },
+        onOutput: (chunk) => {
+            if (!isMounted.current) return
+            setRawOutput((prev) => prev + chunk)
+        },
+    })
+
     async function loadTask() {
+        const seq = ++loadTaskSeqRef.current
+        if (!isMounted.current) return
+
         try {
             setError(null)
             const [statusData, resultData] = await Promise.all([
                 getTaskStatus(taskId!) as Promise<Task>,
                 getTaskResult(taskId!).catch(() => null) as Promise<TaskResult | null>
             ])
-            setTask(statusData)
-            getPluginSchema(statusData.plugin_id).then(setSchema).catch(() => setSchema(null))
 
-            if (resultData) {
-                // The backend returns the result fields at the top level
+            if (seq !== loadTaskSeqRef.current || !isMounted.current) return
+
+            setTask(statusData)
+            if (statusData.scan_phase) {
+                setScanPhase(statusData.scan_phase)
+            }
+
+            getPluginSchema(statusData.plugin_id)
+                .then(schema => isMounted.current && setSchema(schema))
+                .catch(() => isMounted.current && setSchema(null))
+
+            if (resultData && isMounted.current) {
                 setResult(resultData)
-                // Use the full output if available
                 if (resultData.raw_output) {
                     setRawOutput(resultData.raw_output)
                 }
             }
         } catch (err) {
-            console.error('Failed to load task:', err)
-            setError(err instanceof Error ? err.message : 'Unable to load task details')
+            if (isMounted.current && seq === loadTaskSeqRef.current) {
+                console.error('Failed to load task:', err)
+                setError(err instanceof Error ? err.message : 'Unable to load task details')
+            }
         } finally {
-            setLoading(false)
-        }
-    }
-
-    const copyTaskId = async () => {
-        if (!taskId) {
-            addToast('No Task ID available', 'warning')
-            return
-        }
-        try {
-            await navigator.clipboard.writeText(taskId || '')
-            addToast('Task ID copied successfully', 'success')
-        } catch (err) {
-            console.error('Failed to copy task ID:', err)
-            addToast('Unable to copy Task ID', 'error')
-        }
-    }
-    const handleRescan = async () => {
-        if (!task) return
-        try {
-            setLoading(true)
-            const res = await startTask(
-                task.plugin_id,
-                task.inputs || {},
-                true, // Assuming consent was already granted for previous task
-                task.preset
-            )
-            navigate(routePath.task(res.task_id))
-        } catch (err) {
-            console.error('Rescan failed:', err)
-            // Error handling UI can go here
-        } finally {
-            setLoading(false)
+            if (isMounted.current && seq === loadTaskSeqRef.current) {
+                setLoading(false)
+            }
         }
     }
 
@@ -379,13 +587,16 @@ export default function TaskDetails() {
             <div className="min-h-screen bg-charcoal-dark flex items-center justify-center p-12">
                 <div className="space-y-4 text-center">
                     <div className="w-20 h-20 border-8 border-silver-bright/10 border-t-rag-blue animate-spin mx-auto shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"></div>
-                    <p className="text-xs font-black text-silver-bright uppercase tracking-[0.5em] italic">Decrypting_Briefing...</p>
+                    <PhaseLabel phase={scanPhase || undefined} />
                 </div>
             </div>
         )
     }
 
-    const findings = result?.structured?.findings || []
+    const findings = result?.findings || result?.structured?.findings || []
+    const findingGroups = result?.finding_groups || []
+    const assetSummary = result?.asset_summary || []
+    const scanDiff = result?.scan_diff || { new: [], resolved: [], changed: [], summary: { new_count: 0, resolved_count: 0, changed_count: 0 } }
     const tableRows = result?.structured?.rows || []
     const summaryItems = result?.summary || []
     const resultEntryCount = tableRows.length || findings.length
@@ -402,7 +613,7 @@ export default function TaskDetails() {
             ? `${Math.floor(task.duration_seconds / 60)}M ${Math.floor(task.duration_seconds % 60)}S`
             : (task.status === 'completed' ? '0M 0S' : 'TERMINATED'))
         : 'ACTIVE'
-    const severityCounts = findings.reduce((acc: Record<string, number>, finding: any) => {
+    const severityCounts = result?.severity_counts || findings.reduce((acc: Record<string, number>, finding: any) => {
         const key = (finding.severity || 'info').toLowerCase()
         acc[key] = (acc[key] || 0) + 1
         return acc
@@ -492,6 +703,9 @@ export default function TaskDetails() {
         ['Path', parsedTarget?.pathname || '/'],
         ['Port', parsedTarget?.port || (parsedTarget?.protocol === 'https:' ? '443' : parsedTarget?.protocol === 'http:' ? '80' : 'N/A')],
         ['Findings', String(result?.structured?.total_count || findings.length).padStart(2, '0')],
+        ['Validation Mode', result?.execution_context?.validation_mode || task.execution_context?.validation_mode || 'N/A'],
+        ['Evidence Level', result?.execution_context?.evidence_level || task.execution_context?.evidence_level || 'N/A'],
+        ['Scan Profile', result?.execution_context?.scan_profile || task.execution_context?.scan_profile || 'N/A'],
         ...Object.entries(task.inputs || {}).map(([key, val]) => [formatKeyLabel(key), formatValue(val)] as [string, string]),
     ]
     const uniqueParameterEntries = Array.from(
@@ -555,17 +769,6 @@ export default function TaskDetails() {
         setExpandedFindingRows(prev => ({ ...prev, [index]: !prev[index] }))
     }
 
-    const copyRaw = async () => {
-        try {
-            await navigator.clipboard.writeText(rawOutput || result?.raw_output || '')
-            setCopiedRawOutput(true)
-            window.setTimeout(() => setCopiedRawOutput(false), 1500)
-        } catch (err) {
-            console.error('Failed to copy raw output:', err)
-        }
-    }
-
-
     const DetailCard = ({ label, value, subValue }: { label: string, value: string, subValue?: string }) => (
         <div className="bg-charcoal border border-white/5 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] min-h-[118px] flex flex-col justify-between">
             <div className="space-y-3">
@@ -610,7 +813,6 @@ export default function TaskDetails() {
                                     <span className="material-symbols-outlined text-sm">
                                         content_copy
                                     </span>
-
                                     Copy ID
                                 </button>
                                 <span className={`px-3 py-1 text-[10px] uppercase tracking-[0.3em] border ${statusTone}`}>
@@ -667,7 +869,11 @@ export default function TaskDetails() {
                 </div>
             </header>
 
-
+            {!isTerminal && scanPhase && (
+                <section className="border border-rag-blue/20 bg-charcoal p-6">
+                    <PhaseProgress phase={scanPhase} />
+                </section>
+            )}
 
             <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                 <DetailCard
@@ -849,6 +1055,73 @@ export default function TaskDetails() {
                                         <p className="text-sm text-silver/55 italic">No findings identified for this target profile.</p>
                                     )}
                                 </motion.div>
+
+                                <motion.div variants={itemVariants} className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                                    <section className="border border-white/8 bg-charcoal p-6">
+                                        <div className="flex items-center gap-4 mb-5">
+                                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Attack Surface Summary</h3>
+                                            <div className="h-px flex-1 bg-white/8" />
+                                            <span className="text-[10px] uppercase tracking-[0.24em] text-silver/40">{assetSummary.length} Assets</span>
+                                        </div>
+                                        {assetSummary.length > 0 ? (
+                                            <div className="space-y-3">
+                                                {assetSummary.slice(0, 6).map((asset) => (
+                                                    <div key={asset.asset_id} className="border border-white/6 bg-black/20 p-4">
+                                                        <div className="flex items-center justify-between gap-4">
+                                                            <div>
+                                                                <p className="text-xs font-black uppercase tracking-[0.18em] text-silver-bright break-all">
+                                                                    {asset.label || asset.target || asset.asset_id}
+                                                                </p>
+                                                                <p className="mt-1 text-[10px] font-mono uppercase tracking-[0.16em] text-silver/35">
+                                                                    {asset.services?.length || 0} services // {asset.finding_count || 0} findings // {asset.validated_count || 0} validated
+                                                                </p>
+                                                            </div>
+                                                            <span className={`px-2 py-1 text-[9px] font-black uppercase tracking-[0.16em] border ${severityTone(asset.highest_severity)}`}>
+                                                                {asset.highest_severity || 'info'}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm text-silver/55 italic">No normalized asset summary is available for this scan.</p>
+                                        )}
+                                    </section>
+
+                                    <section className="border border-white/8 bg-charcoal p-6">
+                                        <div className="flex items-center gap-4 mb-5">
+                                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Scan Delta</h3>
+                                            <div className="h-px flex-1 bg-white/8" />
+                                            <span className="text-[10px] uppercase tracking-[0.24em] text-silver/40">Previous vs Current</span>
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-3 mb-4">
+                                            {[
+                                                ['New', scanDiff.summary?.new_count || 0, 'text-rag-red'],
+                                                ['Resolved', scanDiff.summary?.resolved_count || 0, 'text-rag-green'],
+                                                ['Changed', scanDiff.summary?.changed_count || 0, 'text-rag-blue'],
+                                            ].map(([label, value, tone]) => (
+                                                <div key={String(label)} className="border border-white/6 bg-black/20 p-4 text-center">
+                                                    <p className="text-[9px] font-black uppercase tracking-[0.18em] text-silver/35">{label}</p>
+                                                    <p className={`mt-2 text-3xl font-black italic ${tone}`}>{value}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {(scanDiff.new?.length || 0) > 0 ? (
+                                            <div className="space-y-2">
+                                                {scanDiff.new!.slice(0, 4).map((group) => (
+                                                    <div key={group.id} className="border border-white/6 bg-black/20 p-3">
+                                                        <p className="text-xs font-black uppercase tracking-[0.16em] text-silver-bright">{group.title}</p>
+                                                        <p className="mt-1 text-[10px] font-mono uppercase tracking-[0.16em] text-silver/35">
+                                                            {group.severity} // {group.finding_kind || 'observation'} // {(group.confidence || 0).toFixed(2)} confidence
+                                                        </p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm text-silver/55 italic">No previous scan baseline is available yet for this target and scanner pairing.</p>
+                                        )}
+                                    </section>
+                                </motion.div>
                             </motion.section>
                         )}
 
@@ -861,6 +1134,52 @@ export default function TaskDetails() {
                                 exit="hidden"
                                 className="space-y-6"
                             >
+                                <motion.div variants={itemVariants} className="border border-white/8 bg-charcoal p-6">
+                                    <div className="flex items-center gap-4 mb-5">
+                                        <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Finding Queue</h3>
+                                        <div className="h-px flex-1 bg-white/8" />
+                                        <span className="text-[10px] uppercase tracking-[0.24em] text-silver/40">{findingGroups.length} Groups</span>
+                                    </div>
+                                    {findingGroups.length > 0 ? (
+                                        <div className="space-y-3">
+                                            {findingGroups.slice(0, 10).map((group) => (
+                                                <button
+                                                    key={group.id}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const match = findings.find((finding: Finding) => finding.finding_group_id === group.id) || findings.find((finding: Finding) => finding.id === group.latest_finding_id)
+                                                        if (match) setSelectedFinding(match)
+                                                    }}
+                                                    className="w-full border border-white/6 bg-black/20 p-4 text-left transition-colors hover:bg-white/[0.04]"
+                                                >
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <span className={`px-2 py-1 text-[9px] font-black uppercase tracking-[0.16em] border ${severityTone(group.severity)}`}>
+                                                            {group.severity}
+                                                        </span>
+                                                        <span className="border border-silver-bright/10 bg-charcoal-dark px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-silver/70">
+                                                            {group.finding_kind || 'observation'}
+                                                        </span>
+                                                        <span className="border border-silver-bright/10 bg-charcoal-dark px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-silver/70">
+                                                            {group.occurrence_count || 1} seen
+                                                        </span>
+                                                        {group.validated ? (
+                                                            <span className="border border-rag-green/20 bg-rag-green/10 px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-rag-green">
+                                                                validated
+                                                            </span>
+                                                        ) : null}
+                                                    </div>
+                                                    <p className="mt-3 text-sm font-black uppercase tracking-[0.14em] text-silver-bright">{group.title}</p>
+                                                    <p className="mt-1 text-[10px] font-mono uppercase tracking-[0.16em] text-silver/35">
+                                                        {(group.confidence || 0).toFixed(2)} confidence // {group.evidence_count || 0} evidence // {group.analyst_status || 'new'}
+                                                    </p>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-sm text-silver/55 italic">No grouped findings are available for this task.</p>
+                                    )}
+                                </motion.div>
+
                                 <motion.div variants={itemVariants} className="border border-white/8 bg-charcoal p-6">
                                     <div className="flex items-center gap-4 mb-5">
                                         <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Discovery Results</h3>
@@ -1062,12 +1381,7 @@ export default function TaskDetails() {
                                                 >
                                                     {wrapRawOutput ? 'Disable Wrap' : 'Enable Wrap'}
                                                 </button>
-                                                <button
-                                                    onClick={copyRaw}
-                                                    className="border border-white/10 px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-silver/75 font-black"
-                                                >
-                                                    {copiedRawOutput ? 'Copied' : 'Copy Output'}
-                                                </button>
+                                                <CopyToClipboard textToCopy={rawOutput || result?.raw_output || ''} />
                                             </div>
                                         </div>
                                     </div>

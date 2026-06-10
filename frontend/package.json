@@ -18,6 +18,7 @@
   "dependencies": {
     "@hugeicons/core-free-icons": "^4.1.4",
     "@hugeicons/react": "^1.1.6",
+    "@tanstack/react-virtual": "^3.14.2",
     "framer-motion": "^12.38.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
@@ -32,6 +33,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
+    "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
@@ -46,6 +48,6 @@
     "tailwindcss": "^3.4.19",
     "typescript": "5.5.4",
     "vite": "^6.0.0",
-    "vitest": "^2.1.5"
+    "vitest": "^4.1.8"
   }
 }
