@@ -4,6 +4,9 @@ Task execution engine with Docker sandboxing
 
 import asyncio
 from asyncio import subprocess
+import os
+import signal
+import base64
 import uuid
 import json
 import time
@@ -13,17 +16,76 @@ from typing import Optional, Dict, Any, List
 import logging
 import re
 
-from .redaction import redact, redact_dict
+_CANCEL_GRACE_SECONDS = 5
+
+from .auth import DEFAULT_OWNER_ID
+from .redaction import redact
 from .cache import get_cache
 from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager
-from .models import TaskStatus, ScanPhase
+from .models import NotificationDeliveryStatus, TaskStatus, ScanPhase
 from .ratelimit import concurrent_limiter
 from .risk_scoring import compute_risk_score, compute_risk_factors
 from .capabilities import CapabilityEnforcer, CapabilityDeniedError, build_enforcer_from_settings
 from .parser_sandbox import run_parser_in_sandbox, ParserSandboxError
 from .network_policy import get_policy_engine
+from .notification_service import process_task_notifications
+from .execution_context import is_offensive_validation, normalize_execution_context
+from .finding_intelligence import (
+    build_asset_summary,
+    build_finding_groups,
+    build_scan_diff,
+    normalize_and_correlate_findings,
+)
+from .platform_resources import (
+    get_credential_profile,
+    get_session_profile,
+    get_target_policy,
+    persist_crawl_run,
+    replace_asset_services,
+    serialize_execution_context,
+)
+from .vault import VaultCrypto
+
+async def _terminate_process_group(pid: int, task_id: str, grace_seconds: int = _CANCEL_GRACE_SECONDS) -> None:
+    """Send SIGTERM to the process group of *pid*, wait *grace_seconds*, then SIGKILL.
+
+    Using a process group (via start_new_session=True on subprocess creation)
+    ensures every child and grandchild spawned by the scanner receives the
+    signal, leaving no orphan processes after cancellation or timeout.
+
+    Errors are logged but never re-raised so callers can always proceed to
+    update task status regardless of OS-level kill failures.
+    """
+    try:
+        pgid = os.getpgid(pid)
+    except (ProcessLookupError, PermissionError) as exc:
+        logger.debug("process group for pid %d already gone: %s", pid, exc)
+        return
+
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError) as exc:
+        logger.debug("SIGTERM to pgid %d failed (already exited?): %s", pgid, exc)
+        return
+
+    for _ in range(grace_seconds * 10):
+        await asyncio.sleep(0.1)
+        try:
+            os.killpg(pgid, 0)
+        except (ProcessLookupError, PermissionError):
+            return
+
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+        logger.warning(
+            "process group %d did not exit within %ds grace — SIGKILL sent (task %s)",
+            pgid, grace_seconds, task_id,
+        )
+    except (ProcessLookupError, PermissionError) as exc:
+        logger.debug("SIGKILL to pgid %d failed: %s", pgid, exc)
+
 
 def _parse_discovered_at(finding: dict) -> Optional[datetime]:
     """Extract and parse discovered_at from a finding dict, or return current UTC time."""
@@ -63,11 +125,19 @@ def _validate_risk_fields(finding: dict) -> None:
 from .scanners.port_scanner import PortScanner
 from .scanners.web_scanner import WebScanner
 from .scanners.recon_scanner import ReconScanner
+from .scanners.network_vulnerability_scanner import NetworkVulnerabilityScanner
+from .scanners.api_scanner import APIScanner
+from .scanners.zap_scanner import ZAPScanner
+from .scanners.xss_validation_scanner import XSSValidationScanner
 
 MODULAR_SCANNERS = {
     "port_scanner": PortScanner,
     "web_scanner": WebScanner,
-    "recon_scanner": ReconScanner
+    "recon_scanner": ReconScanner,
+    "network_scanner": NetworkVulnerabilityScanner,
+    "api_scanner": APIScanner,
+    "zap_scanner": ZAPScanner,
+    "xss_exploiter": XSSValidationScanner,
 }
 
 logger = logging.getLogger(__name__)
@@ -83,11 +153,38 @@ def extract_target(inputs: Dict[str, Any]) -> str:
         or inputs.get("domain")
         or ""
     )
+
+
+def _stable_asset_id(target: str, host: Any, port: Any, protocol: Any) -> str:
+    material = "||".join(
+        [
+            str(target or "").strip().lower(),
+            str(host or "").strip().lower(),
+            str(port or "").strip().lower(),
+            str(protocol or "").strip().lower(),
+        ]
+    )
+    return f"asset:{uuid.uuid5(uuid.NAMESPACE_URL, material).hex[:16]}"
+
+
+def _row_value(row: Any, key: str, default: Any = None) -> Any:
+    """Read a dict/sqlite row key with a default for backward-compatible mocks."""
+    if row is None:
+        return default
+    if isinstance(row, dict):
+        return row.get(key, default)
+    try:
+        return row[key]
+    except (KeyError, IndexError, TypeError):
+        return default
+
+
 class TaskExecutor:
     """Executes security scanning tasks in isolated environments"""
 
     def __init__(self):
         self.running_tasks: Dict[str, asyncio.Task] = {}
+        self._process_pids: Dict[str, int] = {}
         # PubSub: Map of task_id to list of active async queues listening for output/status updates
         self._listeners: Dict[str, List[asyncio.Queue]] = {}
         self._capability_enforcer: CapabilityEnforcer = build_enforcer_from_settings()
@@ -145,17 +242,23 @@ class TaskExecutor:
         inputs: Dict[str, Any],
         safe_mode: bool,
         preset: Optional[str] = None,
-        consent_granted: bool = False
+        execution_context: Optional[Dict[str, Any]] = None,
+        consent_granted: bool = False,
+        owner_id: str = DEFAULT_OWNER_ID,
     ) -> str:
         """
         Create a new scan task.
-        
+
         Args:
             plugin_id: Plugin identifier
             inputs: User input values
             preset: Optional preset name
             consent_granted: Whether user granted consent
-        
+            owner_id: Owning user/workspace identity used to scope later
+                access (issue #401). Defaults to the shared default owner for
+                internal callers (workflows, scheduler, CLI) that are not tied
+                to a request.
+
         Returns:
             Task ID
         """
@@ -177,17 +280,19 @@ class TaskExecutor:
         await db.execute(
             """
             INSERT INTO tasks (
-                id, plugin_id, tool_name, target, inputs_json, preset,
-                status, scan_phase, consent_granted, safe_mode
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                id, owner_id, plugin_id, tool_name, target, inputs_json, preset,
+                execution_context_json, status, scan_phase, consent_granted, safe_mode
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 task_id,
+                owner_id,
                 plugin_id,
                 plugin.name,
                 extract_target(inputs),
                 json.dumps(inputs),
                 preset,
+                serialize_execution_context(execution_context),
                 TaskStatus.QUEUED.value,
                 ScanPhase.QUEUED.value,
                 consent_granted,
@@ -199,7 +304,12 @@ class TaskExecutor:
         await db.log_audit(
             "task_created",
             f"Task created for {plugin.name}",
-            context={"task_id": task_id, "plugin_id": plugin_id, "target": inputs.get("target")},
+            context={
+                "task_id": task_id,
+                "plugin_id": plugin_id,
+                "target": inputs.get("target"),
+                "execution_context": normalize_execution_context(execution_context),
+            },
             task_id=task_id,
             plugin_id=plugin_id
         )
@@ -261,17 +371,27 @@ class TaskExecutor:
 
             # Get task details
             task_row = await db.fetchone(
-                "SELECT plugin_id, inputs_json, safe_mode FROM tasks WHERE id = ?",
+                "SELECT owner_id, plugin_id, inputs_json, execution_context_json, safe_mode FROM tasks WHERE id = ?",
                 (task_id,)
             )
 
             if not task_row:
                 raise ValueError(f"Task not found: {task_id}")
 
+            owner_id = task_row["owner_id"]
             plugin_id = task_row["plugin_id"]
             inputs = json.loads(task_row["inputs_json"])
+            execution_context = normalize_execution_context(
+                json.loads(task_row["execution_context_json"] or "{}")
+            )
             safe_mode = bool(task_row["safe_mode"])
             target = extract_target(inputs)
+            inputs = await self._hydrate_inputs_with_execution_context(
+                db=db,
+                owner_id=owner_id,
+                inputs=inputs,
+                execution_context=execution_context,
+            )
 
             # ── Safe Mode & Network policy enforcement ───────────────────────
             # Enforce Safe Mode target validation inside TaskExecutor to guarantee
@@ -342,9 +462,25 @@ class TaskExecutor:
                         return  # finally block handles running_tasks cleanup + limiter release
 
             # Check if this is a modular scanner or a standard plugin
+            plugin_manager = get_plugin_manager()
+            plugin = plugin_manager.get_plugin(plugin_id)
+            if not plugin:
+                raise ValueError(f"Plugin not found: {plugin_id}")
+
+            self._capability_enforcer.check(
+                plugin_id=plugin.id,
+                declared=plugin.capabilities,
+                safety_level=plugin.safety.get("level", "safe"),
+            )
+
+            if plugin.safety.get("level") == "exploit" and not is_offensive_validation(execution_context):
+                raise ValueError(
+                    "Exploit-level plugins require an execution context with validation_mode set to 'proof' or 'controlled_extract'."
+                )
+
             if plugin_id in MODULAR_SCANNERS:
                 scanner_class = MODULAR_SCANNERS[plugin_id]
-                scanner = scanner_class(task_id, db)
+                scanner = scanner_class(task_id, db, safe_mode=safe_mode)
                 
                 logger.info(f"Executing modular scanner {plugin_id} for task {task_id}")
                 await self._broadcast(task_id, "status", TaskStatus.RUNNING.value)
@@ -383,6 +519,7 @@ class TaskExecutor:
                 await self._upsert_findings_and_report_from_scanner(
                     db=db,
                     task_id=task_id,
+                    owner_id=owner_id,
                     scanner=scanner,
                     plugin_id=plugin_id,
                     target=target,
@@ -393,18 +530,6 @@ class TaskExecutor:
 
             else:
                 # Standard Plugin Execution
-                plugin_manager = get_plugin_manager()
-                plugin = plugin_manager.get_plugin(plugin_id)
-                if not plugin:
-                    raise ValueError(f"Plugin not found: {plugin_id}")
-
-                # Enforce capability policy before any command is built or process spawned
-                self._capability_enforcer.check(
-                    plugin_id=plugin.id,
-                    declared=plugin.capabilities,
-                    safety_level=plugin.safety.get("level", "safe"),
-                )
-
                 command = plugin_manager.build_command(plugin_id, inputs)
 
                 if not command:
@@ -520,6 +645,7 @@ class TaskExecutor:
                 await self._upsert_findings_and_report(
                     db=db,
                     task_id=task_id,
+                    owner_id=owner_id,
                     plugin=plugin,
                     plugin_id=plugin_id,
                     target=target,
@@ -527,6 +653,8 @@ class TaskExecutor:
                     output=output
                 )
                 await self._broadcast_phase(task_id, ScanPhase.REPORTING.value)
+
+            await self._dispatch_task_notifications(db, task_id)
 
             await self._broadcast_phase(task_id, ScanPhase.FINISHED.value)
             await self._broadcast(task_id, "status", final_status)
@@ -641,6 +769,7 @@ class TaskExecutor:
             # Always clean up: remove from the in-memory registry and
             # release the concurrency slot regardless of how the task ended.
             self.running_tasks.pop(task_id, None)
+            self._process_pids.pop(task_id, None)
             await concurrent_limiter.release(task_id)
     
     async def _execute_command(
@@ -664,8 +793,10 @@ class TaskExecutor:
             process = await asyncio.create_subprocess_exec(
                 *command,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
             )
+            self._process_pids[task_id] = process.pid
 
             output_lines = []
 
@@ -673,35 +804,50 @@ class TaskExecutor:
                 stdout = process.stdout
                 if stdout is None:
                     return
-                    
                 while not stdout.at_eof():
                     line = await stdout.readline()
                     if line:
-                        decoded_line = line.decode('utf-8', errors='replace')
+                        decoded_line = line.decode("utf-8", errors="replace")
                         output_lines.append(decoded_line)
                         await self._broadcast(task_id, "output", decoded_line)
 
             try:
                 await asyncio.wait_for(read_stream(), timeout=timeout)
                 await process.wait()
+                self._process_pids.pop(task_id, None)
                 return "".join(output_lines), process.returncode if process.returncode is not None else -1
 
             except asyncio.TimeoutError:
-                process.kill()
-                await process.wait()
+                logger.warning(
+                    "Task %s timed out after %ds — terminating process group (pid=%d)",
+                    task_id, timeout, process.pid,
+                )
+                await _terminate_process_group(process.pid, task_id)
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=3)
+                except asyncio.TimeoutError:
+                    pass
+                self._process_pids.pop(task_id, None)
                 return "".join(output_lines) + "\nTask timed out", -1
 
             except asyncio.CancelledError:
-                # Handle task cancellation by killing the subprocess
-                logger.warning(f"Task {task_id} cancelled. Killing process {process.pid}")
+                logger.warning(
+                    "Task %s cancelled — terminating process group (pid=%d)",
+                    task_id, process.pid,
+                )
+                await _terminate_process_group(process.pid, task_id)
                 try:
-                    process.kill()
-                    await process.wait()
-                except Exception as e:
-                    logger.error(f"Error killing process for cancelled task {task_id}: {e}")
+                    await asyncio.wait_for(process.wait(), timeout=3)
+                except asyncio.TimeoutError:
+                    pass
+                self._process_pids.pop(task_id, None)
                 raise
 
+        except asyncio.CancelledError:
+            self._process_pids.pop(task_id, None)
+            raise
         except Exception as e:
+            self._process_pids.pop(task_id, None)
             logger.error(f"Failed to execute command: {e}")
             return f"Execution error: {str(e)}", -1
 
@@ -775,6 +921,11 @@ class TaskExecutor:
         if task_id not in self.running_tasks:
             return False
         task = self.running_tasks[task_id]
+
+        pid = self._process_pids.get(task_id)
+        if pid is not None:
+            await _terminate_process_group(pid, task_id)
+
         task.cancel()
 
         # If docker is enabled, forcefully kill the sandbox container
@@ -812,7 +963,7 @@ class TaskExecutor:
         task_row = await db.fetchone(
             """
             SELECT id, plugin_id, tool_name, target, status, scan_phase, created_at, started_at, completed_at,
-                   duration_seconds, exit_code, error_message, preset, inputs_json
+                   duration_seconds, exit_code, error_message, preset, inputs_json, execution_context_json
             FROM tasks WHERE id = ?
             """,
             (task_id,)
@@ -846,88 +997,381 @@ class TaskExecutor:
             "exit_code": task_row["exit_code"],
             "error_message": task_row["error_message"],
             "preset": task_row["preset"],
+            "execution_context": normalize_execution_context(
+                json.loads(_row_value(task_row, "execution_context_json", "{}") or "{}")
+            ),
             "queue_position": queue_position,
             "pending_count": pending_count,
         }
 
-    async def _upsert_findings_and_report(self, db, task_id: str, plugin, plugin_id: str, target: str, status: str, output: str = ""):
-        """Persist derived findings and report records into SQLite."""
-        parsed = self._parse_results(plugin, output)
-        # Redact all findings before any persistence path (structured_json AND findings table)
-        parsed["findings"] = [redact_dict(f) for f in parsed.get("findings", [])]
-        findings_data = parsed["findings"]
+    async def _hydrate_inputs_with_execution_context(
+        self,
+        *,
+        db,
+        owner_id: str,
+        inputs: Dict[str, Any],
+        execution_context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Add auth/session material derived from stored profiles."""
+        effective_inputs = dict(inputs)
+        target_policy = await get_target_policy(
+            db,
+            owner_id,
+            execution_context.get("target_policy_id"),
+        )
+        if target_policy:
+            effective_inputs["__target_policy"] = target_policy
 
-        # Update task with structured results (uses the already-redacted parsed dict)
-        await db.execute(
-            "UPDATE tasks SET structured_json = ? WHERE id = ?",
-            (json.dumps(parsed), task_id)
+        credential_profile = await get_credential_profile(
+            db,
+            owner_id,
+            execution_context.get("credential_profile_id"),
+        )
+        if credential_profile:
+            headers = credential_profile.get("extra_headers", {}) or {}
+            effective_inputs["__extra_headers"] = {
+                str(key): str(value) for key, value in headers.items()
+            }
+            username = await self._read_vault_secret(db, credential_profile.get("username_secret_name"))
+            password = await self._read_vault_secret(db, credential_profile.get("password_secret_name"))
+            if username is not None and password is not None:
+                token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+                effective_inputs.setdefault("__extra_headers", {})
+                effective_inputs["__extra_headers"]["Authorization"] = f"Basic {token}"
+
+        session_profile = await get_session_profile(
+            db,
+            owner_id,
+            execution_context.get("session_profile_id"),
+        )
+        if session_profile:
+            extra_headers = session_profile.get("extra_headers", {}) or {}
+            if extra_headers:
+                effective_inputs.setdefault("__extra_headers", {})
+                for key, value in extra_headers.items():
+                    effective_inputs["__extra_headers"][str(key)] = str(value)
+            cookie_secret = await self._read_vault_secret(db, session_profile.get("cookie_secret_name"))
+            if cookie_secret:
+                try:
+                    parsed = json.loads(cookie_secret)
+                    if isinstance(parsed, dict):
+                        effective_inputs["__cookies"] = {
+                            str(key): str(value) for key, value in parsed.items()
+                        }
+                except json.JSONDecodeError:
+                    effective_inputs["__cookies"] = {"session": cookie_secret}
+
+        effective_inputs["__execution_context"] = execution_context
+        return effective_inputs
+
+    async def _read_vault_secret(self, db, secret_name: Any) -> Optional[str]:
+        if not secret_name:
+            return None
+        row = await db.fetchone(
+            "SELECT encrypted_value FROM credential_vault WHERE name = ?",
+            (str(secret_name),),
+        )
+        if not row:
+            return None
+        crypto = VaultCrypto(settings.resolved_vault_key)
+        return crypto.decrypt(row["encrypted_value"])
+
+    def _deserialize_finding_rows(self, rows: List[Any]) -> List[Dict[str, Any]]:
+        findings: List[Dict[str, Any]] = []
+        json_fields = {
+            "metadata_json": "metadata",
+            "risk_factors_json": "risk_factors",
+            "evidence_json": "evidence",
+            "asset_refs_json": "asset_refs",
+            "references_json": "references",
+            "corroborating_sources_json": "corroborating_sources",
+        }
+        for row in rows:
+            item = dict(row)
+            for source_key, target_key in json_fields.items():
+                value = item.pop(source_key, None)
+                if isinstance(value, str):
+                    try:
+                        item[target_key] = json.loads(value)
+                    except json.JSONDecodeError:
+                        item[target_key] = value
+                elif value is not None:
+                    item[target_key] = value
+            findings.append(item)
+        return findings
+
+    async def _load_previous_task_findings(
+        self,
+        db,
+        *,
+        owner_id: str,
+        plugin_id: str,
+        target: str,
+        task_id: str,
+    ) -> List[Dict[str, Any]]:
+        previous_task = await db.fetchone(
+            """
+            SELECT id
+            FROM tasks
+            WHERE owner_id = ? AND plugin_id = ? AND target = ? AND id != ?
+              AND status IN (?, ?)
+            ORDER BY COALESCE(completed_at, created_at) DESC
+            LIMIT 1
+            """,
+            (
+                owner_id,
+                plugin_id,
+                target,
+                task_id,
+                TaskStatus.COMPLETED.value,
+                TaskStatus.FAILED.value,
+            ),
+        )
+        if not previous_task:
+            return []
+
+        rows = await db.fetchall(
+            "SELECT * FROM findings WHERE owner_id = ? AND task_id = ? ORDER BY discovered_at DESC",
+            (owner_id, previous_task["id"]),
+        )
+        return self._deserialize_finding_rows(rows)
+
+    def _normalize_asset_service_record(self, target: str, service: Dict[str, Any]) -> Dict[str, Any]:
+        metadata = service.get("metadata", {}) if isinstance(service.get("metadata"), dict) else {}
+        host = str(service.get("host") or target)
+        port = service.get("port")
+        protocol = service.get("protocol")
+        cert_san = service.get("cert_san") or service.get("cert_sans") or metadata.get("cert_san") or metadata.get("cert_sans") or []
+        if not isinstance(cert_san, list):
+            cert_san = [cert_san]
+        fingerprint = service.get("service_fingerprint")
+        if not fingerprint:
+            fingerprint = " ".join(
+                str(part).strip()
+                for part in (
+                    service.get("product"),
+                    service.get("version"),
+                    service.get("service"),
+                    service.get("title"),
+                )
+                if str(part or "").strip()
+            ) or None
+        return {
+            **service,
+            "host": host,
+            "target": target,
+            "asset_id": str(service.get("asset_id") or _stable_asset_id(target, host, port, protocol)),
+            "cert_san": cert_san,
+            "metadata": metadata,
+            "service_fingerprint": fingerprint,
+        }
+
+    def _build_severity_counts(self, findings: List[Dict[str, Any]]) -> Dict[str, int]:
+        severity_counts: Dict[str, int] = {}
+        for finding in findings:
+            severity = str(finding.get("severity", "info")).lower()
+            severity_counts[severity] = severity_counts.get(severity, 0) + 1
+        return severity_counts
+
+    async def _build_result_contract(
+        self,
+        db,
+        *,
+        task_id: str,
+        owner_id: str,
+        plugin_id: str,
+        target: str,
+        result: Dict[str, Any],
+    ) -> tuple[Dict[str, Any], List[Dict[str, Any]], List[Dict[str, Any]]]:
+        normalized_findings = await normalize_and_correlate_findings(
+            db,
+            owner_id=owner_id,
+            plugin_id=plugin_id,
+            target=target,
+            findings=[item for item in result.get("findings", []) if isinstance(item, dict)],
+        )
+        previous_findings = await self._load_previous_task_findings(
+            db,
+            owner_id=owner_id,
+            plugin_id=plugin_id,
+            target=target,
+            task_id=task_id,
+        )
+        asset_services = [
+            self._normalize_asset_service_record(target, item)
+            for item in (result.get("asset_services") or result.get("services") or [])
+            if isinstance(item, dict)
+        ]
+        structured_result = dict(result)
+        structured_result["findings"] = normalized_findings
+        structured_result["asset_services"] = asset_services
+        structured_result["services"] = asset_services
+        structured_result["finding_groups"] = build_finding_groups(normalized_findings)
+        structured_result["asset_summary"] = build_asset_summary(normalized_findings, asset_services)
+        structured_result["scan_diff"] = build_scan_diff(normalized_findings, previous_findings)
+        structured_result["severity_counts"] = self._build_severity_counts(normalized_findings)
+        structured_result["count"] = len(normalized_findings)
+        return structured_result, previous_findings, asset_services
+
+    async def _persist_finding(
+        self,
+        db,
+        *,
+        owner_id: str,
+        task_id: str,
+        plugin_id: str,
+        target: str,
+        finding: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        u_id = str(uuid.uuid4()).replace("-", "")
+        finding_id = f"finding:{task_id}:{u_id[:8]}"
+
+        _validate_risk_fields(finding)
+        exploitability = finding.get("exploitability")
+        confidence = finding.get("confidence")
+        asset_exposure = finding.get("asset_exposure")
+        discovered = _parse_discovered_at(finding)
+        target_value = str(finding.get("target") or target)
+        metadata = finding.get("metadata", {}) if isinstance(finding.get("metadata"), dict) else {}
+        evidence = finding.get("evidence", []) if isinstance(finding.get("evidence"), list) else []
+        asset_refs = finding.get("asset_refs", []) if isinstance(finding.get("asset_refs"), list) else []
+        references = finding.get("references", []) if isinstance(finding.get("references"), list) else []
+        corroborating_sources = finding.get("corroborating_sources", []) if isinstance(finding.get("corroborating_sources"), list) else []
+        first_seen_at = str(finding.get("first_seen_at") or discovered.isoformat())
+        last_seen_at = str(finding.get("last_seen_at") or discovered.isoformat())
+        occurrence_count = int(finding.get("occurrence_count") or 1)
+        evidence_count = int(finding.get("evidence_count") or len(evidence))
+        risk_score = compute_risk_score(
+            severity=finding["severity"],
+            exploitability=exploitability,
+            asset_exposure=asset_exposure,
+            discovered_at=discovered,
+            confidence=confidence,
+        )
+        risk_factors = compute_risk_factors(
+            severity=finding["severity"],
+            exploitability=exploitability,
+            asset_exposure=asset_exposure,
+            discovered_at=discovered,
+            confidence=confidence,
+            risk_score=risk_score,
         )
 
-        # Insert findings
-        for finding in findings_data:
-            u_id = str(uuid.uuid4()).replace("-", "")
-            finding_id = f"finding:{task_id}:{u_id[:8]}"
+        await db.execute(
+            """
+            INSERT INTO findings (
+                id, owner_id, task_id, plugin_id, title, category, severity,
+                target, description, remediation, proof, cvss, cve,
+                metadata_json, discovered_at,
+                exploitability, confidence, validated, validation_method,
+                confidence_reason, finding_kind, finding_group_id, asset_id,
+                first_seen_at, last_seen_at, occurrence_count, corroborating_sources_json,
+                evidence_count, analyst_status, retest_status, evidence_json, asset_refs_json,
+                service_fingerprint, cpe, references_json,
+                asset_exposure, risk_score, risk_factors_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                finding_id,
+                owner_id,
+                task_id,
+                plugin_id,
+                finding["title"],
+                finding["category"],
+                finding["severity"],
+                target_value,
+                finding["description"],
+                finding.get("remediation", ""),
+                finding.get("proof"),
+                finding.get("cvss"),
+                finding.get("cve"),
+                json.dumps(metadata),
+                discovered.isoformat(),
+                exploitability,
+                confidence,
+                1 if finding.get("validated") else 0,
+                finding.get("validation_method"),
+                finding.get("confidence_reason"),
+                str(finding.get("finding_kind") or "observation"),
+                finding.get("finding_group_id"),
+                finding.get("asset_id"),
+                first_seen_at,
+                last_seen_at,
+                occurrence_count,
+                json.dumps(corroborating_sources),
+                evidence_count,
+                str(finding.get("analyst_status") or "new"),
+                str(finding.get("retest_status") or "not_requested"),
+                json.dumps(evidence),
+                json.dumps(asset_refs),
+                finding.get("service_fingerprint"),
+                finding.get("cpe"),
+                json.dumps(references),
+                asset_exposure,
+                risk_score,
+                json.dumps(risk_factors),
+            ),
+        )
+        return {
+            **finding,
+            "id": finding_id,
+            "plugin_id": plugin_id,
+            "target": target_value,
+            "discovered_at": discovered.isoformat(),
+            "metadata": metadata,
+            "evidence": evidence,
+            "asset_refs": asset_refs,
+            "references": references,
+            "corroborating_sources": corroborating_sources,
+            "first_seen_at": first_seen_at,
+            "last_seen_at": last_seen_at,
+            "occurrence_count": occurrence_count,
+            "evidence_count": evidence_count,
+            "risk_score": risk_score,
+            "risk_factors": risk_factors,
+        }
 
-            _validate_risk_fields(finding)
-            exploitability = finding.get("exploitability")
-            confidence = finding.get("confidence")
-            asset_exposure = finding.get("asset_exposure")
-            discovered = _parse_discovered_at(finding)
-            risk_score = compute_risk_score(
-                severity=finding["severity"],
-                exploitability=exploitability,
-                asset_exposure=asset_exposure,
-                discovered_at=discovered,
-                confidence=confidence,
-            )
-            risk_factors = compute_risk_factors(
-                severity=finding["severity"],
-                exploitability=exploitability,
-                asset_exposure=asset_exposure,
-                discovered_at=discovered,
-                confidence=confidence,
-                risk_score=risk_score,
+    async def _upsert_findings_and_report(self, db, task_id: str, owner_id: str, plugin, plugin_id: str, target: str, status: str, output: str = ""):
+        """Persist derived findings and report records into SQLite."""
+        parsed = self._parse_results(plugin, output)
+        structured_result, previous_findings, asset_services = await self._build_result_contract(
+            db,
+            task_id=task_id,
+            owner_id=owner_id,
+            plugin_id=plugin_id,
+            target=target,
+            result=parsed,
+        )
+        findings_data: List[Dict[str, Any]] = []
+        for finding in structured_result.get("findings", []):
+            findings_data.append(
+                await self._persist_finding(
+                    db,
+                    owner_id=owner_id,
+                    task_id=task_id,
+                    plugin_id=plugin_id,
+                    target=target,
+                    finding=finding,
+                )
             )
 
-            await db.execute(
-                """
-                INSERT INTO findings (
-                    id, task_id, plugin_id, title, category, severity,
-                    target, description, remediation, proof, cvss, cve,
-                    metadata_json, discovered_at,
-                    exploitability, confidence, asset_exposure,
-                    risk_score, risk_factors_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                          ?, ?, ?, ?, ?)
-                """,
-                (
-                    finding_id,
-                    task_id,
-                    plugin_id,
-                    finding["title"],
-                    finding["category"],
-                    finding["severity"],
-                    target,
-                    finding["description"],
-                    finding.get("remediation", ""),
-                    finding.get("proof"),
-                    finding.get("cvss"),
-                    finding.get("cve"),
-                    json.dumps(finding.get("metadata", {})),
-                    discovered.isoformat() if discovered else datetime.now(timezone.utc).isoformat(),
-                    exploitability,
-                    confidence,
-                    asset_exposure,
-                    risk_score,
-                    json.dumps(risk_factors),
-                ),
-            )
+        structured_result["findings"] = findings_data
+        structured_result["severity_counts"] = self._build_severity_counts(findings_data)
+        structured_result["finding_groups"] = build_finding_groups(findings_data)
+        structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
+        structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
+
+        await db.execute(
+            "UPDATE tasks SET structured_json = ? WHERE id = ?",
+            (json.dumps(structured_result), task_id)
+        )
 
         await db.execute(
             """
             INSERT INTO reports (
-                id, task_id, name, type, generated_at, status, findings, pages
-            ) VALUES (?, ?, ?, ?, (datetime('now')), ?, ?, ?)
+                id, owner_id, task_id, name, type, generated_at, status, findings, pages
+            ) VALUES (?, ?, ?, ?, ?, (datetime('now')), ?, ?, ?)
             ON CONFLICT (id) DO UPDATE SET
                 status = EXCLUDED.status,
                 findings = EXCLUDED.findings,
@@ -935,6 +1379,7 @@ class TaskExecutor:
             """,
             (
                 f"report:{task_id}",
+                owner_id,
                 task_id,
                 f"{plugin.name} Report",
                 "technical",
@@ -944,85 +1389,55 @@ class TaskExecutor:
             ),
         )
 
-    async def _upsert_findings_and_report_from_scanner(self, db, task_id: str, scanner: Any, plugin_id: str, target: str, status: str, result: Dict[str, Any]):
-        """Persist modular scanner results into findings, and reports."""
-        # Redact all findings before any persistence path (structured_json AND findings table)
-        redacted_findings = [redact_dict(f) for f in result.get("findings", [])]
-        result["findings"] = redacted_findings
-        findings_data = redacted_findings
-
-        # Update task with redacted structured results
-        await db.execute(
-            "UPDATE tasks SET structured_json = ? WHERE id = ?",
-            (json.dumps(result), task_id)
+        await self._persist_result_resources(
+            db,
+            owner_id=owner_id,
+            task_id=task_id,
+            plugin_id=plugin_id,
+            target=target,
+            result=structured_result,
         )
 
-        # Insert findings
-        for finding in findings_data:
-            u_id = str(uuid.uuid4()).replace("-", "")
-            finding_id = f"finding:{task_id}:{u_id[:8]}"
-
-            _validate_risk_fields(finding)
-            exploitability = finding.get("exploitability")
-            confidence = finding.get("confidence")
-            asset_exposure = finding.get("asset_exposure")
-            discovered = _parse_discovered_at(finding)
-            risk_score = compute_risk_score(
-                severity=finding["severity"],
-                exploitability=exploitability,
-                asset_exposure=asset_exposure,
-                discovered_at=discovered,
-                confidence=confidence,
-            )
-            risk_factors = compute_risk_factors(
-                severity=finding["severity"],
-                exploitability=exploitability,
-                asset_exposure=asset_exposure,
-                discovered_at=discovered,
-                confidence=confidence,
-                risk_score=risk_score,
-            )
-
-            await db.execute(
-                """
-                INSERT INTO findings (
-                    id, task_id, plugin_id, title, category, severity,
-                    target, description, remediation, proof, cvss, cve,
-                    metadata_json, discovered_at,
-                    exploitability, confidence, asset_exposure,
-                    risk_score, risk_factors_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                          ?, ?, ?, ?, ?)
-                """,
-                (
-                    finding_id,
-                    task_id,
-                    plugin_id,
-                    finding["title"],
-                    finding["category"],
-                    finding["severity"],
-                    target,
-                    finding["description"],
-                    finding.get("remediation", ""),
-                    finding.get("proof"),
-                    finding.get("cvss"),
-                    finding.get("cve"),
-                    json.dumps(finding.get("metadata", {})),
-                    discovered.isoformat() if discovered else datetime.now(timezone.utc).isoformat(),
-                    exploitability,
-                    confidence,
-                    asset_exposure,
-                    risk_score,
-                    json.dumps(risk_factors),
+    async def _upsert_findings_and_report_from_scanner(self, db, task_id: str, owner_id: str, scanner: Any, plugin_id: str, target: str, status: str, result: Dict[str, Any]):
+        """Persist modular scanner results into findings, and reports."""
+        structured_result, previous_findings, asset_services = await self._build_result_contract(
+            db,
+            task_id=task_id,
+            owner_id=owner_id,
+            plugin_id=plugin_id,
+            target=target,
+            result=result,
+        )
+        findings_data: List[Dict[str, Any]] = []
+        for finding in structured_result.get("findings", []):
+            findings_data.append(
+                await self._persist_finding(
+                    db,
+                    owner_id=owner_id,
+                    task_id=task_id,
+                    plugin_id=plugin_id,
+                    target=target,
+                    finding=finding,
                 )
             )
+
+        structured_result["findings"] = findings_data
+        structured_result["severity_counts"] = self._build_severity_counts(findings_data)
+        structured_result["finding_groups"] = build_finding_groups(findings_data)
+        structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
+        structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
+
+        await db.execute(
+            "UPDATE tasks SET structured_json = ? WHERE id = ?",
+            (json.dumps(structured_result), task_id)
+        )
 
         # Create/Update report
         await db.execute(
             """
             INSERT INTO reports (
-                id, task_id, name, type, generated_at, status, findings, pages
-            ) VALUES (?, ?, ?, ?, (datetime('now')), ?, ?, ?)
+                id, owner_id, task_id, name, type, generated_at, status, findings, pages
+            ) VALUES (?, ?, ?, ?, ?, (datetime('now')), ?, ?, ?)
             ON CONFLICT (id) DO UPDATE SET
                 status = EXCLUDED.status,
                 findings = EXCLUDED.findings,
@@ -1030,6 +1445,7 @@ class TaskExecutor:
             """,
             (
                 f"report:{task_id}",
+                owner_id,
                 task_id,
                 f"{scanner.name} Report",
                 "professional" if status == TaskStatus.COMPLETED.value else "failed",
@@ -1038,6 +1454,47 @@ class TaskExecutor:
                 2, # Professional reports are typically multi-page
             ),
         )
+
+        await self._persist_result_resources(
+            db,
+            owner_id=owner_id,
+            task_id=task_id,
+            plugin_id=plugin_id,
+            target=target,
+            result=structured_result,
+        )
+
+    async def _persist_result_resources(
+        self,
+        db,
+        *,
+        owner_id: str,
+        task_id: str,
+        plugin_id: str,
+        target: str,
+        result: Dict[str, Any],
+    ) -> None:
+        crawl = result.get("crawl")
+        if isinstance(crawl, dict) and crawl:
+            await persist_crawl_run(
+                db,
+                owner_id=owner_id,
+                task_id=task_id,
+                plugin_id=plugin_id,
+                target=target,
+                crawl=crawl,
+            )
+
+        asset_services = result.get("asset_services") or result.get("services")
+        if isinstance(asset_services, list) and asset_services:
+            await replace_asset_services(
+                db,
+                owner_id=owner_id,
+                task_id=task_id,
+                plugin_id=plugin_id,
+                target=target,
+                services=[item for item in asset_services if isinstance(item, dict)],
+            )
 
     def _parse_results(self, plugin, output: str) -> Dict[str, Any]:
         """Route to appropriate parser based on plugin metadata."""
@@ -1172,7 +1629,21 @@ class TaskExecutor:
             "severity": normalized_severity,
             "description": str(description),
             "remediation": str(finding.get("remediation", "")),
+            "proof": finding.get("proof"),
+            "cvss": finding.get("cvss"),
+            "cve": finding.get("cve"),
             "metadata": metadata,
+            "exploitability": finding.get("exploitability"),
+            "confidence": finding.get("confidence"),
+            "validated": bool(finding.get("validated", False)),
+            "validation_method": finding.get("validation_method"),
+            "confidence_reason": finding.get("confidence_reason"),
+            "evidence": finding.get("evidence", []) if isinstance(finding.get("evidence"), list) else [],
+            "asset_refs": finding.get("asset_refs", []) if isinstance(finding.get("asset_refs"), list) else [],
+            "service_fingerprint": finding.get("service_fingerprint"),
+            "cpe": finding.get("cpe"),
+            "references": finding.get("references", []) if isinstance(finding.get("references"), list) else [],
+            "asset_exposure": finding.get("asset_exposure"),
         }
 
     def _parse_json_fallback_findings(self, plugin, parser_input: str) -> List[Dict[str, Any]]:
@@ -1299,6 +1770,25 @@ class TaskExecutor:
             "technologies": sorted(list(set(techs))),
             "findings": findings
         }
+
+    async def _dispatch_task_notifications(self, db, task_id: str) -> None:
+        """Evaluate notification rules for all findings on a completed task."""
+        try:
+            results = await process_task_notifications(db, task_id)
+            sent = sum(
+                1
+                for r in results
+                if not r.skipped and r.status == NotificationDeliveryStatus.SUCCESS
+            )
+            if sent:
+                logger.info("Task %s: delivered %d notification(s)", task_id, sent)
+        except Exception as exc:
+            logger.warning(
+                "Task %s: notification dispatch failed: %s",
+                task_id,
+                exc,
+                exc_info=True,
+            )
 
     async def _invalidate_cached_views(self):
         """Clear cached aggregate views after write operations."""

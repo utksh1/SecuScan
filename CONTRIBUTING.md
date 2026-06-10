@@ -16,11 +16,29 @@ SecuScan is built for learning, defensive security workflows, and ethical testin
 
 - Documentation fixes, setup clarification, and onboarding polish
 - Frontend UX improvements in `frontend/src`
-- Backend validation, test coverage, and API consistency in `backend/secuscan`
+- Backend validation, test coverage, and API consistency in `backend/secuscan` (see [docs/backend-architecture.md](docs/backend-architecture.md) for a module-by-module reference)
 - Plugin metadata cleanup and parser improvements in `plugins`
 - CI, test reliability, and developer experience
 
 When issue labels are available, look for tags such as `good first issue`, `documentation`, `frontend`, `backend`, `plugin`, `help wanted`, or `gssoc`.
+
+## Issue Template Label Maintenance
+
+Issue templates in `.github/ISSUE_TEMPLATE/` must only reference labels from the active repository taxonomy.
+
+When adding or updating issue template labels:
+
+- Use active label groups such as `type:*`, `area:*`, `priority:*`, and `level:*`.
+- Avoid deprecated labels such as `bug`, `feature`, `documentation`, and `help wanted`.
+- Keep template labels aligned with the labels used by maintainers and CI.
+
+Before opening a pull request that changes issue templates, run:
+
+```bash
+python scripts/validate_issue_template_labels.py
+```
+
+The CI workflow also runs this validation and will fail if an issue template references a label that is not included in the approved label taxonomy.
 
 ## Local Setup
 
@@ -37,6 +55,11 @@ When issue labels are available, look for tags such as `good first issue`, `docu
 ./setup.sh
 ./start.sh
 ```
+
+Windows contributors should also read the
+[`docs/windows_contributor_guide.md`](docs/windows_contributor_guide.md) guide
+for PowerShell activation, Git Bash equivalents, Docker Desktop notes, and
+Windows-specific troubleshooting.
 
 This starts:
 

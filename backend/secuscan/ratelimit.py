@@ -237,9 +237,28 @@ class EndpointRateLimiter:
             self.last_cleanup = None
 
 
+class WorkflowRateLimiter:
+    """Rate limiter for scheduler-triggered workflow scans."""
+
+    def __init__(self):
+        self._last_run: Dict[str, datetime] = {}
+        self.lock = asyncio.Lock()
+
+    async def check_workflow_rate_limit(self, workflow_id: str, min_interval_seconds: int) -> Tuple[bool, str]:
+        async with self.lock:
+            now = datetime.now()
+            last = self._last_run.get(workflow_id)
+            if last and (now - last).total_seconds() < min_interval_seconds:
+                remaining = min_interval_seconds - (now - last).total_seconds()
+                return False, f"Workflow rate limited: wait {remaining:.0f}s between runs"
+            self._last_run[workflow_id] = now
+            return True, ""
+
+
 # Global instances
 rate_limiter = RateLimiter()
 concurrent_limiter = ConcurrentTaskLimiter()
+workflow_rate_limiter = WorkflowRateLimiter()
 
 # Route-specific limiters
 task_start_limiter = EndpointRateLimiter(
@@ -272,6 +291,12 @@ admin_limiter = EndpointRateLimiter(
     window_seconds=60
 )
 
+scheduler_tick_limiter = EndpointRateLimiter(
+    bucket_name="scheduler_tick",
+    limit=settings.rate_limit_scheduler_tick_limit,
+    window_seconds=settings.rate_limit_scheduler_tick_window
+)
+
 async def reset_all_endpoint_limiters():
     """Reset rate limiting history for all route-specific buckets."""
     await task_start_limiter.reset()
@@ -279,3 +304,4 @@ async def reset_all_endpoint_limiters():
     await report_download_limiter.reset()
     await read_heavy_limiter.reset()
     await admin_limiter.reset()
+    await scheduler_tick_limiter.reset()
