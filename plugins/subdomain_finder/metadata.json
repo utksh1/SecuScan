@@ -1,35 +1,33 @@
 {
-  "id": "waf-detection",
-  "name": "WAF Detector",
+  "id": "subdomain_finder",
+  "name": "Subdomain Finder",
   "version": "1.0.0",
-  "description": "Fingerprint the Web Application Firewall behind target app.",
-  "long_description": "Fingerprint the Web Application Firewall behind target app.",
+  "description": "Discover subdomains of a domain.",
+  "long_description": "Discover subdomains of a domain.",
   "category": "recon",
   "author": {
     "name": "SecuScan Contributors",
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd0e",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
-    "binary": "wafw00f"
+    "binary": "subfinder"
   },
   "command_template": [
-    "wafw00f",
-    "{target}"
+    "subfinder",
+    "-d",
+    "{target}",
+    "-silent"
   ],
   "fields": [
     {
       "id": "target",
-      "label": "Target URL",
+      "label": "Root Domain",
       "type": "string",
       "required": true,
-      "placeholder": "https://secuscan.in",
-      "validation": {
-        "pattern": "^https?://",
-        "message": "Must be a valid HTTP(S) URL"
-      }
+      "placeholder": "secuscan.in"
     }
   ],
   "presets": {
@@ -49,10 +47,10 @@
   },
   "dependencies": {
     "binaries": [
-      "wafw00f"
+      "subfinder"
     ],
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "018805888afabfb26b74dfe7bc04b5fd99507c0db53eec802bf7381b6ccff12d"
+  "checksum": "2670f6454c2b5f1d4a972c3335563382578fab7a4b3e084a457ace6c4f6a3ae3"
 }

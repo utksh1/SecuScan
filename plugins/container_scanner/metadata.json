@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "Apache-2.0",
-  "icon": "\ud83d\udce6",
+  "icon": "📦",
   "engine": {
     "type": "cli",
     "binary": "trivy"

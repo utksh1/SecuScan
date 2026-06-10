@@ -47,8 +47,9 @@ def _error_messages(result: ValidationResult) -> list[str]:
 
 
 def _write_metadata(tmp_path: Path, data: dict) -> Path:
-    plugin_dir = tmp_path / "my_plugin"
-    plugin_dir.mkdir()
+    dir_name = data.get("id") or "my_plugin"
+    plugin_dir = tmp_path / dir_name
+    plugin_dir.mkdir(exist_ok=True)
     (plugin_dir / "metadata.json").write_text(json.dumps(data), encoding="utf-8")
     return plugin_dir
 
@@ -162,6 +163,41 @@ class TestRequiredFields:
         result = validate_one_plugin(plugin_dir)
         assert "name" in _error_paths(result)
 
+# ===========================================================================
+# Plugin ID validation
+# ===========================================================================
+
+class TestPluginId:
+    @pytest.mark.parametrize("valid_id", [
+        "amass", "api_scanner", "dns_enum", "http_inspector", "waf_detector", "website_recon", "fuzzer", "tls_inspector_v2"
+    ])
+    def test_valid_ids_accepted(self, tmp_path, valid_id):
+        data = _minimal_valid()
+        data["id"] = valid_id
+        plugin_dir = _write_metadata(tmp_path, data)
+        result = validate_one_plugin(plugin_dir)
+        assert "id" not in _error_paths(result)
+
+    @pytest.mark.parametrize("invalid_id", [
+        "domain-finder", "google-dorking", "people-email-discovery", "port-scanner", "subdomain-finder", "url-fuzzer-2", "website-recon-2", "DNS_Enum", "tls inspector", "123_scanner", "_scanner"
+    ])
+    def test_invalid_ids_rejected(self, tmp_path, invalid_id):
+        data = _minimal_valid()
+        data["id"] = invalid_id
+        plugin_dir = _write_metadata(tmp_path, data)
+        result = validate_one_plugin(plugin_dir)
+        assert "id" in _error_paths(result)
+
+    def test_mismatched_directory_name_rejected(self, tmp_path):
+        data = _minimal_valid()
+        data["id"] = "test_ping"
+        # Manually write to mismatched folder name
+        plugin_dir = tmp_path / "mismatched_folder"
+        plugin_dir.mkdir()
+        (plugin_dir / "metadata.json").write_text(json.dumps(data), encoding="utf-8")
+        result = validate_one_plugin(plugin_dir)
+        assert "id" in _error_paths(result)
+        assert any("directory name" in e.message for e in result.errors if e.path == "id")
 
 # ===========================================================================
 # Engine

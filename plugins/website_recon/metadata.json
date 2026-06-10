@@ -1,33 +1,41 @@
 {
-  "id": "google-dorking",
-  "name": "Google Hacking",
+  "id": "website_recon",
+  "name": "Website Recon",
   "version": "1.0.0",
-  "description": "Find publicly indexed information about target.",
-  "long_description": "Find publicly indexed information about target.",
+  "description": "Fingerprint web technologies of target website.",
+  "long_description": "Fingerprint web technologies of target website.",
   "category": "recon",
   "author": {
     "name": "SecuScan Contributors",
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd0e",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
-    "binary": "python3"
+    "binary": "httpx"
   },
   "command_template": [
-    "python3",
-    "-c",
-    "target='{target}';print('site:'+target);print('inurl:admin site:'+target);print('filetype:sql site:'+target);print('intitle:index.of '+target)"
+    "httpx",
+    "-u",
+    "{target}",
+    "-title",
+    "-status-code",
+    "-tech-detect",
+    "-silent"
   ],
   "fields": [
     {
       "id": "target",
-      "label": "Target Domain",
+      "label": "Target URL",
       "type": "string",
       "required": true,
-      "placeholder": "secuscan.in",
-      "help": "Domain to build Google dork queries for."
+      "placeholder": "https://secuscan.in",
+      "validation": {
+        "pattern": "^https?://",
+        "message": "Must be a valid HTTP(S) URL"
+      },
+      "help": "URL to fingerprint."
     }
   ],
   "presets": {
@@ -47,10 +55,10 @@
   },
   "dependencies": {
     "binaries": [
-      "python3"
+      "httpx"
     ],
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "7284033396542bcc591307d2339b525d7eebd0da5365a252b79ff21a0160f208"
+  "checksum": "6a9596b36b13ef75a224a34462b845f6084d119a7052f06b73bb427c2970b29c"
 }

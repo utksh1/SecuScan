@@ -1,14 +1,14 @@
 """
-Contract and parser tests for the google-dorking plugin.
+Contract and parser tests for the google_dorking plugin.
 
-These tests load the real plugins/google-dorking/metadata.json, validate it
+These tests load the real plugins/google_dorking/metadata.json, validate it
 through the project PluginMetadataValidator, render commands through the
 real PluginManager, and call the real parser.py parse() function.
 
 Assertions are tied to the actual plugin contract: if metadata.json,
 the command template, or parser.py drift, these tests will fail.
 
-Related to issue #498: Add parser and contract coverage for plugin `google-dorking`
+Related to issue #498: Add parser and contract coverage for plugin `google_dorking`
 """
 
 import asyncio
@@ -26,17 +26,17 @@ from backend.secuscan.plugin_validator import PluginMetadataValidator
 from backend.secuscan.plugins import PluginManager
 
 # ---------------------------------------------------------------------------
-# Load parser from hyphenated directory name
+# Load parser from directory name
 # ---------------------------------------------------------------------------
 _spec = importlib.util.spec_from_file_location(
     "google_dorking_parser",
-    REPO_ROOT / "plugins" / "google-dorking" / "parser.py"
+    REPO_ROOT / "plugins" / "google_dorking" / "parser.py"
 )
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 parse = _mod.parse
 
-PLUGIN_DIR = REPO_ROOT / "plugins" / "google-dorking"
+PLUGIN_DIR = REPO_ROOT / "plugins" / "google_dorking"
 PLUGINS_DIR = REPO_ROOT / "plugins"
 
 
@@ -64,7 +64,7 @@ def test_google_dorking_passes_validator():
 
 def test_google_dorking_metadata_id_matches_directory():
     data = json.loads((PLUGIN_DIR / "metadata.json").read_text(encoding="utf-8"))
-    assert data["id"] == "google-dorking"
+    assert data["id"] == "google_dorking"
 
 
 def test_google_dorking_engine_is_python3():
@@ -107,16 +107,16 @@ def test_google_dorking_category_is_recon():
 def test_google_dorking_loaded_by_plugin_manager(setup_test_environment):
     manager = PluginManager(str(PLUGINS_DIR))
     asyncio.run(manager.load_plugins())
-    plugin = manager.get_plugin("google-dorking")
+    plugin = manager.get_plugin("google_dorking")
     assert plugin is not None
-    assert plugin.id == "google-dorking"
+    assert plugin.id == "google_dorking"
     assert plugin.name == "Google Hacking"
 
 
 def test_google_dorking_command_renders_with_target(setup_test_environment):
     manager = PluginManager(str(PLUGINS_DIR))
     asyncio.run(manager.load_plugins())
-    command = manager.build_command("google-dorking", {"target": "secuscan.in"})
+    command = manager.build_command("google_dorking", {"target": "secuscan.in"})
     assert command is not None
     assert command[0] == "python3"
     assert "secuscan.in" in " ".join(command)
@@ -125,7 +125,7 @@ def test_google_dorking_command_renders_with_target(setup_test_environment):
 def test_google_dorking_command_contains_dork_queries(setup_test_environment):
     manager = PluginManager(str(PLUGINS_DIR))
     asyncio.run(manager.load_plugins())
-    command = manager.build_command("google-dorking", {"target": "secuscan.in"})
+    command = manager.build_command("google_dorking", {"target": "secuscan.in"})
     full_command = " ".join(command)
     assert "site:" in full_command
     assert "inurl:admin" in full_command

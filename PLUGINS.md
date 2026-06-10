@@ -2,12 +2,12 @@
 
 This file is a human-readable index of the plugins currently present in `plugins/*/metadata.json`.
 
-Last synced: 2026-05-11
+Last synced: 2026-06-10
 
 ## At a Glance
 
-- Total plugins: 60
-- Safe plugins: 27
+- Total plugins: 59
+- Safe plugins: 26
 - Intrusive plugins: 25
 - Exploit plugins: 8
 - Source of truth: each plugin's `metadata.json`
@@ -26,7 +26,7 @@ Only run scans against systems you own or are explicitly authorized to assess.
 
 | Category | Count |
 | --- | ---: |
-| `recon` | 19 |
+| `recon` | 18 |
 | `vulnerability` | 12 |
 | `robots` | 5 |
 | `web` | 5 |
@@ -53,10 +53,10 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | Directory Discovery | `dir_discovery` | `web` | `intrusive` | `ffuf` | Discover hidden directories and files on web servers. |
 | DNS Reconnaissance | `dns_enum` | `recon` | `safe` | `dnsrecon` | Enumerate DNS records and configurations. |
 | dnsx | `dnsx` | `recon` | `safe` | `dnsx` | DNS resolution and wildcard-aware validation at scale. |
-| Domain Finder | `domain-finder` | `recon` | `safe` | `amass` | Discover additional domain names of target organization. |
+| Domain Finder | `domain_finder` | `recon` | `safe` | `amass` | Discover additional domain names of target organization. |
 | Drupal Security Scan | `droopescan` | `vulnerability` | `intrusive` | `droopescan` | Drupal-focused CMS scanner for version and surface enumeration. |
 | Payload Fuzzer | `fuzzer` | `robots` | `exploit` | `python3` | Autonomously fuzz target fields with massive dictionaries. |
-| Google Hacking | `google-dorking` | `recon` | `safe` | `python3` | Find publicly indexed information about target. |
+| Google Hacking | `google_dorking` | `recon` | `safe` | `python3` | Find publicly indexed information about target. |
 | Password Recovery Audit | `hashcat` | `expert` | `exploit` | `hashcat` | Password recovery and hash audit workflow. |
 | HTTP Inspector | `http_inspector` | `web` | `safe` | `curl` | Inspect HTTP/HTTPS endpoints for headers, cookies, and TLS configuration. |
 | HTTP Request Logger | `http_request_logger` | `exploit` | `intrusive` | `httpx` | Handle incoming HTTP requests and record data. |
@@ -72,8 +72,8 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | Network Scanning | `nmap` | `network` | `safe` | `nmap` | Network discovery and port scanning tool. |
 | Template Vulnerability Scan | `nuclei` | `web` | `intrusive` | `nuclei` | Fast and customizable vulnerability scanner. |
 | Password Auditor | `password_auditor` | `vulnerability` | `intrusive` | `python3` | Discover weak credentials in network services and web apps. |
-| People Hunter | `people-email-discovery` | `recon` | `safe` | `theHarvester` | Discover email addresses and social media profiles. |
-| Port Scanner | `port-scanner` | `recon` | `intrusive` | `nmap` | Detect open ports and fingerprint services. |
+| People Hunter | `people_email_discovery` | `recon` | `safe` | `theHarvester` | Discover email addresses and social media profiles. |
+| Port Scanner | `port_scanner` | `recon` | `intrusive` | `nmap` | Detect open ports and fingerprint services. |
 | Advanced Network Recon | `scapy_recon` | `network` | `safe` | `python3` | Advanced network probing using Scapy. |
 | Secret Scanner | `secret_scanner` | `code` | `safe` | `gitleaks` | Scan directories for hardcoded secrets. |
 | Sharepoint Scanner | `sharepoint_scanner` | `vulnerability` | `intrusive` | `nuclei` | Check SharePoint for security issues, misconfigs, and more. |
@@ -84,20 +84,19 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | SQLi Exploiter | `sqli_exploiter` | `exploit` | `exploit` | `sqlmap` | Exploitation-focused workflow for data extraction from confirmed SQL injection findings. |
 | SQL Injection Testing | `sqlmap` | `web` | `exploit` | `sqlmap` | Detects SQL injection vulnerabilities and supports controlled database enumeration. |
 | SSH Runner | `ssh_runner` | `execution` | `intrusive` | `ssh` | Remote command execution via SSH. |
-| Subdomain Finder | `subdomain-finder` | `recon` | `safe` | `subfinder` | Discover subdomains of a domain. |
+| Subdomain Finder | `subdomain_finder` | `recon` | `safe` | `subfinder` | Discover subdomains of a domain. |
 | Subdomain Scanner | `subdomain_discovery` | `recon` | `safe` | `subfinder` | Enumerate subdomains using passive sources. |
 | Subdomain Takeover | `subdomain_takeover` | `exploit` | `intrusive` | `subfinder` | Discover dangling DNS entries pointing to external services. |
 | Subfinder | `subfinder` | `recon` | `safe` | `subfinder` | Fast passive subdomain enumeration. |
 | theHarvester | `theharvester` | `recon` | `safe` | `theHarvester` | OSINT collection for emails, domains, and hosts. |
 | TLS Security Analysis | `tls_inspector` | `security` | `safe` | `openssl` | Examine TLS/SSL certificates and cipher configurations. |
 | Uncover | `uncover` | `recon` | `safe` | `uncover` | Discover internet-exposed assets from external search sources. |
-| URL Fuzzer | `url-fuzzer-2` | `recon` | `intrusive` | `ffuf` | Discover hidden files and directories. |
+| URL Fuzzer | `url_fuzzer` | `recon` | `intrusive` | `ffuf` | Discover hidden files and directories. |
 | urlfinder | `urlfinder` | `recon` | `safe` | `urlfinder` | Passive historical URL collection. |
-| Virtual Hosts Finder | `virtual-host-finder` | `recon` | `intrusive` | `ffuf` | Find multiple websites hosted on the same server. |
+| Virtual Hosts Finder | `virtual_host_finder` | `recon` | `intrusive` | `ffuf` | Find multiple websites hosted on the same server. |
 | Volatility | `volatility` | `forensics` | `intrusive` | `volatility3` | Memory forensics workflow using Volatility 3 plugins. |
-| WAF Detector | `waf-detection` | `recon` | `safe` | `wafw00f` | Fingerprint the Web Application Firewall behind target app. |
 | WAF Detector | `waf_detector` | `robots` | `safe` | `wafw00f` | Automatically identify Web Application Firewalls protecting targets. |
-| Website Recon | `website-recon-2` | `recon` | `safe` | `httpx` | Fingerprint web technologies of target website. |
+| Website Recon | `website_recon` | `recon` | `safe` | `httpx` | Fingerprint web technologies of target website. |
 | Domain Registration Lookup | `whois_lookup` | `utils` | `safe` | `python3` | Domain registration information lookup. |
 | WordPress Security Scan | `wpscan` | `vulnerability` | `intrusive` | `wpscan` | WordPress security scanner for plugin, theme, and core risk visibility. |
 | XSS Exploiter | `xss_exploiter` | `exploit` | `exploit` | `python3` | Exploit XSS in real-life attacks to extract cookies and data. |

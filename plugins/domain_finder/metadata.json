@@ -1,41 +1,36 @@
 {
-  "id": "website-recon-2",
-  "name": "Website Recon",
+  "id": "domain_finder",
+  "name": "Domain Finder",
   "version": "1.0.0",
-  "description": "Fingerprint web technologies of target website.",
-  "long_description": "Fingerprint web technologies of target website.",
+  "description": "Discover additional domain names of target organization.",
+  "long_description": "Discover additional domain names of target organization.",
   "category": "recon",
   "author": {
     "name": "SecuScan Contributors",
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd0e",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
-    "binary": "httpx"
+    "binary": "amass"
   },
   "command_template": [
-    "httpx",
-    "-u",
+    "amass",
+    "enum",
+    "-d",
     "{target}",
-    "-title",
-    "-status-code",
-    "-tech-detect",
+    "-dir",
+    "/tmp/amass",
     "-silent"
   ],
   "fields": [
     {
       "id": "target",
-      "label": "Target URL",
+      "label": "Root Domain",
       "type": "string",
       "required": true,
-      "placeholder": "https://secuscan.in",
-      "validation": {
-        "pattern": "^https?://",
-        "message": "Must be a valid HTTP(S) URL"
-      },
-      "help": "URL to fingerprint."
+      "placeholder": "secuscan.in"
     }
   ],
   "presets": {
@@ -55,10 +50,10 @@
   },
   "dependencies": {
     "binaries": [
-      "httpx"
+      "amass"
     ],
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "53ac15d9af192a5ac70225f2faaf1f3c086868ea67438d9b588de6645555ef01"
+  "checksum": "8b37efdcea455b696de31c990167cc39d9040472136170ed95449d4acfdcecb0"
 }

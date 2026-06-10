@@ -288,7 +288,7 @@ def test_plugin_manager_resolves_repo_local_wordlist_aliases(setup_test_environm
     )
 
     assert command is not None
-    assert str(medium_wordlist) in command
+    assert Path(medium_wordlist).as_posix() in command
 
 
 def test_plugin_manager_rejects_linux_wordlist_absolute_default(setup_test_environment):
@@ -298,6 +298,6 @@ def test_plugin_manager_rejects_linux_wordlist_absolute_default(setup_test_envir
 
     with pytest.raises(ValueError, match="absolute"):
         manager.build_command(
-            "virtual-host-finder",
+            "virtual_host_finder",
             {"target": "example.com"},
         )

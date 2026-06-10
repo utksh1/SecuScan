@@ -480,7 +480,8 @@ class PluginManager:
         normalized = self._with_field_defaults(plugin, inputs)
         wordlist_value = normalized.get("wordlist")
         if isinstance(wordlist_value, str) and wordlist_value.strip():
-            normalized["wordlist"] = self._resolve_wordlist_path(wordlist_value.strip())
+            resolved = self._resolve_wordlist_path(wordlist_value.strip())
+            normalized["wordlist"] = Path(resolved).as_posix()
         return normalized
 
     def _reject_injected_args(self, field_id: str, value: str) -> None:
