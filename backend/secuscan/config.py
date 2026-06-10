@@ -126,6 +126,27 @@ class Settings(BaseSettings):
     # Workflow Configuration
     workflow_min_interval_seconds: int = 60
 
+    # Notification SSRF Protection
+    notification_ssrf_enabled: bool = True
+    notification_allowed_ip_ranges: List[str] = []
+    notification_blocked_ip_ranges: List[str] = [
+        "169.254.169.254/32",
+        "169.254.0.0/16",
+        "127.0.0.0/8",
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "100.64.0.0/10",
+        "fc00::/7",
+        "fe80::/10",
+        "::1/128",
+        "224.0.0.0/4",
+        "ff00::/8",
+        "0.0.0.0/8",
+    ]
+    notification_max_redirects: int = 0
+    notification_allowed_ports: List[int] = [80, 443, 8080, 8443]
+
     # Logging
     log_level: str = "INFO"
     log_file: str = str(PROJECT_ROOT / "logs" / "secuscan.log")
@@ -147,6 +168,8 @@ class Settings(BaseSettings):
         "trusted_proxies",
         "network_allowlist",
         "network_denylist",
+        "notification_allowed_ip_ranges",
+        "notification_blocked_ip_ranges",
         mode="before",
     )
     @classmethod
