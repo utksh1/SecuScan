@@ -384,6 +384,9 @@ def sanitize_input(value: str) -> str:
     Returns:
         Sanitized value
     """
+    # Convert backslashes to forward slashes to preserve path separators on Windows.
+    value = value.replace('\\', '/')
+
     # Remove shell metacharacters and non-printable control characters.
     dangerous_chars = [';', '|', '&', '$', '`', '(', ')', '<', '>', '\n', '\r', "'", '"', '\\', '!', '{', '}', '\t', '\x00']
     for char in dangerous_chars:
