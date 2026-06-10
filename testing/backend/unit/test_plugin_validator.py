@@ -49,7 +49,7 @@ def _error_messages(result: ValidationResult) -> list[str]:
 
 def _write_metadata(tmp_path: Path, data: dict) -> Path:
     plugin_dir = tmp_path / "my_plugin"
-    plugin_dir.mkdir()
+    plugin_dir.mkdir(exist_ok=True)
     (plugin_dir / "metadata.json").write_text(json.dumps(data), encoding="utf-8")
     return plugin_dir
 
