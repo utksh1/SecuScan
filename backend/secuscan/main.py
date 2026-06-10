@@ -9,9 +9,17 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from .request_middleware import RequestIDMiddleware
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.exception_handlers import (
+    http_exception_handler,
+    request_validation_exception_handler,
+)
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from .request_context import get_request_id
 
 from .config import settings
 from .auth import init_api_key
@@ -164,6 +172,33 @@ app.add_middleware(
 )
 app.add_middleware(RequestIDMiddleware)
 
+@app.exception_handler(StarletteHTTPException)
+async def custom_http_exception_handler(request: Request, exc: StarletteHTTPException):
+    response = await http_exception_handler(request, exc)
+    response.headers["X-Request-ID"] = getattr(request.state, "request_id", get_request_id())
+    return response
+
+
+@app.exception_handler(RequestValidationError)
+async def custom_validation_exception_handler(request: Request, exc: RequestValidationError):
+    response = await request_validation_exception_handler(request, exc)
+    response.headers["X-Request-ID"] = getattr(request.state, "request_id", get_request_id())
+    return response
+
+@app.exception_handler(Exception)
+async def custom_unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled exception in request lifecycle")
+
+    if settings.debug:
+        import traceback
+        html = f"<html><body><h1>500 Internal Server Error</h1><pre>{traceback.format_exc()}</pre></body></html>"
+        response = HTMLResponse(html, status_code=500)
+    else:
+        response = PlainTextResponse("Internal Server Error", status_code=500)
+
+    response.headers["X-Request-ID"] = getattr(request.state, "request_id", get_request_id())
+    return response
+
 # Include API routes
 app.include_router(router)
 app.include_router(saved_views_router)
@@ -176,6 +211,7 @@ async def health_check():
     import platform
     import sys
     
+    logger.info("Health check endpoint accessed")
     return {
         "status": "operational",
         "version": "0.1.0-alpha",
