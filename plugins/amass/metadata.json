@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd0e",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
     "binary": "amass"
@@ -31,7 +31,7 @@
       "type": "string",
       "required": true,
       "placeholder": "secuscan.in",
-      "help_text": "Enter the root domain to enumerate subdomains for (for example: example.com). Do not include http://, https://, paths, or subdomains."
+      "help": "Enter the root domain to enumerate subdomains for (for example: example.com). Do not include http://, https://, paths, or subdomains."
     }
   ],
   "presets": {
@@ -56,5 +56,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "3f5cc0b7791448b3418ca14a8bec020984f97138a5dc1f4499ad72dfbbb1c415"
+  "checksum": "5a0ea8ff2a07b965685a2772bb2557afde4ef50e23dc423c99c27ce518494747"
 }
