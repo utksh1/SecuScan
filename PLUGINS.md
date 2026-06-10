@@ -80,9 +80,9 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | Sitemap Generator | `sitemap_gen` | `robots` | `intrusive` | `katana` | Build complete XML sitemaps by autonomously parsing targets. |
 | Sniper: Auto-Exploiter | `sniper` | `exploit` | `exploit` | `python3` | Validate critical CVEs by automatic exploitation. |
 | Spider | `spider` | `robots` | `intrusive` | `katana` | Advanced web spider with JS execution support. |
-| SQL Injection Feasibility | `sqli_checker` | `expert` | `intrusive` | `ghauri` | SQL injection feasibility scanner powered by Ghauri. |
-| SQLi Exploiter | `sqli_exploiter` | `exploit` | `exploit` | `sqlmap` | Exploit SQL injection in web apps to extract data. |
-| SQL Injection Testing | `sqlmap` | `web` | `exploit` | `sqlmap` | Automatic SQL injection and database takeover tool. |
+| SQL Injection Feasibility | `sqli_checker` | `expert` | `intrusive` | `ghauri` | Validates potential SQL injection vulnerabilities without exploitation. |
+| SQLi Exploiter | `sqli_exploiter` | `exploit` | `exploit` | `sqlmap` | Exploitation-focused workflow for data extraction from confirmed SQL injection findings. |
+| SQL Injection Testing | `sqlmap` | `web` | `exploit` | `sqlmap` | Detects SQL injection vulnerabilities and supports controlled database enumeration. |
 | SSH Runner | `ssh_runner` | `execution` | `intrusive` | `ssh` | Remote command execution via SSH. |
 | Subdomain Discovery (Configurable) | `subdomain_discovery` | `recon` | `safe` | `subfinder` | Comprehensive configurable subdomain enumeration via passive sources. Thread count and source coverage tunable via presets. |
 | Subdomain Takeover | `subdomain_takeover` | `exploit` | `intrusive` | `subfinder` | Discover dangling DNS entries pointing to external services. |
@@ -102,6 +102,12 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | XSS Exploiter | `xss_exploiter` | `exploit` | `exploit` | `python3` | Exploit XSS in real-life attacks to extract cookies and data. |
 | Binary Signature Scan | `yara_scan` | `forensics` | `intrusive` | `yara` | Binary and file-system signature matching with YARA rules. |
 | DAST Web Proxy (ZAP) | `zap_scanner` | `vulnerability` | `exploit` | `python3` | Dynamic proxy spidering and payload injection. |
+
+### SQL Injection Plugin Guidance
+
+- `sqli_checker` should be used to validate whether a target appears vulnerable to SQL injection and to assess feasibility before exploitation.
+- `sqlmap` should be used for SQL injection testing and controlled database enumeration during assessment workflows.
+- `sqli_exploiter` should be used only after a vulnerability has been confirmed and exploitation or data extraction is required.
 
 ## Plugin Input Schema with Examples
 
