@@ -10,11 +10,11 @@ with unittest.mock so no live SQLite file is needed, but the production
 route handler code in routes.py runs unchanged.
 
 Routes under test (from backend/secuscan/routes.py):
-  POST   /api/workflows                  – create
-  POST   /api/workflows/{id}/run         – manual run trigger
-  DELETE /api/workflows/{id}             – delete
-  PUT    /api/workflows/{id}             – update (enable/disable toggle)
-  GET    /api/workflows                  – list
+  POST   /api/v1/workflows                  – create
+  POST   /api/v1/workflows/{id}/run         – manual run trigger
+  DELETE /api/v1/workflows/{id}             – delete
+  PUT    /api/v1/workflows/{id}             – update (enable/disable toggle)
+  GET    /api/v1/workflows                  – list
 """
 
 import json
@@ -77,7 +77,7 @@ class TestDeleteThenRunRace:
             return_value=None,
         ):
             response = client.post(
-                "/api/workflows/deleted-wf-id/run",
+                "/api/v1/workflows/deleted-wf-id/run",
                 headers={"Authorization": "Bearer testtoken"},
             )
         # The real route checks `if not row: raise HTTPException(404)`.
@@ -94,7 +94,7 @@ class TestDeleteThenRunRace:
             return_value=None,
         ):
             response = client.post(
-                "/api/workflows/deleted-wf-id/run",
+                "/api/v1/workflows/deleted-wf-id/run",
                 headers={"Authorization": "Bearer testtoken"},
             )
         assert response.status_code == 404
@@ -110,7 +110,7 @@ class TestDeleteThenRunRace:
             new_callable=AsyncMock,
             return_value=None,
         ):
-            response = client.delete("/api/workflows/ghost-wf-id")
+            response = client.delete("/api/v1/workflows/ghost-wf-id")
         assert response.status_code == 404, (
             f"Deleting a non-existent workflow must return 404, "
             f"got {response.status_code}. Body: {response.text}"
@@ -137,7 +137,7 @@ class TestDisabledWorkflow:
             return_value=disabled_row,
         ):
             response = client.post(
-                f"/api/workflows/{disabled_row['id']}/run",
+                f"/api/v1/workflows/{disabled_row['id']}/run",
                 headers={"Authorization": "Bearer testtoken"},
             )
         assert response.status_code in (400, 409), (
@@ -146,14 +146,14 @@ class TestDisabledWorkflow:
         )
 
     def test_disabled_workflow_appears_in_list_with_enabled_false(self, client):
-        # GET /api/workflows must faithfully surface the enabled=0 state.
+        # GET /api/v1/workflows must faithfully surface the enabled=0 state.
         disabled_row = _workflow_row(enabled=0)
         with patch(
             "backend.secuscan.routes.db.fetchall",
             new_callable=AsyncMock,
             return_value=[disabled_row],
         ):
-            response = client.get("/api/workflows")
+            response = client.get("/api/v1/workflows")
         assert response.status_code == 200
         workflows = response.json().get("workflows", [])
         assert len(workflows) == 1
@@ -165,7 +165,7 @@ class TestDisabledWorkflow:
 
     def test_toggle_workflow_to_disabled_calls_update(self, client):
         """
-        PUT /api/workflows/{id} with enabled=False must reach the DB layer.
+        PUT /api/v1/workflows/{id} with enabled=False must reach the DB layer.
         We verify the route completes without error and the DB execute was
         called — confirming the production update path was exercised.
         """
@@ -185,7 +185,7 @@ class TestDisabledWorkflow:
             ),
         ):
             response = client.put(
-                f"/api/workflows/{existing_row['id']}",
+                f"/api/v1/workflows/{existing_row['id']}",
                 json={"enabled": False},
             )
 
@@ -205,7 +205,7 @@ class TestDisabledWorkflow:
 # ---------------------------------------------------------------------------
 
 class TestDeleteThenList:
-    """After deletion, GET /api/workflows must not include the deleted row."""
+    """After deletion, GET /api/v1/workflows must not include the deleted row."""
 
     def test_deleted_workflow_not_in_list(self, client):
         # Simulate DB returning an empty list after deletion.
@@ -214,7 +214,7 @@ class TestDeleteThenList:
             new_callable=AsyncMock,
             return_value=[],
         ):
-            response = client.get("/api/workflows")
+            response = client.get("/api/v1/workflows")
         assert response.status_code == 200
         body = response.json()
         assert body.get("workflows") == [], (
@@ -229,7 +229,7 @@ class TestDeleteThenList:
             new_callable=AsyncMock,
             return_value=[remaining],
         ):
-            response = client.get("/api/workflows")
+            response = client.get("/api/v1/workflows")
         assert response.status_code == 200
         workflows = response.json().get("workflows", [])
         assert len(workflows) == 1
@@ -270,7 +270,7 @@ class TestEnabledWorkflowRun:
             patch("asyncio.create_task", return_value=MagicMock()),
         ):
             response = client.post(
-                f"/api/workflows/{row['id']}/run",
+                f"/api/v1/workflows/{row['id']}/run",
                 headers={"Authorization": "Bearer testtoken"},
             )
 
