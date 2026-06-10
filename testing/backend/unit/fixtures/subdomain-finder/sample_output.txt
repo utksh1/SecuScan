@@ -1,0 +1,3 @@
+api.secuscan.in  52.0.200.63
+staging.secuscan.in
+dev.secuscan.in  10.0.0.5
