@@ -10,13 +10,14 @@ from testing.backend.benchmarks.conftest import load_threshold
 async def test_10_concurrent_task_creates(bench_env, record_benchmark):
     executor = bench_env["executor"]
     plugin_id = "icmp_ping"
-    inputs = {"target": "127.0.0.1"}
+    safe_mode = True
+    inputs = {"target": "127.0.0.1", "safe_mode": safe_mode}
 
     latencies = []
 
     async def create_one():
         start = time.perf_counter()
-        tid = await executor.create_task(plugin_id, inputs)
+        tid = await executor.create_task(plugin_id, inputs, safe_mode=safe_mode)
         latencies.append((time.perf_counter() - start) * 1000.0)
         return tid
 
@@ -52,12 +53,13 @@ async def test_10_concurrent_task_creates(bench_env, record_benchmark):
 async def test_20_sequential_task_creates(bench_env, record_benchmark):
     executor = bench_env["executor"]
     plugin_id = "icmp_ping"
-    inputs = {"target": "127.0.0.1"}
+    safe_mode = True
+    inputs = {"target": "127.0.0.1", "safe_mode": safe_mode}
 
     latencies = []
     for _ in range(20):
         start = time.perf_counter()
-        await executor.create_task(plugin_id, inputs)
+        await executor.create_task(plugin_id, inputs, safe_mode=safe_mode)
         latencies.append((time.perf_counter() - start) * 1000.0)
 
     mean_lat = statistics.mean(latencies)

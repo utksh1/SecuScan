@@ -16,6 +16,7 @@ Validation logic (validation.py):
 """
 
 import pytest
+from unittest.mock import AsyncMock, patch
 
 ENDPOINT = "/api/v1/task/start"
 
@@ -39,6 +40,7 @@ def code_payload(target: str) -> dict:
 def network_payload(target: str, safe_mode: bool = True) -> dict:
     return {
         "plugin_id": "nmap",
+        # NOTE: safe_mode is server-controlled; including it here should not change behavior.
         "inputs": {"target": target, "safe_mode": safe_mode},
         "consent_granted": True,
     }
@@ -54,6 +56,15 @@ def assert_not_blocked_by_host_validation(r):
         assert "not allowed" not in detail.lower() and "invalid" not in detail.lower(), (
             f"Path target incorrectly blocked by host validation: {r.text}"
         )
+
+
+@pytest.fixture(autouse=True)
+def _mock_task_execution():
+    with patch(
+        "backend.secuscan.executor.TaskExecutor._execute_command",
+        new=AsyncMock(return_value=("mocked output", 0)),
+    ):
+        yield
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +157,7 @@ class TestNetworkTargetSafeMode:
         "93.184.216.34",
     ])
     def test_public_targets_blocked_in_safe_mode(self, test_client, public_target):
-        """safe_mode=True must block public IPs."""
+        """Server safe-mode must block public IPs regardless of client-supplied safe_mode."""
         r = post(test_client, network_payload(public_target, safe_mode=True))
         assert r.status_code == 400, (
             f"Expected public target '{public_target}' blocked, got {r.status_code}: {r.text}"
@@ -158,8 +169,21 @@ class TestNetworkTargetSafeMode:
         "8.8.8.8",
         "1.1.1.1",
     ])
-    def test_public_targets_allowed_when_safe_mode_disabled(self, test_client, public_target):
-        """safe_mode=False lifts the public IP restriction."""
+    def test_client_cannot_disable_safe_mode(self, test_client, public_target):
+        """Client cannot bypass guardrails by setting safe_mode=False in inputs."""
+        r = post(test_client, network_payload(public_target, safe_mode=False))
+        assert r.status_code == 400, (
+            f"Expected public target '{public_target}' blocked even with client safe_mode=False, got {r.status_code}: {r.text}"
+        )
+
+    @pytest.mark.parametrize("public_target", [
+        "8.8.8.8",
+        "1.1.1.1",
+    ])
+    def test_public_targets_allowed_when_server_safe_mode_disabled(self, test_client, monkeypatch, public_target):
+        """Disabling safe-mode is a server configuration decision, not a client input."""
+        from backend.secuscan.config import settings
+        monkeypatch.setattr(settings, "safe_mode_default", False)
         r = post(test_client, network_payload(public_target, safe_mode=False))
         assert r.status_code != 400, (
             f"Public target '{public_target}' incorrectly blocked with safe_mode=False: {r.text}"
@@ -172,12 +196,10 @@ class TestNetworkTargetSafeMode:
     ])
     def test_always_blocked_ranges_rejected(self, test_client, blocked_target):
         """Broadcast, link-local, multicast blocked in all modes."""
-        for safe_mode in (True, False):
-            r = post(test_client, network_payload(blocked_target, safe_mode=safe_mode))
-            assert r.status_code == 400, (
-                f"Expected '{blocked_target}' blocked (safe_mode={safe_mode}), "
-                f"got {r.status_code}: {r.text}"
-            )
+        r = post(test_client, network_payload(blocked_target, safe_mode=True))
+        assert r.status_code == 400, (
+            f"Expected '{blocked_target}' blocked, got {r.status_code}: {r.text}"
+        )
 
     def test_raw_target_not_leaked_in_response(self, test_client):
         """Sentinel value must not appear in error response."""
