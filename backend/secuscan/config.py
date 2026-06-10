@@ -123,9 +123,18 @@ class Settings(BaseSettings):
     parser_sandbox_timeout_seconds: int = 30
     parser_sandbox_max_output_bytes: int = 8 * 1024 * 1024  # 8 MB
 
+    # Workflow Configuration
+    workflow_min_interval_seconds: int = 60
+
     # Logging
     log_level: str = "INFO"
     log_file: str = str(PROJECT_ROOT / "logs" / "secuscan.log")
+
+    # AI Executive Summary (opt-in — feature off by default)
+    ai_summary_enabled: bool = False
+    ai_summary_api_key: str = ""
+    ai_summary_base_url: str = ""
+    ai_summary_model: str = "gpt-4o-mini"
 
     class Config:
         env_prefix = "SECUSCAN_"
