@@ -5,6 +5,7 @@ import io
 import json
 import re
 from .redaction import redact, redact_dict
+from .ai_summary import generate_summary
 from datetime import datetime
 from functools import lru_cache
 from typing import Any, Dict, List
@@ -27,6 +28,21 @@ class ReportGenerator:
         "LOW": (37, 99, 235),
         "INFO": (71, 85, 105),
     }
+
+    @classmethod
+    def _get_ai_summary(cls, findings):
+        """Return an AI executive summary, or '' when the feature is disabled."""
+        from .config import settings as _settings
+        if not _settings.ai_summary_enabled:
+            return ""
+        if not _settings.ai_summary_api_key:
+            return ""
+        return generate_summary(
+            findings=findings,
+            model=_settings.ai_summary_model,
+            api_key=_settings.ai_summary_api_key,
+            base_url=_settings.ai_summary_base_url or None,
+        )
 
     @staticmethod
     def _hex_to_rgb(value: str) -> tuple[int, int, int]:
@@ -119,7 +135,15 @@ class ReportGenerator:
             "cve": cls._clean_text(finding.get("cve")),
             "cwe": cls._clean_text(finding.get("cwe")),
             "cvss": finding.get("cvss"),
+            "validated": bool(finding.get("validated", False)),
+            "validation_method": cls._clean_text(finding.get("validation_method")),
+            "confidence_reason": redact(cls._clean_text(finding.get("confidence_reason"))),
+            "service_fingerprint": cls._clean_text(finding.get("service_fingerprint")),
+            "cpe": cls._clean_text(finding.get("cpe")),
             "discovered_at": cls._clean_text(finding.get("discovered_at")),
+            "evidence": finding.get("evidence", []) if isinstance(finding.get("evidence"), list) else [],
+            "asset_refs": finding.get("asset_refs", []) if isinstance(finding.get("asset_refs"), list) else [],
+            "references": finding.get("references", []) if isinstance(finding.get("references"), list) else [],
             "metadata": redact_dict({cls._clean_text(key): cls._clean_text(val) for key, val in metadata.items()}),
         }
         if normalized["severity"] not in cls.SEVERITY_COLORS:
@@ -170,6 +194,20 @@ class ReportGenerator:
         preset = cls._clean_text(task.get("preset"))
         if preset:
             parameters.append({"label": "Preset", "value": preset})
+
+        execution_context = task.get("execution_context")
+        if not execution_context:
+            raw_context = task.get("execution_context_json")
+            if isinstance(raw_context, str):
+                try:
+                    execution_context = json.loads(raw_context)
+                except json.JSONDecodeError:
+                    execution_context = {}
+        if isinstance(execution_context, dict):
+            for key in ("target_policy_id", "scan_profile", "credential_profile_id", "session_profile_id", "validation_mode", "evidence_level"):
+                value = cls._clean_text(execution_context.get(key))
+                if value:
+                    parameters.append({"label": key.replace("_", " ").title(), "value": value})
 
         for key, value in cls._normalize_task_inputs(task).items():
             label = key.replace("_", " ").title()
@@ -289,6 +327,7 @@ class ReportGenerator:
         payload = cls._build_report_payload(task, result)
         findings = payload["findings"]
         severity_counts = payload["severity_counts"]
+        ai_summary = cls._get_ai_summary(findings)
         shield_icon = cls._icon_data_uri("shield", "1e3a5f")
         target_icon = cls._icon_data_uri("target", "2563eb")
         findings_icon = cls._icon_data_uri("findings", "0f172a")
@@ -319,6 +358,10 @@ class ReportGenerator:
               <h4>Description</h4>
               <p>{cls._escape_html(finding['description'])}</p>
               {f"<h4>Evidence</h4><pre>{cls._escape_html(finding['proof'])}</pre>" if finding['proof'] else ""}
+              {f"<p class='meta'>Validated: {'YES' if finding['validated'] else 'NO'}</p>" if finding['validated'] or finding['validation_method'] else ""}
+              {f"<p class='meta'>Validation method: {cls._escape_html(finding['validation_method'])}</p>" if finding['validation_method'] else ""}
+              {f"<p class='meta'>CPE: {cls._escape_html(finding['cpe'])}</p>" if finding['cpe'] else ""}
+              {f"<p class='meta'>Evidence items: {len(finding['evidence'])}</p>" if finding['evidence'] else ""}
               {f"<div class='remediation'><h4>Recommended action</h4><p>{cls._escape_html(finding['remediation'])}</p></div>" if finding['remediation'] else ""}
               {f"<p class='meta'>CVE: {cls._escape_html(finding['cve'])}</p>" if finding['cve'] else ""}
             </div>
@@ -554,6 +597,7 @@ class ReportGenerator:
   </table>
 
   <h2><img class="stat-icon" src="{shield_icon}" alt=""> Executive Overview</h2>
+  {f'''<div style="margin-bottom:12px;padding:10px 12px;background:#f0f4ff;border-left:4px solid #2563eb;border-radius:3px;"><strong style="display:block;margin-bottom:4px;font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#1e3a8a;">&#129302; AI Executive Summary</strong><p style="margin:0;font-size:9px;line-height:1.55;color:#1e293b;">{cls._escape_html(ai_summary)}</p></div>''' if ai_summary else ""}
   <ul>{summary_markup}</ul>
 
   <h2><img class="stat-icon" src="{clock_icon}" alt=""> Assessment Details</h2>
@@ -595,6 +639,7 @@ class ReportGenerator:
         payload = cls._build_report_payload(task, result)
         findings = payload["findings"]
         severity_counts = payload["severity_counts"]
+        ai_summary = cls._get_ai_summary(findings)
         shield_icon = cls._icon_data_uri("shield", "1e3a5f")
         target_icon = cls._icon_data_uri("target", "2563eb")
         findings_icon = cls._icon_data_uri("findings", "0f172a")
@@ -626,6 +671,10 @@ class ReportGenerator:
                         <p>{cls._escape_html(finding['description'])}</p>
                     </section>
                     {f"<section><h4>Evidence</h4><pre>{cls._escape_html(finding['proof'])}</pre></section>" if finding['proof'] else ""}
+                    {f"<section class='meta'><span>Validated: {'YES' if finding['validated'] else 'NO'}</span></section>" if finding['validated'] or finding['validation_method'] else ""}
+                    {f"<section class='meta'><span>Validation method: {cls._escape_html(finding['validation_method'])}</span></section>" if finding['validation_method'] else ""}
+                    {f"<section class='meta'><span>CPE: {cls._escape_html(finding['cpe'])}</span></section>" if finding['cpe'] else ""}
+                    {f"<section class='meta'><span>Evidence items: {len(finding['evidence'])}</span></section>" if finding['evidence'] else ""}
                     {f"<section class='remediation'><h4>Recommended action</h4><p>{cls._escape_html(finding['remediation'])}</p></section>" if finding['remediation'] else ""}
                     {f"<section class='meta'><span>CVE: {cls._escape_html(finding['cve'])}</span></section>" if finding['cve'] else ""}
                 </div>
@@ -923,6 +972,7 @@ class ReportGenerator:
     <section class="section">
       <h2><img class="section-icon" src="{shield_icon}" alt="">Executive Overview</h2>
       <p class="section-copy">Key takeaways generated from the parsed assessment data.</p>
+      {f'''<div style="margin:0 0 18px;padding:16px 20px;background:#eff6ff;border-left:4px solid #2563eb;border-radius:14px;"><p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#1d4ed8;">&#129302; AI Executive Summary</p><p style="margin:0;color:#1e293b;line-height:1.65;">{cls._escape_html(ai_summary)}</p></div>''' if ai_summary else ""}
       <ul class="summary-list">{summary_markup}</ul>
     </section>
 
@@ -955,6 +1005,10 @@ class ReportGenerator:
                 "Target",
                 "CVSS",
                 "CVE",
+                "CPE",
+                "Validated",
+                "Validation Method",
+                "Confidence Reason",
                 "Description",
                 "Evidence",
                 "Remediation",
@@ -969,6 +1023,10 @@ class ReportGenerator:
                     finding["target"] or payload["target"],
                     finding["cvss"] if finding["cvss"] is not None else "",
                     finding["cve"],
+                    finding["cpe"],
+                    "yes" if finding["validated"] else "no",
+                    finding["validation_method"],
+                    finding["confidence_reason"],
                     finding["description"],
                     finding["proof"],
                     finding["remediation"],
@@ -1043,7 +1101,10 @@ class ReportGenerator:
                         "text": finding.get("remediation", "No remediation provided.")
                     },
                     "properties": {
-                        "precision": "high"
+                        "precision": "high",
+                        "cpe": finding.get("cpe"),
+                        "validated": finding.get("validated"),
+                        "validation_method": finding.get("validation_method"),
                     }
                 })
 
@@ -1054,7 +1115,13 @@ class ReportGenerator:
                     "text": finding.get("description", "Security finding detected")
                 },
                 "level": severity_map.get(finding["severity"], "note"),
-                "locations": []
+                "locations": [],
+                "properties": {
+                    "confidenceReason": finding.get("confidence_reason"),
+                    "cpe": finding.get("cpe"),
+                    "validated": finding.get("validated"),
+                    "assetRefs": finding.get("asset_refs", []),
+                },
             }
 
             # Attempt to extract location if available

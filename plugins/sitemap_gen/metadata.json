@@ -27,6 +27,7 @@
     {
       "id": "target",
       "label": "Target URL",
+      "help": "Enter the HTTP(S) URL to crawl and generate a sitemap from.",
       "type": "string",
       "required": true,
       "placeholder": "https://secuscan.in",
@@ -38,6 +39,7 @@
     {
       "id": "depth",
       "label": "Depth",
+      "help": "Maximum crawl depth. Higher values discover more pages but may take longer to complete.",
       "type": "integer",
       "required": false,
       "default": 4

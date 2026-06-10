@@ -25,6 +25,7 @@
     {
       "id": "target",
       "label": "Target URL",
+      "help": "Enter the HTTP(S) URL to crawl for endpoint and route discovery.",
       "type": "string",
       "required": true,
       "placeholder": "https://secuscan.in"

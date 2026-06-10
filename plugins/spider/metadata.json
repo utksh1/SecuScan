@@ -30,6 +30,7 @@
       "label": "Target URL",
       "type": "string",
       "required": true,
+      "help": "Enter the full website URL to scan, including the http:// or https:// protocol.",
       "placeholder": "https://secuscan.in",
       "validation": {
         "pattern": "^https?://",
@@ -41,6 +42,7 @@
       "label": "Depth",
       "type": "integer",
       "required": false,
+      "help": "Range of crawl depth: 1-10. Higher values scan deeper but take longer. Default: 3. Recommended: 1-5.",
       "default": 3
     }
   ],

@@ -31,8 +31,8 @@
       "required": true,
       "placeholder": "https://secuscan.in",
       "validation": {
-        "pattern": "^https?://",
-        "message": "Must be a valid HTTP(S) URL"
+        "validation_type": "url",
+        "message": "Must be a valid HTTP or HTTPS URL"
       }
     },
     {
