@@ -236,7 +236,7 @@ async def test_upsert_failure_after_successful_scan_marks_task_failed(chaos_env)
             executor,
             "_execute_command",
             new_callable=AsyncMock,
-            return_value=(ping_stdout, 0, None),
+            return_value=(ping_stdout, 0),
         ),
         patch.object(
             executor,
@@ -293,7 +293,7 @@ async def test_nonzero_exit_raw_artifact_present_task_is_failed(chaos_env):
         executor,
         "_execute_command",
         new_callable=AsyncMock,
-        return_value=(failure_output, 2, None),
+        return_value=(failure_output, 2),
     ):
         await executor.execute_task(task_id)
 
