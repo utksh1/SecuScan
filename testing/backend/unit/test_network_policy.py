@@ -47,14 +47,34 @@ class TestDenyByDefault:
 class TestInitDefaultPolicies:
     """Test _init_default_policies logic"""
 
-    def test_empty_allowlist_does_not_add_allow_all(self, tmp_path):
-        """Empty allowlist must NOT create 0.0.0.0/0 or ::/0 rules"""
+    def test_empty_allowlist_adds_default_public_egress(self, tmp_path):
+        """Empty allowlist should add implicit 0.0.0.0/0 and ::/0 rules for public egress"""
         audit_log = tmp_path / "audit.log"
         engine = NetworkPolicyEngine(audit_log_path=str(audit_log))
         _init_default_policies(engine)
-        assert len(engine.allowlist) == 0
-        allowed, _, _ = engine.check_access("8.8.8.8", plugin_id="test")
-        assert not allowed
+        # The engine should have implicit allow-all rules for public egress
+        assert len(engine.allowlist) >= 2
+
+    def test_empty_allowlist_blocks_private_ranges(self, tmp_path):
+        """Even with implicit public egress, denylisted private ranges must be blocked"""
+        audit_log = tmp_path / "audit.log"
+        engine = NetworkPolicyEngine(audit_log_path=str(audit_log))
+        _init_default_policies(engine)
+        # Private/metadata IPs should still be blocked by denylist
+        for blocked_ip in ["10.0.0.1", "192.168.1.1", "172.16.0.1",
+                           "169.254.169.254", "127.0.0.1", "100.64.0.1"]:
+            allowed, _, _ = engine.check_access(blocked_ip, plugin_id="test")
+            assert not allowed, f"{blocked_ip} should be blocked by denylist"
+
+    def test_empty_allowlist_allows_public_ips(self, tmp_path):
+        """With implicit public egress, public IPs should be allowed"""
+        audit_log = tmp_path / "audit.log"
+        engine = NetworkPolicyEngine(audit_log_path=str(audit_log))
+        _init_default_policies(engine)
+        # Public IPs should be allowed
+        for public_ip in ["8.8.8.8", "1.1.1.1", "93.184.216.34"]:
+            allowed, _, _ = engine.check_access(public_ip, plugin_id="test")
+            assert allowed, f"{public_ip} should be allowed by default public egress"
 
     def test_explicit_allowlist_entries_are_loaded(self, monkeypatch, tmp_path):
         """Entries in SECUSCAN_NETWORK_ALLOWLIST should appear in engine.allowlist"""
