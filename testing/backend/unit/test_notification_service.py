@@ -232,9 +232,9 @@ async def test_send_webhook_success():
     mock_response.status_code = 200
     mock_post = AsyncMock(return_value=mock_response)
 
-    with patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)), patch("backend.secuscan.notification_service.socket.getaddrinfo", return_value=[(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]):
-        ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
-               return_value=[(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]):
+    with patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)):
+        with patch("backend.secuscan.notification_service.socket.getaddrinfo", return_value=[(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]):
+            ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
 
     assert ok is True
     assert err is None
@@ -248,10 +248,10 @@ async def test_send_webhook_http_error():
     mock_response = AsyncMock()
     mock_response.status_code = 500
     mock_post = AsyncMock(return_value=mock_response)
-    with patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)), patch("backend.secuscan.notification_service.socket.getaddrinfo", return_value=[(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]):
-        ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
-         patch("backend.secuscan.notification_service.socket.getaddrinfo",
-               return_value=[(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]):
+
+    with patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)):
+        with patch("backend.secuscan.notification_service.socket.getaddrinfo", return_value=[(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]):
+            ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
 
     assert ok is False
     assert "500" in err
@@ -262,11 +262,11 @@ async def test_send_webhook_http_exception():
     """Transport-level errors are caught and returned as failure."""
     from backend.secuscan.notification_service import send_webhook
 
-    with patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)), patch("backend.secuscan.notification_service.socket.getaddrinfo", return_value=[(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]):
-        ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
-    with patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)), \
-         patch("backend.secuscan.notification_service.socket.getaddrinfo",
-               return_value=[(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]):
+    mock_post = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
+
+    with patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)):
+        with patch("backend.secuscan.notification_service.socket.getaddrinfo", return_value=[(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]):
+            ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
 
     assert ok is False
     assert "Connection refused" in err
