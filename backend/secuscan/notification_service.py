@@ -10,14 +10,17 @@ from __future__ import annotations
 
 import json
 import logging
+import socket
 import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 import httpx
 
 from .database import Database
 from .models import NotificationChannelType, NotificationDeliveryStatus
+from .network_policy import get_policy_engine
 from .redaction import redact_dict, redact_inputs
 
 logger = logging.getLogger(__name__)
@@ -137,8 +140,53 @@ async def record_delivery(
     return history_id
 
 
-async def send_webhook(target_url: str, payload: Dict[str, Any]) -> tuple[bool, Optional[str]]:
-    """POST a redacted alert payload to a webhook URL."""
+async def send_webhook(
+    target_url: str,
+    payload: Dict[str, Any],
+    plugin_id: str = "notification",
+    task_id: str = "notification",
+) -> tuple[bool, Optional[str]]:
+    """POST a redacted alert payload to a webhook URL.
+
+    Before sending, the destination hostname is resolved and checked against
+    the NetworkPolicyEngine. This ensures webhook traffic obeys the same
+    egress controls as scanner plugins and is recorded in the audit log.
+    """
+    # --- Fix 1: Network policy check before sending ---
+    try:
+        parsed = urlparse(target_url)
+        hostname = parsed.hostname
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+
+        if not hostname:
+            return False, f"Webhook URL has no hostname: {target_url}"
+
+        try:
+            resolved_ip = socket.gethostbyname(hostname)
+        except socket.gaierror as exc:
+            logger.warning("Webhook URL %s could not be resolved: %s", target_url, exc)
+            return False, f"Webhook hostname could not be resolved: {exc}"
+
+        policy = get_policy_engine()
+        allowed, reason, _ = policy.check_access(
+            dest_ip=resolved_ip,
+            dest_port=port,
+            plugin_id=plugin_id,
+            task_id=task_id,
+            dest_hostname=hostname,
+        )
+
+        if not allowed:
+            logger.warning(
+                "Webhook to %s blocked by network policy: %s", target_url, reason
+            )
+            return False, f"Blocked by network policy: {reason}"
+
+    except Exception as exc:
+        logger.error("Network policy check failed for webhook %s: %s", target_url, exc)
+        return False, f"Network policy check error: {exc}"
+
+    # --- Send the webhook ---
     try:
         async with httpx.AsyncClient(timeout=_WEBHOOK_TIMEOUT_SECONDS) as client:
             response = await client.post(
@@ -177,6 +225,7 @@ async def deliver_via_rule(
     """Attempt delivery for one rule/finding pair."""
     rule_id = str(rule["id"])
     finding_id = str(finding["id"])
+    task_id = str(finding.get("task_id", "unknown"))
 
     if not bool(rule.get("is_active")):
         return DeliveryResult(
@@ -213,7 +262,12 @@ async def deliver_via_rule(
     target = str(rule.get("target_url_or_email", ""))
 
     if channel == NotificationChannelType.WEBHOOK.value:
-        ok, error = await send_webhook(target, payload)
+        ok, error = await send_webhook(
+            target,
+            payload,
+            plugin_id="notification",
+            task_id=task_id,
+        )
     elif channel == NotificationChannelType.EMAIL.value:
         ok, error = await send_email_placeholder(target, payload)
     else:
@@ -236,14 +290,32 @@ async def process_finding_notifications(
     db: Database,
     finding_id: str,
 ) -> List[DeliveryResult]:
-    """Evaluate all active rules against one finding and attempt delivery."""
+    """Evaluate active rules scoped to the finding owner and attempt delivery."""
     finding = await db.fetchone("SELECT * FROM findings WHERE id = ?", (finding_id,))
     if not finding:
         return []
 
-    rules = await db.fetchall(
-        "SELECT * FROM notification_rules WHERE is_active = 1 ORDER BY created_at ASC"
-    )
+    # --- Fix 2: Scope rules to the finding's owner only ---
+    owner_id = finding.get("owner_id")
+    if owner_id:
+        rules = await db.fetchall(
+            """
+            SELECT * FROM notification_rules
+            WHERE is_active = 1 AND owner_id = ?
+            ORDER BY created_at ASC
+            """,
+            (owner_id,),
+        )
+    else:
+        # Fallback: no owner recorded — skip notifications to prevent
+        # cross-tenant data leakage rather than firing all rules.
+        logger.warning(
+            "Finding %s has no owner_id; skipping notifications to prevent "
+            "cross-tenant data leakage.",
+            finding_id,
+        )
+        return []
+
     results: List[DeliveryResult] = []
     for rule in rules:
         results.append(await deliver_via_rule(db, rule, finding))
