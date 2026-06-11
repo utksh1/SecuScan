@@ -232,7 +232,13 @@ async def test_send_webhook_success():
     mock_response.status_code = 200
     mock_post = AsyncMock(return_value=mock_response)
 
-    with patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)):
+    def fake_success_addr(*args, **kwargs):
+        return [(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]
+
+    with (
+        patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)),
+        patch("backend.secuscan.notification_service.socket.getaddrinfo", side_effect=fake_success_addr),
+    ):
         ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
 
     assert ok is True
@@ -248,7 +254,13 @@ async def test_send_webhook_http_error():
     mock_response.status_code = 500
     mock_post = AsyncMock(return_value=mock_response)
 
-    with patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)):
+    def fake_success_addr(*args, **kwargs):
+        return [(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]
+
+    with (
+        patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)),
+        patch("backend.secuscan.notification_service.socket.getaddrinfo", side_effect=fake_success_addr),
+    ):
         ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
 
     assert ok is False
@@ -262,11 +274,107 @@ async def test_send_webhook_http_exception():
 
     mock_post = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
 
-    with patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)):
+    def fake_success_addr(*args, **kwargs):
+        return [(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]
+
+    with (
+        patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)),
+        patch("backend.secuscan.notification_service.socket.getaddrinfo", side_effect=fake_success_addr),
+    ):
         ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
 
     assert ok is False
     assert "Connection refused" in err
+
+
+@pytest.mark.asyncio
+async def test_send_webhook_blocks_private_ip_resolution(monkeypatch):
+    """Webhook to a hostname that resolves to a private IP must be rejected."""
+    from backend.secuscan.notification_service import send_webhook
+
+    def fake_getaddrinfo(*args, **kwargs):
+        return [(socket.AF_INET, None, None, None, ("10.0.0.5", 443))]
+
+    monkeypatch.setattr("backend.secuscan.notification_service.socket.getaddrinfo", fake_getaddrinfo)
+    ok, err = await send_webhook("https://internal.example.com/hook", {"event": "test"})
+    assert ok is False
+    assert "blocked" in err.lower()
+
+
+@pytest.mark.asyncio
+async def test_send_webhook_pins_connection_ip(monkeypatch):
+    """The HTTP request must go to the validated IP, not the original hostname."""
+    from backend.secuscan.notification_service import send_webhook
+
+    def fake_getaddrinfo(*args, **kwargs):
+        return [(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]
+
+    monkeypatch.setattr("backend.secuscan.notification_service.socket.getaddrinfo", fake_getaddrinfo)
+
+    mock_response = AsyncMock()
+    mock_response.status_code = 200
+    mock_post = AsyncMock(return_value=mock_response)
+    mock_client = AsyncMock()
+    mock_client.post = mock_post
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.return_value = mock_client
+
+    with patch("httpx.AsyncClient", return_value=mock_cm):
+        ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
+
+    assert ok is True
+    # Verify client.post was called with the IP URL, not the original hostname
+    call_args, call_kwargs = mock_post.call_args
+    posted_url = str(call_args[0]) if call_args else ""
+    assert "93.184.216.34" in posted_url, "Request must go to resolved IP, not hostname"
+    # Verify Host header preserves original hostname
+    headers = call_kwargs.get("headers", {})
+    assert headers.get("Host") == "hooks.example.com"
+
+
+@pytest.mark.asyncio
+async def test_send_webhook_blocks_metadata_ip_resolution(monkeypatch):
+    """Webhook to a hostname resolving to metadata IP must be rejected."""
+    from backend.secuscan.notification_service import send_webhook
+
+    def fake_getaddrinfo(*args, **kwargs):
+        return [(socket.AF_INET, None, None, None, ("169.254.169.254", 80))]
+
+    monkeypatch.setattr("backend.secuscan.notification_service.socket.getaddrinfo", fake_getaddrinfo)
+    ok, err = await send_webhook("http://metadata.example.com/hook", {"event": "test"})
+    assert ok is False
+    assert "blocked" in err.lower()
+
+
+@pytest.mark.asyncio
+async def test_send_webhook_rejects_unresolvable_hostname(monkeypatch):
+    """Unresolvable webhook hostname is reported as failure."""
+    from backend.secuscan.notification_service import send_webhook
+
+    def fake_getaddrinfo(*args, **kwargs):
+        raise OSError("Name or service not known")
+
+    monkeypatch.setattr("backend.secuscan.notification_service.socket.getaddrinfo", fake_getaddrinfo)
+    ok, err = await send_webhook("https://nonexistent.example.invalid/hook", {"event": "test"})
+    assert ok is False
+    assert "could not be resolved" in err.lower()
+
+
+@pytest.mark.asyncio
+async def test_send_webhook_ssrf_independent_of_enforce_network_policy(monkeypatch):
+    """SSRF protection must work even when enforce_network_policy is False."""
+    from backend.secuscan.notification_service import send_webhook
+    from backend.secuscan.config import settings
+
+    monkeypatch.setattr(settings, "enforce_network_policy", False)
+
+    def fake_getaddrinfo(*args, **kwargs):
+        return [(socket.AF_INET, None, None, None, ("10.0.0.5", 443))]
+
+    monkeypatch.setattr("backend.secuscan.notification_service.socket.getaddrinfo", fake_getaddrinfo)
+    ok, err = await send_webhook("https://internal.example.com/hook", {"event": "test"})
+    assert ok is False
+    assert "blocked" in err.lower()
 
 
 @pytest.mark.asyncio
@@ -279,10 +387,15 @@ async def test_send_webhook_redirect_to_blocked_ip():
     mock_response.headers = {"location": "http://10.0.0.1/evil"}
     mock_post = AsyncMock(return_value=mock_response)
 
+    def fake_getaddrinfo(hostname, port=None, *args, **kwargs):
+        if "hooks.example.com" in hostname:
+            return [(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]
+        # Redirect target resolves to private IP
+        return [(socket.AF_INET, None, None, None, ("10.0.0.1", 80))]
+
     with (
         patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)),
-        patch("backend.secuscan.notification_service.socket.getaddrinfo",
-              return_value=[(socket.AF_INET, None, None, None, ("10.0.0.1", 80))]),
+        patch("backend.secuscan.notification_service.socket.getaddrinfo", side_effect=fake_getaddrinfo),
     ):
         ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
 

@@ -377,6 +377,10 @@ def validate_webhook_target(url: str) -> Tuple[bool, Optional[str]]:
     Validate webhook URL against SSRF attacks by resolving DNS and
     checking resolved IPs against blocked/private networks.
 
+    Uses the configured SECUSCAN_NOTIFICATION_BLOCKED_IP_RANGES to determine
+    which IP ranges to reject. This runs independently of enforce_network_policy
+    so webhook SSRF protection is always active.
+
     Args:
         url: Webhook URL to validate
 
@@ -392,20 +396,17 @@ def validate_webhook_target(url: str) -> Tuple[bool, Optional[str]]:
     except socket.gaierror:
         return False, "Webhook URL hostname could not be resolved"
 
-    blocked_networks = [
-        "127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
-        "169.254.0.0/16", "::1/128", "fc00::/7", "fe80::/10",
-        "100.64.0.0/10", "198.18.0.0/15",
-    ]
-
     for addr in addrs:
         try:
             ip = ipaddress.ip_address(addr[4][0])
         except ValueError:
             continue
-        for net_str in blocked_networks:
-            if ip in ipaddress.ip_network(net_str):
-                return False, f"Webhook URL resolves to blocked address ({ip})"
+        for blocked_cidr in settings.notification_blocked_ip_ranges:
+            try:
+                if ip in ipaddress.ip_network(blocked_cidr, strict=False):
+                    return False, f"Webhook URL resolves to blocked address ({ip}) in range {blocked_cidr}"
+            except ValueError:
+                continue
     return True, None
 
 

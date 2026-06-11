@@ -142,42 +142,80 @@ async def record_delivery(
 
 
 async def send_webhook(target_url: str, payload: Dict[str, Any]) -> tuple[bool, Optional[str]]:
-    """POST a redacted alert payload to a webhook URL with SSRF protections."""
-    from .config import settings
+    """POST a redacted alert payload to a webhook URL with SSRF protections.
 
-    if settings.enforce_network_policy:
-        from .network_policy import get_policy_engine
-        hostname = urlparse(target_url).hostname
-        if hostname:
+    Always resolves the target hostname and validates every returned IP against
+    the configured SECUSCAN_NOTIFICATION_BLOCKED_IP_RANGES, independent of the
+    general enforce_network_policy setting.  The actual HTTP connection uses the
+    validated IP address (not the original hostname) to prevent DNS-rebinding /
+    TOCTOU attacks where the checked IP differs from the contacted IP.
+    """
+    from .config import settings
+    from urllib.parse import urlparse, urlunparse
+
+    parsed = urlparse(target_url)
+    hostname = parsed.hostname
+    if not hostname:
+        return False, "Webhook URL has no hostname"
+
+    # Resolve and validate every address the hostname may return.
+    try:
+        addrs = socket.getaddrinfo(hostname, parsed.port or 443, proto=socket.IPPROTO_TCP)
+    except OSError:
+        return False, "Webhook URL hostname could not be resolved"
+
+    validated_ips: list[str] = []
+    for family, _stype, _proto, _cname, sockaddr in addrs:
+        ip_str = sockaddr[0]
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            continue
+        blocked = False
+        for blocked_cidr in settings.notification_blocked_ip_ranges:
             try:
-                addrs = socket.getaddrinfo(hostname, None)
-                engine = get_policy_engine()
-                for addr in addrs:
-                    ip_str = addr[4][0]
-                    allowed, reason, _ = engine.check_access(
-                        dest_ip=ip_str,
-                        plugin_id="notification_service",
-                        task_id="webhook_delivery",
-                        dest_hostname=hostname,
-                    )
-                    if not allowed:
-                        return False, f"Webhook blocked by network policy: {reason}"
-            except socket.gaierror:
-                return False, "Webhook URL hostname could not be resolved"
+                if ip in ipaddress.ip_network(blocked_cidr, strict=False):
+                    blocked = True
+                    break
+            except ValueError:
+                continue
+        if blocked:
+            return False, f"Webhook target resolves to blocked IP range: {blocked_cidr}"
+        validated_ips.append(ip_str)
+
+    if not validated_ips:
+        return False, "Webhook URL did not resolve to any valid IP addresses"
 
     timeout = httpx.Timeout(
         timeout=_WEBHOOK_TIMEOUT_SECONDS,
         connect=_WEBHOOK_CONNECT_TIMEOUT_SECONDS,
     )
 
+    # Rebuild URL with the validated IP to bind the connection to the checked
+    # address, preventing DNS rebinding attacks.
+    resolved_ip = validated_ips[0]
+    new_netloc = f"[{resolved_ip}]" if ":" in resolved_ip else resolved_ip
+    if parsed.port:
+        new_netloc = f"{new_netloc}:{parsed.port}"
+
+    ip_url = urlunparse((
+        parsed.scheme,
+        new_netloc,
+        parsed.path,
+        parsed.params,
+        parsed.query,
+        parsed.fragment,
+    ))
+
     try:
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
             response = await client.post(
-                target_url,
+                ip_url,
                 json=payload,
                 headers={
                     "Content-Type": "application/json",
                     "User-Agent": _USER_AGENT,
+                    "Host": hostname,
                 },
             )
 
@@ -188,10 +226,10 @@ async def send_webhook(target_url: str, payload: Dict[str, Any]) -> tuple[bool, 
             redirect_url = response.headers.get("location", "")
             if redirect_url:
                 from urllib.parse import urlparse
-                parsed = urlparse(redirect_url)
-                if parsed.hostname:
+                parsed_redirect = urlparse(redirect_url)
+                if parsed_redirect.hostname:
                     try:
-                        redirect_ips = socket.getaddrinfo(parsed.hostname, parsed.port or 443)
+                        redirect_ips = socket.getaddrinfo(parsed_redirect.hostname, parsed_redirect.port or 443)
                         for _family, _stype, _proto, _cname, sockaddr in redirect_ips:
                             rip = ipaddress.ip_address(sockaddr[0])
                             for blocked_cidr in settings.notification_blocked_ip_ranges:

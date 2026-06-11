@@ -214,12 +214,19 @@ def _validate_notification_target(channel_type: NotificationChannelType, target:
             raise HTTPException(status_code=400, detail=error or "Invalid webhook URL")
 
         if settings.notification_ssrf_enabled:
-            from .validation import resolve_and_validate_target
+            from .validation import resolve_and_validate_target, validate_webhook_target
             ssrf_ok, ssrf_err = resolve_and_validate_target(cleaned)
             if not ssrf_ok:
                 raise HTTPException(
                     status_code=400,
                     detail=f"Webhook target blocked by SSRF protection: {ssrf_err}"
+                )
+            # Additional independent check against notification_blocked_ip_ranges
+            target_ok, target_err = validate_webhook_target(cleaned)
+            if not target_ok:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Webhook target blocked by SSRF protection: {target_err}"
                 )
         return cleaned
 
