@@ -49,7 +49,7 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | S3 / Blob Auditor | `cloud_storage_auditor` | `vulnerability` | `safe` | `uncover` | Find misconfigured S3 buckets and exposed cloud storage. |
 | Code Analyzer (Bandit) | `code_analyzer` | `code` | `safe` | `bandit` | Static analysis for Python code. |
 | Container Scan (Trivy) | `container_scanner` | `network` | `safe` | `trivy` | Scan Docker images and registries for known vulnerabilities. |
-| Crawler | `crawler` | `robots` | `intrusive` | `katana` | Recursive web crawler for link discovery. |
+| Crawler | `crawler` | `robots` | `intrusive` | `katana` | Depth-limited Katana crawl for recursive link discovery. |
 | Directory Discovery | `dir_discovery` | `web` | `intrusive` | `ffuf` | Discover hidden directories and files on web servers. |
 | DNS Reconnaissance | `dns_enum` | `recon` | `safe` | `dnsrecon` | Enumerate DNS records and configurations. |
 | dnsx | `dnsx` | `recon` | `safe` | `dnsx` | DNS resolution and wildcard-aware validation at scale. |
@@ -64,7 +64,7 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | IaC Scanner (Checkov) | `iac_scanner` | `vulnerability` | `safe` | `python3` | Analyze Terraform and CloudFormation code for flaws. |
 | ICMP Ping | `icmp_ping` | `utils` | `safe` | `ping` | Check if a server is live and responds to ICMP Echo requests. |
 | Joomla Security Scan | `joomscan` | `vulnerability` | `intrusive` | `joomscan` | Joomla security scanner for version and common weakness discovery. |
-| Katana | `katana` | `recon` | `intrusive` | `katana` | Web crawling for endpoint and route discovery. |
+| Katana | `katana` | `recon` | `intrusive` | `katana` | Baseline Katana URL discovery using the default crawl behavior. |
 | K8s Scanner | `kubernetes_scanner` | `vulnerability` | `intrusive` | `python3` | Kubernetes cluster security assessment. |
 | Exploitation Connector | `metasploit` | `expert` | `exploit` | `msfconsole` | Metasploit connector for controlled exploit-module execution. |
 | Network Scanner | `network_scanner` | `vulnerability` | `intrusive` | `nmap` | Check for 10,000+ CVEs and server misconfigurations. |
@@ -77,17 +77,16 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | Advanced Network Recon | `scapy_recon` | `network` | `safe` | `python3` | Advanced network probing using Scapy. |
 | Secret Scanner | `secret_scanner` | `code` | `safe` | `gitleaks` | Scan directories for hardcoded secrets. |
 | Sharepoint Scanner | `sharepoint_scanner` | `vulnerability` | `intrusive` | `nuclei` | Check SharePoint for security issues, misconfigs, and more. |
-| Sitemap Generator | `sitemap_gen` | `robots` | `intrusive` | `katana` | Build complete XML sitemaps by autonomously parsing targets. |
+| Sitemap Generator | `sitemap_gen` | `robots` | `intrusive` | `katana` | Depth-focused Katana crawl for sitemap-style URL inventory. |
 | Sniper: Auto-Exploiter | `sniper` | `exploit` | `exploit` | `python3` | Validate critical CVEs by automatic exploitation. |
-| Spider | `spider` | `robots` | `intrusive` | `katana` | Advanced web spider with JS execution support. |
-| SQL Injection Feasibility | `sqli_checker` | `expert` | `intrusive` | `ghauri` | SQL injection feasibility scanner powered by Ghauri. |
-| SQLi Exploiter | `sqli_exploiter` | `exploit` | `exploit` | `sqlmap` | Exploit SQL injection in web apps to extract data. |
-| SQL Injection Testing | `sqlmap` | `web` | `exploit` | `sqlmap` | Automatic SQL injection and database takeover tool. |
+| Spider | `spider` | `robots` | `intrusive` | `katana` | JavaScript-aware Katana spider for deeper client-side route discovery. |
+| SQL Injection Feasibility | `sqli_checker` | `expert` | `intrusive` | `ghauri` | Validates potential SQL injection vulnerabilities without exploitation. |
+| SQLi Exploiter | `sqli_exploiter` | `exploit` | `exploit` | `sqlmap` | Exploitation-focused workflow for data extraction from confirmed SQL injection findings. |
+| SQL Injection Testing | `sqlmap` | `web` | `exploit` | `sqlmap` | Detects SQL injection vulnerabilities and supports controlled database enumeration. |
 | SSH Runner | `ssh_runner` | `execution` | `intrusive` | `ssh` | Remote command execution via SSH. |
-| Subdomain Finder | `subdomain-finder` | `recon` | `safe` | `subfinder` | Discover subdomains of a domain. |
-| Subdomain Scanner | `subdomain_discovery` | `recon` | `safe` | `subfinder` | Enumerate subdomains using passive sources. |
+| Subdomain Discovery (Configurable) | `subdomain_discovery` | `recon` | `safe` | `subfinder` | Comprehensive configurable subdomain enumeration via passive sources. Thread count and source coverage tunable via presets. |
 | Subdomain Takeover | `subdomain_takeover` | `exploit` | `intrusive` | `subfinder` | Discover dangling DNS entries pointing to external services. |
-| Subfinder | `subfinder` | `recon` | `safe` | `subfinder` | Fast passive subdomain enumeration. |
+| Subfinder (Quick) | `subfinder` | `recon` | `safe` | `subfinder` | Quick passive subdomain enumeration with minimal configuration — just provide a root domain. |
 | theHarvester | `theharvester` | `recon` | `safe` | `theHarvester` | OSINT collection for emails, domains, and hosts. |
 | TLS Security Analysis | `tls_inspector` | `security` | `safe` | `openssl` | Examine TLS/SSL certificates and cipher configurations. |
 | Uncover | `uncover` | `recon` | `safe` | `uncover` | Discover internet-exposed assets from external search sources. |
@@ -95,7 +94,6 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | urlfinder | `urlfinder` | `recon` | `safe` | `urlfinder` | Passive historical URL collection. |
 | Virtual Hosts Finder | `virtual-host-finder` | `recon` | `intrusive` | `ffuf` | Find multiple websites hosted on the same server. |
 | Volatility | `volatility` | `forensics` | `intrusive` | `volatility3` | Memory forensics workflow using Volatility 3 plugins. |
-| WAF Detector | `waf-detection` | `recon` | `safe` | `wafw00f` | Fingerprint the Web Application Firewall behind target app. |
 | WAF Detector | `waf_detector` | `robots` | `safe` | `wafw00f` | Automatically identify Web Application Firewalls protecting targets. |
 | Website Recon | `website-recon-2` | `recon` | `safe` | `httpx` | Fingerprint web technologies of target website. |
 | Domain Registration Lookup | `whois_lookup` | `utils` | `safe` | `python3` | Domain registration information lookup. |
@@ -103,6 +101,12 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | XSS Exploiter | `xss_exploiter` | `exploit` | `exploit` | `python3` | Exploit XSS in real-life attacks to extract cookies and data. |
 | Binary Signature Scan | `yara_scan` | `forensics` | `intrusive` | `yara` | Binary and file-system signature matching with YARA rules. |
 | DAST Web Proxy (ZAP) | `zap_scanner` | `vulnerability` | `exploit` | `python3` | Dynamic proxy spidering and payload injection. |
+
+### SQL Injection Plugin Guidance
+
+- `sqli_checker` should be used to validate whether a target appears vulnerable to SQL injection and to assess feasibility before exploitation.
+- `sqlmap` should be used for SQL injection testing and controlled database enumeration during assessment workflows.
+- `sqli_exploiter` should be used only after a vulnerability has been confirmed and exploitation or data extraction is required.
 
 ## Plugin Input Schema with Examples
 
@@ -115,44 +119,60 @@ Example schema:
 
 ```json
 {
-  "inputs": [
+  "fields": [
     {
-      "key": "target",
+      "id": "target",
       "label": "Target URL",
-      "type": "text",
+      "type": "string",
       "required": true,
-      "placeholder": "https://example.com"
+      "placeholder": "https://example.com",
+      "help": "Full URL of the target including scheme.",
+      "validation": {
+        "validation_type": "url",
+        "message": "Enter a valid URL starting with http:// or https://"
+      }
     },
     {
-      "key": "scan_type",
+      "id": "scan_type",
       "label": "Scan Type",
       "type": "select",
       "required": true,
-      "options": ["quick", "full"]
+      "options": [
+        { "value": "quick", "label": "Quick" },
+        { "value": "full",  "label": "Full"  }
+      ]
     },
     {
-      "key": "checks",
+      "id": "checks",
       "label": "Checks",
       "type": "multiselect",
       "required": false,
-      "options": ["headers", "ssl", "cookies"]
+      "options": [
+        { "value": "headers", "label": "Headers" },
+        { "value": "ssl",     "label": "SSL"     },
+        { "value": "cookies", "label": "Cookies" }
+      ]
     },
     {
-      "key": "recursive",
+      "id": "recursive",
       "label": "Enable Recursive Scan",
-      "type": "checkbox",
+      "type": "boolean",
       "required": false,
       "default": false
     },
     {
-      "key": "timeout",
+      "id": "timeout",
       "label": "Timeout (seconds)",
-      "type": "number",
+      "type": "integer",
       "required": false,
-      "default": 30
+      "default": 30,
+      "validation": {
+        "min": 1,
+        "max": 3600
+      }
     },
     {
-      "key": "wordlist_path",
+      "id": "wordlist_path",
       "label": "Wordlist Path",
       "type": "path",
       "required": false
@@ -160,6 +180,19 @@ Example schema:
   ]
 }
 ```
+
+### Field Types
+
+| Type Value | Input Rendered | Notes |
+| --- | --- | --- |
+| `string` | Text input | Use `validation.validation_type` for URL, hostname, IP, etc. |
+| `integer` | Number input | Use `validation.min` / `validation.max` for range |
+| `boolean` | Toggle / checkbox | `default` should be `true` or `false` |
+| `select` | Dropdown (single) | `options` must be `[{ "value": ..., "label": ... }]` |
+| `multiselect` | Checkbox group | Same options shape as `select` |
+| `path` | File-path text input | No validation block needed |
+
+For the full list of named validation presets (e.g. `url`, `hostname`, `domain`, `ipv4`, `port`, `cidr`) and range rules, see [plugin-validation.md](docs/plugin-validation.md).
 
 ### Required vs Optional Fields
 
@@ -171,20 +204,27 @@ Example schema:
 
 Plugin presets shall map directly to schema keys.
 
-Example preset:
+Example presets:
 
 ```json
 {
-  "preset": {
-    "target": "https://example.com",
-    "scan_type": "quick",
-    "recursive": true,
-    "timeout": 60
+  "presets": {
+    "quick": {
+      "target": "https://example.com",
+      "scan_type": "quick",
+      "recursive": false,
+      "timeout": 30
+    },
+    "thorough": {
+      "scan_type": "full",
+      "recursive": true,
+      "timeout": 300
+    }
   }
 }
 ```
 
-Each preset key shall exactly match a corresponding schema `"key"` value.
+Each preset key shall exactly match a corresponding field `"id"` value.
 
 ## Maintenance Notes
 

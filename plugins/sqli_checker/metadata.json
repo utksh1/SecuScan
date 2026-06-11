@@ -2,8 +2,8 @@
   "id": "sqli_checker",
   "name": "SQL Injection Feasibility",
   "version": "1.0.0",
-  "description": "SQL injection feasibility scanner powered by Ghauri.",
-  "long_description": "Runs a controlled SQLi feasibility check against a URL parameter and reports injectable indicators.",
+  "description": "Validates potential SQL injection vulnerabilities using Ghauri.",
+  "long_description": "Performs controlled feasibility checks to identify potential SQL injection indicators without focusing on exploitation or data extraction.",
   "category": "expert",
   "author": {
     "name": "SecuScan Contributors",
@@ -124,5 +124,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "c6fd02c9a458bf582009d1b4838384afb07a64b1a3837fb8d93f6cc3d8dd4dfa"
+  "checksum": "62ed5d57c77eaff266ec03e8aa81f2325d2e24d6e71dc2f657072b0df5c64354"
 }

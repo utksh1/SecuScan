@@ -21,7 +21,15 @@ const itemVariants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.3 } },
 }
 
-const emptySteps = [{ plugin_id: '', inputs: {} }]
+const emptySteps = [{
+  plugin_id: '',
+  inputs: {},
+  execution_context: {
+    scan_profile: 'standard',
+    validation_mode: 'proof',
+    evidence_level: 'standard',
+  },
+}]
 
 function timeAgo(iso?: string | null) {
   if (!iso) return null
@@ -32,6 +40,28 @@ function timeAgo(iso?: string | null) {
   const hrs = Math.floor(mins / 60)
   if (hrs < 24) return `${hrs}h ago`
   return `${Math.floor(hrs / 24)}d ago`
+}
+
+function formatSchedule(scheduleSeconds?: number | null) {
+  if (!scheduleSeconds || scheduleSeconds <= 0) return 'Manual'
+  if (scheduleSeconds < 60) return `Every ${scheduleSeconds}s`
+
+  const minutes = scheduleSeconds / 60
+  if (Number.isInteger(minutes) && minutes < 60) {
+    return `Every ${minutes}m`
+  }
+
+  const hours = scheduleSeconds / 3600
+  if (Number.isInteger(hours) && hours < 24) {
+    return `Every ${hours}h`
+  }
+
+  const days = scheduleSeconds / 86400
+  if (Number.isInteger(days)) {
+    return `Every ${days}d`
+  }
+
+  return `Every ${scheduleSeconds}s`
 }
 
 interface DeleteDialogProps {
@@ -79,7 +109,7 @@ interface CreateSheetProps {
 
 function CreateSheet({ onClose, onCreated }: CreateSheetProps) {
   const [name, setName] = useState('')
-  const [interval, setInterval] = useState('0 * * * *')
+  const [scheduleSeconds, setScheduleSeconds] = useState('3600')
   const [enabled, setEnabled] = useState(true)
   const [stepsJson, setStepsJson] = useState(JSON.stringify(emptySteps, null, 2))
   const [jsonError, setJsonError] = useState<string | null>(null)
@@ -99,9 +129,19 @@ function CreateSheet({ onClose, onCreated }: CreateSheetProps) {
       return
     }
 
+    const trimmedSchedule = scheduleSeconds.trim()
+    const parsedSchedule = trimmedSchedule === '' ? null : Number(trimmedSchedule)
+    if (
+      parsedSchedule !== null &&
+      (!Number.isInteger(parsedSchedule) || parsedSchedule <= 0)
+    ) {
+      setError('Schedule must be a positive whole number of seconds')
+      return
+    }
+
     setLoading(true)
     try {
-      const payload: WorkflowCreatePayload = { name, schedule_interval: interval, enabled, steps }
+      const payload: WorkflowCreatePayload = { name, schedule_seconds: parsedSchedule, enabled, steps }
       const created = await createWorkflow(payload)
       onCreated(created)
     } catch {
@@ -134,12 +174,12 @@ function CreateSheet({ onClose, onCreated }: CreateSheetProps) {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em]">Schedule (cron)</label>
+            <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em]">Schedule (seconds)</label>
             <input
-              required
-              value={interval}
-              onChange={e => setInterval(e.target.value)}
-              placeholder="0 * * * *"
+              value={scheduleSeconds}
+              onChange={e => setScheduleSeconds(e.target.value)}
+              placeholder="3600"
+              inputMode="numeric"
               className="w-full bg-charcoal-dark border-4 border-black px-4 py-3 text-sm text-silver-bright font-mono placeholder:text-silver/30 focus:outline-none focus:border-rag-red transition-colors"
             />
           </div>
@@ -211,7 +251,7 @@ function WorkflowCard({ workflow, onToggle, onRun, onDelete, running, toggling }
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1 min-w-0">
             <h3 className="text-xl font-black text-silver-bright uppercase tracking-tight truncate">{workflow.name}</h3>
-            <p className="text-[10px] font-mono text-silver/40 uppercase tracking-widest">{workflow.schedule_interval}</p>
+            <p className="text-[10px] font-mono text-silver/40 uppercase tracking-widest">{formatSchedule(workflow.schedule_seconds)}</p>
           </div>
           <span className={`shrink-0 px-2 py-1 text-[9px] font-black uppercase tracking-widest border-2 border-black ${workflow.enabled ? 'bg-rag-green text-black' : 'bg-charcoal-dark text-silver/40'}`}>
             {workflow.enabled ? 'Enabled' : 'Disabled'}
@@ -289,7 +329,7 @@ export default function Workflows() {
     setError(null)
     try {
       const data = await getWorkflows()
-      setWorkflows(Array.isArray(data) ? data : [])
+      setWorkflows(data)
     } catch {
       setError('Failed to load workflows')
     } finally {
