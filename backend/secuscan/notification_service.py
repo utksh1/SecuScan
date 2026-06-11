@@ -148,7 +148,14 @@ async def send_webhook(
     plugin_id: str = "notification",
     task_id: str = "notification",
 ) -> tuple[bool, Optional[str]]:
-    """POST a redacted alert payload to a webhook URL."""
+    """POST a redacted alert payload to a webhook URL.
+
+    Resolves ALL addresses (IPv4 and IPv6) for the destination hostname and
+    checks every one against the NetworkPolicyEngine before opening the
+    connection. The request is then sent directly to the pre-checked IP so
+    that the address used for the connection matches the address that was
+    policy-checked, closing the DNS-rebinding gap.
+    """
     try:
         parsed = urlparse(target_url)
         hostname = parsed.hostname
@@ -156,23 +163,31 @@ async def send_webhook(
         if not hostname:
             return False, f"Webhook URL has no hostname: {target_url}"
         try:
-            resolved_ip = socket.gethostbyname(hostname)
+            addr_infos = socket.getaddrinfo(hostname, port, proto=socket.IPPROTO_TCP)
         except socket.gaierror as exc:
-            return False, f"Webhook hostname could not be resolved: {exc}"
+            return False, f"Blocked by network policy: hostname could not be resolved: {exc}"
+        if not addr_infos:
+            return False, "Blocked by network policy: hostname resolved to no addresses"
         policy = get_policy_engine()
-        allowed, reason, _ = policy.check_access(
-            dest_ip=resolved_ip,
-            dest_port=port,
-            plugin_id=plugin_id,
-            task_id=task_id,
-            dest_hostname=hostname,
-        )
-        if not allowed:
-            logger.warning("Webhook to %s blocked by network policy: %s", target_url, reason)
-            return False, f"Blocked by network policy: {reason}"
+        for _family, _type, _proto, _canonname, sockaddr in addr_infos:
+            resolved_ip = sockaddr[0]
+            allowed, reason, _ = policy.check_access(
+                dest_ip=resolved_ip,
+                dest_port=port,
+                plugin_id=plugin_id,
+                task_id=task_id,
+                dest_hostname=hostname,
+            )
+            if not allowed:
+                logger.warning(
+                    "Webhook to %s blocked by network policy (resolved %s): %s",
+                    target_url, resolved_ip, reason,
+                )
+                return False, f"Blocked by network policy: {reason}"
+        checked_ip = addr_infos[0][4][0]
     except Exception as exc:
         logger.error("Network policy check failed for webhook %s: %s", target_url, exc)
-        return False, f"Network policy check error: {exc}"
+        return False, f"Blocked by network policy: policy check error: {exc}"
     try:
         async with httpx.AsyncClient(timeout=_WEBHOOK_TIMEOUT_SECONDS) as client:
             response = await client.post(
@@ -183,8 +198,6 @@ async def send_webhook(
         if response.status_code >= 400:
             return False, f"Webhook returned HTTP {response.status_code}"
         return True, None
-    except httpx.HTTPError as exc:
-        return False, str(exc)
     except httpx.HTTPError as exc:
         return False, str(exc)
 
