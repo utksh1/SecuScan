@@ -12,12 +12,13 @@ import Scans from './pages/Scans'
 import TaskDetails from './pages/TaskDetails'
 import Workflows from './pages/Workflows'
 import ApiKeySetupScreen from './components/ApiKeySetupScreen'
-
 import { ThemeProvider } from './components/ThemeContext'
 import { ToastProvider } from './components/ToastContext'
 import { I18nProvider } from './components/I18nContext'
 import { routes } from './routes'
 import { AUTH_REQUIRED_EVENT, getStoredApiKey } from './api'
+import { ShortcutProvider } from './context/ShortcutContext'
+import { ShortcutCheatsheet } from './components/ShortcutCheatsheet'
 
 export function AppRoutes() {
   return (
@@ -32,14 +33,12 @@ export function AppRoutes() {
       <Route path={routes.workflows} element={<Workflows />} />
       <Route path={routes.settings} element={<Settings />} />
       <Route path={routes.task} element={<TaskDetails />} />
-
       <Route path="*" element={<Navigate to={routes.dashboard} replace />} />
     </Routes>
   )
 }
 
 export default function App() {
-  // True when setup is needed: no key stored, or any request got a 401.
   const [needsKey, setNeedsKey] = useState(() => !getStoredApiKey())
 
   useEffect(() => {
@@ -55,14 +54,15 @@ export default function App() {
       <I18nProvider>
         <ToastProvider>
           {needsKey ? (
-            // Render ONLY the setup screen — no page routes are mounted, so no
-            // API calls can fire and spam 401 failures before the key is saved.
             <ApiKeySetupScreen onSaved={() => setNeedsKey(false)} />
           ) : (
             <Router>
-              <AppShell>
-                <AppRoutes />
-              </AppShell>
+              <ShortcutProvider>
+                <ShortcutCheatsheet />
+                <AppShell>
+                  <AppRoutes />
+                </AppShell>
+              </ShortcutProvider>
             </Router>
           )}
         </ToastProvider>
