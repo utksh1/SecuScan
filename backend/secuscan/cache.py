@@ -1,5 +1,5 @@
 """
-In-memory cache helpers for API responses.
+In-memory and Redis-based cache helpers for API responses.
 """
 
 import json
@@ -15,9 +15,15 @@ DEFAULT_MAX_ENTRIES = 10_000
 SWEEP_EVICT_FRACTION = 0.25
 OPPORTUNISTIC_SWEEP_INTERVAL = 50
 
+try:
+    from redis.asyncio import Redis, ConnectionError as RedisConnectionError
+except ImportError:
+    Redis = None
+    RedisConnectionError = Exception
+
 
 class CacheClient:
-    """In-memory dictionary based cache client with TTL, size limit, and LRU eviction."""
+    """Cache client supporting Redis with an in-memory dictionary fallback."""
 
     def __init__(self, url: Optional[str] = None, max_entries: int = DEFAULT_MAX_ENTRIES):
         self.url = url
@@ -28,11 +34,27 @@ class CacheClient:
         self._eviction_count = 0
         self._sweep_count = 0
         self._write_count = 0
+        self.client: Optional[Redis] = None
 
     async def connect(self):
-        pass
+        if self.url and Redis is not None:
+            try:
+                self.client = Redis.from_url(self.url, decode_responses=True)
+                await self.client.ping()
+                logger.info("✓ Connected to Redis cache at %s", self.url)
+            except RedisConnectionError as e:
+                logger.warning("Failed to connect to Redis, falling back to in-memory: %s", e)
+                self.client = None
+        else:
+            self.client = None
 
     async def disconnect(self):
+        if self.client:
+            try:
+                await self.client.aclose()
+            except Exception:
+                pass
+            self.client = None
         self._data.clear()
         self._expires.clear()
         self._access_order.clear()
@@ -60,7 +82,14 @@ class CacheClient:
         self._eviction_count += evict_count
 
     async def get_json(self, key: str) -> Optional[Any]:
-        """Retrieve and parse JSON from memory, respecting TTL."""
+        """Retrieve and parse JSON from cache, respecting TTL."""
+        if self.client:
+            try:
+                val = await self.client.get(key)
+                return json.loads(val) if val is not None else None
+            except Exception as e:
+                logger.warning("Redis get_json error (falling back to in-memory): %s", e)
+
         now = time.time()
         expiry = self._expires.get(key)
 
@@ -76,12 +105,20 @@ class CacheClient:
         return self._data.get(key)
 
     async def set_json(self, key: str, value: Any, ttl: Optional[int] = None):
-        """Store value in memory with optional TTL."""
+        """Store value in cache with optional TTL."""
+        actual_ttl = ttl or settings.cache_ttl_seconds
+
+        if self.client:
+            try:
+                await self.client.set(key, json.dumps(value), ex=actual_ttl)
+                return
+            except Exception as e:
+                logger.warning("Redis set_json error (falling back to in-memory): %s", e)
+
         if len(self._data) >= self.max_entries and key not in self._data:
             self._evict_lru()
 
         self._data[key] = value
-        actual_ttl = ttl or settings.cache_ttl_seconds
         self._expires[key] = time.time() + actual_ttl
         self._access_order[key] = time.time()
         self._write_count += 1
@@ -91,6 +128,15 @@ class CacheClient:
 
     async def delete_prefix(self, prefix: str):
         """Delete all keys starting with prefix."""
+        if self.client:
+            try:
+                keys = await self.client.keys(f"{prefix}*")
+                if keys:
+                    await self.client.delete(*keys)
+                return
+            except Exception as e:
+                logger.warning("Redis delete_prefix error (falling back to in-memory): %s", e)
+
         to_delete = [k for k in self._data.keys() if k.startswith(prefix)]
         for k in to_delete:
             self._data.pop(k, None)
@@ -128,3 +174,4 @@ async def get_cache() -> CacheClient:
     if cache is None:
         raise RuntimeError("Cache not initialized")
     return cache
+
