@@ -29,15 +29,15 @@ def test_generate_scan_cache_key_with_deps(temp_repo):
     dep_file = os.path.join(temp_repo, "package-lock.json")
     with open(dep_file, "w") as f:
         f.write("npm-deps-v1")
-        
+
     target_hash, dep_hash, key = generate_scan_cache_key("test_plugin", temp_repo)
     assert len(target_hash) == 64
     assert dep_hash != "no_deps"
-    
+
     # Modify package-lock.json -> dependency hash changes!
     with open(dep_file, "w") as f:
         f.write("npm-deps-v2")
-        
+
     target_hash_2, dep_hash_2, key_2 = generate_scan_cache_key("test_plugin", temp_repo)
     assert dep_hash != dep_hash_2
     assert key != key_2
@@ -46,7 +46,7 @@ def test_generate_scan_cache_key_with_deps(temp_repo):
 async def test_execute_task_cache_hit(temp_repo):
     # Initialize in-memory cache
     await init_cache()
-    
+
     # We will mock the database and task run details
     mock_db = AsyncMock()
     mock_db.fetchone = AsyncMock(return_value={
@@ -56,13 +56,13 @@ async def test_execute_task_cache_hit(temp_repo):
         "execution_context_json": "{}",
         "safe_mode": False
     })
-    
+
     executor = TaskExecutor()
-    
+
     # Pre-populate cache for this target
     target_hash, dep_hash, cache_key = generate_scan_cache_key("test_plugin", temp_repo)
     cache_client = await get_cache()
-    
+
     cached_data = {
         "status": TaskStatus.COMPLETED.value,
         "duration_seconds": 1.5,
@@ -81,22 +81,22 @@ async def test_execute_task_cache_hit(temp_repo):
         }
     }
     await cache_client.set_json(cache_key, cached_data)
-    
+
     # We mock internal helper methods
     executor._persist_finding = AsyncMock(return_value={"id": "finding_1"})
     executor._persist_result_resources = AsyncMock()
     executor._dispatch_task_notifications = AsyncMock()
     executor._invalidate_cached_views = AsyncMock()
-    
+
     with patch("backend.secuscan.executor.get_db", return_value=mock_db), \
          patch("backend.secuscan.executor.get_plugin_manager") as mock_pm:
-        
+
         mock_plugin = MagicMock()
         mock_plugin.name = "Test Plugin"
         mock_pm.return_value.get_plugin.return_value = mock_plugin
-        
+
         await executor.execute_task("task_id_123", bypass_cache=False)
-        
+
         # Verify db was updated with cached data
         mock_db.execute.assert_any_call(
             """
