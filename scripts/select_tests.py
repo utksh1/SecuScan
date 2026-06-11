@@ -6,25 +6,40 @@ import subprocess
 
 
 def get_changed_files():
-    """
-    Attempts to detect changed files using git diff.
-    """
     base_ref = os.environ.get("GITHUB_BASE_REF", "main")
-    # Commands to try in order of preference
+
     commands = [
         ["git", "diff", "--name-only", f"origin/{base_ref}...HEAD"],
         ["git", "diff", "--name-only", f"{base_ref}...HEAD"],
         ["git", "diff", "--name-only", "HEAD~1"],
         ["git", "diff", "--name-only"],
     ]
+
+    had_error = False
+
     for cmd in commands:
         try:
-            res = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            files = [line.strip() for line in res.stdout.splitlines() if line.strip()]
-            if files:
-                return files
-        except Exception:
-            continue
+            res = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+            files = [
+                line.strip()
+                for line in res.stdout.splitlines()
+                if line.strip()
+            ]
+
+            return files
+
+        except subprocess.CalledProcessError:
+            had_error = True
+
+    if had_error:
+        print("Warning: Unable to determine changed files.")
+
     return []
 
 
@@ -108,7 +123,10 @@ def select_tests(files, event_name="push"):
         - Still run full suite for shared config changes
     """
     if not files:
-        # Empty file list: fall back to running full suite to be safe
+        print(
+            "Warning: No changed files detected. "
+            "Running full test suite as a safety fallback."
+        )
         return True, True
 
     # CRITICAL: For pull requests, always run full suite
@@ -151,7 +169,7 @@ def write_outputs(run_backend, run_frontend):
     frontend_str = "true" if run_frontend else "false"
 
     if output_file:
-        with open(output_file, "a") as f:
+        with open(output_file, "a", encoding="utf-8") as f:
             f.write(f"run_backend={backend_str}\n")
             f.write(f"run_frontend={frontend_str}\n")
         print(
