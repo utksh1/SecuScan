@@ -10,6 +10,7 @@ import logging
 import asyncio
 import socket
 from typing import List, Tuple, Optional, Dict, Any
+from urllib.parse import urlparse
 from enum import Enum
 from dataclasses import dataclass, asdict
 from datetime import datetime
@@ -339,6 +340,44 @@ class NetworkPolicyEngine:
             entries = [e for e in entries if e.action == action]
 
         return entries[-limit:]  # Return most recent N
+
+    def validate_egress_target(self, host: str, port: int = 443) -> Tuple[bool, str]:
+        """Validate an outbound webhook/egress destination against network policy.
+
+        Args:
+            host: Hostname to validate
+            port: Destination port
+
+        Returns:
+            Tuple of (allowed, reason)
+        """
+        target_host = host
+        if "://" in target_host:
+            try:
+                parsed = urlparse(target_host)
+                if parsed.hostname:
+                    target_host = parsed.hostname
+            except Exception:
+                pass
+
+        try:
+            ip = ipaddress.ip_address(target_host)
+        except ValueError:
+            try:
+                resolved = socket.gethostbyname(target_host)
+                ip = ipaddress.ip_address(resolved)
+            except Exception:
+                return False, f"Could not resolve host: {target_host}"
+
+        for net, policy in self.denylist:
+            if not self._is_expired(policy) and ip in net:
+                return False, f"Destination blocked by policy: {policy.reason}"
+
+        for net, policy in self.allowlist:
+            if not self._is_expired(policy) and ip in net:
+                return True, ""
+
+        return False, "Destination denied by default policy"
 
     def export_audit_log(self, format: str = "json") -> str:
         """
