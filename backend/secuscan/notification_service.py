@@ -142,42 +142,49 @@ async def record_delivery(
     return history_id
 
 
-async def send_webhook(target_url: str, payload: Dict[str, Any]) -> tuple[bool, Optional[str]]:
+async def send_webhook(
+    target_url: str,
+    payload: Dict[str, Any],
+    plugin_id: str = "notification",
+    task_id: str = "notification",
+) -> tuple[bool, Optional[str]]:
     """POST a redacted alert payload to a webhook URL."""
     try:
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
+        parsed = urlparse(target_url)
+        hostname = parsed.hostname
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        if not hostname:
+            return False, f"Webhook URL has no hostname: {target_url}"
+        try:
+            resolved_ip = socket.gethostbyname(hostname)
+        except socket.gaierror as exc:
+            return False, f"Webhook hostname could not be resolved: {exc}"
+        policy = get_policy_engine()
+        allowed, reason, _ = policy.check_access(
+            dest_ip=resolved_ip,
+            dest_port=port,
+            plugin_id=plugin_id,
+            task_id=task_id,
+            dest_hostname=hostname,
+        )
+        if not allowed:
+            logger.warning("Webhook to %s blocked by network policy: %s", target_url, reason)
+            return False, f"Blocked by network policy: {reason}"
+    except Exception as exc:
+        logger.error("Network policy check failed for webhook %s: %s", target_url, exc)
+        return False, f"Network policy check error: {exc}"
+    try:
+        async with httpx.AsyncClient(timeout=_WEBHOOK_TIMEOUT_SECONDS) as client:
             response = await client.post(
                 target_url,
                 json=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "User-Agent": _USER_AGENT,
-                },
+                headers={"Content-Type": "application/json", "User-Agent": _USER_AGENT},
             )
-
         if response.status_code >= 400:
             return False, f"Webhook returned HTTP {response.status_code}"
-
-        if response.status_code in (301, 302, 303, 307, 308):
-            redirect_url = response.headers.get("location", "")
-            if redirect_url:
-                from urllib.parse import urlparse
-                parsed = urlparse(redirect_url)
-                if parsed.hostname:
-                    try:
-                        redirect_ips = socket.getaddrinfo(parsed.hostname, parsed.port or 443)
-                        for _family, _stype, _proto, _cname, sockaddr in redirect_ips:
-                            rip = ipaddress.ip_address(sockaddr[0])
-                            for blocked_cidr in settings.notification_blocked_ip_ranges:
-                                try:
-                                    if rip in ipaddress.ip_network(blocked_cidr, strict=False):
-                                        return False, f"Redirect to blocked IP range: {blocked_cidr}"
-                                except ValueError:
-                                    continue
-                    except OSError:
-                        return False, f"Could not resolve redirect target: {redirect_url}"
-
         return True, None
+    except httpx.HTTPError as exc:
+        return False, str(exc)
     except httpx.HTTPError as exc:
         return False, str(exc)
 
