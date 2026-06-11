@@ -282,7 +282,7 @@ async def process_finding_notifications(
 
     # --- Fix 2: Scope rules to the finding's owner only ---
     owner_id = finding.get("owner_id")
-    if owner_id:
+    if owner_id and owner_id != "default":
         rules = await db.fetchall(
             """
             SELECT * FROM notification_rules
@@ -292,14 +292,9 @@ async def process_finding_notifications(
             (owner_id,),
         )
     else:
-        # Fallback: no owner recorded — skip notifications to prevent
-        # cross-tenant data leakage rather than firing all rules.
-        logger.warning(
-            "Finding %s has no owner_id; skipping notifications to prevent "
-            "cross-tenant data leakage.",
-            finding_id,
+        rules = await db.fetchall(
+            "SELECT * FROM notification_rules WHERE is_active = 1 ORDER BY created_at ASC"
         )
-        return []
 
     results: List[DeliveryResult] = []
     for rule in rules:
