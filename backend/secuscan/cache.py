@@ -174,4 +174,3 @@ async def get_cache() -> CacheClient:
     if cache is None:
         raise RuntimeError("Cache not initialized")
     return cache
-
