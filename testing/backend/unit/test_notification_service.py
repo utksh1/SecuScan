@@ -1,7 +1,9 @@
 import json
+import socket
 import uuid
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 import pytest_asyncio
 
@@ -210,3 +212,79 @@ async def test_email_placeholder_records_success(test_db):
     assert len(results) == 1
     assert results[0].status == NotificationDeliveryStatus.SUCCESS
     assert results[0].skipped is False
+
+
+def _mock_async_client(mock_post):
+    """Helper to mock httpx.AsyncClient as an async context manager."""
+    mock_client = AsyncMock()
+    mock_client.post = mock_post
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.return_value = mock_client
+    return mock_cm
+
+
+@pytest.mark.asyncio
+async def test_send_webhook_success():
+    """Normal webhook delivery succeeds."""
+    from backend.secuscan.notification_service import send_webhook
+
+    mock_response = AsyncMock()
+    mock_response.status_code = 200
+    mock_post = AsyncMock(return_value=mock_response)
+
+    with patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)):
+        ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
+
+    assert ok is True
+    assert err is None
+
+
+@pytest.mark.asyncio
+async def test_send_webhook_http_error():
+    """Webhook returning >=400 is reported as failure."""
+    from backend.secuscan.notification_service import send_webhook
+
+    mock_response = AsyncMock()
+    mock_response.status_code = 500
+    mock_post = AsyncMock(return_value=mock_response)
+
+    with patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)):
+        ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
+
+    assert ok is False
+    assert "500" in err
+
+
+@pytest.mark.asyncio
+async def test_send_webhook_http_exception():
+    """Transport-level errors are caught and returned as failure."""
+    from backend.secuscan.notification_service import send_webhook
+
+    mock_post = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
+
+    with patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)):
+        ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
+
+    assert ok is False
+    assert "Connection refused" in err
+
+
+@pytest.mark.asyncio
+async def test_send_webhook_redirect_to_blocked_ip():
+    """Redirect to a private IP (SSRF) is rejected after delivery."""
+    from backend.secuscan.notification_service import send_webhook
+
+    mock_response = AsyncMock()
+    mock_response.status_code = 302
+    mock_response.headers = {"location": "http://10.0.0.1/evil"}
+    mock_post = AsyncMock(return_value=mock_response)
+
+    with (
+        patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)),
+        patch("backend.secuscan.notification_service.socket.getaddrinfo",
+              return_value=[(socket.AF_INET, None, None, None, ("10.0.0.1", 80))]),
+    ):
+        ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
+
+    assert ok is False
+    assert "blocked" in err.lower()
