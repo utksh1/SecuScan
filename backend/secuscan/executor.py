@@ -515,7 +515,7 @@ class TaskExecutor:
 
                 # Persist findings and reports to database for the new task
                 await self._broadcast_phase(task_id, ScanPhase.PARSING.value)
-                
+
                 findings_data: List[Dict[str, Any]] = []
                 for finding in structured_data.get("findings", []):
                     findings_data.append(
@@ -576,7 +576,7 @@ class TaskExecutor:
                 await self._broadcast_phase(task_id, ScanPhase.FINISHED.value)
                 await self._broadcast(task_id, "status", status)
                 await self._invalidate_cached_views()
-                
+
                 await db.log_audit(
                     "task_completed",
                     f"Task completed from cache (duration: {duration:.2f}s)",
