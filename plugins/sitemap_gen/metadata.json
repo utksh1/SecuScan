@@ -2,15 +2,15 @@
   "id": "sitemap_gen",
   "name": "Sitemap Generator",
   "version": "1.0.0",
-  "description": "Build complete XML sitemaps by autonomously parsing targets.",
-  "long_description": "Build complete XML sitemaps by autonomously parsing targets.",
+  "description": "Depth-focused Katana crawl for sitemap-style URL inventory.",
+  "long_description": "Runs Katana with a deeper default crawl depth to produce a sitemap-style inventory of discovered URLs. This does not generate XML; it returns discovered URLs for cataloging target surface area.",
   "category": "robots",
   "author": {
     "name": "SecuScan Contributors",
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udee0\ufe0f",
+  "icon": "🛠️",
   "engine": {
     "type": "cli",
     "binary": "katana"
@@ -70,5 +70,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "ccef2e01d3b41f185a19fc937b08c32c343cc05c4b5160fe3bd1e97ab01a1f9d"
+  "checksum": "e65c7ee56ef634d35f5cd13877ab2d69858e102398361acd8fd09a17f110f349"
 }

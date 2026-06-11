@@ -1,0 +1,3 @@
+[*] Target: secuscan.in
+contact@secuscan.in
+api.secuscan.in found alive

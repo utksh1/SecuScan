@@ -82,15 +82,14 @@ def test_api_scanner_has_required_target_field():
     assert fields["target"]["required"] is True
 
 
-def test_api_scanner_target_field_requires_http_url():
-    """The 'target' field must have a validation pattern requiring http(s)://."""
+def test_api_scanner_target_field_uses_url_validation_preset():
+    """The 'target' field must use the named url validation preset (issue #537)."""
     data = json.loads((PLUGIN_DIR / "metadata.json").read_text(encoding="utf-8"))
     fields = {f["id"]: f for f in data["fields"]}
     target_validation = fields["target"].get("validation", {})
-    pattern = target_validation.get("pattern", "")
-    assert "https?" in pattern or "http" in pattern, (
-        "target field must validate for HTTP(S) URL format"
-    )
+    assert target_validation.get("validation_type") == "url"
+    assert target_validation.get("message") == "Must be a valid HTTP(S) URL"
+    assert "pattern" not in target_validation
 
 
 def test_api_scanner_output_parser_is_custom():
