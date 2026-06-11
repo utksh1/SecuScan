@@ -1,17 +1,13 @@
-import base64
-import os
 import uuid
+
 import pytest
+from fastapi.testclient import TestClient
 
-from fastapi import HTTPException
-
+from backend.secuscan import auth as auth_module
 from backend.secuscan.config import settings
 from backend.secuscan.database import init_db
-from backend.secuscan.vault import VaultCrypto
 from backend.secuscan.main import app
-from backend.secuscan import auth as auth_module
-
-from fastapi.testclient import TestClient
+from backend.secuscan.vault import VaultCrypto
 
 
 @pytest.fixture
@@ -40,12 +36,7 @@ def client(tmp_path, monkeypatch):
 
 
 
-def _insert_vault_secret(db, name: str, plaintext: str):
-    prev_crypto = VaultCrypto(settings.resolved_vault_key_previous, previous_keys=None, current_version=1)
-    blob = prev_crypto.encrypt(plaintext)
-    secret_id = str(uuid.uuid4())
 
-    return db, secret_id, blob
 
 
 def test_rotate_requires_admin_key(tmp_path, monkeypatch):
@@ -119,4 +110,6 @@ def test_rotate_succeeds_with_admin_key(tmp_path, monkeypatch):
         assert r.status_code == 200
         body = r.json()
         assert body["rotated"] == 1
+
+
 

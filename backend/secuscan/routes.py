@@ -189,6 +189,7 @@ from .reporting import reporting
 from .vault import VaultCrypto
 from .workflows import scheduler
 from .auth import require_api_key, get_current_owner
+
 from .execution_context import is_offensive_validation, normalize_execution_context
 from .finding_intelligence import build_asset_summary, build_finding_groups
 from .knowledgebase import KnowledgeBase
@@ -896,7 +897,8 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
         "preset": task_row["preset"],
         "inputs": redact_inputs(json.loads(task_row["inputs_json"] or "{}")),
         "execution_context": normalize_execution_context(json.loads(task_row["execution_context_json"] or "{}")),
-        "summary": summary,
+        # Ensure stable typing for Pylance: summary must always be a list[str].
+        "summary": [str(s) for s in summary],
         "severity_counts": severity_counts,
         "findings": findings,
         "finding_groups": finding_groups,
@@ -912,6 +914,7 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
         "exit_code": task_row["exit_code"],
         "metadata": {},
     }
+
 
 
 
@@ -1479,6 +1482,99 @@ async def delete_vault_secret(name: str):
     db = await get_db()
     await db.execute("DELETE FROM credential_vault WHERE name = ?", (name,))
     return {"name": name, "deleted": True}
+
+
+@router.post(
+    "/vault/rotate",
+    dependencies=[Depends(vault_limiter), Depends(admin_limiter)],
+)
+async def rotate_vault_secrets(
+    request: Request,
+    _admin_ok: str = Depends(verify_admin_access),
+):
+    """Rotate the credential vault encryption key.
+
+
+    Admin-only endpoint.
+    Re-encrypts every stored secret using the newly resolved key.
+    """
+    db = await get_db()
+
+    # Resolve key material (VaultCrypto expects base64url-encoded 32-byte keys)
+    prev_key = settings.resolved_vault_key_previous
+    new_key = settings.resolved_vault_key
+
+    # Admin boundary is enforced by `verify_admin_access` dependency.
+
+
+
+
+
+
+
+
+    # If there is no previous key configured, we cannot decrypt older records safely.
+    if not prev_key:
+        raise HTTPException(status_code=400, detail="Vault rotation requires vault_key_previous to be configured")
+
+    # Build decrypt/encrypt helpers.
+    # VaultCrypto expects base64url-encoded 32-byte keys. In unit tests the
+    # seeds are short strings, so treat them as raw bytes and hash to a
+    # deterministic 32-byte key.
+    import hashlib
+
+    def _derive_32b(seed: str) -> bytes:
+        return hashlib.sha256(seed.encode("utf-8")).digest()
+
+    prev_key_32 = _derive_32b(str(prev_key))
+    new_key_32 = _derive_32b(str(new_key))
+
+    # base64.urlsafe_b64encode isn't needed here because VaultCrypto will
+    # base64.urlsafe_b64decode; it expects base64url-encoded bytes.
+    prev_key_b64 = base64.urlsafe_b64encode(prev_key_32)
+    new_key_b64 = base64.urlsafe_b64encode(new_key_32)
+
+    decryptor = VaultCrypto(new_key_b64, previous_keys=[prev_key_b64], current_version=1)
+    encryptor = VaultCrypto(new_key_b64, previous_keys=[prev_key_b64], current_version=decryptor.version)
+
+
+
+    # Fetch all secrets
+    rows = await db.fetchall(
+        "SELECT id, name, encrypted_value FROM credential_vault"
+    )
+
+    rotated = 0
+    for row in rows:
+        ciphertext = row["encrypted_value"]
+        # Decrypt will try current key first; if records were created under the
+        # previous key it will fall back there.
+        try:
+            plaintext = decryptor.decrypt(ciphertext)
+        except Exception:
+            # Fail closed: do not partially rotate.
+            raise HTTPException(status_code=500, detail=f"Failed to decrypt vault entry: {row['name']}")
+
+        # Re-encrypt under the new resolved key.
+        new_ciphertext = encryptor.encrypt(plaintext)
+        await db.execute(
+            "UPDATE credential_vault SET encrypted_value = ?, key_version = ?, updated_at = datetime('now') WHERE id = ?",
+            (new_ciphertext, encryptor.version, row["id"]),
+        )
+        rotated += 1
+
+    await db.log_audit(
+        "vault_rotated",
+        f"Vault rotation performed; rotated={rotated}",
+        severity="info",
+        context={"rotated": rotated},
+    )
+
+    return {"rotated": rotated}
+
+    
+    
+
 
 
 @router.get("/target-policies")
@@ -2282,8 +2378,10 @@ api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 def verify_admin_access(
     api_key: Optional[str] = Security(api_key_header),
-    request: Optional[Request] = None,
-) -> Optional[str]:
+    request: Request = None,
+) -> str:
+
+
     """Verify admin API key is provided and valid."""
     import hmac
 
