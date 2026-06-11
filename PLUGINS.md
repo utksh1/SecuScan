@@ -94,7 +94,6 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | urlfinder | `urlfinder` | `recon` | `safe` | `urlfinder` | Passive historical URL collection. |
 | Virtual Hosts Finder | `virtual-host-finder` | `recon` | `intrusive` | `ffuf` | Find multiple websites hosted on the same server. |
 | Volatility | `volatility` | `forensics` | `intrusive` | `volatility3` | Memory forensics workflow using Volatility 3 plugins. |
-| WAF Detector | `waf-detection` | `recon` | `safe` | `wafw00f` | Fingerprint the Web Application Firewall behind target app. |
 | WAF Detector | `waf_detector` | `robots` | `safe` | `wafw00f` | Automatically identify Web Application Firewalls protecting targets. |
 | Website Recon | `website-recon-2` | `recon` | `safe` | `httpx` | Fingerprint web technologies of target website. |
 | Domain Registration Lookup | `whois_lookup` | `utils` | `safe` | `python3` | Domain registration information lookup. |
