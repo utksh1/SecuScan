@@ -1,3 +1,5 @@
+import React, { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -57,9 +59,12 @@ const itemVariants = {
 
 export default function Scans() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("all");
+  
+  const rawFilter = searchParams.get("status");
+  const filter = rawFilter && ["running", "completed", "failed", "cancelled"].includes(rawFilter) ? rawFilter : "all";
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [page, setPage] = useState(1);
@@ -163,7 +168,14 @@ export default function Scans() {
   }
 
   function handleFilterChange(value: string) {
-    setFilter(value);
+    setSearchParams((prev) => {
+      if (value === "all") {
+        prev.delete("status");
+      } else {
+        prev.set("status", value);
+      }
+      return prev;
+    });
     setPage(1);
   }
 
