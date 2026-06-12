@@ -1,7 +1,17 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+
+import {
+  API_BASE,
+  deleteTask,
+  clearAllTasks,
+  bulkDeleteTasks,
+  getTaskResult,
+} from "../api";
+
 import { API_BASE, deleteTask, clearAllTasks, bulkDeleteTasks, startTask, ExecutionContext } from "../api";
+
 import { routePath } from "../routes";
 import {
   parseDateSafe,
@@ -10,6 +20,7 @@ import {
 } from "../utils/date";
 import { ConfirmModal } from "../components/ConfirmModal";
 import Pagination from "../components/Pagination";
+import { ReportDiffView } from "../components/ReportDiffView";
 
 interface Task {
   task_id: string;
@@ -64,6 +75,12 @@ export default function Scans() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [comparing, setComparing] = useState(false);
+  const [comparisonData, setComparisonData] = useState<{
+    oldFindings: any[];
+    newFindings: any[];
+  } | null>(null);
+  const [comparisonLoading, setComparisonLoading] = useState(false);
   const PAGE_LIMIT = 10;
 
   // Modal state for confirm dialogs
@@ -247,6 +264,41 @@ export default function Scans() {
         }
       },
     });
+  }
+
+  async function handleCompare() {
+    if (selectedIds.length !== 2) return;
+
+    const selectedTasks = tasks.filter((t) => selectedIds.includes(t.task_id));
+    const completedTasks = selectedTasks.filter(
+      (t) => t.status === "completed",
+    );
+
+    if (completedTasks.length !== 2) {
+      alert("Both selected scans must be completed to compare findings.");
+      return;
+    }
+
+    setComparisonLoading(true);
+    setComparing(true);
+
+    try {
+      const [oldResult, newResult] = await Promise.all([
+        getTaskResult(selectedIds[0]),
+        getTaskResult(selectedIds[1]),
+      ]);
+
+      setComparisonData({
+        oldFindings: oldResult.findings || [],
+        newFindings: newResult.findings || [],
+      });
+    } catch (err) {
+      console.error("Failed to load comparison data:", err);
+      alert("Failed to load scan results for comparison.");
+      setComparing(false);
+    } finally {
+      setComparisonLoading(false);
+    }
   }
 
   function toggleSelection(taskId: string, e: React.MouseEvent) {
@@ -670,6 +722,17 @@ export default function Scans() {
                 >
                   Cancel
                 </button>
+                {selectedIds.length === 2 && (
+                  <button
+                    onClick={handleCompare}
+                    className="bg-rag-amber text-black px-8 py-3 text-[10px] font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3 italic"
+                  >
+                    Compare_Scans
+                    <span className="material-symbols-outlined text-sm">
+                      compare_arrows
+                    </span>
+                  </button>
+                )}
                 <button
                   onClick={handleBulkDelete}
                   className="bg-rag-red text-black px-8 py-3 text-[10px] font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3 italic"
@@ -680,6 +743,52 @@ export default function Scans() {
                   </span>
                 </button>
               </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Comparison View */}
+      <AnimatePresence>
+        {comparing && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] overflow-y-auto p-6 md:p-12"
+          >
+            <div className="max-w-6xl mx-auto">
+              <div className="flex justify-between items-center mb-8">
+                <h2 className="text-4xl font-black text-silver-bright uppercase tracking-tighter italic">
+                  Scan Comparison
+                </h2>
+                <button
+                  onClick={() => {
+                    setComparing(false);
+                    setComparisonData(null);
+                    setSelectedIds([]);
+                  }}
+                  className="bg-rag-red text-black px-6 py-3 text-[10px] font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3 italic"
+                >
+                  Close_Comparison
+                  <span className="material-symbols-outlined text-sm">
+                    close
+                  </span>
+                </button>
+              </div>
+
+              {comparisonLoading ? (
+                <div className="border-4 border-dashed border-silver-bright/10 bg-charcoal/40 p-16 text-center">
+                  <p className="text-sm font-mono uppercase tracking-widest text-silver/40 animate-pulse">
+                    Loading comparison data...
+                  </p>
+                </div>
+              ) : comparisonData ? (
+                <ReportDiffView
+                  oldScanFindings={comparisonData.oldFindings}
+                  newScanFindings={comparisonData.newFindings}
+                />
+              ) : null}
             </div>
           </motion.div>
         )}
