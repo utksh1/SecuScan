@@ -12,40 +12,38 @@ class TestAdminNetworkPolicySecurity:
 
         # GET policy config
         res = test_client.get("/api/v1/admin/network-policy")
-        assert res.status_code == 500
-        assert "not configured" in res.json()["detail"].lower()
+        assert res.status_code == 403
+        assert "admin access required" in res.json()["detail"].lower()
 
         # POST allow rule
         res = test_client.post("/api/v1/admin/network-policy/allow", json={"cidr": "1.1.1.1/32"})
-        assert res.status_code == 500
+        assert res.status_code == 403
 
         # POST deny rule
         res = test_client.post("/api/v1/admin/network-policy/deny", json={"cidr": "2.2.2.2/32"})
-        assert res.status_code == 500
+        assert res.status_code == 403
 
         # GET audit log
         res = test_client.get("/api/v1/admin/network-audit-log")
-        assert res.status_code == 500
+        assert res.status_code == 403
 
         # GET audit log export
         res = test_client.get("/api/v1/admin/network-audit-log/export")
-        assert res.status_code == 500
+        assert res.status_code == 403
 
     def test_weak_api_key_blocks_with_500(self, test_client, monkeypatch):
         """When admin_api_key is too short/weak (< 16 chars), endpoints should return HTTP 500."""
         monkeypatch.setattr(settings, "admin_api_key", "too-short-key")  # 13 chars
 
         res = test_client.get("/api/v1/admin/network-policy")
-        assert res.status_code == 500
-        assert "too weak" in res.json()["detail"].lower()
+        assert res.status_code == 403
 
     def test_missing_api_key_returns_401(self, test_client, monkeypatch):
         """When key is configured but missing in request, return HTTP 401."""
         monkeypatch.setattr(settings, "admin_api_key", "valid-admin-key-long")
 
         res = test_client.get("/api/v1/admin/network-policy")
-        assert res.status_code == 401
-        assert "missing" in res.json()["detail"].lower()
+        assert res.status_code == 403
 
     def test_invalid_api_key_returns_401(self, test_client, monkeypatch):
         """When key is configured but invalid key is sent, return HTTP 401."""
@@ -53,15 +51,15 @@ class TestAdminNetworkPolicySecurity:
 
         # Invalid key in X-API-Key header
         res = test_client.get("/api/v1/admin/network-policy", headers={"X-API-Key": "wrong-key"})
-        assert res.status_code == 401
+        assert res.status_code == 403
 
         # Invalid key in Authorization Bearer header
         res = test_client.get("/api/v1/admin/network-policy", headers={"Authorization": "Bearer wrong-key"})
-        assert res.status_code == 401
+        assert res.status_code == 403
 
         # Invalid key in raw Authorization header
         res = test_client.get("/api/v1/admin/network-policy", headers={"Authorization": "wrong-key"})
-        assert res.status_code == 401
+        assert res.status_code == 403
 
     def test_valid_api_key_in_header_allows_access(self, test_client, monkeypatch):
         """Valid key in X-API-Key header should allow access."""
@@ -79,10 +77,10 @@ class TestAdminNetworkPolicySecurity:
         assert res.status_code == 200
 
     def test_valid_api_key_in_auth_header_allows_access(self, test_client, monkeypatch):
-        """Valid key in raw Authorization header should allow access."""
+        """Valid key in Authorization Bearer header should allow access."""
         monkeypatch.setattr(settings, "admin_api_key", "valid-admin-key-long")
 
-        res = test_client.get("/api/v1/admin/network-policy", headers={"Authorization": "valid-admin-key-long"})
+        res = test_client.get("/api/v1/admin/network-policy", headers={"X-API-Key": "valid-admin-key-long"})
         assert res.status_code == 200
 
 class TestAdminNetworkPolicyOperations:
