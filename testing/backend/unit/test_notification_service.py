@@ -234,7 +234,9 @@ async def test_send_webhook_success():
 
     mock_policy = MagicMock()
     mock_policy.check_access.return_value = (True, "allowed", None)
-    with patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)),          patch("backend.secuscan.notification_service.socket.getaddrinfo", return_value=[(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]),          patch("backend.secuscan.notification_service.get_policy_engine", return_value=mock_policy):
+    with patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)), \
+         patch("backend.secuscan.notification_service.socket.getaddrinfo", return_value=[(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]), \
+         patch("backend.secuscan.notification_service.get_policy_engine", return_value=mock_policy):
         ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
 
     assert ok is True
@@ -252,7 +254,9 @@ async def test_send_webhook_http_error():
 
     mock_policy = MagicMock()
     mock_policy.check_access.return_value = (True, "allowed", None)
-    with patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)),          patch("backend.secuscan.notification_service.socket.getaddrinfo", return_value=[(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]),          patch("backend.secuscan.notification_service.get_policy_engine", return_value=mock_policy):
+    with patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)), \
+         patch("backend.secuscan.notification_service.socket.getaddrinfo", return_value=[(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]), \
+         patch("backend.secuscan.notification_service.get_policy_engine", return_value=mock_policy):
         ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
 
     assert ok is False
@@ -268,7 +272,9 @@ async def test_send_webhook_http_exception():
 
     mock_policy = MagicMock()
     mock_policy.check_access.return_value = (True, "allowed", None)
-    with patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)),          patch("backend.secuscan.notification_service.socket.getaddrinfo", return_value=[(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]),          patch("backend.secuscan.notification_service.get_policy_engine", return_value=mock_policy):
+    with patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)), \
+         patch("backend.secuscan.notification_service.socket.getaddrinfo", return_value=[(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]), \
+         patch("backend.secuscan.notification_service.get_policy_engine", return_value=mock_policy):
         ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
 
     assert ok is False
