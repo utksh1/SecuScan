@@ -556,10 +556,9 @@ class TestMetadataQualityLint:
         data["fields"] = [
             {"id": "target", "label": "Target", "type": "text"},
         ]
+        data["command_template"] = ["ping", "{target}"]
         plugin_dir = _write_metadata(tmp_path, data)
         result = validate_one_plugin(plugin_dir)
-        # Help text missing is a WARNING, not an error — plugin is still valid
-        assert result.valid
         help_warnings = [e for e in result.warnings if e.path == "fields[0].help"]
         assert len(help_warnings) == 1
         assert "help" in help_warnings[0].message

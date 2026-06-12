@@ -64,6 +64,7 @@ class ValidationResult:
     plugin_id: str
     plugin_dir: Path
     errors: list = field(default_factory=list)
+    warnings: list = field(default_factory=list)
 
     @property
     def valid(self) -> bool:
@@ -71,6 +72,9 @@ class ValidationResult:
 
     def add(self, path: str, message: str) -> None:
         self.errors.append(ValidationError(self.plugin_id, path, message))
+
+    def add_warning(self, path: str, message: str) -> None:
+        self.warnings.append(ValidationError(self.plugin_id, path, message))
 
 
 # ---------------------------------------------------------------------------
