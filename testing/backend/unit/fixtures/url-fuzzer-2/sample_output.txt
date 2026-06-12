@@ -1,0 +1,3 @@
+/admin                  [Status: 403]
+/backup.zip             [Status: 200]
+hidden path found: /config
