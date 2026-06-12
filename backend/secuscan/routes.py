@@ -1077,6 +1077,85 @@ async def get_reports(owner: str = Depends(get_current_owner)):
     return await get_or_set_cached(f"reports:list:{owner}", build)
 
 
+@router.get("/analytics/vulnerability-trends", dependencies=[Depends(read_heavy_limiter)])
+async def get_vulnerability_trends(owner: str = Depends(get_current_owner)):
+    """Return daily vulnerability counts for the last 30 days plus a simple forecast."""
+
+    async def build():
+        db = await get_db()
+
+        rows = await db.fetchall(
+            """
+            SELECT
+                date(discovered_at) AS day,
+                COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE severity = 'critical') AS critical,
+                COUNT(*) FILTER (WHERE severity = 'high')     AS high,
+                COUNT(*) FILTER (WHERE severity = 'medium')   AS medium,
+                COUNT(*) FILTER (WHERE severity = 'low')      AS low,
+                COUNT(*) FILTER (WHERE severity = 'info')     AS info,
+                AVG(CASE WHEN risk_score IS NOT NULL THEN risk_score END) AS avg_risk_score
+            FROM findings
+            WHERE owner_id = ?
+              AND discovered_at >= date('now', '-30 days')
+            GROUP BY day
+            ORDER BY day ASC
+            """,
+            (owner,),
+        )
+
+        daily = [
+            {
+                "date": row["day"],
+                "total": int(row["total"]),
+                "critical": int(row["critical"]),
+                "high": int(row["high"]),
+                "medium": int(row["medium"]),
+                "low": int(row["low"]),
+                "info": int(row["info"]),
+                "avg_risk_score": round(row["avg_risk_score"], 1) if row["avg_risk_score"] is not None else None,
+            }
+            for row in rows
+        ]
+
+        # Forecast: rolling averages over the last 7 and previous 7 available days.
+        totals = [d["total"] for d in daily]
+        last_7 = totals[-7:] if len(totals) >= 1 else []
+        prev_7 = totals[-14:-7] if len(totals) >= 8 else []
+
+        if last_7:
+            daily_average = round(sum(last_7) / len(last_7), 1)
+            next_7_days_total = round(daily_average * 7)
+
+            if prev_7:
+                prev_avg = sum(prev_7) / len(prev_7)
+                if prev_avg == 0:
+                    trend = "increasing" if daily_average > 0 else "stable"
+                elif daily_average > prev_avg * 1.10:
+                    trend = "increasing"
+                elif daily_average < prev_avg * 0.90:
+                    trend = "decreasing"
+                else:
+                    trend = "stable"
+            else:
+                trend = "insufficient_data"
+        else:
+            daily_average = 0.0
+            next_7_days_total = 0
+            trend = "insufficient_data"
+
+        return {
+            "daily": daily,
+            "forecast": {
+                "next_7_days_total": next_7_days_total,
+                "daily_average": daily_average,
+                "trend": trend,
+            },
+        }
+
+    return await get_or_set_cached(f"analytics:vulnerability-trends:{owner}", build)
+
+
 @router.get("/tasks", dependencies=[Depends(read_heavy_limiter)])
 async def list_tasks(
     page: int = Query(1, ge=1),
