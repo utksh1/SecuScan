@@ -22,7 +22,7 @@ VALID_ENGINE_TYPES = {"cli", "python", "docker"}
 VALID_SAFETY_LEVELS = {"safe", "intrusive", "exploit"}
 VALID_FIELD_TYPES = {"string","integer","text", "number", "boolean", "select", "multiselect", "textarea"}
 VALID_PARSER_TYPES = {"json", "text", "custom", "none"}
-
+CURRENT_SCHEMA_VERSION = 2
 REQUIRED_TOP_LEVEL_FIELDS = [
     "id",
     "name",
@@ -109,6 +109,30 @@ class PluginMetadataValidator:
         result = ValidationResult(plugin_id=plugin_id, plugin_dir=self.plugin_dir)
 
         self._check_required_fields(data, result)
+        self._check_schema_version(data, result)
+        self._check_engine(data, result)
+        self._check_command_template(data, result)
+        self._check_fields(data, result)
+        self._check_output(data, result)
+        self._check_safety(data, result)
+        self._check_validation_block(data, result)
+        self._check_checksum(data, result)
+        self._check_dependencies(data, result)
+        self._check_custom_parser(data, result)
+
+        return result
+
+    def _check_schema_version(self, data: dict, result: ValidationResult) -> None:
+        version = data.get("schema_version")
+        if version is None:
+            return  # Legacy v1 plugins — schema_version is optional
+        elif not isinstance(version, int) or version < 1:
+            result.add("schema_version", f"'schema_version' must be a positive integer, got {version!r}")
+        elif version > CURRENT_SCHEMA_VERSION:
+            result.add(
+                "schema_version",
+                f"'schema_version' {version} is newer than supported version {CURRENT_SCHEMA_VERSION}.",
+            )
         self._check_engine(data, result)
         self._check_command_template(data, result)
         self._check_fields(data, result)
