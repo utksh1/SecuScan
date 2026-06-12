@@ -293,6 +293,8 @@ state means every plugin reports `[OK]` and the final line shows zero failures.
 If any `[UPDATE]` lines appear, run the same command without `--dry-run` to
 apply the changes before committing.
 
+→ Full guide: [docs/plugin-contribution-guide.md](docs/plugin-contribution-guide.md)
+
 ## Plugin Validation
 
 Validate a single plugin without loading all plugins:
@@ -310,3 +312,5 @@ python scripts/validate_plugin.py --plugin plugins/nmap
 
 The validation checks metadata JSON, required fields, checksums, and custom
 parser imports when applicable.
+
+→ Full guide: [docs/plugin-contribution-guide.md](docs/plugin-contribution-guide.md)
