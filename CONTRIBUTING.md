@@ -205,6 +205,12 @@ Your PR should include:
 
 Try to keep one pull request focused on one problem. If a change touches unrelated areas, split it into separate PRs when possible.
 
+### PR Size and Generated Artifacts
+
+To keep reviews manageable, an automated workflow will post an advisory warning if a PR exceeds **50 changed files** or **1,000 total lines**. We encourage splitting unusually large changes into smaller, focused pull requests.
+
+Additionally, please ensure you never commit auto-generated artifacts (such as `playwright-report/`, `test-results/`, `dist/`, or `.vite/`). The workflow will flag these if they are accidentally included. If this happens, remove them using `git rm --cached -r <path>`.
+
 ## Contribution Scoring
 
 Every merged pull request can be scored for GSSoC using labels applied by the project admin or mentor. The scoring engine reads these labels after the PR is merged, so contributors should focus on clear scope, good implementation, and complete review notes rather than self-assigning score labels.

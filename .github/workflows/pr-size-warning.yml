@@ -1,0 +1,77 @@
+name: PR Size and Artifact Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  check-pr-size:
+    runs-on: ubuntu-latest
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+      MAX_FILES: 50
+      MAX_LINES: 1000
+
+    steps:
+      - name: Analyze PR Size and Artifacts
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          CHANGED_FILES=${{ github.event.pull_request.changed_files }}
+          ADDITIONS=${{ github.event.pull_request.additions }}
+          DELETIONS=${{ github.event.pull_request.deletions }}
+          TOTAL_LINES=$((ADDITIONS + DELETIONS))
+
+          echo "PR Stats:"
+          echo "- Files changed: $CHANGED_FILES"
+          echo "- Additions: $ADDITIONS"
+          echo "- Deletions: $DELETIONS"
+          echo "- Total lines changed: $TOTAL_LINES"
+
+          WARNINGS=""
+
+          # Check for oversized PRs
+          if [ "$CHANGED_FILES" -gt "$MAX_FILES" ] || [ "$TOTAL_LINES" -gt "$MAX_LINES" ]; then
+            MSG="PR is unusually large ($CHANGED_FILES files, $TOTAL_LINES lines changed). Advisory threshold: $MAX_FILES files or $MAX_LINES lines."
+            echo "::warning title=Large PR Detected::$MSG"
+            WARNINGS="${WARNINGS}
+          - ⚠️ **Large PR Detected**
+            - $MSG
+            - Consider splitting this PR into smaller reviewable changes.
+          "
+          fi
+
+          # Check for generated artifact directories
+          FILES=$(gh pr view "$PR_NUMBER" \
+            --repo "${{ github.repository }}" \
+            --json files \
+            --jq '.files[].path')
+
+          if echo "$FILES" | grep -qE 'playwright-report/|test-results/'; then
+            MSG="Generated testing artifacts detected (playwright-report/ or test-results/). Please remove them from commits."
+            echo "::warning title=Generated Artifacts Included::$MSG"
+            WARNINGS="${WARNINGS}
+          - 🚫 **Generated Artifacts Detected**
+            - $MSG
+          "
+          fi
+
+          # Publish GitHub Step Summary
+          if [ -n "$WARNINGS" ]; then
+            {
+              echo "## ⚠️ PR Review Advisory"
+              echo
+              echo "$WARNINGS"
+              echo
+              echo "> This workflow is advisory only and will not fail CI."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            {
+              echo "## ✅ PR Size and Content Check Passed"
+              echo
+              echo "No unusually large diffs or generated artifacts detected."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
