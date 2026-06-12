@@ -377,6 +377,7 @@ Please match the conventions already used in the repo instead of introducing a n
   - Use type hints where they improve clarity
   - Keep validation close to request and model boundaries
   - Prefer small functions over large, multi-purpose blocks
+  - For HTTP request tracing and log/audit correlation guidelines, see [Request ID Tracing](docs/request-id.md)
 - Frontend:
   - Use TypeScript and functional React components
   - Keep component logic readable and avoid unnecessary abstraction
