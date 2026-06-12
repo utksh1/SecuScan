@@ -54,6 +54,12 @@ def deserialize_finding_rows(rows: List[Dict]) -> List[Dict[str, Any]]:
             finding["references"] = finding.pop("references_json")
         if "corroborating_sources_json" in finding:
             finding["corroborating_sources"] = finding.pop("corroborating_sources_json")
+        
+        # Expose remediation safety fields at the top level
+        metadata = finding.get("metadata", {}) or {}
+        finding["safe_to_apply"] = metadata.get("safe_to_apply")
+        finding["compatible_range"] = metadata.get("compatible_range")
+        finding["alternatives"] = metadata.get("alternatives")
     return findings
 
 
@@ -2174,6 +2180,9 @@ async def get_finding_details(finding_id: str, owner: str = Depends(get_current_
         "asset_exposure": finding_row.get("asset_exposure"),
         "risk_score": finding_row.get("risk_score"),
         "risk_factors": risk_factors,
+        "safe_to_apply": metadata.get("safe_to_apply"),
+        "compatible_range": metadata.get("compatible_range"),
+        "alternatives": metadata.get("alternatives"),
     }
 
 

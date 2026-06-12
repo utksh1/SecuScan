@@ -1190,6 +1190,21 @@ class TaskExecutor:
             target=target,
             findings=[item for item in result.get("findings", []) if isinstance(item, dict)],
         )
+
+        try:
+            from .remediation import build_dependency_graph, validate_remediation
+            graph = build_dependency_graph(target)
+            for f in normalized_findings:
+                remediation_str = f.get("remediation", "")
+                if remediation_str:
+                    val_res = validate_remediation(remediation_str, graph)
+                    f_metadata = f.setdefault("metadata", {})
+                    f_metadata["safe_to_apply"] = val_res["safe_to_apply"]
+                    f_metadata["compatible_range"] = val_res["compatible_range"]
+                    f_metadata["alternatives"] = val_res["alternatives"]
+        except Exception:
+            pass
+
         previous_findings = await self._load_previous_task_findings(
             db,
             owner_id=owner_id,
