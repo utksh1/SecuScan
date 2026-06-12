@@ -659,8 +659,12 @@ def validate_command_network_egress(command: list[str], safe_mode: bool, plugin_
         is_host = False
         if not is_ip:
             # Basic hostname check (with dots and valid characters, or 'localhost')
+            # Note: we require lowercase-only hostnames here so that dotted plugin
+            # parameters (e.g. "windows.pslist.PsList") are NOT misidentified as
+            # network destinations.  Hostnames are case-insensitive per RFC 1123
+            # and are conventionally lowercase in practice.
             if candidate.lower() == "localhost" or re.match(
-                r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)+$',
+                r'^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?)+$',
                 candidate
             ):
                 is_host = True
