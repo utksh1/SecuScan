@@ -5,6 +5,7 @@ API routes for SecuScan backend
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request, Depends, Body, Query
 from fastapi.responses import JSONResponse
 from typing import Any, Optional, List, Dict, Callable
+from datetime import datetime, timezone
 import json
 import logging
 import re
@@ -168,6 +169,15 @@ from .models import (
     NotificationChannelType, TaskStatus,
     ExecutionContext, WorkflowStep, ValidationMode, EvidenceLevel,
 )
+from .services.diff_service import compute_diff
+from .schemas.diff import (
+    DiffFindings,
+    DiffSummary,
+    FindingSchema,
+    ScanDiffResponse,
+    ScanMeta,
+    SeverityChange,
+)
 from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager, init_plugins
@@ -293,6 +303,20 @@ def iter_raw_output_chunks(path: str, chunk_size: int = SSE_RAW_OUTPUT_CHUNK_SIZ
             if not chunk:
                 break
             yield chunk
+
+
+def _parse_findings(structured_json: Optional[str]) -> list[dict[str, Any]]:
+    """Extract the findings list from a task row's stored structured JSON."""
+    if not structured_json:
+        return []
+    try:
+        structured = json.loads(structured_json)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(structured, dict):
+        return []
+    findings = structured.get("findings")
+    return findings if isinstance(findings, list) else []
 
 
 def _report_generation_error_response(task_id: str, report_format: str) -> JSONResponse:
@@ -900,6 +924,76 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
         "exit_code": task_row["exit_code"],
         "metadata": {}
     }
+
+
+@router.get("/scans/diff")
+async def get_scan_diff(scan_a: str, scan_b: str) -> ScanDiffResponse:
+    """Diff two completed scans of the same target. 404 if either missing, 400 if targets differ."""
+    if scan_a == scan_b:
+        raise HTTPException(
+            status_code=400,
+            detail="scan_a and scan_b must be different scan IDs",
+        )
+
+    db = await get_db()
+
+    task_row_a = await db.fetchone(
+        "SELECT id, tool_name, target, created_at, structured_json FROM tasks WHERE id = ?",
+        (scan_a,),
+    )
+    if not task_row_a:
+        raise HTTPException(status_code=404, detail=f"Scan not found: {scan_a}")
+
+    task_row_b = await db.fetchone(
+        "SELECT id, tool_name, target, created_at, structured_json FROM tasks WHERE id = ?",
+        (scan_b,),
+    )
+    if not task_row_b:
+        raise HTTPException(status_code=404, detail=f"Scan not found: {scan_b}")
+
+    if task_row_a["target"] != task_row_b["target"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Scans must target the same host to be compared",
+        )
+
+    findings_a = _parse_findings(task_row_a["structured_json"])
+    findings_b = _parse_findings(task_row_b["structured_json"])
+
+    raw_diff = compute_diff(findings_a, findings_b)
+
+    return ScanDiffResponse(
+        scan_a=ScanMeta(
+            task_id=task_row_a["id"],
+            target=task_row_a["target"],
+            timestamp=task_row_a["created_at"] or datetime.min,
+            tool=task_row_a["tool_name"] or "",
+        ),
+        scan_b=ScanMeta(
+            task_id=task_row_b["id"],
+            target=task_row_b["target"],
+            timestamp=task_row_b["created_at"] or datetime.min,
+            tool=task_row_b["tool_name"] or "",
+        ),
+        diff=DiffFindings(
+            new_findings=[FindingSchema.model_validate(f) for f in raw_diff["new_findings"]],
+            fixed_findings=[FindingSchema.model_validate(f) for f in raw_diff["fixed_findings"]],
+            unchanged_findings=[FindingSchema.model_validate(f) for f in raw_diff["unchanged_findings"]],
+            severity_changed=[
+                SeverityChange(
+                    before=FindingSchema.model_validate(sc["before"]),
+                    after=FindingSchema.model_validate(sc["after"]),
+                )
+                for sc in raw_diff["severity_changed"]
+            ],
+        ),
+        summary=DiffSummary(
+            total_new=len(raw_diff["new_findings"]),
+            total_fixed=len(raw_diff["fixed_findings"]),
+            total_unchanged=len(raw_diff["unchanged_findings"]),
+            total_severity_changed=len(raw_diff["severity_changed"]),
+        ),
+    )
 
 
 @router.post("/task/{task_id}/cancel")

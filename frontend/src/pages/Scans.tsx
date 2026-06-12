@@ -10,6 +10,9 @@ import {
 } from "../utils/date";
 import { ConfirmModal } from "../components/ConfirmModal";
 import Pagination from "../components/Pagination";
+import { useScanDiff } from "../hooks/useScanDiff";
+import ScanComparePicker from "../components/ScanComparePicker";
+import ScanDiffView from "../components/ScanDiffView";
 
 interface Task {
   task_id: string;
@@ -80,6 +83,29 @@ export default function Scans() {
     onConfirm: () => {},
     type: "warning",
   });
+
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareIds, setCompareIds] = useState<{ a: string; b: string } | null>(
+    null
+  );
+  const {
+    data: diffData,
+    isLoading: diffLoading,
+    error: diffError,
+    fetchDiff,
+    reset: resetDiff,
+  } = useScanDiff();
+
+  function handleCompare(a: string, b: string) {
+    setCompareIds({ a, b });
+    fetchDiff(a, b);
+  }
+
+  function toggleCompareMode() {
+    setCompareMode((prev) => !prev);
+    resetDiff();
+    setCompareIds(null);
+  }
 
   // Ref so the visibilitychange handler always sees the current interval id
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -346,6 +372,21 @@ export default function Scans() {
           ))}
         </div>
         <div className="flex items-center gap-6">
+          <button
+            onClick={toggleCompareMode}
+            aria-label="Toggle Compare Scans mode"
+            aria-pressed={compareMode}
+            className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-2 italic ${
+              compareMode
+                ? "bg-rag-blue text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+                : "bg-charcoal-dark text-silver/50 border-silver-bright/10 hover:border-rag-blue/40 hover:text-silver"
+            }`}
+          >
+            Compare_Scans
+            <span className="material-symbols-outlined text-sm" aria-hidden="true">
+              compare_arrows
+            </span>
+          </button>
           {tasks.length > 0 && (
             <button
               onClick={handleClearAll}
@@ -363,6 +404,40 @@ export default function Scans() {
           </div>
         </div>
       </section>
+
+      {/* Compare Panel */}
+      <AnimatePresence>
+        {compareMode && (
+          <motion.section
+            key="compare-panel"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.25, ease: [0.19, 1, 0.22, 1] }}
+            className="space-y-8"
+            aria-label="Scan comparison panel"
+          >
+            <ScanComparePicker
+              scans={tasks.filter((t) => t.status === "completed")}
+              onCompare={handleCompare}
+            />
+            <AnimatePresence>
+              {(diffLoading || diffError !== null || diffData !== null) && (
+                <ScanDiffView
+                  diff={diffData}
+                  isLoading={diffLoading}
+                  error={diffError}
+                  onRetry={
+                    compareIds
+                      ? () => fetchDiff(compareIds.a, compareIds.b)
+                      : undefined
+                  }
+                />
+              )}
+            </AnimatePresence>
+          </motion.section>
+        )}
+      </AnimatePresence>
 
       {/* Timeline Operations Feed */}
       <section className="relative">

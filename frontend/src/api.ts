@@ -688,3 +688,64 @@ export function getAssetServices() {
 export function getKnowledgebaseStatus() {
   return request('/knowledgebase/status')
 }
+
+// --- Scan Diff ---
+
+export interface Finding {
+  id?: string | null
+  title: string
+  category: string
+  severity: string
+  target: string
+  description: string
+  remediation?: string | null
+  cvss?: number | null
+  cve?: string | null
+  proof?: string | null
+  discovered_at?: string | null
+  metadata: Record<string, unknown>
+}
+
+export interface SeverityChangePair {
+  before: Finding
+  after: Finding
+}
+
+export interface DiffResult {
+  new_findings: Finding[]
+  fixed_findings: Finding[]
+  unchanged_findings: Finding[]
+  severity_changed: SeverityChangePair[]
+}
+
+export interface DiffSummary {
+  total_new: number
+  total_fixed: number
+  total_unchanged: number
+  total_severity_changed: number
+}
+
+export interface ScanMeta {
+  task_id: string
+  target: string
+  timestamp: string
+  tool: string
+}
+
+export interface ScanDiffResponse {
+  scan_a: ScanMeta
+  scan_b: ScanMeta
+  diff: DiffResult
+  summary: DiffSummary
+}
+
+export function getScanDiff(
+  scanA: string,
+  scanB: string,
+  signal?: AbortSignal,
+): Promise<ScanDiffResponse> {
+  return request<ScanDiffResponse>(
+    `/scans/diff?scan_a=${encodeURIComponent(scanA)}&scan_b=${encodeURIComponent(scanB)}`,
+    signal ? { signal } : undefined,
+  )
+}
