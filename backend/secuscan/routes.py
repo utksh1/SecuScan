@@ -174,7 +174,7 @@ from .plugins import get_plugin_manager, init_plugins
 from .executor import executor
 from .redaction import redact_inputs
 from .ratelimit import (
-    rate_limiter, concurrent_limiter,
+    rate_limiter, concurrent_limiter, workflow_rate_limiter,
     task_start_limiter, vault_limiter,
     report_download_limiter, read_heavy_limiter,
     resolve_client_identity, admin_limiter,
@@ -212,6 +212,15 @@ def _validate_notification_target(channel_type: NotificationChannelType, target:
         is_valid, error = validate_url(cleaned)
         if not is_valid:
             raise HTTPException(status_code=400, detail=error or "Invalid webhook URL")
+
+        if settings.notification_ssrf_enabled:
+            from .validation import resolve_and_validate_target
+            ssrf_ok, ssrf_err = resolve_and_validate_target(cleaned)
+            if not ssrf_ok:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Webhook target blocked by SSRF protection: {ssrf_err}"
+                )
         return cleaned
 
     if not _EMAIL_PATTERN.match(cleaned):
@@ -1731,6 +1740,11 @@ async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_o
     row = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
     if not row:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    wf_rate_ok, wf_rate_msg = await workflow_rate_limiter.check_workflow_rate_limit(
+        workflow_id, settings.workflow_min_interval_seconds
+    )
+    if not wf_rate_ok:
+        raise HTTPException(status_code=429, detail=wf_rate_msg)
     steps = _parse_workflow_steps(row["steps_json"] or "[]")
     active_version = await db.fetchone(
         "SELECT id, version_number FROM workflow_versions "

@@ -2,8 +2,8 @@
   "id": "sqlmap",
   "name": "SQL Injection Testing",
   "version": "1.0.0",
-  "description": "Automatic SQL injection and database takeover tool",
-  "long_description": "SQLMap is an open source penetration testing tool that automates the process of detecting and exploiting SQL injection flaws and taking over of database servers.",
+  "description": "SQL injection detection and database enumeration tool.",
+  "long_description": "Uses sqlmap to detect SQL injection vulnerabilities and perform controlled database enumeration during assessment workflows.",
   "category": "web",
   "author": {
     "name": "SecuScan Contributors",
@@ -126,5 +126,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "109abd6dbca360a17bb9afbcbc5fb8d2493e76749f7e8d16d704fcb490b925c7"
+  "checksum": "efe8eef95714a4363b68618c000bcec5d5e93b98c7b1168775ffaa98fc66eb8a"
 }
