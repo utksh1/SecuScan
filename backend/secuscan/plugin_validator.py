@@ -23,6 +23,12 @@ VALID_SAFETY_LEVELS = {"safe", "intrusive", "exploit"}
 VALID_FIELD_TYPES = {"string","integer","text", "number", "boolean", "select", "multiselect", "textarea"}
 VALID_PARSER_TYPES = {"json", "text", "custom", "none"}
 
+VALID_CATEGORIES = {
+    "recon", "vulnerability", "web", "exploit", "network",
+    "expert", "code", "forensics", "utils", "execution",
+    "security", "robots",
+}
+
 REQUIRED_TOP_LEVEL_FIELDS = [
     "id",
     "name",
@@ -109,6 +115,7 @@ class PluginMetadataValidator:
         result = ValidationResult(plugin_id=plugin_id, plugin_dir=self.plugin_dir)
 
         self._check_required_fields(data, result)
+        self._check_category(data, result)
         self._check_engine(data, result)
         self._check_command_template(data, result)
         self._check_fields(data, result)
@@ -125,6 +132,17 @@ class PluginMetadataValidator:
         for key in REQUIRED_TOP_LEVEL_FIELDS:
             if key not in data or data[key] in (None, "", [], {}):
                 result.add(key, f"Required field '{key}' is missing or empty")
+
+    def _check_category(self, data: dict, result: ValidationResult) -> None:
+        cat = data.get("category")
+        if not cat:
+            return
+        if cat not in VALID_CATEGORIES:
+            result.add(
+                "category",
+                f"'{cat}' is not a recognized category — "
+                f"must be one of: {sorted(VALID_CATEGORIES)}",
+            )
 
     def _check_engine(self, data: dict, result: ValidationResult) -> None:
         engine = data.get("engine")
@@ -213,6 +231,12 @@ class PluginMetadataValidator:
                         f"{prefix}.options",
                         f"Field '{fid}' is type '{ftype}' and must have a non-empty 'options' list",
                     )
+
+            if not f.get("help"):
+                result.add_warning(
+                    f"{prefix}.help",
+                    f"Field '{fid}' is missing 'help' text — add a brief user-facing description",
+                )
 
     def _check_output(self, data: dict, result: ValidationResult) -> None:
         output = data.get("output")
