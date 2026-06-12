@@ -12,6 +12,7 @@ import Scans from './pages/Scans'
 import TaskDetails from './pages/TaskDetails'
 import Workflows from './pages/Workflows'
 import ApiKeySetupScreen from './components/ApiKeySetupScreen'
+import ErrorBoundary from './components/ErrorBoundary'
 
 import { ThemeProvider } from './components/ThemeContext'
 import { ToastProvider } from './components/ToastContext'
@@ -54,17 +55,19 @@ export default function App() {
     <ThemeProvider>
       <I18nProvider>
         <ToastProvider>
-          {needsKey ? (
-            // Render ONLY the setup screen — no page routes are mounted, so no
-            // API calls can fire and spam 401 failures before the key is saved.
-            <ApiKeySetupScreen onSaved={() => setNeedsKey(false)} />
-          ) : (
-            <Router>
-              <AppShell>
-                <AppRoutes />
-              </AppShell>
-            </Router>
-          )}
+          <ErrorBoundary>
+            {needsKey ? (
+              // Render ONLY the setup screen — no page routes are mounted, so no
+              // API calls can fire and spam 401 failures before the key is saved.
+              <ApiKeySetupScreen onSaved={() => setNeedsKey(false)} />
+            ) : (
+              <Router>
+                <AppShell>
+                  <AppRoutes />
+                </AppShell>
+              </Router>
+            )}
+          </ErrorBoundary>
         </ToastProvider>
       </I18nProvider>
     </ThemeProvider>
