@@ -302,8 +302,10 @@ async def test_send_webhook_blocks_private_ip_resolution(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_send_webhook_pins_connection_ip(monkeypatch):
-    """The HTTP request must go to the validated IP, not the original hostname."""
+async def test_send_webhook_pins_connection_ip_for_https(monkeypatch):
+    """HTTPS webhook keeps the original hostname in the URL so that TLS SNI
+    and certificate verification operate against the expected name. The IP
+    pinning is done inside the custom transport, not via URL rewriting."""
     from backend.secuscan.notification_service import send_webhook
 
     def fake_getaddrinfo(*args, **kwargs):
@@ -323,11 +325,39 @@ async def test_send_webhook_pins_connection_ip(monkeypatch):
         ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
 
     assert ok is True
-    # Verify client.post was called with the IP URL, not the original hostname
     call_args, call_kwargs = mock_post.call_args
     posted_url = str(call_args[0]) if call_args else ""
-    assert "93.184.216.34" in posted_url, "Request must go to resolved IP, not hostname"
-    # Verify Host header preserves original hostname
+    # HTTPS must NOT rewrite the URL to the IP — doing so would break TLS.
+    assert "hooks.example.com" in posted_url, "HTTPS URL must keep original hostname"
+    assert "93.184.216.34" not in posted_url, "HTTPS URL must NOT contain the resolved IP"
+
+
+@pytest.mark.asyncio
+async def test_send_webhook_pins_connection_ip_for_http(monkeypatch):
+    """HTTP webhook rewrites the URL to the resolved IP and sets the Host
+    header. There is no TLS, so this is safe and prevents DNS rebinding."""
+    from backend.secuscan.notification_service import send_webhook
+
+    def fake_getaddrinfo(*args, **kwargs):
+        return [(socket.AF_INET, None, None, None, ("93.184.216.34", 80))]
+
+    monkeypatch.setattr("backend.secuscan.notification_service.socket.getaddrinfo", fake_getaddrinfo)
+
+    mock_response = AsyncMock()
+    mock_response.status_code = 200
+    mock_post = AsyncMock(return_value=mock_response)
+    mock_client = AsyncMock()
+    mock_client.post = mock_post
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.return_value = mock_client
+
+    with patch("httpx.AsyncClient", return_value=mock_cm):
+        ok, err = await send_webhook("http://hooks.example.com/alert", {"event": "test"})
+
+    assert ok is True
+    call_args, call_kwargs = mock_post.call_args
+    posted_url = str(call_args[0]) if call_args else ""
+    assert "93.184.216.34" in posted_url, "HTTP request must go to resolved IP, not hostname"
     headers = call_kwargs.get("headers", {})
     assert headers.get("Host") == "hooks.example.com"
 
@@ -375,6 +405,40 @@ async def test_send_webhook_ssrf_independent_of_enforce_network_policy(monkeypat
     ok, err = await send_webhook("https://internal.example.com/hook", {"event": "test"})
     assert ok is False
     assert "blocked" in err.lower()
+
+
+@pytest.mark.asyncio
+async def test_send_webhook_https_uses_pinned_ip_transport(monkeypatch):
+    """HTTPS delivery creates _PinnedIPTransport with the validated IP and original hostname."""
+    from backend.secuscan.notification_service import send_webhook, _PinnedIPTransport
+
+    transport_args = {}
+
+    def capture_transport(resolved_ip, original_hostname):
+        transport_args["resolved_ip"] = resolved_ip
+        transport_args["original_hostname"] = original_hostname
+        return _PinnedIPTransport(resolved_ip, original_hostname)
+
+    monkeypatch.setattr(
+        "backend.secuscan.notification_service._PinnedIPTransport",
+        capture_transport,
+    )
+
+    def fake_getaddrinfo(*args, **kwargs):
+        return [(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]
+
+    monkeypatch.setattr("backend.secuscan.notification_service.socket.getaddrinfo", fake_getaddrinfo)
+
+    mock_response = AsyncMock()
+    mock_response.status_code = 200
+    mock_post = AsyncMock(return_value=mock_response)
+
+    with patch("httpx.AsyncClient", return_value=AsyncMock(**{"post.return_value": mock_response, "__aenter__.return_value.post.return_value": mock_response})):
+        ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
+
+    assert ok is True
+    assert transport_args.get("resolved_ip") == "93.184.216.34"
+    assert transport_args.get("original_hostname") == "hooks.example.com"
 
 
 @pytest.mark.asyncio
