@@ -54,9 +54,21 @@ async def require_api_key(
     - ``X-Api-Key: <key>``
     """
     if request is not None and request.url.path.startswith("/api/v1/admin"):
-        # Admin endpoints have their own separate verify_admin_access dependency.
-        # We bypass require_api_key verification to avoid blocking valid admin key requests.
-        return ""
+        # Verify admin API key inline so admin routes are never left unprotected.
+        # This provides defense-in-depth: even if verify_admin_access is forgotten,
+        # require_api_key still enforces authentication for admin endpoints.
+        from .config import settings
+        candidate = None
+        if bearer is not None:
+            candidate = bearer.credentials
+        elif x_api_key is not None:
+            candidate = x_api_key
+        if candidate and settings.admin_api_key and secrets.compare_digest(candidate, settings.admin_api_key):
+            return candidate
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
 
     if _api_key is None:
         raise HTTPException(
