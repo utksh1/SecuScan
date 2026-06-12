@@ -17,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from backend.secuscan.config import settings
+from backend.secuscan import database as db_module
 from backend.secuscan.database import init_db
 
 
@@ -62,72 +63,81 @@ def get_index_names(db_path: str) -> set:
     return names
 
 
+def init_db_and_get_indexes(db_path: str) -> set:
+    """Initialize a temporary DB, read its indexes, and close the connection.
+
+    The tests in this module only need the schema to exist. Using a dedicated
+    event loop here keeps the aiosqlite worker thread alive until disconnect()
+    completes, which avoids the "Event loop is closed" warnings from pytest.
+    """
+    import asyncio
+
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(init_db(db_path))
+        return get_index_names(db_path)
+    finally:
+        if db_module.db is not None:
+            loop.run_until_complete(db_module.db.disconnect())
+        loop.close()
+
+
 # ── Index existence tests ─────────────────────────────────────────────────────
 
 class TestDatabaseIndexes:
 
     def test_findings_severity_index_exists(self, setup_test_environment):
         """idx_findings_severity must exist for GROUP BY severity queries."""
-        asyncio.run(init_db(settings.database_path))
-        indexes = get_index_names(settings.database_path)
+        indexes = init_db_and_get_indexes(settings.database_path)
         assert "idx_findings_severity" in indexes, (
             "Missing idx_findings_severity — dashboard GROUP BY severity will do a full scan"
         )
 
     def test_findings_discovered_at_index_exists(self, setup_test_environment):
         """idx_findings_discovered_at must exist for ORDER BY discovered_at DESC."""
-        asyncio.run(init_db(settings.database_path))
-        indexes = get_index_names(settings.database_path)
+        indexes = init_db_and_get_indexes(settings.database_path)
         assert "idx_findings_discovered_at" in indexes, (
             "Missing idx_findings_discovered_at — findings list ORDER BY will do a full scan"
         )
 
     def test_findings_task_id_index_exists(self, setup_test_environment):
         """idx_findings_task_id must exist for foreign key lookups."""
-        asyncio.run(init_db(settings.database_path))
-        indexes = get_index_names(settings.database_path)
+        indexes = init_db_and_get_indexes(settings.database_path)
         assert "idx_findings_task_id" in indexes
 
     def test_findings_task_severity_composite_index_exists(self, setup_test_environment):
         """idx_findings_task_severity composite index must exist."""
-        asyncio.run(init_db(settings.database_path))
-        indexes = get_index_names(settings.database_path)
+        indexes = init_db_and_get_indexes(settings.database_path)
         assert "idx_findings_task_severity" in indexes
 
     def test_reports_generated_at_index_exists(self, setup_test_environment):
         """idx_reports_generated_at must exist for reports list ORDER BY."""
-        asyncio.run(init_db(settings.database_path))
-        indexes = get_index_names(settings.database_path)
+        indexes = init_db_and_get_indexes(settings.database_path)
         assert "idx_reports_generated_at" in indexes
 
     def test_reports_task_id_index_exists(self, setup_test_environment):
         """idx_reports_task_id must exist for foreign key lookups."""
-        asyncio.run(init_db(settings.database_path))
-        indexes = get_index_names(settings.database_path)
+        indexes = init_db_and_get_indexes(settings.database_path)
         assert "idx_reports_task_id" in indexes
 
     def test_reports_status_index_exists(self, setup_test_environment):
         """idx_reports_status must exist for status filter queries."""
-        asyncio.run(init_db(settings.database_path))
-        indexes = get_index_names(settings.database_path)
+        indexes = init_db_and_get_indexes(settings.database_path)
         assert "idx_reports_status" in indexes
 
     def test_audit_log_timestamp_index_exists(self, setup_test_environment):
         """idx_audit_timestamp must exist for audit log ORDER BY timestamp."""
-        asyncio.run(init_db(settings.database_path))
-        indexes = get_index_names(settings.database_path)
+        indexes = init_db_and_get_indexes(settings.database_path)
         assert "idx_audit_timestamp" in indexes
 
     def test_audit_log_event_type_index_exists(self, setup_test_environment):
         """idx_audit_event_type must exist for event_type filter queries."""
-        asyncio.run(init_db(settings.database_path))
-        indexes = get_index_names(settings.database_path)
+        indexes = init_db_and_get_indexes(settings.database_path)
         assert "idx_audit_event_type" in indexes
 
     def test_tasks_status_created_composite_index_exists(self, setup_test_environment):
         """idx_tasks_status_created composite index must exist."""
-        asyncio.run(init_db(settings.database_path))
-        indexes = get_index_names(settings.database_path)
+        indexes = init_db_and_get_indexes(settings.database_path)
         assert "idx_tasks_status_created" in indexes
 
 

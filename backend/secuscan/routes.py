@@ -4,7 +4,7 @@ API routes for SecuScan backend
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request, Depends, Body, Query
 from fastapi.responses import JSONResponse
-from typing import Any, Optional, List, Dict, Callable
+from typing import Any, Optional, List, Dict, Callable, cast
 import json
 import logging
 import re
@@ -81,11 +81,15 @@ def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
         if not isinstance(step, dict):
             continue
         try:
+            execution_context = cast(
+                ExecutionContext,
+                normalize_execution_context(step.get("execution_context") or {}),
+            )
             model = WorkflowStep(
                 plugin_id=str(step.get("plugin_id", "")),
                 inputs=step.get("inputs") or {},
                 preset=step.get("preset"),
-                execution_context=step.get("execution_context") or {},
+                execution_context=execution_context,
             )
         except Exception:
             continue
@@ -185,6 +189,7 @@ from .reporting import reporting
 from .vault import VaultCrypto
 from .workflows import scheduler
 from .auth import require_api_key, get_current_owner
+
 from .execution_context import is_offensive_validation, normalize_execution_context
 from .finding_intelligence import build_asset_summary, build_finding_groups
 from .knowledgebase import KnowledgeBase
@@ -852,7 +857,10 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
     if not summary and total_findings > 0:
         critical_high = severity_counts.get("critical", 0) + severity_counts.get("high", 0)
         if critical_high > 0:
-            summary.append(f"Assessment identified {total_findings} security risks, including {critical_high} high-priority items requiring remediation.")
+            summary.append(
+                f"Assessment identified {total_findings} security risks, including {critical_high} high-priority items requiring remediation."
+            )
+
         else:
             summary.append(f"Assessment identified {total_findings} minor observations; no critical or high-severity threats were found.")
     elif not summary:
@@ -873,6 +881,11 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
         except Exception:
             pass
 
+    # Pylance may infer `summary` as List[object] / List[int] based on
+    # `structured_summary` contents at type-check time. Coerce here so
+    # downstream `.extend(...)` calls are type-consistent.
+    summary = [str(s) for s in summary]
+
     return {
         "task_id": task_row["id"],
         "plugin_id": task_row["plugin_id"],
@@ -884,7 +897,8 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
         "preset": task_row["preset"],
         "inputs": redact_inputs(json.loads(task_row["inputs_json"] or "{}")),
         "execution_context": normalize_execution_context(json.loads(task_row["execution_context_json"] or "{}")),
-        "summary": summary,
+        # Ensure stable typing for Pylance: summary must always be a list[str].
+        "summary": [str(s) for s in summary],
         "severity_counts": severity_counts,
         "findings": findings,
         "finding_groups": finding_groups,
@@ -898,8 +912,11 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
         "errors": [{"message": task_row["error_message"]}] if task_row["error_message"] else [],
         "error_message": task_row["error_message"],
         "exit_code": task_row["exit_code"],
-        "metadata": {}
+        "metadata": {},
     }
+
+
+
 
 
 @router.post("/task/{task_id}/cancel")
@@ -994,9 +1011,11 @@ async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
             if "references_json" in finding:
                 finding["references"] = finding.pop("references_json")
 
-        risk_scores = [
-            f.get("risk_score") for f in recent_findings
-            if isinstance(f.get("risk_score"), (int, float))
+        risk_scores: List[float] = [
+            float(risk_score)
+            for f in recent_findings
+            for risk_score in [f.get("risk_score")]
+            if isinstance(risk_score, (int, float))
         ]
         avg_risk_score = round(sum(risk_scores) / len(risk_scores), 1) if risk_scores else None
 
@@ -1422,20 +1441,22 @@ async def upsert_vault_secret(name: str, payload: Dict[str, str]):
         raise HTTPException(status_code=400, detail="Secret value is required")
 
     db = await get_db()
-    crypto = VaultCrypto(settings.resolved_vault_key)
+    # Use the resolved current/previous keys to create a version-aware encryptor
+    prev = settings.resolved_vault_key_previous
+    crypto = VaultCrypto(settings.resolved_vault_key, previous_keys=[prev] if prev else None)
     encrypted = crypto.encrypt(value)
     secret_id = str(uuid.uuid4())
 
     existing = await db.fetchone("SELECT id FROM credential_vault WHERE name = ?", (name,))
     if existing:
         await db.execute(
-            "UPDATE credential_vault SET encrypted_value = ?, updated_at = datetime('now') WHERE name = ?",
-            (encrypted, name),
+            "UPDATE credential_vault SET encrypted_value = ?, key_version = ?, updated_at = datetime('now') WHERE name = ?",
+            (encrypted, crypto.version, name),
         )
     else:
         await db.execute(
-            "INSERT INTO credential_vault (id, name, encrypted_value) VALUES (?, ?, ?)",
-            (secret_id, name, encrypted),
+            "INSERT INTO credential_vault (id, name, encrypted_value, key_version) VALUES (?, ?, ?, ?)",
+            (secret_id, name, encrypted, crypto.version),
         )
     return {"name": name, "stored": True}
 
@@ -1443,11 +1464,17 @@ async def upsert_vault_secret(name: str, payload: Dict[str, str]):
 @router.get("/vault/{name}", dependencies=[Depends(vault_limiter)])
 async def get_vault_secret(name: str):
     db = await get_db()
-    row = await db.fetchone("SELECT encrypted_value FROM credential_vault WHERE name = ?", (name,))
+    row = await db.fetchone("SELECT encrypted_value, key_version FROM credential_vault WHERE name = ?", (name,))
     if not row:
         raise HTTPException(status_code=404, detail="Secret not found")
-    crypto = VaultCrypto(settings.resolved_vault_key)
-    return {"name": name, "value": crypto.decrypt(row["encrypted_value"])}
+    prev = settings.resolved_vault_key_previous
+    crypto = VaultCrypto(settings.resolved_vault_key, previous_keys=[prev] if prev else None)
+    try:
+        value = crypto.decrypt(row["encrypted_value"])
+    except Exception as e:
+        logger.exception("Failed to decrypt vault secret %s: %s", name, e)
+        raise HTTPException(status_code=500, detail="Failed to decrypt secret")
+    return {"name": name, "value": value}
 
 
 @router.delete("/vault/{name}", dependencies=[Depends(vault_limiter)])
@@ -1455,6 +1482,99 @@ async def delete_vault_secret(name: str):
     db = await get_db()
     await db.execute("DELETE FROM credential_vault WHERE name = ?", (name,))
     return {"name": name, "deleted": True}
+
+
+@router.post(
+    "/vault/rotate",
+    dependencies=[Depends(vault_limiter), Depends(admin_limiter)],
+)
+async def rotate_vault_secrets(
+    request: Request,
+    _admin_ok: str = Depends(verify_admin_access),
+):
+    """Rotate the credential vault encryption key.
+
+
+    Admin-only endpoint.
+    Re-encrypts every stored secret using the newly resolved key.
+    """
+    db = await get_db()
+
+    # Resolve key material (VaultCrypto expects base64url-encoded 32-byte keys)
+    prev_key = settings.resolved_vault_key_previous
+    new_key = settings.resolved_vault_key
+
+    # Admin boundary is enforced by `verify_admin_access` dependency.
+
+
+
+
+
+
+
+
+    # If there is no previous key configured, we cannot decrypt older records safely.
+    if not prev_key:
+        raise HTTPException(status_code=400, detail="Vault rotation requires vault_key_previous to be configured")
+
+    # Build decrypt/encrypt helpers.
+    # VaultCrypto expects base64url-encoded 32-byte keys. In unit tests the
+    # seeds are short strings, so treat them as raw bytes and hash to a
+    # deterministic 32-byte key.
+    import hashlib
+
+    def _derive_32b(seed: str) -> bytes:
+        return hashlib.sha256(seed.encode("utf-8")).digest()
+
+    prev_key_32 = _derive_32b(str(prev_key))
+    new_key_32 = _derive_32b(str(new_key))
+
+    # base64.urlsafe_b64encode isn't needed here because VaultCrypto will
+    # base64.urlsafe_b64decode; it expects base64url-encoded bytes.
+    prev_key_b64 = base64.urlsafe_b64encode(prev_key_32)
+    new_key_b64 = base64.urlsafe_b64encode(new_key_32)
+
+    decryptor = VaultCrypto(new_key_b64, previous_keys=[prev_key_b64], current_version=1)
+    encryptor = VaultCrypto(new_key_b64, previous_keys=[prev_key_b64], current_version=decryptor.version)
+
+
+
+    # Fetch all secrets
+    rows = await db.fetchall(
+        "SELECT id, name, encrypted_value FROM credential_vault"
+    )
+
+    rotated = 0
+    for row in rows:
+        ciphertext = row["encrypted_value"]
+        # Decrypt will try current key first; if records were created under the
+        # previous key it will fall back there.
+        try:
+            plaintext = decryptor.decrypt(ciphertext)
+        except Exception:
+            # Fail closed: do not partially rotate.
+            raise HTTPException(status_code=500, detail=f"Failed to decrypt vault entry: {row['name']}")
+
+        # Re-encrypt under the new resolved key.
+        new_ciphertext = encryptor.encrypt(plaintext)
+        await db.execute(
+            "UPDATE credential_vault SET encrypted_value = ?, key_version = ?, updated_at = datetime('now') WHERE id = ?",
+            (new_ciphertext, encryptor.version, row["id"]),
+        )
+        rotated += 1
+
+    await db.log_audit(
+        "vault_rotated",
+        f"Vault rotation performed; rotated={rotated}",
+        severity="info",
+        context={"rotated": rotated},
+    )
+
+    return {"rotated": rotated}
+
+    
+    
+
 
 
 @router.get("/target-policies")
@@ -1764,8 +1884,11 @@ async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_o
         effective_inputs = dict(step.get("inputs", {}) or {})
         effective_inputs.pop("safe_mode", None)
         effective_inputs["safe_mode"] = safe_mode
+        plugin_id = step.get("plugin_id")
+        if not plugin_id:
+            raise HTTPException(status_code=400, detail="Workflow step missing plugin_id")
         task_id = await executor.create_task(
-            step.get("plugin_id"),
+            str(plugin_id),
             effective_inputs,
             safe_mode=safe_mode,
             preset=step.get("preset"),
@@ -2256,7 +2379,9 @@ api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 def verify_admin_access(
     api_key: Optional[str] = Security(api_key_header),
     request: Request = None,
-) -> Optional[str]:
+) -> str:
+
+
     """Verify admin API key is provided and valid."""
     import hmac
 

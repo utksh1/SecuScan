@@ -268,6 +268,7 @@ class Database:
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL UNIQUE,
                 encrypted_value TEXT NOT NULL,
+                key_version INTEGER NOT NULL DEFAULT 1,
                 created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
                 updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
             );
@@ -521,6 +522,19 @@ class Database:
                 ) from exc
 
         await self._backfill_risk_scores()
+
+        # Ensure credential_vault has a key_version column for rotation/versioning
+        vault_columns = await self.fetchall("PRAGMA table_info(credential_vault)")
+        existing_vault_cols = {col["name"] for col in vault_columns}
+        if "key_version" not in existing_vault_cols:
+            try:
+                # Add the column with a sane default for future inserts
+                await self.execute("ALTER TABLE credential_vault ADD COLUMN key_version INTEGER DEFAULT 1")
+                # Backfill any existing rows to the default value to preserve non-null semantics
+                await self.execute("UPDATE credential_vault SET key_version = 1 WHERE key_version IS NULL")
+                print("Added 'key_version' to credential_vault and backfilled existing rows.")
+            except Exception as e:
+                print(f"Failed to add 'key_version' to credential_vault: {e}")
 
     async def _backfill_risk_scores(self):
         """Compute risk scores for existing findings that have none."""

@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     plugin_signature_key: Optional[str] = None
     enforce_plugin_signatures: bool = False
     vault_key: Optional[str] = None
+    vault_key_previous: Optional[str] = None
     denied_capabilities: List[str] = []
     admin_api_key: Optional[str] = None
 
@@ -202,6 +203,18 @@ class Settings(BaseSettings):
                 "starting the server. "
                 "Example: python -c \"import secrets; print(secrets.token_hex(32))\""
             )
+        digest = hashlib.sha256(seed.encode("utf-8")).digest()
+        return base64.urlsafe_b64encode(digest)
+
+    @property
+    def resolved_vault_key_previous(self) -> Optional[bytes]:
+        """Return deterministic 32-byte key for previous vault key if present.
+
+        Returns None when no previous key is configured.
+        """
+        seed = self.vault_key_previous or self.plugin_signature_key
+        if not seed:
+            return None
         digest = hashlib.sha256(seed.encode("utf-8")).digest()
         return base64.urlsafe_b64encode(digest)
 
