@@ -30,7 +30,7 @@ def clean_version_string(ver_str: str) -> str:
 
 def parse_remediation_suggestion(remediation_str: str) -> Tuple[str, str] | None:
     """Parse recommendation string to extract package name and target upgrade version.
-    
+
     Example: "Update framer-motion to version 11.0.0" -> ("framer-motion", "11.0.0")
     """
     pattern = r"(?:update|upgrade)\s+([a-zA-Z0-9_\-\.]+)\s+(?:to\s+)?(?:version\s+)?([a-zA-Z0-9_\-\.\+\~]+)"
@@ -44,7 +44,7 @@ def parse_remediation_suggestion(remediation_str: str) -> Tuple[str, str] | None
 
 def handle_caret(ver_str: str) -> List[str]:
     """Convert NPM caret specification to PEP 440 constraints.
-    
+
     ^1.2.3 -> >=1.2.3, <2.0.0
     ^0.2.3 -> >=0.2.3, <0.3.0
     ^0.0.3 -> >=0.0.3, <0.0.4
@@ -52,11 +52,11 @@ def handle_caret(ver_str: str) -> List[str]:
     parts = ver_str.split(".")
     while len(parts) < 3:
         parts.append("0")
-        
+
     major = "".join(filter(str.isdigit, parts[0])) or "0"
     minor = "".join(filter(str.isdigit, parts[1])) or "0"
     patch = "".join(filter(str.isdigit, parts[2])) or "0"
-    
+
     if major != "0":
         next_major = int(major) + 1
         return [f">={ver_str}", f"<{next_major}.0.0"]
@@ -70,7 +70,7 @@ def handle_caret(ver_str: str) -> List[str]:
 
 def handle_tilde(ver_str: str) -> List[str]:
     """Convert NPM tilde specification to PEP 440 constraints.
-    
+
     ~1.2.3 -> >=1.2.3, <1.3.0
     ~1.2   -> >=1.2.0, <1.3.0
     """
@@ -106,15 +106,15 @@ def semver_to_pep440(semver_str: str) -> SpecifierSet:
     semver_str = semver_str.strip()
     if not semver_str or semver_str in ("*", "x", "any"):
         return SpecifierSet()
-        
+
     parts = semver_str.split()
     pep440_parts = []
-    
+
     for part in parts:
         part = part.strip()
         if not part:
             continue
-            
+
         if part.startswith("^"):
             pep440_parts.extend(handle_caret(part[1:]))
         elif part.startswith("~"):
@@ -131,7 +131,7 @@ def semver_to_pep440(semver_str: str) -> SpecifierSet:
                 pep440_parts.extend(handle_wildcard(part + ".x"))
             elif re.match(r"^[0-9a-zA-Z\.\-\+]+$", part):
                 pep440_parts.append(f"=={part}")
-                
+
     try:
         return SpecifierSet(",".join(pep440_parts))
     except Exception:
@@ -145,9 +145,9 @@ def parse_package_lock(filepath: str) -> Dict[str, List[Tuple[str, str]]]:
             data = json.load(f)
     except Exception:
         return {}
-        
+
     relations = {}
-    
+
     # Check for packages key (modern NPM lockfile v2/v3)
     packages = data.get("packages", {})
     for path, info in packages.items():
@@ -155,14 +155,14 @@ def parse_package_lock(filepath: str) -> Dict[str, List[Tuple[str, str]]]:
             parent = "root"
         else:
             parent = path.replace("node_modules/", "")
-            
+
         deps = info.get("dependencies", {})
         peer_deps = info.get("peerDependencies", {})
         all_deps = {**deps, **peer_deps}
-        
+
         if all_deps:
             relations[parent] = [(normalize_package_name(k), v) for k, v in all_deps.items()]
-            
+
     # Fallback to dependencies key (NPM lockfile v1)
     dependencies = data.get("dependencies", {})
     def parse_v1_deps(deps_dict):
@@ -173,10 +173,10 @@ def parse_package_lock(filepath: str) -> Dict[str, List[Tuple[str, str]]]:
             child_deps = info.get("dependencies", {})
             if child_deps:
                 parse_v1_deps(child_deps)
-                
+
     if not packages and dependencies:
         parse_v1_deps(dependencies)
-        
+
     return relations
 
 
@@ -258,9 +258,9 @@ def get_python_transitive_dependencies(package_name: str) -> List[Tuple[str, Spe
 def build_dependency_graph(target_dir: str) -> Dict[str, List[Dict[str, Any]]]:
     """Scan the target directory for Python/Node manifests and construct a transitive dependency constraint graph."""
     graph: Dict[str, List[Dict[str, Any]]] = {}
-    
+
     target_path = Path(target_dir) if target_dir else Path(".")
-    
+
     # 1. Search for python requirements
     req_files = ["requirements.txt", "requirements-dev.txt"]
     for req_name in req_files:
@@ -268,7 +268,7 @@ def build_dependency_graph(target_dir: str) -> Dict[str, List[Dict[str, Any]]]:
         if not p.exists():
             # Fallback to local project root
             p = Path("backend") / req_name
-            
+
         if p.exists():
             try:
                 with open(p, "r", encoding="utf-8") as f:
@@ -280,7 +280,7 @@ def build_dependency_graph(target_dir: str) -> Dict[str, List[Dict[str, Any]]]:
                                 "parent": "root",
                                 "specifier": spec
                             })
-                            
+
                             # Transitive resolution
                             mock_deps = get_mock_dependencies(name)
                             if mock_deps:
@@ -301,16 +301,16 @@ def build_dependency_graph(target_dir: str) -> Dict[str, List[Dict[str, Any]]]:
                                     })
             except Exception:
                 pass
-                
+
     # 2. Search for Node.js package-lock.json / package.json
     lock_path = target_path / "package-lock.json"
     if not lock_path.exists():
         lock_path = Path("frontend/package-lock.json")
-        
+
     pkg_path = target_path / "package.json"
     if not pkg_path.exists():
         pkg_path = Path("frontend/package.json")
-        
+
     if lock_path.exists():
         try:
             relations = parse_package_lock(str(lock_path))
@@ -335,7 +335,7 @@ def build_dependency_graph(target_dir: str) -> Dict[str, List[Dict[str, Any]]]:
                     })
         except Exception:
             pass
-            
+
     return graph
 
 
@@ -346,20 +346,20 @@ def validate_remediation(remediation_str: str, graph: Dict[str, List[Dict[str, A
         "compatible_range": None,
         "alternatives": []
     }
-    
+
     parsed = parse_remediation_suggestion(remediation_str)
     if not parsed:
         return res
-        
+
     pkg_name, target_version = parsed
     if pkg_name not in graph:
         return res
-        
+
     constraints = graph[pkg_name]
     specifiers = [c["specifier"] for c in constraints]
-    
+
     clean_target = clean_version_string(target_version)
-    
+
     is_safe = True
     try:
         ver = Version(clean_target)
@@ -371,17 +371,17 @@ def validate_remediation(remediation_str: str, graph: Dict[str, List[Dict[str, A
     except Exception:
         # Fall back to safe if parsing error happens to prevent blocking valid tools
         pass
-        
+
     if not is_safe:
         res["safe_to_apply"] = False
-        
+
         # Combine all constraints to show the allowed range
         combined_parts = []
         for c in constraints:
             for spec in c["specifier"]:
                 combined_parts.append(str(spec))
         res["compatible_range"] = ", ".join(combined_parts) if combined_parts else "N/A"
-        
+
         # Determine which packages impose conflicting requirements
         try:
             ver = Version(clean_target)
@@ -390,7 +390,7 @@ def validate_remediation(remediation_str: str, graph: Dict[str, List[Dict[str, A
             }))
         except Exception:
             conflicting_parents = sorted(list({c["parent"] for c in constraints}))
-            
+
         for parent in conflicting_parents:
             if parent == "root":
                 res["alternatives"].append(
@@ -403,5 +403,5 @@ def validate_remediation(remediation_str: str, graph: Dict[str, List[Dict[str, A
         res["alternatives"].append(
             f"Downgrade or keep '{pkg_name}' within compatible range: {res['compatible_range']}."
         )
-        
+
     return res

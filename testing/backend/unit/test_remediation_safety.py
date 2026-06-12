@@ -97,7 +97,7 @@ def test_parse_package_lock():
         lock_file = Path(tmpdir) / "package-lock.json"
         with open(lock_file, "w") as f:
             json.dump(lock_data, f)
-            
+
         relations = parse_package_lock(str(lock_file))
         assert "root" in relations
         assert relations["root"] == [("framer-motion", "^10.0.0")]
@@ -118,7 +118,7 @@ def test_parse_package_json():
         pkg_file = Path(tmpdir) / "package.json"
         with open(pkg_file, "w") as f:
             json.dump(pkg_data, f)
-            
+
         relations = parse_package_json(str(pkg_file))
         assert "root" in relations
         assert ("express", "^4.17.1") in relations["root"]
@@ -141,11 +141,11 @@ def test_validate_remediation_with_conflict():
             {"parent": "library-y", "specifier": SpecifierSet("<2.0")}
         ]
     }
-    
+
     # Suggest upgrade of library-x to 1.5.0 (compatible with <2.0)
     res_safe = validate_remediation("Update library-x to version 1.5.0", graph)
     assert res_safe["safe_to_apply"] is True
-    
+
     # Suggest upgrade of library-x to 2.1.0 (conflicts with <2.0)
     res_unsafe = validate_remediation("Update library-x to version 2.1.0", graph)
     assert res_unsafe["safe_to_apply"] is False
