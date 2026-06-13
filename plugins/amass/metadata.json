@@ -2,15 +2,15 @@
   "id": "amass",
   "name": "Amass",
   "version": "1.0.0",
-  "description": "Deep attack-surface mapping and subdomain discovery.",
-  "long_description": "Deep attack-surface mapping and subdomain discovery.",
+  "description": "Comprehensive attack-surface mapping via deep subdomain enumeration. Combines active DNS brute-forcing, certificate transparency, and ASN/network-block expansion. Use when completeness matters more than speed.",
+  "long_description": "Amass is the most thorough recon plugin in the catalog. Unlike passive-only tools (Subfinder, Assetfinder), it performs active DNS enumeration, pivots to related ASNs and CIDRs, and builds a relationship graph of the target's full internet footprint. Best for pre-engagement scoping or full attack-surface audits. Slower than other recon plugins but discovers significantly more hosts.",
   "category": "recon",
   "author": {
     "name": "SecuScan Contributors",
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "🔎",
+  "icon": "\ud83d\udd0e",
   "engine": {
     "type": "cli",
     "binary": "amass"
@@ -30,8 +30,7 @@
       "label": "Root Domain",
       "type": "string",
       "required": true,
-      "placeholder": "secuscan.in",
-      "help": "Enter the root domain to enumerate subdomains for (for example: example.com). Do not include http://, https://, paths, or subdomains."
+      "placeholder": "secuscan.in"
     }
   ],
   "presets": {
@@ -56,5 +55,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "5a0ea8ff2a07b965685a2772bb2557afde4ef50e23dc423c99c27ce518494747"
+  "checksum": "39d86cb3f2258353d40ef0f81b71955d4490f51e4986fe662fcf4cbce68b179d"
 }

@@ -2,8 +2,8 @@
   "id": "subfinder",
   "name": "Subfinder",
   "version": "1.0.0",
-  "description": "Quick passive subdomain enumeration with minimal configuration.",
-  "long_description": "A lightweight subdomain discovery plugin using ProjectDiscovery's subfinder. Optimized for speed with a single input — just provide the root domain. Best for quick recon where you want results fast without tuning parameters.",
+  "description": "Fast passive subdomain discovery with zero active traffic sent to the target.",
+  "long_description": "Subfinder queries 40+ third-party intelligence APIs (Censys, VirusTotal, SecurityTrails, Shodan, etc.) to retrieve known subdomains without ever contacting the target directly. Unlike Amass, it performs no active DNS brute-forcing and leaves no footprint on target infrastructure. Results are raw unresolved hostnames. Use when speed or strict rules of engagement matter.",
   "category": "recon",
   "author": {
     "name": "SecuScan Contributors",
@@ -52,5 +52,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "f9046380e1c3a3f6d516b1d1afb7ababcc2aa23ca0d0e74e928403bda0b881f4"
+  "checksum": "75b2d7805260599506069e728fe8d2b2b82d0cba6224a7282e079c22be16a989"
 }
