@@ -22,6 +22,7 @@ interface Task {
   started_at?: string;
   completed_at?: string;
   duration_seconds?: number;
+  error_message?: string;
   inputs?: any;
   preset?: string;
   execution_context?: ExecutionContext;
@@ -492,6 +493,50 @@ export default function Scans() {
                           )}
                         </div>
                       </div>
+
+                      {/* Error Notification Panel */}
+                      {task.status === "failed" && task.error_message && (() => {
+                        const isTimeoutFailure =
+                          task.error_message?.toLowerCase().includes("timeout") ||
+                          task.error_message?.toLowerCase().includes("timed out");
+                        return (
+                          <div
+                            className={`mt-6 border-4 border-black p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] ${
+                              isTimeoutFailure
+                                ? "bg-rag-amber/10 border-l-rag-amber"
+                                : "bg-rag-red/10 border-l-rag-red"
+                            }`}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex items-start gap-4">
+                              <span
+                                className={`material-symbols-outlined text-lg shrink-0 mt-0.5 ${
+                                  isTimeoutFailure ? "text-rag-amber" : "text-rag-red"
+                                }`}
+                              >
+                                {isTimeoutFailure ? "timer_off" : "error"}
+                              </span>
+                              <div className="space-y-2 min-w-0">
+                                <p
+                                  className={`text-[10px] font-black uppercase tracking-[0.3em] ${
+                                    isTimeoutFailure ? "text-rag-amber" : "text-rag-red"
+                                  }`}
+                                >
+                                  {isTimeoutFailure ? "SCAN_TIMEOUT_DETECTED" : "SCAN_FAILED"}
+                                </p>
+                                {isTimeoutFailure && (
+                                  <p className="text-[10px] font-mono text-silver/60 uppercase tracking-widest">
+                                    This scan exceeded its execution limit and was terminated automatically.
+                                  </p>
+                                )}
+                                <p className="text-[10px] font-mono text-silver/50 break-words">
+                                  {task.error_message}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* Expandable Details Block */}
                       <AnimatePresence>

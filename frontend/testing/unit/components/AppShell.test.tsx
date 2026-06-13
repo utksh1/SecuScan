@@ -75,3 +75,49 @@ describe('AppShell', () => {
     expect(screen.getByRole('link', { name: /workflows/i })).toBeInTheDocument()
   })
 })
+
+
+describe('sidebar state synchronization', () => {
+    beforeEach(() => {
+        localStorage.clear()
+    })
+
+    it('responds to sidebar-state-changed custom event (same-tab)', async () => {
+        renderShell()
+
+        const main = document.querySelector('main')!
+        // Default: expanded → --sidebar-width = 220px
+        expect(main.style.getPropertyValue('--sidebar-width')).toBe('220px')
+
+        // Collapse via custom event
+        window.dispatchEvent(new CustomEvent('sidebar-state-changed', { detail: false }))
+        await waitFor(() => {
+            expect(main.style.getPropertyValue('--sidebar-width')).toBe('64px')
+        })
+
+        // Expand via custom event
+        window.dispatchEvent(new CustomEvent('sidebar-state-changed', { detail: true }))
+        await waitFor(() => {
+            expect(main.style.getPropertyValue('--sidebar-width')).toBe('220px')
+        })
+    })
+
+    it('responds to storage event (cross-tab)', async () => {
+        renderShell()
+
+        const main = document.querySelector('main')!
+
+        // Simulate another tab writing to localStorage
+        localStorage.setItem('sidebar-expanded', 'false')
+        window.dispatchEvent(new Event('storage'))
+        await waitFor(() => {
+            expect(main.style.getPropertyValue('--sidebar-width')).toBe('64px')
+        })
+
+        localStorage.setItem('sidebar-expanded', 'true')
+        window.dispatchEvent(new Event('storage'))
+        await waitFor(() => {
+            expect(main.style.getPropertyValue('--sidebar-width')).toBe('220px')
+        })
+    })
+})
