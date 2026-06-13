@@ -3,6 +3,11 @@ import { MemoryRouter } from 'react-router-dom';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Scans from '../../../src/pages/Scans';
 
+vi.mock('../../../src/components/ToastContext', () => ({
+  useToast: () => ({ addToast: vi.fn(), removeToast: vi.fn() }),
+  ToastProvider: ({ children }: any) => children,
+}))
+
 vi.mock('../../../src/api', () => ({
   API_BASE: 'http://localhost',
   deleteTask: vi.fn(),

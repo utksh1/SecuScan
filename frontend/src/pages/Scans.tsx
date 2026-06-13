@@ -10,6 +10,7 @@ import {
 } from "../utils/date";
 import { ConfirmModal } from "../components/ConfirmModal";
 import Pagination from "../components/Pagination";
+import { useToast } from "../components/ToastContext";
 
 interface Task {
   task_id: string;
@@ -58,6 +59,7 @@ const itemVariants = {
 
 export default function Scans() {
   const navigate = useNavigate();
+  const { addToast } = useToast();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
@@ -199,7 +201,7 @@ export default function Scans() {
           setModalState(prev => ({ ...prev, isOpen: false }));
         } catch (err) {
           console.error("Failed to delete task:", err);
-          alert("Failed to delete task. It might still be running.");
+          addToast("Failed to delete task. It might still be running.", "error");
           setModalState(prev => ({ ...prev, isOpen: false }));
         }
       },
@@ -221,7 +223,7 @@ export default function Scans() {
           setModalState(prev => ({ ...prev, isOpen: false }));
         } catch (err) {
           console.error("Failed to clear history:", err);
-          alert("Failed to clear history. Ensure no tasks are currently running.");
+          addToast("Failed to clear history. Ensure no tasks are currently running.", "error");
           setModalState(prev => ({ ...prev, isOpen: false }));
         }
       },
@@ -243,7 +245,7 @@ export default function Scans() {
           setModalState(prev => ({ ...prev, isOpen: false }));
         } catch (err) {
           console.error("Bulk delete failed:", err);
-          alert("Failed to delete some tasks. Ensure they are not currently running.");
+          addToast("Failed to delete some tasks. Ensure they are not currently running.", "error");
           setModalState(prev => ({ ...prev, isOpen: false }));
         }
       },
