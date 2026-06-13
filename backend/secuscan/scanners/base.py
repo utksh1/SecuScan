@@ -1,3 +1,26 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 from datetime import datetime
@@ -57,9 +80,9 @@ except asyncio.CancelledError:
     try:
         process.kill()
         await process.wait()
-            except Exception:
-                pass
-            raise
+    except Exception:
+        pass
+    raise
 
     @property
     @abstractmethod
