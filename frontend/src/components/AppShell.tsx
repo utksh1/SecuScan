@@ -20,17 +20,20 @@ export default function AppShell({ children }: AppShellProps) {
         return saved !== null ? JSON.parse(saved) : true
     })
 
-    // Brief hack to sync sidebar state without a full context provider
     useEffect(() => {
         const handleStorage = () => {
             const saved = localStorage.getItem('sidebar-expanded')
             if (saved !== null) setSidebarExpanded(JSON.parse(saved))
         }
+        const handleSidebarChange = (e: Event) => {
+            const detail = (e as CustomEvent).detail
+            if (typeof detail === 'boolean') setSidebarExpanded(detail)
+        }
         window.addEventListener('storage', handleStorage)
-        const interval = setInterval(handleStorage, 100)
+        window.addEventListener('sidebar-state-changed', handleSidebarChange)
         return () => {
             window.removeEventListener('storage', handleStorage)
-            clearInterval(interval)
+            window.removeEventListener('sidebar-state-changed', handleSidebarChange)
         }
     }, [])
 
