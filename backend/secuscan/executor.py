@@ -403,10 +403,11 @@ class TaskExecutor:
                 if plugin and plugin.category == "code":
                     should_validate = False
 
-                # Check for filesystem targets using the same best-effort detection
-                is_fs = target.startswith(("/", "./", "../", "~")) or \
-                        bool(re.match(r"^[A-Za-z]:[\\/]", target)) or \
-                        ("/" in target and not target.startswith(("http://", "https://")))
+
+                # Use shared is_filesystem_target from validation to ensure
+                # consistent filesystem detection across route and executor layers.
+                from .validation import is_filesystem_target
+                is_fs = is_filesystem_target(target)
 
                 if should_validate and not is_fs:
                     from .validation import validate_target

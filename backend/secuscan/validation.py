@@ -532,13 +532,23 @@ def _check_field(key: str, value: Any) -> Tuple[bool, int, str]:
 
     return True, 0, ""
 
-def _is_filesystem_target(target: str) -> bool:
-    """Best-effort detection for path-based targets that should bypass host validation."""
-    if target.startswith(("/", "./", "../", "~")):
+def is_filesystem_target(target: str) -> bool:
+    """Best-effort detection for path-based targets that should bypass host validation.
+
+    Returns True only for genuine local filesystem paths:
+      - Unix absolute paths:   /home/user/repo
+      - Unix relative paths:   ./src, ../lib
+      - Home-relative paths:   ~/projects
+      - Windows paths:         C:\\Users\\repo, D:/work
+
+    CIDR notation (e.g. 8.8.8.8/32), bare hostnames, URLs, and
+    domain paths all return False and are subject to validate_target().
+    """
+    # Unix absolute, relative, and home-relative paths
+    if target.startswith(("/", "./", "../", "~/")):
         return True
+    # Windows paths: C:\\ or C:/
     if re.match(r"^[A-Za-z]:[\\/]", target):
-        return True
-    if "/" in target and not target.startswith(("http://", "https://")):
         return True
     return False
 
@@ -622,7 +632,7 @@ def validate_command_network_egress(command: list[str], safe_mode: bool, plugin_
             continue
         if arg_str.startswith("-"):
             continue  # Ignore flags
-        if _is_filesystem_target(arg_str):
+        if is_filesystem_target(arg_str):
             continue  # Ignore local paths
 
         # Check if it looks like a URL
