@@ -184,21 +184,21 @@ def test_build_dependency_graph_fallback_disabled():
 def test_build_dependency_graph_python_transitive_mocked():
     """Test building dependency graph for Python requirements with mocked transitive dependencies."""
     from unittest.mock import patch
-    
+
     req_content = "library-y>=1.0.0\n"
-    
+
     with tempfile.TemporaryDirectory() as tmpdir:
         req_file = Path(tmpdir) / "requirements.txt"
         with open(req_file, "w", encoding="utf-8") as f:
             f.write(req_content)
-            
+
         # Mock get_python_transitive_dependencies to return a transitive dependency
         mock_transitive = [("library-x", SpecifierSet("<2.0"))]
         with patch("backend.secuscan.remediation.get_python_transitive_dependencies", return_value=mock_transitive):
             graph = build_dependency_graph(tmpdir)
-            
+
         assert "library-y" in graph
         assert graph["library-y"] == [{"parent": "root", "specifier": SpecifierSet(">=1.0.0")}]
-        
+
         assert "library-x" in graph
         assert graph["library-x"] == [{"parent": "library-y", "specifier": SpecifierSet("<2.0")}]

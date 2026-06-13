@@ -41,7 +41,7 @@ def _seed_finding(owner_id: str, finding_id: str, task_id: str, metadata: dict |
 def test_routes_expose_remediation_safety_fields(test_client):
     """Test that safe_to_apply, compatible_range, and alternatives fields are exposed in API responses when present in metadata, and default to None otherwise."""
     _seed_task(ALICE_OWNER, "task-1")
-    
+
     # 1. Seed finding with validated remediation metadata
     metadata_validated = {
         "safe_to_apply": False,
@@ -50,7 +50,7 @@ def test_routes_expose_remediation_safety_fields(test_client):
         "other_key": "some_value"
     }
     _seed_finding(ALICE_OWNER, "finding-validated", "task-1", metadata=metadata_validated)
-    
+
     # 2. Seed finding without validated remediation metadata
     metadata_unvalidated = {
         "other_key": "some_value"
@@ -61,12 +61,12 @@ def test_routes_expose_remediation_safety_fields(test_client):
     response_list = test_client.get("/api/v1/findings", headers=ALICE)
     assert response_list.status_code == 200
     findings_list = response_list.json()["findings"]
-    
+
     finding_val = next(f for f in findings_list if f["id"] == "finding-validated")
     assert finding_val["safe_to_apply"] is False
     assert finding_val["compatible_range"] == "<2.0"
     assert finding_val["alternatives"] == ["Upgrade package-y"]
-    
+
     finding_unval = next(f for f in findings_list if f["id"] == "finding-unvalidated")
     assert finding_unval["safe_to_apply"] is None
     assert finding_unval["compatible_range"] is None
