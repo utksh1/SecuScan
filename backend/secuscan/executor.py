@@ -1406,16 +1406,28 @@ class TaskExecutor:
         try:
             from .remediation import build_dependency_graph, validate_remediation
             graph = build_dependency_graph(target)
+            validations = {}
             for f in normalized_findings:
                 remediation_str = f.get("remediation", "")
                 if remediation_str:
                     val_res = validate_remediation(remediation_str, graph)
+                    validations[id(f)] = val_res
+
+            for f in normalized_findings:
+                if id(f) in validations:
+                    val_res = validations[id(f)]
                     f_metadata = f.setdefault("metadata", {})
                     f_metadata["safe_to_apply"] = val_res["safe_to_apply"]
                     f_metadata["compatible_range"] = val_res["compatible_range"]
                     f_metadata["alternatives"] = val_res["alternatives"]
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(
+                "Remediation safety validation failed for task %s (plugin %s): %s. Skipping safety metadata enrichment.",
+                task_id,
+                plugin_id,
+                str(e),
+                exc_info=True,
+            )
 
         previous_findings = await self._load_previous_task_findings(
             db,

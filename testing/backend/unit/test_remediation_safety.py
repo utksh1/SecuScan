@@ -168,3 +168,37 @@ def test_finding_model_safety_fields():
     assert finding.safe_to_apply is False
     assert finding.compatible_range == "<2.0"
     assert finding.alternatives == ["Upgrade library-y"]
+
+
+def test_build_dependency_graph_fallback_disabled():
+    """Verify that build_dependency_graph does not fall back to local manifests when target is invalid/nonexistent."""
+    # 1. Non-existent directory
+    graph_nonexistent = build_dependency_graph("nonexistent_directory_123")
+    assert graph_nonexistent == {}
+
+    # 2. URL/IP target
+    graph_url = build_dependency_graph("http://example.com/api")
+    assert graph_url == {}
+
+
+def test_build_dependency_graph_python_transitive_mocked():
+    """Test building dependency graph for Python requirements with mocked transitive dependencies."""
+    from unittest.mock import patch
+    
+    req_content = "library-y>=1.0.0\n"
+    
+    with tempfile.TemporaryDirectory() as tmpdir:
+        req_file = Path(tmpdir) / "requirements.txt"
+        with open(req_file, "w", encoding="utf-8") as f:
+            f.write(req_content)
+            
+        # Mock get_python_transitive_dependencies to return a transitive dependency
+        mock_transitive = [("library-x", SpecifierSet("<2.0"))]
+        with patch("backend.secuscan.remediation.get_python_transitive_dependencies", return_value=mock_transitive):
+            graph = build_dependency_graph(tmpdir)
+            
+        assert "library-y" in graph
+        assert graph["library-y"] == [{"parent": "root", "specifier": SpecifierSet(">=1.0.0")}]
+        
+        assert "library-x" in graph
+        assert graph["library-x"] == [{"parent": "library-y", "specifier": SpecifierSet("<2.0")}]

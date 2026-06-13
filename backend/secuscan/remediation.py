@@ -216,16 +216,6 @@ def parse_requirement_line(line: str) -> Tuple[str, SpecifierSet] | None:
         spec = SpecifierSet()
     return name, spec
 
-
-def get_mock_dependencies(pkg_name: str) -> List[Tuple[str, str]]:
-    """Return mock transitive dependencies for deterministic offline unit testing."""
-    registry = {
-        "library-y": [("library-x", "<2.0")],
-        "parent-package": [("child-package", "<=1.5.0")],
-    }
-    return registry.get(pkg_name, [])
-
-
 def get_python_transitive_dependencies(package_name: str) -> List[Tuple[str, SpecifierSet]]:
     """Retrieve python transitive dependencies from installed metadata."""
     try:
@@ -259,16 +249,20 @@ def build_dependency_graph(target_dir: str) -> Dict[str, List[Dict[str, Any]]]:
     """Scan the target directory for Python/Node manifests and construct a transitive dependency constraint graph."""
     graph: Dict[str, List[Dict[str, Any]]] = {}
 
-    target_path = Path(target_dir) if target_dir else Path(".")
+    if not target_dir:
+        return graph
+
+    target_path = Path(target_dir)
+    if not target_path.exists():
+        return graph
+
+    if target_path.is_file():
+        target_path = target_path.parent
 
     # 1. Search for python requirements
     req_files = ["requirements.txt", "requirements-dev.txt"]
     for req_name in req_files:
         p = target_path / req_name
-        if not p.exists():
-            # Fallback to local project root
-            p = Path("backend") / req_name
-
         if p.exists():
             try:
                 with open(p, "r", encoding="utf-8") as f:
@@ -282,34 +276,17 @@ def build_dependency_graph(target_dir: str) -> Dict[str, List[Dict[str, Any]]]:
                             })
 
                             # Transitive resolution
-                            mock_deps = get_mock_dependencies(name)
-                            if mock_deps:
-                                for dep_name, dep_spec_str in mock_deps:
-                                    try:
-                                        dep_spec = SpecifierSet(dep_spec_str)
-                                    except Exception:
-                                        dep_spec = SpecifierSet()
-                                    graph.setdefault(dep_name, []).append({
-                                        "parent": name,
-                                        "specifier": dep_spec
-                                    })
-                            else:
-                                for dep_name, dep_spec in get_python_transitive_dependencies(name):
-                                    graph.setdefault(dep_name, []).append({
-                                        "parent": name,
-                                        "specifier": dep_spec
-                                    })
+                            for dep_name, dep_spec in get_python_transitive_dependencies(name):
+                                graph.setdefault(dep_name, []).append({
+                                    "parent": name,
+                                    "specifier": dep_spec
+                                })
             except Exception:
                 pass
 
     # 2. Search for Node.js package-lock.json / package.json
     lock_path = target_path / "package-lock.json"
-    if not lock_path.exists():
-        lock_path = Path("frontend/package-lock.json")
-
     pkg_path = target_path / "package.json"
-    if not pkg_path.exists():
-        pkg_path = Path("frontend/package.json")
 
     if lock_path.exists():
         try:
