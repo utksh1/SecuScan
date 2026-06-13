@@ -48,6 +48,18 @@ _NATIVE_PLUGIN_IDS = frozenset({
     "port_scanner",
 })
 
+LEGACY_PLUGIN_ID_ALIASES: Dict[str, str] = {
+    "domain-finder": "domain_finder",
+    "google-dorking": "google_dorking",
+    "people-email-discovery": "people_email_discovery",
+    "port-scanner": "port_scanner",
+    "subdomain-finder": "subdomain_finder",
+    "url-fuzzer-2": "url_fuzzer",
+    "virtual-host-finder": "virtual_host_finder",
+    "website-recon-2": "website_recon",
+    "waf-detection": "waf_detector",
+}
+
 _VALIDATION_PRESETS: Dict[str, Dict[str, Any]] = {
     "url": {
         "pattern": re.compile(r"^https?://[^\s/$.?#].[^\s]*$", re.IGNORECASE),
@@ -309,8 +321,9 @@ class PluginManager:
         return True
 
     def get_plugin(self, plugin_id: str) -> Optional[PluginMetadata]:
-        """Get plugin by ID"""
-        return self.plugins.get(plugin_id)
+        """Get plugin by ID, supporting legacy plugin ID aliases."""
+        resolved_id = LEGACY_PLUGIN_ID_ALIASES.get(plugin_id, plugin_id)
+        return self.plugins.get(resolved_id)
 
     def list_plugins(self) -> List[Dict]:
         """List all loaded plugins"""

@@ -269,6 +269,8 @@ class TaskExecutor:
         if not plugin:
             raise ValueError(f"Plugin not found: {plugin_id}")
         
+        plugin_id = plugin.id
+        
         # Apply preset if provided
         if preset and preset in plugin.presets:
             preset_values = plugin.presets[preset]
