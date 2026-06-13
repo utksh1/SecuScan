@@ -313,6 +313,7 @@ class Database:
 
             CREATE TABLE IF NOT EXISTS notification_rules (
                 id TEXT PRIMARY KEY,
+                owner_id TEXT NOT NULL DEFAULT 'default',
                 name TEXT NOT NULL,
                 severity_threshold TEXT NOT NULL,
                 channel_type TEXT NOT NULL,
@@ -369,6 +370,7 @@ class Database:
 
             -- Workflows index (existing)
             CREATE INDEX IF NOT EXISTS idx_workflows_enabled ON workflows(enabled);
+            CREATE INDEX IF NOT EXISTS idx_notification_rules_owner ON notification_rules(owner_id);
             CREATE INDEX IF NOT EXISTS idx_notification_rules_active ON notification_rules(is_active);
             CREATE INDEX IF NOT EXISTS idx_notification_rules_severity ON notification_rules(severity_threshold);
             CREATE INDEX IF NOT EXISTS idx_notification_history_rule_id ON notification_history(rule_id);
@@ -502,6 +504,17 @@ class Database:
             """
         )
 
+    async def _ensure_column(self, table: str, column_def: str):
+        """Add a column to an existing table if it does not already exist."""
+        col_name = column_def.split(maxsplit=1)[0]
+        cursor = await self.connection.execute(f"PRAGMA table_info({table})")
+        rows = await cursor.fetchall()
+        for row in rows:
+            if row["name"] == col_name:
+                return
+        await self.connection.execute(f"ALTER TABLE {table} ADD COLUMN {column_def}")
+        await self.connection.commit()
+
     async def _run_migrations(self):
         migrations_dir = Path(__file__).parent / "migrations"
 
@@ -509,6 +522,14 @@ class Database:
             raise RuntimeError(
             f"Migrations directory not found at {migrations_dir} — "
             "ensure the backend package is installed correctly."
+        )
+
+        # Before running migration 004, ensure the owner_id column exists on
+        # existing notification_rules tables (fresh installs already have it
+        # via CREATE TABLE IF NOT EXISTS in _create_schema).
+        await self._ensure_column(
+            "notification_rules",
+            "owner_id TEXT NOT NULL DEFAULT 'default'",
         )
 
         for migration_file in sorted(migrations_dir.glob("*.sql")):

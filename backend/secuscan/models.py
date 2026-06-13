@@ -329,6 +329,7 @@ class NotificationRuleUpdate(BaseModel):
 class NotificationRuleResponse(BaseModel):
     """Stored notification rule returned by the API."""
     id: str
+    owner_id: str = "default"
     name: str
     severity_threshold: str
     channel_type: str
