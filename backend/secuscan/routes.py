@@ -1382,7 +1382,7 @@ async def get_settings():
 async def list_vault_secrets(
      owner: str = Depends(get_current_owner),
 ):
-    
+
     db = await get_db()
     rows = await db.fetchall(
         "SELECT id, name, created_at, updated_at FROM credential_vault WHERE owner_id =? ORDER BY name ASC",

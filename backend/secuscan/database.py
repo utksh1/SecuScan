@@ -390,7 +390,7 @@ class Database:
         # Migration logic: ensure latest columns exist in 'tasks' table
         tasks_columns = await self.fetchall("PRAGMA table_info(tasks)")
         existing_cols = {col["name"] for col in tasks_columns}
-        
+
         needed_cols = {
             # Per-user ownership for BOLA prevention (issue #401). NOT NULL with a
             # constant default backfills every existing row to the shared default
@@ -482,13 +482,13 @@ class Database:
                     print(f"Added missing column {col_name} to asset_services table.")
                 except Exception as e:
                     print(f"Failed to add column {col_name} to asset_services: {e}")
-                    
+
 
         # Reports table migration: ensure owner_id exists (issue #401)
         reports_columns = await self.fetchall("PRAGMA table_info(reports)")
         existing_report_cols = {col["name"] for col in reports_columns}
-        
-        
+
+
         if "owner_id" not in existing_report_cols:
             try:
                 await self.execute(
@@ -497,12 +497,12 @@ class Database:
                 print("Added missing column 'owner_id' to reports table.")
             except Exception as e:
                 print(f"Failed to add 'owner_id' to reports: {e}")
-                
+
         # Vault table migration
         vault_columns = await self.fetchall("PRAGMA table_info(credential_vault)")
         existing_vault_cols = {col["name"] for col in vault_columns}
-        
-        
+
+
         if "owner_id" not in existing_vault_cols:
             try:
                 await self.execute(
@@ -520,10 +520,10 @@ class Database:
            CREATE INDEX IF NOT EXISTS idx_findings_owner ON findings(owner_id);
            CREATE INDEX IF NOT EXISTS idx_reports_owner ON reports(owner_id);
            CREATE INDEX IF NOT EXISTS idx_credential_vault_owner ON credential_vault(owner_id);
-           
+
           """
         )
-       
+
     async def _run_migrations(self):
         migrations_dir = Path(__file__).parent / "migrations"
 
