@@ -65,7 +65,7 @@ def test_validate_target_ipv4_with_ipv6_allowed_network_does_not_crash(monkeypat
     ok, msg = validate_target("127.0.0.1", safe_mode=True)
 
     assert ok is False
-    assert msg == "Target not within allowed networks in safe mode (SecuScan Guardrail)"
+    assert "Security block: Target 127.0.0.1 is not within the explicitly allowed internal network ranges" in msg
 
 
 def test_validate_target_ipv6_with_ipv4_allowed_network_does_not_crash(monkeypatch):
@@ -73,7 +73,7 @@ def test_validate_target_ipv6_with_ipv4_allowed_network_does_not_crash(monkeypat
     ok, msg = validate_target("::1", safe_mode=True)
 
     assert ok is False
-    assert msg == "Public IPs/networks not allowed in safe mode (SecuScan Guardrail)"
+    assert "Security block: Target ::1 includes public IP addresses" in msg
 
 
 def test_validate_target_mixed_allowed_networks_uses_later_same_version_entry(monkeypatch):
