@@ -2,6 +2,7 @@ import base64
 import csv
 import html
 import io
+import logging
 import json
 import re
 from .redaction import redact, redact_dict
@@ -13,6 +14,9 @@ from typing import Any, Dict, List
 from PIL import Image, ImageDraw
 from xhtml2pdf import pisa
 
+
+
+logger = logging.getLogger(__name__)
 
 class ReportGenerator:
     """Handles PDF, HTML, and CSV generation for security audits."""
@@ -31,18 +35,27 @@ class ReportGenerator:
 
     @classmethod
     def _get_ai_summary(cls, findings):
-        """Return an AI executive summary, or '' when the feature is disabled."""
+        """Return an AI executive summary, or '' when disabled or on any error.
+
+        Never raises: report generation must always succeed even if the LLM
+        provider is misconfigured, unreachable, or returns an error.
+        """
         from .config import settings as _settings
-        if not _settings.ai_summary_enabled:
+        if not _settings.ai_summary_enabled or not _settings.ai_summary_api_key:
             return ""
-        if not _settings.ai_summary_api_key:
+        try:
+            return generate_summary(
+                findings=findings,
+                model=_settings.ai_summary_model,
+                api_key=_settings.ai_summary_api_key,
+                base_url=_settings.ai_summary_base_url or None,
+            ) or ""
+        except Exception:  # noqa: BLE001 - never let summaries break reports
+            logger.warning(
+                "ai_summary: generation failed; continuing without it",
+                exc_info=True,
+            )
             return ""
-        return generate_summary(
-            findings=findings,
-            model=_settings.ai_summary_model,
-            api_key=_settings.ai_summary_api_key,
-            base_url=_settings.ai_summary_base_url or None,
-        )
 
     @staticmethod
     def _hex_to_rgb(value: str) -> tuple[int, int, int]:

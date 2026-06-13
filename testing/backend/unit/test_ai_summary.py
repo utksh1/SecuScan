@@ -43,20 +43,21 @@ class TestBuildPrompt:
         assert "1 high" in prompt
         assert "1 medium" in prompt
 
-    def test_top_findings_contains_critical_and_high(self):
+    def test_finding_titles_are_never_sent(self):
+        # Privacy boundary (#640): no per-finding title text in the prompt.
         prompt = _build_prompt(SAMPLE_FINDINGS)
-        assert "SQL Injection" in prompt
-        assert "Reflected XSS" in prompt
+        assert "SQL Injection" not in prompt
+        assert "Reflected XSS" not in prompt
+        assert "Outdated jQuery" not in prompt
+        assert "Server version" not in prompt
 
-    def test_low_and_info_not_in_top_findings_section(self):
-        top_section = _build_prompt(SAMPLE_FINDINGS).split("Most critical findings:")[1]
-        assert "Outdated jQuery" not in top_section
-        assert "Server version" not in top_section
+    def test_severity_distribution_present(self):
+        prompt = _build_prompt(SAMPLE_FINDINGS)
+        assert "critical" in prompt and "high" in prompt
 
     def test_empty_findings_produces_valid_prompt(self):
         prompt = _build_prompt([])
         assert "Total findings: 0" in prompt
-        assert "none in critical/high range" in prompt
 
     def test_no_hostnames_or_ips_in_prompt(self):
         prompt = _build_prompt([{
@@ -65,6 +66,7 @@ class TestBuildPrompt:
         }])
         assert "10.0.0.1" not in prompt
         assert "internal-db.corp" not in prompt
+        assert "Open redirect" not in prompt  # title itself must not leak
 
     def test_category_distribution_present(self):
         prompt = _build_prompt(SAMPLE_FINDINGS)
@@ -179,6 +181,21 @@ class TestReportGeneratorAiSummary:
             ms.ai_summary_enabled = True
             ms.ai_summary_api_key = ""
             result = ReportGenerator._get_ai_summary([{"title": "x", "severity": "high"}])
+        assert result == ""
+
+    def test_get_ai_summary_survives_provider_failure(self):
+        # A raising LLM provider must never break report generation (#640).
+        from backend.secuscan.reporting import ReportGenerator
+        with patch("backend.secuscan.config.settings") as ms:
+            ms.ai_summary_enabled = True
+            ms.ai_summary_api_key = "sk-test"
+            ms.ai_summary_model = "gpt-4o-mini"
+            ms.ai_summary_base_url = ""
+            with patch(
+                "backend.secuscan.reporting.generate_summary",
+                side_effect=RuntimeError("provider down"),
+            ):
+                result = ReportGenerator._get_ai_summary([{"severity": "high"}])
         assert result == ""
 
     def test_sarif_report_unchanged(self):
