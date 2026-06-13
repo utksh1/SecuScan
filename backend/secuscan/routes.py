@@ -1379,16 +1379,21 @@ async def get_settings():
 
 
 @router.get("/vault", dependencies=[Depends(vault_limiter)])
-async def list_vault_secrets():
+async def list_vault_secrets(
+     owner: str = Depends(get_current_owner),
+):
+
     db = await get_db()
     rows = await db.fetchall(
-        "SELECT id, name, created_at, updated_at FROM credential_vault ORDER BY name ASC"
+        "SELECT id, name, created_at, updated_at FROM credential_vault WHERE owner_id =? ORDER BY name ASC",
+        (owner,),
     )
     return {"items": rows, "total": len(rows)}
 
 
 @router.put("/vault/{name}", dependencies=[Depends(vault_limiter)])
-async def upsert_vault_secret(name: str, payload: Dict[str, str]):
+async def upsert_vault_secret(name: str, payload: Dict[str, str],owner: str = Depends(get_current_owner),
+):
     value = str(payload.get("value", ""))
     if not value:
         raise HTTPException(status_code=400, detail="Secret value is required")
@@ -1398,24 +1403,24 @@ async def upsert_vault_secret(name: str, payload: Dict[str, str]):
     encrypted = crypto.encrypt(value)
     secret_id = str(uuid.uuid4())
 
-    existing = await db.fetchone("SELECT id FROM credential_vault WHERE name = ?", (name,))
+    existing = await db.fetchone("SELECT id FROM credential_vault WHERE owner_id = ? AND name = ?", (owner,name,),)
     if existing:
         await db.execute(
-            "UPDATE credential_vault SET encrypted_value = ?, updated_at = datetime('now') WHERE name = ?",
-            (encrypted, name),
+            "UPDATE credential_vault SET encrypted_value = ?, updated_at = datetime('now') WHERE owner_id = ? AND name = ?",
+            (encrypted,owner,name),
         )
     else:
         await db.execute(
-            "INSERT INTO credential_vault (id, name, encrypted_value) VALUES (?, ?, ?)",
-            (secret_id, name, encrypted),
+            "INSERT INTO credential_vault (id, owner_id, name, encrypted_value) VALUES (?, ?, ?, ?)",
+            (secret_id, owner, name, encrypted),
         )
     return {"name": name, "stored": True}
 
 
 @router.get("/vault/{name}", dependencies=[Depends(vault_limiter)])
-async def get_vault_secret(name: str):
+async def get_vault_secret(name: str,owner: str = Depends(get_current_owner)):
     db = await get_db()
-    row = await db.fetchone("SELECT encrypted_value FROM credential_vault WHERE name = ?", (name,))
+    row = await db.fetchone("SELECT encrypted_value FROM credential_vault WHERE owner_id = ? AND name = ?", (owner,name,))
     if not row:
         raise HTTPException(status_code=404, detail="Secret not found")
     crypto = VaultCrypto(settings.resolved_vault_key)
@@ -1423,9 +1428,9 @@ async def get_vault_secret(name: str):
 
 
 @router.delete("/vault/{name}", dependencies=[Depends(vault_limiter)])
-async def delete_vault_secret(name: str):
+async def delete_vault_secret(name: str,owner: str = Depends(get_current_owner),):
     db = await get_db()
-    await db.execute("DELETE FROM credential_vault WHERE name = ?", (name,))
+    await db.execute("DELETE FROM credential_vault WHERE owner_id = ? AND name = ?", (owner,name),)
     return {"name": name, "deleted": True}
 
 

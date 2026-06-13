@@ -266,11 +266,13 @@ class Database:
 
             CREATE TABLE IF NOT EXISTS credential_vault (
                 id TEXT PRIMARY KEY,
-                name TEXT NOT NULL UNIQUE,
+                owner_id TEXT NOT NULL DEFAULT 'default',
+                name TEXT NOT NULL,
                 encrypted_value TEXT NOT NULL,
                 created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
                 updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
             );
+            CREATE INDEX IF NOT EXISTS idx_credential_vault_owner ON credential_vault(owner_id);
 
             CREATE TABLE IF NOT EXISTS workflows (
                 id TEXT PRIMARY KEY,
@@ -388,7 +390,7 @@ class Database:
         # Migration logic: ensure latest columns exist in 'tasks' table
         tasks_columns = await self.fetchall("PRAGMA table_info(tasks)")
         existing_cols = {col["name"] for col in tasks_columns}
-        
+
         needed_cols = {
             # Per-user ownership for BOLA prevention (issue #401). NOT NULL with a
             # constant default backfills every existing row to the shared default
@@ -481,9 +483,12 @@ class Database:
                 except Exception as e:
                     print(f"Failed to add column {col_name} to asset_services: {e}")
 
+
         # Reports table migration: ensure owner_id exists (issue #401)
         reports_columns = await self.fetchall("PRAGMA table_info(reports)")
         existing_report_cols = {col["name"] for col in reports_columns}
+
+
         if "owner_id" not in existing_report_cols:
             try:
                 await self.execute(
@@ -493,13 +498,30 @@ class Database:
             except Exception as e:
                 print(f"Failed to add 'owner_id' to reports: {e}")
 
+        # Vault table migration
+        vault_columns = await self.fetchall("PRAGMA table_info(credential_vault)")
+        existing_vault_cols = {col["name"] for col in vault_columns}
+
+
+        if "owner_id" not in existing_vault_cols:
+            try:
+                await self.execute(
+                    "ALTER TABLE credential_vault "
+                    "ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'default'"
+                            )
+                print("Added missing column 'owner_id' to credential_vault table.")
+            except Exception as e:
+                print(f"Failed to add 'owner_id' to credential_vault: {e}")
+
         # Owner indexes must run after ALTER TABLE backfills owner_id on legacy DBs.
         await self.connection.executescript(
-            """
-            CREATE INDEX IF NOT EXISTS idx_tasks_owner ON tasks(owner_id);
-            CREATE INDEX IF NOT EXISTS idx_findings_owner ON findings(owner_id);
-            CREATE INDEX IF NOT EXISTS idx_reports_owner ON reports(owner_id);
-            """
+           """
+           CREATE INDEX IF NOT EXISTS idx_tasks_owner ON tasks(owner_id);
+           CREATE INDEX IF NOT EXISTS idx_findings_owner ON findings(owner_id);
+           CREATE INDEX IF NOT EXISTS idx_reports_owner ON reports(owner_id);
+           CREATE INDEX IF NOT EXISTS idx_credential_vault_owner ON credential_vault(owner_id);
+
+          """
         )
 
     async def _run_migrations(self):
