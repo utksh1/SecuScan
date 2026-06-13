@@ -1,33 +1,33 @@
 {
-  "id": "google-dorking",
-  "name": "Google Hacking",
+  "id": "subdomain_finder",
+  "name": "Subdomain Finder",
   "version": "1.0.0",
-  "description": "Find publicly indexed information about target.",
-  "long_description": "Find publicly indexed information about target.",
+  "description": "Discover subdomains of a domain.",
+  "long_description": "Discover subdomains of a domain.",
   "category": "recon",
   "author": {
     "name": "SecuScan Contributors",
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd0e",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
-    "binary": "python3"
+    "binary": "subfinder"
   },
   "command_template": [
-    "python3",
-    "-c",
-    "target='{target}';print('site:'+target);print('inurl:admin site:'+target);print('filetype:sql site:'+target);print('intitle:index.of '+target)"
+    "subfinder",
+    "-d",
+    "{target}",
+    "-silent"
   ],
   "fields": [
     {
       "id": "target",
-      "label": "Target Domain",
+      "label": "Root Domain",
       "type": "string",
       "required": true,
-      "placeholder": "secuscan.in",
-      "help": "Domain to build Google dork queries for."
+      "placeholder": "secuscan.in"
     }
   ],
   "presets": {
@@ -47,10 +47,10 @@
   },
   "dependencies": {
     "binaries": [
-      "python3"
+      "subfinder"
     ],
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "7284033396542bcc591307d2339b525d7eebd0da5365a252b79ff21a0160f208"
+  "checksum": "964933cf6099bb2d5713ed09da228efdaa5dd295c0015690c5319485873c061c"
 }

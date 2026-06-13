@@ -22,7 +22,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from backend.secuscan.plugin_validator import PluginMetadataValidator
 from backend.secuscan.plugins import PluginManager
 
-PLUGIN_DIR = REPO_ROOT / "plugins" / "website-recon-2"
+PLUGIN_DIR = REPO_ROOT / "plugins" / "website_recon"
 PLUGINS_DIR = REPO_ROOT / "plugins"
 
 # ---------------------------------------------------------------------------
@@ -64,7 +64,7 @@ def test_website_recon_2_metadata_id_matches_directory():
         (PLUGIN_DIR / "metadata.json").read_text(encoding="utf-8")
     )
 
-    assert data["id"] == "website-recon-2"
+    assert data["id"] == "website_recon"
 
 def test_website_recon_2_engine_is_httpx():
     data = json.loads(
@@ -105,7 +105,7 @@ def test_website_recon_2_command_renders_with_target(
     asyncio.run(manager.load_plugins())
 
     command = manager.build_command(
-        "website-recon-2",
+        "website_recon",
         {"target": "https://secuscan.in"},
     )
 
@@ -126,7 +126,7 @@ def test_website_recon_2_command_full_token_sequence(
     asyncio.run(manager.load_plugins())
 
     command = manager.build_command(
-        "website-recon-2",
+        "website_recon",
         {"target": "https://secuscan.in"},
     )
 
@@ -147,7 +147,7 @@ def test_website_recon_2_drops_target_token_when_absent(
     asyncio.run(manager.load_plugins())
 
     rendered = manager.build_command(
-        "website-recon-2",
+        "website_recon",
         {},
     )
 
@@ -155,7 +155,7 @@ def test_website_recon_2_drops_target_token_when_absent(
     assert not any("{" in token for token in rendered)
 
     populated = manager.build_command(
-        "website-recon-2",
+        "website_recon",
         {"target": "https://secuscan.in"},
     )
 
@@ -167,10 +167,10 @@ def test_website_recon_2_loaded_by_plugin_manager(
     manager = PluginManager(str(PLUGINS_DIR))
     asyncio.run(manager.load_plugins())
 
-    plugin = manager.get_plugin("website-recon-2")
+    plugin = manager.get_plugin("website_recon")
 
     assert plugin is not None
-    assert plugin.id == "website-recon-2"
+    assert plugin.id == "website_recon"
 
 # ---------------------------------------------------------------------------
 # Parser contract tests

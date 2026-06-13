@@ -298,7 +298,7 @@ def test_plugin_manager_rejects_linux_wordlist_absolute_default(setup_test_envir
 
     with pytest.raises(ValueError, match="absolute"):
         manager.build_command(
-            "virtual-host-finder",
+            "virtual_host_finder",
             {"target": "example.com"},
         )
 

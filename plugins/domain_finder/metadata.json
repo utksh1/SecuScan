@@ -1,24 +1,27 @@
 {
-  "id": "subdomain_takeover",
-  "name": "Subdomain Takeover",
+  "id": "domain_finder",
+  "name": "Domain Finder",
   "version": "1.0.0",
-  "description": "Discover dangling DNS entries pointing to external services.",
-  "long_description": "Discover dangling DNS entries pointing to external services.",
-  "category": "exploit",
+  "description": "Discover additional domain names of target organization.",
+  "long_description": "Discover additional domain names of target organization.",
+  "category": "recon",
   "author": {
     "name": "SecuScan Contributors",
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "🛠️",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
-    "binary": "subfinder"
+    "binary": "amass"
   },
   "command_template": [
-    "subfinder",
+    "amass",
+    "enum",
     "-d",
     "{target}",
+    "-dir",
+    "/tmp/amass",
     "-silent"
   ],
   "fields": [
@@ -38,9 +41,8 @@
     "parser": "custom"
   },
   "safety": {
-    "level": "intrusive",
-    "requires_consent": true,
-    "consent_message": "Subdomain takeover checks may touch third-party hosted endpoints.",
+    "level": "safe",
+    "requires_consent": false,
     "rate_limit": {
       "max_per_hour": 20,
       "max_concurrent": 1
@@ -48,10 +50,10 @@
   },
   "dependencies": {
     "binaries": [
-      "subfinder"
+      "amass"
     ],
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "f735cebb8c673daee580c4026eb8cdef2ebdb5232a3a3591350dda3aa231fc75"
+  "checksum": "8b37efdcea455b696de31c990167cc39d9040472136170ed95449d4acfdcecb0"
 }

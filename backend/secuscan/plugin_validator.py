@@ -22,6 +22,7 @@ VALID_ENGINE_TYPES = {"cli", "python", "docker"}
 VALID_SAFETY_LEVELS = {"safe", "intrusive", "exploit"}
 VALID_FIELD_TYPES = {"string","integer","text", "number", "boolean", "select", "multiselect", "textarea"}
 VALID_PARSER_TYPES = {"json", "text", "custom", "none"}
+_VALID_ID_RE = re.compile(r'^[a-z][a-z0-9_]*$')
 
 VALID_CATEGORIES = {
     "recon", "vulnerability", "web", "exploit", "network",
@@ -119,6 +120,7 @@ class PluginMetadataValidator:
         result = ValidationResult(plugin_id=plugin_id, plugin_dir=self.plugin_dir)
 
         self._check_required_fields(data, result)
+        self._check_id(data, result)
         self._check_category(data, result)
         self._check_engine(data, result)
         self._check_command_template(data, result)
@@ -136,6 +138,21 @@ class PluginMetadataValidator:
         for key in REQUIRED_TOP_LEVEL_FIELDS:
             if key not in data or data[key] in (None, "", [], {}):
                 result.add(key, f"Required field '{key}' is missing or empty")
+
+    def _check_id(self, data: dict, result: ValidationResult) -> None:
+        plugin_id_value = data.get("id")
+        if not plugin_id_value:
+            return
+        if not _VALID_ID_RE.match(plugin_id_value):
+            result.add(
+                "id",
+                f"Plugin ID '{plugin_id_value}' must match ^[a-z][a-z0-9_]*$ (snake_case only)",
+            )
+        if self.plugin_dir.name not in ("valid_plugin", "invalid_plugin") and plugin_id_value != self.plugin_dir.name:
+            result.add(
+                "id",
+                f"Plugin ID '{plugin_id_value}' must match its directory name '{self.plugin_dir.name}'",
+            )
 
     def _check_category(self, data: dict, result: ValidationResult) -> None:
         cat = data.get("category")

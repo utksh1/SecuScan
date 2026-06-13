@@ -469,7 +469,7 @@ async def start_task(
     # the quota for all other users of the same plugin.
     client_id = resolve_client_identity(raw_request)
     can_execute, error_msg = await rate_limiter.can_execute(
-        request.plugin_id,
+        plugin.id,
         plugin.safety.get("rate_limit", {}).get("max_per_hour", settings.max_tasks_per_hour),
         client_id=client_id,
     )
@@ -480,7 +480,7 @@ async def start_task(
     # Create task record first so we have a real task_id for the limiter
     try:
         task_id = await executor.create_task(
-            request.plugin_id,
+            plugin.id,
             effective_inputs,
             safe_mode=safe_mode,
             preset=request.preset,

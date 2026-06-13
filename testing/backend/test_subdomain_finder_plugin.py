@@ -12,7 +12,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from backend.secuscan.plugin_validator import PluginMetadataValidator
 from backend.secuscan.plugins import PluginManager
 
-PLUGIN_ID = "subdomain-finder"
+PLUGIN_ID = "subdomain_finder"
 PLUGIN_DIR = REPO_ROOT / "plugins" / PLUGIN_ID
 PLUGINS_DIR = REPO_ROOT / "plugins"
 PARSER_PATH = PLUGIN_DIR / "parser.py"

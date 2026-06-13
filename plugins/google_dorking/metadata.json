@@ -1,35 +1,33 @@
 {
-  "id": "people-email-discovery",
-  "name": "People Hunter",
+  "id": "google_dorking",
+  "name": "Google Hacking",
   "version": "1.0.0",
-  "description": "Discover email addresses and social media profiles.",
-  "long_description": "Discover email addresses and social media profiles.",
+  "description": "Find publicly indexed information about target.",
+  "long_description": "Find publicly indexed information about target.",
   "category": "recon",
   "author": {
     "name": "SecuScan Contributors",
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd0e",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
-    "binary": "theHarvester"
+    "binary": "python3"
   },
   "command_template": [
-    "theHarvester",
-    "-d",
-    "{target}",
-    "-b",
-    "all"
+    "python3",
+    "-c",
+    "target='{target}';print('site:'+target);print('inurl:admin site:'+target);print('filetype:sql site:'+target);print('intitle:index.of '+target)"
   ],
   "fields": [
     {
       "id": "target",
       "label": "Target Domain",
-      "help": "Enter the domain name to search for associated email addresses and public profiles.",
       "type": "string",
       "required": true,
-      "placeholder": "secuscan.in"
+      "placeholder": "secuscan.in",
+      "help": "Domain to build Google dork queries for."
     }
   ],
   "presets": {
@@ -49,10 +47,10 @@
   },
   "dependencies": {
     "binaries": [
-      "theHarvester"
+      "python3"
     ],
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "b637adaf26113ae2e6225ad26b61bc60bd3777a6c3e8fac58d0ec78b21ebd4e1"
+  "checksum": "f2665f8e61c02957c0947a2df508a96895e1df5554a4a9942bf747c1c01b262f"
 }

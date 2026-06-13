@@ -265,10 +265,12 @@ class TaskExecutor:
         task_id = str(uuid.uuid4())
         plugin_manager = get_plugin_manager()
         plugin = plugin_manager.get_plugin(plugin_id)
-        
+
         if not plugin:
             raise ValueError(f"Plugin not found: {plugin_id}")
-        
+
+        plugin_id = plugin.id
+
         # Apply preset if provided
         if preset and preset in plugin.presets:
             preset_values = plugin.presets[preset]
