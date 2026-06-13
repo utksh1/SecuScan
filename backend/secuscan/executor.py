@@ -913,21 +913,27 @@ class TaskExecutor:
         """
         Cancel a running task.
 
+        Fixes a TOCTOU race condition (issue #724) where the task could
+        complete between the existence check and the dictionary access.
+        Also guards the database update to prevent overwriting a legitimate
+        'completed' status with 'cancelled'.
+
         Args:
             task_id: Task identifier
 
         Returns:
             True if cancelled successfully
         """
-        if task_id not in self.running_tasks:
+        task = self.running_tasks.get(task_id)
+        if task is None:
             return False
-        task = self.running_tasks[task_id]
 
         pid = self._process_pids.get(task_id)
         if pid is not None:
             await _terminate_process_group(pid, task_id)
 
-        task.cancel()
+        if not task.done():
+            task.cancel()
 
         # If docker is enabled, forcefully kill the sandbox container
         if settings.docker_enabled:
@@ -943,8 +949,8 @@ class TaskExecutor:
 
         db = await get_db()
         await db.execute(
-            "UPDATE tasks SET status = ?, completed_at = ? WHERE id = ?",
-            (TaskStatus.CANCELLED.value, datetime.now().isoformat(), task_id)
+            "UPDATE tasks SET status = ?, completed_at = ? WHERE id = ? AND status = ?",
+            (TaskStatus.CANCELLED.value, datetime.now().isoformat(), task_id, TaskStatus.RUNNING.value)
         )
 
         await self._broadcast(task_id, "status", TaskStatus.CANCELLED.value)
