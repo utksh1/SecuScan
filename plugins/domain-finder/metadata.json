@@ -2,8 +2,8 @@
   "id": "domain-finder",
   "name": "Domain Finder",
   "version": "1.0.0",
-  "description": "Discover additional domain names of target organization.",
-  "long_description": "Discover additional domain names of target organization.",
+  "description": "Discover root domains owned by a target organization using Amass enum. Note: currently shares binary with the Amass plugin \u2014 see issue #547.",
+  "long_description": "Uses Amass enum to surface domains related to a target organization. This plugin currently shares its underlying binary and command with the Amass plugin. A future update should replace it with a dedicated tool (e.g. reverse WHOIS, Amass intel mode) to make it truly distinct.",
   "category": "recon",
   "author": {
     "name": "SecuScan Contributors",
@@ -17,11 +17,10 @@
   },
   "command_template": [
     "amass",
-    "enum",
+    "intel",
     "-d",
     "{target}",
-    "-dir",
-    "/tmp/amass",
+    "-whois",
     "-silent"
   ],
   "fields": [
@@ -55,5 +54,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "b8bc0ebc7ba6b739c3f81be706c98cc354e9ffdad1468d62ef00600a3e8907d6"
+  "checksum": "8906eac8330d6dd5984da8e8cc94aff3af41612236f34bb01b78a77ecc525ace"
 }

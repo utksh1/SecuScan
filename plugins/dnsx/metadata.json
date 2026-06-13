@@ -2,15 +2,15 @@
   "id": "dnsx",
   "name": "dnsx",
   "version": "1.0.0",
-  "description": "DNS resolution and wildcard-aware validation at scale.",
-  "long_description": "DNS resolution and wildcard-aware validation at scale.",
+  "description": "Resolve and validate a list of hostnames at scale with wildcard detection.",
+  "long_description": "dnsx is a DNS resolution tool, not a subdomain discovery tool. It takes a list of hostnames (typically output from Subfinder or Amass) and resolves them to confirm which ones are live, filtering out wildcard DNS responses. Use dnsx as a post-processing step after subdomain discovery \u2014 pipe Subfinder or Amass output into dnsx to get a clean, validated list of active hosts.",
   "category": "recon",
   "author": {
     "name": "SecuScan Contributors",
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "🔎",
+  "icon": "\ud83d\udd0e",
   "engine": {
     "type": "cli",
     "binary": "dnsx"
@@ -27,8 +27,7 @@
       "label": "Domain",
       "type": "string",
       "required": true,
-      "placeholder": "secuscan.in",
-      "help": "The target domain against which DNS resolution and verification will be performed (e.g., example.com)."
+      "placeholder": "secuscan.in"
     }
   ],
   "presets": {
@@ -53,5 +52,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "d7a7914e25e63212882702cc8ff218819dd609e38025e24514dd36cf6670cb68"
+  "checksum": "e3c2ae76d363be9f31db107aac0c9798124a36a92a6757b6c3d29f1cd6094761"
 }

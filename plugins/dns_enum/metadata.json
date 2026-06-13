@@ -2,8 +2,8 @@
   "id": "dns_enum",
   "name": "DNS Reconnaissance",
   "version": "1.0.0",
-  "description": "Enumerate DNS records and configurations",
-  "long_description": "DNSRecon is a powerful DNS reconnaissance tool. It can perform various types of DNS security assessments, including zone transfers, reverse lookups, and brute forcing.",
+  "description": "Enumerate DNS records (A, MX, NS, SOA), attempt zone transfers, and brute-force subdomains using DNSRecon.",
+  "long_description": "DNS Recon uses DNSRecon to inspect the DNS configuration of a target domain. Unlike subdomain discovery plugins (Amass, Subfinder), this plugin focuses on DNS record types and server misconfigurations \u2014 such as exposed zone transfers (AXFR) and missing SPF/DMARC records. Use this after identifying a target domain to understand its DNS infrastructure before deeper enumeration.",
   "category": "recon",
   "author": {
     "name": "SecuScan Contributors",
@@ -88,5 +88,5 @@
     ]
   },
   "docker_image": "darkoperator/dnsrecon:latest",
-  "checksum": "a9d9107ad715c542acc252d495337b6f7de790210e3d300971e1aba2e19260f4"
+  "checksum": "4d52a0d59b109ada0c9c178f06c6135825a48f152cf613c35638fec5f6c6f382"
 }
