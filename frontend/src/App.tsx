@@ -11,6 +11,7 @@ import Settings from './pages/Settings'
 import Scans from './pages/Scans'
 import TaskDetails from './pages/TaskDetails'
 import Workflows from './pages/Workflows'
+import PluginHealth from './pages/PluginHealth'
 import ApiKeySetupScreen from './components/ApiKeySetupScreen'
 import ErrorBoundary from './components/ErrorBoundary'
 
@@ -28,6 +29,7 @@ export function AppRoutes() {
       <Route path={routes.scanTool} element={<ToolConfig />} />
       <Route path={routes.findings} element={<Findings />} />
       <Route path={routes.scans} element={<Scans />} />
+      <Route path={routes.plugins} element={<PluginHealth />} />
       <Route path={routes.reports} element={<Reports />} />
       <Route path={routes.reportsCompare} element={<ReportCompare />} />
       <Route path={routes.workflows} element={<Workflows />} />
