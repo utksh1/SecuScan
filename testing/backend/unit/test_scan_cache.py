@@ -184,6 +184,7 @@ async def test_execute_task_cache_hit(temp_repo):
     executor._persist_result_resources = AsyncMock()
     executor._dispatch_task_notifications = AsyncMock()
     executor._invalidate_cached_views = AsyncMock()
+    executor._execute_command = AsyncMock()
 
     with patch("backend.secuscan.executor.get_db", return_value=mock_db), \
          patch("backend.secuscan.executor.get_plugin_manager") as mock_pm:
@@ -193,6 +194,9 @@ async def test_execute_task_cache_hit(temp_repo):
         mock_pm.return_value.get_plugin.return_value = mock_plugin
 
         await executor.execute_task("task_id_123", bypass_cache=False)
+
+        # Verify _execute_command was never called (regression test for cache bypass)
+        executor._execute_command.assert_not_called()
 
         # Verify db was updated with status, duration, etc.
         mock_db.execute.assert_any_call(
