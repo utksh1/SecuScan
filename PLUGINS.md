@@ -310,3 +310,34 @@ python scripts/validate_plugin.py --plugin plugins/nmap
 
 The validation checks metadata JSON, required fields, checksums, and custom
 parser imports when applicable.
+
+### Metadata quality lint rules
+
+Two additional lint checks help maintain high-quality plugin metadata:
+
+1. **Missing field help text** — Each field in the `fields` array should include
+   a `help` string that provides a brief user-facing description of the input.
+   Fields without `help` text produce a lint **warning** (the plugin is still valid).
+
+   ```json
+   // Good — has help text
+   { "id": "target", "label": "Target", "type": "text", "help": "IP address or hostname to scan" }
+
+   // Bad — missing help text (lint warning)
+   { "id": "target", "label": "Target", "type": "text" }
+   ```
+
+2. **Ambiguous category** — Each plugin's `category` must be one of the
+   recognized categories: `recon`, `vulnerability`, `web`, `exploit`, `network`,
+   `expert`, `code`, `forensics`, `utils`, `execution`, `security`, `robots`.
+   Unknown or misspelled categories cause a validation **error** and block
+   the plugin from being loaded.
+
+   ```bash
+   # Run the linter
+   python scripts/validate_plugins.py
+   ```
+
+Existing plugins can be brought into compliance incrementally — the help
+text check is a non-blocking warning, and unknown categories cause a
+clear error message identifying the problem.
