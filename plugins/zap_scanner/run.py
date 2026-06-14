@@ -32,6 +32,16 @@ def main():
             timeout=600,
         )
 
+        if result.returncode != 0:
+            err_msg = (result.stderr or "").strip() or f"ZAP process exited with code {result.returncode}"
+            print(json.dumps({
+                "error": f"ZAP scan failed: {err_msg}",
+                "findings": [],
+                "count": 0,
+                "stderr": result.stderr[:2000],
+            }))
+            sys.exit(1)
+
         findings = []
         if os.path.exists(json_path):
             with open(json_path) as f:

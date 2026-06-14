@@ -1,4 +1,8 @@
 import json
+import sys
+from unittest.mock import patch, MagicMock
+
+import pytest
 
 from plugins.zap_scanner.parser import parse
 
@@ -104,3 +108,33 @@ def test_parse_skips_non_dict_items():
     result = parse(payload)
     assert result["count"] == 1
     assert result["findings"][0]["title"] == "Valid"
+
+
+def test_run_exits_with_error_on_nonzero_docker_exit(capsys):
+    """run.py must return a non-zero exit and emit a JSON error when ZAP fails."""
+    from plugins.zap_scanner import run as zap_run
+
+    mock_result = MagicMock()
+    mock_result.returncode = 1
+    mock_result.stderr = "ERROR: could not connect to target"
+    mock_result.stdout = ""
+
+    with (
+        patch.object(sys, "argv", ["run.py", "https://example.com"]),
+        patch("plugins.zap_scanner.run.subprocess.run", return_value=mock_result),
+        patch("plugins.zap_scanner.run.tempfile.mkdtemp", return_value="/tmp/fake_zap"),
+        patch("plugins.zap_scanner.run.os.path.exists", return_value=False),
+        patch("plugins.zap_scanner.run.shutil.rmtree"),
+    ):
+        with pytest.raises(SystemExit) as exc_info:
+            zap_run.main()
+
+    assert exc_info.value.code == 1
+
+    captured = capsys.readouterr()
+    output = json.loads(captured.out)
+
+    assert output["error"].startswith("ZAP scan failed:")
+    assert "could not connect to target" in output["error"]
+    assert output["findings"] == []
+    assert output["count"] == 0
