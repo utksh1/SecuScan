@@ -130,7 +130,7 @@ async def test_send_email_html_escaping(mock_smtp_class):
     assert "&lt;img src=x onerror=alert(&#x27;target&#x27;)&gt;" in html_part
     assert "&lt;div class=&quot;xss&quot;&gt;description&lt;/div&gt;" in html_part
     assert "&lt;iframe src=&quot;javascript:alert(&#x27;remediation&#x27;)&quot;&gt;&lt;/iframe&gt;" in html_part
-    
+
     # Check that newlines in description/remediation are replaced with <br>
     assert "description&lt;/div&gt;<br>new line" in html_part
 
@@ -139,4 +139,3 @@ async def test_send_email_html_escaping(mock_smtp_class):
     assert "<img src" not in html_part
     assert "<div class=" not in html_part
     assert "<iframe>" not in html_part
-
