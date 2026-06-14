@@ -322,6 +322,109 @@ class ReportGenerator:
         return value
 
     @classmethod
+    def _generate_severity_chart(cls, severity_counts: Dict[str, int]) -> str:
+        """Generate a base64 PNG horizontal bar chart representing the vulnerability distribution."""
+        width, height = 480, 160
+        img = Image.new("RGBA", (width, height), (255, 255, 255, 0))
+        draw = ImageDraw.Draw(img)
+        
+        colors_map = {
+            "CRITICAL": (153, 27, 27, 255),
+            "HIGH": (220, 38, 38, 255),
+            "MEDIUM": (217, 119, 6, 255),
+            "LOW": (37, 99, 235, 255),
+            "INFO": (71, 85, 105, 255)
+        }
+        
+        severities = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
+        max_val = max(severity_counts.values()) if any(severity_counts.values()) else 1
+        
+        # Draw background container
+        draw.rounded_rectangle([0, 0, width - 1, height - 1], radius=8, fill=(248, 250, 252, 255), outline=(226, 232, 240, 255), width=1)
+        
+        y_offset = 12
+        bar_height = 16
+        spacing = 10
+        x_start = 110
+        max_bar_width = 280
+        
+        from PIL import ImageFont
+        try:
+            font = ImageFont.load_default()
+        except Exception:
+            font = None
+            
+        for i, sev in enumerate(severities):
+            count = severity_counts.get(sev, 0)
+            bar_len = int((count / max_val) * max_bar_width) if count > 0 else 0
+            color = colors_map[sev]
+            
+            # Draw bar
+            draw.rectangle([x_start, y_offset, x_start + bar_len, y_offset + bar_height], fill=color)
+            
+            # Draw labels
+            if font:
+                # Severity label
+                draw.text((20, y_offset + 2), sev.title(), fill=(71, 85, 105, 255), font=font)
+                # Count label
+                draw.text((x_start + bar_len + 10, y_offset + 2), str(count), fill=(15, 23, 42, 255), font=font)
+                
+            y_offset += bar_height + spacing
+            
+        output = io.BytesIO()
+        img.save(output, format="PNG")
+        encoded = base64.b64encode(output.getvalue()).decode("ascii")
+        return f"data:image/png;base64,{encoded}"
+
+    @classmethod
+    def _build_remediation_roadmap(cls, findings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Categorize and prioritize findings by priority and fix difficulty."""
+        roadmap = []
+        for finding in findings:
+            title = finding.get("title", "Untitled finding")
+            severity = finding.get("severity", "INFO").upper()
+            category = finding.get("category", "General").lower()
+            description = finding.get("description", "")
+            
+            # Priority mapping
+            if severity in ("CRITICAL", "HIGH"):
+                priority = "Immediate"
+                priority_val = 1
+            elif severity == "MEDIUM":
+                priority = "Scheduled"
+                priority_val = 2
+            else:
+                priority = "Backlog"
+                priority_val = 3
+                
+            # Difficulty mapping heuristics
+            text_to_search = (title + " " + category + " " + description).lower()
+            if any(kw in text_to_search for kw in ("injection", "rce", "bypass", "exec", "auth", "privilege", "deserialization", "crlf", "cryptographic")):
+                difficulty = "Complex Fix"
+                difficulty_val = 3
+            elif any(kw in text_to_search for kw in ("version", "outdated", "header", "deprecate", "secret", "token", "password", "key", "config", "ciphers")):
+                difficulty = "Quick Fix"
+                difficulty_val = 1
+            else:
+                difficulty = "Standard Fix"
+                difficulty_val = 2
+                
+            roadmap.append({
+                "title": title,
+                "severity": severity,
+                "priority": priority,
+                "priority_val": priority_val,
+                "difficulty": difficulty,
+                "difficulty_val": difficulty_val,
+                "remediation": finding.get("remediation", "No remediation actions provided."),
+                "target": finding.get("target") or "General target"
+            })
+            
+        # Sort roadmap: priority_val asc (Immediate -> Scheduled -> Backlog), difficulty_val asc (Quick -> Standard -> Complex)
+        roadmap.sort(key=lambda x: (x["priority_val"], x["difficulty_val"]))
+        return roadmap
+
+    @classmethod
     def _generate_pdf_html_report(cls, task: Dict[str, Any], result: Dict[str, Any]) -> str:
         """Generate conservative HTML/CSS that xhtml2pdf can paginate reliably."""
         payload = cls._build_report_payload(task, result)
@@ -647,6 +750,9 @@ class ReportGenerator:
         rows_icon = cls._icon_data_uri("rows", "2563eb")
         clock_icon = cls._icon_data_uri("clock", "475569")
         target_html = cls._escape_html_with_breaks(payload["target"])
+        
+        # New base64 Severity Chart
+        severity_chart_data = cls._generate_severity_chart(severity_counts)
 
         summary_markup = "".join(
             f"<li>{cls._escape_html(line)}</li>" for line in payload["summary"]
@@ -692,6 +798,30 @@ class ReportGenerator:
                 </div>
             </article>
             """
+            
+        # Build Remediation Roadmap HTML Markup
+        roadmap = cls._build_remediation_roadmap(findings)
+        roadmap_html_markup = ""
+        for i, item in enumerate(roadmap):
+            roadmap_html_markup += f"""
+            <li class="roadmap-item">
+                <label class="checkbox-container">
+                    <input type="checkbox" id="chk-{i}">
+                    <span class="checkmark"></span>
+                    <div class="roadmap-details">
+                        <span class="roadmap-title">{cls._escape_html(item['title'])}</span>
+                        <div class="roadmap-meta">
+                            <span class="badge priority-{item['priority'].lower()}">{item['priority']} Priority</span>
+                            <span class="badge difficulty-{item['difficulty'].lower().replace(' ', '-')}">{item['difficulty']}</span>
+                            <span class="roadmap-target">Target: {cls._escape_html(item['target'])}</span>
+                        </div>
+                        <p class="roadmap-action"><b>Remediation action:</b> {cls._escape_html(item['remediation'])}</p>
+                    </div>
+                </label>
+            </li>
+            """
+        if not roadmap_html_markup:
+            roadmap_html_markup = "<li class='empty-state'>No remediation actions needed.</li>"
 
         return f"""<!DOCTYPE html>
 <html lang="en">
@@ -940,10 +1070,129 @@ class ReportGenerator:
       }}
       .section, .meta-card, .stat-card, .finding-card {{ box-shadow: none; }}
     }}
+
+    /* View Switcher Styling */
+    .shell.view-executive .developer-only {{ display: none !important; }}
+    .shell.view-developer .executive-only {{ display: none !important; }}
+
+    /* Roadmap Checklist Styling */
+    .roadmap-checklist {{
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }}
+    .roadmap-item {{
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px 20px;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.02);
+    }}
+    .roadmap-item:hover {{
+      border-color: #cbd5e1;
+    }}
+    .checkbox-container {{
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      cursor: pointer;
+      user-select: none;
+      width: 100%;
+    }}
+    .checkbox-container input {{
+      position: absolute;
+      opacity: 0;
+      cursor: pointer;
+      height: 0;
+      width: 0;
+    }}
+    .checkmark {{
+      flex: 0 0 20px;
+      height: 20px;
+      width: 20px;
+      background-color: #f1f5f9;
+      border: 2px solid #cbd5e1;
+      border-radius: 6px;
+      position: relative;
+      margin-top: 3px;
+    }}
+    .checkbox-container:hover input ~ .checkmark {{
+      background-color: #e2e8f0;
+    }}
+    .checkbox-container input:checked ~ .checkmark {{
+      background-color: #22c55e;
+      border-color: #22c55e;
+    }}
+    .checkmark:after {{
+      content: "";
+      position: absolute;
+      display: none;
+    }}
+    .checkbox-container input:checked ~ .checkmark:after {{
+      display: block;
+    }}
+    .checkbox-container .checkmark:after {{
+      left: 6px;
+      top: 2px;
+      width: 5px;
+      height: 10px;
+      border: solid white;
+      border-width: 0 2.5px 2.5px 0;
+      transform: rotate(45deg);
+    }}
+    .checkbox-container input:checked ~ .roadmap-details .roadmap-title {{
+      text-decoration: line-through;
+      color: var(--subtle);
+    }}
+    .roadmap-details {{
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex-grow: 1;
+    }}
+    .roadmap-title {{
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--ink);
+    }}
+    .roadmap-meta {{
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }}
+    .badge {{
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 99px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }}
+    .badge.priority-immediate {{ background: rgba(239, 68, 68, 0.1); color: var(--high); }}
+    .badge.priority-scheduled {{ background: rgba(245, 158, 11, 0.1); color: var(--medium); }}
+    .badge.priority-backlog {{ background: rgba(100, 116, 139, 0.1); color: var(--subtle); }}
+    
+    .badge.difficulty-quick-fix {{ background: rgba(34, 197, 94, 0.1); color: #16a34a; }}
+    .badge.difficulty-standard-fix {{ background: rgba(37, 99, 235, 0.1); color: var(--low); }}
+    .badge.difficulty-complex-fix {{ background: rgba(217, 119, 6, 0.1); color: var(--medium); }}
+    
+    .roadmap-target {{
+      font-size: 12px;
+      color: var(--subtle);
+    }}
+    .roadmap-action {{
+      font-size: 12.5px;
+      color: var(--muted);
+      margin: 4px 0 0;
+    }}
   </style>
 </head>
 <body>
-  <div class="shell">
+  <div class="shell view-executive">
     <section class="hero">
       <div class="hero-title">
         <div class="hero-icon"><img src="{shield_icon}" alt=""></div>
@@ -969,25 +1218,78 @@ class ReportGenerator:
       <div class="stat-card" style="--accent: #2563eb;"><div class="stat-card-header"><label>Structured rows</label><span class="card-icon"><img src="{rows_icon}" alt=""></span></div><strong>{len(payload['rows'])}</strong></div>
     </div>
 
-    <section class="section">
+    <!-- View Switcher -->
+    <div class="toolbar" style="margin-top: 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;">
+      <div class="view-switcher" style="display: flex; background: rgba(15, 23, 42, 0.05); padding: 4px; border-radius: 12px; border: 1px solid var(--line);">
+        <button class="tab-btn active" onclick="switchView('executive')" style="background: var(--panel); border: none; color: var(--ink); padding: 8px 18px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; box-shadow: 0 4px 10px rgba(0,0,0,0.04); transition: all 0.2s;">Executive Summary Sheet</button>
+        <button class="tab-btn" onclick="switchView('developer')" style="background: transparent; border: none; color: var(--subtle); padding: 8px 18px; border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; transition: all 0.2s;">Developer-Focused Logs</button>
+      </div>
+    </div>
+
+    <!-- Executive View Content -->
+    <section class="section executive-only">
       <h2><img class="section-icon" src="{shield_icon}" alt="">Executive Overview</h2>
-      <p class="section-copy">Key takeaways generated from the parsed assessment data.</p>
-      {f'''<div style="margin:0 0 18px;padding:16px 20px;background:#eff6ff;border-left:4px solid #2563eb;border-radius:14px;"><p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#1d4ed8;">&#129302; AI Executive Summary</p><p style="margin:0;color:#1e293b;line-height:1.65;">{cls._escape_html(ai_summary)}</p></div>''' if ai_summary else ""}
-      <ul class="summary-list">{summary_markup}</ul>
+      <p class="section-copy">Key takeaways and severity distribution generated from the parsed assessment data.</p>
+      <div class="executive-container" style="display: flex; gap: 24px; align-items: flex-start; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 300px;">
+          {f'''<div style="margin:0 0 18px;padding:16px 20px;background:#eff6ff;border-left:4px solid #2563eb;border-radius:14px;"><p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#1d4ed8;">&#129302; AI Executive Summary</p><p style="margin:0;color:#1e293b;line-height:1.65;">{cls._escape_html(ai_summary)}</p></div>''' if ai_summary else ""}
+          <ul class="summary-list">{summary_markup}</ul>
+        </div>
+        <div class="chart-container" style="flex: 0 0 400px; max-width: 100%;">
+          <img src="{severity_chart_data}" alt="Severity Distribution Chart" style="width: 100%; height: auto; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.05);" />
+        </div>
+      </div>
     </section>
 
-    <section class="section">
+    <section class="section executive-only">
+      <h2><img class="section-icon" src="{shield_icon}" alt="">Remediation Roadmap</h2>
+      <p class="section-copy">Actionable steps grouped by implementation priority and complexity. Mark off completed items to track your progress.</p>
+      <ul class="roadmap-checklist">
+        {roadmap_html_markup}
+      </ul>
+    </section>
+
+    <!-- Developer View Content -->
+    <section class="section developer-only">
       <h2><img class="section-icon" src="{target_icon}" alt="">Scan Parameters</h2>
       <p class="section-copy">Runtime configuration captured for this task, including the selected Nikto flags and SecuScan preset context.</p>
       <div class="meta-grid">{parameter_markup}</div>
     </section>
 
-    <section class="section">
+    <section class="section developer-only">
       <h2><img class="section-icon" src="{findings_icon}" alt="">Technical Findings</h2>
       <p class="section-copy">Detailed finding cards with severity context, supporting evidence, and recommended next actions.</p>
       <div class="findings">{finding_markup}</div>
     </section>
   </div>
+
+  <script>
+    function switchView(viewName) {{
+      const tabs = document.querySelectorAll('.tab-btn');
+      tabs.forEach(tab => {{
+        if (tab.innerText.toLowerCase().includes(viewName)) {{
+          tab.classList.add('active');
+          tab.style.background = 'var(--panel)';
+          tab.style.color = 'var(--ink)';
+          tab.style.boxShadow = '0 4px 10px rgba(0,0,0,0.04)';
+        }} else {{
+          tab.classList.remove('active');
+          tab.style.background = 'transparent';
+          tab.style.color = 'var(--subtle)';
+          tab.style.boxShadow = 'none';
+        }}
+      }});
+      
+      const shell = document.querySelector('.shell');
+      if (viewName === 'executive') {{
+        shell.classList.remove('view-developer');
+        shell.classList.add('view-executive');
+      }} else {{
+        shell.classList.remove('view-executive');
+        shell.classList.add('view-developer');
+      }}
+    }}
+  </script>
 </body>
 </html>"""
 
