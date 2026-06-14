@@ -239,6 +239,7 @@ class TestCancelTaskProcessGroup:
 
         fake_task = MagicMock()
         fake_task.cancel = MagicMock(return_value=True)
+        fake_task.done = MagicMock(return_value=False)
         executor.running_tasks["task-pg"] = fake_task
         executor._process_pids["task-pg"] = 7001
 
@@ -263,6 +264,7 @@ class TestCancelTaskProcessGroup:
 
         fake_task = MagicMock()
         fake_task.cancel = MagicMock(return_value=True)
+        fake_task.done = MagicMock(return_value=False)
         executor.running_tasks["task-nopid"] = fake_task
 
         with (
@@ -284,6 +286,77 @@ class TestCancelTaskProcessGroup:
         executor = TaskExecutor()
         result = await executor.cancel_task("nonexistent-task-id")
         assert result is False
+
+    @pytest.mark.asyncio
+    async def test_cancel_task_race_task_completes_before_access(self):
+        """TOCTOU race: task removed from running_tasks between check and access."""
+        from backend.secuscan.executor import TaskExecutor
+        from unittest.mock import MagicMock, AsyncMock
+
+        executor = TaskExecutor()
+
+        fake_task = MagicMock()
+        fake_task.cancel = MagicMock(return_value=True)
+        fake_task.done = MagicMock(return_value=True)
+        executor.running_tasks["race-task"] = fake_task
+        executor._process_pids["race-task"] = 8001
+
+        with (
+            patch("backend.secuscan.executor._terminate_process_group", new_callable=AsyncMock) as mock_term,
+            patch("backend.secuscan.executor.get_db", new_callable=AsyncMock) as mock_get_db,
+        ):
+            mock_db = AsyncMock()
+            mock_get_db.return_value = mock_db
+            mock_db.execute = AsyncMock()
+            mock_db.log_audit = AsyncMock()
+
+            result = await executor.cancel_task("race-task")
+
+        assert result is True
+        mock_term.assert_awaited_once_with(8001, "race-task")
+        fake_task.cancel.assert_not_called()
+        mock_db.execute.assert_awaited_once()
+        call_args = mock_db.execute.call_args[0]
+        assert "AND status = ?" in call_args[0]
+        assert call_args[1][3] == "running"
+
+    @pytest.mark.asyncio
+    async def test_cancel_task_already_completed_returns_false(self):
+        """Task completed and removed from running_tasks before cancel_task runs."""
+        from backend.secuscan.executor import TaskExecutor
+
+        executor = TaskExecutor()
+        result = await executor.cancel_task("already-removed-task")
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_cancel_task_does_not_overwrite_completed_status(self):
+        """DB update is guarded so it does not overwrite a completed status."""
+        from backend.secuscan.executor import TaskExecutor
+        from unittest.mock import MagicMock, AsyncMock
+
+        executor = TaskExecutor()
+
+        fake_task = MagicMock()
+        fake_task.cancel = MagicMock(return_value=True)
+        fake_task.done = MagicMock(return_value=False)
+        executor.running_tasks["db-guard"] = fake_task
+
+        with (
+            patch("backend.secuscan.executor._terminate_process_group", new_callable=AsyncMock),
+            patch("backend.secuscan.executor.get_db", new_callable=AsyncMock) as mock_get_db,
+        ):
+            mock_db = AsyncMock()
+            mock_get_db.return_value = mock_db
+            mock_db.execute = AsyncMock()
+            mock_db.log_audit = AsyncMock()
+
+            await executor.cancel_task("db-guard")
+
+        mock_db.execute.assert_awaited_once()
+        sql, params = mock_db.execute.call_args[0]
+        assert "AND status = ?" in sql
+        assert params[3] == "running"
 
 
 class TestOrphanPrevention:
