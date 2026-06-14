@@ -6,9 +6,9 @@ Last synced: 2026-05-11
 
 ## At a Glance
 
-- Total plugins: 60
-- Safe plugins: 27
-- Intrusive plugins: 25
+- Total plugins: 58
+- Safe plugins: 25
+- Intrusive plugins: 25 
 - Exploit plugins: 8
 - Source of truth: each plugin's `metadata.json`
 
@@ -26,7 +26,7 @@ Only run scans against systems you own or are explicitly authorized to assess.
 
 | Category | Count |
 | --- | ---: |
-| `recon` | 19 |
+| `recon` | 17 |
 | `vulnerability` | 12 |
 | `robots` | 5 |
 | `web` | 5 |
