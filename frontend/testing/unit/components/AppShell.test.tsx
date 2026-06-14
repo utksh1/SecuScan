@@ -52,6 +52,35 @@ describe('AppShell', () => {
     })
   })
 
+  it('closes the mobile drawer when the backdrop is clicked', async () => {
+    const user = userEvent.setup()
+    renderShell()
+
+    await user.click(screen.getByRole('button', { name: /toggle navigation menu/i }))
+    expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /close navigation menu/i }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('link', { name: 'Settings' })).not.toBeInTheDocument()
+    })
+  })
+
+  it('locks page scroll while the mobile drawer is open', async () => {
+    const user = userEvent.setup()
+    renderShell()
+
+    expect(document.body.style.overflow).toBe('')
+
+    await user.click(screen.getByRole('button', { name: /toggle navigation menu/i }))
+    expect(document.body.style.overflow).toBe('hidden')
+
+    await user.click(screen.getByRole('button', { name: /close navigation menu/i }))
+    await waitFor(() => {
+      expect(document.body.style.overflow).toBe('')
+    })
+  })
+
   it('closes the mobile drawer when navigation changes routes', async () => {
     const user = userEvent.setup()
     renderShell()
