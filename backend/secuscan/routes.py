@@ -361,6 +361,7 @@ async def start_task(
     request: TaskCreateRequest,
     background_tasks: BackgroundTasks,
     raw_request: Request,
+    bypass_cache: bool = Query(False),
     owner: str = Depends(get_current_owner),
 ):
     """
@@ -506,7 +507,7 @@ async def start_task(
     # Use BackgroundTasks so the response can be sent without waiting in real
     # ASGI servers, while tests using TestClient still execute the task to keep
     # contract tests deterministic.
-    background_tasks.add_task(executor.execute_task, task_id)
+    background_tasks.add_task(executor.execute_task, task_id, bypass_cache=bypass_cache)
     await invalidate_view_cache()
 
     return {
