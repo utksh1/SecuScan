@@ -49,7 +49,7 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | S3 / Blob Auditor | `cloud_storage_auditor` | `vulnerability` | `safe` | `uncover` | Find misconfigured S3 buckets and exposed cloud storage. |
 | Code Analyzer (Bandit) | `code_analyzer` | `code` | `safe` | `bandit` | Static analysis for Python code. |
 | Container Scan (Trivy) | `container_scanner` | `network` | `safe` | `trivy` | Scan Docker images and registries for known vulnerabilities. |
-| Crawler | `crawler` | `robots` | `intrusive` | `katana` | Recursive web crawler for link discovery. |
+| Crawler | `crawler` | `robots` | `intrusive` | `katana` | Depth-limited Katana crawl for recursive link discovery. |
 | Directory Discovery | `dir_discovery` | `web` | `intrusive` | `ffuf` | Discover hidden directories and files on web servers. |
 | DNS Reconnaissance | `dns_enum` | `recon` | `safe` | `dnsrecon` | Enumerate DNS records and configurations. |
 | dnsx | `dnsx` | `recon` | `safe` | `dnsx` | DNS resolution and wildcard-aware validation at scale. |
@@ -60,11 +60,11 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | Password Recovery Audit | `hashcat` | `expert` | `exploit` | `hashcat` | Password recovery and hash audit workflow. |
 | HTTP Inspector | `http_inspector` | `web` | `safe` | `curl` | Inspect HTTP/HTTPS endpoints for headers, cookies, and TLS configuration. |
 | HTTP Request Logger | `http_request_logger` | `exploit` | `intrusive` | `httpx` | Handle incoming HTTP requests and record data. |
-| httpx | `httpx` | `recon` | `safe` | `httpx` | Live host probing with status, title, and technology fingerprinting. |
+| httpx | `httpx` | `recon` | `safe` | `httpx` | Probe live hosts and collect reachability information, status codes, page titles, and basic technology indicators. |
 | IaC Scanner (Checkov) | `iac_scanner` | `vulnerability` | `safe` | `python3` | Analyze Terraform and CloudFormation code for flaws. |
 | ICMP Ping | `icmp_ping` | `utils` | `safe` | `ping` | Check if a server is live and responds to ICMP Echo requests. |
 | Joomla Security Scan | `joomscan` | `vulnerability` | `intrusive` | `joomscan` | Joomla security scanner for version and common weakness discovery. |
-| Katana | `katana` | `recon` | `intrusive` | `katana` | Web crawling for endpoint and route discovery. |
+| Katana | `katana` | `recon` | `intrusive` | `katana` | Baseline Katana URL discovery using the default crawl behavior. |
 | K8s Scanner | `kubernetes_scanner` | `vulnerability` | `intrusive` | `python3` | Kubernetes cluster security assessment. |
 | Exploitation Connector | `metasploit` | `expert` | `exploit` | `msfconsole` | Metasploit connector for controlled exploit-module execution. |
 | Network Scanner | `network_scanner` | `vulnerability` | `intrusive` | `nmap` | Check for 10,000+ CVEs and server misconfigurations. |
@@ -77,17 +77,16 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | Advanced Network Recon | `scapy_recon` | `network` | `safe` | `python3` | Advanced network probing using Scapy. |
 | Secret Scanner | `secret_scanner` | `code` | `safe` | `gitleaks` | Scan directories for hardcoded secrets. |
 | Sharepoint Scanner | `sharepoint_scanner` | `vulnerability` | `intrusive` | `nuclei` | Check SharePoint for security issues, misconfigs, and more. |
-| Sitemap Generator | `sitemap_gen` | `robots` | `intrusive` | `katana` | Build complete XML sitemaps by autonomously parsing targets. |
+| Sitemap Generator | `sitemap_gen` | `robots` | `intrusive` | `katana` | Depth-focused Katana crawl for sitemap-style URL inventory. |
 | Sniper: Auto-Exploiter | `sniper` | `exploit` | `exploit` | `python3` | Validate critical CVEs by automatic exploitation. |
-| Spider | `spider` | `robots` | `intrusive` | `katana` | Advanced web spider with JS execution support. |
-| SQL Injection Feasibility | `sqli_checker` | `expert` | `intrusive` | `ghauri` | SQL injection feasibility scanner powered by Ghauri. |
-| SQLi Exploiter | `sqli_exploiter` | `exploit` | `exploit` | `sqlmap` | Exploit SQL injection in web apps to extract data. |
-| SQL Injection Testing | `sqlmap` | `web` | `exploit` | `sqlmap` | Automatic SQL injection and database takeover tool. |
+| Spider | `spider` | `robots` | `intrusive` | `katana` | JavaScript-aware Katana spider for deeper client-side route discovery. |
+| SQL Injection Feasibility | `sqli_checker` | `expert` | `intrusive` | `ghauri` | Validates potential SQL injection vulnerabilities without exploitation. |
+| SQLi Exploiter | `sqli_exploiter` | `exploit` | `exploit` | `sqlmap` | Exploitation-focused workflow for data extraction from confirmed SQL injection findings. |
+| SQL Injection Testing | `sqlmap` | `web` | `exploit` | `sqlmap` | Detects SQL injection vulnerabilities and supports controlled database enumeration. |
 | SSH Runner | `ssh_runner` | `execution` | `intrusive` | `ssh` | Remote command execution via SSH. |
-| Subdomain Finder | `subdomain-finder` | `recon` | `safe` | `subfinder` | Discover subdomains of a domain. |
-| Subdomain Scanner | `subdomain_discovery` | `recon` | `safe` | `subfinder` | Enumerate subdomains using passive sources. |
+| Subdomain Discovery (Configurable) | `subdomain_discovery` | `recon` | `safe` | `subfinder` | Comprehensive configurable subdomain enumeration via passive sources. Thread count and source coverage tunable via presets. |
 | Subdomain Takeover | `subdomain_takeover` | `exploit` | `intrusive` | `subfinder` | Discover dangling DNS entries pointing to external services. |
-| Subfinder | `subfinder` | `recon` | `safe` | `subfinder` | Fast passive subdomain enumeration. |
+| Subfinder (Quick) | `subfinder` | `recon` | `safe` | `subfinder` | Quick passive subdomain enumeration with minimal configuration — just provide a root domain. |
 | theHarvester | `theharvester` | `recon` | `safe` | `theHarvester` | OSINT collection for emails, domains, and hosts. |
 | TLS Security Analysis | `tls_inspector` | `security` | `safe` | `openssl` | Examine TLS/SSL certificates and cipher configurations. |
 | Uncover | `uncover` | `recon` | `safe` | `uncover` | Discover internet-exposed assets from external search sources. |
@@ -95,14 +94,19 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | urlfinder | `urlfinder` | `recon` | `safe` | `urlfinder` | Passive historical URL collection. |
 | Virtual Hosts Finder | `virtual-host-finder` | `recon` | `intrusive` | `ffuf` | Find multiple websites hosted on the same server. |
 | Volatility | `volatility` | `forensics` | `intrusive` | `volatility3` | Memory forensics workflow using Volatility 3 plugins. |
-| WAF Detector | `waf-detection` | `recon` | `safe` | `wafw00f` | Fingerprint the Web Application Firewall behind target app. |
 | WAF Detector | `waf_detector` | `robots` | `safe` | `wafw00f` | Automatically identify Web Application Firewalls protecting targets. |
-| Website Recon | `website-recon-2` | `recon` | `safe` | `httpx` | Fingerprint web technologies of target website. |
+| Website Recon | `website-recon-2` | `recon` | `safe` | `httpx` | Perform website reconnaissance focused on identifying web technologies, frameworks, and application stack details. |
 | Domain Registration Lookup | `whois_lookup` | `utils` | `safe` | `python3` | Domain registration information lookup. |
 | WordPress Security Scan | `wpscan` | `vulnerability` | `intrusive` | `wpscan` | WordPress security scanner for plugin, theme, and core risk visibility. |
 | XSS Exploiter | `xss_exploiter` | `exploit` | `exploit` | `python3` | Exploit XSS in real-life attacks to extract cookies and data. |
 | Binary Signature Scan | `yara_scan` | `forensics` | `intrusive` | `yara` | Binary and file-system signature matching with YARA rules. |
 | DAST Web Proxy (ZAP) | `zap_scanner` | `vulnerability` | `exploit` | `python3` | Dynamic proxy spidering and payload injection. |
+
+### SQL Injection Plugin Guidance
+
+- `sqli_checker` should be used to validate whether a target appears vulnerable to SQL injection and to assess feasibility before exploitation.
+- `sqlmap` should be used for SQL injection testing and controlled database enumeration during assessment workflows.
+- `sqli_exploiter` should be used only after a vulnerability has been confirmed and exploitation or data extraction is required.
 
 ## Plugin Input Schema with Examples
 
@@ -306,3 +310,34 @@ python scripts/validate_plugin.py --plugin plugins/nmap
 
 The validation checks metadata JSON, required fields, checksums, and custom
 parser imports when applicable.
+
+### Metadata quality lint rules
+
+Two additional lint checks help maintain high-quality plugin metadata:
+
+1. **Missing field help text** — Each field in the `fields` array should include
+   a `help` string that provides a brief user-facing description of the input.
+   Fields without `help` text produce a lint **warning** (the plugin is still valid).
+
+   ```json
+   // Good — has help text
+   { "id": "target", "label": "Target", "type": "text", "help": "IP address or hostname to scan" }
+
+   // Bad — missing help text (lint warning)
+   { "id": "target", "label": "Target", "type": "text" }
+   ```
+
+2. **Ambiguous category** — Each plugin's `category` must be one of the
+   recognized categories: `recon`, `vulnerability`, `web`, `exploit`, `network`,
+   `expert`, `code`, `forensics`, `utils`, `execution`, `security`, `robots`.
+   Unknown or misspelled categories cause a validation **error** and block
+   the plugin from being loaded.
+
+   ```bash
+   # Run the linter
+   python scripts/validate_plugins.py
+   ```
+
+Existing plugins can be brought into compliance incrementally — the help
+text check is a non-blocking warning, and unknown categories cause a
+clear error message identifying the problem.

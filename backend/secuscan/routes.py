@@ -110,35 +110,7 @@ def _json_payload(value: Any, fallback: str) -> str:
     return json.dumps(value if value is not None else json.loads(fallback))
 
 
-def is_filesystem_target(target: str) -> bool:
-    """Best-effort detection for path-based targets that should bypass host validation."""
-    # Absolute or relative filesystem roots only — not CIDR notation (e.g. 8.8.8.8/32)
-    if target.startswith(("/", "./", "../", "~/")):
-        return True
-    # Windows drive paths (C:\ or C:/)
-    """
-    Return True only for genuine local filesystem paths.
-
-    Explicit roots accepted:
-      - Unix absolute paths:   /home/user/repo
-      - Unix relative paths:   ./src, ../lib
-      - Home-relative paths:   ~/projects
-      - Windows paths:         C:\\Users\\repo, D:/work
-
-    Anything else — including CIDR notation (8.8.8.8/32, 192.168.1.0/24),
-    bare hostnames, URLs, and domain paths — returns False and will be
-    subject to the full validate_target() check including safe-mode enforcement.
-
-    CIDR notation is handled correctly by ipaddress.ip_network() inside
-    validate_target() and does NOT need special-casing here.
-    """
-    # Unix absolute, relative, and home-relative paths
-    if target.startswith(("/", "./", "../", "~/")):
-        return True
-    # Windows paths: C:\ or C:/
-    if re.match(r"^[A-Za-z]:[\\/]", target):
-        return True
-    return False
+from .validation import is_filesystem_target  # noqa: E402
 
 def _slugify_filename_part(value: str, fallback: str) -> str:
     cleaned = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
@@ -174,7 +146,7 @@ from .plugins import get_plugin_manager, init_plugins
 from .executor import executor
 from .redaction import redact_inputs
 from .ratelimit import (
-    rate_limiter, concurrent_limiter,
+    rate_limiter, concurrent_limiter, workflow_rate_limiter,
     task_start_limiter, vault_limiter,
     report_download_limiter, read_heavy_limiter,
     resolve_client_identity, admin_limiter,
@@ -212,6 +184,15 @@ def _validate_notification_target(channel_type: NotificationChannelType, target:
         is_valid, error = validate_url(cleaned)
         if not is_valid:
             raise HTTPException(status_code=400, detail=error or "Invalid webhook URL")
+
+        if settings.notification_ssrf_enabled:
+            from .validation import resolve_and_validate_target
+            ssrf_ok, ssrf_err = resolve_and_validate_target(cleaned)
+            if not ssrf_ok:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Webhook target blocked by SSRF protection: {ssrf_err}"
+                )
         return cleaned
 
     if not _EMAIL_PATTERN.match(cleaned):
@@ -1731,6 +1712,11 @@ async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_o
     row = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
     if not row:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    wf_rate_ok, wf_rate_msg = await workflow_rate_limiter.check_workflow_rate_limit(
+        workflow_id, settings.workflow_min_interval_seconds
+    )
+    if not wf_rate_ok:
+        raise HTTPException(status_code=429, detail=wf_rate_msg)
     steps = _parse_workflow_steps(row["steps_json"] or "[]")
     active_version = await db.fetchone(
         "SELECT id, version_number FROM workflow_versions "

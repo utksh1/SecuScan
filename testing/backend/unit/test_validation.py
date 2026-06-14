@@ -313,3 +313,54 @@ def test_validate_command_network_egress_log_only(monkeypatch):
     ok, err = validate_command_network_egress(command, safe_mode=False, plugin_id="test", task_id="test-task")
     assert ok is False
     assert "network policy" in err.lower()
+
+
+def test_resolve_and_validate_target_rejects_raw_ip():
+    from backend.secuscan.validation import resolve_and_validate_target
+    ok, err = resolve_and_validate_target("http://10.0.0.1/webhook")
+    assert ok is False
+    assert "Raw IP" in err
+
+
+def test_resolve_and_validate_target_rejects_bad_scheme():
+    from backend.secuscan.validation import resolve_and_validate_target
+    ok, err = resolve_and_validate_target("ftp://example.com/hook")
+    assert ok is False
+    assert "Scheme" in err
+
+
+def test_resolve_and_validate_target_rejects_blocked_port(monkeypatch):
+    from backend.secuscan.validation import resolve_and_validate_target
+    from backend.secuscan.config import settings
+    monkeypatch.setattr(settings, "notification_allowed_ports", [80, 443])
+    ok, err = resolve_and_validate_target("http://example.com:22/webhook")
+    assert ok is False
+    assert "Port" in err
+
+
+def test_resolve_and_validate_target_rejects_private_ip(monkeypatch):
+    from backend.secuscan.validation import resolve_and_validate_target
+    from backend.secuscan.config import settings
+    monkeypatch.setattr(settings, "notification_blocked_ip_ranges", ["10.0.0.0/8"])
+
+    def fake_getaddrinfo(*args, **kwargs):
+        return [(socket.AF_INET, None, None, None, ("10.0.0.5", 80))]
+
+    import socket
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    ok, err = resolve_and_validate_target("http://internal.example.com/hook")
+    assert ok is False
+    assert "blocked" in err
+
+
+def test_resolve_and_validate_target_allows_public_ip(monkeypatch):
+    from backend.secuscan.validation import resolve_and_validate_target
+
+    def fake_getaddrinfo(*args, **kwargs):
+        return [(socket.AF_INET, None, None, None, ("93.184.216.34", 80))]
+
+    import socket
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    ok, err = resolve_and_validate_target("http://example.com/hook")
+    assert ok is True
+    assert err == ""

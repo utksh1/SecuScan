@@ -109,6 +109,7 @@ export default function Sidebar() {
 
     useEffect(() => {
         localStorage.setItem('sidebar-expanded', JSON.stringify(isExpanded))
+        window.dispatchEvent(new CustomEvent('sidebar-state-changed', { detail: isExpanded }))
     }, [isExpanded])
 
     return (

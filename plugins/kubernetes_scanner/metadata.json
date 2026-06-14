@@ -27,7 +27,8 @@
       "label": "Cluster Context",
       "type": "string",
       "required": true,
-      "placeholder": "prod-cluster"
+      "placeholder": "prod-cluster",
+      "help": "Enter the Kubernetes cluster context name from your kubeconfig, for example prod-cluster."
     }
   ],
   "presets": {
@@ -53,5 +54,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "830b2c5f4e397d2d2ad28f71ec8d1a3a5f9bd3e439d8318f71a5b8a371f7ccdb"
+  "checksum": "a86d9187ec7f37dff67dd0c6223a9988138bd2255fc2cfeae0dc14f203630e4c"
 }

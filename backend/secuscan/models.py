@@ -26,6 +26,22 @@ class TaskStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+class SandboxConfig(BaseModel):
+    """Resource constraints applied to every plugin subprocess execution"""
+    timeout_seconds: int = Field(default=120, description="Max wall-clock seconds before SIGTERM")
+    max_memory_mb: int = Field(default=512, description="Max virtual memory in MB (RLIMIT_AS on Linux)")
+    max_output_bytes: int = Field(default=5_242_880, description="Max bytes captured from stdout/stderr")
+    allow_network: bool = Field(default=True, description="Whether subprocess can make network calls")
+
+
+class SandboxViolation(Exception):
+    """Raised when sandbox constraints are violated."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
 class ScanPhase(str, Enum):
     """Granular scan phase for progress display"""
     QUEUED = "queued"
