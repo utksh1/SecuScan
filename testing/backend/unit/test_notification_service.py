@@ -1,5 +1,6 @@
 import json
 import socket
+import ssl
 import uuid
 from unittest.mock import AsyncMock, patch
 
@@ -465,3 +466,71 @@ async def test_send_webhook_redirect_to_blocked_ip():
 
     assert ok is False
     assert "blocked" in err.lower()
+
+
+@pytest.mark.asyncio
+async def test_pinned_ip_network_backend_pins_ip_and_preserves_tls_hostname(monkeypatch):
+    """Regression test: _PinnedIPNetworkBackend connects TCP to the validated
+    (pinned) IP address, and _PinnedIPNetworkStream forces the original
+    hostname into start_tls for SNI / certificate verification.
+
+    This is the core guarantee that prevents DNS-rebinding / TOCTOU attacks
+    without breaking HTTPS hostname verification.
+    """
+    from backend.secuscan.notification_service import _PinnedIPNetworkBackend
+
+    connected_host = None
+    tls_hostname = None
+
+    class TrackingStream:
+        async def read(self, max_bytes, timeout=None):
+            return b""
+
+        async def write(self, buffer, timeout=None):
+            pass
+
+        async def aclose(self):
+            pass
+
+        async def start_tls(self, ssl_context, server_hostname=None, timeout=None):
+            nonlocal tls_hostname
+            tls_hostname = server_hostname
+            return self
+
+        def get_extra_info(self, info):
+            return None
+
+    import httpcore._backends.auto as auto_backend
+
+    async def tracking_connect_tcp(
+        self, host, port, timeout=None, local_address=None, socket_options=None
+    ):
+        nonlocal connected_host
+        connected_host = host
+        return TrackingStream()
+
+    monkeypatch.setattr(
+        auto_backend.AutoBackend, "connect_tcp", tracking_connect_tcp
+    )
+
+    backend = _PinnedIPNetworkBackend(
+        resolved_ip="93.184.216.34",
+        original_hostname="hooks.example.com",
+    )
+
+    stream = await backend.connect_tcp(host="hooks.example.com", port=443)
+
+    assert connected_host == "93.184.216.34", (
+        f"TCP must connect to pinned IP (93.184.216.34), got {connected_host!r}"
+    )
+
+    ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    await stream.start_tls(
+        ssl_context=ssl_ctx,
+        server_hostname="this-should-be-overridden.com",
+    )
+
+    assert tls_hostname == "hooks.example.com", (
+        f"TLS SNI must use original hostname (hooks.example.com), "
+        f"got {tls_hostname!r}"
+    )
