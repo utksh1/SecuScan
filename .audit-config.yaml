@@ -17,11 +17,7 @@ policy:
 
 # Documented exceptions with business justification
 # Format: CVE-XXXX-XXXXX or GHSA-xxxx-xxxx-xxxx
-exceptions:
-  GHSA-gv7w-rqvm-qjhr:
-    package: esbuild
-    reason: "esbuild binary integrity verification issue in Deno module only; SecuScan does not use Deno. Fix requires vite major version upgrade (vite@8+), which is a breaking change. Tracked for next major frontend dep update."
-    expires_at: "2027-06-14"
+exceptions: {}
 
 # Packages to exclude from audits (use sparingly!)
 excluded_packages: []
