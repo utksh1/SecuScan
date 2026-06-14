@@ -1,6 +1,30 @@
+"""
+testing/backend/test_workflow_api_edge_cases.py
+
+Edge-case coverage for POST /api/v1/workflows.
+
+Scenarios covered
+-----------------
+- Empty steps list
+- Missing steps field entirely
+- Malformed step payloads (missing plugin_id, wrong type, null, bare string)
+- steps value that is not a list (dict instead)
+- Multiple steps where one is malformed
+- Invalid schedule_seconds values (zero, negative, float, string, list)
+- Valid / boundary schedule_seconds values (omitted, null, 60 s, 86 400 s)
+
+Implementation notes
+--------------------
+Error-path tests (status 400 / 422) do NOT patch get_db because the route
+rejects the request before touching the database.
+
+Valid-creation tests patch ``backend.secuscan.routes.get_db`` with a plain
+async function returning a controlled mock, matching the ``db = await get_db()``
+call shape used in routes.py.
+"""
+
 import json
 import pytest
-from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
@@ -72,45 +96,27 @@ def _make_fake_row(name="edge-case-workflow", schedule_seconds=None):
 
 
 def _make_mock_db(fake_row):
-    """
-    Return a mock that behaves as both an awaitable and an async context
-    manager, so it works regardless of how get_db is consumed in routes.py.
-    """
+    """Return a mock DB whose fetchone returns fake_row."""
     mock_db = MagicMock()
     mock_db.execute = AsyncMock(return_value=None)
     mock_db.fetchone = AsyncMock(return_value=fake_row)
     mock_db.commit = AsyncMock(return_value=None)
     mock_db.close = AsyncMock(return_value=None)
-
-    # Support ``async with get_db() as db``
-    mock_db.__aenter__ = AsyncMock(return_value=mock_db)
-    mock_db.__aexit__ = AsyncMock(return_value=False)
-
     return mock_db
 
 
 def _patch_get_db(fake_row):
     """
-    Return a patch context manager that makes get_db yield/return mock_db.
-    Works for both ``Depends(get_db)`` with an async-generator and a plain
-    async function.
+    Patch ``backend.secuscan.routes.get_db`` with a plain async function
+    that returns a controlled mock, matching the ``db = await get_db()``
+    call shape used in routes.py.
     """
     mock_db = _make_mock_db(fake_row)
 
-    @asynccontextmanager
-    async def _fake_get_db():
-        yield mock_db
-
-    # FastAPI resolves Depends by calling the function.  We replace get_db
-    # with an async generator factory so both generator and non-generator
-    # call-sites receive the same mock_db object.
     async def _get_db_override():
-        yield mock_db
+        return mock_db
 
-    return patch(
-        "backend.secuscan.routes.get_db",
-        new=_get_db_override,
-    )
+    return patch("backend.secuscan.routes.get_db", new=_get_db_override)
 
 
 # ---------------------------------------------------------------------------
@@ -195,7 +201,7 @@ class TestMalformedSteps:
 # ---------------------------------------------------------------------------
 
 class TestInvalidScheduleSeconds:
-    """schedule_seconds must be a positive integer ≥ 1 when supplied."""
+    """schedule_seconds must be a positive integer when supplied."""
 
     def test_schedule_seconds_zero_is_rejected(self, client):
         response = client.post(
