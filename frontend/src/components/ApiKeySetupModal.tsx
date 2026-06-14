@@ -5,14 +5,6 @@ interface Props {
   onSaved: () => void
 }
 
-/**
- * First-run / 401 modal.
- *
- * Shown when the app receives HTTP 401 or detects no stored API key.
- * The operator reads the key from `backend/data/.api_key`, pastes it here,
- * and clicks Save. The key is written only to localStorage (secuscan_api_key);
- * it is never sent to any server other than as the X-Api-Key request header.
- */
 export default function ApiKeySetupModal({ onSaved }: Props) {
   const [key, setKey] = useState('')
   const [visible, setVisible] = useState(false)

@@ -17,6 +17,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import { ThemeProvider } from './components/ThemeContext'
 import { ToastProvider } from './components/ToastContext'
 import { I18nProvider } from './components/I18nContext'
+import { OfflineQueueProvider } from './components/OfflineQueueContext'
 import { routes } from './routes'
 import { AUTH_REQUIRED_EVENT, getStoredApiKey } from './api'
 
@@ -55,6 +56,17 @@ export default function App() {
     <ThemeProvider>
       <I18nProvider>
         <ToastProvider>
+          {needsKey ? (
+            <ApiKeySetupScreen onSaved={() => setNeedsKey(false)} />
+          ) : (
+            <OfflineQueueProvider>
+            <Router>
+              <AppShell>
+                <AppRoutes />
+              </AppShell>
+            </Router>
+            </OfflineQueueProvider>
+          )}
           <ErrorBoundary>
             {needsKey ? (
               // Render ONLY the setup screen — no page routes are mounted, so no

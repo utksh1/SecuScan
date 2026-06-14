@@ -116,7 +116,11 @@ describe('ToolConfig dynamic schema flow', () => {
         }),
         true,
         'quick',
-        expect.any(Object),
+        expect.objectContaining({
+          scan_profile: 'standard',
+          validation_mode: 'proof',
+          evidence_level: 'standard',
+        }),
       )
     })
   })

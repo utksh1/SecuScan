@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import ToolConfig from '../../../src/pages/ToolConfig'
@@ -16,9 +16,9 @@ vi.mock('../../../src/api', () => ({
   getPluginSchema: vi.fn(),
   startTask: vi.fn(),
   getSettings: vi.fn(),
-  listTargetPolicies: vi.fn(),
-  listCredentialProfiles: vi.fn(),
-  listSessionProfiles: vi.fn(),
+  listTargetPolicies: vi.fn().mockResolvedValue([]),
+  listCredentialProfiles: vi.fn().mockResolvedValue([]),
+  listSessionProfiles: vi.fn().mockResolvedValue([]),
 }))
 
 describe('ToolConfig timeout control', () => {
@@ -80,7 +80,9 @@ describe('ToolConfig timeout control', () => {
     const input = await screen.findByLabelText(/Max Scan Time/i)
     // min from field.validation
     expect(input).toHaveAttribute('min', '30')
-    // max is min(field.validation.max, server default_timeout)
-    expect(input).toHaveAttribute('max', '600')
+    // max is min(field.validation.max, server default_timeout), wait for serverLimits
+    await waitFor(() => {
+      expect(input).toHaveAttribute('max', '600')
+    })
   })
 })

@@ -1,3 +1,5 @@
+import * as offlineQueue from './services/offlineQueue'
+
 function resolveApiBase(): string {
   const configured = (import.meta as any).env.VITE_API_BASE
   if (configured) return configured
@@ -6,11 +8,9 @@ function resolveApiBase(): string {
     const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     const isViteDevServer = window.location.port === '5173'
 
-    // For localhost preview/static modes (e.g. :8080), call backend directly.
     if (isLocalHost && !isViteDevServer) return 'http://127.0.0.1:8000/api/v1'
   }
 
-  // Default for Vite dev server where /api is proxied to backend.
   return '/api/v1'
 }
 
@@ -42,6 +42,7 @@ export interface PluginFieldSchema {
   options?: PluginFieldOption[]
   validation?: Record<string, unknown>
 }
+
 export interface PluginAvailability {
   runnable: boolean
   missing_binaries: string[]
@@ -310,12 +311,42 @@ function getApiKey(): string | null {
 /** Fired on the window when any API request receives HTTP 401. */
 export const AUTH_REQUIRED_EVENT = 'secuscan:auth-required'
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const controller = new AbortController()
-  const timeoutId = window.setTimeout(() => controller.abort(), 10000)
+interface RequestOptions extends RequestInit {
+  retryable?: boolean
+  label?: string
+  actionType?: offlineQueue.ActionType
+}
 
+export class OfflineQueueError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'OfflineQueueError'
+  }
+}
+
+async function request<T>(path: string, init?: RequestOptions): Promise<T> {
+  const method = (init?.method || 'GET').toUpperCase()
+  const isSafe = method === 'GET' || method === 'HEAD'
   const apiKey = getApiKey()
   const authHeaders: Record<string, string> = apiKey ? { 'X-Api-Key': apiKey } : {}
+
+  if (!offlineQueue.isOnline() && !isSafe && init?.retryable) {
+    offlineQueue.enqueue({
+      url: `${API_BASE}${path}`,
+      method,
+      headers: {
+        ...authHeaders,
+        ...(init?.headers as Record<string, string> | undefined),
+      },
+      body: init?.body as string | undefined,
+      maxRetries: 3,
+      label: init?.label || `${method} ${path}`,
+      actionType: init?.actionType,
+    })
+    throw new OfflineQueueError(`Queued for replay when online: ${method} ${path}`)
+  }
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), 10000)
 
   try {
     const response = await fetch(`${API_BASE}${path}`, {
@@ -328,8 +359,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     })
 
     if (response.status === 401) {
-      // Notify the app so it can show the API-key setup UI without every
-      // caller needing to handle auth independently.
       window.dispatchEvent(new CustomEvent(AUTH_REQUIRED_EVENT))
       throw new Error('AUTH_REQUIRED')
     }
@@ -363,7 +392,6 @@ export function getDashboardSummary() {
   return request('/dashboard/summary')
 }
 
-
 export function getFindings() {
   return request<FindingsResponse>('/findings')
 }
@@ -371,7 +399,6 @@ export function getFindings() {
 export function getFindingGroups() {
   return request<{ groups: FindingGroup[]; total: number }>('/finding-groups')
 }
-
 
 export function getReports() {
   return request('/reports')
@@ -541,6 +568,7 @@ export function streamTask(taskId: string, onEvent: (ev: MessageEvent) => void) 
   es.onerror = () => {}
   return es
 }
+
 export interface WorkflowStep {
   plugin_id: string
   inputs: Record<string, unknown>
@@ -624,6 +652,9 @@ export async function createWorkflow(data: WorkflowCreatePayload): Promise<Workf
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
+    retryable: true,
+    label: 'Create Workflow',
+    actionType: 'createWorkflow',
   })
   return normalizeWorkflow(workflow)
 }
@@ -647,6 +678,9 @@ export async function updateWorkflow(workflowId: string, data: WorkflowUpdatePay
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
+    retryable: true,
+    label: 'Update Workflow',
+    actionType: 'updateWorkflow',
   })
   return normalizeWorkflow(workflow)
 }
