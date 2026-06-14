@@ -26,7 +26,7 @@ Only run scans against systems you own or are explicitly authorized to assess.
 
 | Category | Count |
 | --- | ---: |
-| `recon` | 19 |
+| `recon` | 17 |
 | `vulnerability` | 12 |
 | `robots` | 5 |
 | `web` | 5 |
