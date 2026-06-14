@@ -122,8 +122,12 @@ async def test_deliver_via_rule_sends_webhook_and_records_history(test_db):
     _, finding_id = await _seed_finding(test_db)
     rule_id = await _seed_rule(test_db)
 
-    finding = await test_db.fetchone("SELECT * FROM findings WHERE id = ?", (finding_id,))
-    rule = await test_db.fetchone("SELECT * FROM notification_rules WHERE id = ?", (rule_id,))
+    finding = await test_db.fetchone(
+        "SELECT * FROM findings WHERE id = ?", (finding_id,)
+    )
+    rule = await test_db.fetchone(
+        "SELECT * FROM notification_rules WHERE id = ?", (rule_id,)
+    )
 
     with patch(
         "backend.secuscan.notification_service.send_webhook",
@@ -141,8 +145,12 @@ async def test_deliver_via_rule_dedupes_second_attempt(test_db):
     _, finding_id = await _seed_finding(test_db)
     rule_id = await _seed_rule(test_db)
 
-    finding = await test_db.fetchone("SELECT * FROM findings WHERE id = ?", (finding_id,))
-    rule = await test_db.fetchone("SELECT * FROM notification_rules WHERE id = ?", (rule_id,))
+    finding = await test_db.fetchone(
+        "SELECT * FROM findings WHERE id = ?", (finding_id,)
+    )
+    rule = await test_db.fetchone(
+        "SELECT * FROM notification_rules WHERE id = ?", (rule_id,)
+    )
 
     mock_send = AsyncMock(return_value=(True, None))
     with patch(
@@ -162,8 +170,12 @@ async def test_deliver_skips_below_threshold(test_db):
     _, finding_id = await _seed_finding(test_db, severity="low")
     rule_id = await _seed_rule(test_db, severity_threshold="high")
 
-    finding = await test_db.fetchone("SELECT * FROM findings WHERE id = ?", (finding_id,))
-    rule = await test_db.fetchone("SELECT * FROM notification_rules WHERE id = ?", (rule_id,))
+    finding = await test_db.fetchone(
+        "SELECT * FROM findings WHERE id = ?", (finding_id,)
+    )
+    rule = await test_db.fetchone(
+        "SELECT * FROM notification_rules WHERE id = ?", (rule_id,)
+    )
 
     result = await deliver_via_rule(test_db, rule, finding)
 
@@ -180,8 +192,12 @@ async def test_deliver_records_failure_on_webhook_error(test_db):
     _, finding_id = await _seed_finding(test_db)
     rule_id = await _seed_rule(test_db)
 
-    finding = await test_db.fetchone("SELECT * FROM findings WHERE id = ?", (finding_id,))
-    rule = await test_db.fetchone("SELECT * FROM notification_rules WHERE id = ?", (rule_id,))
+    finding = await test_db.fetchone(
+        "SELECT * FROM findings WHERE id = ?", (finding_id,)
+    )
+    rule = await test_db.fetchone(
+        "SELECT * FROM notification_rules WHERE id = ?", (rule_id,)
+    )
 
     with patch(
         "backend.secuscan.notification_service.send_webhook",
@@ -238,9 +254,14 @@ async def test_send_webhook_success():
 
     with (
         patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)),
-        patch("backend.secuscan.notification_service.socket.getaddrinfo", side_effect=fake_success_addr),
+        patch(
+            "backend.secuscan.notification_service.socket.getaddrinfo",
+            side_effect=fake_success_addr,
+        ),
     ):
-        ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
+        ok, err = await send_webhook(
+            "https://hooks.example.com/alert", {"event": "test"}
+        )
 
     assert ok is True
     assert err is None
@@ -260,9 +281,14 @@ async def test_send_webhook_http_error():
 
     with (
         patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)),
-        patch("backend.secuscan.notification_service.socket.getaddrinfo", side_effect=fake_success_addr),
+        patch(
+            "backend.secuscan.notification_service.socket.getaddrinfo",
+            side_effect=fake_success_addr,
+        ),
     ):
-        ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
+        ok, err = await send_webhook(
+            "https://hooks.example.com/alert", {"event": "test"}
+        )
 
     assert ok is False
     assert "500" in err
@@ -280,9 +306,14 @@ async def test_send_webhook_http_exception():
 
     with (
         patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)),
-        patch("backend.secuscan.notification_service.socket.getaddrinfo", side_effect=fake_success_addr),
+        patch(
+            "backend.secuscan.notification_service.socket.getaddrinfo",
+            side_effect=fake_success_addr,
+        ),
     ):
-        ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
+        ok, err = await send_webhook(
+            "https://hooks.example.com/alert", {"event": "test"}
+        )
 
     assert ok is False
     assert "Connection refused" in err
@@ -296,7 +327,9 @@ async def test_send_webhook_blocks_private_ip_resolution(monkeypatch):
     def fake_getaddrinfo(*args, **kwargs):
         return [(socket.AF_INET, None, None, None, ("10.0.0.5", 443))]
 
-    monkeypatch.setattr("backend.secuscan.notification_service.socket.getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(
+        "backend.secuscan.notification_service.socket.getaddrinfo", fake_getaddrinfo
+    )
     ok, err = await send_webhook("https://internal.example.com/hook", {"event": "test"})
     assert ok is False
     assert "blocked" in err.lower()
@@ -312,7 +345,9 @@ async def test_send_webhook_pins_connection_ip_for_https(monkeypatch):
     def fake_getaddrinfo(*args, **kwargs):
         return [(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]
 
-    monkeypatch.setattr("backend.secuscan.notification_service.socket.getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(
+        "backend.secuscan.notification_service.socket.getaddrinfo", fake_getaddrinfo
+    )
 
     mock_response = AsyncMock()
     mock_response.status_code = 200
@@ -323,14 +358,18 @@ async def test_send_webhook_pins_connection_ip_for_https(monkeypatch):
     mock_cm.__aenter__.return_value = mock_client
 
     with patch("httpx.AsyncClient", return_value=mock_cm):
-        ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
+        ok, err = await send_webhook(
+            "https://hooks.example.com/alert", {"event": "test"}
+        )
 
     assert ok is True
     call_args, call_kwargs = mock_post.call_args
     posted_url = str(call_args[0]) if call_args else ""
     # HTTPS must NOT rewrite the URL to the IP — doing so would break TLS.
     assert "hooks.example.com" in posted_url, "HTTPS URL must keep original hostname"
-    assert "93.184.216.34" not in posted_url, "HTTPS URL must NOT contain the resolved IP"
+    assert "93.184.216.34" not in posted_url, (
+        "HTTPS URL must NOT contain the resolved IP"
+    )
 
 
 @pytest.mark.asyncio
@@ -342,7 +381,9 @@ async def test_send_webhook_pins_connection_ip_for_http(monkeypatch):
     def fake_getaddrinfo(*args, **kwargs):
         return [(socket.AF_INET, None, None, None, ("93.184.216.34", 80))]
 
-    monkeypatch.setattr("backend.secuscan.notification_service.socket.getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(
+        "backend.secuscan.notification_service.socket.getaddrinfo", fake_getaddrinfo
+    )
 
     mock_response = AsyncMock()
     mock_response.status_code = 200
@@ -353,12 +394,16 @@ async def test_send_webhook_pins_connection_ip_for_http(monkeypatch):
     mock_cm.__aenter__.return_value = mock_client
 
     with patch("httpx.AsyncClient", return_value=mock_cm):
-        ok, err = await send_webhook("http://hooks.example.com/alert", {"event": "test"})
+        ok, err = await send_webhook(
+            "http://hooks.example.com/alert", {"event": "test"}
+        )
 
     assert ok is True
     call_args, call_kwargs = mock_post.call_args
     posted_url = str(call_args[0]) if call_args else ""
-    assert "93.184.216.34" in posted_url, "HTTP request must go to resolved IP, not hostname"
+    assert "93.184.216.34" in posted_url, (
+        "HTTP request must go to resolved IP, not hostname"
+    )
     headers = call_kwargs.get("headers", {})
     assert headers.get("Host") == "hooks.example.com"
 
@@ -371,7 +416,9 @@ async def test_send_webhook_blocks_metadata_ip_resolution(monkeypatch):
     def fake_getaddrinfo(*args, **kwargs):
         return [(socket.AF_INET, None, None, None, ("169.254.169.254", 80))]
 
-    monkeypatch.setattr("backend.secuscan.notification_service.socket.getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(
+        "backend.secuscan.notification_service.socket.getaddrinfo", fake_getaddrinfo
+    )
     ok, err = await send_webhook("http://metadata.example.com/hook", {"event": "test"})
     assert ok is False
     assert "blocked" in err.lower()
@@ -385,8 +432,12 @@ async def test_send_webhook_rejects_unresolvable_hostname(monkeypatch):
     def fake_getaddrinfo(*args, **kwargs):
         raise OSError("Name or service not known")
 
-    monkeypatch.setattr("backend.secuscan.notification_service.socket.getaddrinfo", fake_getaddrinfo)
-    ok, err = await send_webhook("https://nonexistent.example.invalid/hook", {"event": "test"})
+    monkeypatch.setattr(
+        "backend.secuscan.notification_service.socket.getaddrinfo", fake_getaddrinfo
+    )
+    ok, err = await send_webhook(
+        "https://nonexistent.example.invalid/hook", {"event": "test"}
+    )
     assert ok is False
     assert "could not be resolved" in err.lower()
 
@@ -402,7 +453,9 @@ async def test_send_webhook_ssrf_independent_of_enforce_network_policy(monkeypat
     def fake_getaddrinfo(*args, **kwargs):
         return [(socket.AF_INET, None, None, None, ("10.0.0.5", 443))]
 
-    monkeypatch.setattr("backend.secuscan.notification_service.socket.getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(
+        "backend.secuscan.notification_service.socket.getaddrinfo", fake_getaddrinfo
+    )
     ok, err = await send_webhook("https://internal.example.com/hook", {"event": "test"})
     assert ok is False
     assert "blocked" in err.lower()
@@ -428,14 +481,26 @@ async def test_send_webhook_https_uses_pinned_ip_transport(monkeypatch):
     def fake_getaddrinfo(*args, **kwargs):
         return [(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]
 
-    monkeypatch.setattr("backend.secuscan.notification_service.socket.getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(
+        "backend.secuscan.notification_service.socket.getaddrinfo", fake_getaddrinfo
+    )
 
     mock_response = AsyncMock()
     mock_response.status_code = 200
     mock_post = AsyncMock(return_value=mock_response)
 
-    with patch("httpx.AsyncClient", return_value=AsyncMock(**{"post.return_value": mock_response, "__aenter__.return_value.post.return_value": mock_response})):
-        ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
+    with patch(
+        "httpx.AsyncClient",
+        return_value=AsyncMock(
+            **{
+                "post.return_value": mock_response,
+                "__aenter__.return_value.post.return_value": mock_response,
+            }
+        ),
+    ):
+        ok, err = await send_webhook(
+            "https://hooks.example.com/alert", {"event": "test"}
+        )
 
     assert ok is True
     assert transport_args.get("resolved_ip") == "93.184.216.34"
@@ -460,16 +525,23 @@ async def test_send_webhook_redirect_to_blocked_ip():
 
     with (
         patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)),
-        patch("backend.secuscan.notification_service.socket.getaddrinfo", side_effect=fake_getaddrinfo),
+        patch(
+            "backend.secuscan.notification_service.socket.getaddrinfo",
+            side_effect=fake_getaddrinfo,
+        ),
     ):
-        ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
+        ok, err = await send_webhook(
+            "https://hooks.example.com/alert", {"event": "test"}
+        )
 
     assert ok is False
     assert "blocked" in err.lower()
 
 
 @pytest.mark.asyncio
-async def test_pinned_ip_network_backend_pins_ip_and_preserves_tls_hostname(monkeypatch):
+async def test_pinned_ip_network_backend_pins_ip_and_preserves_tls_hostname(
+    monkeypatch,
+):
     """Regression test: _PinnedIPNetworkBackend connects TCP to the validated
     (pinned) IP address, and _PinnedIPNetworkStream forces the original
     hostname into start_tls for SNI / certificate verification.
@@ -509,9 +581,7 @@ async def test_pinned_ip_network_backend_pins_ip_and_preserves_tls_hostname(monk
         connected_host = host
         return TrackingStream()
 
-    monkeypatch.setattr(
-        auto_backend.AutoBackend, "connect_tcp", tracking_connect_tcp
-    )
+    monkeypatch.setattr(auto_backend.AutoBackend, "connect_tcp", tracking_connect_tcp)
 
     backend = _PinnedIPNetworkBackend(
         resolved_ip="93.184.216.34",
@@ -531,6 +601,5 @@ async def test_pinned_ip_network_backend_pins_ip_and_preserves_tls_hostname(monk
     )
 
     assert tls_hostname == "hooks.example.com", (
-        f"TLS SNI must use original hostname (hooks.example.com), "
-        f"got {tls_hostname!r}"
+        f"TLS SNI must use original hostname (hooks.example.com), got {tls_hostname!r}"
     )

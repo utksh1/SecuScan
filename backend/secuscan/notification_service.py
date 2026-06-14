@@ -52,7 +52,9 @@ class _PinnedIPNetworkStream(httpcore.AsyncNetworkStream):
 
     __slots__ = ("_inner", "_original_hostname")
 
-    def __init__(self, inner: httpcore.AsyncNetworkStream, original_hostname: str) -> None:
+    def __init__(
+        self, inner: httpcore.AsyncNetworkStream, original_hostname: str
+    ) -> None:
         self._inner = inner
         self._original_hostname = original_hostname
 
@@ -91,6 +93,7 @@ class _PinnedIPNetworkBackend(httpcore.AsyncNetworkBackend):
         self._resolved_ip = resolved_ip
         self._original_hostname = original_hostname
         from httpcore._backends.auto import AutoBackend
+
         self._default_backend = AutoBackend()
 
     async def connect_tcp(
@@ -116,7 +119,9 @@ class _PinnedIPNetworkBackend(httpcore.AsyncNetworkBackend):
         timeout: float | None = None,
         socket_options: Iterable[SOCKET_OPTION] | None = None,
     ) -> httpcore.AsyncNetworkStream:
-        return await self._default_backend.connect_unix_socket(path, timeout, socket_options)
+        return await self._default_backend.connect_unix_socket(
+            path, timeout, socket_options
+        )
 
     async def sleep(self, seconds: float) -> None:
         await self._default_backend.sleep(seconds)
@@ -131,6 +136,7 @@ class _PinnedIPTransport(httpx.AsyncBaseTransport):
 
     def __init__(self, resolved_ip: str, original_hostname: str) -> None:
         import httpcore as _httpcore
+
         backend = _PinnedIPNetworkBackend(resolved_ip, original_hostname)
         self._pool = _httpcore.AsyncConnectionPool(network_backend=backend)
 
@@ -277,7 +283,9 @@ async def record_delivery(
     return history_id
 
 
-async def send_webhook(target_url: str, payload: Dict[str, Any]) -> tuple[bool, Optional[str]]:
+async def send_webhook(
+    target_url: str, payload: Dict[str, Any]
+) -> tuple[bool, Optional[str]]:
     """POST a redacted alert payload to a webhook URL with SSRF protections.
 
     Always resolves the target hostname and validates every returned IP against
@@ -306,7 +314,9 @@ async def send_webhook(target_url: str, payload: Dict[str, Any]) -> tuple[bool, 
 
     # Resolve and validate every address the hostname may return.
     try:
-        addrs = socket.getaddrinfo(hostname, parsed.port or 443, proto=socket.IPPROTO_TCP)
+        addrs = socket.getaddrinfo(
+            hostname, parsed.port or 443, proto=socket.IPPROTO_TCP
+        )
     except OSError:
         return False, "Webhook URL hostname could not be resolved"
 
@@ -353,14 +363,16 @@ async def send_webhook(target_url: str, payload: Dict[str, Any]) -> tuple[bool, 
         new_netloc = f"[{resolved_ip}]" if ":" in resolved_ip else resolved_ip
         if parsed.port:
             new_netloc = f"{new_netloc}:{parsed.port}"
-        request_url = urlunparse((
-            scheme,
-            new_netloc,
-            parsed.path,
-            parsed.params,
-            parsed.query,
-            parsed.fragment,
-        ))
+        request_url = urlunparse(
+            (
+                scheme,
+                new_netloc,
+                parsed.path,
+                parsed.params,
+                parsed.query,
+                parsed.fragment,
+            )
+        )
         transport = None
         extra_headers = {"Host": hostname}
 
@@ -391,20 +403,31 @@ async def send_webhook(target_url: str, payload: Dict[str, Any]) -> tuple[bool, 
             redirect_url = response.headers.get("location", "")
             if redirect_url:
                 from urllib.parse import urlparse
+
                 parsed_redirect = urlparse(redirect_url)
                 if parsed_redirect.hostname:
                     try:
-                        redirect_ips = socket.getaddrinfo(parsed_redirect.hostname, parsed_redirect.port or 443)
+                        redirect_ips = socket.getaddrinfo(
+                            parsed_redirect.hostname, parsed_redirect.port or 443
+                        )
                         for _family, _stype, _proto, _cname, sockaddr in redirect_ips:
                             rip = ipaddress.ip_address(sockaddr[0])
                             for blocked_cidr in settings.notification_blocked_ip_ranges:
                                 try:
-                                    if rip in ipaddress.ip_network(blocked_cidr, strict=False):
-                                        return False, f"Redirect to blocked IP range: {blocked_cidr}"
+                                    if rip in ipaddress.ip_network(
+                                        blocked_cidr, strict=False
+                                    ):
+                                        return (
+                                            False,
+                                            f"Redirect to blocked IP range: {blocked_cidr}",
+                                        )
                                 except ValueError:
                                     continue
                     except OSError:
-                        return False, f"Could not resolve redirect target: {redirect_url}"
+                        return (
+                            False,
+                            f"Could not resolve redirect target: {redirect_url}",
+                        )
 
         return True, None
     except httpx.HTTPError as exc:
