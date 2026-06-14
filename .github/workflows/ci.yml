@@ -210,6 +210,10 @@ jobs:
       needs.detect-changes.outputs.run_frontend == 'true' &&
       (needs.formatting-hygiene.result == 'success' || needs.formatting-hygiene.result == 'skipped')
     runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: ["20", "22"]
     defaults:
       run:
         working-directory: frontend
