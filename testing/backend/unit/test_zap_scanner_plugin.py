@@ -59,9 +59,8 @@ def test_zap_scanner_build_command_renders_representative_target(plugin_manager)
 
     assert command is not None
     assert command[0] == "python3"
-    assert command[1] == "-c"
-    assert target in command
-    assert "ZAP connector placeholder scan" in command[2]
+    assert command[1] == "plugins/zap_scanner/run.py"
+    assert command[2] == target
 
 
 def test_zap_scanner_parser_fixture_produces_stable_findings(plugin_manager):
@@ -73,18 +72,20 @@ def test_zap_scanner_parser_fixture_produces_stable_findings(plugin_manager):
     assert parsed["count"] == 3
     assert len(parsed["findings"]) == 3
 
-    assert parsed["items"] == [
-        "ZAP connector placeholder scan",
-        "target=https://secuscan.in",
-        "mode=dast",
-    ]
-
     first = parsed["findings"][0]
 
-    assert first["title"] == "Recon/Scan Observation"
-    assert first["category"] == "Security Scan"
-    assert first["severity"] == "info"
-    assert first["metadata"]["raw"] == "ZAP connector placeholder scan"
+    assert first["title"] == "SQL Injection"
+    assert first["category"] == "DAST"
+    assert first["severity"] == "high"
+    assert first["metadata"]["cweid"] == "89"
+
+    second = parsed["findings"][1]
+    assert second["title"] == "XSS Vulnerability"
+    assert second["severity"] == "medium"
+
+    third = parsed["findings"][2]
+    assert third["title"] == "Missing Security Header"
+    assert third["severity"] == "low"
 
 
 def test_zap_scanner_parser_empty_output_is_deterministic(plugin_manager):
