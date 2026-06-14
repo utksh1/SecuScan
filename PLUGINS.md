@@ -344,9 +344,11 @@ clear error message identifying the problem.
 
 ---
 
+---
+
 ## Catalog Validation (For Contributors)
 
-To prevent the index, categories, and metrics in this file from drifting out of sync with the live plugin directories, a validation tool is provided. 
+To prevent the index, categories, and metrics in this file from drifting out of sync with the live plugin directories, a validation tool is provided.
 
 Before submitting a Pull Request that adds, removes, or modifies a plugin, ensure the catalog is synced by running:
 
