@@ -50,8 +50,16 @@ flowchart LR
     PM --> META[metadata.json]
     PM --> PARSER[parser.py]
 
-    EX --> GUARD[Consent, Safe Mode, Rate, Capability, Network Policy]
-    GUARD --> ENGINE{Execution Engine}
+## Runtime Support
+
+SecuScan CI validates the following runtime baselines:
+
+- Python 3.11
+- Node.js 20 and 22
+
+Runtime compatibility changes should keep these CI checks passing.
+
+## Prerequisites
 
     ENGINE --> CLI[CLI Tools]
     ENGINE --> PY[Python Scanners]
