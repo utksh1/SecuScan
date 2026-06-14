@@ -272,8 +272,10 @@ async def process_finding_notifications(
     if not finding:
         return []
 
+    owner_id = finding.get("owner_id", "default")
     rules = await db.fetchall(
-        "SELECT * FROM notification_rules WHERE is_active = 1 ORDER BY created_at ASC"
+        "SELECT * FROM notification_rules WHERE is_active = 1 AND owner_id = ? ORDER BY created_at ASC",
+        (owner_id,),
     )
     results: List[DeliveryResult] = []
     for rule in rules:

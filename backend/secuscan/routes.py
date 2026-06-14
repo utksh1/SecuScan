@@ -203,6 +203,7 @@ def _validate_notification_target(channel_type: NotificationChannelType, target:
 def _serialize_notification_rule(row: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "id": row["id"],
+        "owner_id": row.get("owner_id", "default"),
         "name": row["name"],
         "severity_threshold": row["severity_threshold"],
         "channel_type": row["channel_type"],
@@ -1919,17 +1920,18 @@ async def trigger_workflow_tick():
 
 
 @router.get("/notifications/rules")
-async def list_notification_rules():
+async def list_notification_rules(owner: str = Depends(get_current_owner)):
     db = await get_db()
     rows = await db.fetchall(
-        "SELECT * FROM notification_rules ORDER BY created_at DESC"
+        "SELECT * FROM notification_rules WHERE owner_id = ? ORDER BY created_at DESC",
+        (owner,),
     )
     rules = [_serialize_notification_rule(row) for row in rows]
     return {"rules": rules, "total": len(rules)}
 
 
 @router.post("/notifications/rules")
-async def create_notification_rule(payload: NotificationRuleCreate):
+async def create_notification_rule(payload: NotificationRuleCreate, owner: str = Depends(get_current_owner)):
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Rule name is required")
@@ -1940,11 +1942,12 @@ async def create_notification_rule(payload: NotificationRuleCreate):
     await db.execute(
         """
         INSERT INTO notification_rules (
-            id, name, severity_threshold, channel_type, target_url_or_email, is_active
-        ) VALUES (?, ?, ?, ?, ?, ?)
+            id, owner_id, name, severity_threshold, channel_type, target_url_or_email, is_active
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         (
             rule_id,
+            owner,
             name,
             payload.severity_threshold.value,
             payload.channel_type.value,
@@ -1962,11 +1965,11 @@ async def create_notification_rule(payload: NotificationRuleCreate):
 
 
 @router.get("/notifications/rules/{rule_id}")
-async def get_notification_rule(rule_id: str):
+async def get_notification_rule(rule_id: str, owner: str = Depends(get_current_owner)):
     db = await get_db()
     row = await db.fetchone(
-        "SELECT * FROM notification_rules WHERE id = ?",
-        (rule_id,),
+        "SELECT * FROM notification_rules WHERE id = ? AND owner_id = ?",
+        (rule_id, owner),
     )
     if not row:
         raise HTTPException(status_code=404, detail="Notification rule not found")
@@ -1974,11 +1977,11 @@ async def get_notification_rule(rule_id: str):
 
 
 @router.patch("/notifications/rules/{rule_id}")
-async def update_notification_rule(rule_id: str, payload: NotificationRuleUpdate):
+async def update_notification_rule(rule_id: str, payload: NotificationRuleUpdate, owner: str = Depends(get_current_owner)):
     db = await get_db()
     row = await db.fetchone(
-        "SELECT * FROM notification_rules WHERE id = ?",
-        (rule_id,),
+        "SELECT * FROM notification_rules WHERE id = ? AND owner_id = ?",
+        (rule_id, owner),
     )
     if not row:
         raise HTTPException(status_code=404, detail="Notification rule not found")
@@ -2031,8 +2034,8 @@ async def update_notification_rule(rule_id: str, payload: NotificationRuleUpdate
     updates.append("updated_at = datetime('now')")
     params.append(rule_id)
     await db.execute(
-        f"UPDATE notification_rules SET {', '.join(updates)} WHERE id = ?",
-        tuple(params),
+        f"UPDATE notification_rules SET {', '.join(updates)} WHERE id = ? AND owner_id = ?",
+        tuple(params + [owner]),
     )
     updated = await db.fetchone(
         "SELECT * FROM notification_rules WHERE id = ?",
@@ -2044,15 +2047,15 @@ async def update_notification_rule(rule_id: str, payload: NotificationRuleUpdate
 
 
 @router.delete("/notifications/rules/{rule_id}")
-async def delete_notification_rule(rule_id: str):
+async def delete_notification_rule(rule_id: str, owner: str = Depends(get_current_owner)):
     db = await get_db()
     row = await db.fetchone(
-        "SELECT id FROM notification_rules WHERE id = ?",
-        (rule_id,),
+        "SELECT id FROM notification_rules WHERE id = ? AND owner_id = ?",
+        (rule_id, owner),
     )
     if not row:
         raise HTTPException(status_code=404, detail="Notification rule not found")
-    await db.execute("DELETE FROM notification_rules WHERE id = ?", (rule_id,))
+    await db.execute("DELETE FROM notification_rules WHERE id = ? AND owner_id = ?", (rule_id, owner))
     return {"rule_id": rule_id, "deleted": True}
 
 
