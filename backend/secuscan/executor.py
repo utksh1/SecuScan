@@ -155,84 +155,6 @@ def extract_target(inputs: Dict[str, Any]) -> str:
     )
 
 
-def generate_scan_cache_key(
-    owner_id: str,
-    plugin_id: str,
-    target: str,
-    inputs: Dict[str, Any],
-    execution_context: Dict[str, Any],
-    safe_mode: bool
-) -> tuple[str, str, str]:
-    """
-    Generate target hash, dependency hash, and an owner-scoped cache key.
-
-    Returns:
-        tuple: (target_hash, dependency_hash, cache_key)
-    """
-    import hashlib
-    import subprocess
-    from pathlib import Path
-
-    target_hash = None
-    if target and os.path.isdir(target):
-        try:
-            res = subprocess.run(
-                ["git", "rev-parse", "HEAD"],
-                cwd=target,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                timeout=5
-            )
-            if res.returncode == 0:
-                target_hash = res.stdout.strip()
-        except Exception:
-            pass
-
-    if not target_hash:
-        target_hash = hashlib.sha256(str(target or "").encode("utf-8")).hexdigest()
-
-    dependency_files = [
-        "package-lock.json",
-        "poetry.lock",
-        "Cargo.lock",
-        "go.sum",
-        "requirements.txt",
-        "Pipfile.lock",
-        "pnpm-lock.yaml",
-        "yarn.lock",
-        "gemfile.lock"
-    ]
-    hasher = hashlib.sha256()
-    found_any = False
-
-    if target and os.path.isdir(target):
-        p = Path(target)
-        for dep_file in sorted(dependency_files):
-            file_path = p / dep_file
-            if file_path.exists() and file_path.is_file():
-                try:
-                    hasher.update(dep_file.encode("utf-8"))
-                    hasher.update(file_path.read_bytes())
-                    found_any = True
-                except Exception:
-                    pass
-
-    if not found_any:
-        dependency_hash = "no_deps"
-    else:
-        dependency_hash = hasher.hexdigest()
-
-    inputs_str = json.dumps(inputs, sort_keys=True)
-    inputs_hash = hashlib.sha256(inputs_str.encode("utf-8")).hexdigest()
-
-    context_str = json.dumps(execution_context, sort_keys=True)
-    context_hash = hashlib.sha256(context_str.encode("utf-8")).hexdigest()
-
-    cache_key = f"scan_cache:{owner_id}:{plugin_id}:{int(safe_mode)}:{target_hash}:{dependency_hash}:{inputs_hash}:{context_hash}"
-    return target_hash, dependency_hash, cache_key
-
-
 def _stable_asset_id(target: str, host: Any, port: Any, protocol: Any) -> str:
     material = "||".join(
         [
@@ -429,13 +351,12 @@ class TaskExecutor:
             task_id=task_id,
         )
 
-    async def execute_task(self, task_id: str, bypass_cache: bool = False):
+    async def execute_task(self, task_id: str):
         """
         Execute a task asynchronously.
         
         Args:
             task_id: Task identifier
-            bypass_cache: Whether to bypass Redis scan result cache
         """
         db = await get_db()
         self.running_tasks[task_id] = asyncio.current_task()
@@ -471,104 +392,6 @@ class TaskExecutor:
                 inputs=inputs,
                 execution_context=execution_context,
             )
-
-            # Check cache if not bypassed
-            cached_result = None
-            cache_key = None
-            if target and not bypass_cache:
-                try:
-                    target_hash, dependency_hash, cache_key = generate_scan_cache_key(
-                        owner_id=owner_id,
-                        plugin_id=plugin_id,
-                        target=target,
-                        inputs=inputs,
-                        execution_context=execution_context,
-                        safe_mode=safe_mode,
-                    )
-                    cache_client = await get_cache()
-                    cached_result = await cache_client.get_json(cache_key)
-                except Exception as cache_exc:
-                    logger.warning("Failed to query scan cache: %s", cache_exc)
-
-            if cached_result is not None:
-                logger.info("Cache hit for scan task %s (key: %s)", task_id, cache_key)
-                await self._broadcast(task_id, "status", TaskStatus.RUNNING.value)
-                await self._broadcast_phase(task_id, ScanPhase.RUNNING_COMMAND.value)
-
-                raw_path = Path(settings.raw_output_dir) / f"{task_id}.txt"
-                try:
-                    with open(raw_path, 'w', encoding='utf-8') as f:
-                        f.write(cached_result.get("raw_output", ""))
-                except Exception as f_exc:
-                    logger.warning("Failed to write raw output for cached task: %s", f_exc)
-
-                status = cached_result.get("status", TaskStatus.COMPLETED.value)
-                duration = cached_result.get("duration_seconds", 0.0)
-                exit_code = cached_result.get("exit_code", 0)
-                error_message = cached_result.get("error_message")
-                structured_data = cached_result.get("structured", {})
-
-                # Update task in SQLite with the cached results
-                await db.execute(
-                    """
-                    UPDATE tasks SET
-                        status = ?,
-                        completed_at = ?,
-                        duration_seconds = ?,
-                        exit_code = ?,
-                        raw_output_path = ?,
-                        error_message = ?
-                    WHERE id = ?
-                    """,
-                    (
-                        status,
-                        datetime.now().isoformat(),
-                        duration,
-                        exit_code,
-                        str(raw_path),
-                        error_message,
-                        task_id
-                    )
-                )
-
-                # Persist findings and reports to database for the new task
-                await self._broadcast_phase(task_id, ScanPhase.PARSING.value)
-
-                plugin_manager = get_plugin_manager()
-                plugin = plugin_manager.get_plugin(plugin_id)
-                is_modular = plugin_id in MODULAR_SCANNERS
-                if is_modular:
-                    scanner_class = MODULAR_SCANNERS[plugin_id]
-                    report_name = f"{scanner_class.__name__} Report"
-                else:
-                    report_name = f"{plugin.name} Report" if plugin else f"{plugin_id} Report"
-
-                await self._persist_findings_and_report_common(
-                    db,
-                    task_id=task_id,
-                    owner_id=owner_id,
-                    plugin_id=plugin_id,
-                    target=target,
-                    status=status,
-                    result_dict=structured_data,
-                    is_modular=is_modular,
-                    report_name=report_name,
-                )
-
-                await self._dispatch_task_notifications(db, task_id)
-                await self._broadcast_phase(task_id, ScanPhase.FINISHED.value)
-                await self._broadcast(task_id, "status", status)
-                await self._invalidate_cached_views()
-
-                await db.log_audit(
-                    "task_completed",
-                    f"Task completed from cache (duration: {duration:.2f}s)",
-                    context={"task_id": task_id, "exit_code": exit_code, "cached": True},
-                    task_id=task_id,
-                    plugin_id=plugin_id
-                )
-                logger.info(f"Task {task_id} completed from cache")
-                return
 
             # ── Safe Mode & Network policy enforcement ───────────────────────
             # Enforce Safe Mode target validation inside TaskExecutor to guarantee
@@ -830,41 +653,7 @@ class TaskExecutor:
                     status=final_status,
                     output=output
                 )
-            if target and not bypass_cache:
-                try:
-                    target_hash, dependency_hash, cache_key = generate_scan_cache_key(
-                        owner_id=owner_id,
-                        plugin_id=plugin_id,
-                        target=target,
-                        inputs=inputs,
-                        execution_context=execution_context,
-                        safe_mode=safe_mode,
-                    )
-                    task_data = await db.fetchone(
-                        "SELECT status, duration_seconds, exit_code, error_message, structured_json, raw_output_path FROM tasks WHERE id = ?",
-                        (task_id,)
-                    )
-                    if task_data and task_data["status"] == TaskStatus.COMPLETED.value:
-                        raw_output = ""
-                        if task_data["raw_output_path"]:
-                            try:
-                                with open(task_data["raw_output_path"], "r", encoding="utf-8") as f:
-                                    raw_output = f.read()
-                            except Exception:
-                                pass
-                        cache_data = {
-                            "status": task_data["status"],
-                            "duration_seconds": task_data["duration_seconds"],
-                            "exit_code": task_data["exit_code"],
-                            "error_message": task_data["error_message"],
-                            "raw_output": raw_output,
-                            "structured": json.loads(task_data["structured_json"]) if task_data["structured_json"] else {}
-                        }
-                        cache_client = await get_cache()
-                        await cache_client.set_json(cache_key, cache_data, ttl=86400)
-                        logger.info("Saved scan results to cache for task %s (key: %s)", task_id, cache_key)
-                except Exception as cache_exc:
-                    logger.warning("Failed to save scan results to cache: %s", cache_exc)
+                await self._broadcast_phase(task_id, ScanPhase.REPORTING.value)
 
             await self._dispatch_task_notifications(db, task_id)
 
@@ -1571,27 +1360,16 @@ class TaskExecutor:
             "risk_factors": risk_factors,
         }
 
-    async def _persist_findings_and_report_common(
-        self,
-        db,
-        *,
-        task_id: str,
-        owner_id: str,
-        plugin_id: str,
-        target: str,
-        status: str,
-        result_dict: Dict[str, Any],
-        is_modular: bool,
-        report_name: str,
-    ) -> Dict[str, Any]:
-        """Common logic to persist findings, report, and result resources for a scan."""
+    async def _upsert_findings_and_report(self, db, task_id: str, owner_id: str, plugin, plugin_id: str, target: str, status: str, output: str = ""):
+        """Persist derived findings and report records into SQLite."""
+        parsed = self._parse_results(plugin, output)
         structured_result, previous_findings, asset_services = await self._build_result_contract(
             db,
             task_id=task_id,
             owner_id=owner_id,
             plugin_id=plugin_id,
             target=target,
-            result=result_dict,
+            result=parsed,
         )
         findings_data: List[Dict[str, Any]] = []
         for finding in structured_result.get("findings", []):
@@ -1617,13 +1395,6 @@ class TaskExecutor:
             (json.dumps(structured_result), task_id)
         )
 
-        if is_modular:
-            report_type = "professional" if status == TaskStatus.COMPLETED.value else "failed"
-            pages = 2
-        else:
-            report_type = "technical"
-            pages = 1
-
         await db.execute(
             """
             INSERT INTO reports (
@@ -1638,11 +1409,11 @@ class TaskExecutor:
                 f"report:{task_id}",
                 owner_id,
                 task_id,
-                report_name,
-                report_type,
+                f"{plugin.name} Report",
+                "technical",
                 "ready" if status == TaskStatus.COMPLETED.value else "failed",
                 len(findings_data),
-                pages,
+                1,
             ),
         )
 
@@ -1654,37 +1425,72 @@ class TaskExecutor:
             target=target,
             result=structured_result,
         )
-        return structured_result
-
-    async def _upsert_findings_and_report(self, db, task_id: str, owner_id: str, plugin, plugin_id: str, target: str, status: str, output: str = ""):
-        """Persist derived findings and report records into SQLite."""
-        parsed = self._parse_results(plugin, output)
-        await self._persist_findings_and_report_common(
-            db,
-            task_id=task_id,
-            owner_id=owner_id,
-            plugin_id=plugin_id,
-            target=target,
-            status=status,
-            result_dict=parsed,
-            is_modular=False,
-            report_name=f"{plugin.name} Report",
-        )
 
     async def _upsert_findings_and_report_from_scanner(self, db, task_id: str, owner_id: str, scanner: Any, plugin_id: str, target: str, status: str, result: Dict[str, Any]):
         """Persist modular scanner results into findings, and reports."""
-        await self._persist_findings_and_report_common(
+        structured_result, previous_findings, asset_services = await self._build_result_contract(
             db,
             task_id=task_id,
             owner_id=owner_id,
             plugin_id=plugin_id,
             target=target,
-            status=status,
-            result_dict=result,
-            is_modular=True,
-            report_name=f"{scanner.name} Report",
+            result=result,
+        )
+        findings_data: List[Dict[str, Any]] = []
+        for finding in structured_result.get("findings", []):
+            findings_data.append(
+                await self._persist_finding(
+                    db,
+                    owner_id=owner_id,
+                    task_id=task_id,
+                    plugin_id=plugin_id,
+                    target=target,
+                    finding=finding,
+                )
+            )
+
+        structured_result["findings"] = findings_data
+        structured_result["severity_counts"] = self._build_severity_counts(findings_data)
+        structured_result["finding_groups"] = build_finding_groups(findings_data)
+        structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
+        structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
+
+        await db.execute(
+            "UPDATE tasks SET structured_json = ? WHERE id = ?",
+            (json.dumps(structured_result), task_id)
         )
 
+        # Create/Update report
+        await db.execute(
+            """
+            INSERT INTO reports (
+                id, owner_id, task_id, name, type, generated_at, status, findings, pages
+            ) VALUES (?, ?, ?, ?, ?, (datetime('now')), ?, ?, ?)
+            ON CONFLICT (id) DO UPDATE SET
+                status = EXCLUDED.status,
+                findings = EXCLUDED.findings,
+                pages = EXCLUDED.pages
+            """,
+            (
+                f"report:{task_id}",
+                owner_id,
+                task_id,
+                f"{scanner.name} Report",
+                "professional" if status == TaskStatus.COMPLETED.value else "failed",
+                "ready" if status == TaskStatus.COMPLETED.value else "failed",
+                len(findings_data),
+                2, # Professional reports are typically multi-page
+            ),
+        )
+
+        await self._persist_result_resources(
+            db,
+            owner_id=owner_id,
+            task_id=task_id,
+            plugin_id=plugin_id,
+            target=target,
+            result=structured_result,
+        )
 
     async def _persist_result_resources(
         self,

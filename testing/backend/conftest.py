@@ -26,12 +26,6 @@ from backend.secuscan import auth as auth_module
 @pytest.fixture(autouse=True)
 def setup_test_environment(monkeypatch):
     """Override settings for tests to ensure isolated execution."""
-    try:
-        from backend.secuscan import cache as cache_module
-        cache_module.cache = None
-    except ImportError:
-        pass
-
     temp_dir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
     temp_path = temp_dir.name
 
