@@ -108,4 +108,64 @@ describe('ReportCompare page', () => {
       expect(screen.getByText(/Only in B/i)).toBeInTheDocument()
     })
   })
+
+  it('allows keyboard navigation', async () => {
+    const user = userEvent.setup()
+    renderCompare()
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /compare reports/i })).toBeInTheDocument()
+    })
+
+    const selects = screen.getAllByRole('combobox')
+    await user.tab()
+    expect(selects[0]).toHaveFocus()
+
+    await user.tab()
+    expect(selects[1]).toHaveFocus()
+
+    await user.selectOptions(selects[0], 'report-a')
+    await user.selectOptions(selects[1], 'report-b')
+
+    await waitFor(() => {
+      expect(screen.getByText(/Only in B/i)).toBeInTheDocument()
+    })
+
+    await user.tab()
+    const refreshButton = screen.getByTitle('Refresh')
+    expect(refreshButton).toHaveFocus()
+  })
+
+  it('keeps context while scrolling within a findings list (sticky header regression guard)', async () => {
+    const user = userEvent.setup()
+    renderCompare()
+
+    const selects = await screen.findAllByRole('combobox')
+    await user.selectOptions(selects[0], 'report-a')
+    await user.selectOptions(selects[1], 'report-b')
+
+    // Ensure the compare sections are rendered.
+    const sectionHeader = await screen.findByRole('heading', { name: /new findings/i })
+    expect(sectionHeader).toBeInTheDocument()
+
+    // The findings list is the scroll container inside that section.
+    const scrollContainer = sectionHeader
+      .closest('section')
+      ?.querySelector('div.max-h-80.overflow-y-auto') as HTMLElement | null
+
+    // JSDOM doesn't do real layout, but the regression guard is about keyboard focus/context,
+    // not about pixel-perfect sticky rendering.
+    expect(scrollContainer).not.toBeNull()
+
+    // Focus the first scrollable finding row's severity chip and scroll.
+    const firstFinding = await screen.findByText(/Only in B/i)
+    firstFinding.focus()
+
+    scrollContainer!.scrollTop = 50
+    scrollContainer!.dispatchEvent(new Event('scroll'))
+
+    // Header should still exist and focus should remain stable.
+    expect(screen.getByRole('heading', { name: /new findings/i })).toBe(sectionHeader)
+    expect(document.activeElement).toBe(firstFinding)
+  })
 })

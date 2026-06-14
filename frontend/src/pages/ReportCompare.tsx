@@ -140,6 +140,7 @@ function CompareSection({
   )
 }
 
+
 export default function ReportCompare() {
   const [reports, setReports] = useState<ReportOption[]>([])
   const [findingsByTask, setFindingsByTask] = useState<Record<string, ComparableFinding[]>>({})
