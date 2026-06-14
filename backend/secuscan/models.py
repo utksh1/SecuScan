@@ -235,6 +235,9 @@ class Finding(BaseModel):
     evidence_count: int = 0
     analyst_status: AnalystStatus = AnalystStatus.NEW
     retest_status: RetestStatus = RetestStatus.NOT_REQUESTED
+    safe_to_apply: Optional[bool] = None
+    compatible_range: Optional[str] = None
+    alternatives: Optional[List[str]] = None
 
 
 class TaskResult(BaseModel):
