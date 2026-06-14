@@ -74,5 +74,5 @@
     "system_packages": []
   },
   "docker_image": "returntocorp/semgrep:latest",
-  "checksum": "7e3ce62ef2e099e35fa384960ab289aa286e507724796cabf8e8f04df757e05a"
+  "checksum": "8e59254f5ad937c0a5a2af47367cddf07e07b8a528d13ff303360d6e478a51d8"
 }
