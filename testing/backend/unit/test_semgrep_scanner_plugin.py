@@ -34,25 +34,27 @@ def plugin_manager(setup_test_environment) -> PluginManager:
 
 def test_semgrep_parser_valid_json():
     parser = _load_semgrep_parser()
-    valid_json = json.dumps({
-        "results": [
-            {
-                "check_id": "rule-1",
-                "path": "src/main.py",
-                "start": {"line": 42},
-                "extra": {
-                    "message": "Found an issue",
-                    "severity": "ERROR",
-                    "lines": "eval(user_input)"
+    valid_json = json.dumps(
+        {
+            "results": [
+                {
+                    "check_id": "rule-1",
+                    "path": "src/main.py",
+                    "start": {"line": 42},
+                    "extra": {
+                        "message": "Found an issue",
+                        "severity": "ERROR",
+                        "lines": "eval(user_input)",
+                    },
                 }
-            }
-        ]
-    })
-    
+            ]
+        }
+    )
+
     parsed = parser.parse(valid_json)
     assert parsed["count"] == 1
     assert len(parsed["findings"]) == 1
-    
+
     finding = parsed["findings"][0]
     assert finding["title"] == "Semgrep issue: rule-1 in src/main.py"
     assert finding["severity"] == "high"
@@ -67,7 +69,7 @@ def test_semgrep_parser_valid_json():
 def test_semgrep_parser_invalid_json():
     parser = _load_semgrep_parser()
     invalid_json = "This is not JSON data"
-    
+
     parsed = parser.parse(invalid_json)
     assert parsed["count"] == 0
     assert parsed["findings"] == []
@@ -75,14 +77,16 @@ def test_semgrep_parser_invalid_json():
 
 def test_semgrep_parser_missing_fields():
     parser = _load_semgrep_parser()
-    missing_fields_json = json.dumps({
-        "results": [
-            {
-                # Missing check_id, path, start, extra
-            }
-        ]
-    })
-    
+    missing_fields_json = json.dumps(
+        {
+            "results": [
+                {
+                    # Missing check_id, path, start, extra
+                }
+            ]
+        }
+    )
+
     parsed = parser.parse(missing_fields_json)
     assert parsed["count"] == 1
     finding = parsed["findings"][0]
@@ -104,17 +108,9 @@ def test_semgrep_parser_severity_mapping():
         ("ERROR", "high"),
         ("UNKNOWN_SEVERITY", "low"),
     ]
-    
+
     for semgrep_sev, expected_secuscan_sev in test_cases:
-        json_data = json.dumps({
-            "results": [
-                {
-                    "extra": {
-                        "severity": semgrep_sev
-                    }
-                }
-            ]
-        })
-        
+        json_data = json.dumps({"results": [{"extra": {"severity": semgrep_sev}}]})
+
         parsed = parser.parse(json_data)
         assert parsed["findings"][0]["severity"] == expected_secuscan_sev
