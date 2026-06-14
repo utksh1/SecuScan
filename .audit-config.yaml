@@ -25,7 +25,7 @@ exceptions:
       Development-only dependency (Vite build tool). Not exposed in
       production runtime. Pre-existing in main before this PR.
     introduced: "2026-01-01"
-    expires: "2026-12-31"
+    expires_at: "2026-12-31"
 
 # Packages to exclude from audits (use sparingly!)
 excluded_packages: []
