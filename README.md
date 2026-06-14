@@ -10,7 +10,9 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License"></a>
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.11%2B-blue" alt="Python 3.11+"></a>
+<a href="https://www.python.org/">
+  <img src="https://img.shields.io/badge/Python-3.11-blue" alt="Python 3.11">
+</a>
   <a href="frontend/"><img src="https://img.shields.io/badge/frontend-React%20%2B%20TypeScript-61dafb" alt="React and TypeScript"></a>
   <a href="PLUGINS.md"><img src="https://img.shields.io/badge/plugins-60%20catalogued-brightgreen" alt="60 catalogued plugins"></a>
 </p>
@@ -50,8 +52,16 @@ flowchart LR
     PM --> META[metadata.json]
     PM --> PARSER[parser.py]
 
-    EX --> GUARD[Consent, Safe Mode, Rate, Capability, Network Policy]
-    GUARD --> ENGINE{Execution Engine}
+## Runtime Support
+
+SecuScan CI validates the following runtime baselines:
+
+- Python 3.11
+- Node.js 20 and 22
+
+Runtime compatibility changes should keep these CI checks passing.
+
+## Prerequisites
 
     ENGINE --> CLI[CLI Tools]
     ENGINE --> PY[Python Scanners]
@@ -121,13 +131,18 @@ SecuScan/
 
 ## Requirements
 
-- Python 3.11+
+- Python 3.11
 - Node.js 20+
 - npm 10+
 - Docker Desktop or Docker Engine for Compose or Docker-backed scans
 
-If multiple Python versions are installed, `./setup.sh` tries to find a compatible `python3`. You can also force one:
+SecuScan CI validates the following runtime baselines:
 
+- Python 3.11
+- Node.js 20 and 22
+
+
+To explicitly use Python 3.11 during setup:
 ```bash
 PYTHON=/path/to/python3.11 ./setup.sh
 ```
@@ -321,7 +336,7 @@ Before a PR, branch from `main`, keep the change focused, add tests for behavior
 
 ## Troubleshooting
 
-- Python must be 3.11+: `python3 --version`
+- Python must be 3.11: `python3 --version`
 - If venv activation fails on Windows PowerShell, use `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
 - If frontend dependencies fail, run `cd frontend && npm install --legacy-peer-deps`
 - If Vite cache is stale, run `cd frontend && npm run dev -- --force`
