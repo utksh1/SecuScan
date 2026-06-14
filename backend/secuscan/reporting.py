@@ -840,6 +840,7 @@ class ReportGenerator:
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="SecuScan security vulnerability assessment report containing executive summary, severity charts, and remediation roadmaps.">
   <title>SecuScan Report - {cls._escape_html(payload['target'])}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1304,6 +1305,29 @@ class ReportGenerator:
       margin: 4px 0 0;
     }}
 
+    /* Print Button Styling */
+    .print-btn {{
+      background: var(--ink);
+      color: white;
+      border: none;
+      padding: 10px 22px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 13.5px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: opacity 0.2s ease, transform 0.1s ease;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+    }}
+    .print-btn:hover {{
+      opacity: 0.9;
+    }}
+    .print-btn:active {{
+      transform: scale(0.98);
+    }}
+
     @page {{
       size: A4;
       margin: 14mm 12mm 16mm;
@@ -1331,11 +1355,16 @@ class ReportGenerator:
         break-inside: avoid;
       }}
       .section, .meta-card, .stat-card, .finding-card {{ box-shadow: none; }}
+      
+      /* Hide controls on PDF print */
+      .toolbar, .print-btn, .view-switcher {{
+        display: none !important;
+      }}
     }}
   </style>
 </head>
 <body>
-  <div class="shell view-executive">
+  <div class="shell view-executive" id="report-container">
     <section class="hero">
       <div class="hero-title">
         <div class="hero-icon"><img src="{shield_icon}" alt=""></div>
@@ -1364,9 +1393,13 @@ class ReportGenerator:
     <!-- View Switcher -->
     <div class="toolbar">
       <div class="view-switcher">
-        <button class="tab-btn active" onclick="switchView('executive')">Executive Summary Sheet</button>
-        <button class="tab-btn" onclick="switchView('developer')">Developer-Focused Logs</button>
+        <button id="btn-tab-executive" class="tab-btn active" onclick="switchView('executive')">Executive Summary Sheet</button>
+        <button id="btn-tab-developer" class="tab-btn" onclick="switchView('developer')">Developer-Focused Logs</button>
       </div>
+      <button id="btn-print-report" class="print-btn" onclick="window.print()">
+        <svg class="mini-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; margin-right: 6px;"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+        Print / Save PDF
+      </button>
     </div>
 
     <!-- Executive View Content -->
