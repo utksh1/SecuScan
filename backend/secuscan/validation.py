@@ -583,7 +583,7 @@ def resolve_and_validate_target(url: str) -> Tuple[bool, str]:
 
     # Resolve hostname to IPs
     try:
-        resolved = socket.getaddrinfo(hostname, port or 443, proto=socket.IPPROTO_TCP)
+        resolved f = socket.getaddrinfo(hostname, port or 443, proto=socket.IPPROTO_TCP)
     except OSError:
         return False, f"Could not resolve hostname: {hostname}"
 
@@ -652,12 +652,17 @@ def validate_command_network_egress(command: list[str], safe_mode: bool, plugin_
         if not candidate:
             continue
 
-        # Clean port suffix if present (e.g. "example.com:80" or "10.0.0.1:8080")
-        if ":" in candidate and not candidate.startswith("["):
-            parts = candidate.rsplit(":", 1)
-            if parts[1].isdigit():
-                candidate = parts[0]
+      # Check for IPv6 first — colon handling differs
+try:
+    ipaddress.IPv6Address(candidate)
+    is_ip = True
+except ipaddress.AddressValueError:
+    pass
 
+if not is_ip and ":" in candidate and not candidate.startswith("["):
+    parts = candidate.rsplit(":", 1)
+    if parts[1].isdigit():
+        candidate = parts[0]
         is_ip = False
         try:
             # Try to parse as IP/CIDR (handles single IP and subnet validation)
