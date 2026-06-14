@@ -47,11 +47,11 @@ class BaseScanner(ABC):
 
     return stdout.decode('utf-8', errors='replace'), process.returncode
 
-except asyncio.CancelledError:
-            logger.warning(
-                "Command cancelled | scanner=%s | task_id=%s",
-                self.name,
-                self.task_id,
+            except asyncio.CancelledError:
+                logger.warning(
+                    "Command cancelled | scanner=%s | task_id=%s",
+                    self.name,
+                    self.task_id,
             )
 
             try:
@@ -59,8 +59,8 @@ except asyncio.CancelledError:
                 await process.wait()
             except Exception:
                 pass
-
             raise
+    
     @property
     @abstractmethod
     def name(self) -> str:
