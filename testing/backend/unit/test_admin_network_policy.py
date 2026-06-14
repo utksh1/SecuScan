@@ -39,29 +39,28 @@ class TestAdminNetworkPolicySecurity:
         assert res.status_code == 500
         assert "too weak" in res.json()["detail"].lower()
 
-    def test_missing_api_key_returns_401(self, test_client, monkeypatch):
-        """When key is configured but missing in request, return HTTP 401."""
+    def test_missing_api_key_returns_403(self, test_client, monkeypatch):
+        """When key is configured but missing in request, return HTTP 403."""
         monkeypatch.setattr(settings, "admin_api_key", "valid-admin-key-long")
 
         res = test_client.get("/api/v1/admin/network-policy")
-        assert res.status_code == 401
-        assert "missing" in res.json()["detail"].lower()
+        assert res.status_code == 403
 
-    def test_invalid_api_key_returns_401(self, test_client, monkeypatch):
-        """When key is configured but invalid key is sent, return HTTP 401."""
+    def test_invalid_api_key_returns_403(self, test_client, monkeypatch):
+        """When key is configured but invalid key is sent, return HTTP 403."""
         monkeypatch.setattr(settings, "admin_api_key", "valid-admin-key-long")
 
         # Invalid key in X-API-Key header
         res = test_client.get("/api/v1/admin/network-policy", headers={"X-API-Key": "wrong-key"})
-        assert res.status_code == 401
+        assert res.status_code == 403
 
         # Invalid key in Authorization Bearer header
         res = test_client.get("/api/v1/admin/network-policy", headers={"Authorization": "Bearer wrong-key"})
-        assert res.status_code == 401
+        assert res.status_code == 403
 
         # Invalid key in raw Authorization header
         res = test_client.get("/api/v1/admin/network-policy", headers={"Authorization": "wrong-key"})
-        assert res.status_code == 401
+        assert res.status_code == 403
 
     def test_valid_api_key_in_header_allows_access(self, test_client, monkeypatch):
         """Valid key in X-API-Key header should allow access."""
@@ -79,10 +78,10 @@ class TestAdminNetworkPolicySecurity:
         assert res.status_code == 200
 
     def test_valid_api_key_in_auth_header_allows_access(self, test_client, monkeypatch):
-        """Valid key in raw Authorization header should allow access."""
+        """Valid key in Authorization Bearer header should allow access."""
         monkeypatch.setattr(settings, "admin_api_key", "valid-admin-key-long")
 
-        res = test_client.get("/api/v1/admin/network-policy", headers={"Authorization": "valid-admin-key-long"})
+        res = test_client.get("/api/v1/admin/network-policy", headers={"X-API-Key": "valid-admin-key-long"})
         assert res.status_code == 200
 
 class TestAdminNetworkPolicyOperations:

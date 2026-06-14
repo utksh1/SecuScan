@@ -41,6 +41,41 @@ def init_api_key(data_dir: str) -> str:
     return _api_key
 
 
+def _validate_admin_api_key(candidate: str | None) -> str:
+    """
+    Validate an admin API key candidate.
+
+    Checks, in order:
+    1. The server has an ``admin_api_key`` configured.
+    2. The configured key meets minimum strength (>= 16 chars).
+    3. The supplied candidate matches the configured key.
+
+    Shared between ``require_api_key`` and ``verify_admin_access`` so that
+    both paths enforce the same security policy.
+    """
+    from .config import settings
+
+    if not settings.admin_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Admin API Key is not configured on the server. Please set SECUSCAN_ADMIN_API_KEY.",
+        )
+
+    if len(settings.admin_api_key) < 16:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Admin API Key is too weak. It must be at least 16 characters long.",
+        )
+
+    if not candidate or not secrets.compare_digest(candidate, settings.admin_api_key):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    return candidate
+
+
 async def require_api_key(
     request: Request = None,
     bearer: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
@@ -52,11 +87,18 @@ async def require_api_key(
     Accepts the key in either:
     - ``Authorization: Bearer <key>``
     - ``X-Api-Key: <key>``
+
+    For ``/api/v1/admin/*`` paths the validation is delegated to
+    ``_validate_admin_api_key`` so that admin routes are never left unprotected
+    (defense-in-depth), even if ``verify_admin_access`` is accidentally omitted.
     """
     if request is not None and request.url.path.startswith("/api/v1/admin"):
-        # Admin endpoints have their own separate verify_admin_access dependency.
-        # We bypass require_api_key verification to avoid blocking valid admin key requests.
-        return ""
+        candidate = None
+        if bearer is not None:
+            candidate = bearer.credentials
+        elif x_api_key is not None:
+            candidate = x_api_key
+        return _validate_admin_api_key(candidate)
 
     if _api_key is None:
         raise HTTPException(
