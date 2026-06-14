@@ -157,8 +157,8 @@ describe('ReportCompare page', () => {
     // not about pixel-perfect sticky rendering.
     expect(scrollContainer).not.toBeNull()
 
-    // Use a focusable element to validate “context retention”. In JSDOM, finding text nodes are not focusable.
-    // After selecting options, tab to Refresh so we have something tabbable to track.
+    // Use the refresh button (focusable) to validate context retention.
+    // Scroll shouldn’t cause re-render/focus loss.
     await user.tab() // from combobox[0]
     await user.tab() // from combobox[1]
     const refreshButton = screen.getByTitle('Refresh')
@@ -167,7 +167,6 @@ describe('ReportCompare page', () => {
     scrollContainer!.scrollTop = 50
     scrollContainer!.dispatchEvent(new Event('scroll'))
 
-    // Header should still exist and focus should remain stable.
     expect(screen.getByRole('heading', { name: /new findings/i })).toBe(sectionHeader)
     expect(document.activeElement).toBe(refreshButton)
   })
