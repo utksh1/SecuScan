@@ -6,8 +6,8 @@ Last synced: 2026-05-11
 
 ## At a Glance
 
-- Total plugins: 60
-- Safe plugins: 27
+- Total plugins: 61
+- Safe plugins: 28
 - Intrusive plugins: 25
 - Exploit plugins: 8
 - Source of truth: each plugin's `metadata.json`
@@ -33,7 +33,7 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | `exploit` | 5 |
 | `network` | 3 |
 | `expert` | 3 |
-| `code` | 2 |
+| `code` | 3 |
 | `forensics` | 2 |
 | `utils` | 2 |
 | `execution` | 1 |
@@ -76,6 +76,7 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | Port Scanner | `port-scanner` | `recon` | `intrusive` | `nmap` | Detect open ports and fingerprint services. |
 | Advanced Network Recon | `scapy_recon` | `network` | `safe` | `python3` | Advanced network probing using Scapy. |
 | Secret Scanner | `secret_scanner` | `code` | `safe` | `gitleaks` | Scan directories for hardcoded secrets. |
+| Semgrep Scanner | `semgrep_scanner` | `code` | `safe` | `semgrep` | Multi-language static code analysis using Semgrep. |
 | Sharepoint Scanner | `sharepoint_scanner` | `vulnerability` | `intrusive` | `nuclei` | Check SharePoint for security issues, misconfigs, and more. |
 | Sitemap Generator | `sitemap_gen` | `robots` | `intrusive` | `katana` | Depth-focused Katana crawl for sitemap-style URL inventory. |
 | Sniper: Auto-Exploiter | `sniper` | `exploit` | `exploit` | `python3` | Validate critical CVEs by automatic exploitation. |
