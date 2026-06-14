@@ -2,15 +2,15 @@
   "id": "httpx",
   "name": "httpx",
   "version": "1.0.0",
-  "description": "Live host probing with status, title, and technology fingerprinting.",
-  "long_description": "Live host probing with status, title, and technology fingerprinting.",
+  "description": "Probe live hosts and collect reachability information, status codes, page titles, and basic technology indicators.",
+  "long_description": "Probe live hosts and collect reachability information, status codes, page titles, and basic technology indicators.",
   "category": "recon",
   "author": {
     "name": "SecuScan Contributors",
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd0e",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
     "binary": "httpx"
@@ -55,5 +55,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "b74defa2b8d5595ae6a8fbd8020c35ce05a214beb65d11f31847ae28d6517e2f"
+  "checksum": "6570954f2b2cae9ce3a2281445f5c4c46533ada5cd6b5c35859d592523d517e9"
 }
