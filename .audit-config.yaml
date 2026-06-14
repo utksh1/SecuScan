@@ -17,7 +17,10 @@ policy:
 
 # Documented exceptions with business justification
 # Format: CVE-XXXX-XXXXX or GHSA-xxxx-xxxx-xxxx
-exceptions: {}
+exceptions:
+  GHSA-gv7w-rqvm-qjhr: # esbuild (Deno-only)
+    reason: "Deno runtime module only; SecuScan uses esbuild via Vite 6.x for Node.js bundling. Fix requires Vite 8.x (breaking change)."
+    expires: 2026-08-31
 
 # Packages to exclude from audits (use sparingly!)
 excluded_packages: []
