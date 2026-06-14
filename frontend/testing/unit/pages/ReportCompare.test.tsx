@@ -157,15 +157,18 @@ describe('ReportCompare page', () => {
     // not about pixel-perfect sticky rendering.
     expect(scrollContainer).not.toBeNull()
 
-    // Focus the first scrollable finding row's severity chip and scroll.
-    const firstFinding = await screen.findByText(/Only in B/i)
-    firstFinding.focus()
+    // Use a focusable element to validate “context retention”. In JSDOM, finding text nodes are not focusable.
+    // After selecting options, tab to Refresh so we have something tabbable to track.
+    await user.tab() // from combobox[0]
+    await user.tab() // from combobox[1]
+    const refreshButton = screen.getByTitle('Refresh')
+    expect(refreshButton).toHaveFocus()
 
     scrollContainer!.scrollTop = 50
     scrollContainer!.dispatchEvent(new Event('scroll'))
 
     // Header should still exist and focus should remain stable.
     expect(screen.getByRole('heading', { name: /new findings/i })).toBe(sectionHeader)
-    expect(document.activeElement).toBe(firstFinding)
+    expect(document.activeElement).toBe(refreshButton)
   })
 })
