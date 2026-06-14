@@ -1,3 +1,73 @@
-ZAP connector placeholder scan
-target=https://secuscan.in
-mode=dast
+{
+  "findings": [
+    {
+      "title": "SQL Injection",
+      "severity": "high",
+      "description": "SQL injection may be possible via the 'id' parameter.",
+      "remediation": "Use parameterized queries.",
+      "metadata": {
+        "url": "https://example.com/page?id=1",
+        "param": "id",
+        "cweid": "89"
+      }
+    },
+    {
+      "title": "XSS Vulnerability",
+      "severity": "medium",
+      "description": "Reflected XSS detected in the 'q' parameter.",
+      "remediation": "Encode output and validate input.",
+      "metadata": {
+        "url": "https://example.com/search?q=<script>",
+        "param": "q",
+        "cweid": "79"
+      }
+    },
+    {
+      "title": "Missing Security Header",
+      "severity": "low",
+      "description": "X-Content-Type-Options header is not set.",
+      "remediation": "Add the X-Content-Type-Options: nosniff header.",
+      "metadata": {
+        "url": "https://example.com/",
+        "param": "",
+        "cweid": "693"
+      }
+    }
+  ],
+  "count": 3,
+  "items": [
+    {
+      "title": "SQL Injection",
+      "severity": "high",
+      "description": "SQL injection may be possible via the 'id' parameter.",
+      "remediation": "Use parameterized queries.",
+      "metadata": {
+        "url": "https://example.com/page?id=1",
+        "param": "id",
+        "cweid": "89"
+      }
+    },
+    {
+      "title": "XSS Vulnerability",
+      "severity": "medium",
+      "description": "Reflected XSS detected in the 'q' parameter.",
+      "remediation": "Encode output and validate input.",
+      "metadata": {
+        "url": "https://example.com/search?q=<script>",
+        "param": "q",
+        "cweid": "79"
+      }
+    },
+    {
+      "title": "Missing Security Header",
+      "severity": "low",
+      "description": "X-Content-Type-Options header is not set.",
+      "remediation": "Add the X-Content-Type-Options: nosniff header.",
+      "metadata": {
+        "url": "https://example.com/",
+        "param": "",
+        "cweid": "693"
+      }
+    }
+  ]
+}
