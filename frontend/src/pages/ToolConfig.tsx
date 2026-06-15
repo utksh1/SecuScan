@@ -158,6 +158,9 @@ export default function ToolConfig() {
   const invalidFieldCount = Object.keys(validationErrors).length
   const hasValidationErrors = invalidFieldCount > 0
   const safetyLevel = String(schema?.safety?.level || 'safe')
+  const availability = plugin?.availability
+  const missingBinaries = availability?.missing_binaries ?? []
+  const hasMissingBinaries = missingBinaries.length > 0
 
   const handleFieldChange = (field: PluginFieldSchema, value: unknown) => {
     setInputs((prev) => ({ ...prev, [field.id]: value }))
@@ -263,18 +266,25 @@ export default function ToolConfig() {
         </div>
       </header>
 
-      {plugin.availability.missing_binaries.length > 0 && (
+      {hasMissingBinaries && (
         <section className="bg-charcoal border-4 border-rag-amber p-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
           <p className="text-[10px] uppercase font-black tracking-[0.3em] text-rag-amber">
             Plugin unavailable
           </p>
           <p className="text-[10px] text-silver/70 uppercase tracking-widest mt-2 leading-relaxed">
-            {plugin.availability.guidance ||
-              `Unavailable: Requires external binaries (${plugin.availability.missing_binaries.join(', ')}). Install required tools locally to enable this scanner.`}
+            {availability?.guidance ||
+              `Unavailable: Requires external binaries (${plugin.availability?.missing_binaries?.join(', ') ?? ''}). Install required tools locally to enable this scanner.`}
           </p>
           <p className="text-[9px] text-silver/40 uppercase tracking-widest mt-3">
             Task launch remains available, but execution may fail until dependencies are installed.
           </p>
+        <button
+  type="button"
+  onClick={() => navigate('/docs')}
+  className="mt-4 inline-flex items-center justify-center px-4 py-2 border-4 border-black bg-rag-amber text-black text-[10px] uppercase font-black tracking-widest"
+>
+  View setup instructions
+</button>
         </section>
       )}
 
