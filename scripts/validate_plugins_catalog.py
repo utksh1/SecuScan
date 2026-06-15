@@ -33,7 +33,7 @@ from typing import Dict, List, Tuple, Set
 def parse_plugins_md(catalog_path: Path) -> Dict[str, Dict[str, str]]:
     """
     Parse PLUGINS.md and extract plugin metadata from the index table.
-    
+
     Returns dict mapping plugin ID -> {"name": ..., "category": ..., "safety": ...}
     """
     if not catalog_path.exists():
@@ -69,7 +69,7 @@ def parse_plugins_md(catalog_path: Path) -> Dict[str, Dict[str, str]]:
 def scan_actual_plugins(plugins_dir: Path) -> Dict[str, Dict[str, str]]:
     """
     Scan plugins/ directory and extract plugin metadata from each metadata.json.
-    
+
     Returns dict mapping plugin ID -> {"id": ..., "category": ..., "safety": ...}
     """
     if not plugins_dir.exists():
@@ -94,7 +94,7 @@ def scan_actual_plugins(plugins_dir: Path) -> Dict[str, Dict[str, str]]:
             metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
             plugin_id = metadata.get("id", plugin_folder.name)
             category = metadata.get("category", "unknown")
-            
+
             # FIXED: Correctly parse safety level inner object from metadata.json
             safety_block = metadata.get("safety", {})
             safety = safety_block.get("level", "unknown") if isinstance(safety_block, dict) else "unknown"
@@ -160,7 +160,7 @@ def extract_category_counts_from_catalog(catalog_path: Path) -> Dict[str, int]:
 def validate_catalog(catalog_path: Path, plugins_dir: Path) -> Tuple[bool, List[str]]:
     """
     Validate that PLUGINS.md is in sync with actual plugins.
-    
+
     Returns (is_valid, list_of_issues)
     """
     issues: List[str] = []
