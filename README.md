@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License"></a>
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.11%2B-blue" alt="Python 3.11+"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.11%2B-blue" alt="Python 3.11"></a>
   <a href="frontend/"><img src="https://img.shields.io/badge/frontend-React%20%2B%20TypeScript-61dafb" alt="React and TypeScript"></a>
   <a href="PLUGINS.md"><img src="https://img.shields.io/badge/plugins-60%20catalogued-brightgreen" alt="60 catalogued plugins"></a>
 </p>
@@ -129,8 +129,9 @@ SecuScan/
 
 ## Requirements
 
-- Python 3.11+
-- Node.js 20+
+- Python 3.11
+- Node.js 20
+- Node.js 22
 - npm 10+
 - Docker Desktop or Docker Engine for Compose or Docker-backed scans
 ## Runtime Support
@@ -347,7 +348,7 @@ Before a PR, branch from `main`, keep the change focused, add tests for behavior
 
 ## Troubleshooting
 
-- Python must be 3.11+: `python3 --version`
+- Python must be 3.11: `python3 --version`
 - If venv activation fails on Windows PowerShell, use `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
 - If frontend dependencies fail, run `cd frontend && npm install --legacy-peer-deps`
 - If Vite cache is stale, run `cd frontend && npm run dev -- --force`
