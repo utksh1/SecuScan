@@ -121,7 +121,7 @@ function filterPillClasses(isActive: boolean) {
     : 'border-silver-bright/10 bg-charcoal-dark text-silver/65 hover:border-silver-bright/30 hover:text-silver-bright'
 }
 
-const filterLabelClass = 'text-[10px] font-black uppercase tracking-[0.2em] text-silver-bright'
+const filterLabelClass ='block text-[10px] font-black uppercase tracking-[0.2em] text-silver-bright'
 const filterControlClass =
   'h-11 w-full border-2 border-silver-bright/10 bg-charcoal-dark px-3 text-xs font-mono text-silver-bright focus:border-rag-red focus:outline-none'
 
@@ -599,7 +599,7 @@ export default function Findings() {
             </div>
 
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-8">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-8">
                 <div className="space-y-2">
                   <label className={filterLabelClass}>Target</label>
                   <select
