@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
-import { getDashboardSummary, getHealth, cancelTask } from '../api'
+import { cancelTask, getDashboardSummary, getHealth } from '../api'
 import { ExecutiveStatsBar } from '../components/ExecutiveStatsBar'
 import { routePath, routes } from '../routes'
-import { formatBriefingDate, formatTaskInit, formatLocaleDate, formatLocaleTime } from '../utils/date'
+import { formatBriefingDate, formatLocaleDate, formatLocaleTime, formatTaskInit } from '../utils/date'
 
 type Finding = {
   id: string
