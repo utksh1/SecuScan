@@ -76,10 +76,9 @@ export default function PrivacyPolicy() {
           to={routes.dashboard}
           className="text-[10px] font-bold text-silver/50 hover:text-silver-bright uppercase tracking-[0.2em] transition-colors"
         >
-          ← Back to Dashboard
+          â† Back to Dashboard
         </Link>
       </div>
     </div>
   )
 }
-
