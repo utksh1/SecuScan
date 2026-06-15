@@ -127,24 +127,19 @@ SecuScan/
 - **Scripts**: [`scripts/`](scripts/) — Validation, checksums, signing, benchmarks
 - **Testing**: [`testing/`](testing/) — Backend/shared test utilities
 
-<<<<<<< HEAD
 ## Requirements
 
 - Python 3.11+
 - Node.js 20+
 - npm 10+
 - Docker Desktop or Docker Engine for Compose or Docker-backed scans
-=======
 ## Runtime Support
->>>>>>> fc68993 (fix: address review feedback)
 
 If multiple Python versions are installed, `./setup.sh` tries to find a compatible `python3`. You can also force one:
 
-<<<<<<< HEAD
 ```bash
 PYTHON=/path/to/python3.11 ./setup.sh
 ```
-=======
 - Python 3.11
 - Node.js 20 and 22
 
@@ -162,7 +157,6 @@ For a fresh local setup, make sure your machine has:
 If your machine has multiple Python versions installed, `./setup.sh` now looks for a compatible `python3` automatically. You can also force one explicitly with `PYTHON=/path/to/python3.11 ./setup.sh`.
 
 The scripted local setup path was re-checked from a fresh clone with a compatible Python 3.11+ interpreter.
->>>>>>> fc68993 (fix: address review feedback)
 
 ## Quick Start
 
