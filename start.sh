@@ -32,6 +32,17 @@ sleep 1
 echo "⚙  Setting up backend..."
 cd "$ROOT_DIR"
 
+# Validate project structure before any expensive setup
+if [ ! -f "$ROOT_DIR/backend/requirements.txt" ]; then
+  echo "ERROR: backend/requirements.txt not found."
+  exit 1
+fi
+
+if [ ! -d "$ROOT_DIR/frontend" ]; then
+  echo "ERROR: frontend directory not found."
+  exit 1
+fi
+
 if [ -d "venv" ]; then
   source venv/bin/activate
 else
