@@ -121,11 +121,11 @@ function filterPillClasses(isActive: boolean) {
     : 'border-silver-bright/10 bg-charcoal-dark text-silver/65 hover:border-silver-bright/30 hover:text-silver-bright'
 }
 
-const filterLabelClass = 'text-[10px] font-black uppercase tracking-[0.2em] text-silver-bright'
+const filterLabelClass ='block text-[10px] font-black uppercase tracking-[0.2em] text-silver-bright'
 const filterControlClass =
   'h-11 w-full border-2 border-silver-bright/10 bg-charcoal-dark px-3 text-xs font-mono text-silver-bright focus:border-rag-red focus:outline-none'
 
-type SortMode = 'severity' | 'newest' | 'oldest' | 'target'
+type SortMode = 'risk' | 'severity' | 'newest' | 'oldest' | 'target'
 
 // ─── Virtual row types ────────────────────────────────────────────────────────
 
@@ -151,7 +151,7 @@ export default function Findings() {
   const [filterAsset, setFilterAsset] = useState('all')
   const [filterValidatedOnly, setFilterValidatedOnly] = useState(false)
   const [filterHighConfidence, setFilterHighConfidence] = useState(false)
-  const [sortMode, setSortMode] = useState<SortMode>('severity')
+  const [sortMode, setSortMode] = useState<SortMode>('risk')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null)
@@ -320,6 +320,12 @@ export default function Findings() {
   const sortedFindings = useMemo(() => {
     const items = [...filteredFindings]
     switch (sortMode) {
+      case 'risk':
+        return items.sort((a, b) => {
+          const ra = a.risk_score ?? 0
+          const rb = b.risk_score ?? 0
+          return rb - ra
+        })
       case 'newest':
         return items.sort((a, b) => {
           const da = parseDateSafe(a.discovered_at)?.getTime() ?? 0
@@ -415,7 +421,7 @@ export default function Findings() {
     if (filterAnalystStatus !== 'all') chips.push({ key: 'analyst', label: `Analyst: ${filterAnalystStatus}` })
     if (filterValidatedOnly) chips.push({ key: 'validated', label: 'Validated Only' })
     if (filterHighConfidence) chips.push({ key: 'confidence', label: 'High Confidence' })
-    if (sortMode !== 'severity') chips.push({ key: 'sort',    label: `Sort: ${sortMode}` })
+    if (sortMode !== 'risk') chips.push({ key: 'sort',    label: `Sort: ${sortMode}` })
     if (dateFrom)                chips.push({ key: 'from',    label: `From: ${dateFrom}` })
     if (dateTo)                  chips.push({ key: 'to',      label: `To: ${dateTo}` })
     return chips
@@ -430,7 +436,7 @@ export default function Findings() {
     setFilterAnalystStatus('all')
     setFilterValidatedOnly(false)
     setFilterHighConfidence(false)
-    setSortMode('severity')
+    setSortMode('risk')
     setDateFrom('')
     setDateTo('')
     setSearchQuery('')
@@ -593,7 +599,7 @@ export default function Findings() {
             </div>
 
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-8">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-8">
                 <div className="space-y-2">
                   <label className={filterLabelClass}>Target</label>
                   <select
@@ -671,6 +677,7 @@ export default function Findings() {
                     onChange={(e) => setSortMode(e.target.value as SortMode)}
                     className={filterControlClass}
                   >
+                    <option value="risk">Risk Score (High → Low)</option>
                     <option value="severity">Severity (High → Low)</option>
                     <option value="newest">Newest First</option>
                     <option value="oldest">Oldest First</option>

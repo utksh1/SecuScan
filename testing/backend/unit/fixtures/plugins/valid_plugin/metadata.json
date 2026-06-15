@@ -21,14 +21,16 @@
       "label": "Target Host",
       "type": "text",
       "required": true,
-      "placeholder": "192.168.1.1"
+      "placeholder": "192.168.1.1",
+      "help": "IP address or hostname to ping"
     },
     {
       "id": "count",
       "label": "Packet Count",
       "type": "number",
       "required": false,
-      "default": 4
+      "default": 4,
+      "help": "Number of ICMP packets to send"
     }
   ],
   "output": {

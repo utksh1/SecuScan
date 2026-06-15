@@ -9,11 +9,16 @@ email is a logged placeholder until SMTP is added.
 from __future__ import annotations
 
 import json
+import html
 import logging
 import socket
 import ssl
 import uuid
 import ipaddress
+import smtplib
+import asyncio
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from dataclasses import dataclass
 from types import TracebackType
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Type
@@ -436,17 +441,112 @@ async def send_webhook(
         return False, str(exc)
 
 
-async def send_email_placeholder(
+def _send_smtp_email_sync(
+    target_email: str,
+    subject: str,
+    body_text: str,
+    body_html: str,
+) -> None:
+    """Synchronously send an email using settings SMTP parameters."""
+    from .config import settings
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = settings.smtp_from_email
+    msg["To"] = target_email
+
+    msg.attach(MIMEText(body_text, "plain", "utf-8"))
+    msg.attach(MIMEText(body_html, "html", "utf-8"))
+
+    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10.0) as server:
+        if settings.smtp_use_tls:
+            server.starttls()
+        if settings.smtp_username and settings.smtp_password:
+            server.login(settings.smtp_username, settings.smtp_password)
+        server.sendmail(settings.smtp_from_email, [target_email], msg.as_string())
+
+
+async def send_email(
     target_email: str,
     payload: Dict[str, Any],
 ) -> tuple[bool, Optional[str]]:
-    """Placeholder email channel — logs intent without sending mail yet."""
-    logger.info(
-        "Email notification placeholder: target=%s finding_id=%s (delivery not implemented)",
-        target_email,
-        payload.get("finding", {}).get("id"),
+    """Send a rich SMTP email notification containing finding details asynchronously."""
+    from .config import settings
+
+    finding = payload.get("finding", {})
+    finding_id = finding.get("id")
+
+    if not settings.smtp_username or not settings.smtp_password:
+        logger.info(
+            "SMTP credentials not configured. Skipping email delivery (Logged placeholder): target=%s finding_id=%s",
+            target_email,
+            finding_id,
+        )
+        return True, None
+
+    subject = f"[SecuScan Alert] {finding.get('severity', 'INFO').upper()} vulnerability detected on {finding.get('target')}"
+
+    body_text = (
+        f"SecuScan Security Alert\n"
+        f"=======================\n\n"
+        f"A vulnerability has been identified during a scan run:\n\n"
+        f"Title: {finding.get('title')}\n"
+        f"Category: {finding.get('category')}\n"
+        f"Severity: {finding.get('severity')}\n"
+        f"Target: {finding.get('target')}\n\n"
+        f"Description:\n{finding.get('description')}\n\n"
+        f"Remediation Guidance:\n{finding.get('remediation')}\n\n"
+        f"View results in the SecuScan Dashboard."
     )
-    return True, None
+
+    title_esc = html.escape(str(finding.get('title') or ""))
+    category_esc = html.escape(str(finding.get('category') or ""))
+    severity_esc = html.escape(str(finding.get('severity') or ""))
+    target_esc = html.escape(str(finding.get('target') or ""))
+    description_esc = html.escape(str(finding.get('description') or "")).replace('\n', '<br>')
+    remediation_esc = html.escape(str(finding.get('remediation') or "")).replace('\n', '<br>')
+
+    body_html = f"""<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h2 style="color: #991b1b; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">🛡️ SecuScan Alert</h2>
+  <p>A new high-priority security vulnerability has been identified:</p>
+  <table style="border-collapse: collapse; width: 100%; margin: 20px 0;">
+    <tr style="background-color: #f8fafc;">
+      <td style="padding: 10px; border: 1px solid #e2e8f0; font-weight: bold; width: 140px;">Title</td>
+      <td style="padding: 10px; border: 1px solid #e2e8f0;">{title_esc}</td>
+    </tr>
+    <tr>
+      <td style="padding: 10px; border: 1px solid #e2e8f0; font-weight: bold;">Category</td>
+      <td style="padding: 10px; border: 1px solid #e2e8f0;">{category_esc}</td>
+    </tr>
+    <tr style="background-color: #f8fafc;">
+      <td style="padding: 10px; border: 1px solid #e2e8f0; font-weight: bold;">Severity</td>
+      <td style="padding: 10px; border: 1px solid #e2e8f0; text-transform: uppercase; font-weight: bold; color: #991b1b;">{severity_esc}</td>
+    </tr>
+    <tr>
+      <td style="padding: 10px; border: 1px solid #e2e8f0; font-weight: bold;">Target</td>
+      <td style="padding: 10px; border: 1px solid #e2e8f0;">{target_esc}</td>
+    </tr>
+  </table>
+  <h3>Description</h3>
+  <p style="color: #475569; background-color: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0;">{description_esc}</p>
+  <h3>Remediation Guidance</h3>
+  <p style="color: #166534; background-color: #f0fdf4; padding: 15px; border-radius: 8px; border: 1px solid #bbf7d0; border-left: 4px solid #22c55e;">
+    {remediation_esc}
+  </p>
+  <p style="font-size: 11px; color: #64748b; margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 15px;">
+    This is an automated notification from your SecuScan installation.
+  </p>
+</body>
+</html>"""
+
+    try:
+        await asyncio.to_thread(_send_smtp_email_sync, target_email, subject, body_text, body_html)
+        return True, None
+    except Exception as exc:
+        logger.error("Failed to send SMTP email notification to %s: %s", target_email, exc)
+        return False, str(exc)
 
 
 async def deliver_via_rule(
@@ -495,7 +595,7 @@ async def deliver_via_rule(
     if channel == NotificationChannelType.WEBHOOK.value:
         ok, error = await send_webhook(target, payload)
     elif channel == NotificationChannelType.EMAIL.value:
-        ok, error = await send_email_placeholder(target, payload)
+        ok, error = await send_email(target, payload)
     else:
         ok, error = False, f"Unsupported channel type: {channel}"
 
