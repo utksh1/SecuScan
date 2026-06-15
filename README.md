@@ -118,6 +118,14 @@ SecuScan/
 ├── wordlists/        Scanner wordlists
 └── .github/          CI, issue templates, automation
 ```
+## Quick Links
+
+- **Backend**: [`backend/`](backend/) — FastAPI app, scanners, executor. See [Backend Architecture](docs/backend-architecture.md)
+- **Frontend**: [`frontend/`](frontend/) — React + TypeScript UI
+- **Plugins**: [`plugins/`](plugins/) — Plugin metadata and parsers. See [Plugin Validation](docs/plugin-validation.md)
+- **Docs**: [`docs/`](docs/) — Product, deployment, auth, and contributor docs
+- **Scripts**: [`scripts/`](scripts/) — Validation, checksums, signing, benchmarks
+- **Testing**: [`testing/`](testing/) — Backend/shared test utilities
 
 ## Requirements
 

@@ -6,8 +6,8 @@ Last synced: 2026-05-11
 
 ## At a Glance
 
-- Total plugins: 60
-- Safe plugins: 27
+- Total plugins: 59
+- Safe plugins: 26
 - Intrusive plugins: 25
 - Exploit plugins: 8
 - Source of truth: each plugin's `metadata.json`
@@ -26,14 +26,14 @@ Only run scans against systems you own or are explicitly authorized to assess.
 
 | Category | Count |
 | --- | ---: |
-| `recon` | 19 |
+| `recon` | 17 |
 | `vulnerability` | 12 |
 | `robots` | 5 |
 | `web` | 5 |
 | `exploit` | 5 |
 | `network` | 3 |
 | `expert` | 3 |
-| `code` | 2 |
+| `code` | 3 |
 | `forensics` | 2 |
 | `utils` | 2 |
 | `execution` | 1 |
@@ -60,7 +60,7 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | Password Recovery Audit | `hashcat` | `expert` | `exploit` | `hashcat` | Password recovery and hash audit workflow. |
 | HTTP Inspector | `http_inspector` | `web` | `safe` | `curl` | Inspect HTTP/HTTPS endpoints for headers, cookies, and TLS configuration. |
 | HTTP Request Logger | `http_request_logger` | `exploit` | `intrusive` | `httpx` | Handle incoming HTTP requests and record data. |
-| httpx | `httpx` | `recon` | `safe` | `httpx` | Live host probing with status, title, and technology fingerprinting. |
+| httpx | `httpx` | `recon` | `safe` | `httpx` | Probe live hosts and collect reachability information, status codes, page titles, and basic technology indicators. |
 | IaC Scanner (Checkov) | `iac_scanner` | `vulnerability` | `safe` | `python3` | Analyze Terraform and CloudFormation code for flaws. |
 | ICMP Ping | `icmp_ping` | `utils` | `safe` | `ping` | Check if a server is live and responds to ICMP Echo requests. |
 | Joomla Security Scan | `joomscan` | `vulnerability` | `intrusive` | `joomscan` | Joomla security scanner for version and common weakness discovery. |
@@ -76,6 +76,7 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | Port Scanner | `port-scanner` | `recon` | `intrusive` | `nmap` | Detect open ports and fingerprint services. |
 | Advanced Network Recon | `scapy_recon` | `network` | `safe` | `python3` | Advanced network probing using Scapy. |
 | Secret Scanner | `secret_scanner` | `code` | `safe` | `gitleaks` | Scan directories for hardcoded secrets. |
+| Semgrep Scanner | `semgrep_scanner` | `code` | `safe` | `semgrep` | Multi-language static code analysis using Semgrep. |
 | Sharepoint Scanner | `sharepoint_scanner` | `vulnerability` | `intrusive` | `nuclei` | Check SharePoint for security issues, misconfigs, and more. |
 | Sitemap Generator | `sitemap_gen` | `robots` | `intrusive` | `katana` | Depth-focused Katana crawl for sitemap-style URL inventory. |
 | Sniper: Auto-Exploiter | `sniper` | `exploit` | `exploit` | `python3` | Validate critical CVEs by automatic exploitation. |
@@ -95,7 +96,7 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | Virtual Hosts Finder | `virtual-host-finder` | `recon` | `intrusive` | `ffuf` | Find multiple websites hosted on the same server. |
 | Volatility | `volatility` | `forensics` | `intrusive` | `volatility3` | Memory forensics workflow using Volatility 3 plugins. |
 | WAF Detector | `waf_detector` | `robots` | `safe` | `wafw00f` | Automatically identify Web Application Firewalls protecting targets. |
-| Website Recon | `website-recon-2` | `recon` | `safe` | `httpx` | Fingerprint web technologies of target website. |
+| Website Recon | `website-recon-2` | `recon` | `safe` | `httpx` | Perform website reconnaissance focused on identifying web technologies, frameworks, and application stack details. |
 | Domain Registration Lookup | `whois_lookup` | `utils` | `safe` | `python3` | Domain registration information lookup. |
 | WordPress Security Scan | `wpscan` | `vulnerability` | `intrusive` | `wpscan` | WordPress security scanner for plugin, theme, and core risk visibility. |
 | XSS Exploiter | `xss_exploiter` | `exploit` | `exploit` | `python3` | Exploit XSS in real-life attacks to extract cookies and data. |
@@ -341,3 +342,16 @@ Two additional lint checks help maintain high-quality plugin metadata:
 Existing plugins can be brought into compliance incrementally — the help
 text check is a non-blocking warning, and unknown categories cause a
 clear error message identifying the problem.
+
+---
+
+---
+
+## Catalog Validation (For Contributors)
+
+To prevent the index, categories, and metrics in this file from drifting out of sync with the live plugin directories, a validation tool is provided.
+
+Before submitting a Pull Request that adds, removes, or modifies a plugin, ensure the catalog is synced by running:
+
+```bash
+python scripts/validate_plugins_catalog.py

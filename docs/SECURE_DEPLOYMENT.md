@@ -142,6 +142,44 @@ Internal Database / Services
 
 ---
 
+# Webhook Security Constraints
+
+SecuScan deployments may integrate with outbound webhooks for notifications, automation workflows, or external integrations. Operators should treat webhook destinations as untrusted network targets unless explicitly approved.
+
+## SSRF Risk
+
+Webhook functionality can introduce Server-Side Request Forgery (SSRF) risks if arbitrary destinations are allowed.
+
+Potential impacts include:
+
+* Access to internal-only services
+* Access to cloud metadata endpoints
+* Network reconnaissance of private infrastructure
+* Data exfiltration through attacker-controlled endpoints
+
+## Recommended Restrictions
+
+Operators should:
+
+* Maintain an allowlist of approved webhook destinations
+* Restrict webhook traffic to trusted HTTPS endpoints
+* Block requests to localhost (`127.0.0.1`, `::1`)
+* Block requests to private RFC1918 address ranges where possible
+* Block access to cloud metadata services
+* Avoid forwarding sensitive credentials in webhook payloads
+
+## Safe Operator Configuration
+
+When enabling webhook integrations:
+
+* Review all configured destinations before deployment
+* Use dedicated webhook credentials where supported
+* Enable outbound firewall filtering when possible
+* Monitor webhook delivery failures and unexpected destinations
+* Remove unused webhook configurations regularly
+
+Webhook integrations should be treated as external trust boundaries and reviewed during security audits.
+
 # Deployment Profiles
 
 ## Local Development
