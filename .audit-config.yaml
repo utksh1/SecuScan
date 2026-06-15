@@ -17,7 +17,13 @@ policy:
 
 # Documented exceptions with business justification
 # Format: CVE-XXXX-XXXXX or GHSA-xxxx-xxxx-xxxx
-exceptions: {}
+exceptions:
+  GHSA-gv7w-rqvm-qjhr:
+    reason: "SecuScan does not use Deno, so esbuild vulnerability is not exploitable."
+    expires_at: "2027-01-01"
+  GHSA-2j2x-hqr9-3h42:
+    reason: "react-router vulnerability via protocol-relative URL is acceptable risk until v7 upgrade."
+    expires_at: "2027-01-01"
 
 # Packages to exclude from audits (use sparingly!)
 excluded_packages: []
