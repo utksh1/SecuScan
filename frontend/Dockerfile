@@ -9,7 +9,7 @@ RUN npm run build
 # Production stage
 FROM nginx:1.27-alpine
 
-RUN apk upgrade --no-cache libcrypto3 libssl3
+RUN apk update && apk upgrade --no-cache libcrypto3 libssl3
 
 # Non-root user
 RUN chown -R nginx:nginx /var/cache/nginx /var/log/nginx /etc/nginx/conf.d \

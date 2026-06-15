@@ -175,6 +175,7 @@ if [ -d "frontend" ]; then
         npm install
     else
         log_info "Existing node_modules found. Updating dependencies..."
+        rm -f package-lock.json
         npm install
     fi
     
