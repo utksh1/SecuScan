@@ -423,7 +423,7 @@ def _init_default_policies(engine: NetworkPolicyEngine) -> None:
     """Initialize default security policies"""
     from .config import settings
 
-    # Add operator-configured denylist
+    # Add operator-configured denylist (always enforced)
     for cidr in settings.network_denylist:
         try:
             engine.add_deny_rule(cidr, reason="Operator configured denylist")
@@ -437,9 +437,27 @@ def _init_default_policies(engine: NetworkPolicyEngine) -> None:
         except ValueError:
             logger.warning(f"Skipping invalid allowlist CIDR: {cidr}")
 
-    # Warn if allowlist is empty ? network policy defaults to deny-all egress
+    # When no explicit allowlist is configured, allow public egress while still
+    # blocking denylisted ranges (private, metadata, loopback, link-local, ULA).
+    # The denylist is checked first (step 1 in check_access), so these implicit
+    # allow rules never override an explicit deny.
     if not settings.network_allowlist:
-        logger.warning(
-            "SECUSCAN_NETWORK_ALLOWLIST is empty. All external network egress is blocked. "
-            "Configure this environment variable with CIDR ranges to allow outbound traffic."
+        engine.add_allow_rule(
+            "0.0.0.0/0",
+            reason="Default public egress (no explicit allowlist configured)",
+        )
+        engine.add_allow_rule(
+            "::/0",
+            reason="Default public egress (no explicit allowlist configured)",
+        )
+        logger.info(
+            "No SECUSCAN_NETWORK_ALLOWLIST configured. Default policy: public egress "
+            "allowed; denylisted ranges (private, metadata, loopback, link-local, ULA) "
+            "still blocked."
+        )
+    else:
+        logger.info(
+            "Custom network allowlist configured with %d entries. "
+            "Deny-by-default egress policy is active.",
+            len(settings.network_allowlist),
         )

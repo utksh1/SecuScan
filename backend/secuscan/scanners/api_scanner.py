@@ -225,7 +225,7 @@ class APIScanner(BaseScanner):
                 continue
 
             allowed_methods = response.headers.get("allow", "")
-            if response.status_code < 500:
+            if response.status_code == 200:
                 endpoints.append(
                     {
                         "type": "graphql_endpoint",
@@ -235,22 +235,23 @@ class APIScanner(BaseScanner):
                         "source": "graphql",
                     }
                 )
-            if "GET" in allowed_methods.upper() and "POST" in allowed_methods.upper():
-                findings.append(
-                    {
-                        "title": f"GraphQL Endpoint Exposed at {path}",
-                        "category": "API Exposure",
-                        "severity": "low",
-                        "target": target,
-                        "description": "A GraphQL endpoint responded to method discovery and should be included in schema, authorization, and query-cost review.",
-                        "validated": True,
-                        "validation_method": "graphql_method_discovery",
-                        "confidence_reason": "The endpoint responded directly to an OPTIONS request with advertised methods.",
-                        "evidence": [
-                            {"type": "url", "label": "Endpoint", "value": url, "source": "graphql"},
-                            {"type": "methods", "label": "Allowed methods", "value": allowed_methods, "source": "graphql"},
-                        ],
-                        "metadata": {"url": url},
+
+                if "GET" in allowed_methods.upper() and "POST" in allowed_methods.upper():
+                    findings.append(
+                        {
+                            "title": f"GraphQL Endpoint Exposed at {path}",
+                            "category": "API Exposure",
+                            "severity": "low",
+                            "target": target,
+                            "description": "A GraphQL endpoint responded to method discovery and should be included in schema, authorization, and query-cost review.",
+                            "validated": True,
+                            "validation_method": "graphql_method_discovery",
+                            "confidence_reason": "The endpoint responded directly to an OPTIONS request with advertised methods.",
+                            "evidence": [
+                                {"type": "url", "label": "Endpoint", "value": url, "source": "graphql"},
+                                {"type": "methods", "label": "Allowed methods", "value": allowed_methods, "source": "graphql"},
+                            ],
+                            "metadata": {"url": url},
                     }
                 )
 

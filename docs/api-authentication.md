@@ -82,3 +82,7 @@ header. Requests without a valid key receive `HTTP 401`.
 - If the backend is not yet initialised (key file missing and startup not complete),
   protected routes return `HTTP 503` rather than `401` to distinguish between
   an uninitialised service and a bad credential.
+- API keys should never be transmitted to third-party webhook destinations.
+- Operators should avoid embedding API credentials in webhook payloads, query parameters, or callback URLs.
+- When webhook integrations are used, restrict outbound destinations to trusted services and use HTTPS for all webhook traffic.
+- Webhook endpoints should be reviewed periodically to reduce SSRF exposure and accidental data disclosure risks.
