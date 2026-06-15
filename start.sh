@@ -23,6 +23,8 @@ echo "  ╚═══════════════════════
 echo ""
 
 # Pre-flight checks: kill existing servers on 8000 and 5173
+# If ports remain occupied after startup fails, see README.md
+# Troubleshooting → Local Startup Troubleshooting.
 echo "🧹 Cleaning up existing processes on port 8000 and 5173..."
 lsof -ti :8000 | xargs kill -9 2>/dev/null || true
 lsof -ti :5173 | xargs kill -9 2>/dev/null || true
