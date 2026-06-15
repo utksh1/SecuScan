@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import Sidebar from '../../../src/components/Sidebar';
+import { OfflineQueueProvider } from '../../../src/components/OfflineQueueContext';
 
 /* ------------------------------------------------------------------ */
 /*  Mocks                                                              */
@@ -59,7 +60,9 @@ vi.mock('../../../src/components/ThemeToggle', () => ({
 function renderSidebar(initialRoute = '/') {
   return render(
     <MemoryRouter initialEntries={[initialRoute]}>
-      <Sidebar />
+      <OfflineQueueProvider>
+        <Sidebar />
+      </OfflineQueueProvider>
     </MemoryRouter>,
   );
 }
