@@ -619,11 +619,34 @@ export default function Dashboard() {
         </AnimatePresence>
       </main>
 
-      <footer className="px-12 py-12 text-center border-t border-accent-silver/5">
-        <p className="text-[10px] text-silver/70 uppercase tracking-[0.5em] font-light">
-          SecuScan Intelligence Systems • Class 1 Operational View
-        </p>
-      </footer>
+      <footer className="px-12 py-10 border-t border-accent-silver/5 space-y-6">
+  <nav className="flex flex-wrap items-center justify-center gap-x-8 gap-y-3">
+    <Link to={routes.docs} className="text-[10px] font-bold text-silver/50 hover:text-silver-bright uppercase tracking-[0.2em] transition-colors">
+      Documentation
+    </Link>
+    <Link to={routes.support} className="text-[10px] font-bold text-silver/50 hover:text-silver-bright uppercase tracking-[0.2em] transition-colors">
+      Support
+    </Link>
+    <Link to={routes.privacyPolicy} className="text-[10px] font-bold text-silver/50 hover:text-silver-bright uppercase tracking-[0.2em] transition-colors">
+      Privacy Policy
+    </Link>
+    <Link to={routes.termsOfService} className="text-[10px] font-bold text-silver/50 hover:text-silver-bright uppercase tracking-[0.2em] transition-colors">
+      Terms of Service
+    </Link>
+    <a href="https://github.com/utksh1/SecuScan" target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold text-silver/50 hover:text-silver-bright uppercase tracking-[0.2em] transition-colors">
+      GitHub
+    </a>
+  </nav>
+
+  <div className="text-center space-y-1">
+    <p className="text-[10px] text-silver/70 uppercase tracking-[0.5em] font-light">
+      SecuScan Intelligence Systems • Class 1 Operational View
+    </p>
+    <p className="text-[9px] text-silver/40 uppercase tracking-[0.3em] font-mono">
+      © {new Date().getFullYear()} SecuScan Intelligence Systems. All rights reserved. — v2.4
+    </p>
+  </div>
+</footer>
     </div>
   )
 }
