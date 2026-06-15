@@ -19,8 +19,9 @@ policy:
 # Format: CVE-XXXX-XXXXX or GHSA-xxxx-xxxx-xxxx
 exceptions:
   GHSA-gv7w-rqvm-qjhr:
-    reason: "SecuScan does not use Deno, so esbuild vulnerability is not exploitable."
-    expires_at: "2027-01-01"
+    package: esbuild
+    expires_at: "2026-12-31"
+    reason: "Pre-existing upstream devDependency vulnerability in esbuild used by Vite."
   GHSA-2j2x-hqr9-3h42:
     reason: "react-router vulnerability via protocol-relative URL is acceptable risk until v7 upgrade."
     expires_at: "2027-01-01"

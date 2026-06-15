@@ -159,6 +159,14 @@ class Settings(BaseSettings):
     ai_summary_base_url: str = ""
     ai_summary_model: str = "gpt-4o-mini"
 
+    # SMTP Configuration for Email Notifications
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_from_email: str = "noreply@secuscan.io"
+    smtp_use_tls: bool = True
+
     class Config:
         env_prefix = "SECUSCAN_"
         case_sensitive = False
