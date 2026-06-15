@@ -273,18 +273,11 @@ export default function ToolConfig() {
           </p>
           <p className="text-[10px] text-silver/70 uppercase tracking-widest mt-2 leading-relaxed">
             {availability?.guidance ||
-              `Unavailable: Requires external binaries (${plugin.availability?.missing_binaries?.join(', ') ?? ''}). Install required tools locally to enable this scanner.`}
+              `Unavailable: Requires external binaries (${missingBinaries.join(', ')}). Install required tools locally to enable this scanner.`}
           </p>
           <p className="text-[9px] text-silver/40 uppercase tracking-widest mt-3">
             Task launch remains available, but execution may fail until dependencies are installed.
           </p>
-        <button
-  type="button"
-  onClick={() => navigate('/docs')}
-  className="mt-4 inline-flex items-center justify-center px-4 py-2 border-4 border-black bg-rag-amber text-black text-[10px] uppercase font-black tracking-widest"
->
-  View setup instructions
-</button>
         </section>
       )}
 
