@@ -784,7 +784,7 @@ export default function TaskDetails() {
         md += `- **Finish Time:** ${task.completed_at ? formatDateLong(task.completed_at) : 'N/A'}\n\n`
 
         md += `## Threat Level: ${dominantSeverity.toUpperCase()}\n\n`
-        
+
         md += `## Threat Distribution\n`
         md += `- **Critical:** ${severityCounts.critical || 0}\n`
         md += `- **High:** ${severityCounts.high || 0}\n`

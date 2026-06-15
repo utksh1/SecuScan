@@ -3861,7 +3861,7 @@ button,
   aside, [role="navigation"], header .flex-wrap, footer, button, .no-print, nav {
     display: none !important;
   }
-  
+
   /* Reset layout for clean paper printing */
   body, html, main, .bg-charcoal-dark, .bg-charcoal, .bg-black\/20 {
     background: white !important;
