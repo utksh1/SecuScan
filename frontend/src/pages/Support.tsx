@@ -9,7 +9,7 @@ const faqs = [
   },
   {
     q: 'Why do I see "Binary not found in PATH" warnings on startup?',
-    a: 'Many plugins (Nmap, Nuclei, Subfinder, etc.) wrap external CLI tools. These warnings just mean the corresponding binary is not installed â€” the plugin still loads but won\'t run until the tool is installed and available in PATH.',
+    a: 'Many plugins (Nmap, Nuclei, Subfinder, etc.) wrap external CLI tools. These warnings just mean the corresponding binary is not installed Ã¢â‚¬â€ the plugin still loads but won\'t run until the tool is installed and available in PATH.',
   },
   {
     q: 'Where is my scan data stored?',
@@ -67,7 +67,7 @@ export default function Support() {
           >
             <h3 className="text-sm font-bold text-silver-bright mb-2">Report an Issue</h3>
             <p className="text-[10px] text-silver/60 uppercase tracking-widest font-mono">
-              GitHub Issues â†’
+              GitHub Issues Ã¢â€ â€™
             </p>
           </a>
           <Link
@@ -76,7 +76,7 @@ export default function Support() {
           >
             <h3 className="text-sm font-bold text-silver-bright mb-2">Read the Documentation</h3>
             <p className="text-[10px] text-silver/60 uppercase tracking-widest font-mono">
-              Docs â†’
+              Docs Ã¢â€ â€™
             </p>
           </Link>
         </div>
@@ -87,7 +87,7 @@ export default function Support() {
           to={routes.dashboard}
           className="text-[10px] font-bold text-silver/50 hover:text-silver-bright uppercase tracking-[0.2em] transition-colors"
         >
-          â† Back to Dashboard
+          Ã¢â€ Â Back to Dashboard
         </Link>
       </div>
     </div>

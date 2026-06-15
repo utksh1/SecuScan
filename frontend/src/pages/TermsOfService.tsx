@@ -21,7 +21,7 @@ const sections = [
   {
     title: '4. Limitation of Liability',
     content:
-      'In no event shall the SecuScan project, its contributors, or maintainers be liable for any damages â€” including data loss, service disruption, or legal consequences â€” arising from the use or misuse of this software.',
+      'In no event shall the SecuScan project, its contributors, or maintainers be liable for any damages Ã¢â‚¬â€ including data loss, service disruption, or legal consequences Ã¢â‚¬â€ arising from the use or misuse of this software.',
   },
   {
     title: '5. User Responsibilities',
@@ -75,7 +75,7 @@ export default function TermsOfService() {
           to={routes.dashboard}
           className="text-[10px] font-bold text-silver/50 hover:text-silver-bright uppercase tracking-[0.2em] transition-colors"
         >
-          â† Back to Dashboard
+          Ã¢â€ Â Back to Dashboard
         </Link>
       </div>
     </div>
