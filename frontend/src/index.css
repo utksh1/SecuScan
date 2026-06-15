@@ -61,6 +61,46 @@
   /* Layout */
   --sidebar-collapsed: 80px;
   --sidebar-expanded: 280px;
+
+  /* Tailwind CSS color variables for opacity support */
+  --tw-color-charcoal-dark: 10 10 12;      /* #0a0a0c */
+  --tw-color-charcoal-light: 29 29 33;     /* #1d1d21 */
+  --tw-color-charcoal: 18 18 20;           /* #121214 */
+  --tw-color-silver-bright: 244 244 245;   /* #f4f4f5 */
+  --tw-color-silver: 161 161 170;          /* #a1a1aa */
+  --tw-color-silver-dark: 71 85 105;       /* #475569 */
+  --tw-color-theme-dark: 0 0 0;            /* true black */
+  --tw-color-theme-inverse: 255 255 255;   /* true white */
+  --tw-color-accent-silver: 63 63 70;      /* #3f3f46 */
+}
+
+.theme-light {
+  /* Core Palette Inverted */
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f1f5f9;
+  --bg-elevated: #ffffff;
+
+  /* Silver Tokens Inverted */
+  --accent-silver: #64748b;
+  --accent-silver-dim: #94a3b8;
+  --accent-silver-bright: #0f172a;
+
+  /* Text Color Tokens Inverted */
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+
+  /* Tailwind CSS color variables Inverted */
+  --tw-color-charcoal-dark: 248 250 252;   /* slate-50 */
+  --tw-color-charcoal-light: 241 245 249;  /* slate-100 */
+  --tw-color-charcoal: 255 255 255;        /* white */
+  --tw-color-silver-bright: 15 23 42;      /* slate-900 */
+  --tw-color-silver: 71 85 105;            /* slate-500 */
+  --tw-color-silver-dark: 148 163 184;     /* slate-400 */
+  --tw-color-theme-dark: 203 213 225;      /* slate-300 */
+  --tw-color-theme-inverse: 15 23 42;      /* slate-900 */
+  --tw-color-accent-silver: 203 213 225;   /* slate-300 */
 }
 
 /* Base Overrides */
@@ -3855,3 +3895,4 @@ button,
     white-space: nowrap;
   }
 }
+
