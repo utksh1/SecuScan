@@ -539,24 +539,24 @@ async def test_send_webhook_redirect_to_blocked_ip():
 
 
 @pytest.mark.asyncio
-async def test_pinned_ip_transport_connects_to_pinned_ip_and_preserves_tls_hostname(
+async def test_send_webhook_https_delivery_pins_ip_and_preserves_tls_hostname(
     monkeypatch,
 ):
-    """Full transport-layer regression: _PinnedIPTransport.handle_async_request
-    must connect TCP to the validated (pinned) IP address while preserving the
-    original hostname for TLS SNI / certificate verification.
+    """HTTPS webhook delivery through send_webhook connects TCP to the
+    validated (pinned) IP address while preserving the original hostname for
+    TLS SNI and certificate verification.
 
-    This proves the security guarantee end-to-end through the transport layer,
-    not just the isolated backend/stream units.
+    This proves the full SSRF-prevention guarantee end-to-end: DNS resolution,
+    IP validation, custom transport creation, TCP-level IP pinning, and
+    hostname preservation for the TLS handshake.
     """
     import httpcore._backends.auto as auto_backend
-    from backend.secuscan.notification_service import _PinnedIPTransport
+    from backend.secuscan.notification_service import send_webhook
 
     tcp_connected_to = None
     tls_sni_hostname = None
 
     class _TLSStream:
-        """Simulates a raw TCP stream that supports start_tls."""
         def __init__(self):
             self._buffer = (
                 b"HTTP/1.1 200 OK\r\n"
@@ -586,8 +586,6 @@ async def test_pinned_ip_transport_connects_to_pinned_ip_and_preserves_tls_hostn
         def get_extra_info(self, info):
             return None
 
-    original_connect = auto_backend.AutoBackend.connect_tcp
-
     async def _tracking_connect_tcp(
         self, host, port, timeout=None, local_address=None, socket_options=None
     ):
@@ -599,25 +597,25 @@ async def test_pinned_ip_transport_connects_to_pinned_ip_and_preserves_tls_hostn
         auto_backend.AutoBackend, "connect_tcp", _tracking_connect_tcp
     )
 
-    transport = _PinnedIPTransport(
-        resolved_ip="93.184.216.34",
-        original_hostname="hooks.example.com",
+    def fake_resolve(*args, **kwargs):
+        return [(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]
+
+    monkeypatch.setattr(
+        "backend.secuscan.notification_service.socket.getaddrinfo", fake_resolve
     )
 
-    request = httpx.Request(
-        "POST", "https://hooks.example.com/alert", json={"event": "test"}
+    ok, err = await send_webhook(
+        "https://hooks.example.com/alert", {"event": "test"}
     )
 
-    async with transport:
-        response = await transport.handle_async_request(request)
-
+    assert ok is True
+    assert err is None
     assert tcp_connected_to == "93.184.216.34", (
-        f"TCP must connect to pinned IP (93.184.216.34), got {tcp_connected_to!r}"
+        f"TCP must connect to validated/pinned IP (93.184.216.34), got {tcp_connected_to!r}"
     )
     assert tls_sni_hostname == "hooks.example.com", (
         f"TLS SNI must use original hostname (hooks.example.com), got {tls_sni_hostname!r}"
     )
-    assert response.status_code == 200
 
 
 @pytest.mark.asyncio
