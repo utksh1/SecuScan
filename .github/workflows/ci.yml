@@ -115,18 +115,43 @@ jobs:
       - name: Run integration tests
         run: pytest testing/backend/integration -q -m "not benchmark"
 
+parser-contracts:
+    needs: [detect-changes, backend-lint, formatting-hygiene]
+    if: |
+      always() &&
+      needs.detect-changes.outputs.run_backend == 'true' &&
+      (needs.backend-lint.result == 'success' || needs.backend-lint.result == 'skipped') &&
+      (needs.formatting-hygiene.result == 'success' || needs.formatting-hygiene.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+      - name: Run parser contract tests for capability group ${{ matrix.capability_group }}
+        run: |
+          echo "Running parser contract tests for capability group: ${{ matrix.capability_group }}"
+          PARSER_CAPABILITY_GROUP=${{ matrix.capability_group }} pytest testing/backend/integration/test_parser_output_contract.py -q
   backend-tests:
     needs:
       - backend-unit
       - backend-integration
+      - parser-contracts
     runs-on: ubuntu-latest
     if: |
       always() &&
       (needs.backend-unit.result == 'success' || needs.backend-unit.result == 'skipped') &&
-      (needs.backend-integration.result == 'success' || needs.backend-integration.result == 'skipped')
+      (needs.backend-integration.result == 'success' || needs.backend-integration.result == 'skipped') &&
+      (needs.parser-contracts.result == 'success' || needs.parser-contracts.result == 'skipped')
     steps:
       - name: Backend test suites completed
-        run: echo "backend-unit and backend-integration completed"
+        run: echo "backend-unit, backend-integration, and parser-contracts completed"
   backend-audit:
     runs-on: ubuntu-latest
     steps:
