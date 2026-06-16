@@ -3855,3 +3855,53 @@ button,
     white-space: nowrap;
   }
 }
+
+@media print {
+  /* Hide UI navigation, sidebar, and export buttons */
+  aside, [role="navigation"], header .flex-wrap, footer, button, .no-print, nav {
+    display: none !important;
+  }
+
+  /* Reset layout for clean paper printing */
+  body, html, main, .bg-charcoal-dark, .bg-charcoal, .bg-black\/20 {
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Force high contrast black text for readability */
+  .text-silver-bright, .text-silver, h1, h2, h3, h4, span, p, div {
+    color: black !important;
+  }
+
+  /* Reset layout constraints and widths */
+  main {
+    margin-left: 0 !important;
+    padding: 0 !important;
+  }
+
+  .min-h-screen {
+    min-height: auto !important;
+    padding: 0 !important;
+  }
+
+  /* Force grid containers into full-width column layouts */
+  .grid {
+    display: block !important;
+  }
+
+  .grid > * {
+    margin-bottom: 20px !important;
+    width: 100% !important;
+  }
+
+  /* Clean headings page-breaking behavior */
+  h1, h2, h3, h4 {
+    page-break-after: avoid;
+    page-break-inside: avoid;
+  }
+
+  section, .border {
+    page-break-inside: avoid;
+    border-color: #ccc !important;
+  }
+}

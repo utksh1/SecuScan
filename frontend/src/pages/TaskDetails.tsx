@@ -10,6 +10,7 @@ import {
     Download01Icon,
     HtmlFile02Icon,
     Pdf02Icon,
+    PrinterIcon,
     Refresh01Icon,
 } from '@hugeicons/core-free-icons'
 import { API_BASE, getPluginSchema, getTaskResult, getTaskStatus, PluginFieldSchema, PluginSchemaResponse, startTask, ExecutionContext } from '../api'
@@ -769,6 +770,55 @@ export default function TaskDetails() {
         setExpandedFindingRows(prev => ({ ...prev, [index]: !prev[index] }))
     }
 
+    const handleExportMarkdown = () => {
+        if (!task) return
+
+        let md = `# SecuScan Security Report\n\n`
+        md += `## Scan Summary\n`
+        md += `- **Target:** ${task.target}\n`
+        md += `- **Tool:** ${toolLabel}\n`
+        md += `- **Plugin ID:** ${task.plugin_id || 'N/A'}\n`
+        md += `- **Status:** ${task.status.toUpperCase()}\n`
+        md += `- **Duration:** ${durationLabel}\n`
+        md += `- **Start Time:** ${task.started_at ? formatDateLong(task.started_at) : 'N/A'}\n`
+        md += `- **Finish Time:** ${task.completed_at ? formatDateLong(task.completed_at) : 'N/A'}\n\n`
+
+        md += `## Threat Level: ${dominantSeverity.toUpperCase()}\n\n`
+
+        md += `## Threat Distribution\n`
+        md += `- **Critical:** ${severityCounts.critical || 0}\n`
+        md += `- **High:** ${severityCounts.high || 0}\n`
+        md += `- **Medium:** ${severityCounts.medium || 0}\n`
+        md += `- **Low:** ${severityCounts.low || 0}\n`
+        md += `- **Info:** ${severityCounts.info || 0}\n\n`
+
+        md += `## Vulnerability Findings (${findings.length})\n\n`
+        if (findings.length > 0) {
+            findings.forEach((f: any, idx: number) => {
+                md += `### ${idx + 1}. [${f.severity.toUpperCase()}] ${stripAnsi(f.title)}\n`
+                md += `- **Severity:** ${f.severity}\n`
+                if (f.description) {
+                    md += `- **Description:** ${stripAnsi(f.description)}\n`
+                }
+                if (f.remediation) {
+                    md += `- **Remediation:** ${stripAnsi(f.remediation)}\n`
+                }
+                md += `\n`
+            })
+        } else {
+            md += `No vulnerabilities identified.\n`
+        }
+
+        const blob = new Blob([md], { type: 'text/markdown;charset=utf-8;' })
+        const url = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.setAttribute('download', `secuscan_report_${task.task_id}.md`)
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+    }
+
     const DetailCard = ({ label, value, subValue }: { label: string, value: string, subValue?: string }) => (
         <div className="bg-charcoal border border-white/5 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] min-h-[118px] flex flex-col justify-between">
             <div className="space-y-3">
@@ -842,6 +892,20 @@ export default function TaskDetails() {
                         )}
                         {task.status === 'completed' && (
                             <>
+                                <button
+                                    onClick={handleExportMarkdown}
+                                    className="bg-charcoal px-5 py-3 border border-white/10 text-[10px] font-black uppercase tracking-[0.26em] italic transition-colors hover:bg-white/[0.04] flex items-center gap-2"
+                                >
+                                    <DetailIcon icon={Download01Icon} size={16} />
+                                    Md_Export
+                                </button>
+                                <button
+                                    onClick={() => window.print()}
+                                    className="bg-charcoal px-5 py-3 border border-white/10 text-[10px] font-black uppercase tracking-[0.26em] italic transition-colors hover:bg-white/[0.04] flex items-center gap-2"
+                                >
+                                    <DetailIcon icon={PrinterIcon} size={16} />
+                                    Print_Report
+                                </button>
                                 <button
                                     onClick={() => window.open(`${API_BASE}/task/${taskId}/report/html`)}
                                     className="bg-charcoal px-5 py-3 border border-white/10 text-[10px] font-black uppercase tracking-[0.26em] italic transition-colors hover:bg-white/[0.04] flex items-center gap-2"
