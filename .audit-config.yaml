@@ -22,6 +22,10 @@ exceptions:
     package: esbuild
     expires_at: "2026-12-31"
     reason: "Pre-existing upstream devDependency vulnerability in esbuild used by Vite."
+  GHSA-fx2h-pf6j-xcff:
+    package: "vite"
+    reason: "High severity vulnerability in development server; upgrade requires a breaking Vite framework version jump."
+    expires_at: "2027-12-31"
 
 # Packages to exclude from audits (use sparingly!)
 excluded_packages: []
