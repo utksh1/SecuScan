@@ -57,8 +57,8 @@ def get_parser_capability_group(metadata_path: Path) -> str:
 
     if "exploit" in caps:
         return "exploit"
-    if "docker" in caps:
-        return "docker"
+    # if "docker" in caps:
+    #     return "docker"
     if "credentials" in caps:
         return "credentials"
     if "intrusive" in caps:
