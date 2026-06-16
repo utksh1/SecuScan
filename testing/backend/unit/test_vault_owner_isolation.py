@@ -9,10 +9,21 @@ secrets.
 import asyncio
 import pytest
 
-from backend.secuscan.ratelimit import reset_all_endpoint_limiters
+from backend.secuscan.config import settings
+from backend.secuscan.ratelimit import (
+    reset_all_endpoint_limiters,
+    vault_limiter,
+)
+
 
 @pytest.fixture(autouse=True)
-def reset_limiters():
+def isolate_vault_tests(monkeypatch):
+    monkeypatch.setattr(settings, "rate_limit_vault_limit", 100)
+    monkeypatch.setattr(settings, "rate_limit_vault_window", 60)
+
+    vault_limiter.limit = 100
+    vault_limiter.window_seconds = 60
+
     asyncio.run(reset_all_endpoint_limiters())
 
 
