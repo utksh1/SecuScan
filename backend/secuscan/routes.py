@@ -1268,6 +1268,10 @@ async def delete_task(task_id: str, owner: str = Depends(get_current_owner)):
     if status and status.get("status") == "running":
         raise HTTPException(status_code=400, detail="Cannot delete a running task. Abort it first.")
 
+    # If the task is currently executing but the DB hasn't been updated yet, fail closed.
+    if task_id in executor.running_tasks:
+        raise HTTPException(status_code=400, detail="Cannot delete a running task. Abort it first.")
+
     await delete_task_records([task_id])
     await invalidate_view_cache()
 

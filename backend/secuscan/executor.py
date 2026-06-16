@@ -362,11 +362,16 @@ class TaskExecutor:
         self.running_tasks[task_id] = asyncio.current_task()
 
         try:
-            # Update status to running
-            await db.execute(
-                "UPDATE tasks SET status = ?, started_at = ? WHERE id = ?",
-                (TaskStatus.RUNNING.value, datetime.now().isoformat(), task_id)
+            # Update status to running — use optimistic lock to detect
+            # if the task was deleted or already running before this point.
+            result = await db.execute(
+                "UPDATE tasks SET status = ?, started_at = ? WHERE id = ? AND status = ?",
+                (TaskStatus.RUNNING.value, datetime.now().isoformat(), task_id, TaskStatus.QUEUED.value)
             )
+            if result.rowcount == 0:
+                logger.warning(f"Task {task_id} was deleted or no longer queued before execution started. Aborting.")
+                self.running_tasks.pop(task_id, None)
+                return
             await self._invalidate_cached_views()
 
             # Get task details
