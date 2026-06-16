@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -7,6 +8,15 @@ export default {
   theme: {
     extend: {
       colors: {
+        'primary': 'var(--bg-primary)',
+        'secondary': 'var(--bg-secondary)',
+        'bg-primary': 'var(--bg-primary)',
+        'bg-secondary': 'var(--bg-secondary)',
+        'bg-tertiary': 'var(--bg-tertiary)',
+        'bg-elevated': 'var(--bg-elevated)',
+        'primary-text': 'var(--text-primary)',
+        'secondary-text': 'var(--text-secondary)',
+        'muted': 'var(--text-muted)',
         'charcoal-dark': '#0a0a0c',
         charcoal: {
           light: '#1d1d21',

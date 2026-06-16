@@ -3855,3 +3855,19 @@ button,
     white-space: nowrap;
   }
 }
+
+/* ============================================
+   Light Theme Overrides
+   ============================================ */
+.theme-light {
+  --bg-primary: #f8f9fa;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f1f3f5;
+  --bg-elevated: #e9ecef;
+  --accent-silver: #6c757d;
+  --accent-silver-dim: #adb5bd;
+  --accent-silver-bright: #212529;
+  --text-primary: #212529;
+  --text-secondary: #495057;
+  --text-muted: #6c757d;
+}
