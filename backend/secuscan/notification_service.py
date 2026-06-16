@@ -12,6 +12,7 @@ import json
 import html
 import logging
 import socket
+import ssl
 import uuid
 import ipaddress
 import smtplib
@@ -19,9 +20,12 @@ import asyncio
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from types import TracebackType
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Type
+from urllib.parse import urlparse
 
 import httpx
+import httpcore
 
 from .database import Database
 from .models import NotificationChannelType, NotificationDeliveryStatus
@@ -42,6 +46,145 @@ _SEVERITY_RANK: Dict[str, int] = {
 _WEBHOOK_TIMEOUT_SECONDS = 10.0
 _WEBHOOK_CONNECT_TIMEOUT_SECONDS = 5.0
 _USER_AGENT = "SecuScan-Notifications/1.0"
+
+SOCKET_OPTION = Tuple[int, int, int | bytes]
+
+
+class _PinnedIPNetworkStream(httpcore.AsyncNetworkStream):
+    """Wraps a network stream so that ``start_tls`` always uses the original
+    hostname for SNI / certificate verification, even when the TCP connection
+    was made to a different (resolved-IP) address."""
+
+    __slots__ = ("_inner", "_original_hostname")
+
+    def __init__(
+        self, inner: httpcore.AsyncNetworkStream, original_hostname: str
+    ) -> None:
+        self._inner = inner
+        self._original_hostname = original_hostname
+
+    async def read(self, max_bytes: int, timeout: float | None = None) -> bytes:
+        return await self._inner.read(max_bytes, timeout)
+
+    async def write(self, buffer: bytes, timeout: float | None = None) -> None:
+        await self._inner.write(buffer, timeout)
+
+    async def aclose(self) -> None:
+        await self._inner.aclose()
+
+    async def start_tls(
+        self,
+        ssl_context: ssl.SSLContext,
+        server_hostname: str | None = None,
+        timeout: float | None = None,
+    ) -> httpcore.AsyncNetworkStream:
+        return await self._inner.start_tls(
+            ssl_context=ssl_context,
+            server_hostname=self._original_hostname,
+            timeout=timeout,
+        )
+
+    def get_extra_info(self, info: str) -> Any:
+        return self._inner.get_extra_info(info)
+
+
+class _PinnedIPNetworkBackend(httpcore.AsyncNetworkBackend):
+    """Network backend that connects TCP to the validated (pinned) IP while
+    preserving the original hostname for subsequent TLS negotiation."""
+
+    __slots__ = ("_resolved_ip", "_original_hostname", "_default_backend")
+
+    def __init__(self, resolved_ip: str, original_hostname: str) -> None:
+        self._resolved_ip = resolved_ip
+        self._original_hostname = original_hostname
+        from httpcore._backends.auto import AutoBackend
+
+        self._default_backend = AutoBackend()
+
+    async def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: float | None = None,
+        local_address: str | None = None,
+        socket_options: Iterable[SOCKET_OPTION] | None = None,
+    ) -> httpcore.AsyncNetworkStream:
+        stream = await self._default_backend.connect_tcp(
+            host=self._resolved_ip,
+            port=port,
+            timeout=timeout,
+            local_address=local_address,
+            socket_options=socket_options,
+        )
+        return _PinnedIPNetworkStream(stream, self._original_hostname)
+
+    async def connect_unix_socket(
+        self,
+        path: str,
+        timeout: float | None = None,
+        socket_options: Iterable[SOCKET_OPTION] | None = None,
+    ) -> httpcore.AsyncNetworkStream:
+        return await self._default_backend.connect_unix_socket(
+            path, timeout, socket_options
+        )
+
+    async def sleep(self, seconds: float) -> None:
+        await self._default_backend.sleep(seconds)
+
+
+class _PinnedIPTransport(httpx.AsyncBaseTransport):
+    """httpx transport that wraps an ``httpcore.AsyncConnectionPool`` using a
+    ``_PinnedIPNetworkBackend`` so that every outgoing connection is pinned to a
+    pre-validated IP address while the original hostname is used for TLS."""
+
+    __slots__ = ("_pool",)
+
+    def __init__(self, resolved_ip: str, original_hostname: str) -> None:
+        import httpcore as _httpcore
+
+        backend = _PinnedIPNetworkBackend(resolved_ip, original_hostname)
+        self._pool = _httpcore.AsyncConnectionPool(network_backend=backend)
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        import httpcore as _httpcore
+
+        req = _httpcore.Request(
+            method=request.method,
+            url=_httpcore.URL(
+                scheme=request.url.raw_scheme,
+                host=request.url.raw_host,
+                port=request.url.port,
+                target=request.url.raw_path,
+            ),
+            headers=request.headers.raw,
+            content=request.stream,
+            extensions=request.extensions,
+        )
+        resp = await self._pool.handle_async_request(req)
+        content = b""
+        async for chunk in resp.stream:
+            content += chunk
+        return httpx.Response(
+            status_code=resp.status,
+            headers=resp.headers,
+            content=content,
+            extensions=resp.extensions,
+        )
+
+    async def __aenter__(self) -> _PinnedIPTransport:
+        await self._pool.__aenter__()
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: Type[BaseException] | None = None,
+        exc_value: BaseException | None = None,
+        traceback: TracebackType | None = None,
+    ) -> None:
+        await self._pool.__aexit__(exc_type, exc_value, traceback)
+
+    async def aclose(self) -> None:
+        await self._pool.aclose()
 
 
 @dataclass(frozen=True)
@@ -145,24 +288,117 @@ async def record_delivery(
     return history_id
 
 
-async def send_webhook(target_url: str, payload: Dict[str, Any]) -> tuple[bool, Optional[str]]:
-    """POST a redacted alert payload to a webhook URL with SSRF protections."""
+async def send_webhook(
+    target_url: str, payload: Dict[str, Any]
+) -> tuple[bool, Optional[str]]:
+    """POST a redacted alert payload to a webhook URL with SSRF protections.
+
+    Always resolves the target hostname and validates every returned IP against
+    the configured SECUSCAN_NOTIFICATION_BLOCKED_IP_RANGES, independent of the
+    general enforce_network_policy setting.
+
+    The address actually contacted is the validated IP (not the hostname) to
+    prevent DNS-rebinding / TOCTOU attacks.  How this is achieved differs by
+    scheme so that TLS verification is not broken:
+
+    * **http**: the URL is rewritten to the resolved IP and the ``Host`` header
+      is set to the original hostname.  Plain HTTP has no TLS so there is no
+      certificate-verification concern.
+
+    * **https**: a custom ``_PinnedIPTransport`` binds the TCP connection to the
+      validated IP while the original hostname is preserved for TLS SNI and
+      certificate verification, keeping the original hostname in the URL.
+    """
     from .config import settings
+    from urllib.parse import urlparse, urlunparse
+
+    parsed = urlparse(target_url)
+    hostname = parsed.hostname
+    if not hostname:
+        return False, "Webhook URL has no hostname"
+
+    # Resolve and validate every address the hostname may return.
+    try:
+        addrs = socket.getaddrinfo(
+            hostname, parsed.port or 443, proto=socket.IPPROTO_TCP
+        )
+    except OSError:
+        return False, "Webhook URL hostname could not be resolved"
+
+    validated_ips: list[str] = []
+    for family, _stype, _proto, _cname, sockaddr in addrs:
+        ip_str = sockaddr[0]
+        try:
+            ip = ipaddress.ip_address(ip_str)
+        except ValueError:
+            continue
+        blocked = False
+        for blocked_cidr in settings.notification_blocked_ip_ranges:
+            try:
+                if ip in ipaddress.ip_network(blocked_cidr, strict=False):
+                    blocked = True
+                    break
+            except ValueError:
+                continue
+        if blocked:
+            return False, f"Webhook target resolves to blocked IP range: {blocked_cidr}"
+        validated_ips.append(ip_str)
+
+    if not validated_ips:
+        return False, "Webhook URL did not resolve to any valid IP addresses"
 
     timeout = httpx.Timeout(
         timeout=_WEBHOOK_TIMEOUT_SECONDS,
         connect=_WEBHOOK_CONNECT_TIMEOUT_SECONDS,
     )
 
+    resolved_ip = validated_ips[0]
+    scheme = parsed.scheme
+
+    # -- Build the request URL and choose the pinning strategy --------------
+    if scheme == "https":
+        # Use a custom transport that connects to the pinned IP while keeping
+        # the original hostname for TLS SNI and certificate verification.
+        transport = _PinnedIPTransport(resolved_ip, hostname)
+        request_url = target_url
+        extra_headers: dict[str, str] = {}
+    else:
+        # Rewrite the URL to the resolved IP and set the Host header.
+        # This is safe for plain HTTP because there is no TLS handshake.
+        new_netloc = f"[{resolved_ip}]" if ":" in resolved_ip else resolved_ip
+        if parsed.port:
+            new_netloc = f"{new_netloc}:{parsed.port}"
+        request_url = urlunparse(
+            (
+                scheme,
+                new_netloc,
+                parsed.path,
+                parsed.params,
+                parsed.query,
+                parsed.fragment,
+            )
+        )
+        transport = None
+        extra_headers = {"Host": hostname}
+
     try:
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
+        client_kwargs: dict[str, Any] = {
+            "timeout": timeout,
+            "follow_redirects": False,
+        }
+        if transport is not None:
+            client_kwargs["transport"] = transport
+
+        async with httpx.AsyncClient(**client_kwargs) as client:
+            headers = {
+                "Content-Type": "application/json",
+                "User-Agent": _USER_AGENT,
+            }
+            headers.update(extra_headers)
             response = await client.post(
-                target_url,
+                request_url,
                 json=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "User-Agent": _USER_AGENT,
-                },
+                headers=headers,
             )
 
         if response.status_code >= 400:
@@ -172,23 +408,36 @@ async def send_webhook(target_url: str, payload: Dict[str, Any]) -> tuple[bool, 
             redirect_url = response.headers.get("location", "")
             if redirect_url:
                 from urllib.parse import urlparse
-                parsed = urlparse(redirect_url)
-                if parsed.hostname:
+
+                parsed_redirect = urlparse(redirect_url)
+                if parsed_redirect.hostname:
                     try:
-                        redirect_ips = socket.getaddrinfo(parsed.hostname, parsed.port or 443)
+                        redirect_ips = socket.getaddrinfo(
+                            parsed_redirect.hostname, parsed_redirect.port or 443
+                        )
                         for _family, _stype, _proto, _cname, sockaddr in redirect_ips:
                             rip = ipaddress.ip_address(sockaddr[0])
                             for blocked_cidr in settings.notification_blocked_ip_ranges:
                                 try:
-                                    if rip in ipaddress.ip_network(blocked_cidr, strict=False):
-                                        return False, f"Redirect to blocked IP range: {blocked_cidr}"
+                                    if rip in ipaddress.ip_network(
+                                        blocked_cidr, strict=False
+                                    ):
+                                        return (
+                                            False,
+                                            f"Redirect to blocked IP range: {blocked_cidr}",
+                                        )
                                 except ValueError:
                                     continue
                     except OSError:
-                        return False, f"Could not resolve redirect target: {redirect_url}"
+                        return (
+                            False,
+                            f"Could not resolve redirect target: {redirect_url}",
+                        )
 
         return True, None
     except httpx.HTTPError as exc:
+        return False, str(exc)
+    except OSError as exc:
         return False, str(exc)
 
 
