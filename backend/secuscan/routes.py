@@ -98,6 +98,7 @@ def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]
         "id": row["id"],
         "name": row["name"],
         "schedule_seconds": row.get("schedule_seconds"),
+        "schedule_timezone": row.get("schedule_timezone"),
         "enabled": bool(row.get("enabled")),
         "steps": _parse_workflow_steps(row.get("steps_json")),
         "created_at": row.get("created_at"),
@@ -155,7 +156,7 @@ from .ratelimit import (
 from .validation import validate_target, validate_task_start_payload, validate_url
 from .reporting import reporting
 from .vault import VaultCrypto
-from .workflows import scheduler
+from .workflows import scheduler, validate_schedule_timezone
 from .auth import require_api_key, get_current_owner
 from .execution_context import is_offensive_validation, normalize_execution_context
 from .finding_intelligence import build_asset_summary, build_finding_groups
@@ -1688,23 +1689,48 @@ async def create_workflow(payload: Dict[str, Any]):
     if not name:
         raise HTTPException(status_code=400, detail="Workflow name is required")
 
-    steps = _parse_workflow_steps(payload.get("steps", []))
-    if not steps:
+    if "steps" not in payload:
         raise HTTPException(status_code=400, detail="Workflow requires at least one step")
+    steps_val = payload["steps"]
+    if not isinstance(steps_val, list):
+        raise HTTPException(status_code=400, detail="steps must be a list")
+    if not steps_val:
+        raise HTTPException(status_code=400, detail="Workflow requires at least one step")
+    for step in steps_val:
+        if not isinstance(step, dict):
+            raise HTTPException(status_code=400, detail="Each step must be a dictionary")
+        plugin_id = step.get("plugin_id")
+        if not plugin_id or not isinstance(plugin_id, str):
+            raise HTTPException(status_code=400, detail="Each step must have a valid non-empty plugin_id")
+
+    steps = _parse_workflow_steps(steps_val)
+
+    schedule_seconds = payload.get("schedule_seconds")
+    if "schedule_seconds" in payload and schedule_seconds is not None:
+        if not isinstance(schedule_seconds, int) or isinstance(schedule_seconds, bool):
+            raise HTTPException(status_code=400, detail="schedule_seconds must be a positive integer")
+        if schedule_seconds < 60 or schedule_seconds > 86400:
+            raise HTTPException(status_code=400, detail="schedule_seconds must be between 60 and 86400")
+
+    schedule_timezone = payload.get("schedule_timezone")
+    if schedule_timezone is not None:
+        is_ok, err_msg = validate_schedule_timezone(schedule_timezone)
+        if not is_ok:
+            raise HTTPException(status_code=400, detail=err_msg)
 
     workflow_id = str(uuid.uuid4())
-    schedule_seconds = payload.get("schedule_seconds")
     enabled = bool(payload.get("enabled", True))
     db = await get_db()
     await db.execute(
         """
-        INSERT INTO workflows (id, name, schedule_seconds, enabled, steps_json)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO workflows (id, name, schedule_seconds, schedule_timezone, enabled, steps_json)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
         (
             workflow_id,
             name,
             int(schedule_seconds) if schedule_seconds else None,
+            schedule_timezone,
             1 if enabled else 0,
             json.dumps(steps),
         ),
@@ -1848,10 +1874,11 @@ async def rollback_workflow(workflow_id: str, version_number: int):
     name = defn.get("name", wf["name"])
     steps = defn.get("steps", [])
     schedule_seconds = defn.get("schedule_seconds")
+    schedule_timezone = defn.get("schedule_timezone")
     enabled = bool(defn.get("enabled", True))
     await db.execute(
-        "UPDATE workflows SET name = ?, steps_json = ?, schedule_seconds = ?, enabled = ? WHERE id = ?",
-        (name, json.dumps(steps), schedule_seconds, 1 if enabled else 0, workflow_id),
+        "UPDATE workflows SET name = ?, steps_json = ?, schedule_seconds = ?, schedule_timezone = ?, enabled = ? WHERE id = ?",
+        (name, json.dumps(steps), schedule_seconds, schedule_timezone, 1 if enabled else 0, workflow_id),
     )
     new_version = await db.snapshot_workflow_version(
         workflow_id=workflow_id,
@@ -1859,6 +1886,7 @@ async def rollback_workflow(workflow_id: str, version_number: int):
         schedule_seconds=schedule_seconds,
         enabled=enabled,
         steps=steps,
+        schedule_timezone=schedule_timezone,
         created_by=f"rollback_to_v{version_number}",
     )
     updated = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
@@ -1883,12 +1911,36 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
         updates.append("name = ?")
         params.append(str(payload["name"]).strip())
     if "steps" in payload:
+        steps_val = payload["steps"]
+        if not isinstance(steps_val, list):
+            raise HTTPException(status_code=400, detail="steps must be a list")
+        if not steps_val:
+            raise HTTPException(status_code=400, detail="Workflow requires at least one step")
+        for step in steps_val:
+            if not isinstance(step, dict):
+                raise HTTPException(status_code=400, detail="Each step must be a dictionary")
+            plugin_id = step.get("plugin_id")
+            if not plugin_id or not isinstance(plugin_id, str):
+                raise HTTPException(status_code=400, detail="Each step must have a valid non-empty plugin_id")
         updates.append("steps_json = ?")
-        params.append(json.dumps(_parse_workflow_steps(payload["steps"])))
+        params.append(json.dumps(_parse_workflow_steps(steps_val)))
     if "schedule_seconds" in payload:
         val = payload["schedule_seconds"]
+        if val is not None:
+            if not isinstance(val, int) or isinstance(val, bool):
+                raise HTTPException(status_code=400, detail="schedule_seconds must be a positive integer")
+            if val < 60 or val > 86400:
+                raise HTTPException(status_code=400, detail="schedule_seconds must be between 60 and 86400")
         updates.append("schedule_seconds = ?")
-        params.append(int(val) if val else None)
+        params.append(val)
+    if "schedule_timezone" in payload:
+        tz_val = payload["schedule_timezone"]
+        if tz_val is not None:
+            is_ok, err_msg = validate_schedule_timezone(tz_val)
+            if not is_ok:
+                raise HTTPException(status_code=400, detail=err_msg)
+        updates.append("schedule_timezone = ?")
+        params.append(tz_val)
     if "enabled" in payload:
         updates.append("enabled = ?")
         params.append(1 if payload["enabled"] else 0)
@@ -1907,6 +1959,7 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
         schedule_seconds=updated["schedule_seconds"],
         enabled=bool(updated["enabled"]),
         steps=json.loads(updated["steps_json"] or "[]"),
+        schedule_timezone=updated["schedule_timezone"],
         created_by="patch",
     )
     return _serialize_workflow(updated)

@@ -12,9 +12,12 @@ from backend.secuscan.main import app
 # Shared test client
 # ---------------------------------------------------------------------------
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def client():
-    with TestClient(app) as c:
+    from backend.secuscan.auth import init_api_key
+    from backend.secuscan.config import settings
+    api_key = init_api_key(settings.data_dir)
+    with TestClient(app, headers={"X-Api-Key": api_key}) as c:
         yield c
 
 
@@ -58,13 +61,14 @@ def _assert_error_response(response, *, expected_statuses=(400, 422)):
 # Mock-DB factory for valid-creation tests
 # ---------------------------------------------------------------------------
 
-def _make_fake_row(name="edge-case-workflow", schedule_seconds=None):
+def _make_fake_row(name="edge-case-workflow", schedule_seconds=None, schedule_timezone=None):
     """Return a dict that mimics the DB row the route would insert/fetch."""
     return {
         "id": "test-wf-id-001",
         "name": name,
         "enabled": 1,
         "schedule_seconds": schedule_seconds,
+        "schedule_timezone": schedule_timezone,
         "steps_json": json.dumps([_step()]),
         "last_run_at": None,
         "created_at": "2026-01-01T00:00:00",
@@ -91,21 +95,12 @@ def _make_mock_db(fake_row):
 
 def _patch_get_db(fake_row):
     """
-    Return a patch context manager that makes get_db yield/return mock_db.
-    Works for both ``Depends(get_db)`` with an async-generator and a plain
-    async function.
+    Return a patch context manager that makes get_db return mock_db.
     """
     mock_db = _make_mock_db(fake_row)
 
-    @asynccontextmanager
-    async def _fake_get_db():
-        yield mock_db
-
-    # FastAPI resolves Depends by calling the function.  We replace get_db
-    # with an async generator factory so both generator and non-generator
-    # call-sites receive the same mock_db object.
     async def _get_db_override():
-        yield mock_db
+        return mock_db
 
     return patch(
         "backend.secuscan.routes.get_db",

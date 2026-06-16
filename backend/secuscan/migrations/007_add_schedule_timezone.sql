@@ -1,0 +1,3 @@
+-- Migration: 007_add_schedule_timezone
+-- The schedule_timezone column is added idempotently in database.py (_create_schema)
+-- to avoid SQLite duplicate column errors on startup.

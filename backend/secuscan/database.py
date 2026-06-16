@@ -276,6 +276,7 @@ class Database:
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL UNIQUE,
                 schedule_seconds INTEGER,
+                schedule_timezone TEXT,
                 enabled BOOLEAN NOT NULL DEFAULT 1,
                 steps_json TEXT NOT NULL DEFAULT '[]',
                 created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
@@ -493,6 +494,16 @@ class Database:
             except Exception as e:
                 print(f"Failed to add 'owner_id' to reports: {e}")
 
+        # Workflows table migration: ensure schedule_timezone exists
+        workflows_columns = await self.fetchall("PRAGMA table_info(workflows)")
+        existing_wf_cols = {col["name"] for col in workflows_columns}
+        if "schedule_timezone" not in existing_wf_cols:
+            try:
+                await self.execute("ALTER TABLE workflows ADD COLUMN schedule_timezone TEXT")
+                print("Added missing column 'schedule_timezone' to workflows table.")
+            except Exception as e:
+                print(f"Failed to add 'schedule_timezone' to workflows: {e}")
+
         # Owner indexes must run after ALTER TABLE backfills owner_id on legacy DBs.
         await self.connection.executescript(
             """
@@ -645,6 +656,7 @@ class Database:
         schedule_seconds: Optional[int],
         enabled: bool,
         steps: List[Dict],
+        schedule_timezone: Optional[str] = None,
         created_by: str = "system",
     ) -> Dict:
         """Snapshot the current workflow definition as a new version row.
@@ -662,6 +674,7 @@ class Database:
         definition = {
             "name": name,
             "schedule_seconds": schedule_seconds,
+            "schedule_timezone": schedule_timezone,
             "enabled": enabled,
             "steps": steps,
         }

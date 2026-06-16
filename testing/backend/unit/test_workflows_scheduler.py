@@ -8,7 +8,7 @@ produces strings without a timezone suffix, causing TypeError on subtraction.
 from datetime import datetime, timezone, timedelta
 import pytest
 
-from backend.secuscan.workflows import WorkflowScheduler
+from backend.secuscan.workflows import WorkflowScheduler, validate_schedule_timezone
 
 
 @pytest.fixture
@@ -87,3 +87,16 @@ def test_offset_aware_iso_string_still_works(scheduler):
 def test_empty_string_treated_as_no_last_run(scheduler):
     """Empty string last_run_at should behave like None → run."""
     assert scheduler._should_run(_now(), "", 3600) is True
+
+
+def test_validate_schedule_timezone():
+    # Valid timezones
+    assert validate_schedule_timezone("UTC") == (True, "")
+    assert validate_schedule_timezone("America/New_York") == (True, "")
+    assert validate_schedule_timezone(" Europe/London ") == (True, "")
+
+    # Invalid timezones
+    assert validate_schedule_timezone("GMT+5")[0] is False
+    assert validate_schedule_timezone("")[0] is False
+    assert validate_schedule_timezone(None)[0] is False
+    assert validate_schedule_timezone("NotATimezone")[0] is False

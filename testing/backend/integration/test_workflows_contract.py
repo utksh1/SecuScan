@@ -31,6 +31,7 @@ def test_workflow_create_list_update_contract(test_client):
     assert created["id"]
     assert created["name"] == "Nightly Scan"
     assert created["schedule_seconds"] == 3600
+    assert created.get("schedule_timezone") is None
     assert created["enabled"] is True
     assert created["steps"] == [expected_step]
     assert created["queued_task_ids"] == []
@@ -42,6 +43,7 @@ def test_workflow_create_list_update_contract(test_client):
     assert listed["total"] == 1
     assert listed["workflows"][0]["id"] == created["id"]
     assert listed["workflows"][0]["schedule_seconds"] == 3600
+    assert listed["workflows"][0].get("schedule_timezone") is None
     assert listed["workflows"][0]["steps"] == created["steps"]
     assert "steps_json" not in listed["workflows"][0]
 
@@ -53,6 +55,7 @@ def test_workflow_create_list_update_contract(test_client):
     updated = update_response.json()
     assert updated["id"] == created["id"]
     assert updated["schedule_seconds"] == 7200
+    assert updated.get("schedule_timezone") is None
     assert updated["enabled"] is False
     assert updated["steps"] == created["steps"]
 
@@ -71,3 +74,45 @@ def test_workflow_run_uses_queued_task_ids_contract(test_client):
     data = run_response.json()
     assert data["workflow_id"] == workflow_id
     assert data["queued_task_ids"] == ["task-001"]
+
+
+def test_workflow_timezone_validation_contract(test_client):
+    # Invalid timezone on create
+    bad_payload = _workflow_payload("Bad Timezone Workflow")
+    bad_payload["schedule_timezone"] = "Invalid_Timezone"
+    res1 = test_client.post("/api/v1/workflows", json=bad_payload)
+    assert res1.status_code == 400
+    assert "Invalid timezone" in res1.json()["detail"]
+
+    # Valid timezone on create
+    good_payload = _workflow_payload("Good Timezone Workflow")
+    good_payload["schedule_timezone"] = "America/New_York"
+    res2 = test_client.post("/api/v1/workflows", json=good_payload)
+    assert res2.status_code == 200
+    created = res2.json()
+    assert created["schedule_timezone"] == "America/New_York"
+
+    # Invalid timezone on update
+    res3 = test_client.patch(
+        f"/api/v1/workflows/{created['id']}",
+        json={"schedule_timezone": "GMT+5"}
+    )
+    assert res3.status_code == 400
+    assert "Invalid timezone" in res3.json()["detail"]
+
+    # Valid timezone on update
+    res4 = test_client.patch(
+        f"/api/v1/workflows/{created['id']}",
+        json={"schedule_timezone": "Europe/London"}
+    )
+    assert res4.status_code == 200
+    updated = res4.json()
+    assert updated["schedule_timezone"] == "Europe/London"
+
+    # None is accepted on update
+    res5 = test_client.patch(
+        f"/api/v1/workflows/{created['id']}",
+        json={"schedule_timezone": None}
+    )
+    assert res5.status_code == 200
+    assert res5.json().get("schedule_timezone") is None

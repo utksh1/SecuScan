@@ -6,6 +6,7 @@ import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .database import get_db
 from .config import settings
 from .ratelimit import workflow_rate_limiter, rate_limiter, concurrent_limiter
@@ -162,6 +163,16 @@ class WorkflowScheduler:
                 await executor.execute_task(task_id)
 
             asyncio.create_task(run_task(task_id))
+
+
+def validate_schedule_timezone(tz: str) -> tuple[bool, str]:
+    if not tz or not isinstance(tz, str):
+        return False, "schedule_timezone must be a non-empty string"
+    try:
+        ZoneInfo(tz.strip())
+        return True, ""
+    except ZoneInfoNotFoundError:
+        return False, f"Invalid timezone: '{tz}'. Use an IANA name such as 'America/New_York' or 'UTC'."
 
 
 scheduler = WorkflowScheduler()
