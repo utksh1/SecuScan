@@ -1,3 +1,10 @@
+"""
+Middleware for managing the X-Request-ID request tracing header.
+
+For details on the request ID contract and cross-layer correlation, see:
+docs/request-id.md (https://github.com/Apoorv-Raj777/SecuScan/blob/main/docs/request-id.md)
+"""
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi import Request
 from .request_context import set_request_id
