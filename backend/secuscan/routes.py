@@ -1675,15 +1675,18 @@ async def get_knowledgebase_status():
 
 
 @router.get("/workflows")
-async def list_workflows():
+async def list_workflows(owner: str = Depends(get_current_owner)):
     db = await get_db()
-    rows = await db.fetchall("SELECT * FROM workflows ORDER BY created_at DESC")
+    rows = await db.fetchall(
+        "SELECT * FROM workflows WHERE owner_id = ? ORDER BY created_at DESC",
+        (owner,),
+    )
     workflows = [_serialize_workflow(row) for row in rows]
     return {"workflows": workflows, "total": len(workflows)}
 
 
 @router.post("/workflows")
-async def create_workflow(payload: Dict[str, Any]):
+async def create_workflow(payload: Dict[str, Any], owner: str = Depends(get_current_owner)):
     name = str(payload.get("name", "")).strip()
     if not name:
         raise HTTPException(status_code=400, detail="Workflow name is required")
@@ -1698,12 +1701,13 @@ async def create_workflow(payload: Dict[str, Any]):
     db = await get_db()
     await db.execute(
         """
-        INSERT INTO workflows (id, name, schedule_seconds, enabled, steps_json)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO workflows (id, name, owner_id, schedule_seconds, enabled, steps_json)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
         (
             workflow_id,
             name,
+            owner,
             int(schedule_seconds) if schedule_seconds else None,
             1 if enabled else 0,
             json.dumps(steps),
@@ -1713,12 +1717,22 @@ async def create_workflow(payload: Dict[str, Any]):
     return _serialize_workflow(row) if row else {"id": workflow_id, "created": True}
 
 
+async def _verify_workflow_owner(db, workflow_id: str, owner: str):
+    """Check the workflow exists and belongs to the caller. Returns the row or raises 404/403."""
+    row = await db.fetchone(
+        "SELECT * FROM workflows WHERE id = ?", (workflow_id,)
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    if row["owner_id"] != owner:
+        raise HTTPException(status_code=403, detail="You do not have access to this workflow")
+    return row
+
+
 @router.post("/workflows/{workflow_id}/run")
 async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_owner)):
     db = await get_db()
-    row = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
-    if not row:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    row = await _verify_workflow_owner(db, workflow_id, owner)
     wf_rate_ok, wf_rate_msg = await workflow_rate_limiter.check_workflow_rate_limit(
         workflow_id, settings.workflow_min_interval_seconds
     )
@@ -1802,32 +1816,28 @@ async def _finalize_workflow_run(run_id: str, poll_interval: float = 5.0, max_po
 
 
 @router.get("/workflows/{workflow_id}/runs")
-async def list_workflow_runs(workflow_id: str, limit: int = 50, offset: int = 0):
+async def list_workflow_runs(workflow_id: str, owner: str = Depends(get_current_owner), limit: int = 50, offset: int = 0):
     """Return paginated run history for a workflow."""
     if limit < 1 or limit > 500:
         raise HTTPException(status_code=400, detail="limit must be between 1 and 500")
     if offset < 0:
         raise HTTPException(status_code=400, detail="offset must be non-negative")
     db = await get_db()
-    wf = await db.fetchone("SELECT id FROM workflows WHERE id = ?", (workflow_id,))
-    if not wf:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    await _verify_workflow_owner(db, workflow_id, owner)
     return await db.get_workflow_runs(workflow_id=workflow_id, limit=limit, offset=offset)
 
 
 @router.get("/workflows/{workflow_id}/versions")
-async def list_workflow_versions(workflow_id: str):
+async def list_workflow_versions(workflow_id: str, owner: str = Depends(get_current_owner)):
     """Return all saved version snapshots for a workflow, newest first."""
     db = await get_db()
-    wf = await db.fetchone("SELECT id FROM workflows WHERE id = ?", (workflow_id,))
-    if not wf:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    await _verify_workflow_owner(db, workflow_id, owner)
     versions = await db.get_workflow_versions(workflow_id=workflow_id)
     return {"workflow_id": workflow_id, "versions": versions, "total": len(versions)}
 
 
 @router.post("/workflows/{workflow_id}/rollback/{version_number}")
-async def rollback_workflow(workflow_id: str, version_number: int):
+async def rollback_workflow(workflow_id: str, version_number: int, owner: str = Depends(get_current_owner)):
     """Restore a workflow to a previously saved version.
 
     The target version's full definition replaces the live workflow fields.
@@ -1835,9 +1845,7 @@ async def rollback_workflow(workflow_id: str, version_number: int):
     and can be rolled back in turn.
     """
     db = await get_db()
-    wf = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
-    if not wf:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    wf = await _verify_workflow_owner(db, workflow_id, owner)
     target = await db.get_workflow_version(workflow_id, version_number)
     if target is None:
         raise HTTPException(
@@ -1871,11 +1879,9 @@ async def rollback_workflow(workflow_id: str, version_number: int):
 
 
 @router.patch("/workflows/{workflow_id}")
-async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
+async def update_workflow(workflow_id: str, payload: Dict[str, Any], owner: str = Depends(get_current_owner)):
     db = await get_db()
-    row = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
-    if not row:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    row = await _verify_workflow_owner(db, workflow_id, owner)
 
     updates = []
     params: List[Any] = []
@@ -1913,8 +1919,9 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
 
 
 @router.delete("/workflows/{workflow_id}")
-async def delete_workflow(workflow_id: str):
+async def delete_workflow(workflow_id: str, owner: str = Depends(get_current_owner)):
     db = await get_db()
+    await _verify_workflow_owner(db, workflow_id, owner)
     await db.execute("DELETE FROM workflows WHERE id = ?", (workflow_id,))
     return {"workflow_id": workflow_id, "deleted": True}
 
@@ -1926,17 +1933,18 @@ async def trigger_workflow_tick():
 
 
 @router.get("/notifications/rules")
-async def list_notification_rules():
+async def list_notification_rules(owner: str = Depends(get_current_owner)):
     db = await get_db()
     rows = await db.fetchall(
-        "SELECT * FROM notification_rules ORDER BY created_at DESC"
+        "SELECT * FROM notification_rules WHERE owner_id = ? ORDER BY created_at DESC",
+        (owner,),
     )
     rules = [_serialize_notification_rule(row) for row in rows]
     return {"rules": rules, "total": len(rules)}
 
 
 @router.post("/notifications/rules")
-async def create_notification_rule(payload: NotificationRuleCreate):
+async def create_notification_rule(payload: NotificationRuleCreate, owner: str = Depends(get_current_owner)):
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Rule name is required")
@@ -1947,12 +1955,13 @@ async def create_notification_rule(payload: NotificationRuleCreate):
     await db.execute(
         """
         INSERT INTO notification_rules (
-            id, name, severity_threshold, channel_type, target_url_or_email, is_active
-        ) VALUES (?, ?, ?, ?, ?, ?)
+            id, name, owner_id, severity_threshold, channel_type, target_url_or_email, is_active
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         (
             rule_id,
             name,
+            owner,
             payload.severity_threshold.value,
             payload.channel_type.value,
             target,
@@ -1968,27 +1977,30 @@ async def create_notification_rule(payload: NotificationRuleCreate):
     return _serialize_notification_rule(row)
 
 
-@router.get("/notifications/rules/{rule_id}")
-async def get_notification_rule(rule_id: str):
-    db = await get_db()
+async def _verify_notification_rule_owner(db, rule_id: str, owner: str):
+    """Check the notification rule exists and belongs to the caller."""
     row = await db.fetchone(
         "SELECT * FROM notification_rules WHERE id = ?",
         (rule_id,),
     )
     if not row:
         raise HTTPException(status_code=404, detail="Notification rule not found")
+    if row["owner_id"] != owner:
+        raise HTTPException(status_code=403, detail="You do not have access to this notification rule")
+    return row
+
+
+@router.get("/notifications/rules/{rule_id}")
+async def get_notification_rule(rule_id: str, owner: str = Depends(get_current_owner)):
+    db = await get_db()
+    row = await _verify_notification_rule_owner(db, rule_id, owner)
     return _serialize_notification_rule(row)
 
 
 @router.patch("/notifications/rules/{rule_id}")
-async def update_notification_rule(rule_id: str, payload: NotificationRuleUpdate):
+async def update_notification_rule(rule_id: str, payload: NotificationRuleUpdate, owner: str = Depends(get_current_owner)):
     db = await get_db()
-    row = await db.fetchone(
-        "SELECT * FROM notification_rules WHERE id = ?",
-        (rule_id,),
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Notification rule not found")
+    row = await _verify_notification_rule_owner(db, rule_id, owner)
 
     updates: List[str] = []
     params: List[Any] = []
@@ -2051,14 +2063,9 @@ async def update_notification_rule(rule_id: str, payload: NotificationRuleUpdate
 
 
 @router.delete("/notifications/rules/{rule_id}")
-async def delete_notification_rule(rule_id: str):
+async def delete_notification_rule(rule_id: str, owner: str = Depends(get_current_owner)):
     db = await get_db()
-    row = await db.fetchone(
-        "SELECT id FROM notification_rules WHERE id = ?",
-        (rule_id,),
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Notification rule not found")
+    await _verify_notification_rule_owner(db, rule_id, owner)
     await db.execute("DELETE FROM notification_rules WHERE id = ?", (rule_id,))
     return {"rule_id": rule_id, "deleted": True}
 

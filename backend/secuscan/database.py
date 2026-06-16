@@ -274,12 +274,14 @@ class Database:
 
             CREATE TABLE IF NOT EXISTS workflows (
                 id TEXT PRIMARY KEY,
-                name TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                owner_id TEXT NOT NULL DEFAULT 'default',
                 schedule_seconds INTEGER,
                 enabled BOOLEAN NOT NULL DEFAULT 1,
                 steps_json TEXT NOT NULL DEFAULT '[]',
                 created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-                last_run_at TIMESTAMP
+                last_run_at TIMESTAMP,
+                UNIQUE(owner_id, name)
             );
 
             CREATE TABLE IF NOT EXISTS workflow_versions (
@@ -314,6 +316,7 @@ class Database:
             CREATE TABLE IF NOT EXISTS notification_rules (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
+                owner_id TEXT NOT NULL DEFAULT 'default',
                 severity_threshold TEXT NOT NULL,
                 channel_type TEXT NOT NULL,
                 target_url_or_email TEXT NOT NULL,
@@ -493,12 +496,38 @@ class Database:
             except Exception as e:
                 print(f"Failed to add 'owner_id' to reports: {e}")
 
+        # Workflows table migration: ensure owner_id and composite unique exist
+        workflows_columns = await self.fetchall("PRAGMA table_info(workflows)")
+        existing_wf_cols = {col["name"] for col in workflows_columns}
+        if "owner_id" not in existing_wf_cols:
+            try:
+                await self.execute(
+                    "ALTER TABLE workflows ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'default'"
+                )
+                print("Added missing column 'owner_id' to workflows table.")
+            except Exception as e:
+                print(f"Failed to add 'owner_id' to workflows: {e}")
+
+        # Notification rules table migration: ensure owner_id exists
+        notif_columns = await self.fetchall("PRAGMA table_info(notification_rules)")
+        existing_notif_cols = {col["name"] for col in notif_columns}
+        if "owner_id" not in existing_notif_cols:
+            try:
+                await self.execute(
+                    "ALTER TABLE notification_rules ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'default'"
+                )
+                print("Added missing column 'owner_id' to notification_rules table.")
+            except Exception as e:
+                print(f"Failed to add 'owner_id' to notification_rules: {e}")
+
         # Owner indexes must run after ALTER TABLE backfills owner_id on legacy DBs.
         await self.connection.executescript(
             """
             CREATE INDEX IF NOT EXISTS idx_tasks_owner ON tasks(owner_id);
             CREATE INDEX IF NOT EXISTS idx_findings_owner ON findings(owner_id);
             CREATE INDEX IF NOT EXISTS idx_reports_owner ON reports(owner_id);
+            CREATE INDEX IF NOT EXISTS idx_workflows_owner ON workflows(owner_id);
+            CREATE INDEX IF NOT EXISTS idx_notification_rules_owner ON notification_rules(owner_id);
             """
         )
 
