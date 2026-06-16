@@ -19,17 +19,58 @@ def test_validate_target():
     # Safe mode restrictions
     assert validate_target("8.8.8.8", safe_mode=True)[0] is False  # Public IP blocked in safe mode
     assert validate_target("military.mil", safe_mode=True)[0] is False  # Blocked TLD
+    assert validate_target("example.gov", safe_mode=True)[0] is False
 
     # Invalid targets
     assert validate_target("10.0.0.0/24")[0] is True  # Private CIDR ranges are allowed in safe mode
     assert validate_target("not!a!valid!hostname")[0] is False
 
-def test_validate_target_safe_mode_blocks_public_hostname(monkeypatch):
-    def fake_getaddrinfo(_host, *_args, **_kwargs):
-        return [(socket.AF_INET, None, None, None, ("8.8.8.8", 0))]
+def test_validate_target_public_ip_allowed_without_safe_mode():
+    ok, msg = validate_target(
+        "8.8.8.8",
+        safe_mode=False
+    )
+
+    assert ok is True
+    assert msg == ""
+
+def test_validate_target_safe_mode_rejects_unresolved_hostname(monkeypatch):
+    """
+    Mutation guard:
+    Safe mode must fail closed if DNS returns no addresses.
+    """
+
+    def fake_getaddrinfo(*args, **kwargs):
+        return []
 
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
-    assert validate_target("example.com", safe_mode=True)[0] is False
+
+    ok, msg = validate_target(
+        "unknown.example",
+        safe_mode=True
+    )
+
+    assert ok is False
+    assert "did not resolve" in msg.lower()
+
+def test_validate_target_safe_mode_blocks_link_local():
+    ok, msg = validate_target(
+        "169.254.1.10",
+        safe_mode=True
+    )
+
+    assert ok is False
+    assert "blocked network" in msg.lower()
+
+
+def test_validate_target_safe_mode_blocks_multicast():
+    ok, msg = validate_target(
+        "224.0.0.1",
+        safe_mode=True
+    )
+
+    assert ok is False
+    assert "blocked network" in msg.lower()
 
 def test_validate_target_safe_mode_blocks_multi_record_when_any_public(monkeypatch):
     """If any A/AAAA record is public, safe-mode must fail closed."""
@@ -57,6 +98,115 @@ def test_validate_target_safe_mode_blocks_dns_rebinding_union(monkeypatch):
     assert ok is False
     assert calls["n"] >= 2
 
+def test_validate_target_blocks_loopback_when_disabled(monkeypatch):
+    monkeypatch.setattr(settings, "allow_loopback_scans", False)
+
+    ok, msg = validate_target(
+        "127.0.0.1",
+        safe_mode=False
+    )
+
+    assert ok is False
+    assert "loopback" in msg.lower()
+
+def test_validate_target_safe_mode_allows_private_hostname(monkeypatch):
+
+    def fake_getaddrinfo(*args, **kwargs):
+        return [
+            (
+                socket.AF_INET,
+                None,
+                None,
+                None,
+                ("192.168.1.20", 0)
+            )
+        ]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+
+    ok, msg = validate_target(
+        "internal.example",
+        safe_mode=True
+    )
+
+    assert ok is True
+    assert msg == ""
+
+def test_validate_target_safe_mode_blocks_public_hostname(monkeypatch):
+
+    def fake_getaddrinfo(*args, **kwargs):
+        return [
+            (
+                socket.AF_INET,
+                None,
+                None,
+                None,
+                ("8.8.8.8", 0)
+            )
+        ]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+
+    ok, msg = validate_target(
+        "public.example",
+        safe_mode=True
+    )
+
+    assert ok is False
+    assert "public" in msg.lower()
+
+def test_validate_target_safe_mode_blocks_link_local_hostname(monkeypatch):
+
+    def fake_getaddrinfo(*args, **kwargs):
+        return [
+            (
+                socket.AF_INET,
+                None,
+                None,
+                None,
+                ("169.254.10.10", 0)
+            )
+        ]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+
+    ok, msg = validate_target(
+        "linklocal.example",
+        safe_mode=True
+    )
+
+    assert ok is False
+    assert "blocked network" in msg.lower()
+
+def test_validate_target_hostname_respects_allowed_networks(monkeypatch):
+
+    monkeypatch.setattr(
+        settings,
+        "allowed_networks",
+        ["192.168.1.0/24"]
+    )
+
+    def fake_getaddrinfo(*args, **kwargs):
+        return [
+            (
+                socket.AF_INET,
+                None,
+                None,
+                None,
+                ("10.0.0.5", 0)
+            )
+        ]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+
+    ok, msg = validate_target(
+        "internal.example",
+        safe_mode=True
+    )
+
+    assert ok is False
+    assert "allowed networks" in msg.lower()
+
 def test_validate_target_safe_mode_blocks_url_ip_literal():
     assert validate_target("http://8.8.8.8", safe_mode=True)[0] is False
 
@@ -67,6 +217,28 @@ def test_validate_target_ipv4_with_ipv6_allowed_network_does_not_crash(monkeypat
     assert ok is False
     assert msg == "Target not within allowed networks in safe mode (SecuScan Guardrail)"
 
+def test_validate_target_safe_mode_blocks_loopback_hostname(monkeypatch):
+
+    def fake_getaddrinfo(*args, **kwargs):
+        return [
+            (
+                socket.AF_INET,
+                None,
+                None,
+                None,
+                ("127.0.0.1", 0)
+            )
+        ]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+
+    ok, msg = validate_target(
+        "localhost.example",
+        safe_mode=True
+    )
+
+    assert ok is False
+    assert "blocked network" in msg.lower()
 
 def test_validate_target_ipv6_with_ipv4_allowed_network_does_not_crash(monkeypatch):
     monkeypatch.setattr(settings, "allowed_networks", ["127.0.0.0/8"])
@@ -82,6 +254,21 @@ def test_validate_target_mixed_allowed_networks_uses_later_same_version_entry(mo
 
     assert ok is True
     assert msg == ""
+
+def test_validate_target_safe_mode_rejects_outside_allowed_network(monkeypatch):
+    monkeypatch.setattr(
+        settings,
+        "allowed_networks",
+        ["192.168.1.0/24"]
+    )
+
+    ok, msg = validate_target(
+        "10.0.0.5",
+        safe_mode=True
+    )
+
+    assert ok is False
+    assert "allowed networks" in msg.lower()
 
 def test_validate_target_mixed_allowed_networks_uses_later_same_version_ipv6_entry(monkeypatch):
     monkeypatch.setattr(validation_module, "ALLOWED_PRIVATE", [ipaddress.ip_network("fc00::/7")])
@@ -346,7 +533,6 @@ def test_resolve_and_validate_target_rejects_private_ip(monkeypatch):
     def fake_getaddrinfo(*args, **kwargs):
         return [(socket.AF_INET, None, None, None, ("10.0.0.5", 80))]
 
-    import socket
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
     ok, err = resolve_and_validate_target("http://internal.example.com/hook")
     assert ok is False
@@ -359,8 +545,46 @@ def test_resolve_and_validate_target_allows_public_ip(monkeypatch):
     def fake_getaddrinfo(*args, **kwargs):
         return [(socket.AF_INET, None, None, None, ("93.184.216.34", 80))]
 
-    import socket
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
     ok, err = resolve_and_validate_target("http://example.com/hook")
     assert ok is True
     assert err == ""
+
+def test_resolve_and_validate_target_blocks_dns_rebinding(monkeypatch):
+    from backend.secuscan.validation import resolve_and_validate_target
+
+    calls = {"count": 0}
+
+    def fake_getaddrinfo(*args, **kwargs):
+        calls["count"] += 1
+
+        if calls["count"] == 1:
+            return [
+                (
+                    socket.AF_INET,
+                    None,
+                    None,
+                    None,
+                    ("93.184.216.34", 80)
+                )
+            ]
+
+        return [
+            (
+                socket.AF_INET,
+                None,
+                None,
+                None,
+                ("10.0.0.5", 80)
+            )
+        ]
+
+    monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+
+    ok, err = resolve_and_validate_target(
+        "http://example.com/hook"
+    )
+
+    assert ok is False
+    assert "blocked" in err.lower()
+    assert calls["count"] >= 2
