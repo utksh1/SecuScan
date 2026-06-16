@@ -88,5 +88,5 @@
     "system_packages": []
   },
   "docker_image": "pyfound/bandit:latest",
-  "checksum": "7daaed25ba96309668e1792c653abeec3f6d407324878b08e1d7a607a5f728db"
+  "checksum": "efbcbcdc76325f82a5cee1076bebf565ebcbb4237f7542b05ad52169ba7d1321"
 }
