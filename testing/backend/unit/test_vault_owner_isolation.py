@@ -27,7 +27,7 @@ class TestVaultOwnerIsolation:
         )
 
         assert r.status_code == 404
-        
+
     def test_owner_list_only_returns_owned_secrets(self, test_client):
         test_client.put(
             "/api/v1/vault/alice-secret",
@@ -48,12 +48,12 @@ class TestVaultOwnerIsolation:
 
         assert r.status_code == 200
         print(r.json())
-        
+
         names = {item["name"] for item in r.json()["items"]}
 
         assert "bob-secret" in names
         assert "alice-secret" not in names
-        
+
     def test_owner_cannot_overwrite_other_owner_secret(self, test_client):
         name = "shared-name"
 
@@ -84,7 +84,7 @@ class TestVaultOwnerIsolation:
 
         assert alice.json()["value"] == "alice-value"
         assert bob.json()["value"] == "bob-value"
-        
+
     def test_owner_cannot_delete_other_owner_secret(self, test_client):
         name = "owner-isolation-delete"
 
