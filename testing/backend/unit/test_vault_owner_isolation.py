@@ -6,6 +6,15 @@ that one owner cannot read, list, overwrite, or delete another owner's
 secrets.
 """
 
+import asyncio
+import pytest
+
+from backend.secuscan.ratelimit import reset_all_endpoint_limiters
+
+@pytest.fixture(autouse=True)
+def reset_limiters():
+    asyncio.run(reset_all_endpoint_limiters())
+
 
 class TestVaultOwnerIsolation:
     OWNER_A = {"X-User-Id": "alice"}
