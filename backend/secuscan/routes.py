@@ -110,35 +110,7 @@ def _json_payload(value: Any, fallback: str) -> str:
     return json.dumps(value if value is not None else json.loads(fallback))
 
 
-def is_filesystem_target(target: str) -> bool:
-    """Best-effort detection for path-based targets that should bypass host validation."""
-    # Absolute or relative filesystem roots only — not CIDR notation (e.g. 8.8.8.8/32)
-    if target.startswith(("/", "./", "../", "~/")):
-        return True
-    # Windows drive paths (C:\ or C:/)
-    """
-    Return True only for genuine local filesystem paths.
-
-    Explicit roots accepted:
-      - Unix absolute paths:   /home/user/repo
-      - Unix relative paths:   ./src, ../lib
-      - Home-relative paths:   ~/projects
-      - Windows paths:         C:\\Users\\repo, D:/work
-
-    Anything else — including CIDR notation (8.8.8.8/32, 192.168.1.0/24),
-    bare hostnames, URLs, and domain paths — returns False and will be
-    subject to the full validate_target() check including safe-mode enforcement.
-
-    CIDR notation is handled correctly by ipaddress.ip_network() inside
-    validate_target() and does NOT need special-casing here.
-    """
-    # Unix absolute, relative, and home-relative paths
-    if target.startswith(("/", "./", "../", "~/")):
-        return True
-    # Windows paths: C:\ or C:/
-    if re.match(r"^[A-Za-z]:[\\/]", target):
-        return True
-    return False
+from .validation import is_filesystem_target  # noqa: E402
 
 def _slugify_filename_part(value: str, fallback: str) -> str:
     cleaned = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
@@ -214,12 +186,19 @@ def _validate_notification_target(channel_type: NotificationChannelType, target:
             raise HTTPException(status_code=400, detail=error or "Invalid webhook URL")
 
         if settings.notification_ssrf_enabled:
-            from .validation import resolve_and_validate_target
+            from .validation import resolve_and_validate_target, validate_webhook_target
             ssrf_ok, ssrf_err = resolve_and_validate_target(cleaned)
             if not ssrf_ok:
                 raise HTTPException(
                     status_code=400,
                     detail=f"Webhook target blocked by SSRF protection: {ssrf_err}"
+                )
+            # Additional independent check against notification_blocked_ip_ranges
+            target_ok, target_err = validate_webhook_target(cleaned)
+            if not target_ok:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Webhook target blocked by SSRF protection: {target_err}"
                 )
         return cleaned
 

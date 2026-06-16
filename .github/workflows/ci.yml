@@ -193,11 +193,14 @@ jobs:
         id: run_benchmarks
         run: python3 scripts/run_benchmarks.py
         continue-on-error: true
-      - name: Upload benchmark results artifact
+      - name: Upload benchmark comparison artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-results
-          path: benchmark_results.json
+          name: benchmark-threshold-comparison
+          path: |
+            benchmark_results.json
+            benchmark_threshold_comparison.json
       - name: Add warning annotation on failure
         if: steps.run_benchmarks.outcome == 'failure'
         run: |

@@ -49,11 +49,11 @@ def compute_plugin_digest(metadata_file: Path, parser_file: Path) -> str:
     metadata_digest = hashlib.sha256(metadata_canonical.encode("utf-8")).hexdigest()
 
     # Hash parser.py if it exists, otherwise use empty string
-    parser_digest = (
-        hashlib.sha256(parser_file.read_bytes()).hexdigest()
-        if parser_file.exists()
-        else ""
-    )
+    parser_digest = ""
+    if parser_file.exists():
+        parser_bytes = parser_file.read_bytes()
+        parser_bytes_normalized = parser_bytes.replace(b"\r\n", b"\n")
+        parser_digest = hashlib.sha256(parser_bytes_normalized).hexdigest()
 
     # Final digest combines both
     return hashlib.sha256(
