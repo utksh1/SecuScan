@@ -161,6 +161,14 @@ Both files must be installed for the test suite to run correctly. The
 - **Permission denied on `./testing/test_python.sh`** — make it executable
   first with `chmod +x testing/test_python.sh`.
 
+## Plugin Contributions
+
+If you are adding a new plugin or editing an existing one, follow the dedicated guide before opening a pull request:
+
+**[docs/plugin-contribution-guide.md](docs/plugin-contribution-guide.md)**
+
+The guide covers the full workflow: editing metadata and parser files, refreshing checksums, validating the plugin, writing fixture-based parser tests, and the pre-PR checklist.
+
 ## Project Layout
 
 - `backend/secuscan`: FastAPI routes, execution logic, workflows, validation, vault, and reporting
