@@ -643,7 +643,7 @@ export default function Dashboard() {
       SecuScan Intelligence Systems • Class 1 Operational View
     </p>
     <p className="text-[9px] text-silver/40 uppercase tracking-[0.3em] font-mono">
-      © {new Date().getFullYear()} SecuScan Intelligence Systems. All rights reserved. — v2.4
+      &copy; {new Date().getFullYear()} SecuScan Intelligence Systems. All rights reserved. &mdash; v2.4
     </p>
   </div>
 </footer>
