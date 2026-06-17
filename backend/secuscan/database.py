@@ -508,6 +508,50 @@ class Database:
             except Exception as e:
                 print(f"Failed to add 'owner_id' to workflows: {e}")
 
+        # On legacy databases the old CREATE TABLE had UNIQUE on name alone,
+        # which blocks same-named workflows across owners.  SQLite cannot
+        # ALTER TABLE … DROP CONSTRAINT, so we must recreate the table.
+        wf_schema = await self.fetchone(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='workflows'"
+        )
+        if wf_schema and "owner_id" in existing_wf_cols:
+            ddl = wf_schema["sql"]
+            # Check for the old inline UNIQUE constraint on name
+            has_old_unique = "name TEXT NOT NULL UNIQUE" in ddl
+            has_composite = "UNIQUE(owner_id, name)" in ddl
+            if has_old_unique or not has_composite:
+                old_fk = await self.fetchone("PRAGMA foreign_keys")
+                if old_fk:
+                    await self.execute("PRAGMA foreign_keys = OFF")
+                try:
+                    await self.connection.executescript("""
+                        CREATE TABLE workflows_new (
+                            id TEXT PRIMARY KEY,
+                            name TEXT NOT NULL,
+                            owner_id TEXT NOT NULL DEFAULT 'default',
+                            schedule_seconds INTEGER,
+                            enabled BOOLEAN NOT NULL DEFAULT 1,
+                            steps_json TEXT NOT NULL DEFAULT '[]',
+                            created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                            last_run_at TIMESTAMP,
+                            UNIQUE(owner_id, name)
+                        );
+                        INSERT INTO workflows_new
+                            (id, name, owner_id, schedule_seconds, enabled,
+                             steps_json, created_at, last_run_at)
+                        SELECT
+                            id, name, COALESCE(owner_id, 'default'),
+                            schedule_seconds, enabled, steps_json, created_at, last_run_at
+                        FROM workflows;
+                        DROP TABLE workflows;
+                        ALTER TABLE workflows_new RENAME TO workflows;
+                    """)
+                    await self.connection.commit()
+                    print("Replaced workflows UNIQUE(name) constraint with UNIQUE(owner_id, name).")
+                finally:
+                    if old_fk:
+                        await self.execute("PRAGMA foreign_keys = ON")
+
         # Notification rules table migration: ensure owner_id exists
         notif_columns = await self.fetchall("PRAGMA table_info(notification_rules)")
         existing_notif_cols = {col["name"] for col in notif_columns}
