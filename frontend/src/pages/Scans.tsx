@@ -547,63 +547,65 @@ export default function Scans() {
                             exit={{ height: 0, opacity: 0 }}
                             className="overflow-hidden"
                           >
-                            <div className="mt-12 pt-12 border-t-4 border-black grid grid-cols-1 md:grid-cols-3 gap-12 bg-charcoal-dark/20 -mx-8 -mb-8 p-8 border-dashed">
-                              <div className="space-y-4">
-                                <h5 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.3em] italic flex items-center gap-3">
-                                  <span className="w-1.5 h-3 bg-rag-blue"></span>{" "}
-                                  Signal_Metadata
-                                </h5>
-                                <div className="space-y-2">
-                                  <p className="text-[10px] font-mono text-silver/40">
-                                    PLUGIN:{" "}
-                                    <span className="text-silver-bright uppercase">
-                                      {task.plugin_id}
-                                    </span>
-                                  </p>
-                                  {task.status === 'running' && task.scan_phase && (
-                                    <p className="text-[10px] font-mono text-rag-blue/80 uppercase tracking-widest">
-                                      PHASE: {task.scan_phase.replace(/_/g, ' ')}
+                            <div className="mt-12 pt-12 border-t-4 border-black flex flex-wrap items-center justify-between gap-4 w-full bg-charcoal-dark/20 -mx-8 -mb-8 p-8 border-dashed">
+                              <div className="flex flex-wrap items-start gap-4">
+                                <div className="space-y-4">
+                                  <h5 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.3em] italic flex items-center gap-3">
+                                    <span className="w-1.5 h-3 bg-rag-blue"></span>{" "}
+                                    Signal_Metadata
+                                  </h5>
+                                  <div className="space-y-2">
+                                    <p className="text-[10px] font-mono text-silver/40">
+                                      PLUGIN:{" "}
+                                      <span className="text-silver-bright uppercase">
+                                        {task.plugin_id}
+                                      </span>
                                     </p>
-                                  )}
-                                  <p className="text-[10px] font-mono text-silver/40">
-                                    SESSION:{" "}
-                                    <span className="text-silver-bright uppercase">
-                                      ENCRYPTED_VTX
-                                    </span>
-                                  </p>
+                                    {task.status === 'running' && task.scan_phase && (
+                                      <p className="text-[10px] font-mono text-rag-blue/80 uppercase tracking-widest">
+                                        PHASE: {task.scan_phase.replace(/_/g, ' ')}
+                                      </p>
+                                    )}
+                                    <p className="text-[10px] font-mono text-silver/40">
+                                      SESSION:{" "}
+                                      <span className="text-silver-bright uppercase">
+                                        ENCRYPTED_VTX
+                                      </span>
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-4">
+                                  <h5 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.3em] italic flex items-center gap-3">
+                                    <span className="w-1.5 h-3 bg-rag-amber"></span>{" "}
+                                    Time_Matrix
+                                  </h5>
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                      <span className="text-[8px] text-silver/20 uppercase font-black tracking-widest">
+                                        In_Lock
+                                      </span>
+                                      <span className="text-[10px] font-mono text-silver-bright block">
+                                        {startDate
+                                          ? formatLocaleTime(startDate)
+                                          : "PENDING"}
+                                      </span>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <span className="text-[8px] text-silver/20 uppercase font-black tracking-widest">
+                                        Release
+                                      </span>
+                                      <span className="text-[10px] font-mono text-silver-bright block">
+                                        {endDate
+                                          ? formatLocaleTime(endDate)
+                                          : "N/A"}
+                                      </span>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
 
-                              <div className="space-y-4">
-                                <h5 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.3em] italic flex items-center gap-3">
-                                  <span className="w-1.5 h-3 bg-rag-amber"></span>{" "}
-                                  Time_Matrix
-                                </h5>
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div className="space-y-1">
-                                    <span className="text-[8px] text-silver/20 uppercase font-black tracking-widest">
-                                      In_Lock
-                                    </span>
-                                    <span className="text-[10px] font-mono text-silver-bright block">
-                                      {startDate
-                                        ? formatLocaleTime(startDate)
-                                        : "PENDING"}
-                                    </span>
-                                  </div>
-                                  <div className="space-y-1">
-                                    <span className="text-[8px] text-silver/20 uppercase font-black tracking-widest">
-                                      Release
-                                    </span>
-                                    <span className="text-[10px] font-mono text-silver-bright block">
-                                      {endDate
-                                        ? formatLocaleTime(endDate)
-                                        : "N/A"}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center justify-end gap-6">
+                              <div className="flex flex-wrap items-center gap-3">
                                 {(task.status === "completed" ||
                                   task.status === "failed" ||
                                   task.status === "cancelled") && (
