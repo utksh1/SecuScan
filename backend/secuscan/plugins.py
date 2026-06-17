@@ -12,11 +12,88 @@ import shutil
 import hashlib
 import hmac
 
-from .models import PluginMetadata
+from .models import PluginMetadata, PluginFieldType
 from .config import settings
+from .capabilities import validate_capability_list, ALL_CAPABILITIES
+from .validation import sanitize_input
+
+# Port specifications: one or more comma-separated port numbers or port ranges.
+# Valid: "22", "80,443", "1-1000", "22,80,1000-2000"
+# Invalid: "--", "1--2", ",,", "-80"
+_PORT_SPEC_PATTERN = re.compile(r"^\d+(-\d+)?(,\d+(-\d+)?)*$")
+
+# Internal control fields injected by the executor/routes layer that are not
+# declared in individual plugin schemas.  Strip these before schema validation
+# so plugins that don't declare them don't raise "Unknown field" errors.
+_INTERNAL_CONTROL_FIELDS: frozenset = frozenset({
+    "safe_mode",
+    "consent_granted",
+    "dry_run",
+    "debug_mode",
+})
 
 logger = logging.getLogger(__name__)
 
+_PLACEHOLDER_PLUGIN_IDS = frozenset({
+    "zap_scanner",
+    "sniper",
+})
+
+_NATIVE_PLUGIN_IDS = frozenset({
+    "network_scanner",
+    "api_scanner",
+    "xss_exploiter",
+    "web_scanner",
+    "recon_scanner",
+    "port_scanner",
+})
+
+_VALIDATION_PRESETS: Dict[str, Dict[str, Any]] = {
+    "url": {
+        "pattern": re.compile(r"^https?://[^\s/$.?#].[^\s]*$", re.IGNORECASE),
+        "message": "Must be a valid URL starting with http:// or https://",
+    },
+    "hostname": {
+        "pattern": re.compile(
+            r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$"
+        ),
+        "message": "Must be a valid hostname (e.g. example.com or sub.example.com)",
+    },
+    "domain": {
+        "pattern": re.compile(r"^(?!https?://)(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$"),
+        "message": "Must be a valid domain name without a scheme (e.g. example.com)",
+    },
+    "ipv4": {
+        "pattern": re.compile(
+            r"^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$"
+        ),
+        "message": "Must be a valid IPv4 address (e.g. 192.168.1.1)",
+    },
+    "port": {
+        "pattern": re.compile(
+            r"^(6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|[1-9]\d{0,3}|[1-9])$"
+        ),
+        "message": "Must be a valid port number between 1 and 65535",
+    },
+    "cidr": {
+        "pattern": re.compile(
+            r"^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)){3}/(3[0-2]|[12]\d|[0-9])$"
+        ),
+        "message": "Must be a valid CIDR block (e.g. 192.168.1.0/24)",
+    },
+}
+
+def _is_absolute_path(value: str) -> bool:
+    """Check if a path is absolute regardless of the server OS.
+
+    Handles Unix (/), Windows drive-letter (C:\\, C:/),
+    and UNC (\\\\server\\share) absolute path styles.
+    """
+    if value.startswith("/"):
+        return True
+    if value.startswith("\\"):
+        return True
+    return bool(re.match(r'^[a-zA-Z]:[/\\]', value))
 
 class PluginManager:
     """Manages plugin loading and validation"""
@@ -68,7 +145,8 @@ class PluginManager:
 
     async def _load_plugin_metadata(self, metadata_file: Path) -> PluginMetadata:
         """Load and parse plugin metadata JSON"""
-        with open(metadata_file, 'r') as f:
+        # Always read metadata as UTF-8 to avoid platform-dependent decoding issues
+        with open(metadata_file, 'r', encoding='utf-8') as f:
             data = json.load(f)
 
         return PluginMetadata(**data)
@@ -111,6 +189,14 @@ class PluginManager:
         if safety_level not in ["safe", "intrusive", "exploit"]:
             logger.error(f"Invalid safety level: {safety_level}")
             return False
+
+        # Validate declared capabilities against the known set
+        if plugin.capabilities is not None:
+            try:
+                validate_capability_list(plugin.capabilities, plugin.id)
+            except ValueError as exc:
+                logger.error("Invalid capabilities in plugin %s: %s", plugin.id, exc)
+                return False
 
         if not self._verify_plugin_integrity(plugin, plugin_dir):
             return False
@@ -173,6 +259,55 @@ class PluginManager:
 
         return hashlib.sha256(f"{metadata_digest}:{parser_digest}".encode("utf-8")).hexdigest()
 
+    def verify_parser_at_exec_time(
+        self, plugin: PluginMetadata, plugin_dir: Path
+    ) -> bool:
+        """Re-verify plugin digest immediately before executing parser.py.
+
+        This closes the TOCTOU window between startup integrity check and
+        actual code execution: the file could be replaced on disk after the
+        initial load-time validation.
+
+        Returns True when execution should proceed, False when it must be
+        blocked.
+        """
+        metadata_file = plugin_dir / "metadata.json"
+        parser_file = plugin_dir / "parser.py"
+
+        if not plugin.checksum:
+            if settings.enforce_plugin_signatures:
+                logger.error(
+                    "Refusing to execute parser for plugin %s: no checksum present "
+                    "and signature enforcement is enabled",
+                    plugin.id,
+                )
+                return False
+            logger.warning(
+                "Executing unverified parser for plugin %s: checksum not set",
+                plugin.id,
+            )
+            return True
+
+        try:
+            current_digest = self.compute_plugin_digest(metadata_file, parser_file)
+        except Exception as exc:
+            logger.error(
+                "Failed to compute digest for plugin %s at exec time: %s",
+                plugin.id,
+                exc,
+            )
+            return False
+
+        if not hmac.compare_digest(current_digest, plugin.checksum):
+            logger.error(
+                "SECURITY: Parser integrity check failed for plugin %s — "
+                "parser.py may have been tampered with after startup",
+                plugin.id,
+            )
+            return False
+
+        return True
+
     def get_plugin(self, plugin_id: str) -> Optional[PluginMetadata]:
         """Get plugin by ID"""
         return self.plugins.get(plugin_id)
@@ -193,6 +328,10 @@ class PluginManager:
                     "icon": plugin.icon,
                     "requires_consent": bool(plugin.safety.get("requires_consent", False)),
                     "consent_message": plugin.safety.get("consent_message"),
+                    "capabilities": plugin.capabilities or [],
+                    "implementation_status": self._resolve_implementation_status(plugin),
+                    "supports_authenticated_crawling": bool(getattr(plugin, "supports_authenticated_crawling", False)),
+                    "supports_session_reuse": bool(getattr(plugin, "supports_session_reuse", False)),
                     "availability": {
                         "runnable": len(missing_binaries) == 0,
                         "missing_binaries": missing_binaries,
@@ -237,10 +376,24 @@ class PluginManager:
                 "description": plugin.description,
                 "fields": [f.model_dump() for f in plugin.fields],
                 "presets": plugin.presets,
-                "safety": plugin.safety
+                "safety": plugin.safety,
+                "implementation_status": self._resolve_implementation_status(plugin),
+                "supports_authenticated_crawling": bool(getattr(plugin, "supports_authenticated_crawling", False)),
+                "supports_session_reuse": bool(getattr(plugin, "supports_session_reuse", False)),
             }
         else:
             return None
+
+    def _resolve_implementation_status(self, plugin: PluginMetadata) -> str:
+        """Resolve implementation maturity without requiring every plugin to be edited."""
+        explicit = getattr(plugin, "implementation_status", None)
+        if explicit:
+            return str(explicit)
+        if plugin.id in _PLACEHOLDER_PLUGIN_IDS:
+            return "placeholder"
+        if plugin.id in _NATIVE_PLUGIN_IDS:
+            return "native"
+        return "integrated"
 
     def _interpolate(self, token: str, inputs: Dict) -> Optional[str]:
         """Interpolate variables in a token string."""
@@ -259,7 +412,7 @@ class PluginManager:
                 return None
 
             placeholder = "{" + var_name + (f":{default_value}" if default_value else "") + "}"
-            rendered = rendered.replace(placeholder, str(value))
+            rendered = rendered.replace(placeholder, sanitize_input(str(value)))
 
         return rendered
 
@@ -272,13 +425,49 @@ class PluginManager:
                     normalized[field.id] = field.default
         return normalized
 
+    def _reject_path_traversal(self, value: str) -> None:
+        """Raise ValueError if value contains parent-directory traversal components."""
+        normalized = value.replace("\\", os.sep).replace("/", os.sep)
+        parts = normalized.split(os.sep)
+        if ".." in parts:
+            raise ValueError(
+                f"Wordlist path {value!r} contains parent-directory traversal ('..'), "
+                f"which is not allowed."
+            )
+
+    def _is_path_in_wordlists_dir(self, resolved: Path) -> bool:
+        """Check that a resolved path is within the configured wordlists directory."""
+        wordlists_dir = Path(settings.wordlists_dir).resolve()
+        try:
+            resolved.resolve().relative_to(wordlists_dir)
+            return True
+        except ValueError:
+            return False
+
     def _resolve_wordlist_path(self, value: str) -> str:
         """Resolve plugin wordlist aliases and Linux-centric defaults to local project assets."""
         candidate = Path(os.path.expanduser(value))
+
+        if _is_absolute_path(value):
+            raise ValueError(
+                f"Wordlist path must be relative, got absolute path: {value!r}"
+            )
+
+        self._reject_path_traversal(value)
+
         if candidate.exists():
+            resolved = candidate.resolve()
+            if not self._is_path_in_wordlists_dir(resolved):
+                raise ValueError(
+                    f"Wordlist path {value!r} resolves outside the allowed wordlists directory "
+                    f"({settings.wordlists_dir}). Only paths within the wordlists directory "
+                    f"are permitted by default."
+                )
             return str(candidate)
 
         wordlists_dir = Path(settings.wordlists_dir)
+        wordlists_resolved = wordlists_dir.resolve()
+
         alias_map = {
             "small": wordlists_dir / "small.txt",
             "medium": wordlists_dir / "medium.txt",
@@ -305,7 +494,17 @@ class PluginManager:
 
         for fallback in fallback_candidates:
             if fallback.exists():
+                resolved = fallback.resolve()
+                if wordlists_resolved not in resolved.parents and resolved != wordlists_resolved:
+                    continue
                 return str(fallback)
+
+        # Before returning the raw value, verify it doesn't escape
+        resolved_value = (wordlists_dir / value).resolve()
+        if wordlists_resolved not in resolved_value.parents and resolved_value != wordlists_resolved:
+            raise ValueError(
+                f"Wordlist path {value!r} escapes the wordlists directory"
+            )
 
         return value
 
@@ -316,6 +515,100 @@ class PluginManager:
         if isinstance(wordlist_value, str) and wordlist_value.strip():
             normalized["wordlist"] = self._resolve_wordlist_path(wordlist_value.strip())
         return normalized
+
+    def _reject_injected_args(self, field_id: str, value: str) -> None:
+        """Raise ValueError if value looks like a flag injection attempt.
+
+        Port fields are exempt from the leading-dash check but must match the
+        numeric port-specification grammar.  All other string fields must not
+        begin with a '-' character.
+        """
+        if field_id in ("ports", "port"):
+            if value and not _PORT_SPEC_PATTERN.match(value):
+                raise ValueError(
+                    f"Invalid port specification {value!r}: "
+                    "must be a number (80), range (1-1000), or comma-separated list (22,80,443)"
+                )
+            return
+        if value.lstrip().startswith("-"):
+            raise ValueError(
+                f"Field '{field_id}' value must not begin with '-': {value!r}"
+            )
+
+    def _validate_inputs_against_schema(
+        self, plugin: PluginMetadata, inputs: Dict[str, Any]
+    ) -> None:
+        """Validate caller-supplied inputs against the plugin's declared field schema.
+
+        Internal control fields (safe_mode, consent_granted, etc.) are stripped
+        before validation because they are injected by the executor layer and are
+        never declared in individual plugin schemas.
+
+        Raises ValueError with a descriptive message for the first violation found.
+        """
+        field_map = {f.id: f for f in plugin.fields}
+
+        for field_id, raw_value in inputs.items():
+            # Strip internal control fields — they are not part of the plugin schema
+            if field_id in _INTERNAL_CONTROL_FIELDS or field_id.startswith("__"):
+                continue
+
+            field = field_map.get(field_id)
+            if field is None:
+                raise ValueError(
+                    f"Unknown field {field_id!r} is not declared in plugin {plugin.id!r} schema"
+                )
+
+            # Skip None / empty values — defaults will be applied later by _with_field_defaults
+            if raw_value is None or raw_value == "":
+                continue
+
+            if field.type == PluginFieldType.INTEGER:
+                try:
+                    int(raw_value)
+                except (TypeError, ValueError):
+                    raise ValueError(
+                        f"Field '{field_id}' expects an integer; got {raw_value!r}"
+                    )
+                continue
+
+            if field.type == PluginFieldType.BOOLEAN:
+                if isinstance(raw_value, bool):
+                    continue
+                if isinstance(raw_value, str) and raw_value.lower() in ("true", "false", "1", "0"):
+                    continue
+                raise ValueError(
+                    f"Field '{field_id}' expects a boolean; got {raw_value!r}"
+                )
+
+            if field.type == PluginFieldType.SELECT:
+                allowed = [opt.get("value") for opt in (field.options or [])]
+                if raw_value not in allowed:
+                    raise ValueError(
+                        f"Field '{field_id}' value {raw_value!r} is not in allowed "
+                        f"values {allowed}"
+                    )
+                continue
+
+            if field.type in (PluginFieldType.STRING, PluginFieldType.TEXT):
+                value_str = str(raw_value)
+
+                # Pattern / validation_type validation from field metadata
+                validation = field.validation or {}
+                validation_type = validation.get("validation_type")
+                if validation_type and validation_type in _VALIDATION_PRESETS:
+                    preset = _VALIDATION_PRESETS[validation_type]
+                    if not preset["pattern"].match(value_str):
+                        msg = validation.get("message", preset["message"])
+                        raise ValueError(f"Field '{field_id}': {msg}")
+                else:
+                    pattern = validation.get("pattern")
+                    if pattern and not re.match(pattern, value_str):
+                        msg = validation.get("message", f"Value does not match pattern {pattern!r}")
+                        raise ValueError(f"Field '{field_id}': {msg}")
+
+                # Reject argv-level flag injection
+                self._reject_injected_args(field_id, value_str)
 
     def build_command(self, plugin_id: str, inputs: Dict) -> Optional[List[str]]:
         """
@@ -332,6 +625,14 @@ class PluginManager:
         if not plugin:
             return None
 
+        inputs = {
+            key: value
+            for key, value in inputs.items()
+            if key not in _INTERNAL_CONTROL_FIELDS and not str(key).startswith("__")
+        }
+
+        # Validate before normalisation so SELECT checks run against raw user values
+        self._validate_inputs_against_schema(plugin, inputs)
         inputs = self._normalize_inputs(plugin, inputs)
         command = []
 
@@ -370,10 +671,8 @@ class PluginManager:
 
         return command
 
-
 # Global plugin manager instance
 plugin_manager: Optional[PluginManager] = None
-
 
 async def init_plugins(plugins_dir: str) -> PluginManager:
     """Initialize plugin manager and load plugins"""
@@ -381,7 +680,6 @@ async def init_plugins(plugins_dir: str) -> PluginManager:
     plugin_manager = PluginManager(plugins_dir)
     await plugin_manager.load_plugins()
     return plugin_manager
-
 
 def get_plugin_manager() -> PluginManager:
     """Get plugin manager instance"""

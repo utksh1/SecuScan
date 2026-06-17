@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { routes } from '../routes'
+import ThemeToggle from './ThemeToggle'
 
 interface NavItemProps {
     to: string;
@@ -13,15 +14,15 @@ interface NavItemProps {
 
 const NavItem = ({ to, icon, label, isExpanded, highlight = false }: NavItemProps) => {
     return (
-        <NavLink 
-            to={to} 
+        <NavLink
+            to={to}
             end
             onClick={(e) => e.stopPropagation()}
             className={({ isActive }) => `
                 relative flex items-center transition-all duration-300 group
                 ${isExpanded ? 'gap-3 px-5 py-2.5 mx-2 rounded-lg' : 'justify-center py-3 px-2 mx-2 rounded-lg'}
-                ${isActive 
-                    ? 'bg-accent-silver/10 text-primary shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)]' 
+                ${isActive
+                    ? 'bg-accent-silver/10 text-primary shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)]'
                     : highlight
                         ? 'bg-rag-blue/15 border border-rag-blue/30 text-silver-bright hover:bg-rag-blue/25'
                         : 'text-secondary hover:text-primary hover:bg-accent-silver/5'}
@@ -32,24 +33,24 @@ const NavItem = ({ to, icon, label, isExpanded, highlight = false }: NavItemProp
                 <>
                     {/* Active Indicator Glow */}
                     {isActive && (
-                        <motion.div 
+                        <motion.div
                             layoutId="activeGlow"
                             className="absolute inset-0 bg-rag-red/5 rounded-lg border border-rag-red/20 shadow-[0_0_15px_rgba(255,59,59,0.1)]"
                             initial={false}
                             transition={{ type: "spring", stiffness: 300, damping: 30 }}
                         />
                     )}
-                    
+
                     {/* Active Side bar */}
                     {isActive && (
-                        <motion.div 
+                        <motion.div
                             layoutId="activeBar"
                             className="absolute left-0 top-1/4 bottom-1/4 w-1 bg-rag-red rounded-r-full shadow-[0_0_10px_rgba(255,59,59,0.5)]"
                             initial={false}
                             transition={{ type: "spring", stiffness: 300, damping: 30 }}
                         />
                     )}
-                    
+
                     <span className={`
                         material-symbols-outlined text-[20px] shrink-0 z-10
                         ${isActive ? 'text-rag-red font-medium fill-1' : highlight ? 'text-rag-blue font-medium' : 'font-light'}
@@ -57,10 +58,10 @@ const NavItem = ({ to, icon, label, isExpanded, highlight = false }: NavItemProp
                     `}>
                         {icon}
                     </span>
-                    
+
                     <AnimatePresence mode="wait">
                         {isExpanded && (
-                            <motion.span 
+                            <motion.span
                                 initial={{ opacity: 0, x: -10 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: -10 }}
@@ -82,7 +83,7 @@ const NavItem = ({ to, icon, label, isExpanded, highlight = false }: NavItemProp
 const NavSection = ({ label, isExpanded }: { label: string, isExpanded: boolean }) => (
     <AnimatePresence>
         {isExpanded ? (
-            <motion.div 
+            <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -107,22 +108,23 @@ export default function Sidebar() {
 
     useEffect(() => {
         localStorage.setItem('sidebar-expanded', JSON.stringify(isExpanded))
+        window.dispatchEvent(new CustomEvent('sidebar-state-changed', { detail: isExpanded }))
     }, [isExpanded])
 
     return (
-        <motion.aside 
+        <motion.aside
             initial={false}
             animate={{ width: isExpanded ? 220 : 64 }}
             onClick={() => setIsExpanded(!isExpanded)}
             className={`
-                hidden lg:flex flex-col h-screen fixed left-0 top-0 bg-secondary border-r border-accent-silver/10 z-50 
+                hidden lg:flex flex-col h-screen fixed left-0 top-0 bg-secondary border-r border-accent-silver/10 z-50
                 shadow-[4px_0_24px_rgba(0,0,0,0.4)] overflow-hidden cursor-pointer
             `}
         >
             {/* Header / Logo */}
             <div className={`flex flex-col pt-8 pb-4 mb-4`}>
                 <div className={`flex items-center gap-4 px-6`}>
-                    <motion.div 
+                    <motion.div
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         onClick={(e) => {
@@ -137,10 +139,10 @@ export default function Sidebar() {
                     >
                         <span className="material-symbols-outlined text-rag-red text-[24px] glow-red fill-1">shield</span>
                     </motion.div>
-                    
+
                     <AnimatePresence>
                         {isExpanded && (
-                            <motion.div 
+                            <motion.div
                                 initial={{ opacity: 0, x: -20 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: -20 }}
@@ -171,19 +173,22 @@ export default function Sidebar() {
             </div>
 
             {/* Bottom Actions */}
-            <div className="p-4 mt-auto border-t border-accent-silver/5 bg-bg-primary/30 backdrop-blur-md">
+            <div className="p-4 mt-auto border-t border-accent-silver/5 bg-bg-primary/30 backdrop-blur-md space-y-3">
                 <NavItem to={routes.settings} icon="settings" label="Settings" isExpanded={isExpanded} />
-                <button 
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        setIsExpanded(!isExpanded);
-                    }}
-                    className="w-full mt-4 py-2 flex items-center justify-center text-muted hover:text-primary transition-colors"
-                >
-                    <span className="material-symbols-outlined text-[18px]">
-                        {isExpanded ? 'keyboard_double_arrow_left' : 'keyboard_double_arrow_right'}
-                    </span>
-                </button>
+                <div className="flex items-center gap-2">
+                    <ThemeToggle size="sm" />
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setIsExpanded(!isExpanded);
+                        }}
+                        className="flex-1 py-2 flex items-center justify-center text-muted hover:text-primary transition-colors"
+                    >
+                        <span className="material-symbols-outlined text-[18px]">
+                            {isExpanded ? 'keyboard_double_arrow_left' : 'keyboard_double_arrow_right'}
+                        </span>
+                    </button>
+                </div>
             </div>
         </motion.aside>
     )

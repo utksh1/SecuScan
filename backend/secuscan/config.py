@@ -33,9 +33,13 @@ class Settings(BaseSettings):
     reports_dir: str = str(PROJECT_ROOT / "data" / "reports")
     plugins_dir: str = str(PROJECT_ROOT.parent / "plugins")
     wordlists_dir: str = str(PROJECT_ROOT / "wordlists")
+    knowledgebase_dir: str = str(PROJECT_ROOT / "data" / "knowledgebase")
 
     # Security
     safe_mode_default: bool = True
+    dns_resolution_timeout_seconds: float = 1.5
+    dns_cache_ttl_seconds: int = 60
+    dns_rebind_check: bool = True
     require_consent: bool = True
     allow_loopback_scans: bool = True
     allowed_networks: List[str] = ["127.0.0.1", "192.168.*.*", "10.*.*.*", "172.16.*.*"]
@@ -55,6 +59,27 @@ class Settings(BaseSettings):
     plugin_signature_key: Optional[str] = None
     enforce_plugin_signatures: bool = False
     vault_key: Optional[str] = None
+    denied_capabilities: List[str] = []
+    admin_api_key: Optional[str] = None
+
+    # Network Policy Configuration
+    network_allowlist: List[str] = []  # IPs/networks to allow (CIDR); empty = deny all egress
+    network_denylist: List[str] = [    # IPs/networks to deny (CIDR)
+        "169.254.169.254/32",          # AWS metadata
+        "169.254.0.0/16",              # Reserved/metadata
+        "127.0.0.0/8",                 # Loopback (for remote execution)
+        "10.0.0.0/8",                  # Private RFC 1918
+        "172.16.0.0/12",               # Private RFC 1918
+        "192.168.0.0/16",              # Private RFC 1918
+        "100.64.0.0/10",               # Carrier-grade NAT (RFC 6598)
+        "fc00::/7",                    # IPv6 Unique Local Address
+        "fe80::/10",                   # IPv6 Link-local
+        "::1/128",                     # IPv6 Loopback
+    ]
+    network_audit_log_file: str = str(PROJECT_ROOT / "logs" / "network.audit.log")
+    network_audit_retention_days: int = 90
+    enforce_network_policy: bool = True
+    network_policy_failure_mode: str = "block"  # "block" or "log_only"
 
     # Rate Limiting
     max_concurrent_tasks: int = 3
@@ -74,6 +99,12 @@ class Settings(BaseSettings):
     rate_limit_read_heavy_limit: int = 100
     rate_limit_read_heavy_window: int = 60
 
+    # Scheduler tick: one trigger per 10 seconds allows legitimate external
+    # callers while preventing a tight loop from forcing continuous workflow
+    # execution and exhausting scan quotas.
+    rate_limit_scheduler_tick_limit: int = 1
+    rate_limit_scheduler_tick_window: int = 10
+
     trusted_proxies: List[str] = ["127.0.0.1", "::1"]
 
     # Sandbox
@@ -81,21 +112,76 @@ class Settings(BaseSettings):
     sandbox_timeout: int = 600  # seconds
     sandbox_cpu_quota: float = 0.5
     sandbox_memory_mb: int = 512
+    sandbox_max_output_bytes: int = 5_242_880  # 5 MB
+    sandbox_allow_network: bool = True
+    docker_network: str = "restricted"  # Docker network name for sandboxed containers
 
     # Task-start payload limits (tunable via env vars)
     task_start_max_body_bytes: int = 64_000       # 64 KB total JSON body
     task_start_max_field_length: int = 1_000      # max chars per string input value
     task_start_max_array_length: int = 50         # max items in any list/multiselect input
 
+    # Parser sandbox limits
+    parser_sandbox_timeout_seconds: int = 30
+    parser_sandbox_max_output_bytes: int = 8 * 1024 * 1024  # 8 MB
+
+    # Workflow Configuration
+    workflow_min_interval_seconds: int = 60
+
+    # Notification SSRF Protection
+    notification_ssrf_enabled: bool = True
+    notification_allowed_ip_ranges: List[str] = []
+    notification_blocked_ip_ranges: List[str] = [
+        "169.254.169.254/32",
+        "169.254.0.0/16",
+        "127.0.0.0/8",
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "100.64.0.0/10",
+        "fc00::/7",
+        "fe80::/10",
+        "::1/128",
+        "224.0.0.0/4",
+        "ff00::/8",
+        "0.0.0.0/8",
+    ]
+    notification_max_redirects: int = 0
+    notification_allowed_ports: List[int] = [80, 443, 8080, 8443]
+
     # Logging
     log_level: str = "INFO"
     log_file: str = str(PROJECT_ROOT / "logs" / "secuscan.log")
+
+    # AI Executive Summary (opt-in — feature off by default)
+    ai_summary_enabled: bool = False
+    ai_summary_api_key: str = ""
+    ai_summary_base_url: str = ""
+    ai_summary_model: str = "gpt-4o-mini"
+
+    # SMTP Configuration for Email Notifications
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_from_email: str = "noreply@secuscan.io"
+    smtp_use_tls: bool = True
 
     class Config:
         env_prefix = "SECUSCAN_"
         case_sensitive = False
 
-    @field_validator("cors_allowed_origins", "cors_allowed_methods", "cors_allowed_headers", "trusted_proxies", mode="before")
+    @field_validator(
+        "cors_allowed_origins",
+        "cors_allowed_methods",
+        "cors_allowed_headers",
+        "trusted_proxies",
+        "network_allowlist",
+        "network_denylist",
+        "notification_allowed_ip_ranges",
+        "notification_blocked_ip_ranges",
+        mode="before",
+    )
     @classmethod
     def parse_csv_or_list(cls, value: Any) -> Any:
         """Allow comma-separated env values in addition to JSON arrays."""
@@ -133,6 +219,7 @@ class Settings(BaseSettings):
             self.raw_output_dir,
             self.reports_dir,
             self.wordlists_dir,
+            self.knowledgebase_dir,
             Path(self.log_file).parent,
         ]:
             Path(directory).mkdir(parents=True, exist_ok=True)
@@ -140,7 +227,6 @@ class Settings(BaseSettings):
         # Create gitkeep files
         (Path(self.raw_output_dir) / ".gitkeep").touch()
         (Path(self.reports_dir) / ".gitkeep").touch()
-
 
 # Global settings instance
 settings = Settings()

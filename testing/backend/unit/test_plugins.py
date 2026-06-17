@@ -1,6 +1,8 @@
 import asyncio
 from pathlib import Path
 
+import pytest
+
 from backend.secuscan.config import settings
 from backend.secuscan.plugins import PluginManager
 
@@ -41,6 +43,35 @@ def test_plugin_manager_build_command(setup_test_environment):
     assert "-L" in command
     assert "10" in command
     assert "http://127.0.0.1" in command
+
+
+def test_plugin_interpolation_sanitizes_user_controlled_values():
+    manager = PluginManager("plugins")
+
+    assert manager._interpolate("{templates}", {"templates": "--debug;$(whoami)"}) == "debugwhoami"
+    assert (
+        manager._interpolate("--user-agent={user_agent}", {"user_agent": "--verbose|curl"})
+        == "--user-agent=verbosecurl"
+    )
+
+
+def test_plugin_interpolation_preserves_legitimate_argv_values():
+    manager = PluginManager("plugins")
+
+    assert (
+        manager._interpolate(
+            "--url={target}",
+            {"target": "https://api-v1.example.com:8443/health-check"},
+        )
+        == "--url=https://api-v1.example.com:8443/health-check"
+    )
+    assert (
+        manager._interpolate(
+            "--user-agent={user_agent}",
+            {"user_agent": "SecuScan-CLI/1.0 api-health-check"},
+        )
+        == "--user-agent=SecuScan-CLI/1.0 api-health-check"
+    )
 
 
 def test_plugin_list_exposes_runtime_capabilities(setup_test_environment, monkeypatch):
@@ -99,6 +130,151 @@ def test_nikto_plugin_supports_expanded_cli_parameters(setup_test_environment):
     assert "-nocache" in command
 
 
+# ---------------------------------------------------------------------------
+# _resolve_wordlist_path unit tests — isolated path safety & resolution
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_wordlist_path_rejects_absolute_unix_path(setup_test_environment, monkeypatch, tmp_path):
+    wordlists_dir = tmp_path / "wordlists"
+    wordlists_dir.mkdir()
+    monkeypatch.setattr("backend.secuscan.config.settings.wordlists_dir", str(wordlists_dir))
+    manager = PluginManager(settings.plugins_dir)
+
+    with pytest.raises(ValueError, match="absolute"):
+        manager._resolve_wordlist_path("/etc/passwd")
+
+
+def test_resolve_wordlist_path_rejects_absolute_windows_path(setup_test_environment, monkeypatch, tmp_path):
+    wordlists_dir = tmp_path / "wordlists"
+    wordlists_dir.mkdir()
+    monkeypatch.setattr("backend.secuscan.config.settings.wordlists_dir", str(wordlists_dir))
+    manager = PluginManager(settings.plugins_dir)
+
+    with pytest.raises(ValueError, match="absolute"):
+        manager._resolve_wordlist_path("C:\\Windows\\system32")
+
+
+def test_resolve_wordlist_path_rejects_traversal(setup_test_environment, monkeypatch, tmp_path):
+    wordlists_dir = tmp_path / "wordlists"
+    wordlists_dir.mkdir()
+    monkeypatch.setattr("backend.secuscan.config.settings.wordlists_dir", str(wordlists_dir))
+    manager = PluginManager(settings.plugins_dir)
+
+    with pytest.raises(ValueError, match="traversal"):
+        manager._resolve_wordlist_path("../../../etc/passwd")
+
+    with pytest.raises(ValueError, match="traversal"):
+        manager._resolve_wordlist_path("..\\..\\..\\etc\\passwd")
+
+
+def test_resolve_wordlist_path_blocks_escaped_existing_path(setup_test_environment, monkeypatch, tmp_path):
+    wordlists_dir = tmp_path / "wordlists"
+    wordlists_dir.mkdir()
+    monkeypatch.setattr("backend.secuscan.config.settings.wordlists_dir", str(wordlists_dir))
+    manager = PluginManager(settings.plugins_dir)
+
+    with pytest.raises(ValueError, match="traversal"):
+        manager._resolve_wordlist_path("..\\outside.txt")
+
+
+def test_resolve_wordlist_path_alias_small_works(setup_test_environment, monkeypatch, tmp_path):
+    wordlists_dir = tmp_path / "wordlists"
+    wordlists_dir.mkdir()
+    monkeypatch.setattr("backend.secuscan.config.settings.wordlists_dir", str(wordlists_dir))
+    small = wordlists_dir / "small.txt"
+    small.write_text("a\nb\nc")
+
+    manager = PluginManager(settings.plugins_dir)
+    result = manager._resolve_wordlist_path("small")
+    assert result == str(small)
+
+
+def test_resolve_wordlist_path_alias_medium_works(setup_test_environment, monkeypatch, tmp_path):
+    wordlists_dir = tmp_path / "wordlists"
+    wordlists_dir.mkdir()
+    monkeypatch.setattr("backend.secuscan.config.settings.wordlists_dir", str(wordlists_dir))
+    medium = wordlists_dir / "medium.txt"
+    medium.write_text("a\nb\nc")
+
+    manager = PluginManager(settings.plugins_dir)
+    result = manager._resolve_wordlist_path("medium")
+    assert result == str(medium)
+
+
+def test_resolve_wordlist_path_alias_large_works(setup_test_environment, monkeypatch, tmp_path):
+    wordlists_dir = tmp_path / "wordlists"
+    wordlists_dir.mkdir()
+    monkeypatch.setattr("backend.secuscan.config.settings.wordlists_dir", str(wordlists_dir))
+    large = wordlists_dir / "large.txt"
+    large.write_text("a\nb\nc")
+
+    manager = PluginManager(settings.plugins_dir)
+    result = manager._resolve_wordlist_path("large")
+    assert result == str(large)
+
+
+def test_resolve_wordlist_path_fallback_dirb_common(setup_test_environment, monkeypatch, tmp_path):
+    wordlists_dir = tmp_path / "wordlists"
+    wordlists_dir.mkdir()
+    monkeypatch.setattr("backend.secuscan.config.settings.wordlists_dir", str(wordlists_dir))
+    common = wordlists_dir / "common.txt"
+    common.write_text("common")
+
+    manager = PluginManager(settings.plugins_dir)
+    result = manager._resolve_wordlist_path("dirb/common.txt")
+    assert result == str(common)
+
+
+def test_resolve_wordlist_path_fallback_seclists_common(setup_test_environment, monkeypatch, tmp_path):
+    wordlists_dir = tmp_path / "wordlists"
+    wordlists_dir.mkdir()
+    monkeypatch.setattr("backend.secuscan.config.settings.wordlists_dir", str(wordlists_dir))
+    common = wordlists_dir / "common.txt"
+    common.write_text("common")
+
+    manager = PluginManager(settings.plugins_dir)
+    result = manager._resolve_wordlist_path("discovery/web-content/common.txt")
+    assert result == str(common)
+
+
+def test_resolve_wordlist_path_fallback_seclists_dns(setup_test_environment, monkeypatch, tmp_path):
+    wordlists_dir = tmp_path / "wordlists"
+    wordlists_dir.mkdir()
+    monkeypatch.setattr("backend.secuscan.config.settings.wordlists_dir", str(wordlists_dir))
+    subdomains = wordlists_dir / "subdomains-top1million-110000.txt"
+    subdomains.write_text("www\napi")
+
+    manager = PluginManager(settings.plugins_dir)
+    result = manager._resolve_wordlist_path("discovery/dns/subdomains-top1million-110000.txt")
+    assert result == str(subdomains)
+
+
+def test_resolve_wordlist_path_returns_value_unchanged_when_not_found(setup_test_environment, monkeypatch, tmp_path):
+    wordlists_dir = tmp_path / "wordlists"
+    wordlists_dir.mkdir()
+    monkeypatch.setattr("backend.secuscan.config.settings.wordlists_dir", str(wordlists_dir))
+    manager = PluginManager(settings.plugins_dir)
+
+    result = manager._resolve_wordlist_path("custom_wordlist.txt")
+    assert result == "custom_wordlist.txt"
+
+
+def test_resolve_wordlist_path_blocks_escaped_nonexistent_path(setup_test_environment, monkeypatch, tmp_path):
+    wordlists_dir = tmp_path / "wordlists"
+    wordlists_dir.mkdir()
+    monkeypatch.setattr("backend.secuscan.config.settings.wordlists_dir", str(wordlists_dir))
+    manager = PluginManager(settings.plugins_dir)
+
+    with pytest.raises(ValueError, match="traversal"):
+        manager._resolve_wordlist_path("../plugins/malicious_script")
+
+
+# ---------------------------------------------------------------------------
+# Existing wordlist integration-style tests (use real files on disk)
+# ---------------------------------------------------------------------------
+
+
 def test_plugin_manager_resolves_repo_local_wordlist_aliases(setup_test_environment):
     manager = PluginManager(settings.plugins_dir)
     asyncio.run(manager.load_plugins())
@@ -106,26 +282,88 @@ def test_plugin_manager_resolves_repo_local_wordlist_aliases(setup_test_environm
     medium_wordlist = Path(settings.wordlists_dir) / "medium.txt"
     medium_wordlist.write_text("admin\nlogin\n", encoding="utf-8")
 
+    # dir_discovery now defaults to the bundled "small" list, so request the
+    # installed "medium" alias explicitly to exercise repo-local resolution.
     command = manager.build_command(
         "dir_discovery",
-        {"base_url": "https://example.com"},
+        {"base_url": "https://example.com", "wordlist": "medium"},
     )
 
     assert command is not None
-    assert str(medium_wordlist) in command
+    assert (str(medium_wordlist) in command) or (medium_wordlist.as_posix() in command)
 
 
-def test_plugin_manager_resolves_linux_wordlist_defaults_to_repo_assets(setup_test_environment):
+def test_plugin_manager_rejects_linux_wordlist_absolute_default(setup_test_environment):
+    """Linux absolute paths in plugin defaults are now rejected for safety."""
     manager = PluginManager(settings.plugins_dir)
     asyncio.run(manager.load_plugins())
 
-    fallback_wordlist = Path(settings.wordlists_dir) / "subdomains-top1million-110000.txt"
-    fallback_wordlist.write_text("www\napi\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="absolute"):
+        manager.build_command(
+            "virtual-host-finder",
+            {"target": "example.com"},
+        )
 
-    command = manager.build_command(
-        "virtual-host-finder",
-        {"target": "example.com"},
-    )
+def test_plugin_validation_presets(setup_test_environment):
+    """Test validation_type presets on field inputs."""
+    manager = PluginManager(settings.plugins_dir)
+    asyncio.run(manager.load_plugins())
 
-    assert command is not None
-    assert str(fallback_wordlist) in command
+    plugin = manager.get_plugin("http_inspector")
+    assert plugin is not None
+
+    # Let's mock a field's validation properties
+    target_field = plugin.fields[0]
+    orig_validation = target_field.validation
+
+    try:
+        # Test 1: URL validation_type preset
+        target_field.validation = {"validation_type": "url", "message": "Must be valid URL"}
+        # Valid URL
+        manager._validate_inputs_against_schema(plugin, {target_field.id: "https://example.com/api"})
+        # Invalid URL
+        with pytest.raises(ValueError, match="Must be valid URL"):
+            manager._validate_inputs_against_schema(plugin, {target_field.id: "invalid-url"})
+
+        # Test 2: Hostname preset
+        target_field.validation = {"validation_type": "hostname"}
+        # Valid hostname
+        manager._validate_inputs_against_schema(plugin, {target_field.id: "sub.example.com"})
+        # Invalid hostname
+        with pytest.raises(ValueError, match="Must be a valid hostname"):
+            manager._validate_inputs_against_schema(plugin, {target_field.id: "https://example.com"})
+
+        # Test 3: Domain preset
+        target_field.validation = {"validation_type": "domain"}
+        # Valid domain
+        manager._validate_inputs_against_schema(plugin, {target_field.id: "example.com"})
+        # Invalid domain
+        with pytest.raises(ValueError, match="Must be a valid domain name"):
+            manager._validate_inputs_against_schema(plugin, {target_field.id: "https://example.com"})
+
+        # Test 4: IPv4 preset
+        target_field.validation = {"validation_type": "ipv4"}
+        # Valid IP
+        manager._validate_inputs_against_schema(plugin, {target_field.id: "192.168.1.1"})
+        # Invalid IP
+        with pytest.raises(ValueError, match="Must be a valid IPv4 address"):
+            manager._validate_inputs_against_schema(plugin, {target_field.id: "999.999.999.999"})
+
+        # Test 5: Port preset
+        target_field.validation = {"validation_type": "port"}
+        # Valid port
+        manager._validate_inputs_against_schema(plugin, {target_field.id: "8080"})
+        # Invalid port
+        with pytest.raises(ValueError, match="Must be a valid port number"):
+            manager._validate_inputs_against_schema(plugin, {target_field.id: "70000"})
+
+        # Test 6: CIDR preset
+        target_field.validation = {"validation_type": "cidr"}
+        # Valid CIDR
+        manager._validate_inputs_against_schema(plugin, {target_field.id: "192.168.1.0/24"})
+        # Invalid CIDR
+        with pytest.raises(ValueError, match="Must be a valid CIDR block"):
+            manager._validate_inputs_against_schema(plugin, {target_field.id: "192.168.1.1"})
+
+    finally:
+        target_field.validation = orig_validation

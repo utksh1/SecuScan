@@ -151,3 +151,25 @@ Existing plugins using a raw `pattern` continue to work without changes:
 ## Backwards compatibility
 
 Plugins that already define `validation.pattern` (without `validation_type`) continue to work exactly as before. No migration is required.
+
+---
+
+## Updating plugin checksums
+
+When changing plugin metadata or parser behavior, refresh the stored checksum so metadata validation stays in sync.
+
+Typical changes that require a checksum refresh include:
+
+- Updating a plugin `metadata.json` file
+- Changing parser expectations or capabilities
+- Modifying plugin fields or defaults
+
+After making changes, run:
+
+```bash
+python scripts/refresh_plugin_checksum.py --plugin <plugin_name>
+```
+
+Then verify that the `checksum` field inside the plugin metadata has been updated and commit the resulting change together with the documentation update.
+
+This keeps parser and metadata expectations aligned and prevents checksum validation failures in CI.
