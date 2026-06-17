@@ -559,7 +559,7 @@ class Database:
         print(f"Backfilled risk scores for {len(rows)} existing finding(s).")
 
     async def execute(self, query: str, params: tuple = ()):
-        """Execute a write query."""
+        """Execute a write query and return the cursor (so callers can inspect rowcount)."""
         cursor = await self.connection.execute(query, params)
         await self.connection.commit()
         return cursor
