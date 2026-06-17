@@ -115,7 +115,7 @@ jobs:
       - name: Run integration tests
         run: pytest testing/backend/integration -q -m "not benchmark"
 
-parser-contracts:
+  parser-contracts:
     needs: [detect-changes, backend-lint, formatting-hygiene]
     if: |
       always() &&
@@ -123,6 +123,13 @@ parser-contracts:
       (needs.backend-lint.result == 'success' || needs.backend-lint.result == 'skipped') &&
       (needs.formatting-hygiene.result == 'success' || needs.formatting-hygiene.result == 'skipped')
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        capability_group:
+          - network
+          - intrusive
+          - credentials
+          - exploit
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -230,7 +237,6 @@ parser-contracts:
         if: steps.run_benchmarks.outcome == 'failure'
         run: |
           echo "::warning::Performance benchmark thresholds exceeded or benchmarks failed to run. Check the job logs for details."
-
   frontend-checks:
     needs: [detect-changes, formatting-hygiene]
     if: |
