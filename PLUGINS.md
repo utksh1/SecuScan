@@ -103,6 +103,14 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | Binary Signature Scan | `yara_scan` | `forensics` | `intrusive` | `yara` | Binary and file-system signature matching with YARA rules. |
 | DAST Web Proxy (ZAP) | `zap_scanner` | `vulnerability` | `exploit` | `python3` | Dynamic proxy spidering and payload injection. |
 
+### Hashcat Output Artifacts
+
+- Session files for resumable runs
+- Potfile entries containing recovered hashes
+- Recovered credential output returned by the parser
+
+Review and remove these artifacts after authorized assessments.
+
 ### SQL Injection Plugin Guidance
 
 - `sqli_checker` should be used to validate whether a target appears vulnerable to SQL injection and to assess feasibility before exploitation.
