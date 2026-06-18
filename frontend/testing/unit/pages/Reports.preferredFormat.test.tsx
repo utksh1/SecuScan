@@ -97,4 +97,29 @@ describe('Reports — preferred export format', () => {
         const htmlBtn = await screen.findByRole('button', { name: /^html$/i })
         expect(htmlBtn.className).toContain('bg-rag-amber')
     })
+
+    it('header download button uses the preferred format instead of defaulting to pdf', async () => {
+        localStorage.setItem('secuscan:preferred-export-format', 'sarif')
+        renderReports()
+
+        const headerBtn = await screen.findByRole('button', { name: /download latest ready report sarif/i })
+        await userEvent.click(headerBtn)
+
+        expect(window.open).toHaveBeenCalledWith(
+            expect.stringContaining('/report/sarif'),
+            '_blank',
+        )
+    })
+
+    it('header download button defaults to pdf when no preference is saved', async () => {
+        renderReports()
+
+        const headerBtn = await screen.findByRole('button', { name: /download latest ready report pdf/i })
+        await userEvent.click(headerBtn)
+
+        expect(window.open).toHaveBeenCalledWith(
+            expect.stringContaining('/report/pdf'),
+            '_blank',
+        )
+    })
 })
