@@ -182,6 +182,9 @@ export interface ScanDiff {
 export interface FindingsResponse {
   findings?: FindingRecord[]
   finding_groups?: FindingGroup[]
+  total?: number
+  page?: number
+  per_page?: number
 }
 
 export interface TaskResultResponse {
@@ -364,12 +367,12 @@ export function getDashboardSummary() {
 }
 
 
-export function getFindings() {
-  return request<FindingsResponse>('/findings')
+export function getFindings(page: number = 1, perPage: number = 50) {
+  return request<FindingsResponse>(`/findings?page=${page}&per_page=${perPage}`)
 }
 
-export function getFindingGroups() {
-  return request<{ groups: FindingGroup[]; total: number }>('/finding-groups')
+export function getFindingGroups(page: number = 1, perPage: number = 50) {
+  return request<{ groups: FindingGroup[]; total: number; page: number; per_page: number }>(`/finding-groups?page=${page}&per_page=${perPage}`)
 }
 
 

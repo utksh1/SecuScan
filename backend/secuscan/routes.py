@@ -976,25 +976,51 @@ async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
 
 
 @router.get("/findings", dependencies=[Depends(read_heavy_limiter)])
-async def get_findings(owner: str = Depends(get_current_owner)):
-    """Return the caller's vulnerability findings."""
+async def get_findings(
+    owner: str = Depends(get_current_owner),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
+):
+    """Return the caller's vulnerability findings with pagination."""
 
     async def build():
         db = await get_db()
+        offset = (page - 1) * per_page
         rows = await db.fetchall(
+            "SELECT * FROM findings WHERE owner_id = ? ORDER BY discovered_at DESC LIMIT ? OFFSET ?",
+            (owner, per_page, offset),
+        )
+        total_row = await db.fetchone(
+            "SELECT COUNT(*) as count FROM findings WHERE owner_id = ?",
+            (owner,),
+        )
+        total = total_row["count"] if total_row else 0
+        findings = deserialize_finding_rows(rows)
+        # Build finding_groups from *all* findings so group counts remain accurate
+        # regardless of which page is being viewed.
+        all_rows = await db.fetchall(
             "SELECT * FROM findings WHERE owner_id = ? ORDER BY discovered_at DESC",
             (owner,),
         )
-        findings = deserialize_finding_rows(rows)
-        return {"findings": findings, "finding_groups": build_finding_groups(findings)}
+        all_findings = deserialize_finding_rows(all_rows)
+        return {
+            "findings": findings,
+            "finding_groups": build_finding_groups(all_findings),
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+        }
 
-    # Cache key is namespaced by owner so one user's list is never served to
-    # another (issue #401).
-    return await get_or_set_cached(f"findings:list:{owner}", build)
+    # Cache key includes pagination params so different pages do not collide.
+    return await get_or_set_cached(f"findings:list:{owner}:page={page}:per_page={per_page}", build)
 
 
 @router.get("/finding-groups", dependencies=[Depends(read_heavy_limiter)])
-async def get_finding_groups(owner: str = Depends(get_current_owner)):
+async def get_finding_groups(
+    owner: str = Depends(get_current_owner),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
+):
     async def build():
         db = await get_db()
         rows = await db.fetchall(
@@ -1002,9 +1028,16 @@ async def get_finding_groups(owner: str = Depends(get_current_owner)):
             (owner,),
         )
         findings = deserialize_finding_rows(rows)
-        return {"groups": build_finding_groups(findings), "total": len(findings)}
+        # Groups are always computed from *all* findings so the returned
+        # groups represent the full picture, not a subset.
+        return {
+            "groups": build_finding_groups(findings),
+            "total": len(findings),
+            "page": page,
+            "per_page": per_page,
+        }
 
-    return await get_or_set_cached(f"findings:groups:{owner}", build)
+    return await get_or_set_cached(f"findings:groups:{owner}:page={page}:per_page={per_page}", build)
 
 
 @router.get("/task/{task_id}/diff", dependencies=[Depends(read_heavy_limiter)])

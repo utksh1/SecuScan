@@ -142,6 +142,10 @@ const ROW_HEIGHTS: Record<VirtualRow['kind'], number> = {
 export default function Findings() {
   const [findings, setFindings] = useState<Finding[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [page, setPage] = useState(1)
+  const [totalItems, setTotalItems] = useState(0)
+  const perPage = 50
   const [searchQuery, setSearchQuery] = useState('')
   const [filterSeverity, setFilterSeverity] = useState('all')
   const [filterTarget, setFilterTarget] = useState('all')
@@ -183,10 +187,12 @@ export default function Findings() {
 
   useEffect(() => {
     setLoading(true)
-    getFindings()
+    getFindings(1, perPage)
       .then((data: any) => {
         const nextFindings = data.findings || []
         setFindings(nextFindings)
+        setTotalItems(data.total ?? nextFindings.length)
+        setPage(1)
         setSelectedFindingId((current) => current ?? nextFindings[0]?.id ?? null)
       })
       .finally(() => setLoading(false))
@@ -466,6 +472,22 @@ export default function Findings() {
       window.setTimeout(() => setCopiedFindingId((current) => (current === finding.id ? null : current)), 1600)
     } catch {
       setCopiedFindingId(null)
+    }
+  }
+
+  async function loadMore() {
+    if (loadingMore) return
+    setLoadingMore(true)
+    const nextPage = page + 1
+    try {
+      const data = await getFindings(nextPage, perPage)
+      const moreFindings = data.findings || []
+      if (moreFindings.length > 0) {
+        setFindings((prev) => [...prev, ...moreFindings])
+        setPage(nextPage)
+      }
+    } finally {
+      setLoadingMore(false)
     }
   }
 
@@ -915,6 +937,18 @@ export default function Findings() {
                     )
                   })}
                 </div>
+              </div>
+            )}
+            {!loading && findings.length < totalItems && (
+              <div className="flex justify-center py-6">
+                <button
+                  type="button"
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="bg-silver-bright px-6 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-50"
+                >
+                  {loadingMore ? 'Loading...' : `Load More (${findings.length}/${totalItems})`}
+                </button>
               </div>
             )}
           </motion.section>
