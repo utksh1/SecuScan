@@ -1181,17 +1181,27 @@ async def delete_task_records(task_ids: List[str]):
         for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
             chunk = task_ids[i : i + SQLITE_CHUNK_SIZE]
             placeholders = ",".join(["?"] * len(chunk))
+            # Delete notification_history first (depends on findings via finding_id)
             await db.execute_no_commit(
-                f"DELETE FROM findings   WHERE task_id IN ({placeholders})", tuple(chunk)
+                f"DELETE FROM notification_history WHERE finding_id IN (SELECT id FROM findings WHERE task_id IN ({placeholders}))", tuple(chunk)
             )
             await db.execute_no_commit(
-                f"DELETE FROM reports    WHERE task_id IN ({placeholders})", tuple(chunk)
+                f"DELETE FROM findings             WHERE task_id IN ({placeholders})", tuple(chunk)
             )
             await db.execute_no_commit(
-                f"DELETE FROM audit_log  WHERE task_id IN ({placeholders})", tuple(chunk)
+                f"DELETE FROM reports              WHERE task_id IN ({placeholders})", tuple(chunk)
             )
             await db.execute_no_commit(
-                f"DELETE FROM tasks      WHERE id       IN ({placeholders})", tuple(chunk)
+                f"DELETE FROM audit_log            WHERE task_id IN ({placeholders})", tuple(chunk)
+            )
+            await db.execute_no_commit(
+                f"DELETE FROM crawl_runs           WHERE task_id IN ({placeholders})", tuple(chunk)
+            )
+            await db.execute_no_commit(
+                f"DELETE FROM asset_services       WHERE task_id IN ({placeholders})", tuple(chunk)
+            )
+            await db.execute_no_commit(
+                f"DELETE FROM tasks                WHERE id         IN ({placeholders})", tuple(chunk)
             )
         await db.commit()
     except HTTPException:
