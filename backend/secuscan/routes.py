@@ -1893,7 +1893,6 @@ async def update_workflow(
     row = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
     if not row:
         raise HTTPException(status_code=404, detail="Workflow not found")
-    
     old_enabled = bool(row["enabled"])
     new_enabled = old_enabled
     enabled_changed = False
@@ -1927,7 +1926,6 @@ async def update_workflow(
     updated = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
     if updated is None:
         return {"workflow_id": workflow_id, "updated": True}
-    
     await db.snapshot_workflow_version(
         workflow_id=workflow_id,
         name=updated["name"],
