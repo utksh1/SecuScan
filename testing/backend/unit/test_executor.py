@@ -688,3 +688,76 @@ async def test_docker_network_missing_and_create_fails(setup_test_environment):
     assert "does not exist and could not be created" in (row["error_message"] or "")
     mock_limiter.release.assert_called_once_with(task_id)
     await db.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_execute_task_aborts_when_task_no_longer_queued(setup_test_environment):
+    """
+    When the optimistic UPDATE ... WHERE status='queued' returns rowcount 0
+    (because the task was deleted or its status changed before execution started),
+    execute_task() must abort without proceeding further.
+    """
+    await init_db(settings.database_path)
+    db = await get_db()
+
+    task_id = str(uuid.uuid4())
+    await db.execute(
+        """
+        INSERT INTO tasks (id, plugin_id, tool_name, target, inputs_json,
+                           status, consent_granted, safe_mode)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (task_id, "nmap", "nmap", "127.0.0.1", '{"target":"127.0.0.1"}',
+         TaskStatus.RUNNING.value, 1, 1)
+    )
+
+    executor = TaskExecutor()
+
+    with patch("backend.secuscan.executor.get_plugin_manager") as mock_pm, \
+         patch("backend.secuscan.executor.concurrent_limiter") as mock_limiter:
+        mock_limiter.release = AsyncMock()
+        mock_pm.return_value.get_plugin.return_value = MagicMock(name="nmap", presets={})
+
+        await executor.execute_task(task_id)
+
+    # Verify the task was NOT updated — it stays in its original (RUNNING) state
+    row = await db.fetchone("SELECT status FROM tasks WHERE id = ?", (task_id,))
+    assert row["status"] == TaskStatus.RUNNING.value
+    mock_pm.return_value.build_command.assert_not_called()
+    await db.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_execute_task_aborts_when_task_deleted_before_running(setup_test_environment):
+    """
+    When the task row is deleted before execute_task runs the optimistic
+    UPDATE, the rowcount will be 0 and the method must abort gracefully.
+    """
+    await init_db(settings.database_path)
+    db = await get_db()
+
+    task_id = str(uuid.uuid4())
+    await db.execute(
+        """
+        INSERT INTO tasks (id, plugin_id, tool_name, target, inputs_json,
+                           status, consent_granted, safe_mode)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (task_id, "nmap", "nmap", "127.0.0.1", '{"target":"127.0.0.1"}',
+         TaskStatus.QUEUED.value, 1, 1)
+    )
+
+    executor = TaskExecutor()
+
+    with patch("backend.secuscan.executor.get_plugin_manager") as mock_pm, \
+         patch("backend.secuscan.executor.concurrent_limiter") as mock_limiter:
+        mock_limiter.release = AsyncMock()
+        mock_pm.return_value.get_plugin.return_value = MagicMock(name="nmap", presets={})
+
+        # Delete the task before execute_task can update it
+        await db.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+
+        await executor.execute_task(task_id)
+
+    assert task_id not in executor.running_tasks
+    await db.disconnect()

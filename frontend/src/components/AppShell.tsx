@@ -41,6 +41,15 @@ export default function AppShell({ children }: AppShellProps) {
         setMobileMenuOpen(false)
     }, [pathname])
 
+    useEffect(() => {
+        if (!mobileMenuOpen) return
+        const previousOverflow = document.body.style.overflow
+        document.body.style.overflow = 'hidden'
+        return () => {
+            document.body.style.overflow = previousOverflow
+        }
+    }, [mobileMenuOpen])
+
     const desktopSidebarWidth = sidebarExpanded ? 220 : 64
     const mobilePrimaryNav = [
         { to: routes.dashboard, icon: 'monitoring', label: 'Dashboard' },
@@ -66,7 +75,7 @@ export default function AppShell({ children }: AppShellProps) {
             <Background state="idle" />
             <div className="flex bg-charcoal-dark min-h-screen">
                 <Sidebar />
-                <div className="lg:hidden fixed inset-x-0 top-0 z-40 bg-secondary border-b border-accent-silver/10 h-14 px-4 flex items-center justify-between">
+                <div className="lg:hidden fixed inset-x-0 top-0 z-[60] bg-[var(--bg-secondary)] border-b border-accent-silver/10 h-14 px-4 flex items-center justify-between">
                     <button
                         onClick={() => setMobileMenuOpen((prev) => !prev)}
                         className="w-9 h-9 border border-accent-silver/20 flex items-center justify-center text-silver-bright bg-charcoal-dark"
@@ -81,11 +90,14 @@ export default function AppShell({ children }: AppShellProps) {
                 </div>
 
                 {mobileMenuOpen && (
-                    <div className="lg:hidden fixed inset-0 z-40 bg-black/60" onClick={() => setMobileMenuOpen(false)}>
-                        <div
-                            className="absolute top-14 left-0 right-0 bg-secondary border-b border-accent-silver/10 p-4"
-                            onClick={(e) => e.stopPropagation()}
-                        >
+                    <>
+                        <button
+                            type="button"
+                            className="lg:hidden fixed inset-0 z-50 bg-charcoal-dark/80 backdrop-blur-sm"
+                            onClick={() => setMobileMenuOpen(false)}
+                            aria-label="Close navigation menu"
+                        />
+                        <div className="lg:hidden fixed top-14 left-0 right-0 z-50 bg-[var(--bg-secondary)] border-b border-accent-silver/10 p-4 shadow-[0_12px_32px_rgba(0,0,0,0.6)]">
                             <nav className="grid grid-cols-2 gap-2">
                                 {mobileDrawerNav.map((item) => (
                                     <NavLink
@@ -104,7 +116,7 @@ export default function AppShell({ children }: AppShellProps) {
                                 ))}
                             </nav>
                         </div>
-                    </div>
+                    </>
                 )}
 
                 <main 
@@ -114,7 +126,7 @@ export default function AppShell({ children }: AppShellProps) {
                     {children}
                 </main>
 
-                <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 h-16 bg-secondary border-t border-accent-silver/10 grid grid-cols-5">
+                <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 h-16 bg-[var(--bg-secondary)] border-t border-accent-silver/10 grid grid-cols-5">
                     {mobilePrimaryNav.map((item) => (
                         <NavLink
                             key={item.to}
