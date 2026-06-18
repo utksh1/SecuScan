@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd0e",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
     "binary": "dnsx"
@@ -27,7 +27,8 @@
       "label": "Domain",
       "type": "string",
       "required": true,
-      "placeholder": "secuscan.in"
+      "placeholder": "secuscan.in",
+      "help": "The target domain against which DNS resolution and verification will be performed (e.g., example.com)."
     }
   ],
   "presets": {
@@ -52,5 +53,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "8f1a5ecf2f4e2192010470c00853682ab7f70714325cdc8d59c8000a1598f44a"
+  "checksum": "d7a7914e25e63212882702cc8ff218819dd609e38025e24514dd36cf6670cb68"
 }

@@ -26,6 +26,7 @@ from backend.secuscan.plugin_validator import (
     VALID_SAFETY_LEVELS,
     VALID_FIELD_TYPES,
     VALID_PARSER_TYPES,
+    VALID_CATEGORIES,
 )
 
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "plugins"
@@ -48,7 +49,7 @@ def _error_messages(result: ValidationResult) -> list[str]:
 
 def _write_metadata(tmp_path: Path, data: dict) -> Path:
     plugin_dir = tmp_path / "my_plugin"
-    plugin_dir.mkdir()
+    plugin_dir.mkdir(exist_ok=True)
     (plugin_dir / "metadata.json").write_text(json.dumps(data), encoding="utf-8")
     return plugin_dir
 
@@ -65,8 +66,8 @@ def _minimal_valid() -> dict:
         "engine": {"type": "cli", "binary": "ping"},
         "command_template": ["ping", "-c", "{count}", "{target}"],
         "fields": [
-            {"id": "target", "label": "Target Host", "type": "text"},
-            {"id": "count", "label": "Count", "type": "number"},
+            {"id": "target", "label": "Target Host", "type": "text", "help": "IP address or hostname"},
+            {"id": "count", "label": "Count", "type": "number", "help": "Number of packets"},
         ],
         "output": {"parser": "text"},
         "safety": {"level": "safe", "requires_consent": False},
@@ -134,6 +135,11 @@ class TestFixtures:
         result = validate_one_plugin(INVALID_FIXTURE)
         placeholder_errors = [e for e in result.errors if "Placeholder" in e.message]
         assert placeholder_errors, "Expected placeholder-mismatch error"
+
+    def test_invalid_fixture_catches_missing_help_text(self):
+        result = validate_one_plugin(INVALID_FIXTURE)
+        help_warnings = [e for e in result.warnings if e.path.endswith(".help")]
+        assert len(help_warnings) >= 2, "Expected help text warnings for both fields"
 
 
 # ===========================================================================
@@ -537,3 +543,60 @@ class TestEdgeCases:
         err = next(e for e in result.errors if e.path == "safety.level")
         display = err.display()
         assert "[" in display and "safety.level" in display and "→" in display
+
+
+# ===========================================================================
+# Metadata quality lint checks
+# ===========================================================================
+
+
+class TestMetadataQualityLint:
+    def test_missing_field_help_text_reported_as_warning(self, tmp_path):
+        data = _minimal_valid()
+        data["fields"] = [
+            {"id": "target", "label": "Target", "type": "text"},
+        ]
+        data["command_template"] = ["ping", "{target}"]
+        plugin_dir = _write_metadata(tmp_path, data)
+        result = validate_one_plugin(plugin_dir)
+        help_warnings = [e for e in result.warnings if e.path == "fields[0].help"]
+        assert len(help_warnings) == 1
+        assert "help" in help_warnings[0].message
+
+    def test_field_help_text_present_no_warning(self, tmp_path):
+        data = _minimal_valid()
+        data["fields"] = [
+            {"id": "target", "label": "Target", "type": "text", "help": "The target IP or hostname"},
+        ]
+        plugin_dir = _write_metadata(tmp_path, data)
+        result = validate_one_plugin(plugin_dir)
+        help_warnings = [e for e in result.warnings if e.path.startswith("fields[0].help")]
+        assert help_warnings == []
+
+    def test_invalid_category_reported(self, tmp_path):
+        data = _minimal_valid()
+        data["category"] = "unknown_category"
+        plugin_dir = _write_metadata(tmp_path, data)
+        result = validate_one_plugin(plugin_dir)
+        assert "category" in _error_paths(result)
+        cat_errors = [e for e in result.errors if e.path == "category"]
+        assert len(cat_errors) == 1
+        assert "not a recognized category" in cat_errors[0].message
+
+    def test_valid_categories_accepted(self, tmp_path):
+        for cat in sorted(VALID_CATEGORIES):
+            data = _minimal_valid()
+            data["category"] = cat
+            plugin_dir = _write_metadata(tmp_path, data)
+            result = validate_one_plugin(plugin_dir)
+            cat_errors = [e for e in result.errors if e.path == "category"]
+            assert cat_errors == [], f"Category '{cat}' should be valid"
+
+    def test_missing_category_is_not_flagged(self, tmp_path):
+        data = _minimal_valid()
+        del data["category"]
+        plugin_dir = _write_metadata(tmp_path, data)
+        result = validate_one_plugin(plugin_dir)
+        cat_errors = [e for e in result.errors if e.path == "category"]
+        assert len(cat_errors) == 1
+        assert "Required" in cat_errors[0].message

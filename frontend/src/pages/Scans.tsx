@@ -22,6 +22,7 @@ interface Task {
   started_at?: string;
   completed_at?: string;
   duration_seconds?: number;
+  error_message?: string;
   inputs?: any;
   preset?: string;
   execution_context?: ExecutionContext;
@@ -493,6 +494,50 @@ export default function Scans() {
                         </div>
                       </div>
 
+                      {/* Error Notification Panel */}
+                      {task.status === "failed" && task.error_message && (() => {
+                        const isTimeoutFailure =
+                          task.error_message?.toLowerCase().includes("timeout") ||
+                          task.error_message?.toLowerCase().includes("timed out");
+                        return (
+                          <div
+                            className={`mt-6 border-4 border-black p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] ${
+                              isTimeoutFailure
+                                ? "bg-rag-amber/10 border-l-rag-amber"
+                                : "bg-rag-red/10 border-l-rag-red"
+                            }`}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex items-start gap-4">
+                              <span
+                                className={`material-symbols-outlined text-lg shrink-0 mt-0.5 ${
+                                  isTimeoutFailure ? "text-rag-amber" : "text-rag-red"
+                                }`}
+                              >
+                                {isTimeoutFailure ? "timer_off" : "error"}
+                              </span>
+                              <div className="space-y-2 min-w-0">
+                                <p
+                                  className={`text-[10px] font-black uppercase tracking-[0.3em] ${
+                                    isTimeoutFailure ? "text-rag-amber" : "text-rag-red"
+                                  }`}
+                                >
+                                  {isTimeoutFailure ? "SCAN_TIMEOUT_DETECTED" : "SCAN_FAILED"}
+                                </p>
+                                {isTimeoutFailure && (
+                                  <p className="text-[10px] font-mono text-silver/60 uppercase tracking-widest">
+                                    This scan exceeded its execution limit and was terminated automatically.
+                                  </p>
+                                )}
+                                <p className="text-[10px] font-mono text-silver/50 break-words">
+                                  {task.error_message}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
                       {/* Expandable Details Block */}
                       <AnimatePresence>
                         {expandedId === task.task_id && (
@@ -502,63 +547,65 @@ export default function Scans() {
                             exit={{ height: 0, opacity: 0 }}
                             className="overflow-hidden"
                           >
-                            <div className="mt-12 pt-12 border-t-4 border-black grid grid-cols-1 md:grid-cols-3 gap-12 bg-charcoal-dark/20 -mx-8 -mb-8 p-8 border-dashed">
-                              <div className="space-y-4">
-                                <h5 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.3em] italic flex items-center gap-3">
-                                  <span className="w-1.5 h-3 bg-rag-blue"></span>{" "}
-                                  Signal_Metadata
-                                </h5>
-                                <div className="space-y-2">
-                                  <p className="text-[10px] font-mono text-silver/40">
-                                    PLUGIN:{" "}
-                                    <span className="text-silver-bright uppercase">
-                                      {task.plugin_id}
-                                    </span>
-                                  </p>
-                                  {task.status === 'running' && task.scan_phase && (
-                                    <p className="text-[10px] font-mono text-rag-blue/80 uppercase tracking-widest">
-                                      PHASE: {task.scan_phase.replace(/_/g, ' ')}
+                            <div className="mt-12 pt-12 border-t-4 border-black flex flex-wrap items-center justify-between gap-4 w-full bg-charcoal-dark/20 -mx-8 -mb-8 p-8 border-dashed">
+                              <div className="flex flex-wrap items-start gap-4">
+                                <div className="space-y-4">
+                                  <h5 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.3em] italic flex items-center gap-3">
+                                    <span className="w-1.5 h-3 bg-rag-blue"></span>{" "}
+                                    Signal_Metadata
+                                  </h5>
+                                  <div className="space-y-2">
+                                    <p className="text-[10px] font-mono text-silver/40">
+                                      PLUGIN:{" "}
+                                      <span className="text-silver-bright uppercase">
+                                        {task.plugin_id}
+                                      </span>
                                     </p>
-                                  )}
-                                  <p className="text-[10px] font-mono text-silver/40">
-                                    SESSION:{" "}
-                                    <span className="text-silver-bright uppercase">
-                                      ENCRYPTED_VTX
-                                    </span>
-                                  </p>
+                                    {task.status === 'running' && task.scan_phase && (
+                                      <p className="text-[10px] font-mono text-rag-blue/80 uppercase tracking-widest">
+                                        PHASE: {task.scan_phase.replace(/_/g, ' ')}
+                                      </p>
+                                    )}
+                                    <p className="text-[10px] font-mono text-silver/40">
+                                      SESSION:{" "}
+                                      <span className="text-silver-bright uppercase">
+                                        ENCRYPTED_VTX
+                                      </span>
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-4">
+                                  <h5 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.3em] italic flex items-center gap-3">
+                                    <span className="w-1.5 h-3 bg-rag-amber"></span>{" "}
+                                    Time_Matrix
+                                  </h5>
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                      <span className="text-[8px] text-silver/20 uppercase font-black tracking-widest">
+                                        In_Lock
+                                      </span>
+                                      <span className="text-[10px] font-mono text-silver-bright block">
+                                        {startDate
+                                          ? formatLocaleTime(startDate)
+                                          : "PENDING"}
+                                      </span>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <span className="text-[8px] text-silver/20 uppercase font-black tracking-widest">
+                                        Release
+                                      </span>
+                                      <span className="text-[10px] font-mono text-silver-bright block">
+                                        {endDate
+                                          ? formatLocaleTime(endDate)
+                                          : "N/A"}
+                                      </span>
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
 
-                              <div className="space-y-4">
-                                <h5 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.3em] italic flex items-center gap-3">
-                                  <span className="w-1.5 h-3 bg-rag-amber"></span>{" "}
-                                  Time_Matrix
-                                </h5>
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div className="space-y-1">
-                                    <span className="text-[8px] text-silver/20 uppercase font-black tracking-widest">
-                                      In_Lock
-                                    </span>
-                                    <span className="text-[10px] font-mono text-silver-bright block">
-                                      {startDate
-                                        ? formatLocaleTime(startDate)
-                                        : "PENDING"}
-                                    </span>
-                                  </div>
-                                  <div className="space-y-1">
-                                    <span className="text-[8px] text-silver/20 uppercase font-black tracking-widest">
-                                      Release
-                                    </span>
-                                    <span className="text-[10px] font-mono text-silver-bright block">
-                                      {endDate
-                                        ? formatLocaleTime(endDate)
-                                        : "N/A"}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center justify-end gap-6">
+                              <div className="flex flex-wrap items-center gap-3">
                                 {(task.status === "completed" ||
                                   task.status === "failed" ||
                                   task.status === "cancelled") && (
