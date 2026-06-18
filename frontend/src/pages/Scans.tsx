@@ -65,7 +65,13 @@ export default function Scans() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const PAGE_LIMIT = 10;
+  
+  // Page size with localStorage persistence
+  const getSavedPageSize = () => {
+    const saved = localStorage.getItem('pagination_pageSize_scans');
+    return saved ? parseInt(saved, 10) : 10;
+  };
+  const [pageLimit, setPageLimit] = useState(getSavedPageSize);
 
   // Modal state for confirm dialogs
   const [modalState, setModalState] = useState<{
@@ -124,7 +130,7 @@ export default function Scans() {
       }
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [filter, page]);
+  }, [filter, page, pageLimit]);
 
   async function loadTasks() {
     const requestSeq = requestSeqRef.current + 1;
@@ -137,7 +143,7 @@ export default function Scans() {
       const params = new URLSearchParams();
       if (filter !== "all") params.set("status", filter);
       params.set("page", String(page));
-      params.set("per_page", String(PAGE_LIMIT));
+      params.set("per_page", String(pageLimit));
 
       const res = await fetch(`${API_BASE}/tasks?${params.toString()}`, {
         signal: controller.signal,
@@ -675,14 +681,18 @@ export default function Scans() {
             </div>
           )}
         </AnimatePresence>
-        {total > PAGE_LIMIT && (
+        {total > pageLimit && (
           <Pagination
             page={page}
             total={total}
-            limit={PAGE_LIMIT}
+            limit={pageLimit}
             loading={loading}
             onPrev={() => setPage((p) => p - 1)}
             onNext={() => setPage((p) => p + 1)}
+            onPageSizeChange={(newSize) => {
+              setPageLimit(newSize);
+              setPage(1);
+            }}
           />
         )}
       </section>
