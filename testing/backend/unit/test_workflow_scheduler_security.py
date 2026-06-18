@@ -203,6 +203,7 @@ class TestTickRateLimiting:
         db_mock.fetchall.return_value = [{
             "id": "wf-1",
             "name": "test",
+            "owner_id": "default",
             "schedule_seconds": 60,
             "last_run_at": None,
             "steps_json": "[]",
@@ -222,6 +223,7 @@ class TestTickRateLimiting:
         db_mock.fetchall.return_value = [{
             "id": "wf-1",
             "name": "test",
+            "owner_id": "default",
             "schedule_seconds": 60,
             "last_run_at": None,
             "steps_json": "[]",

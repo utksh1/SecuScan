@@ -274,12 +274,14 @@ class Database:
 
             CREATE TABLE IF NOT EXISTS workflows (
                 id TEXT PRIMARY KEY,
-                name TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                owner_id TEXT NOT NULL DEFAULT 'default',
                 schedule_seconds INTEGER,
                 enabled BOOLEAN NOT NULL DEFAULT 1,
                 steps_json TEXT NOT NULL DEFAULT '[]',
                 created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-                last_run_at TIMESTAMP
+                last_run_at TIMESTAMP,
+                UNIQUE(owner_id, name)
             );
 
             CREATE TABLE IF NOT EXISTS workflow_versions (
@@ -314,6 +316,7 @@ class Database:
             CREATE TABLE IF NOT EXISTS notification_rules (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
+                owner_id TEXT NOT NULL DEFAULT 'default',
                 severity_threshold TEXT NOT NULL,
                 channel_type TEXT NOT NULL,
                 target_url_or_email TEXT NOT NULL,
@@ -493,12 +496,82 @@ class Database:
             except Exception as e:
                 print(f"Failed to add 'owner_id' to reports: {e}")
 
+        # Workflows table migration: ensure owner_id and composite unique exist
+        workflows_columns = await self.fetchall("PRAGMA table_info(workflows)")
+        existing_wf_cols = {col["name"] for col in workflows_columns}
+        if "owner_id" not in existing_wf_cols:
+            try:
+                await self.execute(
+                    "ALTER TABLE workflows ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'default'"
+                )
+                print("Added missing column 'owner_id' to workflows table.")
+            except Exception as e:
+                print(f"Failed to add 'owner_id' to workflows: {e}")
+
+        # On legacy databases the old CREATE TABLE had UNIQUE on name alone,
+        # which blocks same-named workflows across owners.  SQLite cannot
+        # ALTER TABLE … DROP CONSTRAINT, so we must recreate the table.
+        wf_schema = await self.fetchone(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='workflows'"
+        )
+        if wf_schema and "owner_id" in existing_wf_cols:
+            ddl = wf_schema["sql"]
+            # Check for the old inline UNIQUE constraint on name
+            has_old_unique = "name TEXT NOT NULL UNIQUE" in ddl
+            has_composite = "UNIQUE(owner_id, name)" in ddl
+            if has_old_unique or not has_composite:
+                old_fk = await self.fetchone("PRAGMA foreign_keys")
+                if old_fk:
+                    await self.execute("PRAGMA foreign_keys = OFF")
+                try:
+                    await self.connection.executescript("""
+                        CREATE TABLE workflows_new (
+                            id TEXT PRIMARY KEY,
+                            name TEXT NOT NULL,
+                            owner_id TEXT NOT NULL DEFAULT 'default',
+                            schedule_seconds INTEGER,
+                            enabled BOOLEAN NOT NULL DEFAULT 1,
+                            steps_json TEXT NOT NULL DEFAULT '[]',
+                            created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                            last_run_at TIMESTAMP,
+                            UNIQUE(owner_id, name)
+                        );
+                        INSERT INTO workflows_new
+                            (id, name, owner_id, schedule_seconds, enabled,
+                             steps_json, created_at, last_run_at)
+                        SELECT
+                            id, name, COALESCE(owner_id, 'default'),
+                            schedule_seconds, enabled, steps_json, created_at, last_run_at
+                        FROM workflows;
+                        DROP TABLE workflows;
+                        ALTER TABLE workflows_new RENAME TO workflows;
+                    """)
+                    await self.connection.commit()
+                    print("Replaced workflows UNIQUE(name) constraint with UNIQUE(owner_id, name).")
+                finally:
+                    if old_fk:
+                        await self.execute("PRAGMA foreign_keys = ON")
+
+        # Notification rules table migration: ensure owner_id exists
+        notif_columns = await self.fetchall("PRAGMA table_info(notification_rules)")
+        existing_notif_cols = {col["name"] for col in notif_columns}
+        if "owner_id" not in existing_notif_cols:
+            try:
+                await self.execute(
+                    "ALTER TABLE notification_rules ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'default'"
+                )
+                print("Added missing column 'owner_id' to notification_rules table.")
+            except Exception as e:
+                print(f"Failed to add 'owner_id' to notification_rules: {e}")
+
         # Owner indexes must run after ALTER TABLE backfills owner_id on legacy DBs.
         await self.connection.executescript(
             """
             CREATE INDEX IF NOT EXISTS idx_tasks_owner ON tasks(owner_id);
             CREATE INDEX IF NOT EXISTS idx_findings_owner ON findings(owner_id);
             CREATE INDEX IF NOT EXISTS idx_reports_owner ON reports(owner_id);
+            CREATE INDEX IF NOT EXISTS idx_workflows_owner ON workflows(owner_id);
+            CREATE INDEX IF NOT EXISTS idx_notification_rules_owner ON notification_rules(owner_id);
             """
         )
 
@@ -559,13 +632,15 @@ class Database:
         print(f"Backfilled risk scores for {len(rows)} existing finding(s).")
 
     async def execute(self, query: str, params: tuple = ()):
-        """Execute a write query."""
-        await self.connection.execute(query, params)
+        """Execute a write query and return the cursor (so callers can inspect rowcount)."""
+        cursor = await self.connection.execute(query, params)
         await self.connection.commit()
+        return cursor
 
     async def execute_no_commit(self, query: str, params: tuple = ()):
         """Execute a write query without committing (for use inside transactions)."""
-        await self.connection.execute(query, params)
+        cursor = await self.connection.execute(query, params)
+        return cursor
 
     async def begin(self):
         """Begin a transaction."""
