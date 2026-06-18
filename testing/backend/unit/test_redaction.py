@@ -355,3 +355,132 @@ class TestRedactInputs:
         inputs = {"secret_key": "aws_secret_abc123456789012345678901234567890"}
         result = redact_inputs(inputs)
         assert result["secret_key"] == REDACTED
+
+
+# redact_inputs edge cases (type dispatch, recursion, immutability)
+
+
+class TestRedactInputsEdgeCases:
+    """Edge cases for redact_inputs(): non-string leaf types, recursive walk,
+    and the no-mutation guarantee.
+    """
+
+    def test_none_value_under_non_sensitive_key_passes_through(self):
+        inputs = {"target": None}
+        result = redact_inputs(inputs)
+        assert result["target"] is None
+
+    def test_boolean_value_under_non_sensitive_key_passes_through(self):
+        inputs = {"enabled": True, "disabled": False}
+        result = redact_inputs(inputs)
+        assert result["enabled"] is True
+        assert result["disabled"] is False
+
+    def test_integer_value_under_non_sensitive_key_passes_through(self):
+        inputs = {"count": 42, "max_results": 0, "negative": -7}
+        result = redact_inputs(inputs)
+        assert result["count"] == 42
+        assert result["max_results"] == 0
+        assert result["negative"] == -7
+
+    def test_float_value_under_non_sensitive_key_passes_through(self):
+        inputs = {"score": 9.5, "ratio": 0.0}
+        result = redact_inputs(inputs)
+        assert result["score"] == 9.5
+        assert result["ratio"] == 0.0
+
+    def test_non_string_under_sensitive_key_is_redacted(self):
+        # Sensitive keys are matched by name, not by value type.
+        inputs = {"api_key": 12345, "token": True, "password": 9999}
+        result = redact_inputs(inputs)
+        assert result["api_key"] == REDACTED
+        assert result["token"] == REDACTED
+        assert result["password"] == REDACTED
+
+    def test_recursive_walk_into_nested_dict(self):
+        # Nested dicts are walked by _redact_value -> redact_dict, which uses
+        # pattern-based redaction (not the key-based redaction that fires at
+        # the top level). A nested secret-shaped string is still caught by
+        # the pattern redaction, but a nested sensitive key name is not.
+        inputs = {
+            "outer": {
+                "any_key": "api_key=leaked123456789",
+                "target": "example.com",
+            }
+        }
+        result = redact_inputs(inputs)
+        assert "leaked123456789" not in result["outer"]["any_key"]
+        assert REDACTED in result["outer"]["any_key"]
+        assert result["outer"]["target"] == "example.com"
+
+    def test_recursive_walk_into_list(self):
+        inputs = {
+            "items": [
+                "api_key=secret1234567abcd",
+                "Open port 80 detected",
+            ]
+        }
+        result = redact_inputs(inputs)
+        assert "secret1234567abcd" not in result["items"][0]
+        assert REDACTED in result["items"][0]
+        assert result["items"][1] == "Open port 80 detected"
+
+    def test_sensitive_key_inside_nested_list_of_dicts(self):
+        # Key-based redaction only fires at the top level; nested string values
+        # are pattern-redacted, so a top-level-only key name in a nested dict
+        # will not trigger key-based redaction.
+        inputs = {
+            "items": [
+                {"note": "api_key=leaked123456789"},
+                {"note": "benign content"},
+            ]
+        }
+        result = redact_inputs(inputs)
+        assert "leaked123456789" not in result["items"][0]["note"]
+        assert REDACTED in result["items"][0]["note"]
+        assert result["items"][1]["note"] == "benign content"
+
+    def test_non_dict_input_is_returned_unchanged(self):
+        # redact_inputs tolerates non-dict inputs by returning them as-is.
+        assert redact_inputs(None) is None  # type: ignore[arg-type]
+        assert redact_inputs("a string") == "a string"  # type: ignore[arg-type]
+        assert redact_inputs(42) == 42  # type: ignore[arg-type]
+        assert redact_inputs([1, 2, 3]) == [1, 2, 3]  # type: ignore[arg-type]
+
+    def test_does_not_mutate_input_dict(self):
+        original = {
+            "api_key": "secret_value_1234567",
+            "nested": {"password": "inner_secret_1234567"},
+            "items": [{"token": "list_token_1234567"}],
+        }
+        snapshot_top = dict(original)
+        snapshot_nested = dict(original["nested"])
+        snapshot_items = list(original["items"])
+        redact_inputs(original)
+        assert original == snapshot_top
+        assert original["nested"] == snapshot_nested
+        assert original["items"] == snapshot_items
+
+    def test_empty_string_value_under_sensitive_key_is_redacted(self):
+        inputs = {"api_key": "", "token": ""}
+        result = redact_inputs(inputs)
+        assert result["api_key"] == REDACTED
+        assert result["token"] == REDACTED
+
+    def test_mixed_type_inputs_preserves_types(self):
+        inputs = {
+            "target": "example.com",
+            "port": 443,
+            "enabled": True,
+            "tags": ["web", "api"],
+            "meta": {"version": 1.0, "name": "x"},
+            "api_key": "secret_1234567",
+        }
+        result = redact_inputs(inputs)
+        assert result["target"] == "example.com"
+        assert result["port"] == 443
+        assert result["enabled"] is True
+        assert result["tags"] == ["web", "api"]
+        assert result["meta"]["version"] == 1.0
+        assert result["meta"]["name"] == "x"
+        assert result["api_key"] == REDACTED
