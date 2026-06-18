@@ -13,6 +13,7 @@ import uuid
 import asyncio
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
+from .auth import get_current_owner
 
 def parse_json_fields(rows: List[Dict], fields: List[str]) -> List[Dict]:
     """Helper to parse stringified JSON fields from SQLite."""
@@ -1883,12 +1884,22 @@ async def rollback_workflow(workflow_id: str, version_number: int, owner: str = 
 
 
 @router.patch("/workflows/{workflow_id}")
-async def update_workflow(workflow_id: str, payload: Dict[str, Any], owner: str = Depends(get_current_owner)):
+async def update_workflow(
+    workflow_id: str,
+    payload: Dict[str, Any],
+    owner: str = Depends(get_current_owner),
+):
     db = await get_db()
-    row = await _verify_workflow_owner(db, workflow_id, owner)
-
+    row = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
+    if not row:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    
+    old_enabled = bool(row["enabled"])
+    new_enabled = old_enabled
+    enabled_changed = False
     updates = []
     params: List[Any] = []
+
     if "name" in payload:
         updates.append("name = ?")
         params.append(str(payload["name"]).strip())
@@ -1900,17 +1911,23 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any], owner: str 
         updates.append("schedule_seconds = ?")
         params.append(int(val) if val else None)
     if "enabled" in payload:
-        updates.append("enabled = ?")
-        params.append(1 if payload["enabled"] else 0)
+        new_enabled = bool(payload["enabled"])
 
+        if new_enabled != old_enabled:
+            enabled_changed = True
+
+        updates.append("enabled = ?")
+        params.append(1 if new_enabled else 0)
     if not updates:
         raise HTTPException(status_code=400, detail="No update fields provided")
 
     params.append(workflow_id)
     await db.execute(f"UPDATE workflows SET {', '.join(updates)} WHERE id = ?", tuple(params))
+
     updated = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
     if updated is None:
         return {"workflow_id": workflow_id, "updated": True}
+    
     await db.snapshot_workflow_version(
         workflow_id=workflow_id,
         name=updated["name"],
@@ -1919,6 +1936,25 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any], owner: str 
         steps=json.loads(updated["steps_json"] or "[]"),
         created_by="patch",
     )
+    if enabled_changed:
+            await db.log_audit(
+                event_type=(
+                    "workflow_enabled"
+                    if new_enabled
+                    else "workflow_disabled"
+                ),
+                message=(
+                    f"Workflow {workflow_id} "
+                    f"{'enabled' if new_enabled else 'disabled'}"
+                ),
+                context={
+                    "workflow_id": workflow_id,
+                    "actor": owner,
+                    "previous_state": old_enabled,
+                    "new_state": new_enabled,
+                },
+            )
+
     return _serialize_workflow(updated)
 
 
