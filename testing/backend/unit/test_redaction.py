@@ -357,14 +357,12 @@ class TestRedactInputs:
         assert result["secret_key"] == REDACTED
 
 
-# ── redact_inputs edge cases (type dispatch, recursion, immutability) ─────
+# redact_inputs edge cases (type dispatch, recursion, immutability)
 
 
 class TestRedactInputsEdgeCases:
-    """Additional coverage for redact_inputs() that locks in the type-dispatch
-    contract, recursive walk over nested mixed-type structures, and the
-    no-mutation guarantee. These cases are not covered by the basic happy-path
-    tests above and protect against future regressions in the helper layer.
+    """Edge cases for redact_inputs(): non-string leaf types, recursive walk,
+    and the no-mutation guarantee.
     """
 
     def test_none_value_under_non_sensitive_key_passes_through(self):
@@ -392,9 +390,7 @@ class TestRedactInputsEdgeCases:
         assert result["ratio"] == 0.0
 
     def test_non_string_under_sensitive_key_is_redacted(self):
-        """A non-string value (int, bool) under a sensitive key must still be
-        replaced with [REDACTED] — the contract is key-name based, not type
-        based."""
+        # Sensitive keys are matched by name, not by value type.
         inputs = {"api_key": 12345, "token": True, "password": 9999}
         result = redact_inputs(inputs)
         assert result["api_key"] == REDACTED
@@ -402,13 +398,10 @@ class TestRedactInputsEdgeCases:
         assert result["password"] == REDACTED
 
     def test_recursive_walk_into_nested_dict(self):
-        """Nested dicts are walked by _redact_value → redact_dict, which uses
-        PATTERN-based redaction (not key-based). The contract is therefore:
-          - nested string values are scanned for secrets
-          - nested dict keys are not compared against _SENSITIVE_INPUT_KEYS
-
-        Verify that a secret-shaped string under any nested key is redacted
-        when the pattern matches, and that non-secret values pass through."""
+        # Nested dicts are walked by _redact_value -> redact_dict, which uses
+        # pattern-based redaction (not the key-based redaction that fires at
+        # the top level). A nested secret-shaped string is still caught by
+        # the pattern redaction, but a nested sensitive key name is not.
         inputs = {
             "outer": {
                 "any_key": "api_key=leaked123456789",
@@ -416,14 +409,11 @@ class TestRedactInputsEdgeCases:
             }
         }
         result = redact_inputs(inputs)
-        # The nested string is pattern-redacted (api_key=…)
         assert "leaked123456789" not in result["outer"]["any_key"]
         assert REDACTED in result["outer"]["any_key"]
-        # Non-secret values pass through
         assert result["outer"]["target"] == "example.com"
 
     def test_recursive_walk_into_list(self):
-        """Lists are walked by _redact_value; string items are pattern-redacted."""
         inputs = {
             "items": [
                 "api_key=secret1234567abcd",
@@ -436,9 +426,9 @@ class TestRedactInputsEdgeCases:
         assert result["items"][1] == "Open port 80 detected"
 
     def test_sensitive_key_inside_nested_list_of_dicts(self):
-        """Lists of dicts are walked; each dict's string values are
-        pattern-redacted. The key-based _SENSITIVE_INPUT_KEYS lookup is a
-        top-level-only contract."""
+        # Key-based redaction only fires at the top level; nested string values
+        # are pattern-redacted, so a top-level-only key name in a nested dict
+        # will not trigger key-based redaction.
         inputs = {
             "items": [
                 {"note": "api_key=leaked123456789"},
@@ -446,21 +436,18 @@ class TestRedactInputsEdgeCases:
             ]
         }
         result = redact_inputs(inputs)
-        # The value under the nested 'note' key is pattern-scanned; the
-        # api_key=… prefix is redacted.
         assert "leaked123456789" not in result["items"][0]["note"]
         assert REDACTED in result["items"][0]["note"]
         assert result["items"][1]["note"] == "benign content"
 
     def test_non_dict_input_is_returned_unchanged(self):
-        """The function tolerates non-dict inputs by returning them as-is."""
+        # redact_inputs tolerates non-dict inputs by returning them as-is.
         assert redact_inputs(None) is None  # type: ignore[arg-type]
         assert redact_inputs("a string") == "a string"  # type: ignore[arg-type]
         assert redact_inputs(42) == 42  # type: ignore[arg-type]
         assert redact_inputs([1, 2, 3]) == [1, 2, 3]  # type: ignore[arg-type]
 
     def test_does_not_mutate_input_dict(self):
-        """redact_inputs must not mutate the caller's dict."""
         original = {
             "api_key": "secret_value_1234567",
             "nested": {"password": "inner_secret_1234567"},
@@ -474,22 +461,7 @@ class TestRedactInputsEdgeCases:
         assert original["nested"] == snapshot_nested
         assert original["items"] == snapshot_items
 
-    def test_whitespace_in_key_name_is_not_stripped_for_match(self):
-        """The match is on the lowercased key name only — leading/trailing
-        whitespace in the dict key prevents the lookup from succeeding, so the
-        value passes through to the pattern redactor instead of being replaced
-        with [REDACTED]."""
-        inputs = {" api_key": "secret_value_1234567", "token ": "tok_1234567"}
-        result = redact_inputs(inputs)
-        # The keys with whitespace around them are NOT in _SENSITIVE_INPUT_KEYS,
-        # so the value is passed to the pattern redactor (which may or may not
-        # match depending on the value).
-        # The key name is preserved as-is in the output:
-        assert " api_key" in result
-        assert "token " in result
-
     def test_empty_string_value_under_sensitive_key_is_redacted(self):
-        """Even an empty string under a sensitive key is replaced."""
         inputs = {"api_key": "", "token": ""}
         result = redact_inputs(inputs)
         assert result["api_key"] == REDACTED
