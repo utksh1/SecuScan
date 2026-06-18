@@ -1,10 +1,14 @@
 """
 Unit tests for sandbox_executor.py helper functions.
 
-Covers: resolve_sandbox_config, classify_memory_violation, _build_preexec_fn
+Covers: resolve_sandbox_config, classify_memory_violation, _build_preexec_fn.
 """
 
 import platform
+from unittest.mock import patch
+
+import pytest
+
 from backend.secuscan.sandbox_executor import (
     resolve_sandbox_config,
     classify_memory_violation,
@@ -13,7 +17,7 @@ from backend.secuscan.sandbox_executor import (
 from backend.secuscan.models import SandboxConfig
 
 
-# ── resolve_sandbox_config ────────────────────────────────────────────────────
+# resolve_sandbox_config
 
 
 def test_resolve_sandbox_config_returns_global_defaults():
@@ -49,90 +53,114 @@ def test_resolve_sandbox_config_partial_override():
     """Only specified override fields change; others retain global defaults."""
     override = SandboxConfig(max_output_bytes=1_000_000)
     config = resolve_sandbox_config(plugin_sandbox=override)
-    # max_output_bytes overridden
     assert config.max_output_bytes == 1_000_000
-    # timeout and memory still from global settings
     assert config.timeout_seconds > 0
     assert config.max_memory_mb > 0
 
 
-# ── classify_memory_violation ─────────────────────────────────────────────────
+# classify_memory_violation
 
 
 def test_classify_memory_violation_sigsegv_negative_11():
-    """SIGSEGV exit code -11 indicates memory violation."""
     assert classify_memory_violation(-11, "", 0, 100_000_000) is True
 
 
 def test_classify_memory_violation_sigsegv_139():
-    """Exit code 139 (128 + 11) also indicates SIGSEGV."""
     assert classify_memory_violation(139, "", 0, 100_000_000) is True
 
 
 def test_classify_memory_violation_memeror_in_stderr():
-    """'MemoryError' in stderr indicates OOM."""
     assert classify_memory_violation(1, "Python: MemoryError: out of memory", 0, 100_000_000) is True
 
 
 def test_classify_memory_violation_cannot_allocate():
-    """'Cannot allocate memory' in stderr indicates OOM."""
     assert classify_memory_violation(1, "fatal: Cannot allocate memory", 0, 100_000_000) is True
 
 
 def test_classify_memory_violation_rss_near_limit():
-    """RSS approaching 95% of limit with non-zero exit code is flagged."""
     limit = 100_000_000
-    rss = 96_000_000  # 96% of limit
+    rss = 96_000_000
     assert classify_memory_violation(1, "", rss, limit) is True
 
 
 def test_classify_memory_violation_rss_below_95_percent():
-    """RSS below 95% of limit is not flagged as memory violation."""
     limit = 100_000_000
-    rss = 90_000_000  # 90% of limit
+    rss = 90_000_000
     assert classify_memory_violation(1, "", rss, limit) is False
 
 
 def test_classify_memory_violation_rss_at_limit_zero_exit():
-    """RSS at limit but zero exit code is not flagged (clean exit)."""
     limit = 100_000_000
     rss = limit
     assert classify_memory_violation(0, "", rss, limit) is False
 
 
 def test_classify_memory_violation_normal_exit():
-    """Normal exit with no OOM indicators is not flagged."""
     assert classify_memory_violation(0, "", 10_000_000, 100_000_000) is False
 
 
 def test_classify_memory_violation_error_exit_no_indicators():
-    """Non-zero exit without memory-related indicators is not flagged."""
     assert classify_memory_violation(2, "some other error", 5_000_000, 100_000_000) is False
 
 
-# ── _build_preexec_fn ─────────────────────────────────────────────────────────
+# _build_preexec_fn
 
 
 def test_build_preexec_fn_returns_callable():
-    """_build_preexec_fn returns a callable on Linux."""
     config = SandboxConfig(max_memory_mb=256)
     result = _build_preexec_fn(config)
     assert callable(result)
 
 
-def test_build_preexec_fn_uses_correct_limit():
-    """The returned callable sets RLIMIT_AS to configured memory limit on Linux."""
-    import resource
-    if platform.system() != "Linux":
-        return  # RLIMIT_AS is Linux-only
+@pytest.mark.skipif(platform.system() != "Linux", reason="RLIMIT_AS is Linux-only")
+def test_build_preexec_fn_computes_correct_rlimit_bytes():
+    # Verify the configured limit is converted to bytes correctly without
+    # actually mutating the live process RLIMIT_AS. The 512 MB config must
+    # produce a 536870912-byte limit.
     config = SandboxConfig(max_memory_mb=512)
     preexec = _build_preexec_fn(config)
-    soft, hard = resource.getrlimit(resource.RLIMIT_AS)
-    preexec()
-    new_soft, new_hard = resource.getrlimit(resource.RLIMIT_AS)
-    assert new_soft == 512 * 1024 * 1024
-    # Restore if possible; if hard was unlimited (-1) this may raise - ignore
-    try:
-        resource.setrlimit(resource.RLIMIT_AS, (soft if soft != -1 else new_hard, new_hard))
-    except (ValueError, OSError):
-        pass  # Container environments may restrict limit restoration
+
+    captured = {}
+
+    fake_resource = type("R", (), {})()
+    def _capture(limit_name, value):
+        captured["limit_name"] = limit_name
+        captured["value"] = value
+
+    fake_resource.RLIMIT_AS = 9  # constant from the real resource module
+    fake_resource.setrlimit = _capture
+
+    with patch.dict("sys.modules", {"resource": fake_resource}):
+        preexec()
+
+    assert captured["limit_name"] == 9
+    assert captured["value"] == (512 * 1024 * 1024, 512 * 1024 * 1024)
+
+
+@pytest.mark.skipif(platform.system() != "Linux", reason="RLIMIT_AS is Linux-only")
+def test_build_preexec_fn_does_not_mutate_live_process_limits():
+    # Guard against the old test that called preexec() directly and changed
+    # RLIMIT_AS for the whole pytest process. Here we patch the resource
+    # module that preexec_fn imports inside the closure, so the live process
+    # is never touched.
+    import resource
+
+    config = SandboxConfig(max_memory_mb=256)
+    preexec = _build_preexec_fn(config)
+    before = resource.getrlimit(resource.RLIMIT_AS)
+
+    calls = []
+
+    def _fake_setrlimit(name, value):
+        calls.append((name, value))
+
+    fake_resource = type("R", (), {})()
+    fake_resource.RLIMIT_AS = resource.RLIMIT_AS
+    fake_resource.setrlimit = _fake_setrlimit
+
+    with patch.dict("sys.modules", {"resource": fake_resource}):
+        preexec()
+
+    after = resource.getrlimit(resource.RLIMIT_AS)
+    assert before == after
+    assert calls  # The preexec_fn still tried to set a limit, but on a fake module
