@@ -225,6 +225,34 @@ async def test_delete_running_task_returns_400(app_client):
 
 
 @pytest.mark.asyncio
+async def test_delete_task_rejected_when_in_executor_running_tasks(app_client):
+    """Deleting a task whose ID is in executor.running_tasks returns 400,
+    even if the DB status is 'queued' (i.e. the optimistic UPDATE hasn't fired yet).
+
+    This exercises the in-memory safety check added alongside the race fix.
+    """
+    db = app_client._db
+    task_id = await insert_task(db, status="queued")
+
+    # Place the task ID directly into running_tasks to simulate the race window
+    # where execute_task has stored the task but the DB UPDATE hasn't run yet.
+    app_client._mock_executor.running_tasks = {task_id: "mock_task"}
+    app_client._mock_executor.get_task_status = AsyncMock(
+        return_value={"status": "queued"}
+    )
+
+    resp = await app_client.delete(f"/api/v1/task/{task_id}")
+
+    assert resp.status_code == 400, resp.text
+    body = resp.json()
+    assert "running" in body["detail"].lower()
+
+    # Verify the task still exists in the DB (was NOT deleted)
+    rows = await db_fetchall(app_client._db_path, "SELECT id FROM tasks WHERE id = ?", (task_id,))
+    assert len(rows) == 1, "Task should NOT have been deleted"
+
+
+@pytest.mark.asyncio
 async def test_delete_missing_task_returns_200(app_client):
     """Deleting a task that doesn't exist returns 200 (route is idempotent).
 
