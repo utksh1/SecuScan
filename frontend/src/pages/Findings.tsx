@@ -481,7 +481,7 @@ export default function Findings() {
     const nextPage = page + 1
     try {
       const data = await getFindings(nextPage, perPage)
-      const moreFindings = data.findings || []
+      const moreFindings = (data.findings || []) as Finding[]
       if (moreFindings.length > 0) {
         setFindings((prev) => [...prev, ...moreFindings])
         setPage(nextPage)
@@ -492,7 +492,6 @@ export default function Findings() {
   }
 
   // ─── Keyboard navigation ────────────────────────────────────────────────────
-  const listRef = useRef<HTMLDivElement>(null)
 
   function handleListKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (!sortedFindings.length) return
