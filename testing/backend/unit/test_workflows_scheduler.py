@@ -6,7 +6,9 @@ produces strings without a timezone suffix, causing TypeError on subtraction.
 """
 
 from datetime import datetime, timezone, timedelta
+import asyncio
 import pytest
+from unittest.mock import MagicMock, patch, AsyncMock
 
 from backend.secuscan.workflows import WorkflowScheduler
 
@@ -87,3 +89,126 @@ def test_offset_aware_iso_string_still_works(scheduler):
 def test_empty_string_treated_as_no_last_run(scheduler):
     """Empty string last_run_at should behave like None → run."""
     assert scheduler._should_run(_now(), "", 3600) is True
+
+
+# ---------------------------------------------------------------------------
+# _run_workflow error-path tests
+# ---------------------------------------------------------------------------
+
+def _make_mock_db():
+    mock_db = MagicMock()
+    mock_db.fetchone = AsyncMock(return_value=None)
+    mock_db.fetchall = AsyncMock(return_value=[])
+    return mock_db
+
+
+def _make_mock_plugin(category="scan", safety=None):
+    p = MagicMock()
+    p.category = category
+    p.safety = safety or {}
+    return p
+
+
+async def _run_workflow_with_mocks(scheduler, steps, mock_db, plugin, validate_result=(True, "")):
+    """Run _run_workflow with patched dependencies, return mock_executor for assertions."""
+    mock_pm = MagicMock()
+    mock_pm.get_plugin.return_value = plugin
+
+    mock_executor = MagicMock()
+    mock_executor.create_task = AsyncMock(return_value="tid-test")
+    mock_executor.mark_task_failed = AsyncMock()
+
+    mock_concurrent_limiter = MagicMock()
+    mock_concurrent_limiter.acquire = AsyncMock(return_value=(True, ""))
+
+    mock_engine = MagicMock()
+    mock_engine.check_access.return_value = (True, "", None)
+
+    with patch("backend.secuscan.workflows.get_db", new_callable=AsyncMock, return_value=mock_db):
+        with patch("backend.secuscan.plugins.get_plugin_manager", return_value=mock_pm):
+            with patch("backend.secuscan.validation.validate_target", return_value=validate_result):
+                with patch("backend.secuscan.network_policy.get_policy_engine", return_value=mock_engine):
+                    with patch("backend.secuscan.workflows.executor", mock_executor):
+                        with patch("backend.secuscan.workflows.concurrent_limiter", mock_concurrent_limiter):
+                            with patch("backend.secuscan.workflows.get_target_policy", new_callable=AsyncMock, return_value=None):
+                                with patch("backend.secuscan.workflows.normalize_execution_context", return_value={}):
+                                    with patch("backend.secuscan.workflows.get_request_id", return_value="req-1"):
+                                        await scheduler._run_workflow("wf-1", steps)
+
+    return mock_executor
+
+
+class TestRunWorkflowErrorPaths:
+    def test_skips_missing_plugin(self):
+        """When plugin not found, _run_workflow skips the step and does not create a task."""
+        scheduler = WorkflowScheduler()
+        mock_db = _make_mock_db()
+        mock_executor = asyncio.run(
+            _run_workflow_with_mocks(scheduler, [{"plugin_id": "nonexistent", "inputs": {}}], mock_db, plugin=None)
+        )
+        mock_executor.create_task.assert_not_called()
+
+    def test_skips_invalid_target(self):
+        """When target validation fails, _run_workflow skips the step and does not create a task."""
+        scheduler = WorkflowScheduler()
+        mock_db = _make_mock_db()
+        mock_executor = asyncio.run(
+            _run_workflow_with_mocks(
+                scheduler,
+                [{"plugin_id": "nmap", "inputs": {"target": "bad-target"}}],
+                mock_db,
+                plugin=_make_mock_plugin(category="scan"),
+                validate_result=(False, "Invalid target"),
+            )
+        )
+        mock_executor.create_task.assert_not_called()
+
+    def test_skips_target_validation_timeout(self):
+        """When target validation times out, _run_workflow skips the step without creating a task."""
+        scheduler = WorkflowScheduler()
+        mock_db = _make_mock_db()
+
+        mock_pm = MagicMock()
+        mock_pm.get_plugin.return_value = _make_mock_plugin(category="scan")
+
+        mock_executor = MagicMock()
+        mock_executor.create_task = AsyncMock(return_value="tid-test")
+
+        mock_concurrent_limiter = MagicMock()
+        mock_concurrent_limiter.acquire = AsyncMock(return_value=(True, ""))
+
+        mock_engine = MagicMock()
+        mock_engine.check_access.return_value = (True, "", None)
+
+        def sync_timeout_validate(*args, **kwargs):
+            raise TimeoutError()
+
+        async def run_test():
+            with patch("backend.secuscan.workflows.get_db", new_callable=AsyncMock, return_value=mock_db):
+                with patch("backend.secuscan.plugins.get_plugin_manager", return_value=mock_pm):
+                    with patch("backend.secuscan.validation.validate_target", side_effect=sync_timeout_validate):
+                        with patch("backend.secuscan.network_policy.get_policy_engine", return_value=mock_engine):
+                            with patch("backend.secuscan.workflows.executor", mock_executor):
+                                with patch("backend.secuscan.workflows.concurrent_limiter", mock_concurrent_limiter):
+                                    with patch("backend.secuscan.workflows.get_target_policy", new_callable=AsyncMock, return_value=None):
+                                        with patch("backend.secuscan.workflows.normalize_execution_context", return_value={}):
+                                            with patch("backend.secuscan.workflows.get_request_id", return_value="req-1"):
+                                                await scheduler._run_workflow("wf-1", [{"plugin_id": "nmap", "inputs": {"target": "bad"}}])
+
+        asyncio.run(run_test())
+        mock_executor.create_task.assert_not_called()
+
+    def test_creates_task_when_valid(self):
+        """When plugin found and target valid, _run_workflow creates a task."""
+        scheduler = WorkflowScheduler()
+        mock_db = _make_mock_db()
+        mock_executor = asyncio.run(
+            _run_workflow_with_mocks(
+                scheduler,
+                [{"plugin_id": "nmap", "inputs": {"target": "127.0.0.1"}}],
+                mock_db,
+                plugin=_make_mock_plugin(category="scan"),
+                validate_result=(True, ""),
+            )
+        )
+        mock_executor.create_task.assert_called_once()
