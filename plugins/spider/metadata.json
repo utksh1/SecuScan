@@ -2,15 +2,15 @@
   "id": "spider",
   "name": "Spider",
   "version": "1.0.0",
-  "description": "Advanced web spider with JS execution support.",
-  "long_description": "Advanced web spider with JS execution support.",
+  "description": "JavaScript-aware Katana spider for deeper client-side route discovery.",
+  "long_description": "Runs Katana with JavaScript crawling enabled and a configurable depth. Use this for applications where client-side links and JavaScript-rendered routes may expose additional paths.",
   "category": "robots",
   "author": {
     "name": "SecuScan Contributors",
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udee0\ufe0f",
+  "icon": "🛠️",
   "engine": {
     "type": "cli",
     "binary": "katana"
@@ -30,6 +30,7 @@
       "label": "Target URL",
       "type": "string",
       "required": true,
+      "help": "Enter the full website URL to scan, including the http:// or https:// protocol.",
       "placeholder": "https://secuscan.in",
       "validation": {
         "pattern": "^https?://",
@@ -41,6 +42,7 @@
       "label": "Depth",
       "type": "integer",
       "required": false,
+      "help": "Range of crawl depth: 1-10. Higher values scan deeper but take longer. Default: 3. Recommended: 1-5.",
       "default": 3
     }
   ],
@@ -69,5 +71,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "8b0111447c9ebc7d1487e2a8fafd4b2ee9c23e191eab39a124e372632b288254"
+  "checksum": "8f16aed623f771cf396ea9ef778055da31ca2f88f6f70dde9b1cb9cfeeb58499"
 }

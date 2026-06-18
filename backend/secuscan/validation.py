@@ -70,6 +70,8 @@ def _net_within_allowed_networks(net: ipaddress._BaseNetwork) -> bool:
         for pattern in patterns:
             try:
                 allowed_net = ipaddress.ip_network(pattern, strict=False)
+                if net.version != allowed_net.version:
+                    continue
                 if net.subnet_of(allowed_net) or net.overlaps(allowed_net):
                     return True
             except ValueError:
@@ -349,20 +351,18 @@ def validate_url(url: str) -> Tuple[bool, str]:
     Returns:
         Tuple of (is_valid, error_message)
     """
-    # Basic URL validation
     url_pattern = re.compile(
-        r'^https?://'  # http:// or https://
-        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'  # domain
-        r'localhost|'  # localhost
-        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # IP
-        r'(?::\d+)?'  # optional port
+        r'^https?://'
+        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'
+        r'localhost|'
+        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'
+        r'(?::\d+)?'
         r'(?:/?|[/?]\S+)$', re.IGNORECASE
     )
 
     if not url_pattern.match(url):
         return False, "Invalid URL format"
 
-    # Validate optional port range if provided
     port_match = re.search(r':(\d+)(?:/|\?|$)', url.split('://', 1)[1])
     if port_match:
         port = int(port_match.group(1))
@@ -370,6 +370,44 @@ def validate_url(url: str) -> Tuple[bool, str]:
             return False, "Invalid URL format"
 
     return True, ""
+
+
+def validate_webhook_target(url: str) -> Tuple[bool, Optional[str]]:
+    """
+    Validate webhook URL against SSRF attacks by resolving DNS and
+    checking resolved IPs against blocked/private networks.
+
+    Uses the configured SECUSCAN_NOTIFICATION_BLOCKED_IP_RANGES to determine
+    which IP ranges to reject. This runs independently of enforce_network_policy
+    so webhook SSRF protection is always active.
+
+    Args:
+        url: Webhook URL to validate
+
+    Returns:
+        Tuple of (is_safe, error_message)
+    """
+    hostname = urlparse(url).hostname
+    if not hostname:
+        return False, "Webhook URL has no hostname"
+
+    try:
+        addrs = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        return False, "Webhook URL hostname could not be resolved"
+
+    for addr in addrs:
+        try:
+            ip = ipaddress.ip_address(addr[4][0])
+        except ValueError:
+            continue
+        for blocked_cidr in settings.notification_blocked_ip_ranges:
+            try:
+                if ip in ipaddress.ip_network(blocked_cidr, strict=False):
+                    return False, f"Webhook URL resolves to blocked address ({ip}) in range {blocked_cidr}"
+            except ValueError:
+                continue
+    return True, None
 
 
 def sanitize_input(value: str) -> str:
@@ -382,11 +420,18 @@ def sanitize_input(value: str) -> str:
     Returns:
         Sanitized value
     """
-    # Remove shell metacharacters and non-printable control characters
+    # Convert backslashes to forward slashes to preserve path separators on Windows.
+    value = value.replace('\\', '/')
+
+    # Remove shell metacharacters and non-printable control characters.
     dangerous_chars = [';', '|', '&', '$', '`', '(', ')', '<', '>', '\n', '\r', "'", '"', '\\', '!', '{', '}', '\t', '\x00']
     for char in dangerous_chars:
         value = value.replace(char, '')
-    
+
+    # User-controlled placeholders are passed as argv values, not through a
+    # shell, but leading dashes can still be interpreted as tool options.
+    value = value.lstrip("-")
+
     return value.strip()
 
 
@@ -523,15 +568,92 @@ def _check_field(key: str, value: Any) -> Tuple[bool, int, str]:
 
     return True, 0, ""
 
-def _is_filesystem_target(target: str) -> bool:
-    """Best-effort detection for path-based targets that should bypass host validation."""
-    if target.startswith(("/", "./", "../", "~")):
+def is_filesystem_target(target: str) -> bool:
+    """Best-effort detection for path-based targets that should bypass host validation.
+
+    Returns True only for genuine local filesystem paths:
+      - Unix absolute paths:   /home/user/repo
+      - Unix relative paths:   ./src, ../lib
+      - Home-relative paths:   ~/projects
+      - Windows paths:         C:\\Users\\repo, D:/work
+
+    CIDR notation (e.g. 8.8.8.8/32), bare hostnames, URLs, and
+    domain paths all return False and are subject to validate_target().
+    """
+    # Unix absolute, relative, and home-relative paths
+    if target.startswith(("/", "./", "../", "~/")):
         return True
+    # Windows paths: C:\\ or C:/
     if re.match(r"^[A-Za-z]:[\\/]", target):
         return True
-    if "/" in target and not target.startswith(("http://", "https://")):
-        return True
     return False
+
+def resolve_and_validate_target(url: str) -> Tuple[bool, str]:
+    """Resolve a webhook URL and validate it against SSRF protections.
+
+    Performs DNS resolution, IP range validation, and port checks
+    to prevent Server-Side Request Forgery attacks.
+    """
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return False, "Invalid URL"
+
+    if parsed.scheme not in ("http", "https"):
+        return False, f"Scheme '{parsed.scheme}' not allowed for webhooks"
+
+    hostname = parsed.hostname
+    if not hostname:
+        return False, "URL must have a hostname"
+
+    port = parsed.port
+    if port is not None and port not in settings.notification_allowed_ports:
+        return False, f"Port {port} not in allowed ports: {settings.notification_allowed_ports}"
+
+    # Reject raw IP addresses in webhook URLs
+    try:
+        ipaddress.ip_address(hostname)
+        return False, "Raw IP addresses are not allowed in webhook URLs; use a hostname"
+    except ValueError:
+        pass
+
+    # Resolve hostname to IPs
+    try:
+        resolved = socket.getaddrinfo(hostname, port or 443, proto=socket.IPPROTO_TCP)
+    except OSError:
+        return False, f"Could not resolve hostname: {hostname}"
+
+    for family, _socktype, _proto, _canonname, sockaddr in resolved:
+        try:
+            ip = ipaddress.ip_address(sockaddr[0])
+        except ValueError:
+            continue
+
+        # Check against blocked ranges
+        for blocked_cidr in settings.notification_blocked_ip_ranges:
+            try:
+                blocked_net = ipaddress.ip_network(blocked_cidr, strict=False)
+                if ip in blocked_net:
+                    return False, f"Resolved IP {ip} falls in blocked range {blocked_cidr}"
+            except ValueError:
+                continue
+
+        # Check allowed ranges if configured
+        if settings.notification_allowed_ip_ranges:
+            in_allowed = False
+            for allowed_cidr in settings.notification_allowed_ip_ranges:
+                try:
+                    allowed_net = ipaddress.ip_network(allowed_cidr, strict=False)
+                    if ip in allowed_net:
+                        in_allowed = True
+                        break
+                except ValueError:
+                    continue
+            if not in_allowed:
+                return False, f"Resolved IP {ip} not in allowed ranges"
+
+    return True, ""
+
 
 def validate_command_network_egress(command: list[str], safe_mode: bool, plugin_id: str, task_id: str) -> Tuple[bool, str]:
     """
@@ -546,7 +668,7 @@ def validate_command_network_egress(command: list[str], safe_mode: bool, plugin_
             continue
         if arg_str.startswith("-"):
             continue  # Ignore flags
-        if _is_filesystem_target(arg_str):
+        if is_filesystem_target(arg_str):
             continue  # Ignore local paths
 
         # Check if it looks like a URL

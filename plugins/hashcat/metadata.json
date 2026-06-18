@@ -78,7 +78,12 @@
   },
   "output": {
     "format": "text",
-    "parser": "custom"
+    "parser": "custom",
+    "artifacts": [
+      "Recovered credential output",
+      "Hashcat session files",
+      "Potfile entries"
+    ]
   },
   "safety": {
     "level": "exploit",
@@ -96,5 +101,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "3c62c9b154b651149426d4fa7fefc9fdfb16f05c20e0850b0ed63a8f44c22b89"
+  "checksum": "f46f049daf6fad834f77401ca188596b68dec5ff5036b83e2ef013cf01a0d888"
 }

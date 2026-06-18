@@ -71,4 +71,39 @@ describe('Settings save/reset behavior', () => {
     const concurrentOps = getInputByLabelText(/Concurrent_Operations/i)
     expect(concurrentOps.value).toBe('8')
   })
+  it('nuclear purge removes only secuscan-owned keys and preserves unrelated keys', async () => {
+  // Set up SecuScan keys
+  // Set up SecuScan keys
+  window.localStorage.setItem('secuscan-config', JSON.stringify(DEFAULT_CONFIG))
+  window.localStorage.setItem('secuscan_api_key', 'test-api-key')
+  window.localStorage.setItem('secuscan-saved-views', JSON.stringify([]))
+  window.localStorage.setItem('secuscan-finding-review-state', JSON.stringify({}))
+  window.localStorage.setItem('secuscan:preferred-export-format', 'html')
+  window.localStorage.setItem('secuscan_recent_tools', JSON.stringify([]))
+  window.localStorage.setItem('secuscan-theme', 'dark')
+  window.localStorage.setItem('sidebar-expanded', 'true')
+  // Set up an unrelated key
+  window.localStorage.setItem('some-other-app-key', 'should-not-be-deleted')
+
+  const user = userEvent.setup()
+  renderSettings()
+
+  await user.click(screen.getByRole('button', { name: /NUCLEAR_PURGE/i }))
+
+  const confirmButton = await screen.findByRole('button', { name: /confirm/i })
+  await user.click(confirmButton)
+
+  // SecuScan keys should be gone
+  expect(window.localStorage.getItem('secuscan-config')).toBeNull()
+  expect(window.localStorage.getItem('secuscan_api_key')).toBeNull()
+  expect(window.localStorage.getItem('secuscan-saved-views')).toBeNull()
+  expect(window.localStorage.getItem('secuscan-finding-review-state')).toBeNull()
+  expect(window.localStorage.getItem('secuscan:preferred-export-format')).toBeNull()
+  expect(window.localStorage.getItem('secuscan_recent_tools')).toBeNull()
+  expect(window.localStorage.getItem('secuscan-theme')).toBeNull()
+  expect(window.localStorage.getItem('sidebar-expanded')).toBeNull()
+
+  // Unrelated key should still be there
+  expect(window.localStorage.getItem('some-other-app-key')).toBe('should-not-be-deleted')
+})
 })

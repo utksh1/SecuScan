@@ -292,7 +292,9 @@ export default function Settings() {
             message: "CRITICAL: THIS WILL PURGE ALL HISTORY AND ASSETS. PROCEED?",
             type: "danger",
             onConfirm: () => {
-                localStorage.clear()
+                Object.keys(localStorage)
+                    .filter(key => key.startsWith('secuscan') || key === 'sidebar-expanded')
+                    .forEach(key => localStorage.removeItem(key))
                 window.location.reload()
                 setModalState(prev => ({ ...prev, isOpen: false }))
             }
