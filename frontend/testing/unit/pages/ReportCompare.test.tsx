@@ -157,8 +157,7 @@ describe('ReportCompare page', () => {
     // not about pixel-perfect sticky rendering.
     expect(scrollContainer).not.toBeNull()
 
-    // Use the refresh button (focusable) to validate context retention.
-    // Scroll shouldn’t cause re-render/focus loss.
+    // Use the refresh.
     const refreshButton = screen.getByTitle('Refresh')
     refreshButton.focus()
     expect(refreshButton).toHaveFocus()
