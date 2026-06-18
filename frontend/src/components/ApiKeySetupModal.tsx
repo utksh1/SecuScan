@@ -18,6 +18,26 @@ export default function ApiKeySetupModal({ onSaved }: Props) {
   const [visible, setVisible] = useState(false)
   const [error, setError] = useState('')
 
+  // NEW: Sanitize pasted API keys
+  const sanitizeApiKey = (value: string): string => {
+    return value
+      .trim()                    // Remove leading/trailing whitespace
+      .replace(/\n/g, '')        // Remove newlines
+      .replace(/\r/g, '')        // Remove carriage returns
+      .replace(/\t/g, '')        // Remove tabs
+      .replace(/\u00A0/g, ' ')   // Replace non-breaking spaces with regular space
+      .trim();                   // Final trim after replacements
+  }
+
+  // NEW: Handle paste events
+  const handlePaste = (event: React.ClipboardEvent<HTMLInputElement>) => {
+    event.preventDefault()
+    const pastedText = event.clipboardData.getData('text')
+    const sanitizedText = sanitizeApiKey(pastedText)
+    setKey(sanitizedText)
+    setError('')
+  }
+
   function handleSave() {
     const trimmed = key.trim()
     if (!trimmed) {
@@ -78,6 +98,7 @@ export default function ApiKeySetupModal({ onSaved }: Props) {
             type="password"
             value={key}
             onChange={(e) => { setKey(e.target.value); setError('') }}
+            onPaste={handlePaste}  // NEW: Added paste handler
             onKeyDown={(e) => e.key === 'Enter' && handleSave()}
             placeholder="Paste API key here"
             aria-label="Backend API Key"
