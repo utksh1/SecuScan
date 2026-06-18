@@ -1496,7 +1496,7 @@ async def delete_vault_secret(
         "name": name,
         "deleted": True,
     }
- 
+
 @router.get("/target-policies")
 async def list_target_policies(owner: str = Depends(get_current_owner)):
     db = await get_db()

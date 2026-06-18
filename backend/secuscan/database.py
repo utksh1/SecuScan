@@ -395,7 +395,7 @@ ON credential_vault(owner_id);
         # Migration logic: ensure latest columns exist in 'tasks' table
         tasks_columns = await self.fetchall("PRAGMA table_info(tasks)")
         existing_cols = {col["name"] for col in tasks_columns}
-        
+
         needed_cols = {
             # Per-user ownership for BOLA prevention (issue #401). NOT NULL with a
             # constant default backfills every existing row to the shared default
@@ -499,7 +499,7 @@ ON credential_vault(owner_id);
                 print("Added missing column 'owner_id' to reports table.")
             except Exception as e:
                 print(f"Failed to add 'owner_id' to reports: {e}")
-                
+
         # Vault table migration: ensure owner_id exists
         vault_columns = await self.fetchall(
             "PRAGMA table_info(credential_vault)"
@@ -512,7 +512,7 @@ ON credential_vault(owner_id);
                     "ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'default'"
                     )
                 print("Added missing column 'owner_id' to credential_vault table.")
-                
+
             except Exception as e:
                 print(f"Failed to add 'owner_id' to credential_vault: {e}")
 
