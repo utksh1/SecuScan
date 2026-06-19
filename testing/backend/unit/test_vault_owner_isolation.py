@@ -127,10 +127,10 @@ class TestVaultOwnerIsolation:
 
         assert r.status_code == 200
         assert r.json()["value"] == "alice-secret"
-        
+
     def test_upsert_updates_existing_secret_for_same_owner(self, test_client):
             name = "duplicate-secret"
-            
+
             test_client.put(
                 f"/api/v1/vault/{name}",
                 json={"value": "first"},
@@ -147,19 +147,19 @@ class TestVaultOwnerIsolation:
                 f"/api/v1/vault/{name}",
                 headers=self.OWNER_A,
                 )
-            
+
             assert secret.status_code == 200
             assert secret.json()["value"] == "second"
-            
+
             listing = test_client.get(
                 "/api/v1/vault",
                  headers=self.OWNER_A,
                  )
-            
+
             matches = [
                 item
                 for item in listing.json()["items"]
                 if item["name"] == name
                 ]
-            
+
             assert len(matches) == 1
