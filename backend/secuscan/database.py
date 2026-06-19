@@ -455,6 +455,11 @@ class Database:
             "risk_factors_json": "TEXT NOT NULL DEFAULT '[]'",
             # Per-user ownership for BOLA prevention (issue #401).
             "owner_id": "TEXT NOT NULL DEFAULT 'default'",
+            # Collaboration features: comments, assignments, status tracking, visibility
+            "assigned_to": "TEXT",
+            "assigned_by": "TEXT",
+            "status": "TEXT NOT NULL DEFAULT 'OPEN'",
+            "visibility": "TEXT NOT NULL DEFAULT 'PRIVATE'",
         }
         for col_name, col_type in risk_cols.items():
             if col_name not in existing_finding_cols:

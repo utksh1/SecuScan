@@ -109,6 +109,20 @@ class RetestStatus(str, Enum):
     FAILED = "failed"
 
 
+class FindingStatus(str, Enum):
+    """Team collaboration status for a finding."""
+    OPEN = "OPEN"
+    IN_PROGRESS = "IN_PROGRESS"
+    RESOLVED = "RESOLVED"
+
+
+class FindingVisibility(str, Enum):
+    """Visibility/sharing level for a finding."""
+    PRIVATE = "PRIVATE"
+    TEAM = "TEAM"
+    PUBLIC = "PUBLIC"
+
+
 class ExecutionContext(BaseModel):
     """Task/workflow execution policy selected by the operator."""
     target_policy_id: Optional[str] = None
@@ -235,6 +249,11 @@ class Finding(BaseModel):
     evidence_count: int = 0
     analyst_status: AnalystStatus = AnalystStatus.NEW
     retest_status: RetestStatus = RetestStatus.NOT_REQUESTED
+    # Collaboration fields
+    assigned_to: Optional[str] = None
+    assigned_by: Optional[str] = None
+    status: FindingStatus = FindingStatus.OPEN
+    visibility: FindingVisibility = FindingVisibility.PRIVATE
 
 
 class TaskResult(BaseModel):
@@ -351,3 +370,66 @@ class NotificationHistoryResponse(BaseModel):
 class BulkDeleteRequest(RootModel[Annotated[List[str], Field(max_length=MAX_BULK_DELETE)]]):
     """Accepts a JSON array of task IDs directly. Max 500 per request."""
     pass
+
+
+class Comment(BaseModel):
+    """User comment/annotation on a finding"""
+    id: Optional[str] = None
+    finding_id: str
+    user_id: str
+    content: str
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class CommentCreateRequest(BaseModel):
+    """Request to create a comment on a finding"""
+    content: str = Field(..., min_length=1, max_length=5000)
+
+
+class CommentResponse(BaseModel):
+    """Comment returned by the API"""
+    id: str
+    finding_id: str
+    user_id: str
+    content: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class NotificationResponse(BaseModel):
+    """In-app notification for team collaboration actions"""
+    id: str
+    user_id: str
+    finding_id: Optional[str] = None
+    action_type: str
+    message: str
+    is_read: bool
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+
+
+class ActivityResponse(BaseModel):
+    """Activity/audit trail entry for a finding"""
+    id: str
+    finding_id: str
+    user_id: str
+    action: str
+    details: Dict[str, Any] = Field(default_factory=dict)
+    timestamp: datetime
+
+
+class AssignmentRequest(BaseModel):
+    """Request to assign a finding to a team member"""
+    assigned_to: str = Field(..., min_length=1)
+
+
+class StatusUpdateRequest(BaseModel):
+    """Request to update a finding's status"""
+    status: FindingStatus
+
+
+class VisibilityUpdateRequest(BaseModel):
+    """Request to update a finding's visibility level"""
+    visibility: FindingVisibility
+

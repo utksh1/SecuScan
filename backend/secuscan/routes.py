@@ -11,6 +11,7 @@ import re
 import os
 import uuid
 import asyncio
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
@@ -101,6 +102,9 @@ from .models import (
     NotificationRuleCreate, NotificationRuleUpdate,
     NotificationChannelType, TaskStatus,
     ExecutionContext, WorkflowStep, ValidationMode, EvidenceLevel,
+    Comment, CommentCreateRequest, CommentResponse,
+    NotificationResponse, ActivityResponse,
+    AssignmentRequest, StatusUpdateRequest, VisibilityUpdateRequest,
 )
 from .config import settings
 from .database import get_db
@@ -2327,3 +2331,462 @@ async def export_audit_log(format: str = "json"):
         media_type=mime_type,
         headers={"Content-Disposition": f"attachment; filename=network-audit.{format}"}
     )
+
+
+# ── Collaboration & Team Features ────────────────────────────────────────────
+
+@router.post("/finding/{finding_id}/comments")
+async def add_comment(
+    finding_id: str,
+    body: CommentCreateRequest,
+    owner: str = Depends(get_current_owner),
+):
+    """Add a comment to a finding"""
+    db = await get_db()
+
+    # Verify finding exists and belongs to owner
+    finding = await db.fetchone(
+        "SELECT id, owner_id FROM findings WHERE id = ? AND owner_id = ?",
+        (finding_id, owner),
+    )
+    if not finding:
+        raise HTTPException(status_code=404, detail="Finding not found or access denied")
+
+    # Create comment
+    comment_id = str(uuid.uuid4())
+    now = datetime.utcnow().isoformat()
+    
+    await db.execute(
+        """
+        INSERT INTO comments (id, finding_id, user_id, content, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (comment_id, finding_id, owner, body.content, now, now),
+    )
+
+    # Create activity record
+    activity_id = str(uuid.uuid4())
+    await db.execute(
+        """
+        INSERT INTO activities (id, finding_id, user_id, action, details_json, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (activity_id, finding_id, owner, "comment_added", json.dumps({"comment_id": comment_id}), now),
+    )
+
+    # Create notification for finding assignee and other watchers
+    # For now, notify the assignee if set
+    assignee_row = await db.fetchone(
+        "SELECT assigned_to FROM findings WHERE id = ?", (finding_id,)
+    )
+    if assignee_row and assignee_row["assigned_to"]:
+        notif_id = str(uuid.uuid4())
+        await db.execute(
+            """
+            INSERT INTO notifications (id, user_id, finding_id, action_type, message, is_read, metadata_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                notif_id,
+                assignee_row["assigned_to"],
+                finding_id,
+                "comment_added",
+                f"New comment on assigned finding: {finding_id}",
+                False,
+                json.dumps({"comment_id": comment_id, "commented_by": owner}),
+                now,
+            ),
+        )
+
+    await invalidate_view_cache()
+
+    return {
+        "id": comment_id,
+        "finding_id": finding_id,
+        "user_id": owner,
+        "content": body.content,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+@router.get("/finding/{finding_id}/comments")
+async def get_comments(finding_id: str, owner: str = Depends(get_current_owner)):
+    """Get all comments for a finding (chronological order)"""
+    db = await get_db()
+
+    # Verify finding exists and belongs to owner
+    finding = await db.fetchone(
+        "SELECT id, owner_id FROM findings WHERE id = ? AND owner_id = ?",
+        (finding_id, owner),
+    )
+    if not finding:
+        raise HTTPException(status_code=404, detail="Finding not found or access denied")
+
+    comments = await db.fetchall(
+        """
+        SELECT id, finding_id, user_id, content, created_at, updated_at
+        FROM comments
+        WHERE finding_id = ?
+        ORDER BY created_at ASC
+        """,
+        (finding_id,),
+    )
+
+    return {
+        "finding_id": finding_id,
+        "comments": [
+            {
+                "id": c["id"],
+                "finding_id": c["finding_id"],
+                "user_id": c["user_id"],
+                "content": c["content"],
+                "created_at": c["created_at"],
+                "updated_at": c["updated_at"],
+            }
+            for c in comments
+        ],
+    }
+
+
+@router.post("/finding/{finding_id}/assign")
+async def assign_finding(
+    finding_id: str,
+    body: AssignmentRequest,
+    owner: str = Depends(get_current_owner),
+):
+    """Assign a finding to a team member"""
+    db = await get_db()
+
+    # Verify finding exists and belongs to owner
+    finding = await db.fetchone(
+        "SELECT id, owner_id FROM findings WHERE id = ? AND owner_id = ?",
+        (finding_id, owner),
+    )
+    if not finding:
+        raise HTTPException(status_code=404, detail="Finding not found or access denied")
+
+    now = datetime.utcnow().isoformat()
+
+    # Update finding with assignment
+    await db.execute(
+        """
+        UPDATE findings
+        SET assigned_to = ?, assigned_by = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (body.assigned_to, owner, now, finding_id),
+    )
+
+    # Create activity record
+    activity_id = str(uuid.uuid4())
+    await db.execute(
+        """
+        INSERT INTO activities (id, finding_id, user_id, action, details_json, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            activity_id,
+            finding_id,
+            owner,
+            "finding_assigned",
+            json.dumps({"assigned_to": body.assigned_to, "assigned_by": owner}),
+            now,
+        ),
+    )
+
+    # Create notification for the assignee
+    notif_id = str(uuid.uuid4())
+    await db.execute(
+        """
+        INSERT INTO notifications (id, user_id, finding_id, action_type, message, is_read, metadata_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            notif_id,
+            body.assigned_to,
+            finding_id,
+            "finding_assigned",
+            f"Finding assigned to you by {owner}",
+            False,
+            json.dumps({"assigned_by": owner}),
+            now,
+        ),
+    )
+
+    await invalidate_view_cache()
+
+    return {
+        "id": finding_id,
+        "assigned_to": body.assigned_to,
+        "assigned_by": owner,
+        "timestamp": now,
+    }
+
+
+@router.post("/finding/{finding_id}/status")
+async def update_finding_status(
+    finding_id: str,
+    body: StatusUpdateRequest,
+    owner: str = Depends(get_current_owner),
+):
+    """Update a finding's status (OPEN, IN_PROGRESS, RESOLVED)"""
+    db = await get_db()
+
+    # Verify finding exists and belongs to owner
+    finding = await db.fetchone(
+        "SELECT id, owner_id, status FROM findings WHERE id = ? AND owner_id = ?",
+        (finding_id, owner),
+    )
+    if not finding:
+        raise HTTPException(status_code=404, detail="Finding not found or access denied")
+
+    old_status = finding["status"]
+    new_status = body.status.value
+
+    now = datetime.utcnow().isoformat()
+
+    # Update finding status
+    await db.execute(
+        "UPDATE findings SET status = ? WHERE id = ?",
+        (new_status, finding_id),
+    )
+
+    # Create activity record
+    activity_id = str(uuid.uuid4())
+    await db.execute(
+        """
+        INSERT INTO activities (id, finding_id, user_id, action, details_json, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            activity_id,
+            finding_id,
+            owner,
+            "status_changed",
+            json.dumps({"old_status": old_status, "new_status": new_status}),
+            now,
+        ),
+    )
+
+    # Create notification for assignee if set
+    assignee_row = await db.fetchone(
+        "SELECT assigned_to FROM findings WHERE id = ?", (finding_id,)
+    )
+    if assignee_row and assignee_row["assigned_to"]:
+        notif_id = str(uuid.uuid4())
+        await db.execute(
+            """
+            INSERT INTO notifications (id, user_id, finding_id, action_type, message, is_read, metadata_json, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                notif_id,
+                assignee_row["assigned_to"],
+                finding_id,
+                "status_changed",
+                f"Finding status changed to {new_status}",
+                False,
+                json.dumps({"status": new_status}),
+                now,
+            ),
+        )
+
+    await invalidate_view_cache()
+
+    return {
+        "id": finding_id,
+        "old_status": old_status,
+        "new_status": new_status,
+        "timestamp": now,
+    }
+
+
+@router.post("/finding/{finding_id}/visibility")
+async def update_finding_visibility(
+    finding_id: str,
+    body: VisibilityUpdateRequest,
+    owner: str = Depends(get_current_owner),
+):
+    """Update a finding's visibility level (PRIVATE, TEAM, PUBLIC)"""
+    db = await get_db()
+
+    # Verify finding exists and belongs to owner
+    finding = await db.fetchone(
+        "SELECT id, owner_id, visibility FROM findings WHERE id = ? AND owner_id = ?",
+        (finding_id, owner),
+    )
+    if not finding:
+        raise HTTPException(status_code=404, detail="Finding not found or access denied")
+
+    old_visibility = finding["visibility"]
+    new_visibility = body.visibility.value
+
+    now = datetime.utcnow().isoformat()
+
+    # Update finding visibility
+    await db.execute(
+        "UPDATE findings SET visibility = ? WHERE id = ?",
+        (new_visibility, finding_id),
+    )
+
+    # Create activity record
+    activity_id = str(uuid.uuid4())
+    await db.execute(
+        """
+        INSERT INTO activities (id, finding_id, user_id, action, details_json, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            activity_id,
+            finding_id,
+            owner,
+            "visibility_changed",
+            json.dumps({"old_visibility": old_visibility, "new_visibility": new_visibility}),
+            now,
+        ),
+    )
+
+    await invalidate_view_cache()
+
+    return {
+        "id": finding_id,
+        "old_visibility": old_visibility,
+        "new_visibility": new_visibility,
+        "timestamp": now,
+    }
+
+
+@router.get("/notifications")
+async def get_notifications(
+    is_read: Optional[bool] = None,
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    owner: str = Depends(get_current_owner),
+):
+    """Get notifications for the current user (optionally filtered by read status)"""
+    db = await get_db()
+
+    # Build query
+    query = "SELECT * FROM notifications WHERE user_id = ?"
+    params: List[Any] = [owner]
+
+    if is_read is not None:
+        query += " AND is_read = ?"
+        params.append(1 if is_read else 0)
+
+    query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
+
+    notifications = await db.fetchall(query, tuple(params))
+
+    # Get total count for pagination
+    count_query = "SELECT COUNT(*) as cnt FROM notifications WHERE user_id = ?"
+    count_params: List[Any] = [owner]
+    if is_read is not None:
+        count_query += " AND is_read = ?"
+        count_params.append(1 if is_read else 0)
+
+    count_row = await db.fetchone(count_query, tuple(count_params))
+    total = count_row["cnt"] if count_row else 0
+
+    return {
+        "notifications": [
+            {
+                "id": n["id"],
+                "user_id": n["user_id"],
+                "finding_id": n["finding_id"],
+                "action_type": n["action_type"],
+                "message": n["message"],
+                "is_read": bool(n["is_read"]),
+                "metadata": json.loads(n["metadata_json"]) if n["metadata_json"] else {},
+                "created_at": n["created_at"],
+            }
+            for n in notifications
+        ],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+@router.post("/notification/{notification_id}/mark-read")
+async def mark_notification_read(
+    notification_id: str,
+    owner: str = Depends(get_current_owner),
+):
+    """Mark a notification as read"""
+    db = await get_db()
+
+    # Verify notification belongs to owner
+    notif = await db.fetchone(
+        "SELECT id, user_id FROM notifications WHERE id = ? AND user_id = ?",
+        (notification_id, owner),
+    )
+    if not notif:
+        raise HTTPException(status_code=404, detail="Notification not found or access denied")
+
+    # Mark as read
+    await db.execute(
+        "UPDATE notifications SET is_read = 1 WHERE id = ?",
+        (notification_id,),
+    )
+
+    return {"id": notification_id, "is_read": True}
+
+
+@router.get("/finding/{finding_id}/activity")
+async def get_finding_activity(
+    finding_id: str,
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    owner: str = Depends(get_current_owner),
+):
+    """Get activity/audit trail for a finding"""
+    db = await get_db()
+
+    # Verify finding exists and belongs to owner
+    finding = await db.fetchone(
+        "SELECT id, owner_id FROM findings WHERE id = ? AND owner_id = ?",
+        (finding_id, owner),
+    )
+    if not finding:
+        raise HTTPException(status_code=404, detail="Finding not found or access denied")
+
+    # Fetch activity records (most recent first)
+    activity_rows = await db.fetchall(
+        """
+        SELECT id, finding_id, user_id, action, details_json, timestamp
+        FROM activities
+        WHERE finding_id = ?
+        ORDER BY timestamp DESC
+        LIMIT ? OFFSET ?
+        """,
+        (finding_id, limit, offset),
+    )
+
+    # Get total count
+    count_row = await db.fetchone(
+        "SELECT COUNT(*) as cnt FROM activities WHERE finding_id = ?",
+        (finding_id,),
+    )
+    total = count_row["cnt"] if count_row else 0
+
+    return {
+        "finding_id": finding_id,
+        "activities": [
+            {
+                "id": a["id"],
+                "finding_id": a["finding_id"],
+                "user_id": a["user_id"],
+                "action": a["action"],
+                "details": json.loads(a["details_json"]) if a["details_json"] else {},
+                "timestamp": a["timestamp"],
+            }
+            for a in activity_rows
+        ],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
+

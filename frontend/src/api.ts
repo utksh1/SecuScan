@@ -688,3 +688,96 @@ export function getAssetServices() {
 export function getKnowledgebaseStatus() {
   return request('/knowledgebase/status')
 }
+
+
+// ── Collaboration & Team Features ────────────────────────────────────────────
+
+export interface CommentRecord {
+  id: string
+  finding_id: string
+  user_id: string
+  content: string
+  created_at: string
+  updated_at: string
+}
+
+export interface NotificationAlert {
+  id: string
+  user_id: string
+  finding_id?: string
+  action_type: string
+  message: string
+  is_read: boolean
+  metadata: Record<string, unknown>
+  created_at: string
+}
+
+export interface ActivityRecord {
+  id: string
+  finding_id: string
+  user_id: string
+  action: string
+  details: Record<string, unknown>
+  timestamp: string
+}
+
+export async function postComment(findingId: string, content: string): Promise<CommentRecord> {
+  return request<CommentRecord>(`/finding/${findingId}/comments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  })
+}
+
+export async function getComments(findingId: string): Promise<{ finding_id: string; comments: CommentRecord[] }> {
+  return request(`/finding/${findingId}/comments`)
+}
+
+export async function assignFinding(findingId: string, assignedTo: string): Promise<{ id: string; assigned_to: string; assigned_by: string; timestamp: string }> {
+  return request(`/finding/${findingId}/assign`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ assigned_to: assignedTo }),
+  })
+}
+
+export async function updateFindingStatus(findingId: string, status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED'): Promise<{ id: string; old_status: string; new_status: string; timestamp: string }> {
+  return request(`/finding/${findingId}/status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status }),
+  })
+}
+
+export async function updateFindingVisibility(findingId: string, visibility: 'PRIVATE' | 'TEAM' | 'PUBLIC'): Promise<{ id: string; old_visibility: string; new_visibility: string; timestamp: string }> {
+  return request(`/finding/${findingId}/visibility`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ visibility }),
+  })
+}
+
+export async function getNotifications(params?: { is_read?: boolean; limit?: number; offset?: number }): Promise<{ notifications: NotificationAlert[]; total: number; limit: number; offset: number }> {
+  const sp = new URLSearchParams()
+  if (typeof params?.is_read === 'boolean') sp.set('is_read', String(params.is_read))
+  if (typeof params?.limit === 'number') sp.set('limit', String(params.limit))
+  if (typeof params?.offset === 'number') sp.set('offset', String(params.offset))
+  const suffix = sp.toString() ? `?${sp.toString()}` : ''
+  return request(`/notifications${suffix}`)
+}
+
+export async function markNotificationRead(notificationId: string): Promise<{ id: string; is_read: boolean }> {
+  return request(`/notification/${notificationId}/mark-read`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  })
+}
+
+export async function getActivity(findingId: string, params?: { limit?: number; offset?: number }): Promise<{ finding_id: string; activities: ActivityRecord[]; total: number; limit: number; offset: number }> {
+  const sp = new URLSearchParams()
+  if (typeof params?.limit === 'number') sp.set('limit', String(params.limit))
+  if (typeof params?.offset === 'number') sp.set('offset', String(params.offset))
+  const suffix = sp.toString() ? `?${sp.toString()}` : ''
+  return request(`/finding/${findingId}/activity${suffix}`)
+}
