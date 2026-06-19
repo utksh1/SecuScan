@@ -2,9 +2,9 @@
 Integration tests for GET /api/v1/admin/vault/diagnostics (issue #809).
 
 Verifies the secure diagnostics contract:
-- the route is admin-gated (401 without a valid admin key),
-- it surfaces a non-secret, stable key fingerprint,
-- the fingerprint matches the configured key and never leaks key material,
+- the route is admin-gated (401 without a valid admin key)
+- it surfaces a non-secret, stable key fingerprint
+- the fingerprint matches the configured key and never leaks key material
 - it reports configured/false instead of erroring when no key is set.
 """
 

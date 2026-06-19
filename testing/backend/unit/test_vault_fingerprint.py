@@ -1,12 +1,11 @@
 """
 Unit tests for the vault key fingerprint (issue #809).
 
-The fingerprint must let operators confirm key-rotation state without ever
-exposing key material, so it has to be:
+The fingerprint must let operators confirm key-rotation state without ever exposing key material, so it has to be:
 
-- deterministic / stable for a given key,
-- different for different keys (changes on rotation),
-- one-way: it must not contain or trivially reveal the key,
+- deterministic / stable for a given key
+- different for different keys (changes on rotation)
+- one-way: it must not contain or trivially reveal the key
 - a fixed, well-formed colon-separated hex identifier.
 """
 
