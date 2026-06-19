@@ -10,6 +10,10 @@ Vulnerability exceptions are maintained in the root directory under [.audit-conf
 
 To document a new exception (to temporarily allow a dependency vulnerability that blocks deployment in CI), add an entry under the `exceptions` block using the following format:
 
+Vulnerability exceptions are maintained in the root directory under [.audit-config.yaml](../.audit-config.yaml).
+
+To document a new exception (to temporarily allow a dependency vulnerability that blocks deployment in CI), add an entry under the `exceptions` block using the following format:
+
 ```yaml
 exceptions:
   CVE-2026-99999:
@@ -39,7 +43,67 @@ exceptions:
 
 ---
 
-## 2. Local Reproduction Commands
+## 2. Triage Decision Table
+
+When a new vulnerability appears in a dependency audit, use this table to decide the appropriate action.
+
+### Decision Matrix
+
+| Severity | Exploitable in Our Context? | Affected Scope | Recommended Action | Exception Required? |
+|----------|---------------------------|---------------|-------------------|-------------------|
+| Critical | Yes (active attack surface) | Production | **Block deployment** — fix or upgrade immediately | No |
+| Critical | Unlikely (disabled feature, internal-only) | Development | **Exception with expiry** — document mitigation and set review date | Yes |
+| High | Yes | Production | **Block deployment** — file security ticket and track fix | No |
+| High | Mitigated by config or network controls | Any | **Exception with reason** — document mitigation and review quarterly | Yes |
+| Medium | Yes | Production | **Block deployment** — schedule fix within 30 days | No |
+| Medium | Dev-only dependency | Development | **Acknowledge** — no blocking, track in backlog | No |
+| Low | Any | Any | **Acknowledge** — no blocking, review at next update cycle | No |
+| Info | Any | Any | **Acknowledge** — informational only, no action | No |
+
+### Decision Rules
+
+**Always block (no exception):**
+- Critical/High severity + active production exploitability
+- Vulnerability with known RCE (remote code execution) vector
+- Dependency that handles authentication or sensitive data
+
+**Exception candidates:**
+- Mitigated by WAF, network segmentation, or feature flags
+- Development-only dependency that is not shipped in production artifacts
+- Dependency used by a tool that is only invoked in controlled CI environments
+- Vulnerability with no known exploit Proof-of-Concept
+
+**Always acknowledge (no exception, no block):**
+- Low/Info severity with no active context
+- Vulnerability in a transitive dependency with no control over the upgrade path (document the constraint)
+
+### Exception Review Cadence
+
+All exceptions must include an `expires_at` date. Suggested review intervals:
+
+| Vulnerability Type | Suggested Expiry |
+|---|---|
+| Critical with mitigations | 30 days |
+| High with mitigations | 60 days |
+| Medium dev-only | 90 days |
+| High with no exploit PoC | 90 days |
+| Low/Info (acknowledged) | 180 days |
+
+Expired exceptions automatically fail the CI build when `enforce_expiry: true` is set in `.audit-config.yaml`.
+
+### Filing a Security Ticket
+
+When blocking a deployment for a Critical or High vulnerability:
+
+1. Create a GitHub issue with label `type:security`
+2. Link the CVE/GHSA in the description
+3. Assign to the relevant team owner
+4. Set a target fix date based on severity (Critical: 7 days, High: 30 days)
+5. Add the issue URL to the exception `ticket` field while the fix is pending
+
+---
+
+## 3. Local Reproduction Commands
 
 You can run the audit tools locally to verify dependency status and validate configuration files.
 
