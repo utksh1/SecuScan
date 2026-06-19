@@ -16,6 +16,7 @@ import {
   UserShield02Icon,
 } from '@hugeicons/core-free-icons'
 import { getDashboardSummary, getReports, API_BASE } from '../api'
+import { usePreferredExportFormat } from '../hooks/usePreferredExportFormat'
 import { formatDateLong, isWithinDateRange, type DateRange } from '../utils/date'
 
 type Report = {
@@ -96,7 +97,7 @@ export default function Reports() {
   const [selectedDateRange, setSelectedDateRange] = useState<DateRange>('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [preferredFormat, setPreferredFormat] = useState<string | null>(null)
+  const { preferred: preferredFormat, savePreference } = usePreferredExportFormat()
   const latestReadyReport = [...reports]
     .filter((report) => report.status === 'ready')
     .sort((a, b) => new Date(b.generated_at).getTime() - new Date(a.generated_at).getTime())[0]
@@ -120,8 +121,6 @@ export default function Reports() {
 
   useEffect(() => {
     fetchReports()
-    const pref = localStorage.getItem('secuscan:preferred-export-format')
-    if (pref) setPreferredFormat(pref)
   }, [])
 
   const filteredReports = reports.filter((report) =>
@@ -156,10 +155,11 @@ export default function Reports() {
           <button
             onClick={() => {
               if (!latestReadyReport) return
-              window.open(`${API_BASE}/task/${latestReadyReport.task_id}/report/pdf`, '_blank')
+              const format = preferredFormat ?? 'pdf'
+              window.open(`${API_BASE}/task/${latestReadyReport.task_id}/report/${format}`, '_blank')
             }}
-            aria-label="Download latest ready report PDF"
-            title={latestReadyReport ? 'Download latest ready report PDF' : 'No ready report available'}
+            aria-label={`Download latest ready report ${(preferredFormat ?? 'pdf').toUpperCase()}`}
+            title={latestReadyReport ? `Download latest ready report ${(preferredFormat ?? 'pdf').toUpperCase()}` : 'No ready report available'}
             disabled={!latestReadyReport}
             className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
           >
@@ -402,11 +402,7 @@ export default function Reports() {
                                   key={format}
                                   onClick={() => {
                                     if (report.status === 'generating') return
-                                    // Persist preferred export format for future sessions/tests
-                                    try {
-                                      localStorage.setItem('secuscan:preferred-export-format', format)
-                                    } catch {}
-                                    setPreferredFormat(format)
+                                    savePreference(format)
                                     window.open(`${API_BASE}/task/${report.task_id}/report/${format}`, '_blank')
                                   }}
                                   disabled={report.status === 'generating'}

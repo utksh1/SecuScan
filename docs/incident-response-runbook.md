@@ -15,6 +15,42 @@
 4. **Audit** which reports and scans ran during the exposure window
 5. **Notify** affected users if credentials were accessed
 
+### Secret Rotation Dry-Run Checklist
+
+Before rotating production vault keys, perform a dry-run exercise to validate the process and reduce the risk of service disruption.
+
+#### Preparation
+
+- Identify all services, scripts, and automation that depend on `SECUSCAN_VAULT_KEY`
+- Confirm access to deployment environments and secret management systems
+- Create a temporary non-production vault key for testing
+- Ensure recent backups of encrypted vault data are available
+- Notify relevant team members about the dry-run window
+
+#### Dry-Run Procedure
+
+1. Generate a temporary replacement vault key in a staging or test environment
+2. Update the environment configuration to use the temporary key
+3. Re-encrypt a representative set of stored credentials
+4. Restart affected services and verify normal startup behavior
+5. Execute common workflows that require vault access
+6. Review logs for encryption, decryption, or authentication errors
+7. Document any manual steps, delays, or unexpected issues encountered
+
+#### Validation
+
+- Vault secrets can be encrypted and decrypted successfully
+- No application startup failures occur after key replacement
+- Existing integrations continue to function correctly
+- Audit logs accurately record vault access events
+- Recovery steps are documented and tested
+
+#### Rollback Readiness
+
+- Retain the previous key until validation is complete
+- Verify that the original configuration can be restored quickly
+- Confirm that backup data can be recovered if required
+
 ### Verification
 
 ```bash

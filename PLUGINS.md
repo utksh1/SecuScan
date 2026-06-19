@@ -6,8 +6,8 @@ Last synced: 2026-05-11
 
 ## At a Glance
 
-- Total plugins: 60
-- Safe plugins: 27
+- Total plugins: 59
+- Safe plugins: 26
 - Intrusive plugins: 25
 - Exploit plugins: 8
 - Source of truth: each plugin's `metadata.json`
@@ -26,14 +26,14 @@ Only run scans against systems you own or are explicitly authorized to assess.
 
 | Category | Count |
 | --- | ---: |
-| `recon` | 19 |
+| `recon` | 17 |
 | `vulnerability` | 12 |
 | `robots` | 5 |
 | `web` | 5 |
 | `exploit` | 5 |
 | `network` | 3 |
 | `expert` | 3 |
-| `code` | 2 |
+| `code` | 3 |
 | `forensics` | 2 |
 | `utils` | 2 |
 | `execution` | 1 |
@@ -76,6 +76,7 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | Port Scanner | `port-scanner` | `recon` | `intrusive` | `nmap` | Detect open ports and fingerprint services. |
 | Advanced Network Recon | `scapy_recon` | `network` | `safe` | `python3` | Advanced network probing using Scapy. |
 | Secret Scanner | `secret_scanner` | `code` | `safe` | `gitleaks` | Scan directories for hardcoded secrets. |
+| Semgrep Scanner | `semgrep_scanner` | `code` | `safe` | `semgrep` | Multi-language static code analysis using Semgrep. |
 | Sharepoint Scanner | `sharepoint_scanner` | `vulnerability` | `intrusive` | `nuclei` | Check SharePoint for security issues, misconfigs, and more. |
 | Sitemap Generator | `sitemap_gen` | `robots` | `intrusive` | `katana` | Depth-focused Katana crawl for sitemap-style URL inventory. |
 | Sniper: Auto-Exploiter | `sniper` | `exploit` | `exploit` | `python3` | Validate critical CVEs by automatic exploitation. |
@@ -101,6 +102,14 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | XSS Exploiter | `xss_exploiter` | `exploit` | `exploit` | `python3` | Exploit XSS in real-life attacks to extract cookies and data. |
 | Binary Signature Scan | `yara_scan` | `forensics` | `intrusive` | `yara` | Binary and file-system signature matching with YARA rules. |
 | DAST Web Proxy (ZAP) | `zap_scanner` | `vulnerability` | `exploit` | `python3` | Dynamic proxy spidering and payload injection. |
+
+### Hashcat Output Artifacts
+
+- Session files for resumable runs
+- Potfile entries containing recovered hashes
+- Recovered credential output returned by the parser
+
+Review and remove these artifacts after authorized assessments.
 
 ### SQL Injection Plugin Guidance
 
@@ -341,3 +350,16 @@ Two additional lint checks help maintain high-quality plugin metadata:
 Existing plugins can be brought into compliance incrementally — the help
 text check is a non-blocking warning, and unknown categories cause a
 clear error message identifying the problem.
+
+---
+
+---
+
+## Catalog Validation (For Contributors)
+
+To prevent the index, categories, and metrics in this file from drifting out of sync with the live plugin directories, a validation tool is provided.
+
+Before submitting a Pull Request that adds, removes, or modifies a plugin, ensure the catalog is synced by running:
+
+```bash
+python scripts/validate_plugins_catalog.py
