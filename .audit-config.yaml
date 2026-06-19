@@ -17,12 +17,7 @@ policy:
 
 # Documented exceptions with business justification
 # Format: CVE-XXXX-XXXXX or GHSA-xxxx-xxxx-xxxx
-exceptions:
-  "GHSA-gv7w-rqvm-qjhr":
-    package: "esbuild"
-    reason: "esbuild 0.28.1+ breaks build due to dropped legacy target transpilation; pending esbuild upstream fix or vite upgrade to bundled patched version"
-    expires_at: "2026-09-15"
-    approved_by: "dev-team"
+exceptions: {}
 
 # Packages to exclude from audits (use sparingly!)
 excluded_packages: []
