@@ -2327,3 +2327,40 @@ async def export_audit_log(format: str = "json"):
         media_type=mime_type,
         headers={"Content-Disposition": f"attachment; filename=network-audit.{format}"}
     )
+
+
+@router.get("/admin/vault/diagnostics", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
+async def get_vault_diagnostics():
+    """Report non-secret diagnostics for the credential vault key.
+    Surfaces a one-way fingerprint of the active vault key so operators can confirm key-rotation state without the key material ever leaving the server.
+    Applies across deployments or before/after a rotation.
+    The endpoint never fails on configuration state: when no key is configured it reports ``configured: false`` with a null fingerprint.
+    So it can double as a health probe for vault configuration.
+    The route is admin-gated: while the fingerprint is non-secret, the key source and configuration status are operational details that belong behind the same boundary as the rest of the ``/admin`` surface.
+    """
+    if settings.vault_key:
+        key_source = "vault_key"
+    elif settings.plugin_signature_key:
+        key_source = "plugin_signature_key"
+    else:
+        key_source = None
+
+    try:
+        crypto = VaultCrypto(settings.resolved_vault_key)
+    except RuntimeError:
+        # No SECUSCAN_VAULT_KEY / plugin signature key configured.
+        return {
+            "configured": False,
+            "key_source": None,
+            "algorithm": "AES-256-GCM",
+            "key_fingerprint": None,
+            "fingerprint_algorithm": "sha256-trunc64",
+        }
+
+    return {
+        "configured": True,
+        "key_source": key_source,
+        "algorithm": "AES-256-GCM",
+        "key_fingerprint": crypto.key_fingerprint,
+        "fingerprint_algorithm": "sha256-trunc64",
+    }
