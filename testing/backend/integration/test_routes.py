@@ -294,3 +294,59 @@ def test_task_retry_idempotency(test_client):
         # Attempting to retry a completed task should fail
         retry_res_3 = test_client.post(f"/api/v1/task/{task_id}/retry")
         assert retry_res_3.status_code == 400
+
+def test_task_retry_authorization(test_client):
+    """Test the /task/{task_id}/retry endpoint properly scopes to owner."""
+    import sqlite3
+    from backend.secuscan.config import settings
+
+    payload = {
+        "plugin_id": "http_inspector",
+        "inputs": {"url": "http://127.0.0.1:8000"},
+        "consent_granted": True,
+    }
+    start_res = test_client.post("/api/v1/task/start", json=payload)
+    assert start_res.status_code == 200
+    task_id = start_res.json()["task_id"]
+
+    # Temporarily change owner in the database to simulate another user's task
+    with sqlite3.connect(settings.database_path) as conn:
+        conn.execute("UPDATE tasks SET owner_id = 'other_owner', status = 'failed' WHERE id = ?", (task_id,))
+        conn.commit()
+
+    # Attempt to retry it with our default test_client (which is not 'other_owner')
+    retry_res = test_client.post(f"/api/v1/task/{task_id}/retry")
+    assert retry_res.status_code == 403
+    assert "access" in retry_res.json()["detail"].lower()
+
+def test_task_retry_terminal_states(test_client):
+    """Test retry behavior explicitly on all terminal vs non-terminal statuses."""
+    import sqlite3
+    from backend.secuscan.config import settings
+
+    payload = {
+        "plugin_id": "http_inspector",
+        "inputs": {"url": "http://127.0.0.1:8000"},
+        "consent_granted": True,
+    }
+    start_res = test_client.post("/api/v1/task/start", json=payload)
+    assert start_res.status_code == 200
+    task_id = start_res.json()["task_id"]
+
+    # Test mapping of status to expected HTTP response codes when hitting /retry
+    status_expectations = [
+        ("completed", 400),
+        ("failed", 200),
+        ("cancelled", 200),
+        ("queued", 409),
+        ("running", 409),
+    ]
+
+    for status, expected_code in status_expectations:
+        with sqlite3.connect(settings.database_path) as conn:
+            conn.execute("UPDATE tasks SET status = ? WHERE id = ?", (status, task_id))
+            conn.commit()
+
+        with patch("backend.secuscan.executor.TaskExecutor.execute_task"):
+            res = test_client.post(f"/api/v1/task/{task_id}/retry")
+            assert res.status_code == expected_code, f"Expected {expected_code} for status '{status}', got {res.status_code}"
