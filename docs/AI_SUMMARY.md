@@ -19,7 +19,50 @@ reports generate exactly as before, no exceptions, no extra dependencies needed.
    credentials are **never** included in the prompt.
 3. The LLM returns a 3–5 sentence plain-text paragraph.
 4. The summary appears as a highlighted block at the top of the Executive Overview
-   section in both HTML and PDF reports. SARIF is left untouched.
+   section in both HTML and PDF reports.
+
+---
+
+## Structured Output Formats
+
+The AI executive summary is **not** included in all report formats. This section documents the per-format behavior and the reasoning behind it.
+
+### Format Summary
+
+| Format | AI Summary Included | Reason |
+|--------|---------------------|--------|
+| HTML   | Yes                 | Human-readable; summary improves readability for stakeholders |
+| PDF    | Yes                 | Printed/archived reports benefit from the plain-English overview |
+| SARIF  | No                  | Machine-readable format for CI integrations; summary would break schema validity |
+| JSON   | No                  | Structured export is designed for programmatic consumption; summary would add unstructured noise |
+
+### SARIF Exclusion
+
+SARIF (Static Analysis Results Interchange Format) is a JSON-based standard used by CI tools, security scanners, and IDEs to consume and process scan results programmatically. Adding a free-text AI summary to SARIF output would:
+
+- Break strict schema validation in consuming tools (GitHub Code Scanning, Defender, etc.)
+- Add non-deterministic content that varies between LLM calls, complicating reproducible CI results
+- Introduce unstructured text into a format designed for structured data
+
+The SARIF report contains the full machine-readable list of findings. CI consumers can extract any metadata they need directly from the structured JSON.
+
+### JSON/CSV Export Exclusion
+
+Bulk JSON and CSV exports are designed for data processing pipelines, database ingestion, or third-party integrations. Including the AI summary would:
+
+- Add unstructured text to structured output formats
+- Complicate downstream parsing (summary may contain commas, quotes, newlines)
+- Be redundant — the findings data already includes all the metadata the summary is based on
+
+### HTML and PDF Inclusion
+
+HTML and PDF reports are the primary human-facing outputs. The AI summary adds the most value here:
+
+- Non-technical stakeholders can understand scan results without reading raw findings
+- The highlighted block at the top of the Executive Overview provides immediate context
+- Both formats handle rich text and are not subject to machine-consumption constraints
+
+This design ensures the AI summary reaches the right audience without interfering with machine-consumable outputs.
 
 ---
 
