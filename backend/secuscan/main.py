@@ -25,10 +25,10 @@ from .config import settings
 from .auth import init_api_key
 from .cache import init_cache, cache as global_cache
 from .database import init_db, db as global_db
-from .plugins import init_plugins
 from .routes import router
 from .saved_views import saved_views_router
 from .workflows import scheduler
+from .plugins import init_plugins, get_plugin_check_latency_ms
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level),
@@ -219,7 +219,8 @@ async def health_check():
             "platform": platform.system(),
             "python_version": sys.version.split()[0],
             "docker_available": shutil.which("docker") is not None,
-        }
+        },
+        "plugin_check_latency_ms": get_plugin_check_latency_ms(),
     }
 
 # Root endpoint
