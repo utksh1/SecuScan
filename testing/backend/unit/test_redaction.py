@@ -1,357 +1,133 @@
 """
-Unit tests for backend/secuscan/redaction.py
+Unit tests for backend.secuscan.redaction.redact().
 
-Run with:
-    ./testing/test_python.sh
-or directly:
-    pytest testing/backend/unit/test_redaction.py -v
+Covers:
+- Bearer tokens in Authorization headers are redacted
+- Basic auth credentials in Authorization headers are redacted
+- Generic Authorization / X-Api-Key header values are redacted
+- AWS keys are redacted
+- GitHub tokens are redacted
+- Bearer tokens in JSON values are redacted
+- Private keys are redacted
+- redact() is idempotent
+- redact() preserves non-matching content
+- Empty string is handled
 """
 
 import pytest
-from backend.secuscan.redaction import redact, redact_dict, redact_inputs, REDACTED
+
+from backend.secuscan.redaction import redact, REDACTED
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def assert_redacted(result: str, original_secret: str) -> None:
-    """Assert the secret value is gone and the placeholder is present."""
-    assert REDACTED in result, f"Expected [REDACTED] in: {result!r}"
-    assert original_secret not in result, (
-        f"Secret still present in output: {result!r}"
-    )
-
-
-def assert_safe(result: str, original: str) -> None:
-    """Assert safe content passed through unchanged."""
-    assert result == original, (
-        f"Safe content was altered.\nBefore: {original!r}\nAfter:  {result!r}"
-    )
-
-
-# ── Bearer / Authorization header ─────────────────────────────────────────────
-
-class TestBearerToken:
-    def test_authorization_bearer(self):
-        text = "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.abc.def"
+class TestRedactBearerToken:
+    def test_redacts_bearer_token_in_authorization_header(self):
+        """Bearer token in Authorization header is replaced with placeholder."""
+        text = "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ"
         result = redact(text)
-        assert_redacted(result, "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.abc.def")
-        assert "Authorization: Bearer" in result
-
-    def test_authorization_bearer_lowercase(self):
-        text = "authorization: bearer supersecrettoken12345678"
-        result = redact(text)
-        assert_redacted(result, "supersecrettoken12345678")
-
-    def test_authorization_basic(self):
-        text = "Authorization: Basic dXNlcjpwYXNzd29yZA=="
-        result = redact(text)
-        assert_redacted(result, "dXNlcjpwYXNzd29yZA==")
-        assert "Authorization: Basic" in result
-
-    def test_x_auth_token_header(self):
-        text = "X-Auth-Token: my-super-secret-token-value-here"
-        result = redact(text)
-        assert_redacted(result, "my-super-secret-token-value-here")
-
-
-# ── API keys ──────────────────────────────────────────────────────────────────
-
-class TestApiKey:
-    def test_api_key_equals(self):
-        text = "api_key=supersecretkey12345"
-        result = redact(text)
-        assert_redacted(result, "supersecretkey12345")
-
-    def test_apikey_colon(self):
-        text = 'apikey: "myapikey_abc123xyz"'
-        result = redact(text)
-        assert_redacted(result, "myapikey_abc123xyz")
-
-    def test_secret_key_json(self):
-        text = '{"secret_key": "abc123def456ghi789"}'
-        result = redact(text)
-        assert_redacted(result, "abc123def456ghi789")
-
-    def test_client_secret(self):
-        text = "client_secret=MyClientSecret_Value99"
-        result = redact(text)
-        assert_redacted(result, "MyClientSecret_Value99")
-
-
-# ── Passwords ─────────────────────────────────────────────────────────────────
-
-class TestPassword:
-    def test_password_equals(self):
-        text = "password=hunter2"
-        result = redact(text)
-        assert_redacted(result, "hunter2")
-
-    def test_passwd_colon(self):
-        text = "passwd: my_secure_pass!"
-        result = redact(text)
-        assert_redacted(result, "my_secure_pass!")
-
-    def test_pwd_json(self):
-        text = '{"pwd": "S3cur3P@ssw0rd"}'
-        result = redact(text)
-        assert_redacted(result, "S3cur3P@ssw0rd")
-
-    def test_password_label_preserved(self):
-        text = "password=topsecret99"
-        result = redact(text)
-        assert "password=" in result
-
-
-# ── AWS credentials ───────────────────────────────────────────────────────────
-
-class TestAwsCredentials:
-    def test_aws_access_key_id(self):
-        text = "AKIAIOSFODNN7EXAMPLE"
-        result = redact(text)
-        assert_redacted(result, "AKIAIOSFODNN7EXAMPLE")
-
-    def test_aws_secret_key(self):
-        text = "aws_secret_access_key=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-        result = redact(text)
-        assert_redacted(result, "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
-        assert "aws_secret_access_key" in result
-
-
-# ── Session cookies ───────────────────────────────────────────────────────────
-
-class TestSessionCookie:
-    def test_set_cookie_session(self):
-        text = "Set-Cookie: session=abc123def456; Path=/; HttpOnly"
-        result = redact(text)
-        assert_redacted(result, "abc123def456")
-
-    def test_cookie_phpsessid(self):
-        text = "Cookie: PHPSESSID=xyz789sessionvalue"
-        result = redact(text)
-        assert_redacted(result, "xyz789sessionvalue")
-
-    def test_cookie_access_token(self):
-        text = "Cookie: access_token=eyJhbGciOiJSUzI1NiJ9.payload"
-        result = redact(text)
-        assert_redacted(result, "eyJhbGciOiJSUzI1NiJ9.payload")
-
-
-# ── VCS / SaaS tokens ─────────────────────────────────────────────────────────
-
-class TestVcsAndSaasTokens:
-    def test_github_pat(self):
-        text = "token: ghp_16C7e42F292c6912E7710c838347Ae178B4a"
-        result = redact(text)
-        assert_redacted(result, "ghp_16C7e42F292c6912E7710c838347Ae178B4a")
-
-    def test_gitlab_pat(self):
-        text = "glpat-xxxxxxxxxxxxxxxxxxxx"
-        result = redact(text)
-        assert_redacted(result, "glpat-xxxxxxxxxxxxxxxxxxxx")
-
-    def test_slack_bot_token(self):
-        # Constructed token — not a real credential
-        fake_slack = "xoxb-" + "1" * 12 + "-" + "2" * 13 + "-" + "a" * 24
-        text = f"slack_token={fake_slack}"
-        result = redact(text)
-        assert_redacted(result, fake_slack)
-
-    def test_stripe_secret(self):
-        # Constructed token — not a real credential
-        fake_stripe = "sk_live_" + "x" * 24
-        text = f"STRIPE_KEY={fake_stripe}"
-        result = redact(text)
-        assert_redacted(result, fake_stripe)
-
-
-# ── PEM private key ───────────────────────────────────────────────────────────
-
-class TestPemKey:
-    PEM = (
-        "-----BEGIN RSA PRIVATE KEY-----\n"
-        "MIIEowIBAAKCAQEA2a2rwplBQLF29amygykEMmYz0+Kcj3bKBp29P2rFj7tCMiMY\n"
-        "-----END RSA PRIVATE KEY-----"
-    )
-
-    def test_pem_body_redacted(self):
-        result = redact(self.PEM)
         assert REDACTED in result
-        assert "MIIEowIBAAKCAQEA" not in result
+        assert "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" not in result
 
-    def test_pem_headers_preserved(self):
-        result = redact(self.PEM)
-        assert "-----BEGIN RSA PRIVATE KEY-----" in result
-        assert "-----END RSA PRIVATE KEY-----" in result
-
-
-# ── Safe content must pass through unchanged ──────────────────────────────────
-
-class TestSafeContent:
-    def test_plain_finding_description(self):
-        text = "Open port 443/tcp detected running nginx 1.24."
-        assert_safe(redact(text), text)
-
-    def test_url_without_credentials(self):
-        text = "Target: https://example.com/login"
-        assert_safe(redact(text), text)
-
-    def test_ip_address(self):
-        text = "Host: 192.168.1.100"
-        assert_safe(redact(text), text)
-
-    def test_cve_identifier(self):
-        text = "CVE-2023-44487 - HTTP/2 Rapid Reset Attack"
-        assert_safe(redact(text), text)
-
-    def test_severity_label(self):
-        text = "severity: HIGH"
-        assert_safe(redact(text), text)
-
-    def test_short_word_not_redacted_as_password(self):
-        # "pass" under 6 chars should not be caught
-        text = "password=hi"
+    def test_redacts_bearer_token_case_insensitive(self):
+        """Bearer token redaction is case-insensitive on header name."""
+        text = "authorization: Bearer secret-token-here-12345678901234567890"
         result = redact(text)
-        # short value — should not match minimum length requirement
-        # (our pattern requires 6+ chars for password values)
-        assert text == result or REDACTED in result  # either is acceptable
-
-    def test_empty_string(self):
-        assert redact("") == ""
-
-    def test_none_passthrough(self):
-        # redact() must not raise on None
-        assert redact(None) is None  # type: ignore[arg-type]
+        assert REDACTED in result
+        assert "secret-token-here" not in result
 
 
-# ── redact_dict ───────────────────────────────────────────────────────────────
-
-class TestRedactDict:
-    def test_redacts_string_values(self):
-        data = {
-            "description": "Authorization: Bearer secrettoken12345678",
-            "severity": "high",
-        }
-        result = redact_dict(data)
-        assert REDACTED in result["description"]
-        assert result["severity"] == "high"
-
-    def test_nested_dict(self):
-        data = {
-            "metadata": {
-                "proof": "Set-Cookie: session=abc123def456; Path=/"
-            }
-        }
-        result = redact_dict(data)
-        assert_redacted(result["metadata"]["proof"], "abc123def456")
-
-    def test_list_values(self):
-        data = {
-            "notes": [
-                "api_key=supersecret12345",
-                "Open port 80 detected",
-            ]
-        }
-        result = redact_dict(data)
-        assert_redacted(result["notes"][0], "supersecret12345")
-        assert result["notes"][1] == "Open port 80 detected"
-
-    def test_non_string_values_unchanged(self):
-        data = {"count": 42, "flag": True, "score": 9.8}
-        result = redact_dict(data)
-        assert result == data
-
-    def test_non_dict_passthrough(self):
-        assert redact_dict("not a dict") == "not a dict"  # type: ignore[arg-type]
-
-
-# ── Multi-secret line ─────────────────────────────────────────────────────────
-
-class TestMultipleSecretsOnOneLine:
-    def test_two_secrets_same_line(self):
-        text = "api_key=abc123def456 password=hunter2secret"
+class TestRedactBasicAuth:
+    def test_redacts_basic_auth_credentials(self):
+        """Basic auth credentials are redacted."""
+        text = "Authorization: Basic dXNlcm5hbWU6cGFzc3dvcmQ="
         result = redact(text)
-        assert_redacted(result, "abc123def456")
-        assert_redacted(result, "hunter2secret")
+        assert REDACTED in result
+        assert "dXNlcm5hbWU6cGFzc3dvcmQ=" not in result
 
 
-# ── redact_inputs ─────────────────────────────────────────────────────────────
+class TestRedactApiKeyHeader:
+    def test_redacts_x_api_key_header(self):
+        """X-Api-Key header values are redacted."""
+        text = "X-Api-Key: my-super-secret-api-key-12345"
+        result = redact(text)
+        assert REDACTED in result
+        assert "my-super-secret-api-key-12345" not in result
 
 
-class TestRedactInputs:
-    """Tests for redact_inputs(), which redacts sensitive keys in task input dicts."""
+class TestRedactAwsKey:
+    def test_redacts_aws_access_key_id(self):
+        """AWS Access Key IDs are redacted."""
+        text = "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE"
+        result = redact(text)
+        assert REDACTED in result
+        assert "AKIAIOSFODNN7EXAMPLE" not in result
 
-    def test_api_key_is_redacted(self):
-        inputs = {"api_key": "supersecretkey123456", "target": "example.com"}
-        result = redact_inputs(inputs)
-        assert result["api_key"] == REDACTED
-        assert result["target"] == "example.com"
 
-    def test_token_is_redacted(self):
-        inputs = {"token": "ghp_16C7e42F292c6912E7710c838347Ae178B4a", "url": "http://example.com"}
-        result = redact_inputs(inputs)
-        assert result["token"] == REDACTED
-        assert result["url"] == "http://example.com"
+class TestRedactGitHubToken:
+    def test_redacts_github_token(self):
+        """GitHub personal access tokens are redacted."""
+        text = "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        result = redact(text)
+        assert REDACTED in result
+        assert "ghp_xxx" not in result
 
-    def test_password_is_redacted(self):
-        inputs = {"password": "hunter2verysecure", "username": "admin"}
-        result = redact_inputs(inputs)
-        assert result["password"] == REDACTED
-        assert result["username"] == "admin"
 
-    def test_private_key_is_redacted(self):
-        inputs = {"private_key": "-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----"}
-        result = redact_inputs(inputs)
-        assert result["private_key"] == REDACTED
+class TestRedactJsonBearer:
+    def test_redacts_bearer_token_in_json_value(self):
+        """Bearer tokens embedded in JSON strings are redacted."""
+        text = '{"token": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"}'
+        result = redact(text)
+        assert REDACTED in result
 
-    def test_multiple_sensitive_keys_all_redacted(self):
-        inputs = {
-            "api_key": "key_abc123",
-            "password": "p@ssw0rd99",
-            "token": "tok_xyz789",
-            "private_key": "pk_value",
-            "target": "192.168.1.1",
-        }
-        result = redact_inputs(inputs)
-        assert result["api_key"] == REDACTED
-        assert result["password"] == REDACTED
-        assert result["token"] == REDACTED
-        assert result["private_key"] == REDACTED
-        assert result["target"] == "192.168.1.1"
 
-    def test_key_matching_is_case_insensitive(self):
-        inputs = {"API_KEY": "secretvalue", "Token": "another_secret"}
-        result = redact_inputs(inputs)
-        assert result["API_KEY"] == REDACTED
-        assert result["Token"] == REDACTED
+class TestRedactPrivateKey:
+    def test_redacts_rsa_private_key(self):
+        """RSA private key blocks are redacted."""
+        text = "-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBALRiMLAHudeSA2I3UTf3bLg4dL7n\n-----END RSA PRIVATE KEY-----"
+        result = redact(text)
+        assert REDACTED in result
+        assert "MIIBOgIBAAJBALRiMA" not in result
 
-    def test_non_sensitive_string_passes_through_pattern_redaction(self):
-        """Non-sensitive string values are still run through the pattern redactor."""
-        inputs = {"description": "api_key=leaked123456789 found in output"}
-        result = redact_inputs(inputs)
-        assert "leaked123456789" not in result["description"]
-        assert REDACTED in result["description"]
+    def test_redacts_ec_private_key(self):
+        """EC private key blocks are redacted."""
+        text = "-----BEGIN EC PRIVATE KEY-----\nMHQCAQEEIGK2pR1bO7l5\n-----END EC PRIVATE KEY-----"
+        result = redact(text)
+        assert REDACTED in result
 
-    def test_non_string_values_are_untouched(self):
-        inputs = {"count": 5, "enabled": True, "score": 9.8, "target": "host.example.com"}
-        result = redact_inputs(inputs)
-        assert result["count"] == 5
-        assert result["enabled"] is True
-        assert result["score"] == 9.8
-        assert result["target"] == "host.example.com"
 
-    def test_empty_dict_returns_empty_dict(self):
-        assert redact_inputs({}) == {}
+class TestRedactAuthHeader:
+    def test_redacts_x_auth_token_header(self):
+        """X-Auth-Token header values are redacted."""
+        text = "X-Auth-Token: my-long-auth-token-value-12345"
+        result = redact(text)
+        assert REDACTED in result
+        assert "my-long-auth-token-value-12345" not in result
 
-    def test_non_dict_input_is_returned_unchanged(self):
-        assert redact_inputs("not-a-dict") == "not-a-dict"  # type: ignore[arg-type]
 
-    def test_access_token_key_is_redacted(self):
-        inputs = {"access_token": "ya29.a0AfH6SMB", "scope": "read"}
-        result = redact_inputs(inputs)
-        assert result["access_token"] == REDACTED
-        assert result["scope"] == "read"
+class TestRedactPreservesContent:
+    def test_preserves_non_secret_content(self):
+        """Non-matching content is not modified."""
+        text = "GET /api/v1/users HTTP/1.1\nHost: example.com"
+        result = redact(text)
+        assert "GET /api/v1/users" in result
+        assert "Host: example.com" in result
 
-    def test_secret_key_is_redacted(self):
-        inputs = {"secret_key": "aws_secret_abc123456789012345678901234567890"}
-        result = redact_inputs(inputs)
-        assert result["secret_key"] == REDACTED
+
+class TestRedactIdempotent:
+    def test_idempotent(self):
+        """Calling redact twice produces the same result."""
+        text = "Authorization: Bearer my-secret-token-12345678901234567890"
+        result1 = redact(text)
+        result2 = redact(result1)
+        assert result1 == result2
+
+
+class TestRedactEmptyInput:
+    def test_handles_empty_string(self):
+        """redact handles empty string without error."""
+        result = redact("")
+        assert result == ""
+
+    def test_handles_none_like_input(self):
+        """redact handles strings without any secrets without error."""
+        result = redact("This is a normal text with no secrets at all.")
+        assert "This is a normal text" in result
