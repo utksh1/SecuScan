@@ -19,18 +19,22 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+
 class PolicyAction(Enum):
     """Network policy decision outcome"""
+
     ALLOW = "allow"
     DENY = "deny"
+
 
 @dataclass
 class NetworkPolicy:
     """Single network access policy rule"""
-    cidr: str                      # Network in CIDR notation
-    action: PolicyAction          # Allow or deny
-    reason: str                   # Why this rule exists
-    created_at: datetime          # When rule was added
+
+    cidr: str  # Network in CIDR notation
+    action: PolicyAction  # Allow or deny
+    reason: str  # Why this rule exists
+    created_at: datetime  # When rule was added
     expires_at: Optional[datetime] = None  # Optional expiration
 
     def to_dict(self) -> Dict[str, Any]:
@@ -43,9 +47,11 @@ class NetworkPolicy:
             "expires_at": self.expires_at.isoformat() if self.expires_at else None,
         }
 
+
 @dataclass
 class AuditLogEntry:
     """Network access audit trail entry"""
+
     timestamp: datetime
     plugin_id: str
     task_id: str
@@ -53,7 +59,7 @@ class AuditLogEntry:
     dest_ip: str
     dest_port: int
     dest_hostname: Optional[str]
-    policy_matched: str           # CIDR that caused decision
+    policy_matched: str  # CIDR that caused decision
     reason: str
 
     def to_dict(self) -> Dict[str, Any]:
@@ -69,6 +75,7 @@ class AuditLogEntry:
             "policy_matched": self.policy_matched,
             "reason": self.reason,
         }
+
 
 class NetworkPolicyEngine:
     """
@@ -94,7 +101,7 @@ class NetworkPolicyEngine:
         try:
             # Ensure the directory exists
             Path(self.audit_log_path).parent.mkdir(parents=True, exist_ok=True)
-            with open(self.audit_log_path, 'a') as f:
+            with open(self.audit_log_path, "a") as f:
                 if f.tell() == 0:  # Empty file
                     f.write("# SecuScan Network Audit Log\n")
                     f.write(f"# Started: {datetime.now().isoformat()}\n")
@@ -105,7 +112,7 @@ class NetworkPolicyEngine:
         self,
         cidr: str,
         reason: str = "Operator configured",
-        expires_at: Optional[datetime] = None
+        expires_at: Optional[datetime] = None,
     ) -> None:
         """
         Add a network to the allowlist.
@@ -134,7 +141,7 @@ class NetworkPolicyEngine:
         self,
         cidr: str,
         reason: str = "System blocked",
-        expires_at: Optional[datetime] = None
+        expires_at: Optional[datetime] = None,
     ) -> None:
         """
         Add a network to the denylist.
@@ -186,6 +193,7 @@ class NetworkPolicyEngine:
         if "://" in target_host:
             try:
                 from urllib.parse import urlparse
+
                 parsed = urlparse(target_host)
                 if parsed.scheme in {"http", "https", "ws", "wss"}:
                     if parsed.hostname:
@@ -308,8 +316,9 @@ class NetworkPolicyEngine:
         self.audit_entries.append(entry)
 
         try:
-            with open(self.audit_log_path, 'a') as f:
+            with open(self.audit_log_path, "a") as f:
                 import json
+
                 f.write(json.dumps(entry.to_dict()) + "\n")
         except IOError as e:
             logger.error(f"Failed to write audit log: {e}")
@@ -318,7 +327,7 @@ class NetworkPolicyEngine:
         self,
         plugin_id: Optional[str] = None,
         action: Optional[PolicyAction] = None,
-        limit: int = 1000
+        limit: int = 1000,
     ) -> List[AuditLogEntry]:
         """
         Retrieve audit log entries with optional filtering.
@@ -392,32 +401,48 @@ class NetworkPolicyEngine:
         if format == "csv":
             import csv
             import io
+
             output = io.StringIO()
-            writer = csv.DictWriter(output, fieldnames=[
-                'timestamp', 'plugin_id', 'task_id', 'action',
-                'dest_ip', 'dest_port', 'dest_hostname', 'policy_matched', 'reason'
-            ])
+            writer = csv.DictWriter(
+                output,
+                fieldnames=[
+                    "timestamp",
+                    "plugin_id",
+                    "task_id",
+                    "action",
+                    "dest_ip",
+                    "dest_port",
+                    "dest_hostname",
+                    "policy_matched",
+                    "reason",
+                ],
+            )
             writer.writeheader()
             for entry in self.audit_entries:
                 writer.writerow(entry.to_dict())
             return output.getvalue()
         else:  # JSON
             import json
+
             return json.dumps([e.to_dict() for e in self.audit_entries], indent=2)
+
 
 # Global policy engine instance
 _policy_engine: Optional[NetworkPolicyEngine] = None
+
 
 def get_policy_engine() -> NetworkPolicyEngine:
     """Get or create global policy engine singleton"""
     global _policy_engine
     if _policy_engine is None:
         from .config import settings
+
         _policy_engine = NetworkPolicyEngine(
             audit_log_path=settings.network_audit_log_file
         )
         _init_default_policies(_policy_engine)
     return _policy_engine
+
 
 def _init_default_policies(engine: NetworkPolicyEngine) -> None:
     """Initialize default security policies"""

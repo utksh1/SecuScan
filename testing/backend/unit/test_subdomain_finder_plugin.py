@@ -22,7 +22,9 @@ PARSER_PATH = Path(settings.plugins_dir) / PLUGIN_ID / "parser.py"
 
 
 def _load_subdomain_discovery_parser():
-    spec = importlib.util.spec_from_file_location("subdomain_discovery_parser", PARSER_PATH)
+    spec = importlib.util.spec_from_file_location(
+        "subdomain_discovery_parser", PARSER_PATH
+    )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -51,7 +53,9 @@ def test_subdomain_discovery_metadata_loads_through_validation_path(plugin_manag
     assert {"target", "all", "threads"} <= field_ids
 
 
-def test_subdomain_discovery_build_command_renders_representative_target(plugin_manager):
+def test_subdomain_discovery_build_command_renders_representative_target(
+    plugin_manager,
+):
     target = "secuscan.in"
     command = plugin_manager.build_command(PLUGIN_ID, {"target": target})
 
@@ -62,7 +66,9 @@ def test_subdomain_discovery_build_command_renders_representative_target(plugin_
     assert "-all" not in command
 
 
-def test_subdomain_discovery_build_command_includes_all_flag_when_enabled(plugin_manager):
+def test_subdomain_discovery_build_command_includes_all_flag_when_enabled(
+    plugin_manager,
+):
     target = "secuscan.in"
     command = plugin_manager.build_command(
         PLUGIN_ID,
@@ -110,7 +116,9 @@ def test_subdomain_discovery_executor_normalizes_parser_fixture(plugin_manager):
     assert plugin is not None
 
     parsed = parser.parse(FIXTURE_PATH.read_text(encoding="utf-8"))
-    normalized = executor._normalize_parsed_result(plugin, FIXTURE_PATH.read_text(encoding="utf-8"), parsed)
+    normalized = executor._normalize_parsed_result(
+        plugin, FIXTURE_PATH.read_text(encoding="utf-8"), parsed
+    )
 
     assert normalized["count"] == 3
     assert len(normalized["findings"]) == 3

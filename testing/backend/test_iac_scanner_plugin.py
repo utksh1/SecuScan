@@ -227,4 +227,7 @@ def test_iac_scanner_parser_preserves_raw_line_in_metadata():
     single_line = "terraform/main.tf: Critical infrastructure vulnerability detected\n"
     result = parse(single_line)
     assert result["findings"]
-    assert result["findings"][0]["metadata"]["raw"] == "terraform/main.tf: Critical infrastructure vulnerability detected"
+    assert (
+        result["findings"][0]["metadata"]["raw"]
+        == "terraform/main.tf: Critical infrastructure vulnerability detected"
+    )

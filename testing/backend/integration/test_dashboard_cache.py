@@ -35,9 +35,9 @@ def test_dashboard_summary_second_request_hits_cache(test_client):
         r2 = test_client.get("/api/v1/dashboard/summary")
         assert r2.status_code == 200
 
-        assert mock_fetchall.call_count == calls_after_first, (
-            "second request must not issue new DB queries — data should come from cache"
-        )
+        assert (
+            mock_fetchall.call_count == calls_after_first
+        ), "second request must not issue new DB queries — data should come from cache"
 
         assert r1.json() == r2.json()
 
@@ -82,9 +82,9 @@ def test_dashboard_summary_cache_invalidated_after_task_start(test_client):
         # was cleared.
         r2 = test_client.get("/api/v1/dashboard/summary")
         assert r2.status_code == 200
-        assert mock_fetchall.call_count > calls_after_warm, (
-            "post-invalidation request must rebuild from the database"
-        )
+        assert (
+            mock_fetchall.call_count > calls_after_warm
+        ), "post-invalidation request must rebuild from the database"
 
 
 def test_dashboard_summary_cache_invalidated_when_task_enters_running(test_client):
@@ -106,10 +106,16 @@ def test_dashboard_summary_cache_invalidated_when_task_enters_running(test_clien
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            task_id, "http_inspector", "http_inspector", "https://example.com",
-            "queued", "2026-05-19T10:00:00",
-            "standard", json.dumps({"target": "https://example.com"}),
-            "", json.dumps({"findings": []}),
+            task_id,
+            "http_inspector",
+            "http_inspector",
+            "https://example.com",
+            "queued",
+            "2026-05-19T10:00:00",
+            "standard",
+            json.dumps({"target": "https://example.com"}),
+            "",
+            json.dumps({"findings": []}),
         ),
     )
     conn.commit()
@@ -131,11 +137,12 @@ def test_dashboard_summary_cache_invalidated_when_task_enters_running(test_clien
 
     # Manually trigger the invalidation the executor now calls after updating to running
     from backend.secuscan.executor import executor
+
     asyncio.run(executor._invalidate_cached_views())
 
     # Dashboard must reflect the running task, not the stale cached snapshot
     r2 = test_client.get("/api/v1/dashboard/summary")
     assert r2.status_code == 200
-    assert r2.json()["scan_activity"]["running"] == 1, (
-        "dashboard must show running count after cache invalidation on task start"
-    )
+    assert (
+        r2.json()["scan_activity"]["running"] == 1
+    ), "dashboard must show running count after cache invalidation on task start"

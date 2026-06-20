@@ -499,12 +499,16 @@ async def send_email(
         f"View results in the SecuScan Dashboard."
     )
 
-    title_esc = html.escape(str(finding.get('title') or ""))
-    category_esc = html.escape(str(finding.get('category') or ""))
-    severity_esc = html.escape(str(finding.get('severity') or ""))
-    target_esc = html.escape(str(finding.get('target') or ""))
-    description_esc = html.escape(str(finding.get('description') or "")).replace('\n', '<br>')
-    remediation_esc = html.escape(str(finding.get('remediation') or "")).replace('\n', '<br>')
+    title_esc = html.escape(str(finding.get("title") or ""))
+    category_esc = html.escape(str(finding.get("category") or ""))
+    severity_esc = html.escape(str(finding.get("severity") or ""))
+    target_esc = html.escape(str(finding.get("target") or ""))
+    description_esc = html.escape(str(finding.get("description") or "")).replace(
+        "\n", "<br>"
+    )
+    remediation_esc = html.escape(str(finding.get("remediation") or "")).replace(
+        "\n", "<br>"
+    )
 
     body_html = f"""<!DOCTYPE html>
 <html>
@@ -542,10 +546,14 @@ async def send_email(
 </html>"""
 
     try:
-        await asyncio.to_thread(_send_smtp_email_sync, target_email, subject, body_text, body_html)
+        await asyncio.to_thread(
+            _send_smtp_email_sync, target_email, subject, body_text, body_html
+        )
         return True, None
     except Exception as exc:
-        logger.error("Failed to send SMTP email notification to %s: %s", target_email, exc)
+        logger.error(
+            "Failed to send SMTP email notification to %s: %s", target_email, exc
+        )
         return False, str(exc)
 
 

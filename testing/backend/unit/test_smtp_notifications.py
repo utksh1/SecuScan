@@ -3,6 +3,7 @@ import pytest
 from backend.secuscan.config import settings
 from backend.secuscan.notification_service import send_email
 
+
 @pytest.fixture
 def smtp_payload():
     return {
@@ -15,9 +16,10 @@ def smtp_payload():
             "severity": "critical",
             "target": "https://example.com",
             "description": "API key was found exposed in JavaScript code.",
-            "remediation": "Revoke the API key and configure it securely on the server side."
+            "remediation": "Revoke the API key and configure it securely on the server side.",
         }
     }
+
 
 @pytest.mark.anyio
 @patch("smtplib.SMTP")
@@ -103,8 +105,8 @@ async def test_send_email_html_escaping(mock_smtp_class):
             "category": "Credentials",
             "severity": "critical",
             "target": "<img src=x onerror=alert('target')>",
-            "description": "<div class=\"xss\">description</div>\nnew line",
-            "remediation": "<iframe src=\"javascript:alert('remediation')\"></iframe>"
+            "description": '<div class="xss">description</div>\nnew line',
+            "remediation": "<iframe src=\"javascript:alert('remediation')\"></iframe>",
         }
     }
 
@@ -118,6 +120,7 @@ async def test_send_email_html_escaping(mock_smtp_class):
     msg_str = call_args[2]
 
     import email
+
     msg = email.message_from_string(msg_str)
     html_part = None
     for part in msg.walk():
@@ -129,7 +132,10 @@ async def test_send_email_html_escaping(mock_smtp_class):
     assert "&lt;script&gt;alert(&#x27;title&#x27;)&lt;/script&gt;" in html_part
     assert "&lt;img src=x onerror=alert(&#x27;target&#x27;)&gt;" in html_part
     assert "&lt;div class=&quot;xss&quot;&gt;description&lt;/div&gt;" in html_part
-    assert "&lt;iframe src=&quot;javascript:alert(&#x27;remediation&#x27;)&quot;&gt;&lt;/iframe&gt;" in html_part
+    assert (
+        "&lt;iframe src=&quot;javascript:alert(&#x27;remediation&#x27;)&quot;&gt;&lt;/iframe&gt;"
+        in html_part
+    )
 
     # Check that newlines in description/remediation are replaced with <br>
     assert "description&lt;/div&gt;<br>new line" in html_part

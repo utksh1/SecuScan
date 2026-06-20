@@ -21,7 +21,9 @@ def parse(output: str) -> Dict[str, Any]:
 
     stats_match = PING_STATS_RE.search(output)
     timeout_count = sum(1 for line in lines if "request timeout" in line.lower())
-    filtered = any("communication prohibited by filter" in line.lower() for line in lines)
+    filtered = any(
+        "communication prohibited by filter" in line.lower() for line in lines
+    )
 
     findings = []
     summary = []
@@ -47,7 +49,9 @@ def parse(output: str) -> Dict[str, Any]:
         )
 
         if reachable:
-            summary.append(f"{target} responded to ICMP echo with {received}/{transmitted} replies.")
+            summary.append(
+                f"{target} responded to ICMP echo with {received}/{transmitted} replies."
+            )
             findings.append(
                 {
                     "title": f"Host Reachable: {target}",
@@ -62,8 +66,14 @@ def parse(output: str) -> Dict[str, Any]:
                 }
             )
         else:
-            reason = "ICMP traffic appears filtered along the network path." if filtered else "The host did not reply to the probe."
-            summary.append(f"{target} did not respond to ICMP echo. Packet loss: {packet_loss:.1f}%.")
+            reason = (
+                "ICMP traffic appears filtered along the network path."
+                if filtered
+                else "The host did not reply to the probe."
+            )
+            summary.append(
+                f"{target} did not respond to ICMP echo. Packet loss: {packet_loss:.1f}%."
+            )
             findings.append(
                 {
                     "title": f"No ICMP Response: {target}",

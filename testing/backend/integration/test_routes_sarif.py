@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 from backend.secuscan.database import get_db
 
+
 async def insert_mock_completed_task(task_id: str):
     db = await get_db()
     await db.execute(
@@ -22,21 +23,24 @@ async def insert_mock_completed_task(task_id: str):
             "standard",
             '{"target": "https://example.com"}',
             "nikto -h https://example.com",
-            json.dumps({
-                "findings": [
-                    {
-                        "title": "Exposed admin panel",
-                        "category": "Exposure",
-                        "severity": "HIGH",
-                        "target": "src/admin.py:45",
-                        "description": "Admin panel is reachable.",
-                        "remediation": "Restrict access.",
-                        "cve": "CVE-2026-0001"
-                    }
-                ]
-            })
-        )
+            json.dumps(
+                {
+                    "findings": [
+                        {
+                            "title": "Exposed admin panel",
+                            "category": "Exposure",
+                            "severity": "HIGH",
+                            "target": "src/admin.py:45",
+                            "description": "Admin panel is reachable.",
+                            "remediation": "Restrict access.",
+                            "cve": "CVE-2026-0001",
+                        }
+                    ]
+                }
+            ),
+        ),
     )
+
 
 async def insert_mock_failed_task(task_id: str):
     db = await get_db()
@@ -55,9 +59,10 @@ async def insert_mock_failed_task(task_id: str):
             "standard",
             '{"target": "https://example.com"}',
             "nikto -h https://example.com",
-            json.dumps({"findings": []})
-        )
+            json.dumps({"findings": []}),
+        ),
     )
+
 
 def test_download_sarif_report_success(test_client):
     task_id = "test-task-completed-123"
@@ -73,7 +78,10 @@ def test_download_sarif_report_success(test_client):
     # Verify Content-Disposition header
     assert "attachment" in response.headers["content-disposition"]
     assert "filename=" in response.headers["content-disposition"]
-    assert "secuscan_http-inspector_example-com_" in response.headers["content-disposition"]
+    assert (
+        "secuscan_http-inspector_example-com_"
+        in response.headers["content-disposition"]
+    )
     assert ".sarif" in response.headers["content-disposition"]
 
     # Verify SARIF payload
@@ -86,10 +94,12 @@ def test_download_sarif_report_success(test_client):
     assert results[0]["ruleId"] == "cve-2026-0001"
     assert results[0]["level"] == "error"
 
+
 def test_download_sarif_report_not_found(test_client):
     response = test_client.get("/api/v1/task/non-existent-task-id/report/sarif")
     assert response.status_code == 404
     assert "Task not found" in response.json()["detail"]
+
 
 def test_download_sarif_report_not_finished(test_client):
     # If the task is queued/running, we expect 400 Bad Request
@@ -102,7 +112,14 @@ def test_download_sarif_report_not_finished(test_client):
             INSERT INTO tasks (id, plugin_id, tool_name, target, status, created_at)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (task_id, "http_inspector", "http_inspector", "https://example.com", "running", "2026-05-14T10:30:00")
+            (
+                task_id,
+                "http_inspector",
+                "http_inspector",
+                "https://example.com",
+                "running",
+                "2026-05-14T10:30:00",
+            ),
         )
 
     asyncio.run(insert_running_task())
@@ -110,6 +127,7 @@ def test_download_sarif_report_not_finished(test_client):
     response = test_client.get(f"/api/v1/task/{task_id}/report/sarif")
     assert response.status_code == 400
     assert "Task is not finished yet" in response.json()["detail"]
+
 
 def test_download_sarif_report_failed_task(test_client):
     task_id = "test-task-failed-123"
@@ -133,7 +151,9 @@ def test_download_sarif_report_failed_task(test_client):
         ("sarif", "backend.secuscan.routes.reporting.generate_sarif_report"),
     ],
 )
-def test_download_report_generation_failure_returns_structured_error(test_client, report_format, patch_target):
+def test_download_report_generation_failure_returns_structured_error(
+    test_client, report_format, patch_target
+):
     task_id = f"test-task-report-fail-{report_format}"
     asyncio.run(insert_mock_completed_task(task_id))
 

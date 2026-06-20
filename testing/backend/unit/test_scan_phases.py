@@ -29,6 +29,7 @@ def make_task_row(task_id: str, status: str, scan_phase: str = None):
 
 async def _call_with_mock_db(executor, task_id, mock_db):
     import backend.secuscan.executor as executor_module
+
     original = executor_module.get_db
 
     async def mock_get_db():
@@ -45,7 +46,9 @@ async def _call_with_mock_db(executor, task_id, mock_db):
 async def test_queued_task_has_scan_phase():
     executor = TaskExecutor()
     mock_db = AsyncMock()
-    mock_db.fetchone.return_value = make_task_row("aaa", TaskStatus.QUEUED.value, ScanPhase.QUEUED.value)
+    mock_db.fetchone.return_value = make_task_row(
+        "aaa", TaskStatus.QUEUED.value, ScanPhase.QUEUED.value
+    )
 
     with patch("backend.secuscan.executor.get_db", new=AsyncMock(return_value=mock_db)):
         result = await _call_with_mock_db(executor, "aaa", mock_db)
@@ -57,7 +60,9 @@ async def test_queued_task_has_scan_phase():
 async def test_running_task_has_running_command_phase():
     executor = TaskExecutor()
     mock_db = AsyncMock()
-    mock_db.fetchone.return_value = make_task_row("aaa", TaskStatus.RUNNING.value, ScanPhase.RUNNING_COMMAND.value)
+    mock_db.fetchone.return_value = make_task_row(
+        "aaa", TaskStatus.RUNNING.value, ScanPhase.RUNNING_COMMAND.value
+    )
 
     with patch("backend.secuscan.executor.get_db", new=AsyncMock(return_value=mock_db)):
         result = await _call_with_mock_db(executor, "aaa", mock_db)
@@ -69,7 +74,9 @@ async def test_running_task_has_running_command_phase():
 async def test_parsing_phase():
     executor = TaskExecutor()
     mock_db = AsyncMock()
-    mock_db.fetchone.return_value = make_task_row("aaa", TaskStatus.RUNNING.value, ScanPhase.PARSING.value)
+    mock_db.fetchone.return_value = make_task_row(
+        "aaa", TaskStatus.RUNNING.value, ScanPhase.PARSING.value
+    )
 
     with patch("backend.secuscan.executor.get_db", new=AsyncMock(return_value=mock_db)):
         result = await _call_with_mock_db(executor, "aaa", mock_db)
@@ -81,7 +88,9 @@ async def test_parsing_phase():
 async def test_reporting_phase():
     executor = TaskExecutor()
     mock_db = AsyncMock()
-    mock_db.fetchone.return_value = make_task_row("aaa", TaskStatus.RUNNING.value, ScanPhase.REPORTING.value)
+    mock_db.fetchone.return_value = make_task_row(
+        "aaa", TaskStatus.RUNNING.value, ScanPhase.REPORTING.value
+    )
 
     with patch("backend.secuscan.executor.get_db", new=AsyncMock(return_value=mock_db)):
         result = await _call_with_mock_db(executor, "aaa", mock_db)
@@ -93,7 +102,9 @@ async def test_reporting_phase():
 async def test_finished_phase():
     executor = TaskExecutor()
     mock_db = AsyncMock()
-    mock_db.fetchone.return_value = make_task_row("aaa", TaskStatus.COMPLETED.value, ScanPhase.FINISHED.value)
+    mock_db.fetchone.return_value = make_task_row(
+        "aaa", TaskStatus.COMPLETED.value, ScanPhase.FINISHED.value
+    )
 
     with patch("backend.secuscan.executor.get_db", new=AsyncMock(return_value=mock_db)):
         result = await _call_with_mock_db(executor, "aaa", mock_db)
@@ -105,7 +116,9 @@ async def test_finished_phase():
 async def test_failed_task_scan_phase():
     executor = TaskExecutor()
     mock_db = AsyncMock()
-    mock_db.fetchone.return_value = make_task_row("aaa", TaskStatus.FAILED.value, ScanPhase.FINISHED.value)
+    mock_db.fetchone.return_value = make_task_row(
+        "aaa", TaskStatus.FAILED.value, ScanPhase.FINISHED.value
+    )
 
     with patch("backend.secuscan.executor.get_db", new=AsyncMock(return_value=mock_db)):
         result = await _call_with_mock_db(executor, "aaa", mock_db)
@@ -138,7 +151,7 @@ async def test_broadcast_phase_persists_to_db():
     # Verify the DB was updated
     mock_db.execute.assert_called_once_with(
         "UPDATE tasks SET scan_phase = ? WHERE id = ?",
-        (ScanPhase.PARSING.value, "task-1")
+        (ScanPhase.PARSING.value, "task-1"),
     )
 
 

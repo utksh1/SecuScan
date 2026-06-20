@@ -42,7 +42,9 @@ def sign_plugins(plugins_dir: Path, signature_key: str | None) -> int:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--plugins-dir", default="plugins", help="Plugins directory")
-    parser.add_argument("--signature-key", default=None, help="Optional HMAC signing key")
+    parser.add_argument(
+        "--signature-key", default=None, help="Optional HMAC signing key"
+    )
     args = parser.parse_args()
 
     count = sign_plugins(Path(args.plugins_dir), args.signature_key)

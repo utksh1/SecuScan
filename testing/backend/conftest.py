@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 def anyio_backend():
     return "asyncio"
 
+
 # Add repo root to sys.path so package imports work (backend.*)
 repo_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(repo_root))
@@ -47,11 +48,11 @@ def setup_test_environment(monkeypatch):
 
     temp_dir.cleanup()
 
+
 @pytest.fixture
 def anyio_backend():
     """Force AnyIO tests to run on asyncio (trio is not a dependency in CI)."""
     return "asyncio"
-
 
 
 @pytest.fixture
@@ -65,6 +66,7 @@ def test_client(setup_test_environment):
             concurrent_limiter.running_tasks.clear()
         try:
             from backend.secuscan.ratelimit import reset_all_endpoint_limiters
+
             await reset_all_endpoint_limiters()
         except ImportError:
             pass
@@ -84,6 +86,7 @@ def test_client(setup_test_environment):
             concurrent_limiter.running_tasks.clear()
         try:
             from backend.secuscan.ratelimit import reset_all_endpoint_limiters
+
             await reset_all_endpoint_limiters()
         except ImportError:
             pass

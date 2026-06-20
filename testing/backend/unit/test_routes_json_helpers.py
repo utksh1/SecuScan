@@ -58,11 +58,11 @@ class TestDeserializeFindingRows:
         rows = [
             {
                 "metadata_json": '{"src": "test"}',
-                "risk_factors_json": '[]',
-                "evidence_json": '[]',
-                "asset_refs_json": '[]',
-                "references_json": '[]',
-                "corroborating_sources_json": '[]',
+                "risk_factors_json": "[]",
+                "evidence_json": "[]",
+                "asset_refs_json": "[]",
+                "references_json": "[]",
+                "corroborating_sources_json": "[]",
                 "title": "Test Finding",
             }
         ]
@@ -136,7 +136,9 @@ class TestParseWorkflowSteps:
         assert result == []
 
     def test_skips_non_dict_items(self):
-        result = _parse_workflow_steps(["not-a-dict", 123, {"plugin_id": "x", "inputs": {}}])
+        result = _parse_workflow_steps(
+            ["not-a-dict", 123, {"plugin_id": "x", "inputs": {}}]
+        )
         assert len(result) == 1
         assert result[0]["plugin_id"] == "x"
 
@@ -147,7 +149,14 @@ class TestParseWorkflowSteps:
         assert result[0]["plugin_id"] == ""
 
     def test_preserves_preset_field(self):
-        steps = [{"plugin_id": "nmap", "inputs": {}, "preset": "fast", "execution_context": {}}]
+        steps = [
+            {
+                "plugin_id": "nmap",
+                "inputs": {},
+                "preset": "fast",
+                "execution_context": {},
+            }
+        ]
         result = _parse_workflow_steps(steps)
         assert result[0]["preset"] == "fast"
 

@@ -149,7 +149,9 @@ class TestCapabilityEnforcerDeny:
     def test_error_carries_denied_set(self):
         enforcer = CapabilityEnforcer(denied_capabilities=["exploit", "credentials"])
         with pytest.raises(CapabilityDeniedError) as exc_info:
-            enforcer.check("metasploit", ["network", "exploit", "credentials"], "exploit")
+            enforcer.check(
+                "metasploit", ["network", "exploit", "credentials"], "exploit"
+            )
         blocked = exc_info.value.denied_capabilities
         assert "exploit" in blocked
         assert "credentials" in blocked

@@ -58,8 +58,14 @@ def test_plugin_metadata_ids_and_names_are_unique():
         ids[plugin_id].append(path.parent.name)
         names[plugin_name].append(path.parent.name)
 
-    duplicate_ids = {plugin_id: folders for plugin_id, folders in ids.items() if len(folders) > 1}
-    duplicate_names = {plugin_name: folders for plugin_name, folders in names.items() if len(folders) > 1}
+    duplicate_ids = {
+        plugin_id: folders for plugin_id, folders in ids.items() if len(folders) > 1
+    }
+    duplicate_names = {
+        plugin_name: folders
+        for plugin_name, folders in names.items()
+        if len(folders) > 1
+    }
 
     if duplicate_ids or duplicate_names:
         messages = []

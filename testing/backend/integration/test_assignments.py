@@ -54,7 +54,9 @@ def _get_finding_assignment(finding_id: str) -> dict:
         conn.close()
 
 
-def _get_notification_by_action(user_id: str, finding_id: str, action_type: str) -> dict:
+def _get_notification_by_action(
+    user_id: str, finding_id: str, action_type: str
+) -> dict:
     """Get a notification for a specific user and finding."""
     conn = sqlite3.connect(settings.database_path)
     try:
@@ -72,13 +74,13 @@ def test_assignment_basic(test_client):
     """Test that a finding can be assigned to a team member."""
     finding_id = "finding-assign-1"
     _seed_finding(ALICE_OWNER, finding_id)
-    
+
     resp = test_client.post(
         f"/api/v1/finding/{finding_id}/assign",
         json={"assigned_to": BOB_OWNER},
         headers=ALICE,
     )
-    
+
     assert resp.status_code == 200
     data = resp.json()
     assert data["id"] == finding_id
@@ -90,15 +92,15 @@ def test_assignment_updates_finding_fields(test_client):
     """Test that assignment updates the finding's assigned_to and assigned_by fields."""
     finding_id = "finding-assign-2"
     _seed_finding(ALICE_OWNER, finding_id)
-    
+
     resp = test_client.post(
         f"/api/v1/finding/{finding_id}/assign",
         json={"assigned_to": BOB_OWNER},
         headers=ALICE,
     )
-    
+
     assert resp.status_code == 200
-    
+
     # Verify database was updated
     assignment = _get_finding_assignment(finding_id)
     assert assignment["assigned_to"] == BOB_OWNER
@@ -109,15 +111,15 @@ def test_assignment_creates_activity(test_client):
     """Test that assignment creates an activity record."""
     finding_id = "finding-assign-3"
     _seed_finding(ALICE_OWNER, finding_id)
-    
+
     resp = test_client.post(
         f"/api/v1/finding/{finding_id}/assign",
         json={"assigned_to": BOB_OWNER},
         headers=ALICE,
     )
-    
+
     assert resp.status_code == 200
-    
+
     # Verify activity was created
     conn = sqlite3.connect(settings.database_path)
     try:
@@ -136,15 +138,15 @@ def test_assignment_notifies_assignee(test_client):
     """Test that the assignee receives a notification."""
     finding_id = "finding-assign-4"
     _seed_finding(ALICE_OWNER, finding_id)
-    
+
     resp = test_client.post(
         f"/api/v1/finding/{finding_id}/assign",
         json={"assigned_to": BOB_OWNER},
         headers=ALICE,
     )
-    
+
     assert resp.status_code == 200
-    
+
     # Verify Bob received a notification
     resp = test_client.get(
         "/api/v1/notifications",
@@ -153,27 +155,30 @@ def test_assignment_notifies_assignee(test_client):
     assert resp.status_code == 200
     data = resp.json()
     assert len(data["notifications"]) >= 1
-    
+
     assignment_notif = next(
         (n for n in data["notifications"] if n["action_type"] == "finding_assigned"),
         None,
     )
     assert assignment_notif is not None
-    assert finding_id in assignment_notif["finding_id"] or finding_id == assignment_notif["finding_id"]
+    assert (
+        finding_id in assignment_notif["finding_id"]
+        or finding_id == assignment_notif["finding_id"]
+    )
 
 
 def test_assignment_not_allowed_without_ownership(test_client):
     """Test that non-owner cannot assign a finding."""
     finding_id = "finding-assign-5"
     _seed_finding(ALICE_OWNER, finding_id)
-    
+
     # Bob tries to assign Alice's finding
     resp = test_client.post(
         f"/api/v1/finding/{finding_id}/assign",
         json={"assigned_to": CHARLIE_OWNER},
         headers=BOB,
     )
-    
+
     assert resp.status_code == 403
 
 
@@ -181,7 +186,7 @@ def test_multiple_reassignments(test_client):
     """Test that a finding can be reassigned multiple times."""
     finding_id = "finding-assign-6"
     _seed_finding(ALICE_OWNER, finding_id)
-    
+
     # First assignment: to Bob
     resp = test_client.post(
         f"/api/v1/finding/{finding_id}/assign",
@@ -189,7 +194,7 @@ def test_multiple_reassignments(test_client):
         headers=ALICE,
     )
     assert resp.status_code == 200
-    
+
     # Second assignment: to Charlie
     resp = test_client.post(
         f"/api/v1/finding/{finding_id}/assign",
@@ -197,7 +202,7 @@ def test_multiple_reassignments(test_client):
         headers=ALICE,
     )
     assert resp.status_code == 200
-    
+
     # Verify final assignment
     assignment = _get_finding_assignment(finding_id)
     assert assignment["assigned_to"] == CHARLIE_OWNER
@@ -208,7 +213,7 @@ def test_assignment_creates_two_activities_for_reassignment(test_client):
     """Test that reassignment creates a second activity record."""
     finding_id = "finding-assign-7"
     _seed_finding(ALICE_OWNER, finding_id)
-    
+
     # First assignment
     resp = test_client.post(
         f"/api/v1/finding/{finding_id}/assign",
@@ -216,7 +221,7 @@ def test_assignment_creates_two_activities_for_reassignment(test_client):
         headers=ALICE,
     )
     assert resp.status_code == 200
-    
+
     # Reassign
     resp = test_client.post(
         f"/api/v1/finding/{finding_id}/assign",
@@ -224,7 +229,7 @@ def test_assignment_creates_two_activities_for_reassignment(test_client):
         headers=ALICE,
     )
     assert resp.status_code == 200
-    
+
     # Verify two activities exist
     conn = sqlite3.connect(settings.database_path)
     try:
@@ -242,7 +247,7 @@ def test_assignment_with_invalid_user(test_client):
     """Test that assignment with non-existent user still stores the assignment."""
     finding_id = "finding-assign-8"
     _seed_finding(ALICE_OWNER, finding_id)
-    
+
     # Assign to a non-existent but valid-format user ID
     invalid_user = "user:nonexistent"
     resp = test_client.post(
@@ -250,9 +255,9 @@ def test_assignment_with_invalid_user(test_client):
         json={"assigned_to": invalid_user},
         headers=ALICE,
     )
-    
+
     # Should still succeed (we don't validate if user exists)
     assert resp.status_code == 200
-    
+
     assignment = _get_finding_assignment(finding_id)
     assert assignment["assigned_to"] == invalid_user

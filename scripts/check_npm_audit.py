@@ -32,6 +32,7 @@ SEVERITY_LEVELS = {
     "unknown": 1,
 }
 
+
 def load_config(config_file: str) -> dict:
     """Load audit configuration"""
     try:
@@ -51,10 +52,12 @@ def load_config(config_file: str) -> dict:
         "exceptions": {},
     }
 
+
 def load_npm_audit_report(report_file: str) -> dict:
     """Load npm audit JSON report"""
     with open(report_file) as f:
         return json.load(f)
+
 
 def is_exception_valid(exception: dict, current_date: datetime.datetime = None) -> bool:
     """Check if exception is still valid (not expired)"""
@@ -77,7 +80,9 @@ def is_exception_valid(exception: dict, current_date: datetime.datetime = None) 
         if isinstance(expires_at, str):
             if len(expires_at) == 10:
                 expiry_date = datetime.date.fromisoformat(expires_at)
-                expiry = datetime.datetime.combine(expiry_date, datetime.time.max, tzinfo=datetime.timezone.utc)
+                expiry = datetime.datetime.combine(
+                    expiry_date, datetime.time.max, tzinfo=datetime.timezone.utc
+                )
             else:
                 expiry = datetime.datetime.fromisoformat(expires_at)
                 if expiry.tzinfo is None:
@@ -87,7 +92,9 @@ def is_exception_valid(exception: dict, current_date: datetime.datetime = None) 
             if expiry.tzinfo is None:
                 expiry = expiry.replace(tzinfo=datetime.timezone.utc)
         elif isinstance(expires_at, datetime.date):
-            expiry = datetime.datetime.combine(expires_at, datetime.time.max, tzinfo=datetime.timezone.utc)
+            expiry = datetime.datetime.combine(
+                expires_at, datetime.time.max, tzinfo=datetime.timezone.utc
+            )
         else:
             logger.error(f"Unknown type for expires_at: {type(expires_at)}")
             return False
@@ -97,7 +104,10 @@ def is_exception_valid(exception: dict, current_date: datetime.datetime = None) 
         logger.error(f"Error parsing expiry date '{expires_at}': {e}")
         return False
 
-def check_expiry_warning(exception: dict, warn_days: int, current_date: datetime.datetime = None):
+
+def check_expiry_warning(
+    exception: dict, warn_days: int, current_date: datetime.datetime = None
+):
     """Warn if exception is close to expiry"""
     if current_date is None:
         current_date = datetime.datetime.now(datetime.timezone.utc)
@@ -113,7 +123,9 @@ def check_expiry_warning(exception: dict, warn_days: int, current_date: datetime
         if isinstance(expires_at, str):
             if len(expires_at) == 10:
                 expiry_date = datetime.date.fromisoformat(expires_at)
-                expiry = datetime.datetime.combine(expiry_date, datetime.time.max, tzinfo=datetime.timezone.utc)
+                expiry = datetime.datetime.combine(
+                    expiry_date, datetime.time.max, tzinfo=datetime.timezone.utc
+                )
             else:
                 expiry = datetime.datetime.fromisoformat(expires_at)
                 if expiry.tzinfo is None:
@@ -123,7 +135,9 @@ def check_expiry_warning(exception: dict, warn_days: int, current_date: datetime
             if expiry.tzinfo is None:
                 expiry = expiry.replace(tzinfo=datetime.timezone.utc)
         elif isinstance(expires_at, datetime.date):
-            expiry = datetime.datetime.combine(expires_at, datetime.time.max, tzinfo=datetime.timezone.utc)
+            expiry = datetime.datetime.combine(
+                expires_at, datetime.time.max, tzinfo=datetime.timezone.utc
+            )
         else:
             return
 
@@ -136,6 +150,7 @@ def check_expiry_warning(exception: dict, warn_days: int, current_date: datetime
     except Exception:
         pass
 
+
 def extract_ghsa_or_cve(issue: dict) -> str:
     """Extract GHSA or CVE identifier from npm issue object"""
     cwe = issue.get("cwe", [])
@@ -146,21 +161,21 @@ def extract_ghsa_or_cve(issue: dict) -> str:
     # Try parsing URL for GHSA/CVE
     url = issue.get("url", "")
     if isinstance(url, str) and url:
-        match = re.search(r'(GHSA-[a-zA-Z0-9-]+|CVE-\d+-\d+)', url)
+        match = re.search(r"(GHSA-[a-zA-Z0-9-]+|CVE-\d+-\d+)", url)
         if match:
             return match.group(1)
 
     # Try parsing source
     source = issue.get("source")
     if isinstance(source, str):
-        match = re.search(r'(GHSA-[a-zA-Z0-9-]+|CVE-\d+-\d+)', source)
+        match = re.search(r"(GHSA-[a-zA-Z0-9-]+|CVE-\d+-\d+)", source)
         if match:
             return match.group(1)
 
     # Try parsing title
     title = issue.get("title", "")
     if isinstance(title, str) and title:
-        match = re.search(r'(GHSA-[a-zA-Z0-9-]+|CVE-\d+-\d+)', title)
+        match = re.search(r"(GHSA-[a-zA-Z0-9-]+|CVE-\d+-\d+)", title)
         if match:
             return match.group(1)
 
@@ -171,8 +186,11 @@ def extract_ghsa_or_cve(issue: dict) -> str:
 
     return cve_id or "UNKNOWN"
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Check npm audit report against policy")
+    parser = argparse.ArgumentParser(
+        description="Check npm audit report against policy"
+    )
     parser.add_argument("--report", required=True, help="Path to npm audit JSON report")
     parser.add_argument("--config", required=True, help="Path to .audit-config.yaml")
     parser.add_argument(
@@ -238,26 +256,38 @@ def main():
             if is_excepted and exception:
                 if not is_exception_valid(exception):
                     if policy.get("enforce_expiry", True):
-                        logger.error(f"Exception for package {package_name} has expired!")
+                        logger.error(
+                            f"Exception for package {package_name} has expired!"
+                        )
                         is_excepted = False
                     else:
-                        logger.warning(f"Exception for package {package_name} has expired, but enforce_expiry is set to false.")
-                        check_expiry_warning(exception, policy.get("warn_before_expiry_days", 14))
+                        logger.warning(
+                            f"Exception for package {package_name} has expired, but enforce_expiry is set to false."
+                        )
+                        check_expiry_warning(
+                            exception, policy.get("warn_before_expiry_days", 14)
+                        )
                         logger.info(f"  [OK] {package_name} (package-excepted)")
                         excepted_count += 1
                         continue
                 else:
-                    check_expiry_warning(exception, policy.get("warn_before_expiry_days", 14))
+                    check_expiry_warning(
+                        exception, policy.get("warn_before_expiry_days", 14)
+                    )
                     logger.info(f"  [OK] {package_name} (package-excepted)")
                     excepted_count += 1
                     continue
 
             if severity_level >= min_severity_level:
                 blocking_count += 1
-                logger.error(f"[FAIL] Package {package_name} is vulnerable ({severity})")
+                logger.error(
+                    f"[FAIL] Package {package_name} is vulnerable ({severity})"
+                )
             else:
                 warning_count += 1
-                logger.warning(f"[WARN] Package {package_name} is vulnerable ({severity})")
+                logger.warning(
+                    f"[WARN] Package {package_name} is vulnerable ({severity})"
+                )
             continue
 
         # Check via items
@@ -299,12 +329,16 @@ def main():
                                 f"Exception for {cve_id or package_name} has expired, but enforce_expiry is set to false. "
                                 f"Expiry: {exception.get('expires_at')}"
                             )
-                            check_expiry_warning(exception, policy.get("warn_before_expiry_days", 14))
+                            check_expiry_warning(
+                                exception, policy.get("warn_before_expiry_days", 14)
+                            )
                             logger.info(f"  [OK] {cve_id}: {package_name} (excepted)")
                             excepted_count += 1
                             continue
                     else:
-                        check_expiry_warning(exception, policy.get("warn_before_expiry_days", 14))
+                        check_expiry_warning(
+                            exception, policy.get("warn_before_expiry_days", 14)
+                        )
                         logger.info(f"  [OK] {cve_id}: {package_name} (excepted)")
                         excepted_count += 1
                         continue
@@ -332,6 +366,7 @@ def main():
 
     logger.info("[OK] npm audit passed!")
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

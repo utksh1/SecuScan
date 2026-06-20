@@ -40,7 +40,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const t = (path: string): string => {
     const keys = path.split('.');
     let result: any = translations[locale];
-    
+
     for (const key of keys) {
       if (result && typeof result === 'object' && key in result) {
         result = result[key];
@@ -48,7 +48,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
         return path;
       }
     }
-    
+
     return typeof result === 'string' ? result : path;
   };
 

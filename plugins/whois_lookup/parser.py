@@ -35,7 +35,11 @@ def _parse_plain_text(output: str) -> Dict[str, Any]:
 
         if normalized_key == "registrar":
             detail["registrar"] = normalized_value or "Unknown"
-        elif normalized_key in {"registry expiry date", "registrar registration expiration date", "expiry date"}:
+        elif normalized_key in {
+            "registry expiry date",
+            "registrar registration expiration date",
+            "expiry date",
+        }:
             detail["expiry"] = normalized_value or "Unknown"
         elif normalized_key in {"creation date", "created date", "registered on"}:
             detail["creation"] = normalized_value or "Unknown"
@@ -70,16 +74,17 @@ def _parse_plain_text(output: str) -> Dict[str, Any]:
         "detail": detail,
     }
 
+
 def parse(output: str) -> Dict[str, Any]:
     """
     Parse WHOIS output (JSON format from whois_tool.py).
     """
     try:
         # Robust JSON extraction: find the first '{' and last '}'
-        start = output.find('{')
-        end = output.rfind('}')
+        start = output.find("{")
+        end = output.rfind("}")
         if start != -1 and end != -1:
-            json_content = output[start:end+1]
+            json_content = output[start : end + 1]
             data = json.loads(json_content)
         else:
             data = json.loads(output)
@@ -88,7 +93,7 @@ def parse(output: str) -> Dict[str, Any]:
         return _parse_plain_text(output)
 
     findings = []
-    
+
     registrar = data.get("registrar") or data.get("registrar_name", "Unknown")
     expiry = data.get("expiration_date")
     if isinstance(expiry, list):
@@ -100,9 +105,9 @@ def parse(output: str) -> Dict[str, Any]:
     if isinstance(creation, list):
         creation = creation[0]
     # Format date string (e.g. 1997-09-15)
-    creation_str = str(creation).split(' ')[0] if creation else "Unknown"
-    expiry_str = str(expiry).split(' ')[0] if expiry else "Unknown"
-    
+    creation_str = str(creation).split(" ")[0] if creation else "Unknown"
+    expiry_str = str(expiry).split(" ")[0] if expiry else "Unknown"
+
     summary_data = {
         "registrar": registrar,
         "organization": data.get("org") or "N/A",
@@ -111,22 +116,20 @@ def parse(output: str) -> Dict[str, Any]:
         "expiry": expiry_str,
         "nameservers": nameservers,
     }
-    
-    findings.append({
-        "title": f"WHOIS Record for {data.get('domain_name', 'Target')}",
-        "category": "Domain Info",
-        "severity": "info",
-        "description": (
-            f"Registrar: {summary_data['registrar']}\n"
-            f"Expiry: {summary_data['expiry']}\n"
-            f"Name Servers: {summary_data['nameservers']}"
-        ),
-        "remediation": "Review domain registration data for accuracy and privacy settings (WHOIS privacy).",
-        "metadata": data
-    })
-    
-    return {
-        "findings": findings,
-        "rows": [summary_data],
-        "detail": summary_data
-    }
+
+    findings.append(
+        {
+            "title": f"WHOIS Record for {data.get('domain_name', 'Target')}",
+            "category": "Domain Info",
+            "severity": "info",
+            "description": (
+                f"Registrar: {summary_data['registrar']}\n"
+                f"Expiry: {summary_data['expiry']}\n"
+                f"Name Servers: {summary_data['nameservers']}"
+            ),
+            "remediation": "Review domain registration data for accuracy and privacy settings (WHOIS privacy).",
+            "metadata": data,
+        }
+    )
+
+    return {"findings": findings, "rows": [summary_data], "detail": summary_data}

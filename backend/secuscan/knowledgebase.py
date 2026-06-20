@@ -21,7 +21,12 @@ _SEEDED_CPE_INDEX: Dict[str, List[Dict[str, Any]]] = {
             "cvss": 7.7,
             "title": "Resolver off-by-one overwrite in nginx",
             "description": "Certain nginx resolver configurations before newer releases are vulnerable to a 1-byte memory overwrite.",
-            "references": [{"source": "NVD", "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-23017"}],
+            "references": [
+                {
+                    "source": "NVD",
+                    "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-23017",
+                }
+            ],
         }
     ],
     "cpe:/a:openbsd:openssh:8.2": [
@@ -31,7 +36,12 @@ _SEEDED_CPE_INDEX: Dict[str, List[Dict[str, Any]]] = {
             "cvss": 6.8,
             "title": "Command injection in scp client arguments",
             "description": "Affected OpenSSH releases allow command injection in some scp usage patterns.",
-            "references": [{"source": "NVD", "url": "https://nvd.nist.gov/vuln/detail/CVE-2020-15778"}],
+            "references": [
+                {
+                    "source": "NVD",
+                    "url": "https://nvd.nist.gov/vuln/detail/CVE-2020-15778",
+                }
+            ],
         }
     ],
     "cpe:/a:apache:http_server:2.4.49": [
@@ -41,7 +51,12 @@ _SEEDED_CPE_INDEX: Dict[str, List[Dict[str, Any]]] = {
             "cvss": 9.8,
             "title": "Path traversal and file disclosure in Apache HTTP Server",
             "description": "Apache HTTP Server 2.4.49 is vulnerable to path traversal and possible remote code execution.",
-            "references": [{"source": "NVD", "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-41773"}],
+            "references": [
+                {
+                    "source": "NVD",
+                    "url": "https://nvd.nist.gov/vuln/detail/CVE-2021-41773",
+                }
+            ],
         }
     ],
 }
@@ -49,7 +64,10 @@ _SEEDED_CPE_INDEX: Dict[str, List[Dict[str, Any]]] = {
 _PRODUCT_PATTERNS: List[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bnginx\b", re.I), "cpe:/a:nginx:nginx:{version}"),
     (re.compile(r"\bopenssh\b", re.I), "cpe:/a:openbsd:openssh:{version}"),
-    (re.compile(r"\bapache(?: httpd| http server)?\b", re.I), "cpe:/a:apache:http_server:{version}"),
+    (
+        re.compile(r"\bapache(?: httpd| http server)?\b", re.I),
+        "cpe:/a:apache:http_server:{version}",
+    ),
     (re.compile(r"\bwordpress\b", re.I), "cpe:/a:wordpress:wordpress:{version}"),
     (re.compile(r"\bdrupal\b", re.I), "cpe:/a:drupal:drupal:{version}"),
 ]
@@ -66,7 +84,10 @@ class KnowledgeBase:
         entries = self._load_entries()
         total_refs = sum(len(v) for v in entries.values())
         feed_files = sorted(path.name for path in self.data_dir.glob("*.json"))
-        newest_mtime = max((path.stat().st_mtime for path in self.data_dir.glob("*.json")), default=None)
+        newest_mtime = max(
+            (path.stat().st_mtime for path in self.data_dir.glob("*.json")),
+            default=None,
+        )
         return {
             "status": "ready",
             "source": "local-json-feeds",
@@ -77,9 +98,13 @@ class KnowledgeBase:
             "synced_at": newest_mtime,
         }
 
-    def find_vulnerabilities(self, service: str, product: str, version: str) -> Dict[str, Any]:
+    def find_vulnerabilities(
+        self, service: str, product: str, version: str
+    ) -> Dict[str, Any]:
         entries = self._load_entries()
-        match = self._find_best_cpe_match(entries, service=service, product=product, version=version)
+        match = self._find_best_cpe_match(
+            entries, service=service, product=product, version=version
+        )
         if not match:
             return {"cpe": None, "cves": [], "match_strength": "none"}
 
@@ -92,7 +117,9 @@ class KnowledgeBase:
 
     def infer_cpe(self, service: str, product: str, version: str) -> str | None:
         entries = self._load_entries()
-        match = self._find_best_cpe_match(entries, service=service, product=product, version=version)
+        match = self._find_best_cpe_match(
+            entries, service=service, product=product, version=version
+        )
         return match["cpe"] if match else None
 
     def _normalize_version(self, version: str) -> str:
@@ -123,15 +150,21 @@ class KnowledgeBase:
                 return {"cpe": exact_cpe, "match_strength": "exact"}
 
             family_prefix = template.format(version="").rstrip(":")
-            matching_cpes = [cpe for cpe in entries.keys() if cpe.startswith(family_prefix)]
+            matching_cpes = [
+                cpe for cpe in entries.keys() if cpe.startswith(family_prefix)
+            ]
             if not matching_cpes:
                 continue
 
             if normalized_version:
-                strong = self._select_version_match(matching_cpes, normalized_version, same_minor=True)
+                strong = self._select_version_match(
+                    matching_cpes, normalized_version, same_minor=True
+                )
                 if strong:
                     return {"cpe": strong, "match_strength": "strong_fuzzy"}
-                fuzzy = self._select_version_match(matching_cpes, normalized_version, same_minor=False)
+                fuzzy = self._select_version_match(
+                    matching_cpes, normalized_version, same_minor=False
+                )
                 if fuzzy:
                     return {"cpe": fuzzy, "match_strength": "fuzzy"}
 
@@ -142,7 +175,9 @@ class KnowledgeBase:
             return {"cpe": cpe, "match_strength": match_strength}
         return None
 
-    def _select_version_match(self, cpes: List[str], normalized_version: str, *, same_minor: bool) -> str | None:
+    def _select_version_match(
+        self, cpes: List[str], normalized_version: str, *, same_minor: bool
+    ) -> str | None:
         requested_parts = normalized_version.split(".")
         for cpe in cpes:
             candidate_version = cpe.split(":")[-1]
@@ -150,9 +185,17 @@ class KnowledgeBase:
             if candidate_version == normalized_version:
                 return cpe
             if same_minor:
-                if len(requested_parts) >= 2 and len(candidate_parts) >= 2 and candidate_parts[:2] == requested_parts[:2]:
+                if (
+                    len(requested_parts) >= 2
+                    and len(candidate_parts) >= 2
+                    and candidate_parts[:2] == requested_parts[:2]
+                ):
                     return cpe
-            elif candidate_parts and requested_parts and candidate_parts[0] == requested_parts[0]:
+            elif (
+                candidate_parts
+                and requested_parts
+                and candidate_parts[0] == requested_parts[0]
+            ):
                 return cpe
         return None
 

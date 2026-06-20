@@ -19,7 +19,9 @@ PARSER_PATH = PLUGIN_DIR / "parser.py"
 
 
 def _load_parser():
-    spec = importlib.util.spec_from_file_location("subdomain_finder_parser", PARSER_PATH)
+    spec = importlib.util.spec_from_file_location(
+        "subdomain_finder_parser", PARSER_PATH
+    )
     assert spec is not None
     assert spec.loader is not None
 
@@ -99,9 +101,7 @@ def test_subdomain_finder_loaded_by_plugin_manager(setup_test_environment):
 
 
 _SUBDOMAIN_OUTPUT_FIXTURE = (
-    "api.secuscan.in\n"
-    "admin.secuscan.in  52.0.200.63\n"
-    "dev.secuscan.in\n"
+    "api.secuscan.in\n" "admin.secuscan.in  52.0.200.63\n" "dev.secuscan.in\n"
 )
 
 
@@ -159,11 +159,7 @@ def test_subdomain_finder_parser_normalizes_finding_shape():
 
 
 def test_subdomain_finder_parser_ignores_non_subdomain_lines():
-    result = parse(
-        "not a domain\n"
-        "random text\n"
-        "api.secuscan.in\n"
-    )
+    result = parse("not a domain\n" "random text\n" "api.secuscan.in\n")
 
     assert result["structured"]["total_count"] == 1
     assert result["structured"]["rows"][0]["subdomain"] == "api.secuscan.in"

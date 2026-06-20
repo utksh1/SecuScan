@@ -175,7 +175,14 @@ def test_fuzzer_parser_finding_has_required_keys():
     result = parse(_FUZZER_OUTPUT_FIXTURE)
     assert result["findings"], "Expected at least one finding"
     for finding in result["findings"]:
-        for key in ("title", "category", "severity", "description", "remediation", "metadata"):
+        for key in (
+            "title",
+            "category",
+            "severity",
+            "description",
+            "remediation",
+            "metadata",
+        ):
             assert key in finding, f"Finding missing key: {key}"
 
 

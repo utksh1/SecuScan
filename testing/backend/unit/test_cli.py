@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock, AsyncMock
 import pytest
 from backend.secuscan.cli import run_scan, main
 
+
 @pytest.mark.anyio
 async def test_run_scan_plugin_not_found():
     """Test run_scan when specified plugin does not exist."""
@@ -10,11 +11,11 @@ async def test_run_scan_plugin_not_found():
     mock_pm.get_plugin.return_value = None
     mock_pm.plugins = {"http_inspector": MagicMock()}
 
-    with patch("backend.secuscan.cli.init_db", new_callable=AsyncMock), \
-         patch("backend.secuscan.cli.init_cache", new_callable=AsyncMock), \
-         patch("backend.secuscan.cli.init_plugins", new_callable=AsyncMock), \
-         patch("backend.secuscan.cli.get_plugin_manager", return_value=mock_pm):
-
+    with patch("backend.secuscan.cli.init_db", new_callable=AsyncMock), patch(
+        "backend.secuscan.cli.init_cache", new_callable=AsyncMock
+    ), patch("backend.secuscan.cli.init_plugins", new_callable=AsyncMock), patch(
+        "backend.secuscan.cli.get_plugin_manager", return_value=mock_pm
+    ):
         result = await run_scan("127.0.0.1", "non-existent-plugin", "console")
         assert result == 1
         mock_pm.get_plugin.assert_called_with("non-existent-plugin")
@@ -37,7 +38,7 @@ async def test_run_scan_successful_execution():
     mock_queue = AsyncMock()
     mock_queue.get.side_effect = [
         {"type": "output", "data": "Scanning..."},
-        {"type": "status", "data": "completed"}
+        {"type": "status", "data": "completed"},
     ]
     mock_executor.subscribe.return_value = mock_queue
 
@@ -53,17 +54,19 @@ async def test_run_scan_successful_execution():
         "preset": "standard",
         "inputs_json": "{}",
         "command_used": "nikto -h 127.0.0.1",
-        "structured_json": "{\"findings\": [{\"title\": \"XSS\", \"severity\": \"MEDIUM\"}]}"
+        "structured_json": '{"findings": [{"title": "XSS", "severity": "MEDIUM"}]}',
     }
     mock_db.fetchone.return_value = mock_row
 
-    with patch("backend.secuscan.cli.init_db", new_callable=AsyncMock), \
-         patch("backend.secuscan.cli.init_cache", new_callable=AsyncMock), \
-         patch("backend.secuscan.cli.init_plugins", new_callable=AsyncMock), \
-         patch("backend.secuscan.cli.get_plugin_manager", return_value=mock_pm), \
-         patch("backend.secuscan.cli.executor", mock_executor), \
-         patch("backend.secuscan.cli.get_db", return_value=mock_db):
-
+    with patch("backend.secuscan.cli.init_db", new_callable=AsyncMock), patch(
+        "backend.secuscan.cli.init_cache", new_callable=AsyncMock
+    ), patch("backend.secuscan.cli.init_plugins", new_callable=AsyncMock), patch(
+        "backend.secuscan.cli.get_plugin_manager", return_value=mock_pm
+    ), patch(
+        "backend.secuscan.cli.executor", mock_executor
+    ), patch(
+        "backend.secuscan.cli.get_db", return_value=mock_db
+    ):
         result = await run_scan("127.0.0.1", "http_inspector", "console")
         assert result == 0
         mock_executor.create_task.assert_called_once_with(
@@ -76,8 +79,9 @@ async def test_run_scan_successful_execution():
 
 def test_cli_help_menu():
     """Test CLI parses help argument correctly."""
-    with patch("argparse.ArgumentParser.print_help") as mock_print_help, \
-         patch("sys.argv", ["secuscan", "--help"]):
+    with patch("argparse.ArgumentParser.print_help") as mock_print_help, patch(
+        "sys.argv", ["secuscan", "--help"]
+    ):
         with pytest.raises(SystemExit) as exc_info:
             main()
         assert exc_info.value.code == 0

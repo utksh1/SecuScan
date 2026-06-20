@@ -59,7 +59,9 @@ def make_plugin(
     metadata_file.write_text(json.dumps(metadata, indent=2), encoding="utf-8")
 
     if checksum == "auto":
-        expected = PluginManager.compute_plugin_digest(metadata_file, plugin_dir / "parser.py")
+        expected = PluginManager.compute_plugin_digest(
+            metadata_file, plugin_dir / "parser.py"
+        )
         metadata["checksum"] = expected
     elif checksum is not None:
         metadata["checksum"] = checksum
@@ -89,12 +91,16 @@ def test_fails_when_custom_parser_missing(tmp_path):
 
 
 def test_fails_when_parser_missing_parse_function(tmp_path):
-    plugin_dir = make_plugin(tmp_path, "bad-parser", parser_content="def nope(): return []")
+    plugin_dir = make_plugin(
+        tmp_path, "bad-parser", parser_content="def nope(): return []"
+    )
     assert validate_plugin(plugin_dir) is False
 
 
 def test_fails_when_parser_parse_not_callable(tmp_path):
-    plugin_dir = make_plugin(tmp_path, "bad-parser-callable", parser_content="parse = 123")
+    plugin_dir = make_plugin(
+        tmp_path, "bad-parser-callable", parser_content="parse = 123"
+    )
     assert validate_plugin(plugin_dir) is False
 
 

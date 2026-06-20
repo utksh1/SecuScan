@@ -32,7 +32,10 @@ def test_web_scanner_passive_findings_cover_headers_cookies_forms_and_paths():
 
     assert "Missing Content-Security-Policy" in titles
     assert "Insecure Cookie Attributes on sessionid" in titles
-    assert "State-Changing Form Missing CSRF Indicators: http://example.com/login" in titles
+    assert (
+        "State-Changing Form Missing CSRF Indicators: http://example.com/login"
+        in titles
+    )
     assert "Credential Form Exposed over Non-HTTPS: http://example.com/login" in titles
     assert "Administrative Paths Exposed" in titles
     assert "CMS Fingerprint Detected: Wordpress" in titles

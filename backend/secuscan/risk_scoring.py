@@ -55,6 +55,7 @@ def _recency_score(discovered_at: Optional[datetime]) -> float:
     now = datetime.now(timezone.utc)
     if discovered_at.tzinfo is None:
         from datetime import timedelta
+
         discovered = discovered_at.replace(tzinfo=timezone.utc)
     else:
         discovered = discovered_at
@@ -144,7 +145,9 @@ def compute_risk_factors(
       - detail:   short explanation sentence
     """
     if risk_score is None:
-        risk_score = compute_risk_score(severity, exploitability, asset_exposure, discovered_at, confidence)
+        risk_score = compute_risk_score(
+            severity, exploitability, asset_exposure, discovered_at, confidence
+        )
 
     sv = _severity_score(severity)
     ev = _clamp(exploitability if exploitability is not None else 5.0)
@@ -206,9 +209,11 @@ def _recency_detail(discovered_at: Optional[datetime], rv: float) -> str:
     if discovered_at is None:
         return "No discovery date — assumed moderate recency"
     from datetime import timezone
+
     now = datetime.now(timezone.utc)
     if discovered_at.tzinfo is None:
         from datetime import timedelta
+
         d = discovered_at.replace(tzinfo=timezone.utc)
     else:
         d = discovered_at

@@ -5,6 +5,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class BaseScanner(ABC):
     """
     Abstract base class for modular security scanners.
@@ -23,20 +24,25 @@ class BaseScanner(ABC):
         import asyncio
         from ..validation import validate_command_network_egress
 
-        ok, err = await asyncio.to_thread(validate_command_network_egress, command, self.safe_mode, self.name, self.task_id)
+        ok, err = await asyncio.to_thread(
+            validate_command_network_egress,
+            command,
+            self.safe_mode,
+            self.name,
+            self.task_id,
+        )
         if not ok:
             logger.error(f"Egress boundary check blocked command: {err}")
             return f"Execution blocked by egress boundary check: {err}", -1
 
         import asyncio.subprocess
+
         process = await asyncio.create_subprocess_exec(
-            *command,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT
+            *command, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT
         )
         try:
             stdout, _ = await process.communicate()
-            return stdout.decode('utf-8', errors='replace'), process.returncode
+            return stdout.decode("utf-8", errors="replace"), process.returncode
         except asyncio.CancelledError:
             try:
                 process.kill()
@@ -61,7 +67,7 @@ class BaseScanner(ABC):
     async def run(self, target: str, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute the scanning logic.
-        
+
         Returns:
             Dictionary containing findings, summary, and other structured data.
         """
@@ -86,6 +92,6 @@ class BaseScanner(ABC):
             "low": "low",
             "info": "info",
             "informational": "info",
-            "note": "info"
+            "note": "info",
         }
         return mapping.get(s, "info")

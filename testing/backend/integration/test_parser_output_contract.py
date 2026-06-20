@@ -16,9 +16,16 @@ from backend.secuscan.executor import executor
 # Dynamic Discovery of All Bundled Custom Parsers
 # ---------------------------------------------------------------------------
 
-KNOWN_PARSER_CAPABILITY_GROUPS = frozenset({"network", "intrusive", "credentials", "exploit"})
-SELECTED_PARSER_CAPABILITY_GROUP = os.getenv("PARSER_CAPABILITY_GROUP", "").strip().lower()
-if SELECTED_PARSER_CAPABILITY_GROUP and SELECTED_PARSER_CAPABILITY_GROUP not in KNOWN_PARSER_CAPABILITY_GROUPS:
+KNOWN_PARSER_CAPABILITY_GROUPS = frozenset(
+    {"network", "intrusive", "credentials", "exploit"}
+)
+SELECTED_PARSER_CAPABILITY_GROUP = (
+    os.getenv("PARSER_CAPABILITY_GROUP", "").strip().lower()
+)
+if (
+    SELECTED_PARSER_CAPABILITY_GROUP
+    and SELECTED_PARSER_CAPABILITY_GROUP not in KNOWN_PARSER_CAPABILITY_GROUPS
+):
     raise RuntimeError(
         f"Unsupported parser capability group '{SELECTED_PARSER_CAPABILITY_GROUP}'."
         f"Valid groups: {sorted(KNOWN_PARSER_CAPABILITY_GROUPS)}"
@@ -46,14 +53,15 @@ def get_all_custom_parsers() -> list[tuple[str, Path, Path]]:
     return sorted(parsers, key=lambda x: x[0])
 
 
-
 def get_parser_capability_group(metadata_path: Path) -> str:
     """Return the highest-consequence capability group for CI grouping."""
     data = json.loads(metadata_path.read_text(encoding="utf-8"))
     caps = data.get("capabilities")
     if caps is None:
         safety_level = data.get("safety", {}).get("level", "safe")
-        caps = list(effective_capabilities(None, safety_level, data.get("id", "unknown")))
+        caps = list(
+            effective_capabilities(None, safety_level, data.get("id", "unknown"))
+        )
 
     if "exploit" in caps:
         return "exploit"
@@ -88,7 +96,10 @@ def get_selected_custom_parsers() -> list[tuple[str, Path, Path]]:
 
 def test_parser_capability_groups_are_populated() -> None:
     """Ensure known CI capability groups map to at least one parser plugin."""
-    groups = {get_parser_capability_group(metadata_path) for _, _, metadata_path in get_all_custom_parsers()}
+    groups = {
+        get_parser_capability_group(metadata_path)
+        for _, _, metadata_path in get_all_custom_parsers()
+    }
     missing = KNOWN_PARSER_CAPABILITY_GROUPS - groups
     assert not missing, (
         "The parser capability matrix contains groups with no matching plugins: "
@@ -101,6 +112,7 @@ def test_parser_capability_groups_are_populated() -> None:
 # Module Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="module")
 def plugin_manager_instance():
     """Initializes and loads the global plugin manager for tests."""
@@ -111,51 +123,84 @@ def plugin_manager_instance():
 # Parser Contract Tests
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("plugin_id, parser_path, metadata_path", get_selected_custom_parsers())
-def test_parser_contract_compliance(plugin_id, parser_path, metadata_path, plugin_manager_instance):
+
+@pytest.mark.parametrize(
+    "plugin_id, parser_path, metadata_path", get_selected_custom_parsers()
+)
+def test_parser_contract_compliance(
+    plugin_id, parser_path, metadata_path, plugin_manager_instance
+):
     """
     Verifies that every custom parser in the codebase complies with
     the required parse entrypoint signature and normalization contracts.
     """
     # 1. Assert the custom parser.py file is dynamically importable
     spec = importlib.util.spec_from_file_location(f"parser_{plugin_id}", parser_path)
-    assert spec is not None, f"Failed to create module spec for custom parser: {plugin_id}"
+    assert (
+        spec is not None
+    ), f"Failed to create module spec for custom parser: {plugin_id}"
 
     loader = spec.loader
-    assert loader is not None, f"Failed to load module loader for custom parser: {plugin_id}"
+    assert (
+        loader is not None
+    ), f"Failed to load module loader for custom parser: {plugin_id}"
 
     module = importlib.util.module_from_spec(spec)
     try:
         loader.exec_module(module)
     except Exception as exc:
-        pytest.fail(f"Subprocess import crashed while executing module {plugin_id}: {exc}")
+        pytest.fail(
+            f"Subprocess import crashed while executing module {plugin_id}: {exc}"
+        )
 
     # 2. Assert 'parse' entrypoint exists and is callable
-    assert hasattr(module, "parse"), f"Parser for '{plugin_id}' is missing the required 'parse' function"
-    assert callable(module.parse), f"The 'parse' attribute in '{plugin_id}' custom parser is not a callable function"
+    assert hasattr(
+        module, "parse"
+    ), f"Parser for '{plugin_id}' is missing the required 'parse' function"
+    assert callable(
+        module.parse
+    ), f"The 'parse' attribute in '{plugin_id}' custom parser is not a callable function"
 
     # 3. Retrieve plugin metadata
     plugin = plugin_manager_instance.get_plugin(plugin_id)
-    assert plugin is not None, f"Plugin metadata not found in plugin manager for ID: {plugin_id}"
+    assert (
+        plugin is not None
+    ), f"Plugin metadata not found in plugin manager for ID: {plugin_id}"
 
     # 4. Verify Normalization Contract - Empty shapes
     res_empty = executor._normalize_parsed_result(plugin, "", {})
     assert "findings" in res_empty, "Normalized result is missing 'findings' array"
-    assert isinstance(res_empty["findings"], list), "findings must be represented as a list"
+    assert isinstance(
+        res_empty["findings"], list
+    ), "findings must be represented as a list"
     assert res_empty["count"] == 0, "Empty parser inputs must result in 0 count"
 
     # 5. Verify Normalization Contract - Malformed shapes (resilience test)
     malformed_finding = {"unrelated_field": "some_value"}
-    res_malformed = executor._normalize_parsed_result(plugin, "", {"findings": [malformed_finding]})
+    res_malformed = executor._normalize_parsed_result(
+        plugin, "", {"findings": [malformed_finding]}
+    )
     assert len(res_malformed["findings"]) == 1
 
     finding = res_malformed["findings"][0]
-    assert finding["title"] == "Security Finding", "Malformed finding must fall back to default title"
-    assert finding["severity"] == "info", "Malformed finding severity must default to 'info'"
-    assert finding["category"] == str(plugin.category).title(), "Malformed finding category must match capitalized plugin category"
-    assert finding["description"] == "Security Finding", "Malformed finding description must fall back to default"
-    assert finding["remediation"] == "", "Malformed finding remediation must fall back to empty string"
-    assert finding["metadata"] == {}, "Malformed finding metadata must default to empty dictionary"
+    assert (
+        finding["title"] == "Security Finding"
+    ), "Malformed finding must fall back to default title"
+    assert (
+        finding["severity"] == "info"
+    ), "Malformed finding severity must default to 'info'"
+    assert (
+        finding["category"] == str(plugin.category).title()
+    ), "Malformed finding category must match capitalized plugin category"
+    assert (
+        finding["description"] == "Security Finding"
+    ), "Malformed finding description must fall back to default"
+    assert (
+        finding["remediation"] == ""
+    ), "Malformed finding remediation must fall back to empty string"
+    assert (
+        finding["metadata"] == {}
+    ), "Malformed finding metadata must default to empty dictionary"
 
     # 6. Verify Normalization Contract - Valid Severity Mappings
     severities_test = [
@@ -167,21 +212,33 @@ def test_parser_contract_compliance(plugin_id, parser_path, metadata_path, plugi
         ("LOW", "low"),
         ("INFO", "info"),
         ("informational", "info"),
-        ("error", "high")
+        ("error", "high"),
     ]
     for raw_sev, expected_sev in severities_test:
         test_finding = {"title": "Test Title", "severity": raw_sev}
-        res = executor._normalize_parsed_result(plugin, "", {"findings": [test_finding]})
-        assert res["findings"][0]["severity"] == expected_sev, f"Failed mapping '{raw_sev}' to '{expected_sev}'"
+        res = executor._normalize_parsed_result(
+            plugin, "", {"findings": [test_finding]}
+        )
+        assert (
+            res["findings"][0]["severity"] == expected_sev
+        ), f"Failed mapping '{raw_sev}' to '{expected_sev}'"
 
     # 7. Verify Normalization Contract - Unsafe / Unknown Severities (Negative test case)
     unknown_sevs = ["critical-critical", "severe", "malicious", None, 999, ""]
     for raw_sev in unknown_sevs:
         test_finding = {"title": "Test Title", "severity": raw_sev}
-        res = executor._normalize_parsed_result(plugin, "", {"findings": [test_finding]})
-        assert res["findings"][0]["severity"] == "info", f"Expected unknown severity '{raw_sev}' to default safely to 'info'"
+        res = executor._normalize_parsed_result(
+            plugin, "", {"findings": [test_finding]}
+        )
+        assert (
+            res["findings"][0]["severity"] == "info"
+        ), f"Expected unknown severity '{raw_sev}' to default safely to 'info'"
 
     # 8. Verify Normalization Contract - Non-dictionary findings (Negative test case)
     invalid_findings = ["string_instead_of_dict", 1234, ["list_instead_of_dict"]]
-    res_invalid = executor._normalize_parsed_result(plugin, "", {"findings": invalid_findings})
-    assert len(res_invalid["findings"]) == 0, "Non-dictionary findings in findings list must be strictly filtered out"
+    res_invalid = executor._normalize_parsed_result(
+        plugin, "", {"findings": invalid_findings}
+    )
+    assert (
+        len(res_invalid["findings"]) == 0
+    ), "Non-dictionary findings in findings list must be strictly filtered out"

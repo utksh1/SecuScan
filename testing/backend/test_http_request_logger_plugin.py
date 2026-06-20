@@ -114,7 +114,9 @@ def test_http_request_logger_command_renders_with_target(setup_test_environment)
     manager = PluginManager(str(PLUGINS_DIR))
     asyncio.run(manager.load_plugins())
 
-    command = manager.build_command("http_request_logger", {"target": "https://secuscan.in"})
+    command = manager.build_command(
+        "http_request_logger", {"target": "https://secuscan.in"}
+    )
 
     assert command is not None, "build_command returned None for valid inputs"
     assert command[0] == "httpx"
@@ -131,7 +133,9 @@ def test_http_request_logger_command_full_token_sequence(setup_test_environment)
     manager = PluginManager(str(PLUGINS_DIR))
     asyncio.run(manager.load_plugins())
 
-    command = manager.build_command("http_request_logger", {"target": "https://secuscan.in"})
+    command = manager.build_command(
+        "http_request_logger", {"target": "https://secuscan.in"}
+    )
 
     assert command == [
         "httpx",
@@ -159,7 +163,9 @@ def test_http_request_logger_drops_target_token_when_absent(setup_test_environme
     assert "httpx" in rendered
     assert "-status-code" in rendered
 
-    populated = manager.build_command("http_request_logger", {"target": "https://secuscan.in"})
+    populated = manager.build_command(
+        "http_request_logger", {"target": "https://secuscan.in"}
+    )
     assert "https://secuscan.in" in populated
     assert len(populated) > len(rendered)
 
@@ -250,4 +256,7 @@ def test_http_request_logger_parser_preserves_raw_line_in_metadata():
     single_line = "[200] https://secuscan.in/api - Vulnerable endpoint\n"
     result = parse(single_line)
     assert result["findings"]
-    assert result["findings"][0]["metadata"]["raw"] == "[200] https://secuscan.in/api - Vulnerable endpoint"
+    assert (
+        result["findings"][0]["metadata"]["raw"]
+        == "[200] https://secuscan.in/api - Vulnerable endpoint"
+    )

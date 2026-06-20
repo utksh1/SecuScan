@@ -97,9 +97,9 @@ class TestRedactInputsRoutes:
             # If the response includes an inputs field, sensitive keys must be [REDACTED]
             for key in ("api_key", "token", "password", "private_key"):
                 if key in inputs:
-                    assert inputs[key] == "[REDACTED]", (
-                        f"Expected [REDACTED] for key '{key}', got: {inputs[key]!r}"
-                    )
+                    assert (
+                        inputs[key] == "[REDACTED]"
+                    ), f"Expected [REDACTED] for key '{key}', got: {inputs[key]!r}"
 
     def test_non_sensitive_inputs_pass_through_unchanged(self, test_client):
         """The 'url' (non-sensitive) input value must still be accessible in responses."""
@@ -112,6 +112,6 @@ class TestRedactInputsRoutes:
         # url is not a sensitive key and must not be redacted
         inputs = body.get("inputs", {})
         if inputs and "url" in inputs:
-            assert inputs["url"] == SENSITIVE_INPUTS["url"], (
-                f"Non-sensitive 'url' value was unexpectedly altered: {inputs['url']!r}"
-            )
+            assert (
+                inputs["url"] == SENSITIVE_INPUTS["url"]
+            ), f"Non-sensitive 'url' value was unexpectedly altered: {inputs['url']!r}"

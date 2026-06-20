@@ -54,9 +54,7 @@ def test_notification_rule_crud_contract(test_client):
     assert updated["severity_threshold"] == "high"
     assert updated["is_active"] is False
 
-    delete_response = test_client.delete(
-        f"/api/v1/notifications/rules/{created['id']}"
-    )
+    delete_response = test_client.delete(f"/api/v1/notifications/rules/{created['id']}")
     assert delete_response.status_code == 200
     assert delete_response.json()["deleted"] is True
 

@@ -55,9 +55,8 @@ def test_cloud_storage_auditor_passes_validator():
     the checksum field is absent or malformed.
     """
     result = PluginMetadataValidator(PLUGIN_DIR).validate()
-    assert result.valid, (
-        "Plugin validation errors:\n"
-        + "\n".join(e.display() for e in result.errors)
+    assert result.valid, "Plugin validation errors:\n" + "\n".join(
+        e.display() for e in result.errors
     )
 
 
@@ -143,9 +142,9 @@ def test_cloud_storage_auditor_command_uses_default_limit(setup_test_environment
     assert command is not None
     assert "-limit" in command
     limit_idx = command.index("-limit")
-    assert command[limit_idx + 1] == "100", (
-        f"Default limit must be '100'. Got: {command[limit_idx + 1]}"
-    )
+    assert (
+        command[limit_idx + 1] == "100"
+    ), f"Default limit must be '100'. Got: {command[limit_idx + 1]}"
 
 
 def test_cloud_storage_auditor_command_full_token_sequence(setup_test_environment):
@@ -158,9 +157,14 @@ def test_cloud_storage_auditor_command_full_token_sequence(setup_test_environmen
         {"query": "s3.amazonaws.com"},
     )
 
-    assert command == ["uncover", "-q", "s3.amazonaws.com", "-limit", "100", "-silent"], (
-        f"Command template drift detected. Got: {command}"
-    )
+    assert command == [
+        "uncover",
+        "-q",
+        "s3.amazonaws.com",
+        "-limit",
+        "100",
+        "-silent",
+    ], f"Command template drift detected. Got: {command}"
 
 
 def test_cloud_storage_auditor_command_respects_explicit_limit(setup_test_environment):
@@ -244,14 +248,23 @@ def test_cloud_storage_auditor_parser_finding_has_required_keys():
     result = parse(_STORAGE_AUDIT_TEXT_FIXTURE)
     assert result["findings"], "Expected at least one finding"
     for finding in result["findings"]:
-        for key in ("title", "category", "severity", "description", "remediation", "metadata"):
+        for key in (
+            "title",
+            "category",
+            "severity",
+            "description",
+            "remediation",
+            "metadata",
+        ):
             assert key in finding, f"Finding missing key: {key}"
 
 
 def test_cloud_storage_auditor_parser_critical_keyword_raises_to_high():
     """Lines containing 'critical' must be classified as 'high' severity."""
     result = parse(_STORAGE_AUDIT_TEXT_FIXTURE)
-    critical_findings = [f for f in result["findings"] if "critical" in f["description"].lower()]
+    critical_findings = [
+        f for f in result["findings"] if "critical" in f["description"].lower()
+    ]
     assert critical_findings, "No findings from the critical line"
     for finding in critical_findings:
         assert finding["severity"] == "high"
@@ -261,7 +274,8 @@ def test_cloud_storage_auditor_parser_found_or_exposed_is_low():
     """Lines containing 'found' or 'exposed' must be at least 'low' severity."""
     result = parse(_STORAGE_AUDIT_TEXT_FIXTURE)
     exposed_findings = [
-        f for f in result["findings"]
+        f
+        for f in result["findings"]
         if "exposed" in f["description"].lower() or "found" in f["description"].lower()
     ]
     assert exposed_findings, "Expected findings from exposed/found lines"
@@ -282,7 +296,9 @@ def test_cloud_storage_auditor_parser_preserves_raw_line_in_metadata():
     single_line = "found exposed bucket: example-data\n"
     result = parse(single_line)
     assert result["findings"]
-    assert result["findings"][0]["metadata"]["raw"] == "found exposed bucket: example-data"
+    assert (
+        result["findings"][0]["metadata"]["raw"] == "found exposed bucket: example-data"
+    )
 
 
 # Coverage for multi-bucket / multi-container result sets.

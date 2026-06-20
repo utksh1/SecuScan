@@ -55,9 +55,8 @@ def test_password_auditor_passes_validator():
     the checksum field is absent or malformed.
     """
     result = PluginMetadataValidator(PLUGIN_DIR).validate()
-    assert result.valid, (
-        "Plugin validation errors:\n"
-        + "\n".join(e.display() for e in result.errors)
+    assert result.valid, "Plugin validation errors:\n" + "\n".join(
+        e.display() for e in result.errors
     )
 
 
@@ -133,10 +132,7 @@ def test_password_auditor_loaded_by_plugin_manager(setup_test_environment):
 
 
 _PASSWORD_AUDITOR_OUTPUT_FIXTURE = (
-    "admin:password123\n"
-    "root:letmein\n"
-    "user:qwerty\n"
-    "test:123456\n"
+    "admin:password123\n" "root:letmein\n" "user:qwerty\n" "test:123456\n"
 )
 
 
@@ -160,14 +156,23 @@ def test_password_auditor_parser_finding_has_required_keys():
     result = parse(_PASSWORD_AUDITOR_OUTPUT_FIXTURE)
     assert result["findings"], "Expected at least one finding"
     for finding in result["findings"]:
-        for key in ("title", "category", "severity", "description", "remediation", "metadata"):
+        for key in (
+            "title",
+            "category",
+            "severity",
+            "description",
+            "remediation",
+            "metadata",
+        ):
             assert key in finding, f"Finding missing key: {key}"
 
 
 def test_password_auditor_parser_items_list_matches_non_empty_lines():
     """items must contain each non-empty line from the output."""
     result = parse(_PASSWORD_AUDITOR_OUTPUT_FIXTURE)
-    expected_lines = [l.strip() for l in _PASSWORD_AUDITOR_OUTPUT_FIXTURE.splitlines() if l.strip()]
+    expected_lines = [
+        l.strip() for l in _PASSWORD_AUDITOR_OUTPUT_FIXTURE.splitlines() if l.strip()
+    ]
     assert result["items"] == expected_lines
 
 

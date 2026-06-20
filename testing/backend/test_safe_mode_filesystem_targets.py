@@ -25,6 +25,7 @@ ENDPOINT = "/api/v1/task/start"
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def post(client, payload: dict):
     return client.post(ENDPOINT, json=payload)
 
@@ -53,9 +54,9 @@ def assert_not_blocked_by_host_validation(r):
         # validate_target returns messages like "Public IPs/networks not allowed"
         # consent failure returns "Consent required..."
         # We only fail if it looks like a target validation rejection
-        assert "not allowed" not in detail.lower() and "invalid" not in detail.lower(), (
-            f"Path target incorrectly blocked by host validation: {r.text}"
-        )
+        assert (
+            "not allowed" not in detail.lower() and "invalid" not in detail.lower()
+        ), f"Path target incorrectly blocked by host validation: {r.text}"
 
 
 @pytest.fixture(autouse=True)
@@ -71,19 +72,23 @@ def _mock_task_execution():
 # 1. code_analyzer (category=code) — filesystem paths bypass host validation
 # ---------------------------------------------------------------------------
 
+
 class TestCodePluginFilesystemTargets:
     """
     code_analyzer has category='code'.
     Route: plugin.category != 'code' is False → validate_target() never called.
     """
 
-    @pytest.mark.parametrize("path_target", [
-        "./src",
-        "./",
-        "/tmp/project",
-        "/home/user/myapp",
-        "relative/path/to/code",
-    ])
+    @pytest.mark.parametrize(
+        "path_target",
+        [
+            "./src",
+            "./",
+            "/tmp/project",
+            "/home/user/myapp",
+            "relative/path/to/code",
+        ],
+    )
     def test_path_targets_bypass_host_validation(self, test_client, path_target):
         r = post(test_client, code_payload(path_target))
         assert_not_blocked_by_host_validation(r)
@@ -101,31 +106,42 @@ class TestCodePluginFilesystemTargets:
 # 2. nmap (category=network) — filesystem path-like targets
 # ---------------------------------------------------------------------------
 
+
 class TestNonCodePluginFilesystemTargets:
     """
     nmap has category='network'.
     Route also checks is_filesystem_target() — if True, validation is skipped.
     """
 
-    @pytest.mark.parametrize("path_target", [
-        "./src",
-        "/tmp/project",
-    ])
+    @pytest.mark.parametrize(
+        "path_target",
+        [
+            "./src",
+            "/tmp/project",
+        ],
+    )
     def test_path_target_does_not_cause_server_error(self, test_client, path_target):
         r = post(test_client, network_payload(path_target))
-        assert r.status_code != 500, (
-            f"Server crashed on path target '{path_target}': {r.text}"
-        )
+        assert (
+            r.status_code != 500
+        ), f"Server crashed on path target '{path_target}': {r.text}"
 
-    @pytest.mark.parametrize("path_target", [
-        "./src",
-        "/tmp/project",
-    ])
+    @pytest.mark.parametrize(
+        "path_target",
+        [
+            "./src",
+            "/tmp/project",
+        ],
+    )
     def test_path_target_produces_expected_status(self, test_client, path_target):
         r = post(test_client, network_payload(path_target))
-        assert r.status_code in (200, 201, 202, 400, 422), (
-            f"Unexpected status {r.status_code} for '{path_target}': {r.text}"
-        )
+        assert r.status_code in (
+            200,
+            201,
+            202,
+            400,
+            422,
+        ), f"Unexpected status {r.status_code} for '{path_target}': {r.text}"
 
 
 # ---------------------------------------------------------------------------
@@ -136,70 +152,88 @@ class TestNonCodePluginFilesystemTargets:
 # Always blocked  → broadcast, link-local, multicast
 # ---------------------------------------------------------------------------
 
-class TestNetworkTargetSafeMode:
 
-    @pytest.mark.parametrize("private_target", [
-        "192.168.1.1",
-        "10.0.0.1",
-        "172.16.0.1",
-        "127.0.0.1",
-    ])
+class TestNetworkTargetSafeMode:
+    @pytest.mark.parametrize(
+        "private_target",
+        [
+            "192.168.1.1",
+            "10.0.0.1",
+            "172.16.0.1",
+            "127.0.0.1",
+        ],
+    )
     def test_private_targets_allowed_in_safe_mode(self, test_client, private_target):
         """safe_mode=True allows private/loopback ranges."""
         r = post(test_client, network_payload(private_target, safe_mode=True))
-        assert r.status_code != 400, (
-            f"Private target '{private_target}' incorrectly blocked: {r.text}"
-        )
+        assert (
+            r.status_code != 400
+        ), f"Private target '{private_target}' incorrectly blocked: {r.text}"
 
-    @pytest.mark.parametrize("public_target", [
-        "8.8.8.8",
-        "1.1.1.1",
-        "93.184.216.34",
-    ])
+    @pytest.mark.parametrize(
+        "public_target",
+        [
+            "8.8.8.8",
+            "1.1.1.1",
+            "93.184.216.34",
+        ],
+    )
     def test_public_targets_blocked_in_safe_mode(self, test_client, public_target):
         """Server safe-mode must block public IPs regardless of client-supplied safe_mode."""
         r = post(test_client, network_payload(public_target, safe_mode=True))
-        assert r.status_code == 400, (
-            f"Expected public target '{public_target}' blocked, got {r.status_code}: {r.text}"
-        )
+        assert (
+            r.status_code == 400
+        ), f"Expected public target '{public_target}' blocked, got {r.status_code}: {r.text}"
         detail = r.json().get("detail", "")
         assert isinstance(detail, str) and len(detail) > 0
 
-    @pytest.mark.parametrize("public_target", [
-        "8.8.8.8",
-        "1.1.1.1",
-    ])
+    @pytest.mark.parametrize(
+        "public_target",
+        [
+            "8.8.8.8",
+            "1.1.1.1",
+        ],
+    )
     def test_client_cannot_disable_safe_mode(self, test_client, public_target):
         """Client cannot bypass guardrails by setting safe_mode=False in inputs."""
         r = post(test_client, network_payload(public_target, safe_mode=False))
-        assert r.status_code == 400, (
-            f"Expected public target '{public_target}' blocked even with client safe_mode=False, got {r.status_code}: {r.text}"
-        )
+        assert (
+            r.status_code == 400
+        ), f"Expected public target '{public_target}' blocked even with client safe_mode=False, got {r.status_code}: {r.text}"
 
-    @pytest.mark.parametrize("public_target", [
-        "8.8.8.8",
-        "1.1.1.1",
-    ])
-    def test_public_targets_allowed_when_server_safe_mode_disabled(self, test_client, monkeypatch, public_target):
+    @pytest.mark.parametrize(
+        "public_target",
+        [
+            "8.8.8.8",
+            "1.1.1.1",
+        ],
+    )
+    def test_public_targets_allowed_when_server_safe_mode_disabled(
+        self, test_client, monkeypatch, public_target
+    ):
         """Disabling safe-mode is a server configuration decision, not a client input."""
         from backend.secuscan.config import settings
+
         monkeypatch.setattr(settings, "safe_mode_default", False)
         r = post(test_client, network_payload(public_target, safe_mode=False))
-        assert r.status_code != 400, (
-            f"Public target '{public_target}' incorrectly blocked with safe_mode=False: {r.text}"
-        )
+        assert (
+            r.status_code != 400
+        ), f"Public target '{public_target}' incorrectly blocked with safe_mode=False: {r.text}"
 
-    @pytest.mark.parametrize("blocked_target", [
-        "169.254.1.1",   # link-local
-        "224.0.0.1",     # multicast
-        "0.0.0.1",       # broadcast range
-    ])
+    @pytest.mark.parametrize(
+        "blocked_target",
+        [
+            "169.254.1.1",  # link-local
+            "224.0.0.1",  # multicast
+            "0.0.0.1",  # broadcast range
+        ],
+    )
     def test_always_blocked_ranges_rejected(self, test_client, blocked_target):
         """Broadcast, link-local, multicast blocked in all modes."""
         r = post(test_client, network_payload(blocked_target, safe_mode=True))
-        assert r.status_code == 400, (
-            f"Expected '{blocked_target}' blocked, got {r.status_code}: {r.text}"
-        )
+        assert (
+            r.status_code == 400
+        ), f"Expected '{blocked_target}' blocked, got {r.status_code}: {r.text}"
 
     def test_raw_target_not_leaked_in_response(self, test_client):
         """Sentinel value must not appear in error response."""
@@ -213,36 +247,45 @@ class TestNetworkTargetSafeMode:
 # 4. Edge cases
 # ---------------------------------------------------------------------------
 
-class TestEdgeCases:
 
+class TestEdgeCases:
     def test_path_traversal_does_not_cause_500(self, test_client):
         r = post(test_client, code_payload("../../etc/passwd"))
         assert r.status_code != 500
 
     def test_missing_target_does_not_crash(self, test_client):
-        r = post(test_client, {
-            "plugin_id": "code_analyzer",
-            "inputs": {},
-            "consent_granted": True,
-        })
+        r = post(
+            test_client,
+            {
+                "plugin_id": "code_analyzer",
+                "inputs": {},
+                "consent_granted": True,
+            },
+        )
         assert r.status_code != 500
 
     def test_consent_checked_before_target_for_code_plugin(self, test_client):
-        r = post(test_client, {
-            "plugin_id": "code_analyzer",
-            "inputs": {"target": "./src"},
-            "consent_granted": False,
-        })
+        r = post(
+            test_client,
+            {
+                "plugin_id": "code_analyzer",
+                "inputs": {"target": "./src"},
+                "consent_granted": False,
+            },
+        )
         assert r.status_code == 400
         detail = r.json().get("detail", "")
         assert "consent" in detail.lower()
 
     def test_consent_checked_before_target_for_network_plugin(self, test_client):
-        r = post(test_client, {
-            "plugin_id": "nmap",
-            "inputs": {"target": "192.168.1.1"},
-            "consent_granted": False,
-        })
+        r = post(
+            test_client,
+            {
+                "plugin_id": "nmap",
+                "inputs": {"target": "192.168.1.1"},
+                "consent_granted": False,
+            },
+        )
         assert r.status_code == 400
         detail = r.json().get("detail", "")
         assert "consent" in detail.lower()

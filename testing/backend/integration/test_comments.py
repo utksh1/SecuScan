@@ -3,6 +3,8 @@ Unit tests for finding comments and annotation functionality.
 Tests the creation, retrieval, and notification of comments on findings.
 """
 
+from backend.secuscan.config import settings
+import pytest
 import sqlite3
 import json
 from pathlib import Path
@@ -10,9 +12,6 @@ import sys
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
-
-import pytest
-from backend.secuscan.config import settings
 
 
 ALICE = {"X-User-Id": "alice"}
@@ -75,18 +74,23 @@ def test_comment_creation(test_client):
     """Test that a user can create a comment on a finding they own."""
     finding_id = "finding-test-1"
     _seed_finding(ALICE_OWNER, finding_id)
-    
+
     resp = test_client.post(
         f"/api/v1/finding/{finding_id}/comments",
-        json={"content": "This is a critical vulnerability that needs immediate attention."},
+        json={
+            "content": "This is a critical vulnerability that needs immediate attention."
+        },
         headers=ALICE,
     )
-    
+
     assert resp.status_code == 200
     data = resp.json()
     assert data["finding_id"] == finding_id
     assert data["user_id"] == ALICE_OWNER
-    assert data["content"] == "This is a critical vulnerability that needs immediate attention."
+    assert (
+        data["content"]
+        == "This is a critical vulnerability that needs immediate attention."
+    )
     assert "id" in data
     assert "created_at" in data
 
@@ -95,13 +99,13 @@ def test_comment_not_allowed_without_access(test_client):
     """Test that a user cannot comment on a finding they don't own."""
     finding_id = "finding-test-2"
     _seed_finding(ALICE_OWNER, finding_id)
-    
+
     resp = test_client.post(
         f"/api/v1/finding/{finding_id}/comments",
         json={"content": "Trying to hack!"},
         headers=BOB,
     )
-    
+
     assert resp.status_code == 403
 
 
@@ -109,13 +113,13 @@ def test_comment_validation(test_client):
     """Test that empty comments are rejected."""
     finding_id = "finding-test-3"
     _seed_finding(ALICE_OWNER, finding_id)
-    
+
     resp = test_client.post(
         f"/api/v1/finding/{finding_id}/comments",
         json={"content": ""},
         headers=ALICE,
     )
-    
+
     assert resp.status_code == 422  # Validation error
 
 
@@ -123,15 +127,15 @@ def test_comment_creates_activity(test_client):
     """Test that creating a comment creates an activity record."""
     finding_id = "finding-test-4"
     _seed_finding(ALICE_OWNER, finding_id)
-    
+
     resp = test_client.post(
         f"/api/v1/finding/{finding_id}/comments",
         json={"content": "Adding a detailed analysis of the vulnerability."},
         headers=ALICE,
     )
-    
+
     assert resp.status_code == 200
-    
+
     # Verify activity was created
     conn = sqlite3.connect(settings.database_path)
     try:
@@ -150,7 +154,7 @@ def test_comment_listing(test_client):
     """Test that comments can be retrieved in chronological order."""
     finding_id = "finding-test-5"
     _seed_finding(ALICE_OWNER, finding_id)
-    
+
     # Create multiple comments
     for i in range(3):
         resp = test_client.post(
@@ -159,13 +163,13 @@ def test_comment_listing(test_client):
             headers=ALICE,
         )
         assert resp.status_code == 200
-    
+
     # Retrieve comments
     resp = test_client.get(
         f"/api/v1/finding/{finding_id}/comments",
         headers=ALICE,
     )
-    
+
     assert resp.status_code == 200
     data = resp.json()
     assert data["finding_id"] == finding_id
@@ -180,7 +184,7 @@ def test_comments_access_denied_for_other_owner(test_client):
     """Test that another user cannot see comments on findings they don't own."""
     finding_id = "finding-test-6"
     _seed_finding(ALICE_OWNER, finding_id)
-    
+
     # Alice creates a comment
     resp = test_client.post(
         f"/api/v1/finding/{finding_id}/comments",
@@ -188,13 +192,13 @@ def test_comments_access_denied_for_other_owner(test_client):
         headers=ALICE,
     )
     assert resp.status_code == 200
-    
+
     # Bob tries to read comments
     resp = test_client.get(
         f"/api/v1/finding/{finding_id}/comments",
         headers=BOB,
     )
-    
+
     assert resp.status_code == 403
 
 
@@ -202,7 +206,7 @@ def test_comment_notification_to_assignee(test_client):
     """Test that assigning a finding and then commenting notifies the assignee."""
     finding_id = "finding-test-7"
     _seed_finding(ALICE_OWNER, finding_id)
-    
+
     # First, assign the finding to Bob
     resp = test_client.post(
         f"/api/v1/finding/{finding_id}/assign",
@@ -210,7 +214,7 @@ def test_comment_notification_to_assignee(test_client):
         headers=ALICE,
     )
     assert resp.status_code == 200
-    
+
     # Now Alice creates a comment
     resp = test_client.post(
         f"/api/v1/finding/{finding_id}/comments",
@@ -218,7 +222,7 @@ def test_comment_notification_to_assignee(test_client):
         headers=ALICE,
     )
     assert resp.status_code == 200
-    
+
     # Verify Bob received a notification
     resp = test_client.get(
         "/api/v1/notifications",

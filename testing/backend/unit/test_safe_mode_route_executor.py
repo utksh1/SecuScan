@@ -17,6 +17,7 @@ import pytest
 # 1. Server-controlled effective_inputs logic (what the route does)
 # ---------------------------------------------------------------------------
 
+
 class TestServerControlledSafeMode:
     """Tests the pattern that routes.py uses for effective_inputs."""
 
@@ -37,33 +38,43 @@ class TestServerControlledSafeMode:
     def test_client_safe_mode_is_stripped(self, settings):
         """Client-supplied safe_mode=False is removed from inputs."""
         raw = {"target": "8.8.8.8", "safe_mode": False}
-        effective = self._build_effective_inputs(raw, safe_mode=bool(settings.safe_mode_default))
+        effective = self._build_effective_inputs(
+            raw, safe_mode=bool(settings.safe_mode_default)
+        )
         assert effective["safe_mode"] is True
         assert effective["target"] == "8.8.8.8"
 
     def test_client_safe_mode_true_is_stripped(self, settings):
         """Client-supplied safe_mode=True is also removed (no trust)."""
         raw = {"target": "192.168.1.1", "safe_mode": True}
-        effective = self._build_effective_inputs(raw, safe_mode=bool(settings.safe_mode_default))
+        effective = self._build_effective_inputs(
+            raw, safe_mode=bool(settings.safe_mode_default)
+        )
         assert effective["safe_mode"] is True
 
     def test_server_disabled_safe_mode(self, settings):
         """When server-side safe_mode_default=False, effective safe_mode is False."""
         settings.safe_mode_default = False
         raw = {"target": "8.8.8.8", "safe_mode": True}
-        effective = self._build_effective_inputs(raw, safe_mode=bool(settings.safe_mode_default))
+        effective = self._build_effective_inputs(
+            raw, safe_mode=bool(settings.safe_mode_default)
+        )
         assert effective["safe_mode"] is False
 
     def test_no_safe_mode_in_input_gets_server_default(self, settings):
         """When client does not send safe_mode at all, server default is used."""
         raw = {"target": "192.168.1.1"}
-        effective = self._build_effective_inputs(raw, safe_mode=bool(settings.safe_mode_default))
+        effective = self._build_effective_inputs(
+            raw, safe_mode=bool(settings.safe_mode_default)
+        )
         assert effective["safe_mode"] is True
 
     def test_other_inputs_preserved(self, settings):
         """Other input fields are not affected by the safe_mode injection."""
         raw = {"target": "127.0.0.1", "plugin_option": "aggressive"}
-        effective = self._build_effective_inputs(raw, safe_mode=bool(settings.safe_mode_default))
+        effective = self._build_effective_inputs(
+            raw, safe_mode=bool(settings.safe_mode_default)
+        )
         assert effective["plugin_option"] == "aggressive"
         assert effective["target"] == "127.0.0.1"
 
@@ -71,6 +82,7 @@ class TestServerControlledSafeMode:
 # ---------------------------------------------------------------------------
 # 2. Executor safe_mode persistence
 # ---------------------------------------------------------------------------
+
 
 class TestExecutorSafeModePersistence:
     """Tests that executor.create_task stores safe_mode in the database."""

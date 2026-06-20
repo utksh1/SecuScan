@@ -1,16 +1,21 @@
 import pytest
 from unittest.mock import patch
 
+
 def test_request_id_present_on_success(test_client):
     response = test_client.get("/api/v1/health")
     assert response.status_code == 200
     assert "x-request-id" in response.headers
     assert response.headers["x-request-id"] != ""
 
+
 def test_request_id_echoed_when_provided(test_client):
-    response = test_client.get("/api/v1/health", headers={"X-Request-ID": "my-trace-id"})
+    response = test_client.get(
+        "/api/v1/health", headers={"X-Request-ID": "my-trace-id"}
+    )
     assert response.status_code == 200
     assert response.headers["x-request-id"] == "my-trace-id"
+
 
 def test_request_id_present_on_404(test_client):
     response = test_client.get("/api/v1/does-not-exist")
@@ -20,6 +25,7 @@ def test_request_id_present_on_404(test_client):
     # Verify JSON shape
     assert response.headers["content-type"].startswith("application/json")
     assert response.json()["detail"] == "Not Found"
+
 
 def test_request_id_present_on_422(test_client):
     # POST with missing required fields triggers 422 validation error
@@ -31,6 +37,7 @@ def test_request_id_present_on_422(test_client):
     assert response.headers["content-type"].startswith("application/json")
     assert isinstance(response.json()["detail"], list)
 
+
 def test_request_id_present_on_unhandled_exception(test_client):
     # Force an unhandled exception in a route handler by mocking platform.system.
     # We create a local TestClient with raise_exceptions=False to ensure our
@@ -41,7 +48,9 @@ def test_request_id_present_on_unhandled_exception(test_client):
     from backend.secuscan.config import settings
 
     api_key = auth_module.init_api_key(settings.data_dir)
-    client = TestClient(app, headers={"X-Api-Key": api_key}, raise_server_exceptions=False)
+    client = TestClient(
+        app, headers={"X-Api-Key": api_key}, raise_server_exceptions=False
+    )
 
     with patch("platform.system", side_effect=RuntimeError("boom")):
         response = client.get("/api/v1/health")
@@ -56,6 +65,7 @@ def test_request_id_present_on_unhandled_exception(test_client):
         else:
             assert "text/plain" in response.headers["content-type"]
             assert response.text == "Internal Server Error"
+
 
 def test_request_id_is_consistent_across_same_request(test_client):
     # The ID in the response header should match what was set on the request state.

@@ -34,9 +34,9 @@ async def test_task_fetchall_100_rows(bench_env, record_benchmark):
     )
 
     assert len(rows) >= 100, f"Expected at least 100 rows, got {len(rows)}"
-    assert elapsed_ms < threshold, (
-        f"Fetchall took {elapsed_ms:.2f}ms, threshold: {threshold}ms"
-    )
+    assert (
+        elapsed_ms < threshold
+    ), f"Fetchall took {elapsed_ms:.2f}ms, threshold: {threshold}ms"
 
 
 @pytest.mark.benchmark
@@ -77,9 +77,9 @@ async def test_task_fetchone_repeated_50x(bench_env, record_benchmark):
     print(
         f"\n[bench_task_fetchone_repeated_50x] Mean: {mean_ms:.2f}ms, P95: {p95_ms:.2f}ms (threshold: {threshold}ms)"
     )
-    assert p95_ms < threshold, (
-        f"P95 fetchone latency {p95_ms:.2f}ms exceeded threshold {threshold}ms"
-    )
+    assert (
+        p95_ms < threshold
+    ), f"P95 fetchone latency {p95_ms:.2f}ms exceeded threshold {threshold}ms"
 
 
 @pytest.mark.benchmark
@@ -133,6 +133,6 @@ async def test_findings_fetchall_500_rows(bench_env, record_benchmark):
     )
 
     assert len(rows) >= 500, f"Expected at least 500 findings, got {len(rows)}"
-    assert elapsed_ms < threshold, (
-        f"Fetchall findings took {elapsed_ms:.2f}ms, threshold: {threshold}ms"
-    )
+    assert (
+        elapsed_ms < threshold
+    ), f"Fetchall findings took {elapsed_ms:.2f}ms, threshold: {threshold}ms"

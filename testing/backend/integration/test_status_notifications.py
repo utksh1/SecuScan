@@ -20,7 +20,9 @@ ALICE_OWNER = "user:alice"
 BOB_OWNER = "user:bob"
 
 
-def _seed_finding(owner_id: str, finding_id: str, task_id: str = "task-1", status: str = "OPEN") -> None:
+def _seed_finding(
+    owner_id: str, finding_id: str, task_id: str = "task-1", status: str = "OPEN"
+) -> None:
     """Insert a finding directly for testing."""
     conn = sqlite3.connect(settings.database_path)
     try:
@@ -208,8 +210,7 @@ def test_status_update_notifies_assignee(test_client):
     data = resp.json()
 
     status_notif = next(
-        (n for n in data["notifications"]
-         if n["action_type"] == "status_changed"),
+        (n for n in data["notifications"] if n["action_type"] == "status_changed"),
         None,
     )
     assert status_notif is not None
@@ -280,8 +281,7 @@ def test_notification_mark_read(test_client):
     )
     assert resp.status_code == 200
     data = resp.json()
-    assert any(n["id"] == notif_id and n["is_read"]
-               for n in data["notifications"])
+    assert any(n["id"] == notif_id and n["is_read"] for n in data["notifications"])
 
 
 def test_activity_feed_retrieval(test_client):

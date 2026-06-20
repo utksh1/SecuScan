@@ -20,6 +20,7 @@ from backend.secuscan.ratelimit import ConcurrentTaskLimiter
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def run(coro):
     return asyncio.run(coro)
 
@@ -27,6 +28,7 @@ def run(coro):
 # ---------------------------------------------------------------------------
 # Unit: ConcurrentTaskLimiter
 # ---------------------------------------------------------------------------
+
 
 def test_acquire_succeeds_when_slots_available():
     limiter = ConcurrentTaskLimiter(max_concurrent=3)
@@ -60,12 +62,12 @@ def test_release_frees_slot_for_next_acquire():
 
     run(limiter.release("task-1"))
     ok, _ = run(limiter.acquire("task-2"))
-    assert ok is True   # slot recovered
+    assert ok is True  # slot recovered
 
 
 def test_release_unknown_id_is_a_noop():
     limiter = ConcurrentTaskLimiter(max_concurrent=3)
-    run(limiter.release("never-existed"))   # must not raise
+    run(limiter.release("never-existed"))  # must not raise
 
 
 def test_available_slots_full_when_empty():
@@ -98,6 +100,7 @@ def test_available_slots_recovers_after_release():
 # Regression: atomic acquire — no TOCTOU window between concurrent callers
 # ---------------------------------------------------------------------------
 
+
 def test_concurrent_acquires_respect_max_limit():
     """
     Fire max_concurrent+2 acquire calls concurrently inside a single event loop.
@@ -114,15 +117,16 @@ def test_concurrent_acquires_respect_max_limit():
 
     results = asyncio.run(run_concurrent())
     successes = [ok for ok, _ in results if ok]
-    failures  = [ok for ok, _ in results if not ok]
+    failures = [ok for ok, _ in results if not ok]
 
     assert len(successes) == 3, "Exactly max_concurrent slots should be granted"
-    assert len(failures)  == 2, "Remaining requests should be rejected"
+    assert len(failures) == 2, "Remaining requests should be rejected"
 
 
 # ---------------------------------------------------------------------------
 # Regression: "temp" pattern no longer bypasses a full limiter
 # ---------------------------------------------------------------------------
+
 
 def test_temp_pattern_does_not_bypass_limit():
     """
@@ -135,8 +139,8 @@ def test_temp_pattern_does_not_bypass_limit():
     run(limiter.acquire("real-2"))
 
     # Full — simulating the old broken pattern must not free a real slot
-    run(limiter.acquire("temp"))   # fails silently (full)
-    run(limiter.release("temp"))   # no-op — "temp" was never registered
+    run(limiter.acquire("temp"))  # fails silently (full)
+    run(limiter.release("temp"))  # no-op — "temp" was never registered
 
     assert run(limiter.get_available_slots()) == 0
 
@@ -144,6 +148,7 @@ def test_temp_pattern_does_not_bypass_limit():
 # ---------------------------------------------------------------------------
 # Route-level regression: simultaneous task starts honour max_concurrent
 # ---------------------------------------------------------------------------
+
 
 def test_route_rejects_task_when_limiter_full(test_client, monkeypatch):
     """
@@ -179,14 +184,17 @@ def test_route_rejects_task_when_limiter_full(test_client, monkeypatch):
             },
         )
 
-        assert response.status_code == 503, (
-            f"Expected 503 when limiter is full, got {response.status_code}: {response.text}"
-        )
-        assert len(scheduled) == 0, "Background task must not be scheduled when acquire fails"
+        assert (
+            response.status_code == 503
+        ), f"Expected 503 when limiter is full, got {response.status_code}: {response.text}"
+        assert (
+            len(scheduled) == 0
+        ), "Background task must not be scheduled when acquire fails"
 
     finally:
         # Clean up pre-filled slots
         async def cleanup():
             for i in range(concurrent_limiter.max_concurrent):
                 await concurrent_limiter.release(f"pre-task-{i}")
+
         asyncio.run(cleanup())

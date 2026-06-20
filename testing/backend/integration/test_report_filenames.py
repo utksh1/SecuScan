@@ -4,7 +4,9 @@ import sqlite3
 from backend.secuscan.config import settings
 
 
-def _seed_task(task_id: str, tool: str, target: str, created_at: str, status: str = "completed"):
+def _seed_task(
+    task_id: str, tool: str, target: str, created_at: str, status: str = "completed"
+):
     conn = sqlite3.connect(settings.database_path)
     conn.execute(
         """
@@ -32,6 +34,7 @@ def _seed_task(task_id: str, tool: str, target: str, created_at: str, status: st
 # CSV
 # ---------------------------------------------------------------------------
 
+
 def test_csv_filename_url_target(test_client):
     task_id = "fn-csv-url-001"
     _seed_task(task_id, "http_inspector", "https://example.com", "2026-04-10T12:00:00")
@@ -57,6 +60,7 @@ def test_csv_filename_hostport_target(test_client):
 # HTML
 # ---------------------------------------------------------------------------
 
+
 def test_html_filename_url_target(test_client):
     task_id = "fn-html-url-001"
     _seed_task(task_id, "nikto", "http://testsite.local", "2026-02-20T09:30:00")
@@ -81,9 +85,12 @@ def test_html_filename_hostport_target(test_client):
 # PDF
 # ---------------------------------------------------------------------------
 
+
 def test_pdf_filename_url_target(test_client):
     task_id = "fn-pdf-url-001"
-    _seed_task(task_id, "http_inspector", "https://target.example.org", "2026-05-01T00:00:00")
+    _seed_task(
+        task_id, "http_inspector", "https://target.example.org", "2026-05-01T00:00:00"
+    )
 
     response = test_client.get(f"/api/v1/task/{task_id}/report/pdf")
     assert response.status_code == 200
@@ -105,9 +112,12 @@ def test_pdf_filename_hostport_target(test_client):
 # SARIF
 # ---------------------------------------------------------------------------
 
+
 def test_sarif_filename_url_target(test_client):
     task_id = "fn-sarif-url-001"
-    _seed_task(task_id, "http_inspector", "https://scan.example.com", "2026-05-10T10:00:00")
+    _seed_task(
+        task_id, "http_inspector", "https://scan.example.com", "2026-05-10T10:00:00"
+    )
 
     response = test_client.get(f"/api/v1/task/{task_id}/report/sarif")
     assert response.status_code == 200
@@ -129,6 +139,7 @@ def test_sarif_filename_hostport_target(test_client):
 # Error paths — 404 and unfinished task do not produce download headers
 # ---------------------------------------------------------------------------
 
+
 def test_report_404_for_missing_task(test_client):
     response = test_client.get("/api/v1/task/does-not-exist-xyz/report/csv")
     assert response.status_code == 404
@@ -137,7 +148,13 @@ def test_report_404_for_missing_task(test_client):
 
 def test_report_400_for_unfinished_task(test_client):
     task_id = "fn-running-001"
-    _seed_task(task_id, "http_inspector", "https://example.com", "2026-05-14T10:00:00", status="running")
+    _seed_task(
+        task_id,
+        "http_inspector",
+        "https://example.com",
+        "2026-05-14T10:00:00",
+        status="running",
+    )
 
     for fmt in ("csv", "html", "pdf", "sarif"):
         response = test_client.get(f"/api/v1/task/{task_id}/report/{fmt}")

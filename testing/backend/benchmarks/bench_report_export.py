@@ -66,9 +66,9 @@ def test_csv_export_10x(bench_env, record_benchmark):
     threshold = load_threshold("csv_export_mean_ms")
 
     print(f"\n[bench_csv_export_10x] Mean: {mean_ms:.2f}ms (threshold: {threshold}ms)")
-    assert mean_ms < threshold, (
-        f"Mean CSV export latency {mean_ms:.2f}ms exceeded threshold {threshold}ms"
-    )
+    assert (
+        mean_ms < threshold
+    ), f"Mean CSV export latency {mean_ms:.2f}ms exceeded threshold {threshold}ms"
 
 
 @pytest.mark.benchmark
@@ -89,6 +89,6 @@ def test_html_export_10x(bench_env, record_benchmark):
     threshold = load_threshold("html_export_mean_ms")
 
     print(f"\n[bench_html_export_10x] Mean: {mean_ms:.2f}ms (threshold: {threshold}ms)")
-    assert mean_ms < threshold, (
-        f"Mean HTML export latency {mean_ms:.2f}ms exceeded threshold {threshold}ms"
-    )
+    assert (
+        mean_ms < threshold
+    ), f"Mean HTML export latency {mean_ms:.2f}ms exceeded threshold {threshold}ms"

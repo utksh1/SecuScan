@@ -19,9 +19,11 @@ class TestSnapshotWorkflowVersion:
         db = make_db()
         run(db.connect())
         try:
-            v = run(db.snapshot_workflow_version(
-                "wf-test-1", "Test WF", 60, True, [{"plugin_id": "nmap"}]
-            ))
+            v = run(
+                db.snapshot_workflow_version(
+                    "wf-test-1", "Test WF", 60, True, [{"plugin_id": "nmap"}]
+                )
+            )
             assert v["version_number"] == 1
             assert v["workflow_id"] == "wf-test-1"
             assert v["created_by"] == "system"
@@ -128,9 +130,16 @@ class TestRecordWorkflowRun:
         db = make_db()
         run(db.connect())
         try:
-            run_id = run(db.record_workflow_run("wf-1", None, 1, ["t1", "t2"], "manual"))
+            run_id = run(
+                db.record_workflow_run("wf-1", None, 1, ["t1", "t2"], "manual")
+            )
             assert run_id is not None
-            run_row = run(db.fetchone("SELECT status, triggered_by FROM workflow_runs WHERE id = ?", (run_id,)))
+            run_row = run(
+                db.fetchone(
+                    "SELECT status, triggered_by FROM workflow_runs WHERE id = ?",
+                    (run_id,),
+                )
+            )
             assert run_row["status"] == "queued"
             assert run_row["triggered_by"] == "manual"
         finally:
@@ -141,7 +150,11 @@ class TestRecordWorkflowRun:
         run(db.connect())
         try:
             run_id = run(db.record_workflow_run("wf-1", None, 1, [], "scheduler"))
-            raw = run(db.fetchone("SELECT task_ids_json FROM workflow_runs WHERE id = ?", (run_id,)))
+            raw = run(
+                db.fetchone(
+                    "SELECT task_ids_json FROM workflow_runs WHERE id = ?", (run_id,)
+                )
+            )
             assert raw["task_ids_json"] == "[]"
         finally:
             run(db.disconnect())
@@ -154,7 +167,12 @@ class TestFinalizeWorkflowRun:
         try:
             run_id = run(db.record_workflow_run("wf-1", None, 1, [], "manual"))
             run(db.finalize_workflow_run(run_id, "completed"))
-            run_row = run(db.fetchone("SELECT status, completed_at FROM workflow_runs WHERE id = ?", (run_id,)))
+            run_row = run(
+                db.fetchone(
+                    "SELECT status, completed_at FROM workflow_runs WHERE id = ?",
+                    (run_id,),
+                )
+            )
             assert run_row["status"] == "completed"
             assert run_row["completed_at"] is not None
         finally:
@@ -165,8 +183,17 @@ class TestFinalizeWorkflowRun:
         run(db.connect())
         try:
             run_id = run(db.record_workflow_run("wf-1", None, 1, [], "manual"))
-            run(db.finalize_workflow_run(run_id, "failed", error_message="Plugin not found"))
-            run_row = run(db.fetchone("SELECT status, error_message FROM workflow_runs WHERE id = ?", (run_id,)))
+            run(
+                db.finalize_workflow_run(
+                    run_id, "failed", error_message="Plugin not found"
+                )
+            )
+            run_row = run(
+                db.fetchone(
+                    "SELECT status, error_message FROM workflow_runs WHERE id = ?",
+                    (run_id,),
+                )
+            )
             assert run_row["status"] == "failed"
             assert run_row["error_message"] == "Plugin not found"
         finally:
@@ -191,10 +218,12 @@ class TestCheckWorkflowRunTasks:
             task_ids = []
             for _ in range(3):
                 tid = uuid.uuid4().hex
-                run(db.execute(
-                    "INSERT INTO tasks (id, plugin_id, tool_name, target, inputs_json, execution_context_json, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (tid, "nmap", "nmap", "127.0.0.1", "{}", "{}", "completed"),
-                ))
+                run(
+                    db.execute(
+                        "INSERT INTO tasks (id, plugin_id, tool_name, target, inputs_json, execution_context_json, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (tid, "nmap", "nmap", "127.0.0.1", "{}", "{}", "completed"),
+                    )
+                )
                 task_ids.append(tid)
             run_id = run(db.record_workflow_run("wf-1", None, 1, task_ids, "manual"))
             result = run(db.check_workflow_run_tasks(run_id))
@@ -207,10 +236,12 @@ class TestCheckWorkflowRunTasks:
         run(db.connect())
         try:
             tid = uuid.uuid4().hex
-            run(db.execute(
-                "INSERT INTO tasks (id, plugin_id, tool_name, target, inputs_json, execution_context_json, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (tid, "nmap", "nmap", "127.0.0.1", "{}", "{}", "running"),
-            ))
+            run(
+                db.execute(
+                    "INSERT INTO tasks (id, plugin_id, tool_name, target, inputs_json, execution_context_json, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (tid, "nmap", "nmap", "127.0.0.1", "{}", "{}", "running"),
+                )
+            )
             run_id = run(db.record_workflow_run("wf-1", None, 1, [tid], "manual"))
             result = run(db.check_workflow_run_tasks(run_id))
             assert result is None
@@ -222,10 +253,12 @@ class TestCheckWorkflowRunTasks:
         run(db.connect())
         try:
             tid = uuid.uuid4().hex
-            run(db.execute(
-                "INSERT INTO tasks (id, plugin_id, tool_name, target, inputs_json, execution_context_json, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (tid, "nmap", "nmap", "127.0.0.1", "{}", "{}", "failed"),
-            ))
+            run(
+                db.execute(
+                    "INSERT INTO tasks (id, plugin_id, tool_name, target, inputs_json, execution_context_json, status) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (tid, "nmap", "nmap", "127.0.0.1", "{}", "{}", "failed"),
+                )
+            )
             run_id = run(db.record_workflow_run("wf-1", None, 1, [tid], "manual"))
             result = run(db.check_workflow_run_tasks(run_id))
             assert result == "failed"

@@ -13,22 +13,22 @@ from backend.secuscan.redaction import redact, redact_dict, redact_inputs, REDAC
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def assert_redacted(result: str, original_secret: str) -> None:
     """Assert the secret value is gone and the placeholder is present."""
     assert REDACTED in result, f"Expected [REDACTED] in: {result!r}"
-    assert original_secret not in result, (
-        f"Secret still present in output: {result!r}"
-    )
+    assert original_secret not in result, f"Secret still present in output: {result!r}"
 
 
 def assert_safe(result: str, original: str) -> None:
     """Assert safe content passed through unchanged."""
-    assert result == original, (
-        f"Safe content was altered.\nBefore: {original!r}\nAfter:  {result!r}"
-    )
+    assert (
+        result == original
+    ), f"Safe content was altered.\nBefore: {original!r}\nAfter:  {result!r}"
 
 
 # ── Bearer / Authorization header ─────────────────────────────────────────────
+
 
 class TestBearerToken:
     def test_authorization_bearer(self):
@@ -56,6 +56,7 @@ class TestBearerToken:
 
 # ── API keys ──────────────────────────────────────────────────────────────────
 
+
 class TestApiKey:
     def test_api_key_equals(self):
         text = "api_key=supersecretkey12345"
@@ -79,6 +80,7 @@ class TestApiKey:
 
 
 # ── Passwords ─────────────────────────────────────────────────────────────────
+
 
 class TestPassword:
     def test_password_equals(self):
@@ -104,6 +106,7 @@ class TestPassword:
 
 # ── AWS credentials ───────────────────────────────────────────────────────────
 
+
 class TestAwsCredentials:
     def test_aws_access_key_id(self):
         text = "AKIAIOSFODNN7EXAMPLE"
@@ -118,6 +121,7 @@ class TestAwsCredentials:
 
 
 # ── Session cookies ───────────────────────────────────────────────────────────
+
 
 class TestSessionCookie:
     def test_set_cookie_session(self):
@@ -137,6 +141,7 @@ class TestSessionCookie:
 
 
 # ── VCS / SaaS tokens ─────────────────────────────────────────────────────────
+
 
 class TestVcsAndSaasTokens:
     def test_github_pat(self):
@@ -166,6 +171,7 @@ class TestVcsAndSaasTokens:
 
 # ── PEM private key ───────────────────────────────────────────────────────────
 
+
 class TestPemKey:
     PEM = (
         "-----BEGIN RSA PRIVATE KEY-----\n"
@@ -185,6 +191,7 @@ class TestPemKey:
 
 
 # ── Safe content must pass through unchanged ──────────────────────────────────
+
 
 class TestSafeContent:
     def test_plain_finding_description(self):
@@ -225,6 +232,7 @@ class TestSafeContent:
 
 # ── redact_dict ───────────────────────────────────────────────────────────────
 
+
 class TestRedactDict:
     def test_redacts_string_values(self):
         data = {
@@ -236,11 +244,7 @@ class TestRedactDict:
         assert result["severity"] == "high"
 
     def test_nested_dict(self):
-        data = {
-            "metadata": {
-                "proof": "Set-Cookie: session=abc123def456; Path=/"
-            }
-        }
+        data = {"metadata": {"proof": "Set-Cookie: session=abc123def456; Path=/"}}
         result = redact_dict(data)
         assert_redacted(result["metadata"]["proof"], "abc123def456")
 
@@ -266,6 +270,7 @@ class TestRedactDict:
 
 # ── Multi-secret line ─────────────────────────────────────────────────────────
 
+
 class TestMultipleSecretsOnOneLine:
     def test_two_secrets_same_line(self):
         text = "api_key=abc123def456 password=hunter2secret"
@@ -287,7 +292,10 @@ class TestRedactInputs:
         assert result["target"] == "example.com"
 
     def test_token_is_redacted(self):
-        inputs = {"token": "ghp_16C7e42F292c6912E7710c838347Ae178B4a", "url": "http://example.com"}
+        inputs = {
+            "token": "ghp_16C7e42F292c6912E7710c838347Ae178B4a",
+            "url": "http://example.com",
+        }
         result = redact_inputs(inputs)
         assert result["token"] == REDACTED
         assert result["url"] == "http://example.com"
@@ -299,7 +307,9 @@ class TestRedactInputs:
         assert result["username"] == "admin"
 
     def test_private_key_is_redacted(self):
-        inputs = {"private_key": "-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----"}
+        inputs = {
+            "private_key": "-----BEGIN RSA PRIVATE KEY-----\nMIIE...\n-----END RSA PRIVATE KEY-----"
+        }
         result = redact_inputs(inputs)
         assert result["private_key"] == REDACTED
 
@@ -332,7 +342,12 @@ class TestRedactInputs:
         assert REDACTED in result["description"]
 
     def test_non_string_values_are_untouched(self):
-        inputs = {"count": 5, "enabled": True, "score": 9.8, "target": "host.example.com"}
+        inputs = {
+            "count": 5,
+            "enabled": True,
+            "score": 9.8,
+            "target": "host.example.com",
+        }
         result = redact_inputs(inputs)
         assert result["count"] == 5
         assert result["enabled"] is True

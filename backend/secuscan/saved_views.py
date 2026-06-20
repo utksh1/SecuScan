@@ -17,12 +17,13 @@ _VALID_SEVERITIES = {"all", "critical", "high", "medium", "low", "info"}
 
 class FilterPreset(BaseModel):
     """Validated representation of the frontend filter state."""
-    severity:    str = "all"
-    target:      str = "all"
-    scanner:     str = "all"
-    sortMode:    str = "severity"
-    dateFrom:    str = ""
-    dateTo:      str = ""
+
+    severity: str = "all"
+    target: str = "all"
+    scanner: str = "all"
+    sortMode: str = "severity"
+    dateFrom: str = ""
+    dateTo: str = ""
     searchQuery: str = ""
 
     @field_validator("sortMode")
@@ -42,7 +43,8 @@ class FilterPreset(BaseModel):
 
 class SavedViewCreate(BaseModel):
     """Request body for POST /saved-views."""
-    name:        str = Field(..., min_length=1, max_length=60)
+
+    name: str = Field(..., min_length=1, max_length=60)
     filter_json: str
 
     @field_validator("name")
@@ -66,7 +68,8 @@ class SavedViewCreate(BaseModel):
 
 class SavedViewUpdate(BaseModel):
     """Request body for PUT /saved-views/{id}."""
-    name:        Optional[str] = Field(None, min_length=1, max_length=60)
+
+    name: Optional[str] = Field(None, min_length=1, max_length=60)
     filter_json: Optional[str] = None
 
     @field_validator("name")
@@ -92,9 +95,6 @@ class SavedViewUpdate(BaseModel):
         return v
 
 
-
-
-
 @saved_views_router.get("")
 async def list_saved_views() -> Dict[str, Any]:
     """Return all saved views ordered by creation date."""
@@ -114,7 +114,6 @@ async def create_saved_view(body: SavedViewCreate) -> Dict[str, Any]:
     """
     db = await get_db()
 
-
     existing = await db.fetchone(
         "SELECT id FROM saved_views WHERE LOWER(name) = LOWER(?)", (body.name,)
     )
@@ -122,7 +121,7 @@ async def create_saved_view(body: SavedViewCreate) -> Dict[str, Any]:
         raise HTTPException(
             status_code=409,
             detail=f"A saved view named '{body.name}' already exists. "
-                   "Use PUT to overwrite it.",
+            "Use PUT to overwrite it.",
         )
 
     view_id = str(uuid.uuid4())

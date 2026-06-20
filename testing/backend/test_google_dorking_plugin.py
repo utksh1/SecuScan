@@ -29,8 +29,7 @@ from backend.secuscan.plugins import PluginManager
 # Load parser from hyphenated directory name
 # ---------------------------------------------------------------------------
 _spec = importlib.util.spec_from_file_location(
-    "google_dorking_parser",
-    REPO_ROOT / "plugins" / "google-dorking" / "parser.py"
+    "google_dorking_parser", REPO_ROOT / "plugins" / "google-dorking" / "parser.py"
 )
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
@@ -164,7 +163,14 @@ def test_google_dorking_parser_finding_has_required_keys():
     result = parse(_GOOGLE_DORKING_OUTPUT_FIXTURE)
     assert result["findings"]
     for finding in result["findings"]:
-        for key in ("title", "category", "severity", "description", "remediation", "metadata"):
+        for key in (
+            "title",
+            "category",
+            "severity",
+            "description",
+            "remediation",
+            "metadata",
+        ):
             assert key in finding
 
 
@@ -197,12 +203,19 @@ def test_google_dorking_parser_preserves_raw_line_in_metadata():
     single_line = "exposed login page found at secuscan.in/admin\n"
     result = parse(single_line)
     assert result["findings"]
-    assert result["findings"][0]["metadata"]["raw_line"] == "exposed login page found at secuscan.in/admin"
+    assert (
+        result["findings"][0]["metadata"]["raw_line"]
+        == "exposed login page found at secuscan.in/admin"
+    )
 
 
 def test_google_dorking_parser_items_matches_lines():
     result = parse(_GOOGLE_DORKING_OUTPUT_FIXTURE)
-    expected = [line.strip() for line in _GOOGLE_DORKING_OUTPUT_FIXTURE.splitlines() if line.strip()]
+    expected = [
+        line.strip()
+        for line in _GOOGLE_DORKING_OUTPUT_FIXTURE.splitlines()
+        if line.strip()
+    ]
     assert result["items"] == expected
 
 

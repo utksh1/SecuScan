@@ -120,7 +120,9 @@ def test_bundled_small_wordlist_exists_and_is_nonempty():
     """small.txt must be committed and contain at least one path entry."""
     small = WORDLISTS_DIR / "small.txt"
     assert small.exists(), "wordlists/small.txt must be bundled"
-    entries = [ln for ln in small.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    entries = [
+        ln for ln in small.read_text(encoding="utf-8").splitlines() if ln.strip()
+    ]
     assert entries, "wordlists/small.txt must contain at least one entry"
 
 
@@ -137,7 +139,9 @@ def test_default_wordlist_resolves_to_real_bundled_file(monkeypatch):
 
     resolved = manager._resolve_wordlist_path(default_value)
 
-    assert os.path.exists(resolved), f"default wordlist {default_value!r} must resolve to a real file"
+    assert os.path.exists(
+        resolved
+    ), f"default wordlist {default_value!r} must resolve to a real file"
     assert os.path.basename(resolved) == "small.txt"
     resolved_parent = Path(resolved).resolve().parent
     assert resolved_parent == WORDLISTS_DIR.resolve()

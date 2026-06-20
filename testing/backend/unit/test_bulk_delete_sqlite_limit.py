@@ -28,6 +28,7 @@ ENDPOINT = "/api/v1/tasks/bulk"
 
 # Fixtures  (mirrors test_task_cleanup.py)
 
+
 @pytest_asyncio.fixture
 async def db_path(tmp_path):
     return str(tmp_path / "test_secuscan.db")
@@ -49,6 +50,7 @@ async def app_client(db_path):
         test_db = await db_module.init_db(db_path)
 
         import tempfile, os
+
         with tempfile.TemporaryDirectory() as tmp_data_dir:
             api_key = auth_module.init_api_key(tmp_data_dir)
 
@@ -81,6 +83,7 @@ async def insert_task(db, status: str = "completed") -> str:
 
 # 1. Unit tests — BulkDeleteRequest Pydantic model validation
 
+
 class TestBulkDeleteRequestModel:
     """
     Validates that the Pydantic model enforces size limits before any
@@ -108,9 +111,9 @@ class TestBulkDeleteRequestModel:
         with pytest.raises(ValidationError) as exc_info:
             BulkDeleteRequest(ids)
         errors = exc_info.value.errors()
-        assert any(e["type"] in ("too_long", "value_error") for e in errors), (
-            f"Expected a list-length validation error, got: {errors}"
-        )
+        assert any(
+            e["type"] in ("too_long", "value_error") for e in errors
+        ), f"Expected a list-length validation error, got: {errors}"
 
     def test_1000_ids_raises_validation_error(self):
         """1000 IDs (the original crash threshold) must also be rejected."""
@@ -121,8 +124,8 @@ class TestBulkDeleteRequestModel:
 
 # 2. Integration — HTTP endpoint boundary tests
 
-class TestBulkDeleteEndpointLimits:
 
+class TestBulkDeleteEndpointLimits:
     @pytest.mark.asyncio
     async def test_empty_list_returns_200(self, app_client):
         """[] must return 200 with deleted_count=0 — not 422."""
@@ -139,18 +142,18 @@ class TestBulkDeleteEndpointLimits:
         # but the endpoint must NOT reject the request with 422.
         ids = [str(uuid.uuid4()) for _ in range(MAX_BULK_DELETE)]
         resp = await app_client.request("DELETE", ENDPOINT, json=ids)
-        assert resp.status_code == 200, (
-            f"Expected 200 for {MAX_BULK_DELETE} IDs, got {resp.status_code}: {resp.text}"
-        )
+        assert (
+            resp.status_code == 200
+        ), f"Expected 200 for {MAX_BULK_DELETE} IDs, got {resp.status_code}: {resp.text}"
 
     @pytest.mark.asyncio
     async def test_501_ids_rejected_with_422(self, app_client):
         """501 IDs (one over the limit) must be rejected with 422."""
         ids = [str(uuid.uuid4()) for _ in range(MAX_BULK_DELETE + 1)]
         resp = await app_client.request("DELETE", ENDPOINT, json=ids)
-        assert resp.status_code == 422, (
-            f"Expected 422 for {MAX_BULK_DELETE + 1} IDs, got {resp.status_code}: {resp.text}"
-        )
+        assert (
+            resp.status_code == 422
+        ), f"Expected 422 for {MAX_BULK_DELETE + 1} IDs, got {resp.status_code}: {resp.text}"
 
     @pytest.mark.asyncio
     async def test_response_shape_on_success(self, app_client):
@@ -162,6 +165,7 @@ class TestBulkDeleteEndpointLimits:
 
 
 # 3. Unit test — delete_task_records() chunking
+
 
 class TestDeleteTaskRecordsChunking:
     """
@@ -190,8 +194,10 @@ class TestDeleteTaskRecordsChunking:
         mock_db.begin = AsyncMock()
         mock_db.commit = AsyncMock()
         mock_db.rollback = AsyncMock()
+
         async def capture_execute(sql, params=()):
             captured_sql.append(sql)
+
         mock_db.execute_no_commit = capture_execute
 
         with patch("backend.secuscan.routes.get_db", return_value=mock_db):
@@ -226,9 +232,11 @@ class TestDeleteTaskRecordsChunking:
         mock_db.begin = AsyncMock()
         mock_db.commit = AsyncMock()
         mock_db.rollback = AsyncMock()
+
         async def capture_execute(sql, params=()):
             captured_sql.append(sql)
             captured_params.append(params)
+
         mock_db.execute_no_commit = capture_execute
 
         with patch("backend.secuscan.routes.get_db", return_value=mock_db):

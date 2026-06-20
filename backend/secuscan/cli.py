@@ -21,7 +21,10 @@ from backend.secuscan.config import settings
 from backend.secuscan.plugins import init_plugins, get_plugin_manager
 from backend.secuscan.reporting import reporting
 
-async def run_scan(target: str, plugin_id: str, output_format: str, output_file: Optional[str] = None):
+
+async def run_scan(
+    target: str, plugin_id: str, output_format: str, output_file: Optional[str] = None
+):
     """Initialize components and execute a scan task."""
 
     # Ensure directories exist
@@ -37,7 +40,11 @@ async def run_scan(target: str, plugin_id: str, output_format: str, output_file:
     # If target is "." and no plugin specified, default to a sensible one for code
     if target == "." and plugin_id == "nmap":
         # Check if we should use secret_scanner or code_analyzer instead
-        plugin_id = "secret_scanner" if plugin_manager.get_plugin("secret_scanner") else "code_analyzer"
+        plugin_id = (
+            "secret_scanner"
+            if plugin_manager.get_plugin("secret_scanner")
+            else "code_analyzer"
+        )
         print(f"[*] Detected directory target '.', defaulting to plugin: {plugin_id}")
 
     plugin = plugin_manager.get_plugin(plugin_id)
@@ -51,7 +58,9 @@ async def run_scan(target: str, plugin_id: str, output_format: str, output_file:
     safe_mode = bool(settings.safe_mode_default)
     inputs = {"target": target, "safe_mode": safe_mode}
     try:
-        task_id = await executor.create_task(plugin_id, inputs, safe_mode=safe_mode, consent_granted=True)
+        task_id = await executor.create_task(
+            plugin_id, inputs, safe_mode=safe_mode, consent_granted=True
+        )
     except Exception as e:
         print(f"Error creating task: {e}")
         return 1
@@ -89,7 +98,7 @@ async def run_scan(target: str, plugin_id: str, output_format: str, output_file:
     db = await get_db()
     task_row = await db.fetchone(
         "SELECT id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
-        (task_id,)
+        (task_id,),
     )
 
     if not task_row:
@@ -103,7 +112,9 @@ async def run_scan(target: str, plugin_id: str, output_format: str, output_file:
     print(f"\n[*] Scan completed successfully.")
 
     # Generate report
-    structured_data = json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
+    structured_data = (
+        json.loads(task_row["structured_json"]) if task_row["structured_json"] else {}
+    )
     result_payload = {"structured": structured_data}
 
     report_content: str = ""
@@ -133,15 +144,25 @@ async def run_scan(target: str, plugin_id: str, output_format: str, output_file:
 
     return 0
 
+
 def main():
-    parser = argparse.ArgumentParser(description="SecuScan CLI - Local-First Pentesting Toolkit")
+    parser = argparse.ArgumentParser(
+        description="SecuScan CLI - Local-First Pentesting Toolkit"
+    )
     subparsers = parser.add_subparsers(dest="command", help="Command to run")
 
     # Scan command
     scan_parser = subparsers.add_parser("scan", help="Run a security scan")
     scan_parser.add_argument("target", help="Target to scan (IP, Domain, or Path)")
-    scan_parser.add_argument("--plugin", default="nmap", help="Plugin ID to use (default: nmap)")
-    scan_parser.add_argument("--format", choices=["sarif", "json", "csv", "html", "console"], default="console", help="Output format")
+    scan_parser.add_argument(
+        "--plugin", default="nmap", help="Plugin ID to use (default: nmap)"
+    )
+    scan_parser.add_argument(
+        "--format",
+        choices=["sarif", "json", "csv", "html", "console"],
+        default="console",
+        help="Output format",
+    )
     scan_parser.add_argument("--output", "-o", help="Output file path")
 
     # List plugins command
@@ -150,7 +171,9 @@ def main():
     args = parser.parse_args()
 
     if args.command == "scan":
-        sys.exit(asyncio.run(run_scan(args.target, args.plugin, args.format, args.output)))
+        sys.exit(
+            asyncio.run(run_scan(args.target, args.plugin, args.format, args.output))
+        )
     elif args.command == "plugins":
         # Synchronous shortcut for listing
         async def list_plugins():
@@ -160,9 +183,11 @@ def main():
             print("-" * 65)
             for p_id, p in pm.plugins.items():
                 print(f"{p_id:<20} {p.name:<30} {p.category:<15}")
+
         asyncio.run(list_plugins())
     else:
         parser.print_help()
+
 
 if __name__ == "__main__":
     main()

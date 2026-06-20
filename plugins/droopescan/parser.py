@@ -2,7 +2,9 @@ import json
 from typing import Any, Dict, List
 
 
-def _make_finding(title: str, category: str, severity: str, description: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
+def _make_finding(
+    title: str, category: str, severity: str, description: str, metadata: Dict[str, Any]
+) -> Dict[str, Any]:
     return {
         "title": title,
         "category": category,
@@ -46,7 +48,9 @@ def parse(output: str) -> Dict[str, Any]:
                 findings.append(
                     _make_finding(
                         title=f"DroopeScan {key}",
-                        category="CMS Vulnerability" if severity == "high" else "CMS Discovery",
+                        category="CMS Vulnerability"
+                        if severity == "high"
+                        else "CMS Discovery",
                         severity=severity,
                         description=description,
                         metadata=item,

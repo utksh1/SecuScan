@@ -26,6 +26,7 @@ def _now():
 # Core behaviour
 # ---------------------------------------------------------------------------
 
+
 def test_should_run_when_no_last_run(scheduler):
     """First-ever run: last_run_at is None → always run."""
     assert scheduler._should_run(_now(), None, 3600) is True
@@ -53,6 +54,7 @@ def test_should_run_at_exact_boundary(scheduler):
 # Regression: SQLite naive datetime string must not raise TypeError
 # ---------------------------------------------------------------------------
 
+
 def test_sqlite_naive_datetime_does_not_raise(scheduler):
     """
     Regression: SQLite datetime('now') produces '2026-05-25 08:02:28' —
@@ -60,7 +62,7 @@ def test_sqlite_naive_datetime_does_not_raise(scheduler):
     Subtracting naive from aware raises TypeError.
     This test fails on the unfixed code and passes after the fix.
     """
-    sqlite_format = "2026-05-25 08:02:28"   # exact format SQLite produces
+    sqlite_format = "2026-05-25 08:02:28"  # exact format SQLite produces
     now = datetime.now(timezone.utc)
 
     # Must not raise TypeError
@@ -95,6 +97,7 @@ def test_empty_string_treated_as_no_last_run(scheduler):
 # _run_workflow error-path tests
 # ---------------------------------------------------------------------------
 
+
 def _make_mock_db():
     mock_db = MagicMock()
     mock_db.fetchone = AsyncMock(return_value=None)
@@ -109,7 +112,9 @@ def _make_mock_plugin(category="scan", safety=None):
     return p
 
 
-async def _run_workflow_with_mocks(scheduler, steps, mock_db, plugin, validate_result=(True, "")):
+async def _run_workflow_with_mocks(
+    scheduler, steps, mock_db, plugin, validate_result=(True, "")
+):
     """Run _run_workflow with patched dependencies, return mock_executor for assertions."""
     mock_pm = MagicMock()
     mock_pm.get_plugin.return_value = plugin
@@ -124,15 +129,38 @@ async def _run_workflow_with_mocks(scheduler, steps, mock_db, plugin, validate_r
     mock_engine = MagicMock()
     mock_engine.check_access.return_value = (True, "", None)
 
-    with patch("backend.secuscan.workflows.get_db", new_callable=AsyncMock, return_value=mock_db):
+    with patch(
+        "backend.secuscan.workflows.get_db",
+        new_callable=AsyncMock,
+        return_value=mock_db,
+    ):
         with patch("backend.secuscan.plugins.get_plugin_manager", return_value=mock_pm):
-            with patch("backend.secuscan.validation.validate_target", return_value=validate_result):
-                with patch("backend.secuscan.network_policy.get_policy_engine", return_value=mock_engine):
+            with patch(
+                "backend.secuscan.validation.validate_target",
+                return_value=validate_result,
+            ):
+                with patch(
+                    "backend.secuscan.network_policy.get_policy_engine",
+                    return_value=mock_engine,
+                ):
                     with patch("backend.secuscan.workflows.executor", mock_executor):
-                        with patch("backend.secuscan.workflows.concurrent_limiter", mock_concurrent_limiter):
-                            with patch("backend.secuscan.workflows.get_target_policy", new_callable=AsyncMock, return_value=None):
-                                with patch("backend.secuscan.workflows.normalize_execution_context", return_value={}):
-                                    with patch("backend.secuscan.workflows.get_request_id", return_value="req-1"):
+                        with patch(
+                            "backend.secuscan.workflows.concurrent_limiter",
+                            mock_concurrent_limiter,
+                        ):
+                            with patch(
+                                "backend.secuscan.workflows.get_target_policy",
+                                new_callable=AsyncMock,
+                                return_value=None,
+                            ):
+                                with patch(
+                                    "backend.secuscan.workflows.normalize_execution_context",
+                                    return_value={},
+                                ):
+                                    with patch(
+                                        "backend.secuscan.workflows.get_request_id",
+                                        return_value="req-1",
+                                    ):
                                         await scheduler._run_workflow("wf-1", steps)
 
     return mock_executor
@@ -144,7 +172,12 @@ class TestRunWorkflowErrorPaths:
         scheduler = WorkflowScheduler()
         mock_db = _make_mock_db()
         mock_executor = asyncio.run(
-            _run_workflow_with_mocks(scheduler, [{"plugin_id": "nonexistent", "inputs": {}}], mock_db, plugin=None)
+            _run_workflow_with_mocks(
+                scheduler,
+                [{"plugin_id": "nonexistent", "inputs": {}}],
+                mock_db,
+                plugin=None,
+            )
         )
         mock_executor.create_task.assert_not_called()
 
@@ -184,16 +217,51 @@ class TestRunWorkflowErrorPaths:
             raise TimeoutError()
 
         async def run_test():
-            with patch("backend.secuscan.workflows.get_db", new_callable=AsyncMock, return_value=mock_db):
-                with patch("backend.secuscan.plugins.get_plugin_manager", return_value=mock_pm):
-                    with patch("backend.secuscan.validation.validate_target", side_effect=sync_timeout_validate):
-                        with patch("backend.secuscan.network_policy.get_policy_engine", return_value=mock_engine):
-                            with patch("backend.secuscan.workflows.executor", mock_executor):
-                                with patch("backend.secuscan.workflows.concurrent_limiter", mock_concurrent_limiter):
-                                    with patch("backend.secuscan.workflows.get_target_policy", new_callable=AsyncMock, return_value=None):
-                                        with patch("backend.secuscan.workflows.normalize_execution_context", return_value={}):
-                                            with patch("backend.secuscan.workflows.get_request_id", return_value="req-1"):
-                                                await scheduler._run_workflow("wf-1", [{"plugin_id": "nmap", "inputs": {"target": "bad"}}])
+            with patch(
+                "backend.secuscan.workflows.get_db",
+                new_callable=AsyncMock,
+                return_value=mock_db,
+            ):
+                with patch(
+                    "backend.secuscan.plugins.get_plugin_manager", return_value=mock_pm
+                ):
+                    with patch(
+                        "backend.secuscan.validation.validate_target",
+                        side_effect=sync_timeout_validate,
+                    ):
+                        with patch(
+                            "backend.secuscan.network_policy.get_policy_engine",
+                            return_value=mock_engine,
+                        ):
+                            with patch(
+                                "backend.secuscan.workflows.executor", mock_executor
+                            ):
+                                with patch(
+                                    "backend.secuscan.workflows.concurrent_limiter",
+                                    mock_concurrent_limiter,
+                                ):
+                                    with patch(
+                                        "backend.secuscan.workflows.get_target_policy",
+                                        new_callable=AsyncMock,
+                                        return_value=None,
+                                    ):
+                                        with patch(
+                                            "backend.secuscan.workflows.normalize_execution_context",
+                                            return_value={},
+                                        ):
+                                            with patch(
+                                                "backend.secuscan.workflows.get_request_id",
+                                                return_value="req-1",
+                                            ):
+                                                await scheduler._run_workflow(
+                                                    "wf-1",
+                                                    [
+                                                        {
+                                                            "plugin_id": "nmap",
+                                                            "inputs": {"target": "bad"},
+                                                        }
+                                                    ],
+                                                )
 
         asyncio.run(run_test())
         mock_executor.create_task.assert_not_called()

@@ -30,19 +30,34 @@ BOB_OWNER = "user:bob"
 # DB helpers (direct SQL, bypasses the API for fixture setup)
 # ---------------------------------------------------------------------------
 
+
 def _conn():
     return sqlite3.connect(settings.database_path)
 
 
-def _seed_workflow(owner_id: str, workflow_id: str, name: str,
-                   *, schedule_seconds=3600, enabled=1):
+def _seed_workflow(
+    owner_id: str, workflow_id: str, name: str, *, schedule_seconds=3600, enabled=1
+):
     conn = _conn()
     try:
         conn.execute(
             "INSERT INTO workflows (id, name, owner_id, schedule_seconds, enabled, steps_json) "
             "VALUES (?, ?, ?, ?, ?, ?)",
-            (workflow_id, name, owner_id, schedule_seconds, enabled,
-             json.dumps([{"plugin_id": "http_inspector", "inputs": {"url": "http://example.com"}}])),
+            (
+                workflow_id,
+                name,
+                owner_id,
+                schedule_seconds,
+                enabled,
+                json.dumps(
+                    [
+                        {
+                            "plugin_id": "http_inspector",
+                            "inputs": {"url": "http://example.com"},
+                        }
+                    ]
+                ),
+            ),
         )
         conn.commit()
     finally:
@@ -56,8 +71,12 @@ def _seed_workflow_version(workflow_id: str, version_number: int):
             "INSERT INTO workflow_versions "
             "(id, workflow_id, version_number, definition_json, created_by) "
             "VALUES (?, ?, ?, ?, 'test')",
-            (f"v-{workflow_id}-{version_number}", workflow_id, version_number,
-             json.dumps({"name": "test", "enabled": True, "steps": []})),
+            (
+                f"v-{workflow_id}-{version_number}",
+                workflow_id,
+                version_number,
+                json.dumps({"name": "test", "enabled": True, "steps": []}),
+            ),
         )
         conn.commit()
     finally:
@@ -81,7 +100,9 @@ def _seed_notification_rule(owner_id: str, rule_id: str, name: str):
 def _workflow_owner(workflow_id: str):
     conn = _conn()
     try:
-        cur = conn.execute("SELECT owner_id FROM workflows WHERE id = ?", (workflow_id,))
+        cur = conn.execute(
+            "SELECT owner_id FROM workflows WHERE id = ?", (workflow_id,)
+        )
         row = cur.fetchone()
         return row[0] if row else None
     finally:
@@ -101,12 +122,15 @@ def _workflow_exists(workflow_id: str) -> bool:
 # Workflow fixtures — payload helper
 # ---------------------------------------------------------------------------
 
+
 def _wf_payload(name: str = "Nightly Scan"):
     return {
         "name": name,
         "schedule_seconds": 3600,
         "enabled": True,
-        "steps": [{"plugin_id": "http_inspector", "inputs": {"url": "http://127.0.0.1:8000"}}],
+        "steps": [
+            {"plugin_id": "http_inspector", "inputs": {"url": "http://127.0.0.1:8000"}}
+        ],
     }
 
 
@@ -114,13 +138,18 @@ def _wf_payload(name: str = "Nightly Scan"):
 # Same-name workflows across owners
 # ---------------------------------------------------------------------------
 
+
 def test_same_name_workflows_allowed_across_owners(test_client):
     """Two different owners can each create a workflow with the same name."""
-    resp_a = test_client.post("/api/v1/workflows", json=_wf_payload("MyScan"), headers=ALICE)
+    resp_a = test_client.post(
+        "/api/v1/workflows", json=_wf_payload("MyScan"), headers=ALICE
+    )
     assert resp_a.status_code == 200, resp_a.text
     wf_a = resp_a.json()
 
-    resp_b = test_client.post("/api/v1/workflows", json=_wf_payload("MyScan"), headers=BOB)
+    resp_b = test_client.post(
+        "/api/v1/workflows", json=_wf_payload("MyScan"), headers=BOB
+    )
     assert resp_b.status_code == 200, resp_b.text
     wf_b = resp_b.json()
 
@@ -134,12 +163,19 @@ def test_same_name_workflows_allowed_across_owners(test_client):
 # Cross-owner isolation — workflows
 # ---------------------------------------------------------------------------
 
+
 def test_workflow_list_is_scoped_to_owner(test_client):
     _seed_workflow(ALICE_OWNER, "wf-alice-1", "AliceWF")
     _seed_workflow(BOB_OWNER, "wf-bob-1", "BobWF")
 
-    alice_wfs = {w["id"] for w in test_client.get("/api/v1/workflows", headers=ALICE).json()["workflows"]}
-    bob_wfs = {w["id"] for w in test_client.get("/api/v1/workflows", headers=BOB).json()["workflows"]}
+    alice_wfs = {
+        w["id"]
+        for w in test_client.get("/api/v1/workflows", headers=ALICE).json()["workflows"]
+    }
+    bob_wfs = {
+        w["id"]
+        for w in test_client.get("/api/v1/workflows", headers=BOB).json()["workflows"]
+    }
 
     assert "wf-alice-1" in alice_wfs and "wf-bob-1" not in alice_wfs
     assert "wf-bob-1" in bob_wfs and "wf-alice-1" not in bob_wfs
@@ -158,7 +194,9 @@ def test_workflow_get_blocks_cross_owner(test_client):
 def test_workflow_update_blocks_cross_owner(test_client):
     _seed_workflow(ALICE_OWNER, "wf-alice-upd", "AliceWF")
 
-    resp = test_client.patch("/api/v1/workflows/wf-alice-upd", json={"enabled": False}, headers=BOB)
+    resp = test_client.patch(
+        "/api/v1/workflows/wf-alice-upd", json={"enabled": False}, headers=BOB
+    )
     assert resp.status_code == 403, resp.text
 
 
@@ -174,8 +212,10 @@ def test_workflow_delete_blocks_cross_owner(test_client):
 def test_workflow_run_blocks_cross_owner(test_client):
     _seed_workflow(ALICE_OWNER, "wf-alice-run", "AliceWF", enabled=0)
 
-    with patch("backend.secuscan.routes.executor.create_task", new=AsyncMock(return_value="t-1")), \
-         patch("backend.secuscan.routes.executor.execute_task", new=AsyncMock()):
+    with patch(
+        "backend.secuscan.routes.executor.create_task",
+        new=AsyncMock(return_value="t-1"),
+    ), patch("backend.secuscan.routes.executor.execute_task", new=AsyncMock()):
         resp = test_client.post("/api/v1/workflows/wf-alice-run/run", headers=BOB)
     assert resp.status_code == 403, resp.text
 
@@ -207,10 +247,13 @@ def test_workflow_rollback_blocks_cross_owner(test_client):
 # Owners can access their own workflows
 # ---------------------------------------------------------------------------
 
+
 def test_workflow_owner_can_update(test_client):
     _seed_workflow(ALICE_OWNER, "wf-own-upd", "OwnWF")
 
-    resp = test_client.patch("/api/v1/workflows/wf-own-upd", json={"enabled": False}, headers=ALICE)
+    resp = test_client.patch(
+        "/api/v1/workflows/wf-own-upd", json={"enabled": False}, headers=ALICE
+    )
     assert resp.status_code == 200, resp.text
 
 
@@ -226,12 +269,23 @@ def test_workflow_owner_can_delete(test_client):
 # Cross-owner isolation — notification rules
 # ---------------------------------------------------------------------------
 
+
 def test_notification_rule_list_is_scoped_to_owner(test_client):
     _seed_notification_rule(ALICE_OWNER, "nr-alice", "AliceRule")
     _seed_notification_rule(BOB_OWNER, "nr-bob", "BobRule")
 
-    alice_rules = {r["id"] for r in test_client.get("/api/v1/notifications/rules", headers=ALICE).json()["rules"]}
-    bob_rules = {r["id"] for r in test_client.get("/api/v1/notifications/rules", headers=BOB).json()["rules"]}
+    alice_rules = {
+        r["id"]
+        for r in test_client.get("/api/v1/notifications/rules", headers=ALICE).json()[
+            "rules"
+        ]
+    }
+    bob_rules = {
+        r["id"]
+        for r in test_client.get("/api/v1/notifications/rules", headers=BOB).json()[
+            "rules"
+        ]
+    }
 
     assert "nr-alice" in alice_rules and "nr-bob" not in alice_rules
     assert "nr-bob" in bob_rules and "nr-alice" not in bob_rules
@@ -298,6 +352,7 @@ def test_notification_rule_owner_can_delete(test_client):
 # ---------------------------------------------------------------------------
 # Unknown / missing resources return 404, not 403
 # ---------------------------------------------------------------------------
+
 
 def test_unknown_workflow_returns_404_not_403(test_client):
     resp = test_client.get("/api/v1/workflows/does-not-exist/runs", headers=BOB)

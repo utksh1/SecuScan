@@ -30,7 +30,9 @@ def _stable_asset_id(target: str, host: Any, port: Any, protocol: Any) -> str:
     return f"asset:{digest}"
 
 
-async def get_target_policy(db: Database, owner_id: str, policy_id: str | None) -> Optional[Dict[str, Any]]:
+async def get_target_policy(
+    db: Database, owner_id: str, policy_id: str | None
+) -> Optional[Dict[str, Any]]:
     if not policy_id:
         return None
     row = await db.fetchone(
@@ -40,7 +42,9 @@ async def get_target_policy(db: Database, owner_id: str, policy_id: str | None) 
     return _deserialize_resource_row(row)
 
 
-async def get_credential_profile(db: Database, owner_id: str, profile_id: str | None) -> Optional[Dict[str, Any]]:
+async def get_credential_profile(
+    db: Database, owner_id: str, profile_id: str | None
+) -> Optional[Dict[str, Any]]:
     if not profile_id:
         return None
     row = await db.fetchone(
@@ -50,7 +54,9 @@ async def get_credential_profile(db: Database, owner_id: str, profile_id: str | 
     return _deserialize_resource_row(row)
 
 
-async def get_session_profile(db: Database, owner_id: str, profile_id: str | None) -> Optional[Dict[str, Any]]:
+async def get_session_profile(
+    db: Database, owner_id: str, profile_id: str | None
+) -> Optional[Dict[str, Any]]:
     if not profile_id:
         return None
     row = await db.fetchone(
@@ -116,26 +122,39 @@ async def replace_asset_services(
 ) -> None:
     await db.execute("DELETE FROM asset_services WHERE task_id = ?", (task_id,))
     for item in services:
-        metadata = item.get("metadata", {}) if isinstance(item.get("metadata"), dict) else {}
+        metadata = (
+            item.get("metadata", {}) if isinstance(item.get("metadata"), dict) else {}
+        )
         host = str(item.get("host") or target)
         port = item.get("port")
         protocol = item.get("protocol")
-        asset_id = str(item.get("asset_id") or _stable_asset_id(target, host, port, protocol))
-        cert_sans = item.get("cert_san") or item.get("cert_sans") or metadata.get("cert_san") or metadata.get("cert_sans") or []
+        asset_id = str(
+            item.get("asset_id") or _stable_asset_id(target, host, port, protocol)
+        )
+        cert_sans = (
+            item.get("cert_san")
+            or item.get("cert_sans")
+            or metadata.get("cert_san")
+            or metadata.get("cert_sans")
+            or []
+        )
         if not isinstance(cert_sans, list):
             cert_sans = [cert_sans]
         service_fingerprint = item.get("service_fingerprint")
         if not service_fingerprint:
-            service_fingerprint = " ".join(
-                str(part).strip()
-                for part in (
-                    item.get("product"),
-                    item.get("version"),
-                    item.get("service"),
-                    item.get("title"),
+            service_fingerprint = (
+                " ".join(
+                    str(part).strip()
+                    for part in (
+                        item.get("product"),
+                        item.get("version"),
+                        item.get("service"),
+                        item.get("title"),
+                    )
+                    if str(part or "").strip()
                 )
-                if str(part or "").strip()
-            ) or None
+                or None
+            )
         await db.execute(
             """
             INSERT INTO asset_services (
@@ -171,11 +190,15 @@ async def replace_asset_services(
         )
 
 
-def serialize_execution_context(context: ExecutionContext | Dict[str, Any] | None) -> str:
+def serialize_execution_context(
+    context: ExecutionContext | Dict[str, Any] | None
+) -> str:
     return json.dumps(normalize_execution_context(context or {}))
 
 
-def _deserialize_resource_row(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+def _deserialize_resource_row(
+    row: Optional[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
     if row is None:
         return None
     item = dict(row)

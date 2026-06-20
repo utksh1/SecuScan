@@ -43,9 +43,9 @@ async def test_10_concurrent_task_creates(bench_env, record_benchmark):
     )
     print(f"Mean: {mean_lat:.2f}ms, P50: {p50_lat:.2f}ms, P95: {p95_lat:.2f}ms")
 
-    assert total_time_ms < threshold_total, (
-        f"10 concurrent task creates took {total_time_ms:.2f}ms, threshold: {threshold_total}ms"
-    )
+    assert (
+        total_time_ms < threshold_total
+    ), f"10 concurrent task creates took {total_time_ms:.2f}ms, threshold: {threshold_total}ms"
 
 
 @pytest.mark.benchmark
@@ -73,9 +73,9 @@ async def test_20_sequential_task_creates(bench_env, record_benchmark):
         f"\n[bench_20_sequential_task_creates] Mean latency: {mean_lat:.2f}ms (threshold: {threshold_mean}ms)"
     )
 
-    assert mean_lat < threshold_mean, (
-        f"Mean sequential task create took {mean_lat:.2f}ms, threshold: {threshold_mean}ms"
-    )
+    assert (
+        mean_lat < threshold_mean
+    ), f"Mean sequential task create took {mean_lat:.2f}ms, threshold: {threshold_mean}ms"
 
 
 @pytest.mark.benchmark
@@ -108,6 +108,6 @@ async def test_concurrent_slot_saturation(bench_env, record_benchmark):
     )
 
     assert not acquired, "Should not be able to acquire 4th slot"
-    assert elapsed_ms < threshold_rejection, (
-        f"Slot rejection took {elapsed_ms:.2f}ms, threshold: {threshold_rejection}ms"
-    )
+    assert (
+        elapsed_ms < threshold_rejection
+    ), f"Slot rejection took {elapsed_ms:.2f}ms, threshold: {threshold_rejection}ms"

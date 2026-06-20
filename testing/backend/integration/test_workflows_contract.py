@@ -6,7 +6,9 @@ def _workflow_payload(name: str = "Nightly Scan"):
         "name": name,
         "schedule_seconds": 3600,
         "enabled": True,
-        "steps": [{"plugin_id": "http_inspector", "inputs": {"url": "http://127.0.0.1:8000"}}],
+        "steps": [
+            {"plugin_id": "http_inspector", "inputs": {"url": "http://127.0.0.1:8000"}}
+        ],
     }
 
 
@@ -58,11 +60,16 @@ def test_workflow_create_list_update_contract(test_client):
 
 
 def test_workflow_run_uses_queued_task_ids_contract(test_client):
-    create_response = test_client.post("/api/v1/workflows", json=_workflow_payload("Run Contract"))
+    create_response = test_client.post(
+        "/api/v1/workflows", json=_workflow_payload("Run Contract")
+    )
     workflow_id = create_response.json()["id"]
 
     with (
-        patch("backend.secuscan.routes.executor.create_task", new=AsyncMock(return_value="task-001")),
+        patch(
+            "backend.secuscan.routes.executor.create_task",
+            new=AsyncMock(return_value="task-001"),
+        ),
         patch("backend.secuscan.routes.executor.execute_task", new=AsyncMock()),
     ):
         run_response = test_client.post(f"/api/v1/workflows/{workflow_id}/run")

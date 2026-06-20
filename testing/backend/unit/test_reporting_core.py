@@ -4,6 +4,7 @@ import io
 import pytest
 from backend.secuscan.reporting import ReportGenerator
 
+
 @pytest.fixture
 def sample_task():
     return {
@@ -15,12 +16,9 @@ def sample_task():
         "created_at": "2026-06-17T12:00:00.000000Z",
         "preset": "Full Scan",
         "command_used": "test-scanner --target example.com",
-        "inputs": {
-            "depth": "deep",
-            "threads": 4,
-            "enable_ssl": True
-        }
+        "inputs": {"depth": "deep", "threads": 4, "enable_ssl": True},
     }
+
 
 @pytest.fixture
 def sample_result():
@@ -42,9 +40,7 @@ def sample_result():
                 "description": "A SQL injection vulnerability exists in the login form.",
                 "proof": "UNION SELECT username, password FROM users;",
                 "remediation": "Use parameterized SQL queries and input sanitization.",
-                "metadata": {
-                    "payload": "' OR 1=1 --"
-                }
+                "metadata": {"payload": "' OR 1=1 --"},
             },
             {
                 "id": "finding-2",
@@ -58,23 +54,24 @@ def sample_result():
                 "validated": False,
                 "description": "Reflected Cross-Site Scripting via query parameter.",
                 "proof": "<script>alert(1)</script>",
-                "remediation": "Escape user input in output HTML rendering."
-            }
+                "remediation": "Escape user input in output HTML rendering.",
+            },
         ],
         "structured": {
             "open_ports": [80, 443],
             "technologies": ["Apache", "PHP"],
             "rows": [
                 {"port": 80, "service": "http"},
-                {"port": 443, "service": "https"}
-            ]
+                {"port": 443, "service": "https"},
+            ],
         },
         "summary": [
             "The scan completed successfully.",
-            "Found two high-severity vulnerabilities."
+            "Found two high-severity vulnerabilities.",
         ],
-        "errors": []
+        "errors": [],
     }
+
 
 def test_generate_csv_report(sample_task, sample_result):
     csv_report = ReportGenerator.generate_csv_report(sample_task, sample_result)
@@ -89,9 +86,19 @@ def test_generate_csv_report(sample_task, sample_result):
     assert len(rows) > 0
     headers = rows[0]
     expected_headers = [
-        "Severity", "Title", "Category", "Target", "CVSS", "CVE", "CPE",
-        "Validated", "Validation Method", "Confidence Reason", "Description",
-        "Evidence", "Remediation"
+        "Severity",
+        "Title",
+        "Category",
+        "Target",
+        "CVSS",
+        "CVE",
+        "CPE",
+        "Validated",
+        "Validation Method",
+        "Confidence Reason",
+        "Description",
+        "Evidence",
+        "Remediation",
     ]
     assert headers == expected_headers
 
@@ -103,6 +110,7 @@ def test_generate_csv_report(sample_task, sample_result):
     assert rows[2][0] == "HIGH"
     assert rows[2][7] == "no"
 
+
 def test_generate_html_report(sample_task, sample_result):
     html_report = ReportGenerator.generate_html_report(sample_task, sample_result)
     assert isinstance(html_report, str)
@@ -112,11 +120,13 @@ def test_generate_html_report(sample_task, sample_result):
     assert "XSS Vulnerability" in html_report
     assert "example.com" in html_report
 
+
 def test_generate_pdf_report(sample_task, sample_result):
     pdf_report = ReportGenerator.generate_pdf_report(sample_task, sample_result)
     assert isinstance(pdf_report, bytes)
     # PDF header signature
     assert pdf_report.startswith(b"%PDF")
+
 
 def test_generate_sarif_report(sample_task, sample_result):
     sarif_report = ReportGenerator.generate_sarif_report(sample_task, sample_result)

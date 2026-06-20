@@ -41,14 +41,20 @@ class ReportGenerator:
             "HIGH": (220, 38, 38, 255),
             "MEDIUM": (217, 119, 6, 255),
             "LOW": (37, 99, 235, 255),
-            "INFO": (71, 85, 105, 255)
+            "INFO": (71, 85, 105, 255),
         }
 
         severities = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]
         max_val = max(severity_counts.values()) if any(severity_counts.values()) else 1
 
         # Draw background container
-        draw.rounded_rectangle([0, 0, width - 1, height - 1], radius=8, fill=(248, 250, 252, 255), outline=(226, 232, 240, 255), width=1)
+        draw.rounded_rectangle(
+            [0, 0, width - 1, height - 1],
+            radius=8,
+            fill=(248, 250, 252, 255),
+            outline=(226, 232, 240, 255),
+            width=1,
+        )
 
         y_offset = 12
         bar_height = 16
@@ -57,8 +63,14 @@ class ReportGenerator:
         max_bar_width = 280
 
         from PIL import ImageFont
+
         font = None
-        for font_name in ("arial.ttf", "Helvetica.ttf", "segoeui.ttf", "sans-serif.ttf"):
+        for font_name in (
+            "arial.ttf",
+            "Helvetica.ttf",
+            "segoeui.ttf",
+            "sans-serif.ttf",
+        ):
             try:
                 font = ImageFont.truetype(font_name, 12)
                 break
@@ -76,18 +88,33 @@ class ReportGenerator:
             color = colors_map[sev]
 
             # Draw background progress track
-            draw.rounded_rectangle([x_start, y_offset, x_start + max_bar_width, y_offset + bar_height], radius=4, fill=(226, 232, 240, 255))
+            draw.rounded_rectangle(
+                [x_start, y_offset, x_start + max_bar_width, y_offset + bar_height],
+                radius=4,
+                fill=(226, 232, 240, 255),
+            )
 
             # Draw actual severity bar
             if count > 0:
-                draw.rounded_rectangle([x_start, y_offset, x_start + bar_len, y_offset + bar_height], radius=4, fill=color)
+                draw.rounded_rectangle(
+                    [x_start, y_offset, x_start + bar_len, y_offset + bar_height],
+                    radius=4,
+                    fill=color,
+                )
 
             # Draw labels
             if font:
                 # Severity label
-                draw.text((20, y_offset + 2), sev.title(), fill=(71, 85, 105, 255), font=font)
+                draw.text(
+                    (20, y_offset + 2), sev.title(), fill=(71, 85, 105, 255), font=font
+                )
                 # Count label
-                draw.text((x_start + bar_len + 10, y_offset + 2), str(count), fill=(15, 23, 42, 255), font=font)
+                draw.text(
+                    (x_start + bar_len + 10, y_offset + 2),
+                    str(count),
+                    fill=(15, 23, 42, 255),
+                    font=font,
+                )
 
             y_offset += bar_height + spacing
 
@@ -100,6 +127,7 @@ class ReportGenerator:
     def _get_ai_summary(cls, findings):
         """Return an AI executive summary, or '' when the feature is disabled."""
         from .config import settings as _settings
+
         if not _settings.ai_summary_enabled:
             return ""
         if not _settings.ai_summary_api_key:
@@ -114,11 +142,13 @@ class ReportGenerator:
     @staticmethod
     def _hex_to_rgb(value: str) -> tuple[int, int, int]:
         value = value.strip("#")
-        return tuple(int(value[index:index + 2], 16) for index in (0, 2, 4))
+        return tuple(int(value[index : index + 2], 16) for index in (0, 2, 4))
 
     @staticmethod
     @lru_cache(maxsize=32)
-    def _icon_data_uri(name: str, background: str = "1e3a5f", foreground: str = "ffffff") -> str:
+    def _icon_data_uri(
+        name: str, background: str = "1e3a5f", foreground: str = "ffffff"
+    ) -> str:
         """Return a tiny embedded PNG icon that works in both HTML and xhtml2pdf."""
         bg = ReportGenerator._hex_to_rgb(background)
         fg = ReportGenerator._hex_to_rgb(foreground)
@@ -126,7 +156,11 @@ class ReportGenerator:
         draw = ImageDraw.Draw(image)
 
         if name == "shield":
-            draw.line([(24, 8), (36, 13), (34, 28), (24, 39), (14, 28), (12, 13), (24, 8)], fill=fg, width=3)
+            draw.line(
+                [(24, 8), (36, 13), (34, 28), (24, 39), (14, 28), (12, 13), (24, 8)],
+                fill=fg,
+                width=3,
+            )
             draw.line([(19, 24), (23, 28), (30, 19)], fill=fg, width=3)
         elif name == "findings":
             draw.rectangle((12, 11, 36, 37), outline=fg, width=3)
@@ -196,7 +230,10 @@ class ReportGenerator:
             "category": cls._clean_text(finding.get("category")) or "General",
             "severity": cls._clean_text(finding.get("severity") or "info").upper(),
             "target": cls._clean_text(finding.get("target")),
-            "description": redact(cls._clean_text(finding.get("description")) or "No description was provided."),
+            "description": redact(
+                cls._clean_text(finding.get("description"))
+                or "No description was provided."
+            ),
             "remediation": redact(cls._clean_text(finding.get("remediation"))),
             "proof": redact(cls._clean_text(finding.get("proof"))),
             "cve": cls._clean_text(finding.get("cve")),
@@ -204,14 +241,27 @@ class ReportGenerator:
             "cvss": finding.get("cvss"),
             "validated": bool(finding.get("validated", False)),
             "validation_method": cls._clean_text(finding.get("validation_method")),
-            "confidence_reason": redact(cls._clean_text(finding.get("confidence_reason"))),
+            "confidence_reason": redact(
+                cls._clean_text(finding.get("confidence_reason"))
+            ),
             "service_fingerprint": cls._clean_text(finding.get("service_fingerprint")),
             "cpe": cls._clean_text(finding.get("cpe")),
             "discovered_at": cls._clean_text(finding.get("discovered_at")),
-            "evidence": finding.get("evidence", []) if isinstance(finding.get("evidence"), list) else [],
-            "asset_refs": finding.get("asset_refs", []) if isinstance(finding.get("asset_refs"), list) else [],
-            "references": finding.get("references", []) if isinstance(finding.get("references"), list) else [],
-            "metadata": redact_dict({cls._clean_text(key): cls._clean_text(val) for key, val in metadata.items()}),
+            "evidence": finding.get("evidence", [])
+            if isinstance(finding.get("evidence"), list)
+            else [],
+            "asset_refs": finding.get("asset_refs", [])
+            if isinstance(finding.get("asset_refs"), list)
+            else [],
+            "references": finding.get("references", [])
+            if isinstance(finding.get("references"), list)
+            else [],
+            "metadata": redact_dict(
+                {
+                    cls._clean_text(key): cls._clean_text(val)
+                    for key, val in metadata.items()
+                }
+            ),
         }
         if normalized["severity"] not in cls.SEVERITY_COLORS:
             normalized["severity"] = "INFO"
@@ -246,7 +296,9 @@ class ReportGenerator:
         if value is False:
             return "OFF"
         if isinstance(value, list):
-            return ", ".join(cls._clean_text(item) for item in value if cls._clean_text(item))
+            return ", ".join(
+                cls._clean_text(item) for item in value if cls._clean_text(item)
+            )
         if isinstance(value, dict):
             return json.dumps(value, sort_keys=True)
         return cls._clean_text(value)
@@ -254,8 +306,14 @@ class ReportGenerator:
     @classmethod
     def _build_scan_parameters(cls, task: Dict[str, Any]) -> List[Dict[str, str]]:
         parameters = [
-            {"label": "Target", "value": cls._clean_text(task.get("target")) or "Unknown"},
-            {"label": "Plugin", "value": cls._clean_text(task.get("plugin_id")) or "Unknown"},
+            {
+                "label": "Target",
+                "value": cls._clean_text(task.get("target")) or "Unknown",
+            },
+            {
+                "label": "Plugin",
+                "value": cls._clean_text(task.get("plugin_id")) or "Unknown",
+            },
         ]
 
         preset = cls._clean_text(task.get("preset"))
@@ -271,10 +329,19 @@ class ReportGenerator:
                 except json.JSONDecodeError:
                     execution_context = {}
         if isinstance(execution_context, dict):
-            for key in ("target_policy_id", "scan_profile", "credential_profile_id", "session_profile_id", "validation_mode", "evidence_level"):
+            for key in (
+                "target_policy_id",
+                "scan_profile",
+                "credential_profile_id",
+                "session_profile_id",
+                "validation_mode",
+                "evidence_level",
+            ):
                 value = cls._clean_text(execution_context.get(key))
                 if value:
-                    parameters.append({"label": key.replace("_", " ").title(), "value": value})
+                    parameters.append(
+                        {"label": key.replace("_", " ").title(), "value": value}
+                    )
 
         for key, value in cls._normalize_task_inputs(task).items():
             label = key.replace("_", " ").title()
@@ -297,11 +364,15 @@ class ReportGenerator:
         task: Dict[str, Any],
     ) -> List[str]:
         total_findings = len(findings)
-        critical_high = severity_counts.get("CRITICAL", 0) + severity_counts.get("HIGH", 0)
+        critical_high = severity_counts.get("CRITICAL", 0) + severity_counts.get(
+            "HIGH", 0
+        )
         summary: List[str] = []
 
         if total_findings == 0:
-            summary.append("No structured findings were recorded for this assessment run.")
+            summary.append(
+                "No structured findings were recorded for this assessment run."
+            )
         elif critical_high > 0:
             summary.append(
                 f"The assessment identified {total_findings} findings, including "
@@ -312,44 +383,64 @@ class ReportGenerator:
                 f"The assessment identified {total_findings} findings with no critical or high severity items."
             )
 
-        tool_name = cls._clean_text(task.get("tool_name")) or cls._clean_text(task.get("plugin_id")) or "scan engine"
+        tool_name = (
+            cls._clean_text(task.get("tool_name"))
+            or cls._clean_text(task.get("plugin_id"))
+            or "scan engine"
+        )
         summary.append(f"Scan execution was performed with {tool_name}.")
 
         open_ports = structured.get("open_ports")
         if isinstance(open_ports, list) and open_ports:
-            summary.append(f"Observed {len(open_ports)} exposed network ports during this run.")
+            summary.append(
+                f"Observed {len(open_ports)} exposed network ports during this run."
+            )
 
         technologies = structured.get("technologies")
         if isinstance(technologies, list) and technologies:
-            summary.append(f"Detected {len(technologies)} technology fingerprints in the target surface.")
+            summary.append(
+                f"Detected {len(technologies)} technology fingerprints in the target surface."
+            )
 
         rows = structured.get("rows")
         if isinstance(rows, list) and rows:
-            summary.append(f"Structured output included {len(rows)} tabular result rows for analyst review.")
+            summary.append(
+                f"Structured output included {len(rows)} tabular result rows for analyst review."
+            )
 
         return summary
 
     @classmethod
-    def _build_report_payload(cls, task: Dict[str, Any], result: Dict[str, Any]) -> Dict[str, Any]:
+    def _build_report_payload(
+        cls, task: Dict[str, Any], result: Dict[str, Any]
+    ) -> Dict[str, Any]:
         structured = result.get("structured")
         if not isinstance(structured, dict):
             structured = result if isinstance(result, dict) else {}
 
         raw_findings = result.get("findings")
         if not isinstance(raw_findings, list):
-            raw_findings = structured.get("findings", []) if isinstance(structured, dict) else []
+            raw_findings = (
+                structured.get("findings", []) if isinstance(structured, dict) else []
+            )
 
         findings = [cls._normalize_finding(item) for item in raw_findings]
 
         severity_counts = {severity: 0 for severity in cls.SEVERITY_ORDER}
         for finding in findings:
-            severity_counts[finding["severity"]] = severity_counts.get(finding["severity"], 0) + 1
+            severity_counts[finding["severity"]] = (
+                severity_counts.get(finding["severity"], 0) + 1
+            )
 
         raw_summary = result.get("summary")
         if isinstance(raw_summary, list) and raw_summary:
-            summary = [cls._clean_text(item) for item in raw_summary if cls._clean_text(item)]
+            summary = [
+                cls._clean_text(item) for item in raw_summary if cls._clean_text(item)
+            ]
         else:
-            summary = cls._build_summary_lines(findings, severity_counts, structured, task)
+            summary = cls._build_summary_lines(
+                findings, severity_counts, structured, task
+            )
 
         rows = structured.get("rows")
         if not isinstance(rows, list):
@@ -361,7 +452,9 @@ class ReportGenerator:
 
         return {
             "task_id": cls._clean_text(task.get("id")),
-            "tool_name": cls._clean_text(task.get("tool_name")) or cls._clean_text(task.get("plugin_id")) or "Unknown tool",
+            "tool_name": cls._clean_text(task.get("tool_name"))
+            or cls._clean_text(task.get("plugin_id"))
+            or "Unknown tool",
             "target": cls._clean_text(task.get("target")) or "Unknown target",
             "status": cls._clean_text(task.get("status")) or "unknown",
             "created_at": cls._clean_text(task.get("created_at")),
@@ -383,13 +476,17 @@ class ReportGenerator:
             return "Unknown"
         for fmt in ("%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
             try:
-                return datetime.strptime(value.replace("Z", ""), fmt).strftime("%b %d, %Y %H:%M")
+                return datetime.strptime(value.replace("Z", ""), fmt).strftime(
+                    "%b %d, %Y %H:%M"
+                )
             except ValueError:
                 continue
         return value
 
     @classmethod
-    def _generate_pdf_html_report(cls, task: Dict[str, Any], result: Dict[str, Any]) -> str:
+    def _generate_pdf_html_report(
+        cls, task: Dict[str, Any], result: Dict[str, Any]
+    ) -> str:
         """Generate conservative HTML/CSS that xhtml2pdf can paginate reliably."""
         payload = cls._build_report_payload(task, result)
         findings = payload["findings"]
@@ -1132,7 +1229,7 @@ class ReportGenerator:
             "HIGH": "error",
             "MEDIUM": "warning",
             "LOW": "note",
-            "INFO": "note"
+            "INFO": "note",
         }
 
         rules = []
@@ -1174,25 +1271,31 @@ class ReportGenerator:
 
             if rule_id not in rule_indices:
                 rule_indices[rule_id] = len(rules)
-                rules.append({
-                    "id": rule_id,
-                    "name": finding.get("title", "Security Finding"),
-                    "shortDescription": {
-                        "text": finding.get("title", "Security Finding")
-                    },
-                    "fullDescription": {
-                        "text": finding.get("description", "No detailed description available.")
-                    },
-                    "help": {
-                        "text": finding.get("remediation", "No remediation provided.")
-                    },
-                    "properties": {
-                        "precision": "high",
-                        "cpe": finding.get("cpe"),
-                        "validated": finding.get("validated"),
-                        "validation_method": finding.get("validation_method"),
+                rules.append(
+                    {
+                        "id": rule_id,
+                        "name": finding.get("title", "Security Finding"),
+                        "shortDescription": {
+                            "text": finding.get("title", "Security Finding")
+                        },
+                        "fullDescription": {
+                            "text": finding.get(
+                                "description", "No detailed description available."
+                            )
+                        },
+                        "help": {
+                            "text": finding.get(
+                                "remediation", "No remediation provided."
+                            )
+                        },
+                        "properties": {
+                            "precision": "high",
+                            "cpe": finding.get("cpe"),
+                            "validated": finding.get("validated"),
+                            "validation_method": finding.get("validation_method"),
+                        },
                     }
-                })
+                )
 
             sarif_result = {
                 "ruleId": rule_id,
@@ -1216,19 +1319,15 @@ class ReportGenerator:
             if target:
                 is_url = "://" in target or target.startswith(("http://", "https://"))
 
-                location = {
-                    "physicalLocation": {
-                        "artifactLocation": {
-                            "uri": target
-                        }
-                    }
-                }
+                location = {"physicalLocation": {"artifactLocation": {"uri": target}}}
 
                 # If target has a line number like file.py:123 and is NOT a web URL
                 if not is_url and ":" in target:
                     parts = target.split(":")
                     if parts[-1].isdigit():
-                        location["physicalLocation"]["artifactLocation"]["uri"] = ":".join(parts[:-1])
+                        location["physicalLocation"]["artifactLocation"][
+                            "uri"
+                        ] = ":".join(parts[:-1])
                         location["physicalLocation"]["region"] = {
                             "startLine": int(parts[-1])
                         }
@@ -1247,12 +1346,12 @@ class ReportGenerator:
                             "name": tool_name,
                             "version": "1.0.0",
                             "informationUri": "https://github.com/utksh1/SecuScan",
-                            "rules": rules
+                            "rules": rules,
                         }
                     },
-                    "results": results
+                    "results": results,
                 }
-            ]
+            ],
         }
 
         return json.dumps(sarif_output, indent=2)

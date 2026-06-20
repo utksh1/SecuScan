@@ -29,7 +29,9 @@ PLUGIN_DIR = REPO_ROOT / "plugins" / "domain-finder"
 PLUGINS_DIR = REPO_ROOT / "plugins"
 
 # Import parser from domain-finder (hyphenated directory name requires importlib)
-spec = importlib.util.spec_from_file_location("domain_finder_parser", str(PLUGIN_DIR / "parser.py"))
+spec = importlib.util.spec_from_file_location(
+    "domain_finder_parser", str(PLUGIN_DIR / "parser.py")
+)
 _parser_module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(_parser_module)
 parse = _parser_module.parse

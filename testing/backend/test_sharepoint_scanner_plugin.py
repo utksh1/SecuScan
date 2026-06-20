@@ -55,9 +55,8 @@ def test_sharepoint_scanner_passes_validator():
     the checksum field is absent or malformed.
     """
     result = PluginMetadataValidator(PLUGIN_DIR).validate()
-    assert result.valid, (
-        "Plugin validation errors:\n"
-        + "\n".join(e.display() for e in result.errors)
+    assert result.valid, "Plugin validation errors:\n" + "\n".join(
+        e.display() for e in result.errors
     )
 
 
@@ -108,7 +107,9 @@ def test_sharepoint_scanner_command_renders_with_target(setup_test_environment):
     manager = PluginManager(str(PLUGINS_DIR))
     asyncio.run(manager.load_plugins())
 
-    command = manager.build_command("sharepoint_scanner", {"target": "https://sharepoint.example.com"})
+    command = manager.build_command(
+        "sharepoint_scanner", {"target": "https://sharepoint.example.com"}
+    )
 
     assert command is not None, "build_command returned None for valid inputs"
     assert "nuclei" in command
@@ -122,11 +123,16 @@ def test_sharepoint_scanner_command_full_token_sequence(setup_test_environment):
     manager = PluginManager(str(PLUGINS_DIR))
     asyncio.run(manager.load_plugins())
 
-    command = manager.build_command("sharepoint_scanner", {"target": "https://secuscan.in"})
-
-    assert command == ["nuclei", "-u", "https://secuscan.in", "-silent"], (
-        f"Command template drift detected. Got: {command}"
+    command = manager.build_command(
+        "sharepoint_scanner", {"target": "https://secuscan.in"}
     )
+
+    assert command == [
+        "nuclei",
+        "-u",
+        "https://secuscan.in",
+        "-silent",
+    ], f"Command template drift detected. Got: {command}"
 
 
 def test_sharepoint_scanner_loaded_by_plugin_manager(setup_test_environment):
@@ -173,7 +179,14 @@ def test_sharepoint_scanner_parser_finding_has_required_keys():
     result = parse(_SHAREPOINT_SCANNER_OUTPUT_FIXTURE)
     assert result["findings"], "Expected at least one finding"
     for finding in result["findings"]:
-        for key in ("title", "category", "severity", "description", "remediation", "metadata"):
+        for key in (
+            "title",
+            "category",
+            "severity",
+            "description",
+            "remediation",
+            "metadata",
+        ):
             assert key in finding, f"Finding missing key: {key}"
 
 
@@ -181,8 +194,10 @@ def test_sharepoint_scanner_parser_critical_and_injection_raise_to_high():
     """Lines containing 'critical' or 'injection' must be classified as 'high' severity."""
     result = parse(_SHAREPOINT_SCANNER_OUTPUT_FIXTURE)
     high_findings = [
-        f for f in result["findings"]
-        if "critical" in f["description"].lower() or "injection" in f["description"].lower()
+        f
+        for f in result["findings"]
+        if "critical" in f["description"].lower()
+        or "injection" in f["description"].lower()
     ]
     assert high_findings, "Expected at least one high-severity finding"
     for finding in high_findings:
@@ -193,8 +208,11 @@ def test_sharepoint_scanner_parser_exposed_or_found_is_at_least_low():
     """Lines containing 'exposed', 'found', or 'detected' must be at least 'low' severity."""
     result = parse(_SHAREPOINT_SCANNER_OUTPUT_FIXTURE)
     flagged = [
-        f for f in result["findings"]
-        if any(kw in f["description"].lower() for kw in ("exposed", "found", "detected"))
+        f
+        for f in result["findings"]
+        if any(
+            kw in f["description"].lower() for kw in ("exposed", "found", "detected")
+        )
     ]
     assert flagged, "Expected at least one low-severity finding from flagged keywords"
     for finding in flagged:
@@ -204,7 +222,9 @@ def test_sharepoint_scanner_parser_exposed_or_found_is_at_least_low():
 def test_sharepoint_scanner_parser_items_list_matches_non_empty_lines():
     """items must contain each non-empty line from the output."""
     result = parse(_SHAREPOINT_SCANNER_OUTPUT_FIXTURE)
-    expected_lines = [l.strip() for l in _SHAREPOINT_SCANNER_OUTPUT_FIXTURE.splitlines() if l.strip()]
+    expected_lines = [
+        l.strip() for l in _SHAREPOINT_SCANNER_OUTPUT_FIXTURE.splitlines() if l.strip()
+    ]
     assert result["items"] == expected_lines
 
 
@@ -221,4 +241,7 @@ def test_sharepoint_scanner_parser_preserves_raw_line_in_metadata():
     single_line = "https://sharepoint.example.com/sites/admin [found]\n"
     result = parse(single_line)
     assert result["findings"]
-    assert result["findings"][0]["metadata"]["raw"] == "https://sharepoint.example.com/sites/admin [found]"
+    assert (
+        result["findings"][0]["metadata"]["raw"]
+        == "https://sharepoint.example.com/sites/admin [found]"
+    )

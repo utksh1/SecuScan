@@ -23,6 +23,7 @@ from backend.secuscan.scanners.port_scanner import PortScanner
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_plugin(**extra_fields) -> PluginMetadata:
     """Build a minimal PluginMetadata with caller-supplied field list."""
     base = {
@@ -55,7 +56,10 @@ def _nmap_like_plugin() -> PluginMetadata:
                 id="target",
                 label="Target",
                 type=PluginFieldType.STRING,
-                validation={"pattern": r"^[a-zA-Z0-9.\-]+$", "message": "Invalid target"},
+                validation={
+                    "pattern": r"^[a-zA-Z0-9.\-]+$",
+                    "message": "Invalid target",
+                },
             ),
             PluginField(
                 id="scan_type",
@@ -85,6 +89,7 @@ def _nmap_like_plugin() -> PluginMetadata:
 # ---------------------------------------------------------------------------
 # _reject_injected_args
 # ---------------------------------------------------------------------------
+
 
 class TestRejectInjectedArgs:
     def setup_method(self):
@@ -121,6 +126,7 @@ class TestRejectInjectedArgs:
 # ---------------------------------------------------------------------------
 # _validate_inputs_against_schema
 # ---------------------------------------------------------------------------
+
 
 class TestSchemaValidation:
     def setup_method(self):
@@ -203,59 +209,72 @@ class TestSchemaValidation:
 # PortScanner input normalisation
 # ---------------------------------------------------------------------------
 
+
 class TestPortScannerResolveScanType:
-    @pytest.mark.parametrize("raw,expected", [
-        ("T", "T"),
-        ("S", "S"),
-        ("U", "U"),
-        ("-sT", "T"),
-        ("-sS", "S"),
-        ("-sU", "U"),
-        ("sT", "T"),
-        (None, "T"),
-        ("", "T"),
-    ])
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("T", "T"),
+            ("S", "S"),
+            ("U", "U"),
+            ("-sT", "T"),
+            ("-sS", "S"),
+            ("-sU", "U"),
+            ("sT", "T"),
+            (None, "T"),
+            ("", "T"),
+        ],
+    )
     def test_resolve_scan_type_valid(self, raw, expected):
         assert PortScanner._resolve_scan_type(raw) == expected
 
-    @pytest.mark.parametrize("raw", [
-        "-sV",           # -sV is a version-detection flag, not a scan-type
-        "V",             # V is not a valid scan-type letter
-        "X",
-        "TCP",
-        "--script=evil",
-        "T; rm -rf /",
-    ])
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            "-sV",  # -sV is a version-detection flag, not a scan-type
+            "V",  # V is not a valid scan-type letter
+            "X",
+            "TCP",
+            "--script=evil",
+            "T; rm -rf /",
+        ],
+    )
     def test_resolve_scan_type_invalid_raises(self, raw):
         with pytest.raises(ValueError, match="Invalid scan_type"):
             PortScanner._resolve_scan_type(raw)
 
 
 class TestPortScannerResolvePorts:
-    @pytest.mark.parametrize("raw,expected", [
-        ("", ""),
-        (None, ""),
-        ("top100", ""),
-        ("top1000", "1-1000"),
-        ("all", "1-65535"),
-        ("22,80,443", "22,80,443"),
-        ("1-1000", "1-1000"),
-        ("22,80,1000-2000", "22,80,1000-2000"),
-    ])
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("", ""),
+            (None, ""),
+            ("top100", ""),
+            ("top1000", "1-1000"),
+            ("all", "1-65535"),
+            ("22,80,443", "22,80,443"),
+            ("1-1000", "1-1000"),
+            ("22,80,1000-2000", "22,80,1000-2000"),
+        ],
+    )
     def test_resolve_ports_valid(self, raw, expected):
         assert PortScanner._resolve_ports(raw) == expected
 
-    @pytest.mark.parametrize("raw", [
-        "--script=evil.nse",
-        "--top-ports 100",
-        "-p 80",
-        "80 --script",
-        "1--2",          # repeated hyphens
-        "--",
-        ",,",
-        ",80",           # leading comma
-        "80,",           # trailing comma
-    ])
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            "--script=evil.nse",
+            "--top-ports 100",
+            "-p 80",
+            "80 --script",
+            "1--2",  # repeated hyphens
+            "--",
+            ",,",
+            ",80",  # leading comma
+            "80,",  # trailing comma
+        ],
+    )
     def test_resolve_ports_invalid_raises(self, raw):
         with pytest.raises(ValueError, match="Invalid port specification"):
             PortScanner._resolve_ports(raw)
@@ -265,26 +284,30 @@ class TestPortScannerResolvePorts:
 # Port spec pattern
 # ---------------------------------------------------------------------------
 
+
 class TestPortSpecPattern:
-    @pytest.mark.parametrize("value,should_match", [
-        ("22", True),
-        ("22,80,443", True),
-        ("1-1000", True),
-        ("1-65535", True),
-        ("22,80,1000-2000", True),
-        # invalid
-        ("", False),
-        ("--script=evil", False),
-        ("80 --script", False),
-        ("22;whoami", False),
-        ("$(id)", False),
-        ("--", False),        # repeated hyphens
-        ("1--2", False),      # double hyphen in range
-        (",,", False),        # empty comma-separated entries
-        (",80", False),       # leading comma
-        ("80,", False),       # trailing comma
-        ("-80", False),       # leading hyphen
-    ])
+    @pytest.mark.parametrize(
+        "value,should_match",
+        [
+            ("22", True),
+            ("22,80,443", True),
+            ("1-1000", True),
+            ("1-65535", True),
+            ("22,80,1000-2000", True),
+            # invalid
+            ("", False),
+            ("--script=evil", False),
+            ("80 --script", False),
+            ("22;whoami", False),
+            ("$(id)", False),
+            ("--", False),  # repeated hyphens
+            ("1--2", False),  # double hyphen in range
+            (",,", False),  # empty comma-separated entries
+            (",80", False),  # leading comma
+            ("80,", False),  # trailing comma
+            ("-80", False),  # leading hyphen
+        ],
+    )
     def test_pattern(self, value, should_match):
         assert bool(_PORT_SPEC_PATTERN.match(value)) == should_match
 
@@ -293,6 +316,7 @@ class TestPortSpecPattern:
 # Internal control field regression (safe_mode and friends must not be
 # rejected as "unknown field" even when the plugin schema does not declare them)
 # ---------------------------------------------------------------------------
+
 
 class TestInternalControlFields:
     """Regression: internal fields injected by the executor must pass through
@@ -313,7 +337,10 @@ class TestInternalControlFields:
                     label="Scan Type",
                     type=PluginFieldType.SELECT,
                     required=False,
-                    options=[{"value": "S", "label": "SYN"}, {"value": "T", "label": "TCP"}],
+                    options=[
+                        {"value": "S", "label": "SYN"},
+                        {"value": "T", "label": "TCP"},
+                    ],
                 ),
                 PluginField(
                     id="ports",

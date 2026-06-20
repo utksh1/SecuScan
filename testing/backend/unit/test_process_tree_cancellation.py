@@ -49,6 +49,7 @@ class TestTerminateProcessGroup:
     @pytest.mark.asyncio
     async def test_process_exits_before_sigkill(self):
         killpg_calls = []
+
         def fake_killpg(pgid, sig):
             killpg_calls.append(sig)
             if sig == signal.SIGTERM:
@@ -56,6 +57,7 @@ class TestTerminateProcessGroup:
             raise ProcessLookupError()
 
         call_count = [0]
+
         def fake_killpg_probe(pgid, sig):
             if sig == 0:
                 call_count[0] += 1
@@ -83,6 +85,7 @@ class TestTerminateProcessGroup:
     @pytest.mark.asyncio
     async def test_sigkill_sent_when_process_does_not_exit(self):
         probe_count = [0]
+
         def fake_killpg(pgid, sig):
             if sig == 0:
                 probe_count[0] += 1
@@ -111,9 +114,12 @@ class TestExecuteCommandProcessGroup:
         mock_proc.wait = AsyncMock(return_value=0)
 
         from backend.secuscan.executor import TaskExecutor
+
         executor = TaskExecutor()
 
-        with patch("asyncio.create_subprocess_exec", return_value=mock_proc) as mock_create:
+        with patch(
+            "asyncio.create_subprocess_exec", return_value=mock_proc
+        ) as mock_create:
             await executor._execute_command(["echo", "hello"], "task-sess")
             _, kwargs = mock_create.call_args
             assert kwargs.get("start_new_session") is True
@@ -128,6 +134,7 @@ class TestExecuteCommandProcessGroup:
         mock_proc.wait = AsyncMock(return_value=0)
 
         from backend.secuscan.executor import TaskExecutor
+
         executor = TaskExecutor()
 
         captured_pid = {}
@@ -148,6 +155,7 @@ class TestExecuteCommandProcessGroup:
     @pytest.mark.asyncio
     async def test_terminate_group_called_on_timeout(self):
         from backend.secuscan.executor import TaskExecutor
+
         executor = TaskExecutor()
 
         mock_proc = AsyncMock()
@@ -160,9 +168,14 @@ class TestExecuteCommandProcessGroup:
         with (
             patch("asyncio.create_subprocess_exec", return_value=mock_proc),
             patch("asyncio.wait_for", side_effect=asyncio.TimeoutError),
-            patch("backend.secuscan.executor._terminate_process_group", new_callable=AsyncMock) as mock_term,
+            patch(
+                "backend.secuscan.executor._terminate_process_group",
+                new_callable=AsyncMock,
+            ) as mock_term,
         ):
-            output, code = await executor._execute_command(["sleep", "999"], "task-timeout", timeout=1)
+            output, code = await executor._execute_command(
+                ["sleep", "999"], "task-timeout", timeout=1
+            )
         mock_term.assert_awaited_once_with(3001, "task-timeout")
         assert code == -1
         assert "timed out" in output
@@ -170,6 +183,7 @@ class TestExecuteCommandProcessGroup:
     @pytest.mark.asyncio
     async def test_terminate_group_called_on_cancel(self):
         from backend.secuscan.executor import TaskExecutor
+
         executor = TaskExecutor()
 
         mock_proc = AsyncMock()
@@ -185,7 +199,10 @@ class TestExecuteCommandProcessGroup:
         with (
             patch("asyncio.create_subprocess_exec", return_value=mock_proc),
             patch("asyncio.wait_for", side_effect=raise_cancelled),
-            patch("backend.secuscan.executor._terminate_process_group", new_callable=AsyncMock) as mock_term,
+            patch(
+                "backend.secuscan.executor._terminate_process_group",
+                new_callable=AsyncMock,
+            ) as mock_term,
         ):
             with pytest.raises(asyncio.CancelledError):
                 await executor._execute_command(["sleep", "999"], "task-cancel")
@@ -194,6 +211,7 @@ class TestExecuteCommandProcessGroup:
     @pytest.mark.asyncio
     async def test_process_pid_cleared_after_successful_command(self):
         from backend.secuscan.executor import TaskExecutor
+
         executor = TaskExecutor()
 
         mock_proc = AsyncMock()
@@ -211,6 +229,7 @@ class TestExecuteCommandProcessGroup:
     @pytest.mark.asyncio
     async def test_process_pid_cleared_after_timeout(self):
         from backend.secuscan.executor import TaskExecutor
+
         executor = TaskExecutor()
 
         mock_proc = AsyncMock()
@@ -223,9 +242,14 @@ class TestExecuteCommandProcessGroup:
         with (
             patch("asyncio.create_subprocess_exec", return_value=mock_proc),
             patch("asyncio.wait_for", side_effect=asyncio.TimeoutError),
-            patch("backend.secuscan.executor._terminate_process_group", new_callable=AsyncMock),
+            patch(
+                "backend.secuscan.executor._terminate_process_group",
+                new_callable=AsyncMock,
+            ),
         ):
-            await executor._execute_command(["sleep", "99"], "task-pid-timeout", timeout=1)
+            await executor._execute_command(
+                ["sleep", "99"], "task-pid-timeout", timeout=1
+            )
 
         assert "task-pid-timeout" not in executor._process_pids
 
@@ -235,6 +259,7 @@ class TestCancelTaskProcessGroup:
     async def test_cancel_task_terminates_process_group(self):
         from backend.secuscan.executor import TaskExecutor
         from unittest.mock import MagicMock
+
         executor = TaskExecutor()
 
         fake_task = MagicMock()
@@ -243,8 +268,13 @@ class TestCancelTaskProcessGroup:
         executor._process_pids["task-pg"] = 7001
 
         with (
-            patch("backend.secuscan.executor._terminate_process_group", new_callable=AsyncMock) as mock_term,
-            patch("backend.secuscan.executor.get_db", new_callable=AsyncMock) as mock_get_db,
+            patch(
+                "backend.secuscan.executor._terminate_process_group",
+                new_callable=AsyncMock,
+            ) as mock_term,
+            patch(
+                "backend.secuscan.executor.get_db", new_callable=AsyncMock
+            ) as mock_get_db,
         ):
             mock_db = AsyncMock()
             mock_get_db.return_value = mock_db
@@ -259,6 +289,7 @@ class TestCancelTaskProcessGroup:
     async def test_cancel_task_no_pid_still_cancels_asyncio_task(self):
         from backend.secuscan.executor import TaskExecutor
         from unittest.mock import MagicMock
+
         executor = TaskExecutor()
 
         fake_task = MagicMock()
@@ -266,8 +297,13 @@ class TestCancelTaskProcessGroup:
         executor.running_tasks["task-nopid"] = fake_task
 
         with (
-            patch("backend.secuscan.executor._terminate_process_group", new_callable=AsyncMock) as mock_term,
-            patch("backend.secuscan.executor.get_db", new_callable=AsyncMock) as mock_get_db,
+            patch(
+                "backend.secuscan.executor._terminate_process_group",
+                new_callable=AsyncMock,
+            ) as mock_term,
+            patch(
+                "backend.secuscan.executor.get_db", new_callable=AsyncMock
+            ) as mock_get_db,
         ):
             mock_db = AsyncMock()
             mock_get_db.return_value = mock_db
@@ -281,6 +317,7 @@ class TestCancelTaskProcessGroup:
     @pytest.mark.asyncio
     async def test_cancel_unknown_task_returns_false(self):
         from backend.secuscan.executor import TaskExecutor
+
         executor = TaskExecutor()
         result = await executor.cancel_task("nonexistent-task-id")
         assert result is False
@@ -288,11 +325,14 @@ class TestCancelTaskProcessGroup:
 
 class TestOrphanPrevention:
     @pytest.mark.asyncio
-    @pytest.mark.skipif(sys.platform == "win32", reason="process groups not supported on Windows")
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="process groups not supported on Windows"
+    )
     async def test_child_process_killed_with_parent(self):
         """Spawn a parent that forks a sleeping child; cancel, verify child dies."""
         parent = await asyncio.create_subprocess_exec(
-            sys.executable, "-c",
+            sys.executable,
+            "-c",
             "import subprocess, time; subprocess.Popen(['sleep', '30']); time.sleep(30)",
             start_new_session=True,
         )
@@ -312,4 +352,6 @@ class TestOrphanPrevention:
         except (ProcessLookupError, PermissionError):
             still_alive = False
 
-        assert not still_alive, "Process group should be gone after terminate_process_group"
+        assert (
+            not still_alive
+        ), "Process group should be gone after terminate_process_group"

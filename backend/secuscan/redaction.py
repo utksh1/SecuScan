@@ -104,8 +104,7 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     (
         "password",
         re.compile(
-            r"((?:password|passwd|pass|pwd)\s*[=:\"'\s]{1,4})"
-            r"([^\s\"'&;,]{6,})",
+            r"((?:password|passwd|pass|pwd)\s*[=:\"'\s]{1,4})" r"([^\s\"'&;,]{6,})",
             re.IGNORECASE,
         ),
     ),
@@ -126,8 +125,7 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     (
         "vcs_token",
         re.compile(
-            r"(glpat-[A-Za-z0-9_\-]{20,}"
-            r"|gh[pousr]_[A-Za-z0-9]{36,})",
+            r"(glpat-[A-Za-z0-9_\-]{20,}" r"|gh[pousr]_[A-Za-z0-9]{36,})",
             re.IGNORECASE,
         ),
     ),
@@ -145,8 +143,7 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     (
         "hex_secret",
         re.compile(
-            r"((?:token|secret|key|hash|salt)\s*[=:\"'\s]{1,4})"
-            r"([0-9a-fA-F]{32,})",
+            r"((?:token|secret|key|hash|salt)\s*[=:\"'\s]{1,4})" r"([0-9a-fA-F]{32,})",
             re.IGNORECASE,
         ),
     ),
@@ -204,29 +201,31 @@ def redact_dict(data: dict[str, Any]) -> dict[str, Any]:
 
 # Keys whose values are unconditionally redacted in task inputs regardless of
 # value format.  Matched case-insensitively against the full key name.
-_SENSITIVE_INPUT_KEYS: frozenset[str] = frozenset({
-    "api_key",
-    "apikey",
-    "api_secret",
-    "secret",
-    "secret_key",
-    "password",
-    "passwd",
-    "pass",
-    "pwd",
-    "token",
-    "access_token",
-    "refresh_token",
-    "auth",
-    "auth_token",
-    "authorization",
-    "credentials",
-    "private_key",
-    "client_secret",
-    "webhook_secret",
-    "signing_key",
-    "encryption_key",
-})
+_SENSITIVE_INPUT_KEYS: frozenset[str] = frozenset(
+    {
+        "api_key",
+        "apikey",
+        "api_secret",
+        "secret",
+        "secret_key",
+        "password",
+        "passwd",
+        "pass",
+        "pwd",
+        "token",
+        "access_token",
+        "refresh_token",
+        "auth",
+        "auth_token",
+        "authorization",
+        "credentials",
+        "private_key",
+        "client_secret",
+        "webhook_secret",
+        "signing_key",
+        "encryption_key",
+    }
+)
 
 
 def redact_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
@@ -271,9 +270,7 @@ def _redact_value(value: Any) -> Any:
     return value
 
 
-def _apply_pattern(
-    name: str, pattern: re.Pattern[str], text: str
-) -> tuple[str, int]:
+def _apply_pattern(name: str, pattern: re.Pattern[str], text: str) -> tuple[str, int]:
     """
     Apply a single compiled pattern to *text*.
 

@@ -37,8 +37,14 @@ class WebScanner(BaseScanner):
         findings: List[Dict[str, Any]] = []
         summary = [f"Performing {intensity} web scan on {target}"]
 
-        extra_headers = inputs.get("__extra_headers") if isinstance(inputs.get("__extra_headers"), dict) else {}
-        cookies = inputs.get("__cookies") if isinstance(inputs.get("__cookies"), dict) else {}
+        extra_headers = (
+            inputs.get("__extra_headers")
+            if isinstance(inputs.get("__extra_headers"), dict)
+            else {}
+        )
+        cookies = (
+            inputs.get("__cookies") if isinstance(inputs.get("__cookies"), dict) else {}
+        )
 
         self.update_progress(0.05)
         crawl = await crawl_target(
@@ -56,7 +62,9 @@ class WebScanner(BaseScanner):
         nuclei_findings = await self._run_nuclei(target)
         findings.extend(nuclei_findings)
         if nuclei_findings:
-            summary.append(f"Discovered {len(nuclei_findings)} template-based observations via Nuclei.")
+            summary.append(
+                f"Discovered {len(nuclei_findings)} template-based observations via Nuclei."
+            )
         self.update_progress(0.55)
 
         if intensity in ["deep", "custom"]:
@@ -74,7 +82,9 @@ class WebScanner(BaseScanner):
 
         rows = []
         for page in crawl.get("pages", [])[:100]:
-            rows.append({"type": "page", "url": page.get("url"), "title": page.get("title")})
+            rows.append(
+                {"type": "page", "url": page.get("url"), "title": page.get("title")}
+            )
         for path_hint in crawl.get("path_hints", [])[:50]:
             rows.append({"type": "path_hint", **path_hint})
 
@@ -87,7 +97,9 @@ class WebScanner(BaseScanner):
             "rows": rows[:150],
         }
 
-    def _build_passive_findings(self, target: str, crawl: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _build_passive_findings(
+        self, target: str, crawl: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         findings: List[Dict[str, Any]] = []
         findings.extend(self._surface_findings(target, crawl))
         findings.extend(self._header_findings(target, crawl))
@@ -98,7 +110,9 @@ class WebScanner(BaseScanner):
         findings.extend(self._cms_findings(target, crawl))
         return findings
 
-    def _surface_findings(self, target: str, crawl: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _surface_findings(
+        self, target: str, crawl: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         findings: List[Dict[str, Any]] = []
         forms = crawl.get("forms", [])
         if forms:
@@ -114,7 +128,12 @@ class WebScanner(BaseScanner):
                     "validation_method": "passive_crawl",
                     "confidence_reason": "Forms were parsed directly from the target HTML during the crawl phase.",
                     "evidence": [
-                        {"type": "form", "label": "Form action", "value": form.get("action"), "source": "crawl"}
+                        {
+                            "type": "form",
+                            "label": "Form action",
+                            "value": form.get("action"),
+                            "source": "crawl",
+                        }
                         for form in forms[:10]
                     ],
                     "metadata": {"form_count": len(forms)},
@@ -133,15 +152,28 @@ class WebScanner(BaseScanner):
                     "validated": True,
                     "validation_method": "passive_crawl",
                     "confidence_reason": "API-like paths were identified from live application responses.",
-                    "evidence": [{"type": "url", "label": "API hint", "value": item, "source": "crawl"} for item in api_hints[:10]],
+                    "evidence": [
+                        {
+                            "type": "url",
+                            "label": "API hint",
+                            "value": item,
+                            "source": "crawl",
+                        }
+                        for item in api_hints[:10]
+                    ],
                     "metadata": {"api_hint_count": len(api_hints)},
                 }
             )
         return findings
 
-    def _header_findings(self, target: str, crawl: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _header_findings(
+        self, target: str, crawl: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         findings: List[Dict[str, Any]] = []
-        headers = {str(key).lower(): str(value) for key, value in (crawl.get("headers") or {}).items()}
+        headers = {
+            str(key).lower(): str(value)
+            for key, value in (crawl.get("headers") or {}).items()
+        }
         final_url = str(crawl.get("final_url") or target)
         for header_key, (label, severity) in self.SECURITY_HEADERS.items():
             value = headers.get(header_key, "")
@@ -159,8 +191,18 @@ class WebScanner(BaseScanner):
                     "validation_method": "header_analysis",
                     "confidence_reason": "The header snapshot taken during the crawl did not include this control.",
                     "evidence": [
-                        {"type": "url", "label": "Observed URL", "value": final_url, "source": "crawl"},
-                        {"type": "header_snapshot", "label": "Header snapshot", "value": json.dumps(headers, sort_keys=True)[:1000], "source": "crawl"},
+                        {
+                            "type": "url",
+                            "label": "Observed URL",
+                            "value": final_url,
+                            "source": "crawl",
+                        },
+                        {
+                            "type": "header_snapshot",
+                            "label": "Header snapshot",
+                            "value": json.dumps(headers, sort_keys=True)[:1000],
+                            "source": "crawl",
+                        },
                     ],
                     "metadata": {"header": label, "url": final_url},
                 }
@@ -178,16 +220,29 @@ class WebScanner(BaseScanner):
                     "validated": True,
                     "validation_method": "header_analysis",
                     "confidence_reason": "The server banner was observed directly in the HTTP response headers.",
-                    "evidence": [{"type": "header", "label": "Server", "value": server, "source": "crawl"}],
+                    "evidence": [
+                        {
+                            "type": "header",
+                            "label": "Server",
+                            "value": server,
+                            "source": "crawl",
+                        }
+                    ],
                     "metadata": {"server": server},
                 }
             )
         return findings
 
-    def _cookie_findings(self, target: str, crawl: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _cookie_findings(
+        self, target: str, crawl: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         findings: List[Dict[str, Any]] = []
         for raw_cookie in crawl.get("set_cookie_headers", [])[:20]:
-            parts = [segment.strip() for segment in str(raw_cookie).split(";") if segment.strip()]
+            parts = [
+                segment.strip()
+                for segment in str(raw_cookie).split(";")
+                if segment.strip()
+            ]
             if not parts:
                 continue
             cookie_name = parts[0].split("=", 1)[0]
@@ -195,7 +250,10 @@ class WebScanner(BaseScanner):
             missing_flags = []
             if "httponly" not in lowered:
                 missing_flags.append("HttpOnly")
-            if "secure" not in lowered and str(crawl.get("scheme") or "").lower() == "https":
+            if (
+                "secure" not in lowered
+                and str(crawl.get("scheme") or "").lower() == "https"
+            ):
                 missing_flags.append("Secure")
             if not any(segment.startswith("samesite=") for segment in lowered):
                 missing_flags.append("SameSite")
@@ -212,13 +270,25 @@ class WebScanner(BaseScanner):
                     "validated": True,
                     "validation_method": "cookie_analysis",
                     "confidence_reason": "Set-Cookie headers were observed directly during the crawl session.",
-                    "evidence": [{"type": "set_cookie", "label": "Set-Cookie", "value": raw_cookie, "source": "crawl"}],
-                    "metadata": {"cookie_name": cookie_name, "missing_flags": missing_flags},
+                    "evidence": [
+                        {
+                            "type": "set_cookie",
+                            "label": "Set-Cookie",
+                            "value": raw_cookie,
+                            "source": "crawl",
+                        }
+                    ],
+                    "metadata": {
+                        "cookie_name": cookie_name,
+                        "missing_flags": missing_flags,
+                    },
                 }
             )
         return findings
 
-    def _form_findings(self, target: str, crawl: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _form_findings(
+        self, target: str, crawl: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         findings: List[Dict[str, Any]] = []
         for form in crawl.get("forms", [])[:20]:
             action = str(form.get("action") or form.get("page_url") or target)
@@ -235,13 +305,26 @@ class WebScanner(BaseScanner):
                         "validation_method": "form_analysis",
                         "confidence_reason": "The form structure was observed directly and no common CSRF token field name was present.",
                         "evidence": [
-                            {"type": "form_action", "label": "Form action", "value": action, "source": "crawl"},
-                            {"type": "form_method", "label": "Method", "value": form.get("method"), "source": "crawl"},
+                            {
+                                "type": "form_action",
+                                "label": "Form action",
+                                "value": action,
+                                "source": "crawl",
+                            },
+                            {
+                                "type": "form_method",
+                                "label": "Method",
+                                "value": form.get("method"),
+                                "source": "crawl",
+                            },
                         ],
                         "metadata": {"action": action, "method": form.get("method")},
                     }
                 )
-            if form.get("password_fields") and str(crawl.get("scheme") or "").lower() != "https":
+            if (
+                form.get("password_fields")
+                and str(crawl.get("scheme") or "").lower() != "https"
+            ):
                 findings.append(
                     {
                         "title": f"Credential Form Exposed over Non-HTTPS: {action}",
@@ -254,20 +337,34 @@ class WebScanner(BaseScanner):
                         "validation_method": "form_transport_analysis",
                         "confidence_reason": "Password fields were parsed from the form and the final crawl URL was not HTTPS.",
                         "evidence": [
-                            {"type": "form_action", "label": "Form action", "value": action, "source": "crawl"},
-                            {"type": "scheme", "label": "Observed scheme", "value": crawl.get("scheme"), "source": "crawl"},
+                            {
+                                "type": "form_action",
+                                "label": "Form action",
+                                "value": action,
+                                "source": "crawl",
+                            },
+                            {
+                                "type": "scheme",
+                                "label": "Observed scheme",
+                                "value": crawl.get("scheme"),
+                                "source": "crawl",
+                            },
                         ],
                         "metadata": {"action": action},
                     }
                 )
         return findings
 
-    def _path_findings(self, target: str, crawl: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _path_findings(
+        self, target: str, crawl: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         grouped: Dict[str, List[str]] = {}
         for item in crawl.get("path_hints", []):
             if not isinstance(item, dict):
                 continue
-            grouped.setdefault(str(item.get("kind") or "path"), []).append(str(item.get("url") or ""))
+            grouped.setdefault(str(item.get("kind") or "path"), []).append(
+                str(item.get("url") or "")
+            )
 
         findings: List[Dict[str, Any]] = []
         labels = {
@@ -291,13 +388,23 @@ class WebScanner(BaseScanner):
                     "validated": True,
                     "validation_method": "surface_discovery",
                     "confidence_reason": "The paths were observed directly during crawl or path enumeration.",
-                    "evidence": [{"type": "url", "label": f"{kind.title()} path", "value": url, "source": "crawl"} for url in urls[:10]],
+                    "evidence": [
+                        {
+                            "type": "url",
+                            "label": f"{kind.title()} path",
+                            "value": url,
+                            "source": "crawl",
+                        }
+                        for url in urls[:10]
+                    ],
                     "metadata": {"path_kind": kind, "count": len(urls)},
                 }
             )
         return findings
 
-    def _transport_findings(self, target: str, crawl: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _transport_findings(
+        self, target: str, crawl: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         findings: List[Dict[str, Any]] = []
         seed = str(crawl.get("seed_url") or target)
         final_url = str(crawl.get("final_url") or target)
@@ -317,14 +424,28 @@ class WebScanner(BaseScanner):
                     "validation_method": "transport_analysis",
                     "confidence_reason": "The final crawl URL was observed directly and did not use HTTPS.",
                     "evidence": [
-                        {"type": "seed_url", "label": "Seed URL", "value": seed, "source": "crawl"},
-                        {"type": "final_url", "label": "Final URL", "value": final_url, "source": "crawl"},
+                        {
+                            "type": "seed_url",
+                            "label": "Seed URL",
+                            "value": seed,
+                            "source": "crawl",
+                        },
+                        {
+                            "type": "final_url",
+                            "label": "Final URL",
+                            "value": final_url,
+                            "source": "crawl",
+                        },
                     ],
                     "metadata": {"seed_url": seed, "final_url": final_url},
                 }
             )
 
-        if seed.startswith("http://") and final_url.startswith("https://") and not redirect_chain:
+        if (
+            seed.startswith("http://")
+            and final_url.startswith("https://")
+            and not redirect_chain
+        ):
             findings.append(
                 {
                     "title": "HTTPS Redirect Chain Incomplete",
@@ -336,8 +457,18 @@ class WebScanner(BaseScanner):
                     "validation_method": "redirect_analysis",
                     "confidence_reason": "The seed and final URLs differed in transport without a captured redirect chain.",
                     "evidence": [
-                        {"type": "seed_url", "label": "Seed URL", "value": seed, "source": "crawl"},
-                        {"type": "final_url", "label": "Final URL", "value": final_url, "source": "crawl"},
+                        {
+                            "type": "seed_url",
+                            "label": "Seed URL",
+                            "value": seed,
+                            "source": "crawl",
+                        },
+                        {
+                            "type": "final_url",
+                            "label": "Final URL",
+                            "value": final_url,
+                            "source": "crawl",
+                        },
                     ],
                     "metadata": {"seed_url": seed, "final_url": final_url},
                 }
@@ -357,7 +488,14 @@ class WebScanner(BaseScanner):
                     "validated": True,
                     "validation_method": "cms_fingerprint",
                     "confidence_reason": "CMS-specific paths, meta generator tags, or static assets were observed during crawl.",
-                    "evidence": [{"type": "cms_hint", "label": "CMS hint", "value": cms, "source": "crawl"}],
+                    "evidence": [
+                        {
+                            "type": "cms_hint",
+                            "label": "CMS hint",
+                            "value": cms,
+                            "source": "crawl",
+                        }
+                    ],
                     "metadata": {"cms": cms},
                 }
             )
@@ -380,8 +518,15 @@ class WebScanner(BaseScanner):
             except json.JSONDecodeError:
                 continue
             info = item.get("info", {}) if isinstance(item.get("info"), dict) else {}
-            template_id = item.get("template-id") or item.get("templateID") or info.get("name") or "nuclei-template"
-            severity = self.normalize_severity(str(info.get("severity") or item.get("severity") or "info"))
+            template_id = (
+                item.get("template-id")
+                or item.get("templateID")
+                or info.get("name")
+                or "nuclei-template"
+            )
+            severity = self.normalize_severity(
+                str(info.get("severity") or item.get("severity") or "info")
+            )
             matched = item.get("matched-at") or item.get("matched")
             findings.append(
                 {
@@ -389,16 +534,38 @@ class WebScanner(BaseScanner):
                     "category": "Vulnerability",
                     "severity": severity,
                     "target": target,
-                    "description": str(info.get("description") or item.get("matcher-name") or f"Template {template_id} matched on the target."),
+                    "description": str(
+                        info.get("description")
+                        or item.get("matcher-name")
+                        or f"Template {template_id} matched on the target."
+                    ),
                     "validated": False,
                     "validation_method": "template_scan",
                     "confidence_reason": "Issue was reported by a Nuclei template and should be corroborated before remediation is prioritized.",
                     "evidence": [
-                        {"type": "template", "label": "Template", "value": template_id, "source": "nuclei"},
-                        {"type": "url", "label": "Matched URL", "value": matched, "source": "nuclei"},
+                        {
+                            "type": "template",
+                            "label": "Template",
+                            "value": template_id,
+                            "source": "nuclei",
+                        },
+                        {
+                            "type": "url",
+                            "label": "Matched URL",
+                            "value": matched,
+                            "source": "nuclei",
+                        },
                     ],
-                    "references": [{"source": "template", "url": ref} for ref in info.get("reference", []) if isinstance(ref, str)],
-                    "metadata": {"template": template_id, "url": matched, "source": "nuclei"},
+                    "references": [
+                        {"source": "template", "url": ref}
+                        for ref in info.get("reference", [])
+                        if isinstance(ref, str)
+                    ],
+                    "metadata": {
+                        "template": template_id,
+                        "url": matched,
+                        "source": "nuclei",
+                    },
                 }
             )
 
@@ -419,10 +586,24 @@ class WebScanner(BaseScanner):
                         "validation_method": "template_scan",
                         "confidence_reason": "Issue was reported by a Nuclei template and should be corroborated before remediation is prioritized.",
                         "evidence": [
-                            {"type": "template", "label": "Template", "value": template_id, "source": "nuclei"},
-                            {"type": "url", "label": "Matched URL", "value": matched, "source": "nuclei"},
+                            {
+                                "type": "template",
+                                "label": "Template",
+                                "value": template_id,
+                                "source": "nuclei",
+                            },
+                            {
+                                "type": "url",
+                                "label": "Matched URL",
+                                "value": matched,
+                                "source": "nuclei",
+                            },
                         ],
-                        "metadata": {"template": template_id, "url": matched, "source": "nuclei"},
+                        "metadata": {
+                            "template": template_id,
+                            "url": matched,
+                            "source": "nuclei",
+                        },
                     }
                 )
         return findings
@@ -441,26 +622,48 @@ class WebScanner(BaseScanner):
             document = None
 
         if isinstance(document, dict):
-            vulnerabilities = document.get("vulnerabilities") or document.get("findings") or document.get("items") or []
+            vulnerabilities = (
+                document.get("vulnerabilities")
+                or document.get("findings")
+                or document.get("items")
+                or []
+            )
             if isinstance(vulnerabilities, list):
                 for item in vulnerabilities:
                     if not isinstance(item, dict):
                         continue
                     uri = item.get("uri") or item.get("url") or item.get("path")
-                    message = item.get("msg") or item.get("message") or item.get("description") or "Nikto observation"
+                    message = (
+                        item.get("msg")
+                        or item.get("message")
+                        or item.get("description")
+                        or "Nikto observation"
+                    )
                     findings.append(
                         {
                             "title": f"Nikto: {message}",
                             "category": "Web Vulnerability",
-                            "severity": self.normalize_severity(str(item.get("severity") or "medium")),
+                            "severity": self.normalize_severity(
+                                str(item.get("severity") or "medium")
+                            ),
                             "target": target,
                             "description": str(message),
                             "validated": False,
                             "validation_method": "nikto_scan",
                             "confidence_reason": "Observation was reported by Nikto and may require manual confirmation.",
                             "evidence": [
-                                {"type": "url", "label": "Affected URL", "value": uri, "source": "nikto"},
-                                {"type": "nikto_item", "label": "Nikto record", "value": json.dumps(item, sort_keys=True)[:1000], "source": "nikto"},
+                                {
+                                    "type": "url",
+                                    "label": "Affected URL",
+                                    "value": uri,
+                                    "source": "nikto",
+                                },
+                                {
+                                    "type": "nikto_item",
+                                    "label": "Nikto record",
+                                    "value": json.dumps(item, sort_keys=True)[:1000],
+                                    "source": "nikto",
+                                },
                             ],
                             "metadata": {"source": "nikto", "url": uri},
                         }
@@ -482,7 +685,14 @@ class WebScanner(BaseScanner):
                     "validated": False,
                     "validation_method": "nikto_scan",
                     "confidence_reason": "Observation was reported by Nikto and may require manual confirmation.",
-                    "evidence": [{"type": "nikto_line", "label": "Nikto output", "value": line.strip(), "source": "nikto"}],
+                    "evidence": [
+                        {
+                            "type": "nikto_line",
+                            "label": "Nikto output",
+                            "value": line.strip(),
+                            "source": "nikto",
+                        }
+                    ],
                     "metadata": {"source": "nikto"},
                 }
             )
@@ -512,23 +722,42 @@ class WebScanner(BaseScanner):
                     {
                         "title": f"Discovered Path: {url}",
                         "category": "Asset Discovery",
-                        "severity": "low" if kind in {"admin", "debug", "docs"} else "info",
+                        "severity": "low"
+                        if kind in {"admin", "debug", "docs"}
+                        else "info",
                         "target": target,
                         "description": f"Accessible path found during fuzzing: {url}",
                         "validated": True,
                         "validation_method": "directory_fuzzing",
                         "confidence_reason": "The endpoint returned an HTTP success or redirect status during path enumeration.",
                         "evidence": [
-                            {"type": "url", "label": "Path", "value": url, "source": "ffuf"},
-                            {"type": "status_code", "label": "Status", "value": status, "source": "ffuf"},
+                            {
+                                "type": "url",
+                                "label": "Path",
+                                "value": url,
+                                "source": "ffuf",
+                            },
+                            {
+                                "type": "status_code",
+                                "label": "Status",
+                                "value": status,
+                                "source": "ffuf",
+                            },
                         ],
-                        "metadata": {"status": status, "path_kind": kind or "generic", "source": "ffuf"},
+                        "metadata": {
+                            "status": status,
+                            "path_kind": kind or "generic",
+                            "source": "ffuf",
+                        },
                     }
                 )
             if findings:
                 return findings
 
-        for match in re.finditer(r"\[Status: (\d+), Size: \d+, Words: \d+, Lines: \d+, Duration: .*?\]\s*\|\s*URL: (.*)", output):
+        for match in re.finditer(
+            r"\[Status: (\d+), Size: \d+, Words: \d+, Lines: \d+, Duration: .*?\]\s*\|\s*URL: (.*)",
+            output,
+        ):
             status, url = match.groups()
             kind = self._classify_path(url.lower())
             findings.append(
@@ -542,10 +771,24 @@ class WebScanner(BaseScanner):
                     "validation_method": "directory_fuzzing",
                     "confidence_reason": "The endpoint returned an HTTP success or redirect status during path enumeration.",
                     "evidence": [
-                        {"type": "url", "label": "Path", "value": url, "source": "ffuf"},
-                        {"type": "status_code", "label": "Status", "value": status, "source": "ffuf"},
+                        {
+                            "type": "url",
+                            "label": "Path",
+                            "value": url,
+                            "source": "ffuf",
+                        },
+                        {
+                            "type": "status_code",
+                            "label": "Status",
+                            "value": status,
+                            "source": "ffuf",
+                        },
                     ],
-                    "metadata": {"status": status, "path_kind": kind or "generic", "source": "ffuf"},
+                    "metadata": {
+                        "status": status,
+                        "path_kind": kind or "generic",
+                        "source": "ffuf",
+                    },
                 }
             )
         return findings

@@ -30,7 +30,9 @@ async def run_scan(client: httpx.AsyncClient, idx: int) -> float:
 
 async def main(concurrency: int = 5) -> None:
     async with httpx.AsyncClient() as client:
-        latencies = await asyncio.gather(*[run_scan(client, i) for i in range(concurrency)])
+        latencies = await asyncio.gather(
+            *[run_scan(client, i) for i in range(concurrency)]
+        )
 
     print(f"Submitted {concurrency} scans")
     print(f"Min latency: {min(latencies):.3f}s")

@@ -30,15 +30,17 @@ def discover_plugins(plugin_root=PLUGIN_ROOT):
         except json.JSONDecodeError:
             metadata = {}
 
-        plugins.append({
-            "name": metadata.get("name", plugin_dir.name),
-            "path": safe_relative_path(plugin_dir, plugin_root.parent),
-            "metadata_path": safe_relative_path(metadata_file, plugin_root.parent),
-            "has_metadata": True,
-            "has_parser": parser_file.exists(),
-            "category": metadata.get("category", "uncategorized"),
-            "description": metadata.get("description", ""),
-        })
+        plugins.append(
+            {
+                "name": metadata.get("name", plugin_dir.name),
+                "path": safe_relative_path(plugin_dir, plugin_root.parent),
+                "metadata_path": safe_relative_path(metadata_file, plugin_root.parent),
+                "has_metadata": True,
+                "has_parser": parser_file.exists(),
+                "category": metadata.get("category", "uncategorized"),
+                "description": metadata.get("description", ""),
+            }
+        )
 
     return sorted(plugins, key=lambda item: item["name"])
 
@@ -82,13 +84,15 @@ def format_markdown(report):
     for category, count in sorted(report["categories"].items()):
         lines.append(f"- {category}: {count}")
 
-    lines.extend([
-        "",
-        "## Plugin Details",
-        "",
-        "| Plugin | Category | Parser | Path |",
-        "|---|---|---|---|",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Plugin Details",
+            "",
+            "| Plugin | Category | Parser | Path |",
+            "|---|---|---|---|",
+        ]
+    )
 
     for plugin in report["plugins"]:
         parser_status = "Yes" if plugin["has_parser"] else "No"
@@ -109,7 +113,11 @@ def main():
     args = parser.parse_args()
 
     report = build_report(discover_plugins())
-    content = json.dumps(report, indent=2) if args.format == "json" else format_markdown(report)
+    content = (
+        json.dumps(report, indent=2)
+        if args.format == "json"
+        else format_markdown(report)
+    )
 
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)

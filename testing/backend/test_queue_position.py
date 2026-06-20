@@ -40,11 +40,17 @@ async def test_queued_task_gets_correct_position():
         {"id": "ccc"},
     ]
 
-    with patch("backend.secuscan.executor.get_db", return_value=AsyncMock(return_value=mock_db)):
-        with patch("backend.secuscan.executor.get_db", new=AsyncMock(return_value=mock_db)):
-            result = await executor.get_task_status.__wrapped__(executor, "bbb") \
-                if hasattr(executor.get_task_status, "__wrapped__") \
+    with patch(
+        "backend.secuscan.executor.get_db", return_value=AsyncMock(return_value=mock_db)
+    ):
+        with patch(
+            "backend.secuscan.executor.get_db", new=AsyncMock(return_value=mock_db)
+        ):
+            result = (
+                await executor.get_task_status.__wrapped__(executor, "bbb")
+                if hasattr(executor.get_task_status, "__wrapped__")
                 else await _call_with_mock_db(executor, "bbb", mock_db)
+            )
 
     assert result["queue_position"] == 2
     assert result["pending_count"] == 3
@@ -96,6 +102,7 @@ async def test_first_queued_task_is_position_one():
 async def _call_with_mock_db(executor, task_id, mock_db):
     """Helper to call get_task_status with a mocked db."""
     import backend.secuscan.executor as executor_module
+
     original = executor_module.get_db
 
     async def mock_get_db():

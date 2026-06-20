@@ -30,6 +30,7 @@ SEVERITY_LEVELS = {
     "unknown": 1,
 }
 
+
 def load_config(config_file: str) -> dict:
     """Load audit configuration"""
     try:
@@ -50,10 +51,12 @@ def load_config(config_file: str) -> dict:
         "excluded_packages": [],
     }
 
+
 def load_pip_audit_report(report_file: str) -> dict:
     """Load pip-audit JSON report"""
     with open(report_file) as f:
         return json.load(f)
+
 
 def get_cve_id(vuln: dict) -> str:
     """Extract CVE ID from vulnerability record"""
@@ -63,6 +66,7 @@ def get_cve_id(vuln: dict) -> str:
     if "id" in vuln:
         return vuln["id"]
     return vuln.get("advisory", {}).get("id", "UNKNOWN")
+
 
 def is_exception_valid(exception: dict, current_date: datetime.datetime = None) -> bool:
     """Check if exception is still valid (not expired)"""
@@ -85,7 +89,9 @@ def is_exception_valid(exception: dict, current_date: datetime.datetime = None) 
         if isinstance(expires_at, str):
             if len(expires_at) == 10:
                 expiry_date = datetime.date.fromisoformat(expires_at)
-                expiry = datetime.datetime.combine(expiry_date, datetime.time.max, tzinfo=datetime.timezone.utc)
+                expiry = datetime.datetime.combine(
+                    expiry_date, datetime.time.max, tzinfo=datetime.timezone.utc
+                )
             else:
                 expiry = datetime.datetime.fromisoformat(expires_at)
                 if expiry.tzinfo is None:
@@ -95,7 +101,9 @@ def is_exception_valid(exception: dict, current_date: datetime.datetime = None) 
             if expiry.tzinfo is None:
                 expiry = expiry.replace(tzinfo=datetime.timezone.utc)
         elif isinstance(expires_at, datetime.date):
-            expiry = datetime.datetime.combine(expires_at, datetime.time.max, tzinfo=datetime.timezone.utc)
+            expiry = datetime.datetime.combine(
+                expires_at, datetime.time.max, tzinfo=datetime.timezone.utc
+            )
         else:
             logger.error(f"Unknown type for expires_at: {type(expires_at)}")
             return False
@@ -105,7 +113,10 @@ def is_exception_valid(exception: dict, current_date: datetime.datetime = None) 
         logger.error(f"Error parsing expiry date '{expires_at}': {e}")
         return False
 
-def check_expiry_warning(exception: dict, warn_days: int, current_date: datetime.datetime = None):
+
+def check_expiry_warning(
+    exception: dict, warn_days: int, current_date: datetime.datetime = None
+):
     """Warn if exception is close to expiry"""
     if current_date is None:
         current_date = datetime.datetime.now(datetime.timezone.utc)
@@ -121,7 +132,9 @@ def check_expiry_warning(exception: dict, warn_days: int, current_date: datetime
         if isinstance(expires_at, str):
             if len(expires_at) == 10:
                 expiry_date = datetime.date.fromisoformat(expires_at)
-                expiry = datetime.datetime.combine(expiry_date, datetime.time.max, tzinfo=datetime.timezone.utc)
+                expiry = datetime.datetime.combine(
+                    expiry_date, datetime.time.max, tzinfo=datetime.timezone.utc
+                )
             else:
                 expiry = datetime.datetime.fromisoformat(expires_at)
                 if expiry.tzinfo is None:
@@ -131,7 +144,9 @@ def check_expiry_warning(exception: dict, warn_days: int, current_date: datetime
             if expiry.tzinfo is None:
                 expiry = expiry.replace(tzinfo=datetime.timezone.utc)
         elif isinstance(expires_at, datetime.date):
-            expiry = datetime.datetime.combine(expires_at, datetime.time.max, tzinfo=datetime.timezone.utc)
+            expiry = datetime.datetime.combine(
+                expires_at, datetime.time.max, tzinfo=datetime.timezone.utc
+            )
         else:
             return
 
@@ -144,18 +159,27 @@ def check_expiry_warning(exception: dict, warn_days: int, current_date: datetime
     except Exception:
         pass
 
+
 def parse_vulnerabilities(report) -> list:
     """Extract all vulnerability structures in a standard format"""
     vuls = []
 
     # 1. Top-level "vulnerabilities" list
-    if isinstance(report, dict) and "vulnerabilities" in report and isinstance(report["vulnerabilities"], list):
+    if (
+        isinstance(report, dict)
+        and "vulnerabilities" in report
+        and isinstance(report["vulnerabilities"], list)
+    ):
         for v in report["vulnerabilities"]:
             if isinstance(v, dict):
                 vuls.append(v)
 
     # 2. Dependencies with inner vulns
-    if isinstance(report, dict) and "dependencies" in report and isinstance(report["dependencies"], list):
+    if (
+        isinstance(report, dict)
+        and "dependencies" in report
+        and isinstance(report["dependencies"], list)
+    ):
         for dep in report["dependencies"]:
             if not isinstance(dep, dict):
                 continue
@@ -172,9 +196,14 @@ def parse_vulnerabilities(report) -> list:
                         "cve": v.get("id") or v.get("cve") or "UNKNOWN",
                         "aliases": v.get("aliases") or [],
                         "vulnerability": {
-                            "severity": v.get("severity") or v.get("vulnerability", {}).get("severity") or "unknown",
-                            "advisory": v.get("description") or v.get("advisory") or v.get("vulnerability", {}).get("advisory") or "",
-                        }
+                            "severity": v.get("severity")
+                            or v.get("vulnerability", {}).get("severity")
+                            or "unknown",
+                            "advisory": v.get("description")
+                            or v.get("advisory")
+                            or v.get("vulnerability", {}).get("advisory")
+                            or "",
+                        },
                     }
                     vuls.append(vuln_record)
 
@@ -196,13 +225,19 @@ def parse_vulnerabilities(report) -> list:
                         "cve": v.get("id") or v.get("cve") or "UNKNOWN",
                         "aliases": v.get("aliases") or [],
                         "vulnerability": {
-                            "severity": v.get("severity") or v.get("vulnerability", {}).get("severity") or "unknown",
-                            "advisory": v.get("description") or v.get("advisory") or v.get("vulnerability", {}).get("advisory") or "",
-                        }
+                            "severity": v.get("severity")
+                            or v.get("vulnerability", {}).get("severity")
+                            or "unknown",
+                            "advisory": v.get("description")
+                            or v.get("advisory")
+                            or v.get("vulnerability", {}).get("advisory")
+                            or "",
+                        },
                     }
                     vuls.append(vuln_record)
 
     return vuls
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -304,12 +339,20 @@ def main():
                         f"Exception for {cve_id or package} has expired, but enforce_expiry is set to false. "
                         f"Expiry: {exception.get('expires_at')}"
                     )
-                    check_expiry_warning(exception, policy.get("warn_before_expiry_days", 14))
-                    excepted_vulns.append((cve_id, package, version, exception.get("reason")))
+                    check_expiry_warning(
+                        exception, policy.get("warn_before_expiry_days", 14)
+                    )
+                    excepted_vulns.append(
+                        (cve_id, package, version, exception.get("reason"))
+                    )
                     continue
             else:
-                check_expiry_warning(exception, policy.get("warn_before_expiry_days", 14))
-                excepted_vulns.append((cve_id, package, version, exception.get("reason")))
+                check_expiry_warning(
+                    exception, policy.get("warn_before_expiry_days", 14)
+                )
+                excepted_vulns.append(
+                    (cve_id, package, version, exception.get("reason"))
+                )
                 continue
 
         # Check severity
@@ -326,7 +369,9 @@ def main():
             logger.info(f"  - {cve} ({pkg}=={ver}): {reason}")
 
     if warning_vulns:
-        logger.warning(f"[WARN] {len(warning_vulns)} low-severity vulnerabilities found:")
+        logger.warning(
+            f"[WARN] {len(warning_vulns)} low-severity vulnerabilities found:"
+        )
         for cve, pkg, ver, sev, adv in warning_vulns:
             logger.warning(f"  - {cve} ({sev}): {pkg}=={ver}")
 
@@ -335,12 +380,15 @@ def main():
         for cve, pkg, ver, sev, adv in blocking_vulns:
             logger.error(f"  - {cve} ({sev}): {pkg}=={ver}")
             logger.error(f"    Advisory: {adv}")
-            logger.error(f"    To exception: Add entry to .audit-config.yaml with expiry date")
+            logger.error(
+                f"    To exception: Add entry to .audit-config.yaml with expiry date"
+            )
 
         return 1  # Fail CI
 
     logger.info("[OK] Dependency audit passed!")
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -4,10 +4,16 @@ import ipaddress
 from backend.secuscan import validation as validation_module
 from backend.secuscan.config import settings
 from backend.secuscan.validation import (
-    validate_target, validate_port, validate_port_range, validate_url,
-    sanitize_input, is_safe_path, match_pattern
+    validate_target,
+    validate_port,
+    validate_port_range,
+    validate_url,
+    sanitize_input,
+    is_safe_path,
+    match_pattern,
 )
 from backend.secuscan.routes import is_filesystem_target
+
 
 def test_validate_target():
     # Valid IP target
@@ -17,12 +23,17 @@ def test_validate_target():
     assert validate_target("example.com", safe_mode=False) == (True, "")
 
     # Safe mode restrictions
-    assert validate_target("8.8.8.8", safe_mode=True)[0] is False  # Public IP blocked in safe mode
+    assert (
+        validate_target("8.8.8.8", safe_mode=True)[0] is False
+    )  # Public IP blocked in safe mode
     assert validate_target("military.mil", safe_mode=True)[0] is False  # Blocked TLD
 
     # Invalid targets
-    assert validate_target("10.0.0.0/24")[0] is True  # Private CIDR ranges are allowed in safe mode
+    assert (
+        validate_target("10.0.0.0/24")[0] is True
+    )  # Private CIDR ranges are allowed in safe mode
     assert validate_target("not!a!valid!hostname")[0] is False
+
 
 def test_validate_target_safe_mode_blocks_public_hostname(monkeypatch):
     def fake_getaddrinfo(_host, *_args, **_kwargs):
@@ -31,8 +42,10 @@ def test_validate_target_safe_mode_blocks_public_hostname(monkeypatch):
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
     assert validate_target("example.com", safe_mode=True)[0] is False
 
+
 def test_validate_target_safe_mode_blocks_multi_record_when_any_public(monkeypatch):
     """If any A/AAAA record is public, safe-mode must fail closed."""
+
     def fake_getaddrinfo(_host, *_args, **_kwargs):
         return [
             (socket.AF_INET, None, None, None, ("192.168.1.10", 0)),
@@ -41,6 +54,7 @@ def test_validate_target_safe_mode_blocks_multi_record_when_any_public(monkeypat
 
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
     assert validate_target("multirecord.example", safe_mode=True)[0] is False
+
 
 def test_validate_target_safe_mode_blocks_dns_rebinding_union(monkeypatch):
     """Rebinding/round-robin: validate_target resolves twice and validates the union."""
@@ -57,8 +71,10 @@ def test_validate_target_safe_mode_blocks_dns_rebinding_union(monkeypatch):
     assert ok is False
     assert calls["n"] >= 2
 
+
 def test_validate_target_safe_mode_blocks_url_ip_literal():
     assert validate_target("http://8.8.8.8", safe_mode=True)[0] is False
+
 
 def test_validate_target_ipv4_with_ipv6_allowed_network_does_not_crash(monkeypatch):
     monkeypatch.setattr(settings, "allowed_networks", ["fc00::/7"])
@@ -76,21 +92,29 @@ def test_validate_target_ipv6_with_ipv4_allowed_network_does_not_crash(monkeypat
     assert msg == "Public IPs/networks not allowed in safe mode (SecuScan Guardrail)"
 
 
-def test_validate_target_mixed_allowed_networks_uses_later_same_version_entry(monkeypatch):
+def test_validate_target_mixed_allowed_networks_uses_later_same_version_entry(
+    monkeypatch,
+):
     monkeypatch.setattr(settings, "allowed_networks", ["fc00::/7", "127.0.0.0/8"])
     ok, msg = validate_target("127.0.0.1", safe_mode=True)
 
     assert ok is True
     assert msg == ""
 
-def test_validate_target_mixed_allowed_networks_uses_later_same_version_ipv6_entry(monkeypatch):
-    monkeypatch.setattr(validation_module, "ALLOWED_PRIVATE", [ipaddress.ip_network("fc00::/7")])
+
+def test_validate_target_mixed_allowed_networks_uses_later_same_version_ipv6_entry(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        validation_module, "ALLOWED_PRIVATE", [ipaddress.ip_network("fc00::/7")]
+    )
     monkeypatch.setattr(settings, "allowed_networks", ["127.0.0.0/8", "fc00::/7"])
 
     ok, msg = validate_target("fd00::1", safe_mode=True)
 
     assert ok is True
     assert msg == ""
+
 
 def test_validate_port():
     assert validate_port(80) == (True, "")
@@ -102,10 +126,11 @@ def test_validate_port():
     assert validate_port(-1)[0] is False
 
     # Type guard: non-integer inputs must be rejected cleanly, not raise TypeError
-    assert validate_port("80")[0] is False       # string
-    assert validate_port(80.5)[0] is False       # float
-    assert validate_port(True)[0] is False       # bool (subclass of int)
-    assert validate_port(None)[0] is False       # None
+    assert validate_port("80")[0] is False  # string
+    assert validate_port(80.5)[0] is False  # float
+    assert validate_port(True)[0] is False  # bool (subclass of int)
+    assert validate_port(None)[0] is False  # None
+
 
 def test_validate_url():
     assert validate_url("http://localhost:8080")[0] is True
@@ -121,13 +146,17 @@ def test_validate_url():
     assert validate_url("not_a_url")[0] is False
     assert validate_url("http://")[0] is False
 
+
 def test_sanitize_input():
     # Regular input should be unchanged
     assert sanitize_input("nmap -sV -p 80") == "nmap -sV -p 80"
 
     # Dangerous shell metacharacters should be removed
     assert sanitize_input("127.0.0.1; rm -rf /") == "127.0.0.1 rm -rf /"
-    assert sanitize_input("target.com | wget malicious.com") == "target.com  wget malicious.com"
+    assert (
+        sanitize_input("target.com | wget malicious.com")
+        == "target.com  wget malicious.com"
+    )
     assert sanitize_input("test & echo hacked") == "test  echo hacked"
 
     # Null byte: can truncate strings in C-backed tools (e.g. nmap)
@@ -138,6 +167,7 @@ def test_sanitize_input():
 
     # Output should be a plain string with no leading/trailing whitespace
     assert sanitize_input("  192.168.1.1  ") == "192.168.1.1"
+
 
 def test_is_safe_path():
     base = "/opt/secuscan/data"
@@ -152,11 +182,13 @@ def test_is_safe_path():
     assert is_safe_path("../../../etc/passwd", base) is False
     assert is_safe_path("subdir/../../etc/passwd", base) is False
 
+
 def test_match_pattern():
     assert match_pattern("http_inspector", "http_*") is True
     assert match_pattern("nmap", "nmap") is True
     assert match_pattern("tls_inspector", "*inspector") is True
     assert match_pattern("dirb", "http_*") is False
+
 
 def test_validate_port_range():
     # Single port
@@ -187,6 +219,7 @@ def test_validate_port_range():
     # Invalid: non-numeric
     assert validate_port_range("abc")[0] is False
     assert validate_port_range("80,bad")[0] is False
+
 
 class TestIsFilesystemTarget:
     """
@@ -291,6 +324,7 @@ class TestIsFilesystemTarget:
     def test_windows_lowercase_drive(self):
         assert is_filesystem_target(r"c:\users\repo") is True
 
+
 def test_validate_command_network_egress_log_only(monkeypatch):
     """Test that validate_command_network_egress permits execution with a warning when failure mode is 'log_only'"""
     from backend.secuscan.validation import validate_command_network_egress
@@ -304,19 +338,24 @@ def test_validate_command_network_egress_log_only(monkeypatch):
     command = ["curl", "http://10.0.0.1/"]
 
     # Under 'log_only' mode, egress violation is logged as a warning but allowed
-    ok, err = validate_command_network_egress(command, safe_mode=False, plugin_id="test", task_id="test-task")
+    ok, err = validate_command_network_egress(
+        command, safe_mode=False, plugin_id="test", task_id="test-task"
+    )
     assert ok is True
     assert err == ""
 
     # Under 'block' mode, it should be denied
     monkeypatch.setattr(settings, "network_policy_failure_mode", "block")
-    ok, err = validate_command_network_egress(command, safe_mode=False, plugin_id="test", task_id="test-task")
+    ok, err = validate_command_network_egress(
+        command, safe_mode=False, plugin_id="test", task_id="test-task"
+    )
     assert ok is False
     assert "network policy" in err.lower()
 
 
 def test_resolve_and_validate_target_rejects_raw_ip():
     from backend.secuscan.validation import resolve_and_validate_target
+
     ok, err = resolve_and_validate_target("http://10.0.0.1/webhook")
     assert ok is False
     assert "Raw IP" in err
@@ -324,6 +363,7 @@ def test_resolve_and_validate_target_rejects_raw_ip():
 
 def test_resolve_and_validate_target_rejects_bad_scheme():
     from backend.secuscan.validation import resolve_and_validate_target
+
     ok, err = resolve_and_validate_target("ftp://example.com/hook")
     assert ok is False
     assert "Scheme" in err
@@ -332,6 +372,7 @@ def test_resolve_and_validate_target_rejects_bad_scheme():
 def test_resolve_and_validate_target_rejects_blocked_port(monkeypatch):
     from backend.secuscan.validation import resolve_and_validate_target
     from backend.secuscan.config import settings
+
     monkeypatch.setattr(settings, "notification_allowed_ports", [80, 443])
     ok, err = resolve_and_validate_target("http://example.com:22/webhook")
     assert ok is False
@@ -341,12 +382,14 @@ def test_resolve_and_validate_target_rejects_blocked_port(monkeypatch):
 def test_resolve_and_validate_target_rejects_private_ip(monkeypatch):
     from backend.secuscan.validation import resolve_and_validate_target
     from backend.secuscan.config import settings
+
     monkeypatch.setattr(settings, "notification_blocked_ip_ranges", ["10.0.0.0/8"])
 
     def fake_getaddrinfo(*args, **kwargs):
         return [(socket.AF_INET, None, None, None, ("10.0.0.5", 80))]
 
     import socket
+
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
     ok, err = resolve_and_validate_target("http://internal.example.com/hook")
     assert ok is False
@@ -360,6 +403,7 @@ def test_resolve_and_validate_target_allows_public_ip(monkeypatch):
         return [(socket.AF_INET, None, None, None, ("93.184.216.34", 80))]
 
     import socket
+
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
     ok, err = resolve_and_validate_target("http://example.com/hook")
     assert ok is True
@@ -371,6 +415,7 @@ class TestValidateWebhookTarget:
 
     def test_rejects_no_hostname(self):
         from backend.secuscan.validation import validate_webhook_target
+
         ok, err = validate_webhook_target("not-a-url")
         assert ok is False
         assert "hostname" in err.lower()

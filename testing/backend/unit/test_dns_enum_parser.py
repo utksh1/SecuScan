@@ -19,9 +19,16 @@ def test_dns_enum_groups_repeated_record_hosts():
 
     assert result["count"] == 8
     assert len(result["findings"]) == 5
-    assert any("record values grouped into 5 readable DNS entries" in item for item in result["summary"])
+    assert any(
+        "record values grouped into 5 readable DNS entries" in item
+        for item in result["summary"]
+    )
 
-    soa = next(finding for finding in result["findings"] if finding["title"] == "DNS SOA Record: adi.ns.cloudflare.com")
+    soa = next(
+        finding
+        for finding in result["findings"]
+        if finding["title"] == "DNS SOA Record: adi.ns.cloudflare.com"
+    )
     assert "173.245.58.56" in soa["description"]
     assert "108.162.192.56" in soa["description"]
     assert soa["metadata"]["record_count"] == 2

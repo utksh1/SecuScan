@@ -45,7 +45,9 @@ def parse_plugins_md(catalog_path: Path) -> Dict[str, Dict[str, str]]:
 
     # Extract plugin index table using regex
     # Pattern: | Plugin Name | `plugin_id` | `category` | `safety` | ... |
-    table_pattern = r"\|\s*([^\|]+?)\s*\|\s*`([^`]+?)`\s*\|\s*`([^`]+?)`\s*\|\s*`([^`]+?)`"
+    table_pattern = (
+        r"\|\s*([^\|]+?)\s*\|\s*`([^`]+?)`\s*\|\s*`([^`]+?)`\s*\|\s*`([^`]+?)`"
+    )
 
     for match in re.finditer(table_pattern, catalog_text):
         name = match.group(1).strip()
@@ -85,8 +87,7 @@ def scan_actual_plugins(plugins_dir: Path) -> Dict[str, Dict[str, str]]:
         metadata_file = plugin_folder / "metadata.json"
         if not metadata_file.exists():
             print(
-                f"[WARNING] No metadata.json in {plugin_folder.name}",
-                file=sys.stderr
+                f"[WARNING] No metadata.json in {plugin_folder.name}", file=sys.stderr
             )
             continue
 
@@ -97,7 +98,11 @@ def scan_actual_plugins(plugins_dir: Path) -> Dict[str, Dict[str, str]]:
 
             # FIXED: Correctly parse safety level inner object from metadata.json
             safety_block = metadata.get("safety", {})
-            safety = safety_block.get("level", "unknown") if isinstance(safety_block, dict) else "unknown"
+            safety = (
+                safety_block.get("level", "unknown")
+                if isinstance(safety_block, dict)
+                else "unknown"
+            )
 
             plugins[plugin_id] = {
                 "id": plugin_id,
@@ -108,7 +113,7 @@ def scan_actual_plugins(plugins_dir: Path) -> Dict[str, Dict[str, str]]:
         except json.JSONDecodeError as e:
             print(
                 f"[WARNING] Invalid JSON in {plugin_folder.name}/metadata.json: {e}",
-                file=sys.stderr
+                file=sys.stderr,
             )
             continue
 
@@ -274,7 +279,9 @@ Examples:
     else:
         print("[✗] Catalog validation failed:")
         print()
-        print(f"DEBUG - Actual plugins found in folder: {sorted(list(scan_actual_plugins(plugins_path).keys()))}\n")
+        print(
+            f"DEBUG - Actual plugins found in folder: {sorted(list(scan_actual_plugins(plugins_path).keys()))}\n"
+        )
         for issue in issues:
             print(f"  • {issue}")
         print()

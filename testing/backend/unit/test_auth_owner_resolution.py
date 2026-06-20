@@ -19,6 +19,7 @@ def test_default_owner_id_value():
 
 def test_resolve_owner_id_with_x_user_id_header():
     """X-User-Id header with value returns prefixed owner ID."""
+
     class MockRequest:
         def __init__(self, headers):
             self.headers = headers
@@ -29,6 +30,7 @@ def test_resolve_owner_id_with_x_user_id_header():
 
 def test_resolve_owner_id_trims_whitespace():
     """Leading/trailing whitespace in X-User-Id is stripped."""
+
     class MockRequest:
         def __init__(self, headers):
             self.headers = headers
@@ -39,6 +41,7 @@ def test_resolve_owner_id_trims_whitespace():
 
 def test_resolve_owner_id_whitespace_only():
     """Whitespace-only X-User-Id falls back to DEFAULT_OWNER_ID."""
+
     class MockRequest:
         def __init__(self, headers):
             self.headers = headers
@@ -49,6 +52,7 @@ def test_resolve_owner_id_whitespace_only():
 
 def test_resolve_owner_id_empty_header():
     """Empty X-User-Id falls back to DEFAULT_OWNER_ID."""
+
     class MockRequest:
         def __init__(self, headers):
             self.headers = headers
@@ -59,6 +63,7 @@ def test_resolve_owner_id_empty_header():
 
 def test_resolve_owner_id_missing_header():
     """Missing X-User-Id falls back to DEFAULT_OWNER_ID."""
+
     class MockRequest:
         def __init__(self, headers):
             self.headers = headers
@@ -74,6 +79,7 @@ def test_resolve_owner_id_no_request():
 
 def test_resolve_owner_id_prefix_format():
     """Resolved owner ID always starts with 'user:' prefix."""
+
     class MockRequest:
         def __init__(self, headers):
             self.headers = headers

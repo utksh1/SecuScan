@@ -63,9 +63,9 @@ def test_build_report_payload_100x(bench_env, record_benchmark):
     print(
         f"\n[bench_build_report_payload_100x] Mean: {mean_ms:.2f}ms (threshold: {threshold}ms)"
     )
-    assert mean_ms < threshold, (
-        f"Mean payload build latency {mean_ms:.2f}ms exceeded threshold {threshold}ms"
-    )
+    assert (
+        mean_ms < threshold
+    ), f"Mean payload build latency {mean_ms:.2f}ms exceeded threshold {threshold}ms"
 
 
 @pytest.mark.benchmark
@@ -88,9 +88,9 @@ def test_normalize_1000_findings(bench_env, record_benchmark):
     print(
         f"\n[bench_normalize_1000_findings] Throughput: {throughput:.2f} calls/sec (threshold: {threshold} calls/sec)"
     )
-    assert throughput > threshold, (
-        f"Throughput {throughput:.2f} calls/sec was below threshold {threshold} calls/sec"
-    )
+    assert (
+        throughput > threshold
+    ), f"Throughput {throughput:.2f} calls/sec was below threshold {threshold} calls/sec"
 
 
 @pytest.mark.benchmark
@@ -113,6 +113,6 @@ def test_html_report_generate_10x(bench_env, record_benchmark):
     print(
         f"\n[bench_html_report_generate_10x] Mean: {mean_ms:.2f}ms (threshold: {threshold}ms)"
     )
-    assert mean_ms < threshold, (
-        f"Mean HTML report generation latency {mean_ms:.2f}ms exceeded threshold {threshold}ms"
-    )
+    assert (
+        mean_ms < threshold
+    ), f"Mean HTML report generation latency {mean_ms:.2f}ms exceeded threshold {threshold}ms"

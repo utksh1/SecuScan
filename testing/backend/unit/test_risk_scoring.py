@@ -14,8 +14,12 @@ class TestComputeRiskScore:
 
     def test_deterministic(self):
         """Same inputs always produce the same score."""
-        s1 = compute_risk_score("critical", exploitability=9.0, asset_exposure="critical", confidence=0.9)
-        s2 = compute_risk_score("critical", exploitability=9.0, asset_exposure="critical", confidence=0.9)
+        s1 = compute_risk_score(
+            "critical", exploitability=9.0, asset_exposure="critical", confidence=0.9
+        )
+        s2 = compute_risk_score(
+            "critical", exploitability=9.0, asset_exposure="critical", confidence=0.9
+        )
         assert s1 == s2
 
     def test_score_range(self):
@@ -68,7 +72,9 @@ class TestComputeRiskScore:
         """Finding from today gets max recency contribution."""
         today = datetime.now(timezone.utc)
         score = compute_risk_score("high", discovered_at=today)
-        recent_score = compute_risk_score("high", discovered_at=today - timedelta(days=365))
+        recent_score = compute_risk_score(
+            "high", discovered_at=today - timedelta(days=365)
+        )
         # Today should be higher than a year ago
         assert score > recent_score
 
@@ -82,7 +88,9 @@ class TestComputeRiskScore:
     def test_recency_none(self):
         """None discovered_at defaults to moderate recency (5.0)."""
         s1 = compute_risk_score("medium")
-        s2 = compute_risk_score("medium", discovered_at=datetime.now(timezone.utc) - timedelta(days=89))
+        s2 = compute_risk_score(
+            "medium", discovered_at=datetime.now(timezone.utc) - timedelta(days=89)
+        )
         assert s1 == s2
 
     def test_exploitability_clamping(self):
@@ -103,12 +111,26 @@ class TestComputeRiskFactors:
         factors = compute_risk_factors("critical")
         assert len(factors) == 5
         keys = {f["factor"] for f in factors}
-        assert keys == {"severity", "exploitability", "asset_exposure", "recency", "confidence"}
+        assert keys == {
+            "severity",
+            "exploitability",
+            "asset_exposure",
+            "recency",
+            "confidence",
+        }
 
     def test_contributions_sum_to_score(self):
         """Sum of weighted contributions equals the risk score."""
-        score = compute_risk_score("high", exploitability=7.0, asset_exposure="high", confidence=0.8)
-        factors = compute_risk_factors("high", exploitability=7.0, asset_exposure="high", confidence=0.8, risk_score=score)
+        score = compute_risk_score(
+            "high", exploitability=7.0, asset_exposure="high", confidence=0.8
+        )
+        factors = compute_risk_factors(
+            "high",
+            exploitability=7.0,
+            asset_exposure="high",
+            confidence=0.8,
+            risk_score=score,
+        )
         total = sum(f["contribution"] for f in factors)
         # Rounding may cause 0.01 delta
         assert abs(total - score) < 0.1
@@ -121,7 +143,9 @@ class TestComputeRiskFactors:
 
     def test_risk_factors_provide_detail(self):
         """Each factor has a non-empty detail string."""
-        factors = compute_risk_factors("critical", exploitability=9.0, asset_exposure="critical", confidence=0.95)
+        factors = compute_risk_factors(
+            "critical", exploitability=9.0, asset_exposure="critical", confidence=0.95
+        )
         for f in factors:
             assert f["detail"], f"Factor {f['factor']} missing detail"
 
@@ -142,7 +166,14 @@ class TestFindingModelWithRiskFields:
             confidence=0.95,
             asset_exposure="critical",
             risk_score=8.7,
-            risk_factors=[{"factor": "severity", "score": 10.0, "weight": 0.30, "contribution": 3.0}],
+            risk_factors=[
+                {
+                    "factor": "severity",
+                    "score": 10.0,
+                    "weight": 0.30,
+                    "contribution": 3.0,
+                }
+            ],
         )
         assert finding.exploitability == 8.5
         assert finding.confidence == 0.95
@@ -174,17 +205,20 @@ class TestRiskFieldValidation:
     def test_exploitability_negative_raises(self):
         from backend.secuscan.executor import _validate_risk_fields
         import pytest
+
         with pytest.raises(ValueError, match="exploitability must be in"):
             _validate_risk_fields({"exploitability": -1, "severity": "medium"})
 
     def test_exploitability_too_high_raises(self):
         from backend.secuscan.executor import _validate_risk_fields
         import pytest
+
         with pytest.raises(ValueError, match="exploitability must be in"):
             _validate_risk_fields({"exploitability": 11, "severity": "medium"})
 
     def test_exploitability_valid(self):
         from backend.secuscan.executor import _validate_risk_fields
+
         # Should not raise
         _validate_risk_fields({"exploitability": 5.0, "severity": "medium"})
         _validate_risk_fields({"exploitability": 0, "severity": "medium"})
@@ -193,17 +227,20 @@ class TestRiskFieldValidation:
     def test_confidence_negative_raises(self):
         from backend.secuscan.executor import _validate_risk_fields
         import pytest
+
         with pytest.raises(ValueError, match="confidence must be in"):
             _validate_risk_fields({"confidence": -0.1, "severity": "medium"})
 
     def test_confidence_too_high_raises(self):
         from backend.secuscan.executor import _validate_risk_fields
         import pytest
+
         with pytest.raises(ValueError, match="confidence must be in"):
             _validate_risk_fields({"confidence": 1.1, "severity": "medium"})
 
     def test_confidence_valid(self):
         from backend.secuscan.executor import _validate_risk_fields
+
         _validate_risk_fields({"confidence": 0.0, "severity": "medium"})
         _validate_risk_fields({"confidence": 0.5, "severity": "medium"})
         _validate_risk_fields({"confidence": 1.0, "severity": "medium"})
@@ -211,23 +248,27 @@ class TestRiskFieldValidation:
     def test_asset_exposure_invalid_raises(self):
         from backend.secuscan.executor import _validate_risk_fields
         import pytest
+
         with pytest.raises(ValueError, match="asset_exposure must be one of"):
             _validate_risk_fields({"asset_exposure": "extreme", "severity": "medium"})
 
     def test_asset_exposure_valid(self):
         from backend.secuscan.executor import _validate_risk_fields
+
         for val in ("critical", "high", "medium", "low"):
             _validate_risk_fields({"asset_exposure": val, "severity": "medium"})
 
     def test_non_numeric_exploitability_raises(self):
         from backend.secuscan.executor import _validate_risk_fields
         import pytest
+
         with pytest.raises(ValueError, match="exploitability must be numeric"):
             _validate_risk_fields({"exploitability": "high", "severity": "medium"})
 
     def test_non_numeric_confidence_raises(self):
         from backend.secuscan.executor import _validate_risk_fields
         import pytest
+
         with pytest.raises(ValueError, match="confidence must be numeric"):
             _validate_risk_fields({"confidence": "yes", "severity": "medium"})
 
@@ -238,6 +279,7 @@ class TestParseDiscoveredAt:
     def test_parse_discovered_at_string(self):
         from backend.secuscan.executor import _parse_discovered_at
         from datetime import datetime, timezone
+
         dt = _parse_discovered_at({"discovered_at": "2026-05-20T12:00:00"})
         assert dt is not None
         assert dt.year == 2026
@@ -247,6 +289,7 @@ class TestParseDiscoveredAt:
     def test_parse_discovered_at_datetime(self):
         from backend.secuscan.executor import _parse_discovered_at
         from datetime import datetime, timezone
+
         now = datetime.now(timezone.utc)
         dt = _parse_discovered_at({"discovered_at": now})
         assert dt == now
@@ -254,6 +297,7 @@ class TestParseDiscoveredAt:
     def test_parse_discovered_at_missing_uses_now(self):
         from backend.secuscan.executor import _parse_discovered_at
         from datetime import datetime, timezone
+
         dt = _parse_discovered_at({})
         assert dt is not None
         now = datetime.now(timezone.utc)
@@ -262,6 +306,7 @@ class TestParseDiscoveredAt:
     def test_parse_discovered_at_invalid_falls_back_to_now(self):
         from backend.secuscan.executor import _parse_discovered_at
         from datetime import datetime, timezone
+
         dt = _parse_discovered_at({"discovered_at": "not-a-date"})
         assert dt is not None
         now = datetime.now(timezone.utc)
@@ -270,6 +315,7 @@ class TestParseDiscoveredAt:
     def test_recency_with_real_timestamp(self):
         """Score differs when a real discovered_at is passed vs None."""
         from datetime import datetime, timezone, timedelta
+
         today = datetime.now(timezone.utc)
         recent = compute_risk_score("high", discovered_at=today)
         old = compute_risk_score("high", discovered_at=today - timedelta(days=400))
@@ -279,7 +325,10 @@ class TestParseDiscoveredAt:
     def test_risk_factors_with_real_timestamp(self):
         """Factor detail includes actual discovered_at."""
         from datetime import datetime, timezone
-        factors = compute_risk_factors("medium", discovered_at=datetime(2026, 5, 20, tzinfo=timezone.utc))
+
+        factors = compute_risk_factors(
+            "medium", discovered_at=datetime(2026, 5, 20, tzinfo=timezone.utc)
+        )
         recency = [f for f in factors if f["factor"] == "recency"][0]
         assert "2026-05-20" in recency["value"]
 
@@ -288,7 +337,9 @@ class TestBackfillRiskScores:
     """Tests for backfilling risk scores on existing findings."""
 
     @pytest.mark.asyncio
-    async def test_backfill_sets_risk_score_on_null_findings(self, setup_test_environment):
+    async def test_backfill_sets_risk_score_on_null_findings(
+        self, setup_test_environment
+    ):
         """Findings with NULL risk_score get a computed score after backfill."""
         from backend.secuscan.config import settings
         from backend.secuscan.database import init_db, get_db
@@ -306,12 +357,25 @@ class TestBackfillRiskScores:
                 risk_score, risk_factors_json
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '[]')
             """,
-            (finding_id, "task-1", "test", "Test Finding", "test",
-             "critical", "example.com", "XSS vulnerability",
-             "2026-05-20T12:00:00", 8.0, 0.9, "critical"),
+            (
+                finding_id,
+                "task-1",
+                "test",
+                "Test Finding",
+                "test",
+                "critical",
+                "example.com",
+                "XSS vulnerability",
+                "2026-05-20T12:00:00",
+                8.0,
+                0.9,
+                "critical",
+            ),
         )
 
-        row = await db.fetchone("SELECT risk_score FROM findings WHERE id = ?", (finding_id,))
+        row = await db.fetchone(
+            "SELECT risk_score FROM findings WHERE id = ?", (finding_id,)
+        )
         assert row["risk_score"] is None
 
         await db._backfill_risk_scores()
@@ -343,12 +407,24 @@ class TestBackfillRiskScores:
                 target, description, discovered_at, risk_score, risk_factors_json
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (finding_id, "task-2", "test", "Already Scored", "test",
-             "high", "example.com", "Old finding",
-             "2026-01-01T00:00:00", 5.0, '[{"factor":"severity","score":5}]'),
+            (
+                finding_id,
+                "task-2",
+                "test",
+                "Already Scored",
+                "test",
+                "high",
+                "example.com",
+                "Old finding",
+                "2026-01-01T00:00:00",
+                5.0,
+                '[{"factor":"severity","score":5}]',
+            ),
         )
 
         await db._backfill_risk_scores()
 
-        row = await db.fetchone("SELECT risk_score FROM findings WHERE id = ?", (finding_id,))
+        row = await db.fetchone(
+            "SELECT risk_score FROM findings WHERE id = ?", (finding_id,)
+        )
         assert row["risk_score"] == 5.0

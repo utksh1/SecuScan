@@ -55,9 +55,8 @@ def test_crawler_passes_validator():
     the checksum field is absent or malformed.
     """
     result = PluginMetadataValidator(PLUGIN_DIR).validate()
-    assert result.valid, (
-        "Plugin validation errors:\n"
-        + "\n".join(e.display() for e in result.errors)
+    assert result.valid, "Plugin validation errors:\n" + "\n".join(
+        e.display() for e in result.errors
     )
 
 
@@ -88,9 +87,9 @@ def test_crawler_target_field_requires_http_url():
     fields = {f["id"]: f for f in data["fields"]}
     target_validation = fields["target"].get("validation", {})
     pattern = target_validation.get("pattern", "")
-    assert "https?" in pattern or "http" in pattern, (
-        "target field must validate for HTTP(S) URL format"
-    )
+    assert (
+        "https?" in pattern or "http" in pattern
+    ), "target field must validate for HTTP(S) URL format"
 
 
 def test_crawler_has_optional_depth_field_with_default():
@@ -156,9 +155,9 @@ def test_crawler_command_uses_default_depth(setup_test_environment):
     assert command is not None
     assert "-depth" in command
     depth_idx = command.index("-depth")
-    assert command[depth_idx + 1] == "2", (
-        f"Default depth must be '2'. Got: {command[depth_idx + 1]}"
-    )
+    assert (
+        command[depth_idx + 1] == "2"
+    ), f"Default depth must be '2'. Got: {command[depth_idx + 1]}"
 
 
 def test_crawler_command_full_token_sequence(setup_test_environment):
@@ -168,9 +167,14 @@ def test_crawler_command_full_token_sequence(setup_test_environment):
 
     command = manager.build_command("crawler", {"target": "https://secuscan.in"})
 
-    assert command == ["katana", "-u", "https://secuscan.in", "-depth", "2", "-silent"], (
-        f"Command template drift detected. Got: {command}"
-    )
+    assert command == [
+        "katana",
+        "-u",
+        "https://secuscan.in",
+        "-depth",
+        "2",
+        "-silent",
+    ], f"Command template drift detected. Got: {command}"
 
 
 def test_crawler_command_respects_explicit_depth(setup_test_environment):
@@ -178,13 +182,15 @@ def test_crawler_command_respects_explicit_depth(setup_test_environment):
     manager = PluginManager(str(PLUGINS_DIR))
     asyncio.run(manager.load_plugins())
 
-    command = manager.build_command("crawler", {"target": "https://example.com", "depth": 5})
+    command = manager.build_command(
+        "crawler", {"target": "https://example.com", "depth": 5}
+    )
 
     assert command is not None
     depth_idx = command.index("-depth")
-    assert command[depth_idx + 1] == "5", (
-        f"Explicit depth=5 must override default. Got: {command[depth_idx + 1]}"
-    )
+    assert (
+        command[depth_idx + 1] == "5"
+    ), f"Explicit depth=5 must override default. Got: {command[depth_idx + 1]}"
 
 
 def test_crawler_drops_target_token_when_absent(setup_test_environment):
@@ -252,7 +258,14 @@ def test_crawler_parser_finding_has_required_keys():
     result = parse(_CRAWLER_OUTPUT_FIXTURE)
     assert result["findings"], "Expected at least one finding"
     for finding in result["findings"]:
-        for key in ("title", "category", "severity", "description", "remediation", "metadata"):
+        for key in (
+            "title",
+            "category",
+            "severity",
+            "description",
+            "remediation",
+            "metadata",
+        ):
             assert key in finding, f"Finding missing key: {key}"
 
 
@@ -260,8 +273,10 @@ def test_crawler_parser_critical_and_injection_raise_to_high():
     """Lines containing 'critical' or 'injection' must be classified as 'high' severity."""
     result = parse(_CRAWLER_OUTPUT_FIXTURE)
     high_findings = [
-        f for f in result["findings"]
-        if "critical" in f["description"].lower() or "injection" in f["description"].lower()
+        f
+        for f in result["findings"]
+        if "critical" in f["description"].lower()
+        or "injection" in f["description"].lower()
     ]
     assert high_findings, "Expected at least one high-severity finding"
     for finding in high_findings:
@@ -272,8 +287,11 @@ def test_crawler_parser_exposed_or_found_is_at_least_low():
     """Lines containing 'exposed', 'found', or 'detected' must be at least 'low' severity."""
     result = parse(_CRAWLER_OUTPUT_FIXTURE)
     flagged = [
-        f for f in result["findings"]
-        if any(kw in f["description"].lower() for kw in ("exposed", "found", "detected"))
+        f
+        for f in result["findings"]
+        if any(
+            kw in f["description"].lower() for kw in ("exposed", "found", "detected")
+        )
     ]
     assert flagged, "Expected at least one low-severity finding from flagged keywords"
     for finding in flagged:
@@ -283,7 +301,9 @@ def test_crawler_parser_exposed_or_found_is_at_least_low():
 def test_crawler_parser_items_list_matches_non_empty_lines():
     """items must contain each non-empty line from the output."""
     result = parse(_CRAWLER_OUTPUT_FIXTURE)
-    expected_lines = [l.strip() for l in _CRAWLER_OUTPUT_FIXTURE.splitlines() if l.strip()]
+    expected_lines = [
+        l.strip() for l in _CRAWLER_OUTPUT_FIXTURE.splitlines() if l.strip()
+    ]
     assert result["items"] == expected_lines
 
 
@@ -300,4 +320,6 @@ def test_crawler_parser_preserves_raw_line_in_metadata():
     single_line = "https://example.com/admin [found]\n"
     result = parse(single_line)
     assert result["findings"]
-    assert result["findings"][0]["metadata"]["raw"] == "https://example.com/admin [found]"
+    assert (
+        result["findings"][0]["metadata"]["raw"] == "https://example.com/admin [found]"
+    )

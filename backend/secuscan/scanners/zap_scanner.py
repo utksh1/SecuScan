@@ -57,10 +57,15 @@ class ZAPScanner(BaseScanner):
             "findings": findings,
             "crawl": crawl,
             "zap_output_excerpt": raw_output[:4000],
-            "rows": [{"url": page.get("url"), "type": "page"} for page in crawl.get("pages", [])[:100]],
+            "rows": [
+                {"url": page.get("url"), "type": "page"}
+                for page in crawl.get("pages", [])[:100]
+            ],
         }
 
-    def _build_passive_findings(self, target: str, crawl: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _build_passive_findings(
+        self, target: str, crawl: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         findings: List[Dict[str, Any]] = []
         forms = crawl.get("forms", [])
         if forms:
@@ -75,7 +80,10 @@ class ZAPScanner(BaseScanner):
                     "validated": True,
                     "validation_method": "passive_crawl",
                     "confidence_reason": "Forms were parsed directly from the target HTML surface.",
-                    "evidence": [{"type": "form", "value": form.get("action")} for form in forms[:10]],
+                    "evidence": [
+                        {"type": "form", "value": form.get("action")}
+                        for form in forms[:10]
+                    ],
                     "references": [],
                     "metadata": {"form_count": len(forms)},
                 }

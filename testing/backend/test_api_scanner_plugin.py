@@ -55,9 +55,8 @@ def test_api_scanner_passes_validator():
     the checksum field is absent or malformed.
     """
     result = PluginMetadataValidator(PLUGIN_DIR).validate()
-    assert result.valid, (
-        "Plugin validation errors:\n"
-        + "\n".join(e.display() for e in result.errors)
+    assert result.valid, "Plugin validation errors:\n" + "\n".join(
+        e.display() for e in result.errors
     )
 
 
@@ -125,7 +124,9 @@ def test_api_scanner_command_renders_with_target(setup_test_environment):
     manager = PluginManager(str(PLUGINS_DIR))
     asyncio.run(manager.load_plugins())
 
-    command = manager.build_command("api_scanner", {"target": "https://api.example.com"})
+    command = manager.build_command(
+        "api_scanner", {"target": "https://api.example.com"}
+    )
 
     assert command is not None, "build_command returned None for valid inputs"
     assert command[0] == "nuclei"
@@ -139,11 +140,16 @@ def test_api_scanner_command_full_token_sequence(setup_test_environment):
     manager = PluginManager(str(PLUGINS_DIR))
     asyncio.run(manager.load_plugins())
 
-    command = manager.build_command("api_scanner", {"target": "https://api.secuscan.in"})
-
-    assert command == ["nuclei", "-u", "https://api.secuscan.in", "-silent"], (
-        f"Command template drift detected. Got: {command}"
+    command = manager.build_command(
+        "api_scanner", {"target": "https://api.secuscan.in"}
     )
+
+    assert command == [
+        "nuclei",
+        "-u",
+        "https://api.secuscan.in",
+        "-silent",
+    ], f"Command template drift detected. Got: {command}"
 
 
 def test_api_scanner_drops_target_token_when_absent(setup_test_environment):
@@ -160,7 +166,9 @@ def test_api_scanner_drops_target_token_when_absent(setup_test_environment):
     assert not any("{" in token for token in rendered), "Unresolved placeholder leaked"
     assert rendered == ["nuclei", "-u", "-silent"]
 
-    populated = manager.build_command("api_scanner", {"target": "https://api.example.com"})
+    populated = manager.build_command(
+        "api_scanner", {"target": "https://api.example.com"}
+    )
     assert "https://api.example.com" in populated
     assert len(populated) == len(rendered) + 1
 
@@ -208,7 +216,14 @@ def test_api_scanner_parser_finding_has_required_keys():
     result = parse(_API_SCAN_TEXT_FIXTURE)
     assert result["findings"], "Expected at least one finding"
     for finding in result["findings"]:
-        for key in ("title", "category", "severity", "description", "remediation", "metadata"):
+        for key in (
+            "title",
+            "category",
+            "severity",
+            "description",
+            "remediation",
+            "metadata",
+        ):
             assert key in finding, f"Finding missing key: {key}"
 
 
@@ -216,17 +231,22 @@ def test_api_scanner_parser_critical_keyword_raises_severity():
     """Lines containing 'critical' or 'injection' must be classified as 'high' severity."""
     result = parse(_API_SCAN_TEXT_FIXTURE)
     high_findings = [f for f in result["findings"] if f["severity"] == "high"]
-    assert len(high_findings) >= 1, "Expected at least one high-severity finding from critical/injection lines"
+    assert (
+        len(high_findings) >= 1
+    ), "Expected at least one high-severity finding from critical/injection lines"
 
 
 def test_api_scanner_parser_low_severity_for_exposed():
     """Lines containing 'exposed' or 'found' but not critical keywords must be 'low' severity."""
     result = parse(_API_SCAN_TEXT_FIXTURE)
-    exposed_lines = [f for f in result["findings"] if "exposed" in f["description"].lower()]
+    exposed_lines = [
+        f for f in result["findings"] if "exposed" in f["description"].lower()
+    ]
     for finding in exposed_lines:
-        assert finding["severity"] in ("low", "high"), (
-            f"Unexpected severity '{finding['severity']}' for exposed finding"
-        )
+        assert finding["severity"] in (
+            "low",
+            "high",
+        ), f"Unexpected severity '{finding['severity']}' for exposed finding"
 
 
 def test_api_scanner_parser_empty_output():
@@ -242,7 +262,11 @@ def test_api_scanner_parser_preserves_raw_line_in_metadata():
     single_line = "https://api.example.com/v1/tokens [GET] [exposed]\n"
     result = parse(single_line)
     assert result["findings"]
-    assert result["findings"][0]["metadata"]["raw"] == "https://api.example.com/v1/tokens [GET] [exposed]"
+    assert (
+        result["findings"][0]["metadata"]["raw"]
+        == "https://api.example.com/v1/tokens [GET] [exposed]"
+    )
+
 
 def test_api_scanner_parser_handles_paginated_fixture():
     """
@@ -266,6 +290,7 @@ def test_api_scanner_parser_handles_paginated_fixture():
     assert result["count"] == 4
     assert len(result["findings"]) == 4
     assert len(result["items"]) == 4
+
 
 def test_api_scanner_parser_handles_chunked_response_fixture():
     """

@@ -1,5 +1,6 @@
 from scripts.validate_doc_anchors import slugify, validate_file
 
+
 def test_detects_missing_anchor(tmp_path):
     doc = tmp_path / "sample.md"
 
@@ -24,6 +25,7 @@ def test_valid_anchor_passes(tmp_path):
     failures = validate_file(doc)
 
     assert failures == []
+
 
 def test_slugify_heading():
     assert slugify("Incident Response Runbook") == "incident-response-runbook"

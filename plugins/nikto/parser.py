@@ -40,7 +40,10 @@ def _load_json_payload(output: str) -> Optional[Any]:
 
 def _parse_json_output(data: Any, raw_output: str) -> Dict[str, Any]:
     vulnerabilities = list(_iter_vulnerabilities(data))
-    findings = [_finding_from_vulnerability(vuln, idx) for idx, vuln in enumerate(vulnerabilities, start=1)]
+    findings = [
+        _finding_from_vulnerability(vuln, idx)
+        for idx, vuln in enumerate(vulnerabilities, start=1)
+    ]
 
     return {
         "findings": findings,
@@ -71,7 +74,11 @@ def _iter_vulnerabilities(data: Any) -> Iterable[Dict[str, Any]]:
     # Some Nikto JSON variants nest scan data under host-like keys.
     for value in data.values():
         if isinstance(value, dict):
-            nested = value.get("vulnerabilities") or value.get("findings") or value.get("results")
+            nested = (
+                value.get("vulnerabilities")
+                or value.get("findings")
+                or value.get("results")
+            )
             if isinstance(nested, list):
                 for item in nested:
                     if isinstance(item, dict):
@@ -79,7 +86,10 @@ def _iter_vulnerabilities(data: Any) -> Iterable[Dict[str, Any]]:
 
 
 def _finding_from_vulnerability(vuln: Dict[str, Any], index: int) -> Dict[str, Any]:
-    message = _first_string(vuln, "msg", "message", "description", "Description") or "Nikto finding"
+    message = (
+        _first_string(vuln, "msg", "message", "description", "Description")
+        or "Nikto finding"
+    )
     url = _first_string(vuln, "url", "uri", "path", "URL")
     method = _first_string(vuln, "method", "Method")
     nikto_id = _first_string(vuln, "id", "nikto_id", "NiktoID")
@@ -125,11 +135,19 @@ def _parse_text_output(output: str) -> Dict[str, Any]:
         key, value = _split_status_line(clean)
         if key:
             normalized_key = key.lower().replace(" ", "_")
-            if normalized_key in {"target_ip", "target_hostname", "target_port", "start_time", "end_time"}:
+            if normalized_key in {
+                "target_ip",
+                "target_hostname",
+                "target_port",
+                "start_time",
+                "end_time",
+            }:
                 metadata[normalized_key] = value
                 continue
             if normalized_key == "server":
-                findings.append(_text_finding("Server banner disclosed", value, proof=clean))
+                findings.append(
+                    _text_finding("Server banner disclosed", value, proof=clean)
+                )
                 continue
 
         if _is_summary_line(clean):
@@ -186,7 +204,9 @@ def _parse_finding_line(line: str, index: int) -> Optional[Dict[str, Any]]:
     }
 
 
-def _text_finding(title: str, message: str, proof: Optional[str] = None) -> Dict[str, Any]:
+def _text_finding(
+    title: str, message: str, proof: Optional[str] = None
+) -> Dict[str, Any]:
     return {
         "title": title,
         "category": "Information Disclosure",
@@ -280,7 +300,11 @@ def _description(
 
 def _category_from_message(message: str) -> str:
     lower = message.lower()
-    if "header" in lower or "clickjacking" in lower or "content-security-policy" in lower:
+    if (
+        "header" in lower
+        or "clickjacking" in lower
+        or "content-security-policy" in lower
+    ):
         return "Security Headers"
     if "cookie" in lower:
         return "Cookie Security"
@@ -336,7 +360,9 @@ def _remediation_for_message(message: str) -> str:
     if "cookie" in lower:
         return "Set secure cookie attributes such as HttpOnly, Secure, and SameSite where appropriate."
     if "directory indexing" in lower:
-        return "Disable directory listing and restrict direct access to sensitive paths."
+        return (
+            "Disable directory listing and restrict direct access to sensitive paths."
+        )
     if "method" in lower or "options" in lower:
         return "Disable unnecessary HTTP methods and restrict methods to the minimum required set."
     if "outdated" in lower or "vulnerable" in lower or "cve-" in lower:

@@ -10,7 +10,7 @@ def sample_task():
         "status": "completed",
         "created_at": "2026-05-14T10:30:00",
         "preset": "standard",
-        "inputs_json": "{\"target\": \"https://example.com\", \"display_options\": \"EPV\", \"safe_mode\": true}",
+        "inputs_json": '{"target": "https://example.com", "display_options": "EPV", "safe_mode": true}',
         "command_used": "nikto -h https://example.com -Display EPV -Format json -output -",
     }
 
@@ -64,10 +64,21 @@ def test_generate_pdf_report_handles_long_wrapping_content():
     }
     result = sample_result()
     finding = result["structured"]["findings"][0]
-    finding["title"] = "Long finding title that should wrap cleanly without colliding with the severity badge"
-    finding["description"] = " ".join(["This description should wrap through several lines."] * 35)
-    finding["proof"] = "\n".join([f"evidence-line-{index}: HTTP 200 with unexpected exposure" for index in range(40)])
-    finding["remediation"] = " ".join(["Apply layered access controls and verify the exposed surface again."] * 20)
+    finding[
+        "title"
+    ] = "Long finding title that should wrap cleanly without colliding with the severity badge"
+    finding["description"] = " ".join(
+        ["This description should wrap through several lines."] * 35
+    )
+    finding["proof"] = "\n".join(
+        [
+            f"evidence-line-{index}: HTTP 200 with unexpected exposure"
+            for index in range(40)
+        ]
+    )
+    finding["remediation"] = " ".join(
+        ["Apply layered access controls and verify the exposed surface again."] * 20
+    )
 
     pdf_bytes = ReportGenerator.generate_pdf_report(task, result)
 
@@ -90,5 +101,12 @@ def test_build_report_payload_includes_parameters_and_command():
     payload = ReportGenerator._build_report_payload(sample_task(), sample_result())
 
     labels = {item["label"] for item in payload["scan_parameters"]}
-    assert {"Target", "Plugin", "Preset", "Display Options", "Safe Mode", "Command"} <= labels
+    assert {
+        "Target",
+        "Plugin",
+        "Preset",
+        "Display Options",
+        "Safe Mode",
+        "Command",
+    } <= labels
     assert payload["command_used"].startswith("nikto -h")

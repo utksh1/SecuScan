@@ -1,6 +1,7 @@
 import pytest
 from backend.secuscan.reporting import ReportGenerator
 
+
 @pytest.fixture
 def sample_task():
     return {
@@ -12,10 +13,9 @@ def sample_task():
         "created_at": "2026-06-17T12:00:00.000000Z",
         "preset": "Full Scan",
         "command_used": "test-scanner --target example.com",
-        "inputs": {
-            "depth": "deep"
-        }
+        "inputs": {"depth": "deep"},
     }
+
 
 @pytest.fixture
 def sample_result():
@@ -42,26 +42,20 @@ def sample_result():
                 "proof": "<script>alert(1)</script>",
                 "remediation": "Escape user input in output HTML rendering.",
                 "validated": False,
-            }
+            },
         ],
-        "structured": {
-            "rows": []
-        },
+        "structured": {"rows": []},
         "summary": ["Scan completed successfully."],
-        "errors": []
+        "errors": [],
     }
 
+
 def test_generate_severity_chart():
-    severity_counts = {
-        "CRITICAL": 1,
-        "HIGH": 2,
-        "MEDIUM": 0,
-        "LOW": 4,
-        "INFO": 0
-    }
+    severity_counts = {"CRITICAL": 1, "HIGH": 2, "MEDIUM": 0, "LOW": 4, "INFO": 0}
     chart_data = ReportGenerator._generate_severity_chart(severity_counts)
     assert isinstance(chart_data, str)
     assert chart_data.startswith("data:image/png;base64,")
+
 
 def test_html_report_contains_chart(sample_task, sample_result):
     html_report = ReportGenerator.generate_html_report(sample_task, sample_result)

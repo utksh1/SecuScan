@@ -22,6 +22,7 @@ from backend.secuscan.database import init_db
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def seed_findings(db_path: str, count: int = 100):
     """Insert `count` findings with mixed severities into the test DB."""
     severities = ["critical", "high", "medium", "low", "info"]
@@ -64,23 +65,23 @@ def get_index_names(db_path: str) -> set:
 
 # ── Index existence tests ─────────────────────────────────────────────────────
 
-class TestDatabaseIndexes:
 
+class TestDatabaseIndexes:
     def test_findings_severity_index_exists(self, setup_test_environment):
         """idx_findings_severity must exist for GROUP BY severity queries."""
         asyncio.run(init_db(settings.database_path))
         indexes = get_index_names(settings.database_path)
-        assert "idx_findings_severity" in indexes, (
-            "Missing idx_findings_severity — dashboard GROUP BY severity will do a full scan"
-        )
+        assert (
+            "idx_findings_severity" in indexes
+        ), "Missing idx_findings_severity — dashboard GROUP BY severity will do a full scan"
 
     def test_findings_discovered_at_index_exists(self, setup_test_environment):
         """idx_findings_discovered_at must exist for ORDER BY discovered_at DESC."""
         asyncio.run(init_db(settings.database_path))
         indexes = get_index_names(settings.database_path)
-        assert "idx_findings_discovered_at" in indexes, (
-            "Missing idx_findings_discovered_at — findings list ORDER BY will do a full scan"
-        )
+        assert (
+            "idx_findings_discovered_at" in indexes
+        ), "Missing idx_findings_discovered_at — findings list ORDER BY will do a full scan"
 
     def test_findings_task_id_index_exists(self, setup_test_environment):
         """idx_findings_task_id must exist for foreign key lookups."""
@@ -88,7 +89,9 @@ class TestDatabaseIndexes:
         indexes = get_index_names(settings.database_path)
         assert "idx_findings_task_id" in indexes
 
-    def test_findings_task_severity_composite_index_exists(self, setup_test_environment):
+    def test_findings_task_severity_composite_index_exists(
+        self, setup_test_environment
+    ):
         """idx_findings_task_severity composite index must exist."""
         asyncio.run(init_db(settings.database_path))
         indexes = get_index_names(settings.database_path)
@@ -133,9 +136,11 @@ class TestDatabaseIndexes:
 
 # ── Dashboard query correctness tests ─────────────────────────────────────────
 
-class TestDashboardQueryCorrectness:
 
-    def test_dashboard_severity_counts_correct(self, test_client, setup_test_environment):
+class TestDashboardQueryCorrectness:
+    def test_dashboard_severity_counts_correct(
+        self, test_client, setup_test_environment
+    ):
         """Dashboard must return correct severity counts from seeded findings."""
         seed_findings(settings.database_path, count=50)
 
@@ -159,9 +164,9 @@ class TestDashboardQueryCorrectness:
         assert r.status_code == 200
         data = r.json()
 
-        assert len(data["recent_findings"]) <= 5, (
-            "Dashboard must fetch at most 5 recent findings — not the full table"
-        )
+        assert (
+            len(data["recent_findings"]) <= 5
+        ), "Dashboard must fetch at most 5 recent findings — not the full table"
 
     def test_dashboard_empty_findings(self, test_client, setup_test_environment):
         """Dashboard must handle zero findings without errors."""
@@ -188,10 +193,17 @@ class TestDashboardQueryCorrectness:
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    str(uuid.uuid4()), str(uuid.uuid4()), "test_plugin",
-                    f"Critical Finding {i}", "test", "critical",
-                    "10.0.0.1", "Critical issue", "Patch immediately",
-                    datetime.now(timezone.utc).isoformat(), json.dumps({}),
+                    str(uuid.uuid4()),
+                    str(uuid.uuid4()),
+                    "test_plugin",
+                    f"Critical Finding {i}",
+                    "test",
+                    "critical",
+                    "10.0.0.1",
+                    "Critical issue",
+                    "Patch immediately",
+                    datetime.now(timezone.utc).isoformat(),
+                    json.dumps({}),
                 ),
             )
         conn.commit()

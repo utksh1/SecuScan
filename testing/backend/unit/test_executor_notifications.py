@@ -12,7 +12,9 @@ from backend.secuscan.models import TaskStatus
 
 
 @pytest.mark.asyncio
-async def test_execute_task_dispatches_notifications_after_findings(setup_test_environment):
+async def test_execute_task_dispatches_notifications_after_findings(
+    setup_test_environment,
+):
     """Successful task completion should trigger process_task_notifications."""
     await init_db(settings.database_path)
     db = await get_db()
@@ -83,7 +85,9 @@ async def test_execute_task_dispatches_notifications_after_findings(setup_test_e
 
 
 @pytest.mark.asyncio
-async def test_execute_task_survives_notification_dispatch_failure(setup_test_environment):
+async def test_execute_task_survives_notification_dispatch_failure(
+    setup_test_environment,
+):
     """Notification errors must not prevent task completion."""
     await init_db(settings.database_path)
     db = await get_db()

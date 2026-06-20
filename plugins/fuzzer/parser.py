@@ -8,9 +8,15 @@ def parse(output: str) -> Dict[str, Any]:
     for line in lines[:300]:
         severity = "info"
         low_line = line.lower()
-        if any(keyword in low_line for keyword in ["open", "found", "vuln", "warning", "detected", "exposed"]):
+        if any(
+            keyword in low_line
+            for keyword in ["open", "found", "vuln", "warning", "detected", "exposed"]
+        ):
             severity = "low"
-        if any(keyword in low_line for keyword in ["critical", "exploit", "injection", "compromised"]):
+        if any(
+            keyword in low_line
+            for keyword in ["critical", "exploit", "injection", "compromised"]
+        ):
             severity = "high"
 
         findings.append(

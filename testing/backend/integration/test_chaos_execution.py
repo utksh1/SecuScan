@@ -49,6 +49,7 @@ import pytest_asyncio
 # Fixture
 # ---------------------------------------------------------------------------
 
+
 @pytest_asyncio.fixture
 async def chaos_env(setup_test_environment):
     """
@@ -104,6 +105,7 @@ async def chaos_env(setup_test_environment):
 # Seed helpers
 # ---------------------------------------------------------------------------
 
+
 async def _insert_queued_task(
     db,
     plugin_id: str = "icmp_ping",
@@ -131,6 +133,7 @@ async def _insert_queued_task(
 # ---------------------------------------------------------------------------
 # Read-back helpers (open a second connection so tests see committed data)
 # ---------------------------------------------------------------------------
+
 
 async def _read_task(db_path: str, task_id: str) -> dict:
     """Return the relevant columns for one task row, or {} if not found."""
@@ -160,6 +163,7 @@ async def _read_report(db_path: str, task_id: str) -> dict:
 # Test 1 — subprocess crash → status='failed', task removed from running_tasks
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_process_crash_marks_task_failed(chaos_env):
     """
@@ -172,8 +176,8 @@ async def test_process_crash_marks_task_failed(chaos_env):
     The task must never be left in 'running' state after the coroutine returns.
     """
     executor = chaos_env["executor"]
-    db       = chaos_env["db"]
-    db_path  = chaos_env["db_path"]
+    db = chaos_env["db"]
+    db_path = chaos_env["db_path"]
 
     task_id = await _insert_queued_task(db)
 
@@ -190,23 +194,24 @@ async def test_process_crash_marks_task_failed(chaos_env):
 
     row = await _read_task(db_path, task_id)
 
-    assert row["status"] == "failed", (
-        f"Process crash must leave status='failed', got '{row['status']}'"
-    )
-    assert row["error_message"] is not None, (
-        "error_message must be populated after a process crash"
-    )
-    assert "binary not found" in row["error_message"], (
-        "error_message should contain the original exception text"
-    )
-    assert task_id not in executor.running_tasks, (
-        "execute_task's finally block must remove the task from running_tasks"
-    )
+    assert (
+        row["status"] == "failed"
+    ), f"Process crash must leave status='failed', got '{row['status']}'"
+    assert (
+        row["error_message"] is not None
+    ), "error_message must be populated after a process crash"
+    assert (
+        "binary not found" in row["error_message"]
+    ), "error_message should contain the original exception text"
+    assert (
+        task_id not in executor.running_tasks
+    ), "execute_task's finally block must remove the task from running_tasks"
 
 
 # ---------------------------------------------------------------------------
 # Test 2 — upsert failure after successful scan → overwrites 'completed' → 'failed'
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_upsert_failure_after_successful_scan_marks_task_failed(chaos_env):
@@ -218,8 +223,8 @@ async def test_upsert_failure_after_successful_scan_marks_task_failed(chaos_env)
     crash never leaves a misleading 'completed' record in the database.
     """
     executor = chaos_env["executor"]
-    db       = chaos_env["db"]
-    db_path  = chaos_env["db_path"]
+    db = chaos_env["db"]
+    db_path = chaos_env["db_path"]
 
     task_id = await _insert_queued_task(db)
 
@@ -254,14 +259,15 @@ async def test_upsert_failure_after_successful_scan_marks_task_failed(chaos_env)
         f"The except block must overwrite the happy-path 'completed' UPDATE. "
         f"Got '{row['status']}' instead."
     )
-    assert task_id not in executor.running_tasks, (
-        "Task must be removed from running_tasks even when upsert fails"
-    )
+    assert (
+        task_id not in executor.running_tasks
+    ), "Task must be removed from running_tasks even when upsert fails"
 
 
 # ---------------------------------------------------------------------------
 # Test 3 — non-zero exit + raw artifact on disk → task failed, report failed
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_nonzero_exit_raw_artifact_present_task_is_failed(chaos_env):
@@ -275,9 +281,9 @@ async def test_nonzero_exit_raw_artifact_present_task_is_failed(chaos_env):
     The existence of a raw output file must never imply a successful scan result.
     """
     executor = chaos_env["executor"]
-    db       = chaos_env["db"]
-    db_path  = chaos_env["db_path"]
-    raw_dir  = chaos_env["raw_dir"]
+    db = chaos_env["db"]
+    db_path = chaos_env["db_path"]
+    raw_dir = chaos_env["raw_dir"]
 
     task_id = await _insert_queued_task(db)
 
@@ -310,9 +316,9 @@ async def test_nonzero_exit_raw_artifact_present_task_is_failed(chaos_env):
         "Raw output file must be written to disk even for failed scans "
         "(it is the operator's debugging record)"
     )
-    assert "Name or service not known" in raw_file.read_text(), (
-        "Raw file content must reflect the actual tool output"
-    )
+    assert (
+        "Name or service not known" in raw_file.read_text()
+    ), "Raw file content must reflect the actual tool output"
 
     # The report row must also be marked 'failed' — not 'ready'.
     report_row = await _read_report(db_path, task_id)
@@ -330,6 +336,7 @@ async def test_nonzero_exit_raw_artifact_present_task_is_failed(chaos_env):
 # Test 4 — concurrency slot released unconditionally after crash
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_concurrency_slot_released_after_crash(chaos_env):
     """
@@ -344,8 +351,8 @@ async def test_concurrency_slot_released_after_crash(chaos_env):
     from backend.secuscan.ratelimit import concurrent_limiter
 
     executor = chaos_env["executor"]
-    db       = chaos_env["db"]
-    db_path  = chaos_env["db_path"]
+    db = chaos_env["db"]
+    db_path = chaos_env["db_path"]
 
     task_id = await _insert_queued_task(db)
 
@@ -371,12 +378,12 @@ async def test_concurrency_slot_released_after_crash(chaos_env):
         "concurrent_limiter must release the slot in the finally block after a crash. "
         f"Held before: {held_slots_before}, held after: {held_slots_after}"
     )
-    assert task_id not in concurrent_limiter.running_tasks, (
-        "The crashed task's ID must not remain in concurrent_limiter.running_tasks"
-    )
+    assert (
+        task_id not in concurrent_limiter.running_tasks
+    ), "The crashed task's ID must not remain in concurrent_limiter.running_tasks"
 
     # The task must also be recorded as failed, not left as 'running'.
     row = await _read_task(db_path, task_id)
-    assert row["status"] == "failed", (
-        f"Task status must be 'failed' after a crash, got '{row['status']}'"
-    )
+    assert (
+        row["status"] == "failed"
+    ), f"Task status must be 'failed' after a crash, got '{row['status']}'"

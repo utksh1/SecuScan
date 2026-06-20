@@ -101,6 +101,7 @@ def test_select_tests_shared_config_fallback():
 
 # ── Event-based logic (PR vs push) ────────────────────────────────────────────
 
+
 def test_select_tests_pull_request_always_full_suite():
     """
     PRs must always run full suite to ensure required branch protection checks
@@ -127,6 +128,9 @@ def test_select_tests_push_uses_selective_skipping():
     # Push with docs-only: skip tests
     assert select_tests(["README.md"], event_name="push") == (False, False)
     # Push with backend: run backend only
-    assert select_tests(["backend/secuscan/main.py"], event_name="push") == (True, False)
+    assert select_tests(["backend/secuscan/main.py"], event_name="push") == (
+        True,
+        False,
+    )
     # Push with frontend: run frontend only
     assert select_tests(["frontend/src/App.tsx"], event_name="push") == (False, True)

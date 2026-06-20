@@ -83,7 +83,9 @@ def seed_database(db_path: str, findings_count: int = 10_000, tasks_count: int =
     print("Seeding complete.\n")
 
 
-def benchmark_query(label: str, db_path: str, query: str, params: tuple = (), runs: int = 10):
+def benchmark_query(
+    label: str, db_path: str, query: str, params: tuple = (), runs: int = 10
+):
     """Run a query N times and report average execution time."""
     conn = sqlite3.connect(db_path)
     times = []
@@ -116,6 +118,7 @@ def main():
 
         # Initialize schema (with indexes)
         from backend.secuscan.database import Database
+
         asyncio.run(Database(db_path).connect())
 
         seed_database(db_path, findings_count=10_000, tasks_count=1_000)

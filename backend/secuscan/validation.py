@@ -15,9 +15,9 @@ from .config import settings
 
 # Blocked network ranges
 BLOCKED_NETWORKS = [
-    ipaddress.ip_network("0.0.0.0/8"),       # Broadcast
+    ipaddress.ip_network("0.0.0.0/8"),  # Broadcast
     ipaddress.ip_network("169.254.0.0/16"),  # Link-local
-    ipaddress.ip_network("224.0.0.0/4"),     # Multicast
+    ipaddress.ip_network("224.0.0.0/4"),  # Multicast
 ]
 
 # Allowed private IP ranges
@@ -34,7 +34,9 @@ BLOCKED_TLDS = [".mil", ".gov"]
 
 def _net_within_allowed_networks(net: ipaddress._BaseNetwork) -> bool:
     """Return True if net is permitted by settings.allowed_networks (best-effort, conservative)."""
-    patterns = [str(p).strip() for p in (settings.allowed_networks or []) if str(p).strip()]
+    patterns = [
+        str(p).strip() for p in (settings.allowed_networks or []) if str(p).strip()
+    ]
     if not patterns:
         return True
 
@@ -62,7 +64,9 @@ def _net_within_allowed_networks(net: ipaddress._BaseNetwork) -> bool:
         if wildcard_octets == 0:
             return None
         prefix = (4 - wildcard_octets) * 8
-        return ipaddress.IPv4Network(f"{'.'.join(map(str, fixed))}/{prefix}", strict=False)
+        return ipaddress.IPv4Network(
+            f"{'.'.join(map(str, fixed))}/{prefix}", strict=False
+        )
 
     # Single-IP networks can be checked against wildcards and CIDRs.
     if net.num_addresses == 1:
@@ -76,7 +80,11 @@ def _net_within_allowed_networks(net: ipaddress._BaseNetwork) -> bool:
                     return True
             except ValueError:
                 converted = wildcard_to_net(pattern)
-                if converted and net.version == converted.version and net.subnet_of(converted):
+                if (
+                    converted
+                    and net.version == converted.version
+                    and net.subnet_of(converted)
+                ):
                     return True
                 if fnmatch(ip_str, pattern):
                     return True
@@ -146,9 +154,14 @@ def _resolve_host_ips_uncached(hostname: str) -> list[ipaddress._BaseAddress]:
     return _resolve_host_ips(hostname)
 
 
-def _validate_resolved_ips_safe_mode(resolved_ips: list[ipaddress._BaseAddress]) -> Tuple[bool, str]:
+def _validate_resolved_ips_safe_mode(
+    resolved_ips: list[ipaddress._BaseAddress],
+) -> Tuple[bool, str]:
     if not resolved_ips:
-        return False, "Hostname did not resolve to any IPs in safe mode (SecuScan Guardrail)"
+        return (
+            False,
+            "Hostname did not resolve to any IPs in safe mode (SecuScan Guardrail)",
+        )
 
     for ip in resolved_ips:
         ip_net = ipaddress.ip_network(ip, strict=False)
@@ -158,13 +171,22 @@ def _validate_resolved_ips_safe_mode(resolved_ips: list[ipaddress._BaseAddress])
             return False, "Loopback scans are disabled in global settings"
 
         is_private = any(
-            (ip_net.version == allowed.version and (ip_net.subnet_of(allowed) or ip_net.overlaps(allowed)))
+            (
+                ip_net.version == allowed.version
+                and (ip_net.subnet_of(allowed) or ip_net.overlaps(allowed))
+            )
             for allowed in ALLOWED_PRIVATE
         )
         if not is_private:
-            return False, "Public IPs/networks not allowed in safe mode (SecuScan Guardrail)"
+            return (
+                False,
+                "Public IPs/networks not allowed in safe mode (SecuScan Guardrail)",
+            )
         if not _net_within_allowed_networks(ip_net):
-            return False, "Target not within allowed networks in safe mode (SecuScan Guardrail)"
+            return (
+                False,
+                "Target not within allowed networks in safe mode (SecuScan Guardrail)",
+            )
 
     return True, ""
 
@@ -172,11 +194,11 @@ def _validate_resolved_ips_safe_mode(resolved_ips: list[ipaddress._BaseAddress])
 def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
     """
     Validate scan target address (IP, Hostname, URL, or CIDR).
-    
+
     Args:
         target: IP address, hostname, or network range to validate
         safe_mode: Whether to enforce safe mode restrictions
-    
+
     Returns:
         Tuple of (is_valid, error_message)
     """
@@ -187,7 +209,7 @@ def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
     # Try parsing as IP network (handles single IP and CIDR)
     try:
         net = ipaddress.ip_network(target, strict=False)
-        
+
         # Check blocked networks (Broadcast, Link-local, Multicast)
         if any(net.overlaps(blocked) for blocked in BLOCKED_NETWORKS):
             return False, "Target overlaps with blocked network range"
@@ -199,14 +221,23 @@ def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
         # Safe mode: only allow private IPs
         if safe_mode:
             is_private = any(
-                (net.version == allowed.version and (net.subnet_of(allowed) or net.overlaps(allowed)))
+                (
+                    net.version == allowed.version
+                    and (net.subnet_of(allowed) or net.overlaps(allowed))
+                )
                 for allowed in ALLOWED_PRIVATE
             )
             if not is_private:
-                return False, "Public IPs/networks not allowed in safe mode (SecuScan Guardrail)"
+                return (
+                    False,
+                    "Public IPs/networks not allowed in safe mode (SecuScan Guardrail)",
+                )
 
             if not _net_within_allowed_networks(net):
-                return False, "Target not within allowed networks in safe mode (SecuScan Guardrail)"
+                return (
+                    False,
+                    "Target not within allowed networks in safe mode (SecuScan Guardrail)",
+                )
 
         return True, ""
 
@@ -228,7 +259,10 @@ def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
         pass
 
     # Validate hostname format (RFC 1123)
-    if not re.match(r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$', hostname_to_validate):
+    if not re.match(
+        r"^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$",
+        hostname_to_validate,
+    ):
         return False, "Invalid hostname format"
 
     # Check blocked TLDs in safe mode
@@ -299,10 +333,10 @@ def validate_port_range(port_range: str) -> Tuple[bool, str]:
         Tuple of (is_valid, error_message)
     """
     # Handle comma-separated ports (supports mixed specs like "80,443-8080")
-    if ',' in port_range:
-        for port_str in port_range.split(','):
+    if "," in port_range:
+        for port_str in port_range.split(","):
             port_str = port_str.strip()
-            if '-' in port_str:
+            if "-" in port_str:
                 # Delegate sub-ranges like "443-8080" to the range parser below
                 is_valid, msg = validate_port_range(port_str)
                 if not is_valid:
@@ -318,9 +352,9 @@ def validate_port_range(port_range: str) -> Tuple[bool, str]:
         return True, ""
 
     # Handle port ranges
-    if '-' in port_range:
+    if "-" in port_range:
         try:
-            start, end = map(int, port_range.split('-'))
+            start, end = map(int, port_range.split("-"))
             if start > end:
                 return False, "Port range start must be less than end"
 
@@ -344,26 +378,27 @@ def validate_port_range(port_range: str) -> Tuple[bool, str]:
 def validate_url(url: str) -> Tuple[bool, str]:
     """
     Validate URL format.
-    
+
     Args:
         url: URL to validate
-    
+
     Returns:
         Tuple of (is_valid, error_message)
     """
     url_pattern = re.compile(
-        r'^https?://'
-        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'
-        r'localhost|'
-        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'
-        r'(?::\d+)?'
-        r'(?:/?|[/?]\S+)$', re.IGNORECASE
+        r"^https?://"
+        r"(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|"
+        r"localhost|"
+        r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"
+        r"(?::\d+)?"
+        r"(?:/?|[/?]\S+)$",
+        re.IGNORECASE,
     )
 
     if not url_pattern.match(url):
         return False, "Invalid URL format"
 
-    port_match = re.search(r':(\d+)(?:/|\?|$)', url.split('://', 1)[1])
+    port_match = re.search(r":(\d+)(?:/|\?|$)", url.split("://", 1)[1])
     if port_match:
         port = int(port_match.group(1))
         if port < 1 or port > 65535:
@@ -404,7 +439,10 @@ def validate_webhook_target(url: str) -> Tuple[bool, Optional[str]]:
         for blocked_cidr in settings.notification_blocked_ip_ranges:
             try:
                 if ip in ipaddress.ip_network(blocked_cidr, strict=False):
-                    return False, f"Webhook URL resolves to blocked address ({ip}) in range {blocked_cidr}"
+                    return (
+                        False,
+                        f"Webhook URL resolves to blocked address ({ip}) in range {blocked_cidr}",
+                    )
             except ValueError:
                 continue
     return True, None
@@ -413,20 +451,40 @@ def validate_webhook_target(url: str) -> Tuple[bool, Optional[str]]:
 def sanitize_input(value: str) -> str:
     """
     Sanitize user input to prevent command injection.
-    
+
     Args:
         value: Input value to sanitize
-    
+
     Returns:
         Sanitized value
     """
     # Convert backslashes to forward slashes to preserve path separators on Windows.
-    value = value.replace('\\', '/')
+    value = value.replace("\\", "/")
 
     # Remove shell metacharacters and non-printable control characters.
-    dangerous_chars = [';', '|', '&', '$', '`', '(', ')', '<', '>', '\n', '\r', "'", '"', '\\', '!', '{', '}', '\t', '\x00']
+    dangerous_chars = [
+        ";",
+        "|",
+        "&",
+        "$",
+        "`",
+        "(",
+        ")",
+        "<",
+        ">",
+        "\n",
+        "\r",
+        "'",
+        '"',
+        "\\",
+        "!",
+        "{",
+        "}",
+        "\t",
+        "\x00",
+    ]
     for char in dangerous_chars:
-        value = value.replace(char, '')
+        value = value.replace(char, "")
 
     # User-controlled placeholders are passed as argv values, not through a
     # shell, but leading dashes can still be interpreted as tool options.
@@ -438,15 +496,16 @@ def sanitize_input(value: str) -> str:
 def is_safe_path(path: str, base_dir: str) -> bool:
     """
     Check if a path is safe (no directory traversal).
-    
+
     Args:
         path: Path to check
         base_dir: Base directory to restrict to
-    
+
     Returns:
         True if path is safe
     """
     import os
+
     try:
         real_base = os.path.realpath(base_dir)
         real_path = os.path.realpath(os.path.join(base_dir, path))
@@ -458,11 +517,11 @@ def is_safe_path(path: str, base_dir: str) -> bool:
 def match_pattern(value: str, pattern: str) -> bool:
     """
     Match value against wildcard pattern.
-    
+
     Args:
         value: Value to match
         pattern: Pattern with wildcards (* and ?)
-    
+
     Returns:
         True if value matches pattern
     """
@@ -472,6 +531,7 @@ def match_pattern(value: str, pattern: str) -> bool:
 # ---------------------------------------------------------------------------
 # Task-start payload size/length validation
 # ---------------------------------------------------------------------------
+
 
 def validate_task_start_payload(
     raw_body: bytes,
@@ -548,7 +608,10 @@ def _check_field(key: str, value: Any) -> Tuple[bool, int, str]:
                 f"(max {settings.task_start_max_array_length}).",
             )
         for idx, item in enumerate(value):
-            if isinstance(item, str) and len(item) > settings.task_start_max_field_length:
+            if (
+                isinstance(item, str)
+                and len(item) > settings.task_start_max_field_length
+            ):
                 return (
                     False,
                     400,
@@ -567,6 +630,7 @@ def _check_field(key: str, value: Any) -> Tuple[bool, int, str]:
                 return ok, status, msg
 
     return True, 0, ""
+
 
 def is_filesystem_target(target: str) -> bool:
     """Best-effort detection for path-based targets that should bypass host validation.
@@ -588,6 +652,7 @@ def is_filesystem_target(target: str) -> bool:
         return True
     return False
 
+
 def resolve_and_validate_target(url: str) -> Tuple[bool, str]:
     """Resolve a webhook URL and validate it against SSRF protections.
 
@@ -608,7 +673,10 @@ def resolve_and_validate_target(url: str) -> Tuple[bool, str]:
 
     port = parsed.port
     if port is not None and port not in settings.notification_allowed_ports:
-        return False, f"Port {port} not in allowed ports: {settings.notification_allowed_ports}"
+        return (
+            False,
+            f"Port {port} not in allowed ports: {settings.notification_allowed_ports}",
+        )
 
     # Reject raw IP addresses in webhook URLs
     try:
@@ -634,7 +702,10 @@ def resolve_and_validate_target(url: str) -> Tuple[bool, str]:
             try:
                 blocked_net = ipaddress.ip_network(blocked_cidr, strict=False)
                 if ip in blocked_net:
-                    return False, f"Resolved IP {ip} falls in blocked range {blocked_cidr}"
+                    return (
+                        False,
+                        f"Resolved IP {ip} falls in blocked range {blocked_cidr}",
+                    )
             except ValueError:
                 continue
 
@@ -655,7 +726,9 @@ def resolve_and_validate_target(url: str) -> Tuple[bool, str]:
     return True, ""
 
 
-def validate_command_network_egress(command: list[str], safe_mode: bool, plugin_id: str, task_id: str) -> Tuple[bool, str]:
+def validate_command_network_egress(
+    command: list[str], safe_mode: bool, plugin_id: str, task_id: str
+) -> Tuple[bool, str]:
     """
     Inspect all command arguments. If any argument represents an outbound network
     destination (IP, hostname, URL), validate it against both Safe Mode and Network Policy.
@@ -706,8 +779,8 @@ def validate_command_network_egress(command: list[str], safe_mode: bool, plugin_
         if not is_ip:
             # Basic hostname check (with dots and valid characters, or 'localhost')
             if candidate.lower() == "localhost" or re.match(
-                r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)+$',
-                candidate
+                r"^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)+$",
+                candidate,
             ):
                 is_host = True
 
@@ -728,10 +801,14 @@ def validate_command_network_egress(command: list[str], safe_mode: bool, plugin_
                 if not allowed:
                     if settings.network_policy_failure_mode == "log_only":
                         import logging
+
                         logging.getLogger(__name__).warning(
                             f"[Log Only] Command argument '{arg_str}' network policy violation allowed: {reason}"
                         )
                     else:
-                        return False, f"Command argument '{arg_str}' violates network policy: {reason}"
+                        return (
+                            False,
+                            f"Command argument '{arg_str}' violates network policy: {reason}",
+                        )
 
     return True, ""

@@ -56,7 +56,9 @@ def resolve_plugin_dir(plugin_arg: str, plugins_dir: Path) -> Path:
 
 def _import_parser(parser_file: Path, plugin_id: str) -> Optional[str]:
     try:
-        spec = importlib.util.spec_from_file_location(f"parser_{plugin_id}", parser_file)
+        spec = importlib.util.spec_from_file_location(
+            f"parser_{plugin_id}", parser_file
+        )
         if spec is None or spec.loader is None:
             return f"Unable to load parser module from {parser_file}"
         module = importlib.util.module_from_spec(spec)
@@ -77,7 +79,9 @@ def _compute_normalized_digest(metadata: dict, parser_file: Path) -> str:
     metadata_payload = dict(metadata)
     metadata_payload.pop("checksum", None)
     metadata_payload.pop("signature", None)
-    metadata_canonical = json.dumps(metadata_payload, sort_keys=True, separators=(",", ":"))
+    metadata_canonical = json.dumps(
+        metadata_payload, sort_keys=True, separators=(",", ":")
+    )
     metadata_digest = hashlib.sha256(metadata_canonical.encode("utf-8")).hexdigest()
 
     if parser_file.exists():
@@ -87,7 +91,9 @@ def _compute_normalized_digest(metadata: dict, parser_file: Path) -> str:
     else:
         parser_digest = ""
 
-    return hashlib.sha256(f"{metadata_digest}:{parser_digest}".encode("utf-8")).hexdigest()
+    return hashlib.sha256(
+        f"{metadata_digest}:{parser_digest}".encode("utf-8")
+    ).hexdigest()
 
 
 def validate_plugin(plugin_dir: Path) -> bool:
@@ -148,7 +154,9 @@ def validate_plugin(plugin_dir: Path) -> bool:
                 normalized_expected = None
                 if parser_file.exists():
                     try:
-                        normalized_expected = _compute_normalized_digest(metadata, parser_file)
+                        normalized_expected = _compute_normalized_digest(
+                            metadata, parser_file
+                        )
                     except Exception:
                         normalized_expected = None
 
@@ -165,7 +173,9 @@ def validate_plugin(plugin_dir: Path) -> bool:
     parser_type = plugin.output.get("parser")
     if parser_type == "custom" or parser_file.exists():
         if not parser_file.exists():
-            errors.append(f"Custom parser specified but parser.py not found for {plugin_id}")
+            errors.append(
+                f"Custom parser specified but parser.py not found for {plugin_id}"
+            )
         else:
             parser_error = _import_parser(parser_file, plugin_id)
             if parser_error:

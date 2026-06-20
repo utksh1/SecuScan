@@ -90,7 +90,9 @@ def test_theharvester_executor_normalizes_parser_fixture(plugin_manager):
     assert plugin is not None
 
     parsed = parser.parse(FIXTURE_PATH.read_text(encoding="utf-8"))
-    normalized = executor._normalize_parsed_result(plugin, FIXTURE_PATH.read_text(encoding="utf-8"), parsed)
+    normalized = executor._normalize_parsed_result(
+        plugin, FIXTURE_PATH.read_text(encoding="utf-8"), parsed
+    )
 
     assert normalized["count"] == 3
     assert normalized["findings"][-1]["severity"] == "low"

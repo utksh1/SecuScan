@@ -93,7 +93,9 @@ class TestIsOffensiveValidation:
         assert is_offensive_validation({"validation_mode": "proof"}) is True
 
     def test_controlled_extract_is_offensive(self):
-        assert is_offensive_validation({"validation_mode": "controlled_extract"}) is True
+        assert (
+            is_offensive_validation({"validation_mode": "controlled_extract"}) is True
+        )
 
     def test_missing_validation_mode_defaults_to_offensive(self):
         """No validation_mode key → defaults to PROOF → offensive."""
@@ -104,7 +106,9 @@ class TestIsOffensiveValidation:
 
     def test_unknown_validation_mode_is_not_offensive(self):
         """An unknown validation_mode is treated as non-offensive (safe default)."""
-        assert is_offensive_validation({"validation_mode": "exploit_everything"}) is False
+        assert (
+            is_offensive_validation({"validation_mode": "exploit_everything"}) is False
+        )
 
     def test_empty_string_validation_mode_defaults_to_offensive(self):
         """An empty-string validation_mode is treated like a missing value and
@@ -115,12 +119,18 @@ class TestIsOffensiveValidation:
 
     def test_extra_keys_are_ignored(self):
         """Unrelated keys do not influence the offensive classification."""
-        assert is_offensive_validation(
-            {"validation_mode": "detect_only", "evidence_level": "full"}
-        ) is False
-        assert is_offensive_validation(
-            {"validation_mode": "proof", "evidence_level": "minimal"}
-        ) is True
+        assert (
+            is_offensive_validation(
+                {"validation_mode": "detect_only", "evidence_level": "full"}
+            )
+            is False
+        )
+        assert (
+            is_offensive_validation(
+                {"validation_mode": "proof", "evidence_level": "minimal"}
+            )
+            is True
+        )
 
 
 # ---------------------------------------------------------------------------

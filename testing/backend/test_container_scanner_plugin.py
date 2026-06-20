@@ -55,9 +55,8 @@ def test_container_scanner_passes_validator():
     or the checksum field is absent or malformed.
     """
     result = PluginMetadataValidator(PLUGIN_DIR).validate()
-    assert result.valid, (
-        "Plugin validation errors:\n"
-        + "\n".join(e.display() for e in result.errors)
+    assert result.valid, "Plugin validation errors:\n" + "\n".join(
+        e.display() for e in result.errors
     )
 
 
@@ -125,9 +124,14 @@ def test_container_scanner_command_full_token_sequence(setup_test_environment):
 
     command = manager.build_command("container_scanner", {"target": "alpine:3.15"})
 
-    assert command == ["trivy", "image", "-f", "json", "--no-progress", "alpine:3.15"], (
-        f"Command template drift detected. Got: {command}"
-    )
+    assert command == [
+        "trivy",
+        "image",
+        "-f",
+        "json",
+        "--no-progress",
+        "alpine:3.15",
+    ], f"Command template drift detected. Got: {command}"
 
 
 def test_container_scanner_drops_target_token_when_absent(setup_test_environment):
@@ -167,35 +171,37 @@ def test_container_scanner_loaded_by_plugin_manager(setup_test_environment):
 # Parser contract tests against the real parser.py
 # ---------------------------------------------------------------------------
 
-_TRIVY_JSON_FIXTURE = json.dumps({
-    "Results": [
-        {
-            "Target": "ubuntu:latest (ubuntu 22.04)",
-            "Vulnerabilities": [
-                {
-                    "VulnerabilityID": "CVE-2024-1234",
-                    "PkgName": "libssl1.1",
-                    "Severity": "HIGH",
-                    "Title": "OpenSSL buffer overflow in libssl1.1",
-                    "Description": "Heap-based buffer overflow in libssl1.1 allows RCE.",
-                    "InstalledVersion": "1.1.1f-1ubuntu2",
-                    "FixedVersion": "1.1.1f-1ubuntu2.23",
-                    "CVSS": {"nvd": {"V3Score": 9.8}},
-                },
-                {
-                    "VulnerabilityID": "CVE-2024-5678",
-                    "PkgName": "curl",
-                    "Severity": "MEDIUM",
-                    "Title": "SSRF in curl",
-                    "Description": "Server-side request forgery in curl.",
-                    "InstalledVersion": "7.81.0-1ubuntu1.13",
-                    "FixedVersion": "7.81.0-1ubuntu1.16",
-                    "CVSS": {},
-                },
-            ],
-        }
-    ]
-})
+_TRIVY_JSON_FIXTURE = json.dumps(
+    {
+        "Results": [
+            {
+                "Target": "ubuntu:latest (ubuntu 22.04)",
+                "Vulnerabilities": [
+                    {
+                        "VulnerabilityID": "CVE-2024-1234",
+                        "PkgName": "libssl1.1",
+                        "Severity": "HIGH",
+                        "Title": "OpenSSL buffer overflow in libssl1.1",
+                        "Description": "Heap-based buffer overflow in libssl1.1 allows RCE.",
+                        "InstalledVersion": "1.1.1f-1ubuntu2",
+                        "FixedVersion": "1.1.1f-1ubuntu2.23",
+                        "CVSS": {"nvd": {"V3Score": 9.8}},
+                    },
+                    {
+                        "VulnerabilityID": "CVE-2024-5678",
+                        "PkgName": "curl",
+                        "Severity": "MEDIUM",
+                        "Title": "SSRF in curl",
+                        "Description": "Server-side request forgery in curl.",
+                        "InstalledVersion": "7.81.0-1ubuntu1.13",
+                        "FixedVersion": "7.81.0-1ubuntu1.16",
+                        "CVSS": {},
+                    },
+                ],
+            }
+        ]
+    }
+)
 
 
 def test_container_scanner_parser_returns_findings_key():
@@ -230,7 +236,14 @@ def test_container_scanner_parser_finding_has_required_keys():
     """Each finding must contain title, category, severity, description, remediation, metadata."""
     result = parse(_TRIVY_JSON_FIXTURE)
     for finding in result["findings"]:
-        for key in ("title", "category", "severity", "description", "remediation", "metadata"):
+        for key in (
+            "title",
+            "category",
+            "severity",
+            "description",
+            "remediation",
+            "metadata",
+        ):
             assert key in finding, f"Finding missing required key: {key}"
 
 
@@ -244,7 +257,9 @@ def test_container_scanner_parser_category_is_container_vulnerability():
 def test_container_scanner_parser_remediation_includes_package_name():
     """Remediation text must include the affected package name."""
     result = parse(_TRIVY_JSON_FIXTURE)
-    ssl_finding = next(f for f in result["findings"] if f["metadata"]["package"] == "libssl1.1")
+    ssl_finding = next(
+        f for f in result["findings"] if f["metadata"]["package"] == "libssl1.1"
+    )
     assert "libssl1.1" in ssl_finding["remediation"]
 
 

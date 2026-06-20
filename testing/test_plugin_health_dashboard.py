@@ -7,7 +7,11 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from scripts.plugin_health_dashboard import discover_plugins, build_report, format_markdown
+from scripts.plugin_health_dashboard import (
+    discover_plugins,
+    build_report,
+    format_markdown,
+)
 
 
 def test_discover_plugins_uses_metadata_and_parser_directories(tmp_path):

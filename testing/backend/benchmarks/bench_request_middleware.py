@@ -26,9 +26,7 @@ def make_request(headers=None):
 async def test_request_middleware_existing_id(record_benchmark):
     middleware = RequestIDMiddleware(app=None)
 
-    request = make_request(
-        [(b"x-request-id", b"test-request-id")]
-    )
+    request = make_request([(b"x-request-id", b"test-request-id")])
 
     latencies = []
 
@@ -37,9 +35,7 @@ async def test_request_middleware_existing_id(record_benchmark):
 
         await middleware.dispatch(request, call_next)
 
-        latencies.append(
-            (time.perf_counter() - start) * 1000.0
-        )
+        latencies.append((time.perf_counter() - start) * 1000.0)
 
     mean_ms = sum(latencies) / len(latencies)
 
@@ -48,10 +44,7 @@ async def test_request_middleware_existing_id(record_benchmark):
         mean_ms,
     )
 
-    print(
-        f"\n[bench_request_middleware_existing_id] "
-        f"Mean: {mean_ms:.4f}ms "
-    )
+    print(f"\n[bench_request_middleware_existing_id] " f"Mean: {mean_ms:.4f}ms ")
 
 
 @pytest.mark.benchmark
@@ -68,9 +61,7 @@ async def test_request_middleware_uuid_generation(record_benchmark):
 
         await middleware.dispatch(request, call_next)
 
-        latencies.append(
-            (time.perf_counter() - start) * 1000.0
-        )
+        latencies.append((time.perf_counter() - start) * 1000.0)
 
     mean_ms = sum(latencies) / len(latencies)
 
@@ -79,7 +70,4 @@ async def test_request_middleware_uuid_generation(record_benchmark):
         mean_ms,
     )
 
-    print(
-        f"\n[bench_request_middleware_uuid_generation] "
-        f"Mean: {mean_ms:.4f}ms "
-    )
+    print(f"\n[bench_request_middleware_uuid_generation] " f"Mean: {mean_ms:.4f}ms ")

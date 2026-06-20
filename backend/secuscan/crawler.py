@@ -96,19 +96,28 @@ async def crawl_target(
 
     base_url = str(response.url)
     final_parsed = urlparse(base_url)
-    normalized_links = sorted({urljoin(base_url, link) for link in parser.links if link})
-    normalized_scripts = sorted({urljoin(base_url, script) for script in parser.scripts if script})
+    normalized_links = sorted(
+        {urljoin(base_url, link) for link in parser.links if link}
+    )
+    normalized_scripts = sorted(
+        {urljoin(base_url, script) for script in parser.scripts if script}
+    )
 
     params = []
     for parsed_link in normalized_links:
-        for key, value in parse_qsl(urlparse(parsed_link).query, keep_blank_values=True):
+        for key, value in parse_qsl(
+            urlparse(parsed_link).query, keep_blank_values=True
+        ):
             params.append({"url": parsed_link, "name": key, "sample": value})
 
     api_hints = []
     path_hints = []
     for candidate in normalized_links + normalized_scripts:
         lowered = candidate.lower()
-        if any(token in lowered for token in ("/api/", "swagger", "openapi", "graphql", ".json")):
+        if any(
+            token in lowered
+            for token in ("/api/", "swagger", "openapi", "graphql", ".json")
+        ):
             api_hints.append(candidate)
         path_tag = _classify_path_hint(lowered)
         if path_tag:
@@ -116,8 +125,14 @@ async def crawl_target(
 
     forms = [_normalize_form(base_url, form) for form in parser.forms[:50]]
     headers_snapshot = dict(response.headers)
-    set_cookie_headers = list(response.headers.get_list("set-cookie")) if hasattr(response.headers, "get_list") else []
-    tech_hints = _extract_tech_hints(headers_snapshot, parser.meta_generators, normalized_scripts, body)
+    set_cookie_headers = (
+        list(response.headers.get_list("set-cookie"))
+        if hasattr(response.headers, "get_list")
+        else []
+    )
+    tech_hints = _extract_tech_hints(
+        headers_snapshot, parser.meta_generators, normalized_scripts, body
+    )
     cms_hints = _extract_cms_hints(parser.meta_generators, body, normalized_scripts)
     redirect_chain = [
         {
@@ -138,8 +153,16 @@ async def crawl_target(
         "redirect_chain": redirect_chain[:10],
         "tech_hints": tech_hints[:20],
         "cms_hints": cms_hints[:10],
-        "pages": [{"url": base_url, "title": _extract_title(body), "content_type": response.headers.get("content-type", "")}] + [
-            {"url": link, "title": "", "content_type": ""} for link in normalized_links[:100]
+        "pages": [
+            {
+                "url": base_url,
+                "title": _extract_title(body),
+                "content_type": response.headers.get("content-type", ""),
+            }
+        ]
+        + [
+            {"url": link, "title": "", "content_type": ""}
+            for link in normalized_links[:100]
         ],
         "forms": forms,
         "scripts": normalized_scripts[:100],
@@ -155,7 +178,7 @@ def _extract_title(html: str) -> str:
     end = html.lower().find("</title>")
     if start == -1 or end == -1 or end <= start:
         return ""
-    return html[start + len("<title>"):end].strip()
+    return html[start + len("<title>") : end].strip()
 
 
 def _normalize_form(page_url: str, form: Dict[str, Any]) -> Dict[str, Any]:
@@ -167,7 +190,13 @@ def _normalize_form(page_url: str, form: Dict[str, Any]) -> Dict[str, Any]:
         for item in inputs
         if isinstance(item, dict)
     )
-    csrf_names = {"csrf", "_csrf", "csrfmiddlewaretoken", "authenticity_token", "__requestverificationtoken"}
+    csrf_names = {
+        "csrf",
+        "_csrf",
+        "csrfmiddlewaretoken",
+        "authenticity_token",
+        "__requestverificationtoken",
+    }
     has_csrf_token = any(
         str(item.get("name") or "").strip().lower() in csrf_names
         for item in inputs
@@ -223,18 +252,25 @@ def _extract_tech_hints(
         hints.append("Joomla")
     for script in scripts:
         lowered = script.lower()
-        if any(token in lowered for token in ("react", "vue", "angular", "jquery", "bootstrap")):
+        if any(
+            token in lowered
+            for token in ("react", "vue", "angular", "jquery", "bootstrap")
+        ):
             hints.append(script.rsplit("/", 1)[-1])
     return sorted({item.strip() for item in hints if str(item).strip()})
 
 
-def _extract_cms_hints(meta_generators: List[str], body: str, scripts: List[str]) -> List[str]:
+def _extract_cms_hints(
+    meta_generators: List[str], body: str, scripts: List[str]
+) -> List[str]:
     hints: List[str] = []
     combined = " ".join(meta_generators).lower()
     if "wordpress" in combined or "wp-content" in body.lower():
         hints.append("wordpress")
     if "drupal" in combined or "/sites/default/" in body.lower():
         hints.append("drupal")
-    if "joomla" in combined or any("/media/system/js/" in script.lower() for script in scripts):
+    if "joomla" in combined or any(
+        "/media/system/js/" in script.lower() for script in scripts
+    ):
         hints.append("joomla")
     return sorted(set(hints))

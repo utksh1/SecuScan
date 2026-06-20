@@ -55,9 +55,8 @@ def test_people_email_discovery_passes_validator():
     the checksum field is absent or malformed.
     """
     result = PluginMetadataValidator(PLUGIN_DIR).validate()
-    assert result.valid, (
-        "Plugin validation errors:\n"
-        + "\n".join(e.display() for e in result.errors)
+    assert result.valid, "Plugin validation errors:\n" + "\n".join(
+        e.display() for e in result.errors
     )
 
 
@@ -125,9 +124,13 @@ def test_people_email_discovery_command_full_token_sequence(setup_test_environme
 
     command = manager.build_command("people-email-discovery", {"target": "secuscan.in"})
 
-    assert command == ["theHarvester", "-d", "secuscan.in", "-b", "all"], (
-        f"Command template drift detected. Got: {command}"
-    )
+    assert command == [
+        "theHarvester",
+        "-d",
+        "secuscan.in",
+        "-b",
+        "all",
+    ], f"Command template drift detected. Got: {command}"
 
 
 def test_people_email_discovery_loaded_by_plugin_manager(setup_test_environment):
@@ -174,14 +177,25 @@ def test_people_email_discovery_parser_finding_has_required_keys():
     result = parse(_PEOPLE_EMAIL_DISCOVERY_OUTPUT_FIXTURE)
     assert result["findings"], "Expected at least one finding"
     for finding in result["findings"]:
-        for key in ("title", "category", "severity", "description", "remediation", "metadata"):
+        for key in (
+            "title",
+            "category",
+            "severity",
+            "description",
+            "remediation",
+            "metadata",
+        ):
             assert key in finding, f"Finding missing key: {key}"
 
 
 def test_people_email_discovery_parser_items_list_matches_non_empty_lines():
     """items must contain each non-empty line from the output."""
     result = parse(_PEOPLE_EMAIL_DISCOVERY_OUTPUT_FIXTURE)
-    expected_lines = [l.strip() for l in _PEOPLE_EMAIL_DISCOVERY_OUTPUT_FIXTURE.splitlines() if l.strip()]
+    expected_lines = [
+        l.strip()
+        for l in _PEOPLE_EMAIL_DISCOVERY_OUTPUT_FIXTURE.splitlines()
+        if l.strip()
+    ]
     assert result["items"] == expected_lines
 
 

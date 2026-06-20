@@ -52,14 +52,14 @@ RESPONSE=$(curl -s "$BASE_URL/plugins")
 if echo "$RESPONSE" | grep -q '"plugins"'; then
     PLUGIN_COUNT=$(echo "$RESPONSE" | grep -o '"id"' | wc -l)
     test_pass "Plugins endpoint returns $PLUGIN_COUNT plugins"
-    
+
     # Check for expected plugins
     if echo "$RESPONSE" | grep -q '"http_inspector"'; then
         test_pass "HTTP Inspector plugin found"
     else
         test_fail "HTTP Inspector plugin missing"
     fi
-    
+
     if echo "$RESPONSE" | grep -q '"nmap"'; then
         test_pass "Nmap plugin found"
     else
@@ -75,7 +75,7 @@ echo "Test 3: Get Plugin Schema"
 RESPONSE=$(curl -s "$BASE_URL/plugin/http_inspector/schema")
 if echo "$RESPONSE" | grep -q '"fields"'; then
     test_pass "Plugin schema endpoint returns fields"
-    
+
     if echo "$RESPONSE" | grep -q '"presets"'; then
         test_pass "Plugin schema includes presets"
     else
@@ -102,7 +102,7 @@ echo "Test 5: Get Settings"
 RESPONSE=$(curl -s "$BASE_URL/settings")
 if echo "$RESPONSE" | grep -q '"network"' && echo "$RESPONSE" | grep -q '"safety"'; then
     test_pass "Settings endpoint returns configuration"
-    
+
     if echo "$RESPONSE" | grep -q '"safe_mode_default"'; then
         test_pass "Settings include safe_mode"
     else
@@ -127,7 +127,7 @@ RESPONSE=$(curl -s -X POST "$BASE_URL/task/start" \
 if echo "$RESPONSE" | grep -q '"task_id"'; then
     TASK_ID=$(echo "$RESPONSE" | grep -o '"task_id":"[^"]*' | cut -d'"' -f4)
     test_pass "Task created successfully: $TASK_ID"
-    
+
     # Test 7: Get Task Status
     echo ""
     echo "Test 7: Get Task Status"
@@ -139,7 +139,7 @@ if echo "$RESPONSE" | grep -q '"task_id"'; then
     else
         test_fail "Task status endpoint failed"
     fi
-    
+
     # Test 8: Get Task Result
     echo ""
     echo "Test 8: Get Task Result"
@@ -150,7 +150,7 @@ if echo "$RESPONSE" | grep -q '"task_id"'; then
     else
         test_warn "Task result may not be ready yet"
     fi
-    
+
     # Test 9: Get Tasks List
     echo ""
     echo "Test 9: Get Tasks List"
@@ -161,7 +161,7 @@ if echo "$RESPONSE" | grep -q '"task_id"'; then
     else
         test_fail "Tasks list endpoint failed"
     fi
-    
+
     # Test 10: Delete Task
     echo ""
     echo "Test 10: Delete Task"

@@ -6,10 +6,15 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 from backend.secuscan.network_policy import (
-    NetworkPolicyEngine, NetworkPolicy, PolicyAction, AuditLogEntry,
-    get_policy_engine, _init_default_policies
+    NetworkPolicyEngine,
+    NetworkPolicy,
+    PolicyAction,
+    AuditLogEntry,
+    get_policy_engine,
+    _init_default_policies,
 )
 from backend.secuscan.config import settings
+
 
 class TestDenyByDefault:
     """Test deny-by-default behavior"""
@@ -61,8 +66,14 @@ class TestInitDefaultPolicies:
         engine = NetworkPolicyEngine(audit_log_path=str(audit_log))
         _init_default_policies(engine)
         # Private/metadata IPs should still be blocked by denylist
-        for blocked_ip in ["10.0.0.1", "192.168.1.1", "172.16.0.1",
-                           "169.254.169.254", "127.0.0.1", "100.64.0.1"]:
+        for blocked_ip in [
+            "10.0.0.1",
+            "192.168.1.1",
+            "172.16.0.1",
+            "169.254.169.254",
+            "127.0.0.1",
+            "100.64.0.1",
+        ]:
             allowed, _, _ = engine.check_access(blocked_ip, plugin_id="test")
             assert not allowed, f"{blocked_ip} should be blocked by denylist"
 
@@ -237,6 +248,7 @@ class TestAuditLogging:
         assert "8.8.8.8" in content
         assert "allow" in content
 
+
 class TestPolicyExpiration:
     """Test temporary policies"""
 
@@ -264,6 +276,7 @@ class TestPolicyExpiration:
         allowed, _, _ = engine.check_access("10.1.1.1", plugin_id="test")
         assert allowed
 
+
 class TestInvalidInput:
     """Test error handling"""
 
@@ -287,6 +300,7 @@ class TestInvalidInput:
 
         assert not allowed
         assert "invalid" in reason.lower()
+
 
 class TestAuditLogFiltering:
     """Test audit log queries"""
@@ -315,6 +329,7 @@ class TestAuditLogFiltering:
         allow_entries = engine.get_audit_entries(action=PolicyAction.ALLOW)
         assert len(allow_entries) == 1
         assert allow_entries[0].action == PolicyAction.ALLOW
+
 
 class TestURLTargetHandling:
     """Test URL and target parsing/cleaning in the policy engine"""
@@ -351,12 +366,14 @@ class TestURLTargetHandling:
         )
         assert allowed
 
+
 class TestDefaultDenylistSSRFProtection:
     """Test that private subnets are blocked by default in settings"""
 
     def test_private_subnets_in_default_denylist(self):
         """Standard private ranges (RFC1918, RFC6598, IPv6 local) must be in the default denylist"""
         from backend.secuscan.config import Settings
+
         default_settings = Settings()
         denylist = default_settings.network_denylist
         assert "10.0.0.0/8" in denylist

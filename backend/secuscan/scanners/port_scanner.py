@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from .base import BaseScanner
 from ..plugins import get_plugin_manager
 
+
 class PortScanner(BaseScanner):
     """
     Orchestrates Nmap scanning with refined result parsing.

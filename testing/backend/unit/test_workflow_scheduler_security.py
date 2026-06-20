@@ -26,6 +26,7 @@ def rate_limiter():
 # WorkflowRateLimiter unit tests
 # ---------------------------------------------------------------------------
 
+
 class TestWorkflowRateLimiter:
     @pytest.mark.asyncio
     async def test_allows_first_run(self, rate_limiter):
@@ -54,13 +55,16 @@ class TestWorkflowRateLimiter:
 # (e.g., "from .plugins import get_plugin_manager"), so we patch the
 # original module paths rather than the local names.
 
+
 class TestSchedulerSecurityControls:
     @pytest.mark.asyncio
     async def test_skips_step_when_plugin_not_found(self, scheduler):
         steps = [{"plugin_id": "nonexistent-plugin", "inputs": {}}]
-        with patch("backend.secuscan.workflows.get_db", new_callable=AsyncMock) as mock_get_db, \
-             patch("backend.secuscan.plugins.get_plugin_manager") as mock_get_pm:
-
+        with patch(
+            "backend.secuscan.workflows.get_db", new_callable=AsyncMock
+        ) as mock_get_db, patch(
+            "backend.secuscan.plugins.get_plugin_manager"
+        ) as mock_get_pm:
             mock_db = AsyncMock()
             mock_get_db.return_value = mock_db
             mock_pm = MagicMock()
@@ -72,14 +76,18 @@ class TestSchedulerSecurityControls:
 
     @pytest.mark.asyncio
     async def test_skips_step_when_target_validation_fails(self, scheduler):
-        steps = [{
-            "plugin_id": "nmap",
-            "inputs": {"target": "invalid-target"},
-        }]
-        with patch("backend.secuscan.workflows.get_db", new_callable=AsyncMock), \
-             patch("backend.secuscan.plugins.get_plugin_manager") as mock_get_pm, \
-             patch("backend.secuscan.validation.validate_target", return_value=(False, "Target not allowed")) as mock_val:
-
+        steps = [
+            {
+                "plugin_id": "nmap",
+                "inputs": {"target": "invalid-target"},
+            }
+        ]
+        with patch("backend.secuscan.workflows.get_db", new_callable=AsyncMock), patch(
+            "backend.secuscan.plugins.get_plugin_manager"
+        ) as mock_get_pm, patch(
+            "backend.secuscan.validation.validate_target",
+            return_value=(False, "Target not allowed"),
+        ) as mock_val:
             mock_pm = MagicMock()
             plugin = MagicMock()
             plugin.category = "network"
@@ -93,15 +101,20 @@ class TestSchedulerSecurityControls:
 
     @pytest.mark.asyncio
     async def test_skips_step_when_rate_limit_exceeded(self, scheduler):
-        steps = [{
-            "plugin_id": "nmap",
-            "inputs": {"target": "example.com"},
-        }]
-        with patch("backend.secuscan.workflows.get_db", new_callable=AsyncMock), \
-             patch("backend.secuscan.plugins.get_plugin_manager") as mock_get_pm, \
-             patch("backend.secuscan.validation.validate_target", return_value=(True, "")), \
-             patch("backend.secuscan.ratelimit.rate_limiter.can_execute", new_callable=AsyncMock) as mock_rate:
-
+        steps = [
+            {
+                "plugin_id": "nmap",
+                "inputs": {"target": "example.com"},
+            }
+        ]
+        with patch("backend.secuscan.workflows.get_db", new_callable=AsyncMock), patch(
+            "backend.secuscan.plugins.get_plugin_manager"
+        ) as mock_get_pm, patch(
+            "backend.secuscan.validation.validate_target", return_value=(True, "")
+        ), patch(
+            "backend.secuscan.ratelimit.rate_limiter.can_execute",
+            new_callable=AsyncMock,
+        ) as mock_rate:
             mock_pm = MagicMock()
             plugin = MagicMock()
             plugin.category = "network"
@@ -116,17 +129,27 @@ class TestSchedulerSecurityControls:
 
     @pytest.mark.asyncio
     async def test_applies_safe_mode_consistently(self, scheduler):
-        steps = [{
-            "plugin_id": "nmap",
-            "inputs": {"target": "example.com", "safe_mode": False},
-        }]
-        with patch("backend.secuscan.workflows.get_db", new_callable=AsyncMock), \
-             patch("backend.secuscan.plugins.get_plugin_manager") as mock_get_pm, \
-             patch("backend.secuscan.validation.validate_target", return_value=(True, "")), \
-             patch("backend.secuscan.ratelimit.rate_limiter.can_execute", return_value=(True, "")), \
-             patch("backend.secuscan.ratelimit.concurrent_limiter.acquire", return_value=(True, "")), \
-             patch("backend.secuscan.executor.executor.create_task", new_callable=AsyncMock, return_value="task-1") as mock_create:
-
+        steps = [
+            {
+                "plugin_id": "nmap",
+                "inputs": {"target": "example.com", "safe_mode": False},
+            }
+        ]
+        with patch("backend.secuscan.workflows.get_db", new_callable=AsyncMock), patch(
+            "backend.secuscan.plugins.get_plugin_manager"
+        ) as mock_get_pm, patch(
+            "backend.secuscan.validation.validate_target", return_value=(True, "")
+        ), patch(
+            "backend.secuscan.ratelimit.rate_limiter.can_execute",
+            return_value=(True, ""),
+        ), patch(
+            "backend.secuscan.ratelimit.concurrent_limiter.acquire",
+            return_value=(True, ""),
+        ), patch(
+            "backend.secuscan.executor.executor.create_task",
+            new_callable=AsyncMock,
+            return_value="task-1",
+        ) as mock_create:
             mock_pm = MagicMock()
             plugin = MagicMock()
             plugin.category = "network"
@@ -143,17 +166,27 @@ class TestSchedulerSecurityControls:
 
     @pytest.mark.asyncio
     async def test_acquires_concurrency_slot(self, scheduler):
-        steps = [{
-            "plugin_id": "nmap",
-            "inputs": {"target": "example.com"},
-        }]
-        with patch("backend.secuscan.workflows.get_db", new_callable=AsyncMock), \
-             patch("backend.secuscan.plugins.get_plugin_manager") as mock_get_pm, \
-             patch("backend.secuscan.validation.validate_target", return_value=(True, "")), \
-             patch("backend.secuscan.ratelimit.rate_limiter.can_execute", return_value=(True, "")), \
-             patch("backend.secuscan.ratelimit.concurrent_limiter.acquire", new_callable=AsyncMock) as mock_acquire, \
-             patch("backend.secuscan.executor.executor.create_task", new_callable=AsyncMock, return_value="task-1"):
-
+        steps = [
+            {
+                "plugin_id": "nmap",
+                "inputs": {"target": "example.com"},
+            }
+        ]
+        with patch("backend.secuscan.workflows.get_db", new_callable=AsyncMock), patch(
+            "backend.secuscan.plugins.get_plugin_manager"
+        ) as mock_get_pm, patch(
+            "backend.secuscan.validation.validate_target", return_value=(True, "")
+        ), patch(
+            "backend.secuscan.ratelimit.rate_limiter.can_execute",
+            return_value=(True, ""),
+        ), patch(
+            "backend.secuscan.ratelimit.concurrent_limiter.acquire",
+            new_callable=AsyncMock,
+        ) as mock_acquire, patch(
+            "backend.secuscan.executor.executor.create_task",
+            new_callable=AsyncMock,
+            return_value="task-1",
+        ):
             mock_pm = MagicMock()
             plugin = MagicMock()
             plugin.category = "network"
@@ -168,18 +201,30 @@ class TestSchedulerSecurityControls:
 
     @pytest.mark.asyncio
     async def test_skips_step_when_concurrency_limit_reached(self, scheduler):
-        steps = [{
-            "plugin_id": "nmap",
-            "inputs": {"target": "example.com"},
-        }]
-        with patch("backend.secuscan.workflows.get_db", new_callable=AsyncMock), \
-             patch("backend.secuscan.plugins.get_plugin_manager") as mock_get_pm, \
-             patch("backend.secuscan.validation.validate_target", return_value=(True, "")), \
-             patch("backend.secuscan.ratelimit.rate_limiter.can_execute", return_value=(True, "")), \
-             patch("backend.secuscan.ratelimit.concurrent_limiter.acquire", return_value=(False, "Concurrency limit reached")), \
-             patch("backend.secuscan.executor.executor.create_task", new_callable=AsyncMock, return_value="task-1"), \
-             patch("backend.secuscan.executor.executor.mark_task_failed", new_callable=AsyncMock) as mock_fail:
-
+        steps = [
+            {
+                "plugin_id": "nmap",
+                "inputs": {"target": "example.com"},
+            }
+        ]
+        with patch("backend.secuscan.workflows.get_db", new_callable=AsyncMock), patch(
+            "backend.secuscan.plugins.get_plugin_manager"
+        ) as mock_get_pm, patch(
+            "backend.secuscan.validation.validate_target", return_value=(True, "")
+        ), patch(
+            "backend.secuscan.ratelimit.rate_limiter.can_execute",
+            return_value=(True, ""),
+        ), patch(
+            "backend.secuscan.ratelimit.concurrent_limiter.acquire",
+            return_value=(False, "Concurrency limit reached"),
+        ), patch(
+            "backend.secuscan.executor.executor.create_task",
+            new_callable=AsyncMock,
+            return_value="task-1",
+        ), patch(
+            "backend.secuscan.executor.executor.mark_task_failed",
+            new_callable=AsyncMock,
+        ) as mock_fail:
             mock_pm = MagicMock()
             plugin = MagicMock()
             plugin.category = "network"
@@ -196,22 +241,29 @@ class TestSchedulerSecurityControls:
 # WorkflowScheduler.tick rate limit integration
 # ---------------------------------------------------------------------------
 
+
 class TestTickRateLimiting:
     @pytest.mark.asyncio
     async def test_tick_applies_workflow_rate_limiter(self, scheduler):
         db_mock = AsyncMock()
-        db_mock.fetchall.return_value = [{
-            "id": "wf-1",
-            "name": "test",
-            "owner_id": "default",
-            "schedule_seconds": 60,
-            "last_run_at": None,
-            "steps_json": "[]",
-        }]
-        with patch("backend.secuscan.workflows.get_db", return_value=db_mock), \
-             patch.object(scheduler, "_run_workflow", new_callable=AsyncMock) as mock_run, \
-             patch("backend.secuscan.workflows.workflow_rate_limiter.check_workflow_rate_limit", new_callable=AsyncMock) as mock_rate:
-
+        db_mock.fetchall.return_value = [
+            {
+                "id": "wf-1",
+                "name": "test",
+                "owner_id": "default",
+                "schedule_seconds": 60,
+                "last_run_at": None,
+                "steps_json": "[]",
+            }
+        ]
+        with patch(
+            "backend.secuscan.workflows.get_db", return_value=db_mock
+        ), patch.object(
+            scheduler, "_run_workflow", new_callable=AsyncMock
+        ) as mock_run, patch(
+            "backend.secuscan.workflows.workflow_rate_limiter.check_workflow_rate_limit",
+            new_callable=AsyncMock,
+        ) as mock_rate:
             mock_rate.return_value = (True, "")
             await scheduler.tick()
             mock_rate.assert_called_once_with("wf-1", 60)
@@ -220,19 +272,28 @@ class TestTickRateLimiting:
     @pytest.mark.asyncio
     async def test_tick_skips_rate_limited_workflow(self, scheduler):
         db_mock = AsyncMock()
-        db_mock.fetchall.return_value = [{
-            "id": "wf-1",
-            "name": "test",
-            "owner_id": "default",
-            "schedule_seconds": 60,
-            "last_run_at": None,
-            "steps_json": "[]",
-        }]
-        with patch("backend.secuscan.workflows.get_db", return_value=db_mock), \
-             patch.object(scheduler, "_run_workflow", new_callable=AsyncMock) as mock_run, \
-             patch("backend.secuscan.workflows.workflow_rate_limiter.check_workflow_rate_limit", new_callable=AsyncMock) as mock_rate:
-
-            mock_rate.return_value = (False, "Workflow rate limited: wait 30s between runs")
+        db_mock.fetchall.return_value = [
+            {
+                "id": "wf-1",
+                "name": "test",
+                "owner_id": "default",
+                "schedule_seconds": 60,
+                "last_run_at": None,
+                "steps_json": "[]",
+            }
+        ]
+        with patch(
+            "backend.secuscan.workflows.get_db", return_value=db_mock
+        ), patch.object(
+            scheduler, "_run_workflow", new_callable=AsyncMock
+        ) as mock_run, patch(
+            "backend.secuscan.workflows.workflow_rate_limiter.check_workflow_rate_limit",
+            new_callable=AsyncMock,
+        ) as mock_rate:
+            mock_rate.return_value = (
+                False,
+                "Workflow rate limited: wait 30s between runs",
+            )
             await scheduler.tick()
             mock_rate.assert_called_once()
             mock_run.assert_not_called()

@@ -55,7 +55,9 @@ def test_public_target_allowed_when_target_policy_opted_in(test_client, monkeypa
     from backend.secuscan.config import settings
 
     monkeypatch.setattr(settings, "safe_mode_default", True)
-    policy = _create_target_policy(test_client, allow_public_targets=True, allow_exploit_validation=False)
+    policy = _create_target_policy(
+        test_client, allow_public_targets=True, allow_exploit_validation=False
+    )
 
     with patch("backend.secuscan.executor.TaskExecutor._execute_command") as mock_exec:
         mock_exec.return_value = ("Mocked successful output", 0)
@@ -105,7 +107,9 @@ def test_network_scanner_correlates_service_to_cve(test_client, monkeypatch):
         ]
     )
 
-    with patch("backend.secuscan.scanners.base.BaseScanner._execute_command") as mock_exec:
+    with patch(
+        "backend.secuscan.scanners.base.BaseScanner._execute_command"
+    ) as mock_exec:
         mock_exec.return_value = (nmap_output, 0)
 
         response = test_client.post(
@@ -137,4 +141,6 @@ def test_network_scanner_correlates_service_to_cve(test_client, monkeypatch):
         assert any(f.get("cve") == "CVE-2021-23017" for f in findings)
 
         asset_rows = test_client.get("/api/v1/assets/services").json()["items"]
-        assert any(item.get("cpe") == "cpe:/a:nginx:nginx:1.18.0" for item in asset_rows)
+        assert any(
+            item.get("cpe") == "cpe:/a:nginx:nginx:1.18.0" for item in asset_rows
+        )

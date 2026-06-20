@@ -75,7 +75,9 @@ class TestAuthDependency:
 
     def test_valid_bearer_token(self, client_with_key):
         client, api_key = client_with_key
-        resp = client.get("/api/v1/plugins", headers={"Authorization": f"Bearer {api_key}"})
+        resp = client.get(
+            "/api/v1/plugins", headers={"Authorization": f"Bearer {api_key}"}
+        )
         assert resp.status_code == 200
 
     def test_bearer_wrong_key_returns_401(self, client_with_key):
@@ -100,21 +102,25 @@ class TestIsFilesystemTarget:
 
     from backend.secuscan.routes import is_filesystem_target
 
-    @pytest.mark.parametrize("target,expected", [
-        ("/etc/passwd", True),
-        ("./relative/path", True),
-        ("../parent/path", True),
-        ("~/home/dir", True),
-        ("C:\\Windows\\System32", True),
-        ("C:/Windows/System32", True),
-        # These are NOT filesystem targets
-        ("8.8.8.8/32", False),
-        ("192.168.1.0/24", False),
-        ("example.com", False),
-        ("http://example.com/path", False),
-        ("https://example.com/path", False),
-        ("10.0.0.1", False),
-    ])
+    @pytest.mark.parametrize(
+        "target,expected",
+        [
+            ("/etc/passwd", True),
+            ("./relative/path", True),
+            ("../parent/path", True),
+            ("~/home/dir", True),
+            ("C:\\Windows\\System32", True),
+            ("C:/Windows/System32", True),
+            # These are NOT filesystem targets
+            ("8.8.8.8/32", False),
+            ("192.168.1.0/24", False),
+            ("example.com", False),
+            ("http://example.com/path", False),
+            ("https://example.com/path", False),
+            ("10.0.0.1", False),
+        ],
+    )
     def test_filesystem_target_detection(self, target, expected):
         from backend.secuscan.routes import is_filesystem_target
+
         assert is_filesystem_target(target) == expected

@@ -5,6 +5,7 @@ import sys
 HEADING_RE = re.compile(r"^#+\s+(.+)$")
 LINK_RE = re.compile(r"\]\(([^)]+)\)")
 
+
 def slugify(text):
     text = text.lower().strip()
     text = re.sub(r"[^\w\s-]", "", text)
@@ -21,6 +22,7 @@ def collect_anchors(md_file):
             anchors.add(slugify(match.group(1)))
 
     return anchors
+
 
 def validate_file(md_file):
     content = md_file.read_text(encoding="utf-8")

@@ -19,6 +19,7 @@ from httpx import ASGITransport, AsyncClient
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest_asyncio.fixture
 async def db_path(tmp_path):
     """Return a path to a fresh temp SQLite file (schema created by init_db)."""
@@ -38,7 +39,6 @@ async def app_client(db_path):
     mock_executor.get_task_status = AsyncMock(return_value={"status": "queued"})
 
     with patch("backend.secuscan.routes.executor", mock_executor):
-
         from backend.secuscan.main import app
         from backend.secuscan import database as db_module
         from backend.secuscan import cache as cache_module
@@ -76,6 +76,7 @@ async def app_client(db_path):
 # DB helpers — read directly from the temp DB to verify side effects
 # ---------------------------------------------------------------------------
 
+
 async def db_fetchall(db_path: str, sql: str, params=()):
     async with aiosqlite.connect(db_path) as conn:
         conn.row_factory = aiosqlite.Row
@@ -88,8 +89,10 @@ async def db_fetchall(db_path: str, sql: str, params=()):
 # Seed helpers — insert test data directly into the temp DB
 # ---------------------------------------------------------------------------
 
-async def insert_task(db, status: str = "completed",
-                      raw_output_path: str = None) -> str:
+
+async def insert_task(
+    db, status: str = "completed", raw_output_path: str = None
+) -> str:
     task_id = str(uuid.uuid4())
     await db.execute(
         "INSERT INTO tasks "
@@ -133,6 +136,7 @@ async def insert_audit_log(db, task_id: str):
 # Tests: POST /api/v1/task/{task_id}/cancel
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_cancel_queued_task_returns_200(app_client):
     """Cancelling a queued task returns 200 with status='cancelled'."""
@@ -162,6 +166,7 @@ async def test_cancel_missing_task_returns_404(app_client):
 # ---------------------------------------------------------------------------
 # Tests: DELETE /api/v1/task/{task_id}
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_delete_task_returns_200_and_removes_row(app_client):
@@ -194,13 +199,19 @@ async def test_delete_task_also_removes_associated_records(app_client):
     resp = await app_client.delete(f"/api/v1/task/{task_id}")
     assert resp.status_code == 200, resp.text
 
-    rows = await db_fetchall(db_path, "SELECT id FROM findings WHERE id = ?", (finding_id,))
+    rows = await db_fetchall(
+        db_path, "SELECT id FROM findings WHERE id = ?", (finding_id,)
+    )
     assert len(rows) == 0, "Finding should have been deleted"
 
-    rows = await db_fetchall(db_path, "SELECT id FROM reports WHERE id = ?", (report_id,))
+    rows = await db_fetchall(
+        db_path, "SELECT id FROM reports WHERE id = ?", (report_id,)
+    )
     assert len(rows) == 0, "Report should have been deleted"
 
-    rows = await db_fetchall(db_path, "SELECT id FROM audit_log WHERE task_id = ?", (task_id,))
+    rows = await db_fetchall(
+        db_path, "SELECT id FROM audit_log WHERE task_id = ?", (task_id,)
+    )
     assert len(rows) == 0, "Audit log rows should have been deleted"
 
 
@@ -248,7 +259,9 @@ async def test_delete_task_rejected_when_in_executor_running_tasks(app_client):
     assert "running" in body["detail"].lower()
 
     # Verify the task still exists in the DB (was NOT deleted)
-    rows = await db_fetchall(app_client._db_path, "SELECT id FROM tasks WHERE id = ?", (task_id,))
+    rows = await db_fetchall(
+        app_client._db_path, "SELECT id FROM tasks WHERE id = ?", (task_id,)
+    )
     assert len(rows) == 1, "Task should NOT have been deleted"
 
 
@@ -276,13 +289,14 @@ async def test_delete_task_removes_raw_output_file(app_client, tmp_path):
     raw_file.write_text("nmap output data")
     assert raw_file.exists()
 
-    task_id = await insert_task(db, status="completed",
-                                raw_output_path=str(raw_file))
+    task_id = await insert_task(db, status="completed", raw_output_path=str(raw_file))
 
     resp = await app_client.delete(f"/api/v1/task/{task_id}")
     assert resp.status_code == 200, resp.text
 
-    assert not raw_file.exists(), "raw_output_path file should have been deleted from disk"
+    assert (
+        not raw_file.exists()
+    ), "raw_output_path file should have been deleted from disk"
 
 
 @pytest.mark.asyncio
@@ -323,6 +337,7 @@ async def test_completed_task_stream_replays_raw_output_in_chunks(app_client, tm
 # Tests: DELETE /api/v1/tasks/bulk
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_bulk_delete_removes_only_requested_tasks(app_client):
     """Bulk delete removes listed tasks but leaves others untouched."""
@@ -334,7 +349,9 @@ async def test_bulk_delete_removes_only_requested_tasks(app_client):
     task_c = await insert_task(db, status="completed")  # must survive
 
     resp = await app_client.request(
-        "DELETE", "/api/v1/tasks/bulk", json=[task_a, task_b],
+        "DELETE",
+        "/api/v1/tasks/bulk",
+        json=[task_a, task_b],
     )
 
     assert resp.status_code == 200, resp.text
@@ -360,7 +377,9 @@ async def test_bulk_delete_with_running_task_returns_400(app_client):
     task_running = await insert_task(db, status="running")
 
     resp = await app_client.request(
-        "DELETE", "/api/v1/tasks/bulk", json=[task_ok, task_running],
+        "DELETE",
+        "/api/v1/tasks/bulk",
+        json=[task_ok, task_running],
     )
 
     assert resp.status_code == 400, resp.text
@@ -384,7 +403,9 @@ async def test_bulk_delete_atomicity_no_partial_delete_with_running_task(app_cli
     task_running = await insert_task(db, status="running")
 
     resp = await app_client.request(
-        "DELETE", "/api/v1/tasks/bulk", json=[task_ok, task_running],
+        "DELETE",
+        "/api/v1/tasks/bulk",
+        json=[task_ok, task_running],
     )
     assert resp.status_code == 400, resp.text
 
@@ -394,13 +415,19 @@ async def test_bulk_delete_atomicity_no_partial_delete_with_running_task(app_cli
         assert len(rows) == 1, f"Task {tid} should NOT have been deleted"
 
     # Associated records must survive
-    rows = await db_fetchall(db_path, "SELECT id FROM findings WHERE id = ?", (finding_id,))
+    rows = await db_fetchall(
+        db_path, "SELECT id FROM findings WHERE id = ?", (finding_id,)
+    )
     assert len(rows) == 1, "Finding should NOT have been deleted"
 
-    rows = await db_fetchall(db_path, "SELECT id FROM reports WHERE id = ?", (report_id,))
+    rows = await db_fetchall(
+        db_path, "SELECT id FROM reports WHERE id = ?", (report_id,)
+    )
     assert len(rows) == 1, "Report should NOT have been deleted"
 
-    rows = await db_fetchall(db_path, "SELECT id FROM audit_log WHERE task_id = ?", (task_ok,))
+    rows = await db_fetchall(
+        db_path, "SELECT id FROM audit_log WHERE task_id = ?", (task_ok,)
+    )
     assert len(rows) >= 1, "Audit log should NOT have been deleted"
 
 
@@ -416,24 +443,33 @@ async def test_bulk_delete_cascades_to_associated_records(app_client):
     await insert_audit_log(db, task_id)
 
     resp = await app_client.request(
-        "DELETE", "/api/v1/tasks/bulk", json=[task_id],
+        "DELETE",
+        "/api/v1/tasks/bulk",
+        json=[task_id],
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["deleted_count"] == 1
 
-    rows = await db_fetchall(db_path, "SELECT id FROM findings WHERE id = ?", (finding_id,))
+    rows = await db_fetchall(
+        db_path, "SELECT id FROM findings WHERE id = ?", (finding_id,)
+    )
     assert len(rows) == 0, "Finding should have been deleted"
 
-    rows = await db_fetchall(db_path, "SELECT id FROM reports WHERE id = ?", (report_id,))
+    rows = await db_fetchall(
+        db_path, "SELECT id FROM reports WHERE id = ?", (report_id,)
+    )
     assert len(rows) == 0, "Report should have been deleted"
 
-    rows = await db_fetchall(db_path, "SELECT id FROM audit_log WHERE task_id = ?", (task_id,))
+    rows = await db_fetchall(
+        db_path, "SELECT id FROM audit_log WHERE task_id = ?", (task_id,)
+    )
     assert len(rows) == 0, "Audit log should have been deleted"
 
 
 # ---------------------------------------------------------------------------
 # Tests: DELETE /api/v1/tasks/clear
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_clear_all_tasks_removes_everything(app_client):

@@ -20,7 +20,7 @@ Users can add textual comments/annotations to any finding for contextual analysi
   - Body: `{ "content": "Your comment here" }`
   - Returns: Full comment object
   - **Side effects**: Creates activity record, notifies assigned user if present
-  
+
 - `GET /api/v1/finding/{finding_id}/comments` - List comments
   - Returns: Array of comments ordered chronologically (oldest first)
 
@@ -40,7 +40,7 @@ Findings can be assigned to team members for ownership and accountability.
 - `POST /api/v1/finding/{finding_id}/assign` - Assign finding
   - Body: `{ "assigned_to": "user:alice" }`
   - Returns: Assignment details with timestamp
-  - **Side effects**: 
+  - **Side effects**:
     - Updates finding's `assigned_to` and `assigned_by` columns
     - Creates activity record
     - Generates notification for assignee
@@ -106,7 +106,7 @@ In-app notifications alert users to important events: assignments, comments, sta
 - `GET /api/v1/notifications` - List notifications
   - Query params: `?is_read=false&limit=50&offset=0`
   - Returns: Paginated notification list
-  
+
 - `POST /api/v1/notification/{notification_id}/mark-read` - Mark as read
   - Returns: Notification with is_read=true
 
@@ -312,7 +312,7 @@ const [activityFeedOpen, setActivityFeedOpen] = useState(false)
 // In the JSX:
 {selectedFinding && (
   <div className="collaboration-section">
-    <AssignmentControl 
+    <AssignmentControl
       findingId={selectedFinding.id}
       assignedTo={selectedFinding.assigned_to}
       assignedBy={selectedFinding.assigned_by}
@@ -359,7 +359,7 @@ const [activityFeedOpen, setActivityFeedOpen] = useState(false)
 export default function NotificationsBell() {
   const [notifications, setNotifications] = useState<NotificationAlert[]>([])
   const [unreadCount, setUnreadCount] = useState(0)
-  
+
   // Load notifications on mount
   // Show unread count in bell icon
   // Dropdown to mark as read
@@ -379,7 +379,7 @@ export default function NotificationsBell() {
 
 2. **API Versioning**: All new endpoints are under `/api/v1/` (no breaking changes)
 
-3. **Backward Compatibility**: 
+3. **Backward Compatibility**:
    - Existing finding queries still work
    - New fields have sensible defaults
    - No changes to existing endpoint contracts

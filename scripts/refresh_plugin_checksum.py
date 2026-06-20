@@ -33,6 +33,7 @@ from pathlib import Path
 
 # ── Digest logic (mirrors PluginManager.compute_plugin_digest exactly) ────────
 
+
 def compute_plugin_digest(metadata_file: Path, parser_file: Path) -> str:
     """
     Compute deterministic plugin digest ignoring mutable checksum/signature fields.
@@ -63,6 +64,7 @@ def compute_plugin_digest(metadata_file: Path, parser_file: Path) -> str:
 
 # ── Core refresh logic ────────────────────────────────────────────────────────
 
+
 def refresh_plugin(plugin_dir: Path, dry_run: bool = False) -> bool:
     """
     Recalculate and write the checksum for a single plugin.
@@ -75,7 +77,7 @@ def refresh_plugin(plugin_dir: Path, dry_run: bool = False) -> bool:
         True if the plugin was processed successfully, False on error
     """
     metadata_file = plugin_dir / "metadata.json"
-    parser_file   = plugin_dir / "parser.py"
+    parser_file = plugin_dir / "parser.py"
 
     # Validate plugin folder structure
     if not plugin_dir.exists():
@@ -90,14 +92,20 @@ def refresh_plugin(plugin_dir: Path, dry_run: bool = False) -> bool:
     try:
         new_checksum = compute_plugin_digest(metadata_file, parser_file)
     except Exception as e:
-        print(f"  [ERROR] Failed to compute digest for {plugin_dir.name}: {e}", file=sys.stderr)
+        print(
+            f"  [ERROR] Failed to compute digest for {plugin_dir.name}: {e}",
+            file=sys.stderr,
+        )
         return False
 
     # Read current metadata
     try:
         metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
-        print(f"  [ERROR] Invalid JSON in metadata.json for {plugin_dir.name}: {e}", file=sys.stderr)
+        print(
+            f"  [ERROR] Invalid JSON in metadata.json for {plugin_dir.name}: {e}",
+            file=sys.stderr,
+        )
         return False
 
     old_checksum = metadata.get("checksum", "<none>")
@@ -131,9 +139,7 @@ def refresh_all_plugins(plugins_dir: Path, dry_run: bool = False) -> None:
         print(f"[ERROR] Plugins directory not found: {plugins_dir}", file=sys.stderr)
         sys.exit(1)
 
-    plugin_dirs = sorted(
-        [d for d in plugins_dir.iterdir() if d.is_dir()]
-    )
+    plugin_dirs = sorted([d for d in plugins_dir.iterdir() if d.is_dir()])
 
     if not plugin_dirs:
         print(f"[WARNING] No plugin folders found in: {plugins_dir}")
@@ -142,7 +148,7 @@ def refresh_all_plugins(plugins_dir: Path, dry_run: bool = False) -> None:
     print(f"Refreshing checksums for {len(plugin_dirs)} plugins...\n")
 
     success_count = 0
-    error_count   = 0
+    error_count = 0
 
     for plugin_dir in plugin_dirs:
         if refresh_plugin(plugin_dir, dry_run=dry_run):
@@ -157,6 +163,7 @@ def refresh_all_plugins(plugins_dir: Path, dry_run: bool = False) -> None:
 
 
 # ── CLI entry point ───────────────────────────────────────────────────────────
+
 
 def main() -> None:
     # Default plugins dir is relative to this script's location

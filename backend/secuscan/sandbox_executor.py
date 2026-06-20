@@ -14,9 +14,12 @@ CHUNK_SIZE = 64 * 1024
 SIGTERM_GRACE = 3.0
 
 
-def resolve_sandbox_config(plugin_sandbox: Optional[SandboxConfig] = None) -> SandboxConfig:
+def resolve_sandbox_config(
+    plugin_sandbox: Optional[SandboxConfig] = None,
+) -> SandboxConfig:
     """Merge global settings with optional per-plugin sandbox overrides."""
     from .config import settings
+
     base = SandboxConfig(
         timeout_seconds=settings.sandbox_timeout,
         max_memory_mb=settings.sandbox_memory_mb,
@@ -35,6 +38,7 @@ def _build_preexec_fn(config: SandboxConfig):
 
     def _apply_limits():
         import resource
+
         resource.setrlimit(resource.RLIMIT_AS, (mem_limit, mem_limit))
 
     return _apply_limits
@@ -119,6 +123,7 @@ async def sandbox_execute(
     rss_before = 0
     try:
         import resource
+
         rss_before = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
     except (ImportError, AttributeError):
         pass
@@ -143,8 +148,12 @@ async def sandbox_execute(
     violation_reason = None
 
     reader_task = asyncio.gather(
-        _read_stream(process.stdout, stdout_buffer, state, broadcast_callback, "stdout"),
-        _read_stream(process.stderr, stderr_buffer, state, broadcast_callback, "stderr"),
+        _read_stream(
+            process.stdout, stdout_buffer, state, broadcast_callback, "stdout"
+        ),
+        _read_stream(
+            process.stderr, stderr_buffer, state, broadcast_callback, "stderr"
+        ),
     )
 
     try:
@@ -196,6 +205,7 @@ async def sandbox_execute(
         rss_delta = 0
         try:
             import resource
+
             rss_after = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
             rss_delta = rss_after - rss_before
         except (ImportError, AttributeError):

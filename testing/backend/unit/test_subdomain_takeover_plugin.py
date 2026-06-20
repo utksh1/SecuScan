@@ -18,7 +18,9 @@ PARSER_PATH = Path(settings.plugins_dir) / PLUGIN_ID / "parser.py"
 
 
 def _load_subdomain_takeover_parser():
-    spec = importlib.util.spec_from_file_location("subdomain_takeover_parser", PARSER_PATH)
+    spec = importlib.util.spec_from_file_location(
+        "subdomain_takeover_parser", PARSER_PATH
+    )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -83,7 +85,9 @@ def test_subdomain_takeover_executor_normalizes_parser_fixture(plugin_manager):
     assert plugin is not None
 
     parsed = parser.parse(FIXTURE_PATH.read_text(encoding="utf-8"))
-    normalized = executor._normalize_parsed_result(plugin, FIXTURE_PATH.read_text(encoding="utf-8"), parsed)
+    normalized = executor._normalize_parsed_result(
+        plugin, FIXTURE_PATH.read_text(encoding="utf-8"), parsed
+    )
 
     assert normalized["count"] == 3
     assert all(f["title"] for f in normalized["findings"])

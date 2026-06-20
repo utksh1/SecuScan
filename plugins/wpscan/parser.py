@@ -2,7 +2,13 @@ import json
 from typing import Any, Dict, List
 
 
-def _finding(title: str, category: str, severity: str, description: str, metadata: Dict[str, Any] | None = None) -> Dict[str, Any]:
+def _finding(
+    title: str,
+    category: str,
+    severity: str,
+    description: str,
+    metadata: Dict[str, Any] | None = None,
+) -> Dict[str, Any]:
     return {
         "title": title,
         "category": category,

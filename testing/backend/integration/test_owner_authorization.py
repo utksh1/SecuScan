@@ -28,6 +28,7 @@ BOB_OWNER = "user:bob"
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _seed_task(owner_id: str, task_id: str, *, status: str = "completed") -> None:
     """Insert a task row directly with an explicit owner_id."""
     conn = sqlite3.connect(settings.database_path)
@@ -90,6 +91,7 @@ def _task_owner(task_id: str):
 # Creation wiring
 # ---------------------------------------------------------------------------
 
+
 def test_started_task_records_requesting_user_as_owner(test_client):
     """A task created via the API is owned by the requesting user."""
     from unittest.mock import patch
@@ -128,6 +130,7 @@ def test_tasks_created_by_distinct_users_get_distinct_owners(test_client):
 # Cross-user GET / report / cancel / delete on a single task
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "method,path_tmpl",
     [
@@ -148,15 +151,23 @@ def test_user_b_cannot_access_user_a_task(test_client, method, path_tmpl):
     path = path_tmpl.format(tid="alice-task")
 
     resp = getattr(test_client, method)(path, headers=BOB)
-    assert resp.status_code == 403, f"{method.upper()} {path} -> {resp.status_code}: {resp.text}"
+    assert (
+        resp.status_code == 403
+    ), f"{method.upper()} {path} -> {resp.status_code}: {resp.text}"
 
 
 def test_user_a_can_access_own_task(test_client):
     """The owner retains full access to their own task."""
     _seed_task(ALICE_OWNER, "alice-task")
 
-    assert test_client.get("/api/v1/task/alice-task/status", headers=ALICE).status_code == 200
-    assert test_client.get("/api/v1/task/alice-task/result", headers=ALICE).status_code == 200
+    assert (
+        test_client.get("/api/v1/task/alice-task/status", headers=ALICE).status_code
+        == 200
+    )
+    assert (
+        test_client.get("/api/v1/task/alice-task/result", headers=ALICE).status_code
+        == 200
+    )
 
 
 def test_unknown_task_returns_404_not_403(test_client):
@@ -169,12 +180,19 @@ def test_unknown_task_returns_404_not_403(test_client):
 # Listing endpoints must not leak another user's resources
 # ---------------------------------------------------------------------------
 
+
 def test_task_list_is_scoped_to_owner(test_client):
     _seed_task(ALICE_OWNER, "alice-task")
     _seed_task(BOB_OWNER, "bob-task")
 
-    alice_ids = {t["task_id"] for t in test_client.get("/api/v1/tasks", headers=ALICE).json()["tasks"]}
-    bob_ids = {t["task_id"] for t in test_client.get("/api/v1/tasks", headers=BOB).json()["tasks"]}
+    alice_ids = {
+        t["task_id"]
+        for t in test_client.get("/api/v1/tasks", headers=ALICE).json()["tasks"]
+    }
+    bob_ids = {
+        t["task_id"]
+        for t in test_client.get("/api/v1/tasks", headers=BOB).json()["tasks"]
+    }
 
     assert "alice-task" in alice_ids and "bob-task" not in alice_ids
     assert "bob-task" in bob_ids and "alice-task" not in bob_ids
@@ -186,8 +204,14 @@ def test_findings_list_is_scoped_to_owner(test_client):
     _seed_finding(ALICE_OWNER, "alice-finding", "alice-task")
     _seed_finding(BOB_OWNER, "bob-finding", "bob-task")
 
-    alice_findings = {f["id"] for f in test_client.get("/api/v1/findings", headers=ALICE).json()["findings"]}
-    bob_findings = {f["id"] for f in test_client.get("/api/v1/findings", headers=BOB).json()["findings"]}
+    alice_findings = {
+        f["id"]
+        for f in test_client.get("/api/v1/findings", headers=ALICE).json()["findings"]
+    }
+    bob_findings = {
+        f["id"]
+        for f in test_client.get("/api/v1/findings", headers=BOB).json()["findings"]
+    }
 
     assert alice_findings == {"alice-finding"}
     assert bob_findings == {"bob-finding"}
@@ -199,8 +223,14 @@ def test_reports_list_is_scoped_to_owner(test_client):
     _seed_report(ALICE_OWNER, "report:alice", "alice-task")
     _seed_report(BOB_OWNER, "report:bob", "bob-task")
 
-    alice_reports = {r["id"] for r in test_client.get("/api/v1/reports", headers=ALICE).json()["reports"]}
-    bob_reports = {r["id"] for r in test_client.get("/api/v1/reports", headers=BOB).json()["reports"]}
+    alice_reports = {
+        r["id"]
+        for r in test_client.get("/api/v1/reports", headers=ALICE).json()["reports"]
+    }
+    bob_reports = {
+        r["id"]
+        for r in test_client.get("/api/v1/reports", headers=BOB).json()["reports"]
+    }
 
     assert alice_reports == {"report:alice"}
     assert bob_reports == {"report:bob"}
@@ -210,18 +240,26 @@ def test_finding_detail_blocks_cross_user_access(test_client):
     _seed_task(ALICE_OWNER, "alice-task")
     _seed_finding(ALICE_OWNER, "alice-finding", "alice-task")
 
-    assert test_client.get("/api/v1/finding/alice-finding", headers=BOB).status_code == 403
-    assert test_client.get("/api/v1/finding/alice-finding", headers=ALICE).status_code == 200
+    assert (
+        test_client.get("/api/v1/finding/alice-finding", headers=BOB).status_code == 403
+    )
+    assert (
+        test_client.get("/api/v1/finding/alice-finding", headers=ALICE).status_code
+        == 200
+    )
 
 
 # ---------------------------------------------------------------------------
 # Bulk delete must only ever touch the caller's own tasks
 # ---------------------------------------------------------------------------
 
+
 def test_bulk_delete_ignores_other_users_tasks(test_client):
     _seed_task(ALICE_OWNER, "alice-task")
 
-    resp = test_client.request("DELETE", "/api/v1/tasks/bulk", json=["alice-task"], headers=BOB)
+    resp = test_client.request(
+        "DELETE", "/api/v1/tasks/bulk", json=["alice-task"], headers=BOB
+    )
     assert resp.status_code == 200
     assert resp.json()["deleted_count"] == 0
     # Alice's task must still exist.

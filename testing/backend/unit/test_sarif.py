@@ -1,6 +1,7 @@
 import json
 from backend.secuscan.reporting import ReportGenerator
 
+
 def sample_task():
     return {
         "id": "task-123",
@@ -10,9 +11,10 @@ def sample_task():
         "status": "completed",
         "created_at": "2026-05-14T10:30:00",
         "preset": "standard",
-        "inputs_json": "{\"target\": \"https://example.com\", \"display_options\": \"EPV\", \"safe_mode\": true}",
+        "inputs_json": '{"target": "https://example.com", "display_options": "EPV", "safe_mode": true}',
         "command_used": "nikto -h https://example.com -Display EPV -Format json -output -",
     }
+
 
 def test_generate_sarif_report_with_typical_findings():
     result = {
@@ -49,7 +51,7 @@ def test_generate_sarif_report_with_typical_findings():
                     "description": "Version leaked in header.",
                     "remediation": "Hide version.",
                     "id": "leak-101",
-                }
+                },
             ]
         }
     }
@@ -59,7 +61,10 @@ def test_generate_sarif_report_with_typical_findings():
 
     # Assert version and schema
     assert sarif["version"] == "2.1.0"
-    assert sarif["$schema"] == "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0-rtm.5.json"
+    assert (
+        sarif["$schema"]
+        == "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0-rtm.5.json"
+    )
 
     # Assert tool driver
     run = sarif["runs"][0]
@@ -74,7 +79,10 @@ def test_generate_sarif_report_with_typical_findings():
     assert rules[0]["id"] == "cve-2026-0001"
     assert rules[0]["name"] == "Exposed admin panel"
     assert rules[0]["shortDescription"]["text"] == "Exposed admin panel"
-    assert rules[0]["fullDescription"]["text"] == "Admin panel is reachable without restrictions."
+    assert (
+        rules[0]["fullDescription"]["text"]
+        == "Admin panel is reachable without restrictions."
+    )
     assert rules[0]["help"]["text"] == "Restrict access."
     assert rules[0]["properties"]["cpe"] == "cpe:/a:nginx:nginx:1.18.0"
     assert rules[0]["properties"]["validated"] is True
@@ -116,11 +124,7 @@ def test_generate_sarif_report_with_typical_findings():
 
 
 def test_generate_sarif_report_with_empty_findings():
-    result = {
-        "structured": {
-            "findings": []
-        }
-    }
+    result = {"structured": {"findings": []}}
 
     sarif_str = ReportGenerator.generate_sarif_report(sample_task(), result)
     sarif = json.loads(sarif_str)

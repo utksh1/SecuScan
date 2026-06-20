@@ -66,8 +66,18 @@ def _minimal_valid() -> dict:
         "engine": {"type": "cli", "binary": "ping"},
         "command_template": ["ping", "-c", "{count}", "{target}"],
         "fields": [
-            {"id": "target", "label": "Target Host", "type": "text", "help": "IP address or hostname"},
-            {"id": "count", "label": "Count", "type": "number", "help": "Number of packets"},
+            {
+                "id": "target",
+                "label": "Target Host",
+                "type": "text",
+                "help": "IP address or hostname",
+            },
+            {
+                "id": "count",
+                "label": "Count",
+                "type": "number",
+                "help": "Number of packets",
+            },
         ],
         "output": {"parser": "text"},
         "safety": {"level": "safe", "requires_consent": False},
@@ -86,16 +96,16 @@ class TestFixtures:
         # The fixture uses a placeholder checksum so we expect exactly that error.
         # All other checks should pass.
         non_checksum_errors = [e for e in result.errors if e.path != "checksum"]
-        assert non_checksum_errors == [], (
-            f"Unexpected errors in valid fixture: {non_checksum_errors}"
-        )
+        assert (
+            non_checksum_errors == []
+        ), f"Unexpected errors in valid fixture: {non_checksum_errors}"
 
     def test_invalid_fixture_fails(self):
         result = validate_one_plugin(INVALID_FIXTURE)
         assert not result.valid, "Invalid fixture should fail validation"
-        assert len(result.errors) >= 5, (
-            f"Expected at least 5 errors, got {len(result.errors)}: {result.errors}"
-        )
+        assert (
+            len(result.errors) >= 5
+        ), f"Expected at least 5 errors, got {len(result.errors)}: {result.errors}"
 
     def test_invalid_fixture_catches_bad_engine_type(self):
         result = validate_one_plugin(INVALID_FIXTURE)
@@ -148,18 +158,31 @@ class TestFixtures:
 
 
 class TestRequiredFields:
-    @pytest.mark.parametrize("missing_key", [
-        "id", "name", "description", "version", "category",
-        "icon", "engine", "command_template", "fields", "output", "safety", "checksum",
-    ])
+    @pytest.mark.parametrize(
+        "missing_key",
+        [
+            "id",
+            "name",
+            "description",
+            "version",
+            "category",
+            "icon",
+            "engine",
+            "command_template",
+            "fields",
+            "output",
+            "safety",
+            "checksum",
+        ],
+    )
     def test_missing_required_field_is_reported(self, tmp_path, missing_key):
         data = _minimal_valid()
         del data[missing_key]
         plugin_dir = _write_metadata(tmp_path, data)
         result = validate_one_plugin(plugin_dir)
-        assert missing_key in _error_paths(result), (
-            f"Expected error for missing key '{missing_key}', got: {_error_paths(result)}"
-        )
+        assert missing_key in _error_paths(
+            result
+        ), f"Expected error for missing key '{missing_key}', got: {_error_paths(result)}"
 
     def test_empty_string_name_is_reported(self, tmp_path):
         data = _minimal_valid()
@@ -436,7 +459,10 @@ class TestChecksum:
 class TestDependencies:
     def test_valid_dependencies_block_is_ok(self, tmp_path):
         data = _minimal_valid()
-        data["dependencies"] = {"binaries": ["curl", "jq"], "python_packages": ["requests"]}
+        data["dependencies"] = {
+            "binaries": ["curl", "jq"],
+            "python_packages": ["requests"],
+        }
         plugin_dir = _write_metadata(tmp_path, data)
         result = validate_one_plugin(plugin_dir)
         dep_errors = [e for e in result.errors if e.path.startswith("dependencies")]
@@ -527,7 +553,9 @@ class TestEdgeCases:
         for name in ("plugin_a", "plugin_b"):
             d = tmp_path / name
             d.mkdir()
-            (d / "metadata.json").write_text(json.dumps(_minimal_valid()), encoding="utf-8")
+            (d / "metadata.json").write_text(
+                json.dumps(_minimal_valid()), encoding="utf-8"
+            )
         results = validate_all_plugins(tmp_path)
         assert len(results) == 2
 
@@ -566,11 +594,18 @@ class TestMetadataQualityLint:
     def test_field_help_text_present_no_warning(self, tmp_path):
         data = _minimal_valid()
         data["fields"] = [
-            {"id": "target", "label": "Target", "type": "text", "help": "The target IP or hostname"},
+            {
+                "id": "target",
+                "label": "Target",
+                "type": "text",
+                "help": "The target IP or hostname",
+            },
         ]
         plugin_dir = _write_metadata(tmp_path, data)
         result = validate_one_plugin(plugin_dir)
-        help_warnings = [e for e in result.warnings if e.path.startswith("fields[0].help")]
+        help_warnings = [
+            e for e in result.warnings if e.path.startswith("fields[0].help")
+        ]
         assert help_warnings == []
 
     def test_invalid_category_reported(self, tmp_path):

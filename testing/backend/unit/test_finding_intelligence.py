@@ -37,12 +37,40 @@ def test_build_finding_groups_merges_duplicate_group_ids():
 
 def test_build_scan_diff_tracks_new_resolved_and_changed_groups():
     current = [
-        {"id": "new-1", "finding_group_id": "group:new", "title": "New finding", "severity": "high", "confidence": 0.9, "validated": False},
-        {"id": "chg-2", "finding_group_id": "group:changed", "title": "Changed finding", "severity": "medium", "confidence": 0.8, "validated": True},
+        {
+            "id": "new-1",
+            "finding_group_id": "group:new",
+            "title": "New finding",
+            "severity": "high",
+            "confidence": 0.9,
+            "validated": False,
+        },
+        {
+            "id": "chg-2",
+            "finding_group_id": "group:changed",
+            "title": "Changed finding",
+            "severity": "medium",
+            "confidence": 0.8,
+            "validated": True,
+        },
     ]
     previous = [
-        {"id": "old-1", "finding_group_id": "group:resolved", "title": "Resolved finding", "severity": "low", "confidence": 0.4, "validated": False},
-        {"id": "chg-1", "finding_group_id": "group:changed", "title": "Changed finding", "severity": "low", "confidence": 0.3, "validated": False},
+        {
+            "id": "old-1",
+            "finding_group_id": "group:resolved",
+            "title": "Resolved finding",
+            "severity": "low",
+            "confidence": 0.4,
+            "validated": False,
+        },
+        {
+            "id": "chg-1",
+            "finding_group_id": "group:changed",
+            "title": "Changed finding",
+            "severity": "low",
+            "confidence": 0.3,
+            "validated": False,
+        },
     ]
 
     diff = build_scan_diff(current, previous)

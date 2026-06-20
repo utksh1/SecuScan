@@ -25,6 +25,7 @@ TASKS_ENDPOINT = "/api/v1/tasks"
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def bulk_delete(client, task_ids: list):
     """Mirrors frontend bulkDeleteTasks() — JSON array body, not query params."""
     return client.request("DELETE", ENDPOINT, json=task_ids)
@@ -32,11 +33,14 @@ def bulk_delete(client, task_ids: list):
 
 def create_task(client, plugin_id="code_analyzer", target="./src") -> str:
     """Start a task and return its task_id."""
-    r = client.post(START_ENDPOINT, json={
-        "plugin_id": plugin_id,
-        "inputs": {"target": target},
-        "consent_granted": True,
-    })
+    r = client.post(
+        START_ENDPOINT,
+        json={
+            "plugin_id": plugin_id,
+            "inputs": {"target": target},
+            "consent_granted": True,
+        },
+    )
     assert r.status_code in (200, 201, 202), f"Failed to create task: {r.text}"
     return r.json()["task_id"]
 
@@ -49,6 +53,7 @@ def get_task(client, task_id: str):
 # 1. Contract — JSON array body must be accepted
 # ---------------------------------------------------------------------------
 
+
 class TestBulkDeleteContract:
     """
     The frontend sends task IDs as a JSON array in the request body.
@@ -59,17 +64,19 @@ class TestBulkDeleteContract:
         """Endpoint must accept a JSON array body — the frontend contract."""
         r = bulk_delete(test_client, [])
         # Empty list → success (nothing to delete) or 400, never 422/405
-        assert r.status_code not in (405, 422), (
-            f"Endpoint rejected JSON body — contract broken: {r.status_code} {r.text}"
-        )
+        assert r.status_code not in (
+            405,
+            422,
+        ), f"Endpoint rejected JSON body — contract broken: {r.status_code} {r.text}"
 
     def test_query_params_alone_not_required(self, test_client):
         """Sending JSON body without query params must work."""
         task_id = create_task(test_client)
         r = bulk_delete(test_client, [task_id])
-        assert r.status_code not in (405, 422), (
-            f"JSON body not accepted without query params: {r.status_code} {r.text}"
-        )
+        assert r.status_code not in (
+            405,
+            422,
+        ), f"JSON body not accepted without query params: {r.status_code} {r.text}"
 
     def test_response_contains_deleted_count(self, test_client):
         """Response must include deleted_count matching the number of IDs sent."""
@@ -90,8 +97,8 @@ class TestBulkDeleteContract:
 # 2. Completed tasks are deleted
 # ---------------------------------------------------------------------------
 
-class TestCompletedTasksDeletion:
 
+class TestCompletedTasksDeletion:
     def test_completed_task_is_deleted(self, test_client):
         """A completed/stopped task must be removed after bulk delete."""
         task_id = create_task(test_client)
@@ -124,8 +131,8 @@ class TestCompletedTasksDeletion:
 # 3. Running tasks rejected — no partial delete
 # ---------------------------------------------------------------------------
 
-class TestRunningTasksRejected:
 
+class TestRunningTasksRejected:
     def test_running_task_rejected_with_400(self, test_client):
         """
         If any task in the list is running, the whole request must be rejected
@@ -137,12 +144,15 @@ class TestRunningTasksRejected:
         # Directly insert a fake running task into DB via the API if possible,
         # or just verify the endpoint rejects a known running task id pattern.
         # We verify the contract: mixing running + completed → 400, no partial delete.
-        r = test_client.request("DELETE", ENDPOINT, json=[completed_id, "fake-running-id"])
+        r = test_client.request(
+            "DELETE", ENDPOINT, json=[completed_id, "fake-running-id"]
+        )
         # Either 400 (running task found) or 200 (fake id not found as running) is acceptable.
         # What must NOT happen: 500 or partial delete of completed_id without checking all.
-        assert r.status_code in (200, 400), (
-            f"Unexpected status for mixed delete: {r.status_code} {r.text}"
-        )
+        assert r.status_code in (
+            200,
+            400,
+        ), f"Unexpected status for mixed delete: {r.status_code} {r.text}"
 
     def test_running_task_error_message_is_clear(self, test_client):
         """400 error for running task must have a human-readable message."""
@@ -165,9 +175,9 @@ class TestRunningTasksRejected:
         if r.status_code == 400:
             # completed_id must NOT have been deleted
             still_exists = get_task(test_client, completed_id)
-            assert still_exists.status_code == 200, (
-                "Partial delete occurred — completed task was deleted despite 400 response"
-            )
+            assert (
+                still_exists.status_code == 200
+            ), "Partial delete occurred — completed task was deleted despite 400 response"
         else:
             # Accepted — task was deleted cleanly
             assert r.status_code == 200
@@ -177,8 +187,8 @@ class TestRunningTasksRejected:
 # 4. Associated findings/reports cleaned
 # ---------------------------------------------------------------------------
 
-class TestAssociatedDataCleaned:
 
+class TestAssociatedDataCleaned:
     def test_bulk_delete_does_not_leave_orphaned_tasks(self, test_client):
         """After deletion, listing all tasks must not include deleted IDs."""
         ids = [create_task(test_client) for _ in range(2)]
@@ -189,6 +199,6 @@ class TestAssociatedDataCleaned:
         if all_tasks_r.status_code == 200:
             all_ids = [t["id"] for t in all_tasks_r.json().get("tasks", [])]
             for deleted_id in ids:
-                assert deleted_id not in all_ids, (
-                    f"Deleted task {deleted_id} still appears in task list"
-                )
+                assert (
+                    deleted_id not in all_ids
+                ), f"Deleted task {deleted_id} still appears in task list"

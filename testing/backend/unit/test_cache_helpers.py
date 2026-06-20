@@ -9,6 +9,7 @@ from backend.secuscan.cache import CacheClient
 # get_or_set_cached unit tests (directly against CacheClient)
 # ---------------------------------------------------------------------------
 
+
 def _run(coro):
     return asyncio.run(coro)
 
@@ -140,15 +141,15 @@ def test_lru_eviction_preserves_recently_accessed():
         await cache.set_json("key:1", "val1")
         await cache.set_json("key:2", "val2")
         await cache.set_json("key:3", "val3")
-        cache._access_order["key:2"] = 1.0       # Oldest
-        cache._access_order["key:3"] = 2.0        # Middle
-        await cache.get_json("key:1")              # Refreshes to ~now (most recent)
+        cache._access_order["key:2"] = 1.0  # Oldest
+        cache._access_order["key:3"] = 2.0  # Middle
+        await cache.get_json("key:1")  # Refreshes to ~now (most recent)
         await cache.set_json("key:4", "val4")
 
     _run(run())
     assert cache.size == 3
-    assert _run(cache.get_json("key:1")) == "val1"   # Recently accessed, preserved
-    assert _run(cache.get_json("key:2")) is None      # Oldest, evicted
+    assert _run(cache.get_json("key:1")) == "val1"  # Recently accessed, preserved
+    assert _run(cache.get_json("key:2")) is None  # Oldest, evicted
     assert _run(cache.get_json("key:4")) == "val4"
 
 

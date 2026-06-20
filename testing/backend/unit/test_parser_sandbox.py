@@ -115,7 +115,9 @@ class TestRunParserSuccessful:
                 return {"findings": [{"title": f"f{i}"} for i in range(1000)]}
             """,
         )
-        result = run_parser_in_sandbox(p, "test_plugin", "data", max_output_bytes=10 * 1024 * 1024)
+        result = run_parser_in_sandbox(
+            p, "test_plugin", "data", max_output_bytes=10 * 1024 * 1024
+        )
         assert len(result["findings"]) == 1000
 
 
@@ -288,6 +290,7 @@ class TestOutputSizeLimit:
         )
         cap = 512 * 1024  # 512 KB cap
         import time
+
         start = time.monotonic()
         with pytest.raises(ParserSandboxError) as exc_info:
             run_parser_in_sandbox(p, "overflow_plugin", "data", max_output_bytes=cap)
@@ -316,6 +319,7 @@ class TestOutputSizeLimit:
             """,
         )
         import time
+
         start = time.monotonic()
         # Stderr overflow does NOT kill the process — the parser still succeeds.
         # We just verify the collected stderr is bounded.

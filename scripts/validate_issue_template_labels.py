@@ -47,9 +47,7 @@ def parse_labels(raw_value):
         raw_value = raw_value[1:-1]
 
     return [
-        label.strip().strip("\"'")
-        for label in raw_value.split(",")
-        if label.strip()
+        label.strip().strip("\"'") for label in raw_value.split(",") if label.strip()
     ]
 
 
@@ -69,7 +67,7 @@ def extract_labels_from_front_matter(front_matter):
             labels.extend(parse_labels(value))
             continue
 
-        for next_line in lines[index + 1:]:
+        for next_line in lines[index + 1 :]:
             stripped = next_line.strip()
 
             if not stripped:
@@ -83,14 +81,20 @@ def extract_labels_from_front_matter(front_matter):
     return labels
 
 
-for template in list(TEMPLATE_DIR.glob("*.md")) + list(TEMPLATE_DIR.glob("*.yml")) + list(TEMPLATE_DIR.glob("*.yaml")):
+for template in (
+    list(TEMPLATE_DIR.glob("*.md"))
+    + list(TEMPLATE_DIR.glob("*.yml"))
+    + list(TEMPLATE_DIR.glob("*.yaml"))
+):
     content = template.read_text(encoding="utf-8")
     front_matter = extract_front_matter(content)
     labels = extract_labels_from_front_matter(front_matter)
 
     for label in labels:
         if label not in VALID_LABELS:
-            errors.append("{}: invalid label '{}'".format(template.relative_to(REPO_ROOT), label))
+            errors.append(
+                "{}: invalid label '{}'".format(template.relative_to(REPO_ROOT), label)
+            )
 
 if errors:
     print("Invalid issue template labels found:")

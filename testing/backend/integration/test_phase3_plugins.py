@@ -24,7 +24,13 @@ def _create_target_policy(test_client, **overrides):
         "allow_exploit_validation": True,
         "allow_authenticated_scan": True,
         "default_validation_mode": "proof",
-        "allowed_targets": ["10.0.0.10", "https://api.lab", "https://wp.lab", "https://joomla.lab", "https://drupal.lab"],
+        "allowed_targets": [
+            "10.0.0.10",
+            "https://api.lab",
+            "https://wp.lab",
+            "https://joomla.lab",
+            "https://drupal.lab",
+        ],
     }
     payload.update(overrides)
     response = test_client.post("/api/v1/target-policies", json=payload)
@@ -32,7 +38,9 @@ def _create_target_policy(test_client, **overrides):
     return response.json()
 
 
-def run_plugin_test(test_client, plugin_id, inputs, mock_output, execution_context=None):
+def run_plugin_test(
+    test_client, plugin_id, inputs, mock_output, execution_context=None
+):
     """Helper to run a plugin test with mocked execution."""
     with patch("backend.secuscan.executor.TaskExecutor._execute_command") as mock_exec:
         mock_exec.return_value = (mock_output, 0)
@@ -46,7 +54,9 @@ def run_plugin_test(test_client, plugin_id, inputs, mock_output, execution_conte
             payload["execution_context"] = execution_context
 
         response = test_client.post("/api/v1/task/start", json=payload)
-        assert response.status_code == 200, f"Failed to start {plugin_id}: {response.text}"
+        assert (
+            response.status_code == 200
+        ), f"Failed to start {plugin_id}: {response.text}"
         task_id = response.json()["task_id"]
 
         max_retries = 10
@@ -58,7 +68,9 @@ def run_plugin_test(test_client, plugin_id, inputs, mock_output, execution_conte
                 break
             time.sleep(0.1)
 
-        assert status == TaskStatus.COMPLETED.value, f"Task {task_id} did not complete for {plugin_id}"
+        assert (
+            status == TaskStatus.COMPLETED.value
+        ), f"Task {task_id} did not complete for {plugin_id}"
 
         result_response = test_client.get(f"/api/v1/task/{task_id}/result")
         assert result_response.status_code == 200
@@ -86,14 +98,19 @@ def test_phase3_plugins_discoverable_and_schema_accessible(test_client):
 
 def test_wpscan(test_client, monkeypatch):
     monkeypatch.setattr(settings, "safe_mode_default", False)
-    mock_out = '{"plugins":{"sample-plugin":{"vulnerabilities":[{"title":"CVE-2026-1000"}]}}}'
+    mock_out = (
+        '{"plugins":{"sample-plugin":{"vulnerabilities":[{"title":"CVE-2026-1000"}]}}}'
+    )
     result = run_plugin_test(
         test_client,
         "wpscan",
         {"target": "https://wp.lab", "enumerate": "vp"},
         mock_out,
     )
-    assert any("WordPress Plugin Vulnerability" in f["title"] for f in result["structured"]["findings"])
+    assert any(
+        "WordPress Plugin Vulnerability" in f["title"]
+        for f in result["structured"]["findings"]
+    )
 
 
 def test_joomscan(test_client, monkeypatch):
@@ -105,7 +122,9 @@ def test_joomscan(test_client, monkeypatch):
         {"target": "https://joomla.lab"},
         mock_out,
     )
-    assert any("Joomla Vulnerability" in f["title"] for f in result["structured"]["findings"])
+    assert any(
+        "Joomla Vulnerability" in f["title"] for f in result["structured"]["findings"]
+    )
 
 
 def test_droopescan(test_client, monkeypatch):
@@ -117,7 +136,10 @@ def test_droopescan(test_client, monkeypatch):
         {"target": "https://drupal.lab"},
         mock_out,
     )
-    assert any("DroopeScan vulnerabilities" in f["title"] for f in result["structured"]["findings"])
+    assert any(
+        "DroopeScan vulnerabilities" in f["title"]
+        for f in result["structured"]["findings"]
+    )
 
 
 def test_yara_scan(test_client):
@@ -139,7 +161,9 @@ def test_volatility(test_client):
         {"target": "/tmp/mem.dump", "plugin_name": "windows.pslist.PsList"},
         mock_out,
     )
-    assert any("Volatility Artifact" in f["title"] for f in result["structured"]["findings"])
+    assert any(
+        "Volatility Artifact" in f["title"] for f in result["structured"]["findings"]
+    )
 
 
 def test_hashcat(test_client):
@@ -148,7 +172,12 @@ def test_hashcat(test_client):
     result = run_plugin_test(
         test_client,
         "hashcat",
-        {"target": "/tmp/hashes.txt", "hash_type": 0, "attack_mode": 0, "wordlist": "words.txt"},
+        {
+            "target": "/tmp/hashes.txt",
+            "hash_type": 0,
+            "attack_mode": 0,
+            "wordlist": "words.txt",
+        },
         mock_out,
         execution_context={
             "target_policy_id": policy["id"],
@@ -179,7 +208,10 @@ def test_metasploit(test_client):
             "evidence_level": "standard",
         },
     )
-    assert any("Metasploit Session Opened" in f["title"] for f in result["structured"]["findings"])
+    assert any(
+        "Metasploit Session Opened" in f["title"]
+        for f in result["structured"]["findings"]
+    )
 
 
 def test_sqli_checker(test_client, monkeypatch):

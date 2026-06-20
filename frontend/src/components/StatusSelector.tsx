@@ -44,12 +44,12 @@ export default function StatusSelector({
   return (
     <div className="mb-4 rounded border border-silver-bright/20 bg-charcoal-dark/50 p-4">
       <h3 className="mb-3 text-xs font-bold uppercase tracking-widest text-silver-bright">Status</h3>
-      
+
       <div className="space-y-2">
         {allStatuses.map((status) => {
           const isActive = status === currentStatus
           const config = statusConfig[status]
-          
+
           return (
             <button
               key={status}
@@ -57,8 +57,8 @@ export default function StatusSelector({
               disabled={updating}
               className={`
                 w-full rounded px-3 py-2 text-xs font-bold uppercase tracking-widest transition-all
-                ${isActive ? 
-                  `${config.bgColor} ${config.color} border-2 border-current` : 
+                ${isActive ?
+                  `${config.bgColor} ${config.color} border-2 border-current` :
                   'border border-silver-bright/20 bg-charcoal text-silver-bright hover:border-silver-bright/50'
                 }
                 disabled:opacity-50

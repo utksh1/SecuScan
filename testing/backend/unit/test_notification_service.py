@@ -367,9 +367,9 @@ async def test_send_webhook_pins_connection_ip_for_https(monkeypatch):
     posted_url = str(call_args[0]) if call_args else ""
     # HTTPS must NOT rewrite the URL to the IP — doing so would break TLS.
     assert "hooks.example.com" in posted_url, "HTTPS URL must keep original hostname"
-    assert "93.184.216.34" not in posted_url, (
-        "HTTPS URL must NOT contain the resolved IP"
-    )
+    assert (
+        "93.184.216.34" not in posted_url
+    ), "HTTPS URL must NOT contain the resolved IP"
 
 
 @pytest.mark.asyncio
@@ -401,9 +401,9 @@ async def test_send_webhook_pins_connection_ip_for_http(monkeypatch):
     assert ok is True
     call_args, call_kwargs = mock_post.call_args
     posted_url = str(call_args[0]) if call_args else ""
-    assert "93.184.216.34" in posted_url, (
-        "HTTP request must go to resolved IP, not hostname"
-    )
+    assert (
+        "93.184.216.34" in posted_url
+    ), "HTTP request must go to resolved IP, not hostname"
     headers = call_kwargs.get("headers", {})
     assert headers.get("Host") == "hooks.example.com"
 
@@ -593,9 +593,7 @@ async def test_send_webhook_https_delivery_pins_ip_and_preserves_tls_hostname(
         tcp_connected_to = host
         return _TLSStream()
 
-    monkeypatch.setattr(
-        auto_backend.AutoBackend, "connect_tcp", _tracking_connect_tcp
-    )
+    monkeypatch.setattr(auto_backend.AutoBackend, "connect_tcp", _tracking_connect_tcp)
 
     def fake_resolve(*args, **kwargs):
         return [(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]
@@ -604,18 +602,16 @@ async def test_send_webhook_https_delivery_pins_ip_and_preserves_tls_hostname(
         "backend.secuscan.notification_service.socket.getaddrinfo", fake_resolve
     )
 
-    ok, err = await send_webhook(
-        "https://hooks.example.com/alert", {"event": "test"}
-    )
+    ok, err = await send_webhook("https://hooks.example.com/alert", {"event": "test"})
 
     assert ok is True
     assert err is None
-    assert tcp_connected_to == "93.184.216.34", (
-        f"TCP must connect to validated/pinned IP (93.184.216.34), got {tcp_connected_to!r}"
-    )
-    assert tls_sni_hostname == "hooks.example.com", (
-        f"TLS SNI must use original hostname (hooks.example.com), got {tls_sni_hostname!r}"
-    )
+    assert (
+        tcp_connected_to == "93.184.216.34"
+    ), f"TCP must connect to validated/pinned IP (93.184.216.34), got {tcp_connected_to!r}"
+    assert (
+        tls_sni_hostname == "hooks.example.com"
+    ), f"TLS SNI must use original hostname (hooks.example.com), got {tls_sni_hostname!r}"
 
 
 @pytest.mark.asyncio
@@ -670,9 +666,9 @@ async def test_pinned_ip_network_backend_pins_ip_and_preserves_tls_hostname(
 
     stream = await backend.connect_tcp(host="hooks.example.com", port=443)
 
-    assert connected_host == "93.184.216.34", (
-        f"TCP must connect to pinned IP (93.184.216.34), got {connected_host!r}"
-    )
+    assert (
+        connected_host == "93.184.216.34"
+    ), f"TCP must connect to pinned IP (93.184.216.34), got {connected_host!r}"
 
     ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     await stream.start_tls(
@@ -680,6 +676,6 @@ async def test_pinned_ip_network_backend_pins_ip_and_preserves_tls_hostname(
         server_hostname="this-should-be-overridden.com",
     )
 
-    assert tls_hostname == "hooks.example.com", (
-        f"TLS SNI must use original hostname (hooks.example.com), got {tls_hostname!r}"
-    )
+    assert (
+        tls_hostname == "hooks.example.com"
+    ), f"TLS SNI must use original hostname (hooks.example.com), got {tls_hostname!r}"

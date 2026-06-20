@@ -27,7 +27,13 @@ async def insert_completed_task(task_id: str):
             "standard",
             '{"target": "https://audit-test.example.com"}',
             "nikto -h https://audit-test.example.com",
-            json.dumps({"findings": [{"title": "Finding", "severity": "HIGH", "description": "Test"}]}),
+            json.dumps(
+                {
+                    "findings": [
+                        {"title": "Finding", "severity": "HIGH", "description": "Test"}
+                    ]
+                }
+            ),
         ),
     )
 
@@ -39,7 +45,14 @@ async def insert_running_task(task_id: str):
         INSERT INTO tasks (id, plugin_id, tool_name, target, status, created_at)
         VALUES (?, ?, ?, ?, ?, ?)
         """,
-        (task_id, "http_inspector", "http_inspector", "https://audit-test.example.com", "running", "2026-05-14T10:30:00"),
+        (
+            task_id,
+            "http_inspector",
+            "http_inspector",
+            "https://audit-test.example.com",
+            "running",
+            "2026-05-14T10:30:00",
+        ),
     )
 
 
@@ -113,12 +126,16 @@ def test_generation_failure_does_not_create_audit_entry(test_client):
     task_id = "audit-gen-fail"
     asyncio.run(insert_completed_task(task_id))
 
-    with patch("backend.secuscan.routes.reporting.generate_sarif_report", side_effect=RuntimeError("boom")):
+    with patch(
+        "backend.secuscan.routes.reporting.generate_sarif_report",
+        side_effect=RuntimeError("boom"),
+    ):
         response = test_client.get(f"/api/v1/task/{task_id}/report/sarif")
 
     assert response.status_code == 500
     entries = asyncio.run(get_audit_entries(task_id))
     assert len(entries) == 0
+
 
 def test_request_id_is_saved_in_audit_context(test_client):
     task_id = "audit-request-id"

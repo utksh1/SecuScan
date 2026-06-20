@@ -13,7 +13,7 @@ from backend.secuscan.ratelimit import (
     task_start_limiter,
     vault_limiter,
     report_download_limiter,
-    read_heavy_limiter
+    read_heavy_limiter,
 )
 from backend.secuscan.main import app
 
@@ -93,7 +93,9 @@ async def test_sliding_window_reset():
     # 3. Simulate time pass: manually backdate the timestamps
     async with limiter.lock:
         identity = "ip:127.0.0.1"
-        limiter.history[identity] = [ts - timedelta(seconds=3) for ts in limiter.history[identity]]
+        limiter.history[identity] = [
+            ts - timedelta(seconds=3) for ts in limiter.history[identity]
+        ]
 
     # 4. Now the request should succeed since window elapsed
     await limiter(req, res)
@@ -165,6 +167,7 @@ def test_priority_client_identity_resolution():
     Verify client identity resolves correctly in priority order:
     API Key -> Authenticated User -> Client IP
     """
+
     class MockRequest:
         def __init__(self, host="127.0.0.1", headers=None, user_id=None, user=None):
             self.client = type("Client", (), {"host": host})()
@@ -190,14 +193,14 @@ def test_priority_client_identity_resolution():
     # Scenario D: API Key header present (takes precedence over User ID and IP)
     req_apikey = MockRequest(
         host="192.168.1.50",
-        headers={"x-user-id": "usr_999", "x-api-key": "secret_key_123"}
+        headers={"x-user-id": "usr_999", "x-api-key": "secret_key_123"},
     )
     assert resolve_client_identity(req_apikey) == "apikey:secret_key_123"
 
     # Scenario E: Authorization bearer header present (takes precedence over User ID and IP)
     req_auth = MockRequest(
         host="192.168.1.50",
-        headers={"x-user-id": "usr_999", "authorization": "Bearer token_xyz"}
+        headers={"x-user-id": "usr_999", "authorization": "Bearer token_xyz"},
     )
     assert resolve_client_identity(req_auth) == "apikey:token_xyz"
 
@@ -327,16 +330,22 @@ class TestRateLimiterClientKeying:
 
         # Drain client_A's quota entirely
         for _ in range(max_per_hour):
-            allowed, _ = await limiter.can_execute(plugin_id, max_per_hour=max_per_hour, client_id="client_A")
+            allowed, _ = await limiter.can_execute(
+                plugin_id, max_per_hour=max_per_hour, client_id="client_A"
+            )
             assert allowed
 
         # client_A is now blocked
-        allowed_a, msg_a = await limiter.can_execute(plugin_id, max_per_hour=max_per_hour, client_id="client_A")
+        allowed_a, msg_a = await limiter.can_execute(
+            plugin_id, max_per_hour=max_per_hour, client_id="client_A"
+        )
         assert not allowed_a
         assert "Rate limit exceeded" in msg_a
 
         # client_B must still be allowed despite client_A being blocked
-        allowed_b, msg_b = await limiter.can_execute(plugin_id, max_per_hour=max_per_hour, client_id="client_B")
+        allowed_b, msg_b = await limiter.can_execute(
+            plugin_id, max_per_hour=max_per_hour, client_id="client_B"
+        )
         assert allowed_b, f"client_B was blocked unexpectedly: {msg_b}"
 
     @pytest.mark.asyncio
@@ -347,12 +356,20 @@ class TestRateLimiterClientKeying:
         max_per_hour = 1
 
         # Exhaust both clients for the same plugin
-        await limiter.can_execute(plugin_id, max_per_hour=max_per_hour, client_id="client_A")
-        await limiter.can_execute(plugin_id, max_per_hour=max_per_hour, client_id="client_B")
+        await limiter.can_execute(
+            plugin_id, max_per_hour=max_per_hour, client_id="client_A"
+        )
+        await limiter.can_execute(
+            plugin_id, max_per_hour=max_per_hour, client_id="client_B"
+        )
 
         # Confirm both are blocked before reset
-        allowed_a, _ = await limiter.can_execute(plugin_id, max_per_hour=max_per_hour, client_id="client_A")
-        allowed_b, _ = await limiter.can_execute(plugin_id, max_per_hour=max_per_hour, client_id="client_B")
+        allowed_a, _ = await limiter.can_execute(
+            plugin_id, max_per_hour=max_per_hour, client_id="client_A"
+        )
+        allowed_b, _ = await limiter.can_execute(
+            plugin_id, max_per_hour=max_per_hour, client_id="client_B"
+        )
         assert not allowed_a
         assert not allowed_b
 
@@ -360,8 +377,12 @@ class TestRateLimiterClientKeying:
         await limiter.reset(plugin_id)
 
         # Both clients must be allowed again after reset
-        allowed_a_after, _ = await limiter.can_execute(plugin_id, max_per_hour=max_per_hour, client_id="client_A")
-        allowed_b_after, _ = await limiter.can_execute(plugin_id, max_per_hour=max_per_hour, client_id="client_B")
+        allowed_a_after, _ = await limiter.can_execute(
+            plugin_id, max_per_hour=max_per_hour, client_id="client_A"
+        )
+        allowed_b_after, _ = await limiter.can_execute(
+            plugin_id, max_per_hour=max_per_hour, client_id="client_B"
+        )
         assert allowed_a_after, "client_A should be allowed after reset"
         assert allowed_b_after, "client_B should be allowed after reset"
 
@@ -372,18 +393,26 @@ class TestRateLimiterClientKeying:
         max_per_hour = 1
 
         # Exhaust quotas for two different plugins under the same client
-        await limiter.can_execute("nmap", max_per_hour=max_per_hour, client_id="client_A")
-        await limiter.can_execute("gobuster", max_per_hour=max_per_hour, client_id="client_A")
+        await limiter.can_execute(
+            "nmap", max_per_hour=max_per_hour, client_id="client_A"
+        )
+        await limiter.can_execute(
+            "gobuster", max_per_hour=max_per_hour, client_id="client_A"
+        )
 
         # Reset only nmap
         await limiter.reset("nmap")
 
         # nmap bucket cleared: request should be allowed
-        allowed_nmap, _ = await limiter.can_execute("nmap", max_per_hour=max_per_hour, client_id="client_A")
+        allowed_nmap, _ = await limiter.can_execute(
+            "nmap", max_per_hour=max_per_hour, client_id="client_A"
+        )
         assert allowed_nmap, "nmap bucket should be cleared after reset"
 
         # gobuster bucket untouched: request should still be blocked
-        allowed_gobuster, _ = await limiter.can_execute("gobuster", max_per_hour=max_per_hour, client_id="client_A")
+        allowed_gobuster, _ = await limiter.can_execute(
+            "gobuster", max_per_hour=max_per_hour, client_id="client_A"
+        )
         assert not allowed_gobuster, "gobuster bucket should remain exhausted"
 
     @pytest.mark.asyncio
@@ -404,7 +433,9 @@ class TestRateLimiterClientKeying:
 
         assert allowed_1
         assert allowed_2
-        assert not allowed_3, "Global bucket should be rate-limited after quota is exhausted"
+        assert (
+            not allowed_3
+        ), "Global bucket should be rate-limited after quota is exhausted"
         assert "Rate limit exceeded" in msg
 
         # Verify the key in task_history is the expected global bucket format

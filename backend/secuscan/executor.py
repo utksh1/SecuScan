@@ -27,7 +27,11 @@ from .plugins import get_plugin_manager
 from .models import NotificationDeliveryStatus, TaskStatus, ScanPhase
 from .ratelimit import concurrent_limiter
 from .risk_scoring import compute_risk_score, compute_risk_factors
-from .capabilities import CapabilityEnforcer, CapabilityDeniedError, build_enforcer_from_settings
+from .capabilities import (
+    CapabilityEnforcer,
+    CapabilityDeniedError,
+    build_enforcer_from_settings,
+)
 from .parser_sandbox import run_parser_in_sandbox, ParserSandboxError
 from .network_policy import get_policy_engine
 from .notification_service import process_task_notifications
@@ -48,7 +52,10 @@ from .platform_resources import (
 )
 from .vault import VaultCrypto
 
-async def _terminate_process_group(pid: int, task_id: str, grace_seconds: int = _CANCEL_GRACE_SECONDS) -> None:
+
+async def _terminate_process_group(
+    pid: int, task_id: str, grace_seconds: int = _CANCEL_GRACE_SECONDS
+) -> None:
     """Send SIGTERM to the process group of *pid*, wait *grace_seconds*, then SIGKILL.
 
     Using a process group (via start_new_session=True on subprocess creation)
@@ -81,7 +88,9 @@ async def _terminate_process_group(pid: int, task_id: str, grace_seconds: int = 
         os.killpg(pgid, signal.SIGKILL)
         logger.warning(
             "process group %d did not exit within %ds grace — SIGKILL sent (task %s)",
-            pgid, grace_seconds, task_id,
+            pgid,
+            grace_seconds,
+            task_id,
         )
     except (ProcessLookupError, PermissionError) as exc:
         logger.debug("SIGKILL to pgid %d failed: %s", pgid, exc)
@@ -106,7 +115,9 @@ def _validate_risk_fields(finding: dict) -> None:
     exp = finding.get("exploitability")
     if exp is not None:
         if not isinstance(exp, (int, float)):
-            raise ValueError(f"exploitability must be numeric, got {type(exp).__name__}")
+            raise ValueError(
+                f"exploitability must be numeric, got {type(exp).__name__}"
+            )
         if exp < 0 or exp > 10:
             raise ValueError(f"exploitability must be in [0, 10], got {exp}")
 
@@ -119,7 +130,10 @@ def _validate_risk_fields(finding: dict) -> None:
 
     ae = finding.get("asset_exposure")
     if ae is not None and ae.lower() not in ("critical", "high", "medium", "low"):
-        raise ValueError(f"asset_exposure must be one of critical/high/medium/low, got {ae}")
+        raise ValueError(
+            f"asset_exposure must be one of critical/high/medium/low, got {ae}"
+        )
+
 
 # Modular Scanners
 from .scanners.port_scanner import PortScanner
@@ -211,7 +225,9 @@ class TaskExecutor:
             for q in list(self._listeners[task_id]):
                 self._enqueue_listener_event(task_id, q, event)
 
-    def _enqueue_listener_event(self, task_id: str, q: asyncio.Queue, event: Dict[str, Any]):
+    def _enqueue_listener_event(
+        self, task_id: str, q: asyncio.Queue, event: Dict[str, Any]
+    ):
         """Add an event to a bounded listener queue without unbounded memory growth."""
         try:
             q.put_nowait(event)
@@ -225,15 +241,16 @@ class TaskExecutor:
         try:
             q.put_nowait(event)
         except asyncio.QueueFull:
-            logger.warning("Dropping stream event for slow listener on task %s", task_id)
-    
+            logger.warning(
+                "Dropping stream event for slow listener on task %s", task_id
+            )
+
     async def _broadcast_phase(self, task_id: str, phase: str):
         """Broadcast a scan phase transition and persist it to the database."""
         await self._broadcast(task_id, "phase", phase)
         db = await get_db()
         await db.execute(
-            "UPDATE tasks SET scan_phase = ? WHERE id = ?",
-            (phase, task_id)
+            "UPDATE tasks SET scan_phase = ? WHERE id = ?", (phase, task_id)
         )
 
     async def create_task(
@@ -265,16 +282,16 @@ class TaskExecutor:
         task_id = str(uuid.uuid4())
         plugin_manager = get_plugin_manager()
         plugin = plugin_manager.get_plugin(plugin_id)
-        
+
         if not plugin:
             raise ValueError(f"Plugin not found: {plugin_id}")
-        
+
         # Apply preset if provided
         if preset and preset in plugin.presets:
             preset_values = plugin.presets[preset]
             # Merge preset with user inputs (user inputs take precedence)
             inputs = {**preset_values, **inputs}
-        
+
         # Store task in database
         db = await get_db()
         await db.execute(
@@ -296,10 +313,10 @@ class TaskExecutor:
                 TaskStatus.QUEUED.value,
                 ScanPhase.QUEUED.value,
                 consent_granted,
-                bool(safe_mode)
-            )
+                bool(safe_mode),
+            ),
         )
-        
+
         # Log audit event
         await db.log_audit(
             "task_created",
@@ -311,11 +328,11 @@ class TaskExecutor:
                 "execution_context": normalize_execution_context(execution_context),
             },
             task_id=task_id,
-            plugin_id=plugin_id
+            plugin_id=plugin_id,
         )
-        
+
         return task_id
-    
+
     async def mark_task_failed(self, task_id: str, reason: str) -> None:
         """
         Mark a task as failed without running it.
@@ -341,7 +358,7 @@ class TaskExecutor:
                 0,
                 reason,
                 task_id,
-            )
+            ),
         )
         await db.log_audit(
             "task_failed",
@@ -354,7 +371,7 @@ class TaskExecutor:
     async def execute_task(self, task_id: str):
         """
         Execute a task asynchronously.
-        
+
         Args:
             task_id: Task identifier
         """
@@ -366,10 +383,17 @@ class TaskExecutor:
             # if the task was deleted or already running before this point.
             result = await db.execute(
                 "UPDATE tasks SET status = ?, started_at = ? WHERE id = ? AND status = ?",
-                (TaskStatus.RUNNING.value, datetime.now().isoformat(), task_id, TaskStatus.QUEUED.value)
+                (
+                    TaskStatus.RUNNING.value,
+                    datetime.now().isoformat(),
+                    task_id,
+                    TaskStatus.QUEUED.value,
+                ),
             )
             if result.rowcount == 0:
-                logger.warning(f"Task {task_id} was deleted or no longer queued before execution started. Aborting.")
+                logger.warning(
+                    f"Task {task_id} was deleted or no longer queued before execution started. Aborting."
+                )
                 self.running_tasks.pop(task_id, None)
                 return
             await self._invalidate_cached_views()
@@ -377,7 +401,7 @@ class TaskExecutor:
             # Get task details
             task_row = await db.fetchone(
                 "SELECT owner_id, plugin_id, inputs_json, execution_context_json, safe_mode FROM tasks WHERE id = ?",
-                (task_id,)
+                (task_id,),
             )
 
             if not task_row:
@@ -408,14 +432,15 @@ class TaskExecutor:
                 if plugin and plugin.category == "code":
                     should_validate = False
 
-
                 # Use shared is_filesystem_target from validation to ensure
                 # consistent filesystem detection across route and executor layers.
                 from .validation import is_filesystem_target
+
                 is_fs = is_filesystem_target(target)
 
                 if should_validate and not is_fs:
                     from .validation import validate_target
+
                     try:
                         # Enforce safe mode validation of target address in a thread pool
                         is_valid, error_msg = await asyncio.wait_for(
@@ -427,14 +452,18 @@ class TaskExecutor:
                                 task_id,
                                 f"Safe mode target validation failed: {error_msg}",
                             )
-                            await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
+                            await self._broadcast(
+                                task_id, "status", TaskStatus.FAILED.value
+                            )
                             return
                     except asyncio.TimeoutError:
                         await self.mark_task_failed(
                             task_id,
                             "Target validation timed out (SecuScan Guardrail)",
                         )
-                        await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
+                        await self._broadcast(
+                            task_id, "status", TaskStatus.FAILED.value
+                        )
                         return
 
             # Check before launching any scanner or subprocess.  check_access()
@@ -452,7 +481,10 @@ class TaskExecutor:
                         timeout=float(settings.dns_resolution_timeout_seconds),
                     )
                 except asyncio.TimeoutError:
-                    allowed, reason = False, "Network policy check timed out (DNS resolution timeout)"
+                    allowed, reason = (
+                        False,
+                        "Network policy check timed out (DNS resolution timeout)",
+                    )
 
                 if not allowed:
                     if settings.network_policy_failure_mode == "log_only":
@@ -464,7 +496,9 @@ class TaskExecutor:
                             task_id,
                             f"Network policy denied access to {target}: {reason}",
                         )
-                        await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
+                        await self._broadcast(
+                            task_id, "status", TaskStatus.FAILED.value
+                        )
                         return  # finally block handles running_tasks cleanup + limiter release
 
             # Check if this is a modular scanner or a standard plugin
@@ -479,7 +513,9 @@ class TaskExecutor:
                 safety_level=plugin.safety.get("level", "safe"),
             )
 
-            if plugin.safety.get("level") == "exploit" and not is_offensive_validation(execution_context):
+            if plugin.safety.get("level") == "exploit" and not is_offensive_validation(
+                execution_context
+            ):
                 raise ValueError(
                     "Exploit-level plugins require an execution context with validation_mode set to 'proof' or 'controlled_extract'."
                 )
@@ -487,19 +523,23 @@ class TaskExecutor:
             if plugin_id in MODULAR_SCANNERS:
                 scanner_class = MODULAR_SCANNERS[plugin_id]
                 scanner = scanner_class(task_id, db, safe_mode=safe_mode)
-                
+
                 logger.info(f"Executing modular scanner {plugin_id} for task {task_id}")
                 await self._broadcast(task_id, "status", TaskStatus.RUNNING.value)
                 await self._broadcast_phase(task_id, ScanPhase.RUNNING_COMMAND.value)
-                
+
                 start_time = time.time()
                 # Run the scanner
                 result = await scanner.run(target, inputs)
                 duration = time.time() - start_time
-                
+
                 # Update task with results
-                final_status = TaskStatus.COMPLETED.value if result.get("status") != "failed" else TaskStatus.FAILED.value
-                
+                final_status = (
+                    TaskStatus.COMPLETED.value
+                    if result.get("status") != "failed"
+                    else TaskStatus.FAILED.value
+                )
+
                 await db.execute(
                     """
                     UPDATE tasks SET
@@ -516,8 +556,8 @@ class TaskExecutor:
                         duration,
                         json.dumps(result),
                         result.get("error_message"),
-                        task_id
-                    )
+                        task_id,
+                    ),
                 )
 
                 # Upsert findings and report using the scanner's result
@@ -530,7 +570,7 @@ class TaskExecutor:
                     plugin_id=plugin_id,
                     target=target,
                     status=final_status,
-                    result=result
+                    result=result,
                 )
                 await self._broadcast_phase(task_id, ScanPhase.REPORTING.value)
 
@@ -546,26 +586,42 @@ class TaskExecutor:
                     # Validate the named Docker network exists before using it.
                     # If missing, attempt to create it automatically rather than failing.
                     _net_check = await asyncio.create_subprocess_exec(
-                        "docker", "network", "inspect", settings.docker_network,
+                        "docker",
+                        "network",
+                        "inspect",
+                        settings.docker_network,
                         stdout=asyncio.subprocess.DEVNULL,
                         stderr=asyncio.subprocess.DEVNULL,
                     )
                     await _net_check.wait()
                     if _net_check.returncode != 0:
-                        logger.info(f"Docker network '{settings.docker_network}' not found. Creating isolated bridge network (ICC disabled)...")
+                        logger.info(
+                            f"Docker network '{settings.docker_network}' not found. Creating isolated bridge network (ICC disabled)..."
+                        )
                         _net_create = await asyncio.create_subprocess_exec(
-                            "docker", "network", "create",
-                            "--driver", "bridge",
-                            "--opt", "com.docker.network.bridge.enable_icc=false",
+                            "docker",
+                            "network",
+                            "create",
+                            "--driver",
+                            "bridge",
+                            "--opt",
+                            "com.docker.network.bridge.enable_icc=false",
                             settings.docker_network,
                             stdout=asyncio.subprocess.DEVNULL,
                             stderr=asyncio.subprocess.DEVNULL,
                         )
                         await _net_create.wait()
                         if _net_create.returncode != 0:
-                            logger.warning("Failed to create isolated bridge network with ICC disabled. Falling back to standard bridge...")
+                            logger.warning(
+                                "Failed to create isolated bridge network with ICC disabled. Falling back to standard bridge..."
+                            )
                             _net_create_fallback = await asyncio.create_subprocess_exec(
-                                "docker", "network", "create", "--driver", "bridge", settings.docker_network,
+                                "docker",
+                                "network",
+                                "create",
+                                "--driver",
+                                "bridge",
+                                settings.docker_network,
                                 stdout=asyncio.subprocess.DEVNULL,
                                 stderr=asyncio.subprocess.DEVNULL,
                             )
@@ -574,9 +630,13 @@ class TaskExecutor:
                                 raise RuntimeError(
                                     f"Docker network '{settings.docker_network}' does not exist and could not be created automatically."
                                 )
-                            logger.info(f"Successfully created Docker network '{settings.docker_network}' (fallback)")
+                            logger.info(
+                                f"Successfully created Docker network '{settings.docker_network}' (fallback)"
+                            )
                         else:
-                            logger.info(f"Successfully created Docker network '{settings.docker_network}' with ICC disabled")
+                            logger.info(
+                                f"Successfully created Docker network '{settings.docker_network}' with ICC disabled"
+                            )
 
                     docker_image = plugin.docker_image or "alpine:latest"
                     docker_cmd = [
@@ -589,8 +649,10 @@ class TaskExecutor:
                         f"{settings.sandbox_memory_mb}m",
                         "--cpus",
                         str(settings.sandbox_cpu_quota),
-                        "--cap-drop", "NET_RAW",
-                        "--network", settings.docker_network,
+                        "--cap-drop",
+                        "NET_RAW",
+                        "--network",
+                        settings.docker_network,
                         docker_image,
                     ]
                     command = docker_cmd + command
@@ -611,7 +673,7 @@ class TaskExecutor:
                 # Save raw output
                 raw_path = Path(settings.raw_output_dir) / f"{task_id}.txt"
                 output = redact(output)
-                with open(raw_path, 'w') as f:
+                with open(raw_path, "w") as f:
                     f.write(output)
 
                 # Some CLI tools use non-zero exit codes for "no result" states while still
@@ -642,8 +704,8 @@ class TaskExecutor:
                         str(raw_path),
                         " ".join(command),
                         error_message,
-                        task_id
-                    )
+                        task_id,
+                    ),
                 )
 
                 # Upsert findings and report
@@ -656,7 +718,7 @@ class TaskExecutor:
                     plugin_id=plugin_id,
                     target=target,
                     status=final_status,
-                    output=output
+                    output=output,
                 )
                 await self._broadcast_phase(task_id, ScanPhase.REPORTING.value)
 
@@ -670,9 +732,9 @@ class TaskExecutor:
             await db.log_audit(
                 "task_completed",
                 f"Task completed in {duration:.2f}s",
-                context={"task_id": task_id, "exit_code": locals().get('exit_code', 0)},
+                context={"task_id": task_id, "exit_code": locals().get("exit_code", 0)},
                 task_id=task_id,
-                plugin_id=plugin_id
+                plugin_id=plugin_id,
             )
 
             logger.info(f"Task {task_id} completed in {duration:.2f}s")
@@ -683,7 +745,7 @@ class TaskExecutor:
             # Task.cancelled() returns False while the finally block is still
             # executing, so this is the only reliable place to write the
             # cancellation status to the DB.
-            duration = (time.time() - start_time) if 'start_time' in locals() else 0
+            duration = (time.time() - start_time) if "start_time" in locals() else 0
             await db.execute(
                 """
                 UPDATE tasks SET
@@ -698,7 +760,7 @@ class TaskExecutor:
                     duration,
                     task_id,
                     TaskStatus.RUNNING.value,
-                )
+                ),
             )
             await self._broadcast(task_id, "status", TaskStatus.CANCELLED.value)
             await self._invalidate_cached_views()
@@ -742,7 +804,7 @@ class TaskExecutor:
             logger.error(f"Task {task_id} failed: {e}", exc_info=True)
 
             # Update task as failed
-            duration = (time.time() - start_time) if 'start_time' in locals() else 0
+            duration = (time.time() - start_time) if "start_time" in locals() else 0
             await db.execute(
                 """
                 UPDATE tasks SET
@@ -757,8 +819,8 @@ class TaskExecutor:
                     datetime.now().isoformat(),
                     duration,
                     str(e),
-                    task_id
-                )
+                    task_id,
+                ),
             )
 
             await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
@@ -769,7 +831,7 @@ class TaskExecutor:
                 f"Task failed: {str(e)}",
                 severity="error",
                 context={"task_id": task_id, "error": str(e)},
-                task_id=task_id
+                task_id=task_id,
             )
         finally:
             # Always clean up: remove from the in-memory registry and
@@ -777,12 +839,9 @@ class TaskExecutor:
             self.running_tasks.pop(task_id, None)
             self._process_pids.pop(task_id, None)
             await concurrent_limiter.release(task_id)
-    
+
     async def _execute_command(
-        self,
-        command: list,
-        task_id: str,
-        timeout: int = 600
+        self, command: list, task_id: str, timeout: int = 600
     ) -> tuple:
         """
         Execute command in subprocess and stream output.
@@ -821,12 +880,17 @@ class TaskExecutor:
                 await asyncio.wait_for(read_stream(), timeout=timeout)
                 await process.wait()
                 self._process_pids.pop(task_id, None)
-                return "".join(output_lines), process.returncode if process.returncode is not None else -1
+                return (
+                    "".join(output_lines),
+                    process.returncode if process.returncode is not None else -1,
+                )
 
             except asyncio.TimeoutError:
                 logger.warning(
                     "Task %s timed out after %ds — terminating process group (pid=%d)",
-                    task_id, timeout, process.pid,
+                    task_id,
+                    timeout,
+                    process.pid,
                 )
                 await _terminate_process_group(process.pid, task_id)
                 try:
@@ -839,7 +903,8 @@ class TaskExecutor:
             except asyncio.CancelledError:
                 logger.warning(
                     "Task %s cancelled — terminating process group (pid=%d)",
-                    task_id, process.pid,
+                    task_id,
+                    process.pid,
                 )
                 await _terminate_process_group(process.pid, task_id)
                 try:
@@ -874,14 +939,20 @@ class TaskExecutor:
                 return min(timeout, settings.sandbox_timeout)
         return settings.sandbox_timeout
 
-    def _classify_command_result(self, plugin, output: str, exit_code: int) -> tuple[str, Optional[str]]:
+    def _classify_command_result(
+        self, plugin, output: str, exit_code: int
+    ) -> tuple[str, Optional[str]]:
         """Map raw process exit codes into task status with plugin-specific tolerances."""
         normalized_output = output.lower()
 
-        if "unknown option:" in normalized_output or "flag provided but not defined:" in normalized_output:
+        if (
+            "unknown option:" in normalized_output
+            or "flag provided but not defined:" in normalized_output
+        ):
             return (
                 TaskStatus.FAILED.value,
-                output or "Tool rejected one or more generated CLI options. Check the final command and raw output for details.",
+                output
+                or "Tool rejected one or more generated CLI options. Check the final command and raw output for details.",
             )
 
         if exit_code == 0:
@@ -938,9 +1009,11 @@ class TaskExecutor:
         if settings.docker_enabled:
             try:
                 killer = await asyncio.create_subprocess_exec(
-                    "docker", "kill", f"secuscan_task_{task_id}",
+                    "docker",
+                    "kill",
+                    f"secuscan_task_{task_id}",
                     stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE
+                    stderr=subprocess.PIPE,
                 )
                 await killer.communicate()
             except Exception as e:
@@ -949,20 +1022,16 @@ class TaskExecutor:
         db = await get_db()
         await db.execute(
             "UPDATE tasks SET status = ?, completed_at = ? WHERE id = ?",
-            (TaskStatus.CANCELLED.value, datetime.now().isoformat(), task_id)
+            (TaskStatus.CANCELLED.value, datetime.now().isoformat(), task_id),
         )
 
         await self._broadcast(task_id, "status", TaskStatus.CANCELLED.value)
         await self._invalidate_cached_views()
 
-        await db.log_audit(
-            "task_cancelled",
-            "Task cancelled by user",
-            task_id=task_id
-        )
+        await db.log_audit("task_cancelled", "Task cancelled by user", task_id=task_id)
 
         return True
-    
+
     async def get_task_status(self, task_id: str) -> Optional[Dict]:
         """Get task status and progress"""
         db = await get_db()
@@ -972,7 +1041,7 @@ class TaskExecutor:
                    duration_seconds, exit_code, error_message, preset, inputs_json, execution_context_json
             FROM tasks WHERE id = ?
             """,
-            (task_id,)
+            (task_id,),
         )
         if not task_row:
             return None
@@ -983,7 +1052,7 @@ class TaskExecutor:
         if task_row["status"] == TaskStatus.QUEUED.value:
             queued_rows = await db.fetchall(
                 "SELECT id FROM tasks WHERE status = ? ORDER BY created_at ASC",
-                (TaskStatus.QUEUED.value,)
+                (TaskStatus.QUEUED.value,),
             )
             ids = [r["id"] for r in queued_rows]
             pending_count = len(ids)
@@ -1038,10 +1107,16 @@ class TaskExecutor:
             effective_inputs["__extra_headers"] = {
                 str(key): str(value) for key, value in headers.items()
             }
-            username = await self._read_vault_secret(db, credential_profile.get("username_secret_name"))
-            password = await self._read_vault_secret(db, credential_profile.get("password_secret_name"))
+            username = await self._read_vault_secret(
+                db, credential_profile.get("username_secret_name")
+            )
+            password = await self._read_vault_secret(
+                db, credential_profile.get("password_secret_name")
+            )
             if username is not None and password is not None:
-                token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+                token = base64.b64encode(
+                    f"{username}:{password}".encode("utf-8")
+                ).decode("ascii")
                 effective_inputs.setdefault("__extra_headers", {})
                 effective_inputs["__extra_headers"]["Authorization"] = f"Basic {token}"
 
@@ -1056,7 +1131,9 @@ class TaskExecutor:
                 effective_inputs.setdefault("__extra_headers", {})
                 for key, value in extra_headers.items():
                     effective_inputs["__extra_headers"][str(key)] = str(value)
-            cookie_secret = await self._read_vault_secret(db, session_profile.get("cookie_secret_name"))
+            cookie_secret = await self._read_vault_secret(
+                db, session_profile.get("cookie_secret_name")
+            )
             if cookie_secret:
                 try:
                     parsed = json.loads(cookie_secret)
@@ -1142,31 +1219,49 @@ class TaskExecutor:
         )
         return self._deserialize_finding_rows(rows)
 
-    def _normalize_asset_service_record(self, target: str, service: Dict[str, Any]) -> Dict[str, Any]:
-        metadata = service.get("metadata", {}) if isinstance(service.get("metadata"), dict) else {}
+    def _normalize_asset_service_record(
+        self, target: str, service: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        metadata = (
+            service.get("metadata", {})
+            if isinstance(service.get("metadata"), dict)
+            else {}
+        )
         host = str(service.get("host") or target)
         port = service.get("port")
         protocol = service.get("protocol")
-        cert_san = service.get("cert_san") or service.get("cert_sans") or metadata.get("cert_san") or metadata.get("cert_sans") or []
+        cert_san = (
+            service.get("cert_san")
+            or service.get("cert_sans")
+            or metadata.get("cert_san")
+            or metadata.get("cert_sans")
+            or []
+        )
         if not isinstance(cert_san, list):
             cert_san = [cert_san]
         fingerprint = service.get("service_fingerprint")
         if not fingerprint:
-            fingerprint = " ".join(
-                str(part).strip()
-                for part in (
-                    service.get("product"),
-                    service.get("version"),
-                    service.get("service"),
-                    service.get("title"),
+            fingerprint = (
+                " ".join(
+                    str(part).strip()
+                    for part in (
+                        service.get("product"),
+                        service.get("version"),
+                        service.get("service"),
+                        service.get("title"),
+                    )
+                    if str(part or "").strip()
                 )
-                if str(part or "").strip()
-            ) or None
+                or None
+            )
         return {
             **service,
             "host": host,
             "target": target,
-            "asset_id": str(service.get("asset_id") or _stable_asset_id(target, host, port, protocol)),
+            "asset_id": str(
+                service.get("asset_id")
+                or _stable_asset_id(target, host, port, protocol)
+            ),
             "cert_san": cert_san,
             "metadata": metadata,
             "service_fingerprint": fingerprint,
@@ -1194,7 +1289,9 @@ class TaskExecutor:
             owner_id=owner_id,
             plugin_id=plugin_id,
             target=target,
-            findings=[item for item in result.get("findings", []) if isinstance(item, dict)],
+            findings=[
+                item for item in result.get("findings", []) if isinstance(item, dict)
+            ],
         )
         previous_findings = await self._load_previous_task_findings(
             db,
@@ -1213,9 +1310,15 @@ class TaskExecutor:
         structured_result["asset_services"] = asset_services
         structured_result["services"] = asset_services
         structured_result["finding_groups"] = build_finding_groups(normalized_findings)
-        structured_result["asset_summary"] = build_asset_summary(normalized_findings, asset_services)
-        structured_result["scan_diff"] = build_scan_diff(normalized_findings, previous_findings)
-        structured_result["severity_counts"] = self._build_severity_counts(normalized_findings)
+        structured_result["asset_summary"] = build_asset_summary(
+            normalized_findings, asset_services
+        )
+        structured_result["scan_diff"] = build_scan_diff(
+            normalized_findings, previous_findings
+        )
+        structured_result["severity_counts"] = self._build_severity_counts(
+            normalized_findings
+        )
         structured_result["count"] = len(normalized_findings)
         return structured_result, previous_findings, asset_services
 
@@ -1238,11 +1341,31 @@ class TaskExecutor:
         asset_exposure = finding.get("asset_exposure")
         discovered = _parse_discovered_at(finding)
         target_value = str(finding.get("target") or target)
-        metadata = finding.get("metadata", {}) if isinstance(finding.get("metadata"), dict) else {}
-        evidence = finding.get("evidence", []) if isinstance(finding.get("evidence"), list) else []
-        asset_refs = finding.get("asset_refs", []) if isinstance(finding.get("asset_refs"), list) else []
-        references = finding.get("references", []) if isinstance(finding.get("references"), list) else []
-        corroborating_sources = finding.get("corroborating_sources", []) if isinstance(finding.get("corroborating_sources"), list) else []
+        metadata = (
+            finding.get("metadata", {})
+            if isinstance(finding.get("metadata"), dict)
+            else {}
+        )
+        evidence = (
+            finding.get("evidence", [])
+            if isinstance(finding.get("evidence"), list)
+            else []
+        )
+        asset_refs = (
+            finding.get("asset_refs", [])
+            if isinstance(finding.get("asset_refs"), list)
+            else []
+        )
+        references = (
+            finding.get("references", [])
+            if isinstance(finding.get("references"), list)
+            else []
+        )
+        corroborating_sources = (
+            finding.get("corroborating_sources", [])
+            if isinstance(finding.get("corroborating_sources"), list)
+            else []
+        )
         first_seen_at = str(finding.get("first_seen_at") or discovered.isoformat())
         last_seen_at = str(finding.get("last_seen_at") or discovered.isoformat())
         occurrence_count = int(finding.get("occurrence_count") or 1)
@@ -1338,10 +1461,24 @@ class TaskExecutor:
             "risk_factors": risk_factors,
         }
 
-    async def _upsert_findings_and_report(self, db, task_id: str, owner_id: str, plugin, plugin_id: str, target: str, status: str, output: str = ""):
+    async def _upsert_findings_and_report(
+        self,
+        db,
+        task_id: str,
+        owner_id: str,
+        plugin,
+        plugin_id: str,
+        target: str,
+        status: str,
+        output: str = "",
+    ):
         """Persist derived findings and report records into SQLite."""
         parsed = self._parse_results(plugin, output)
-        structured_result, previous_findings, asset_services = await self._build_result_contract(
+        (
+            structured_result,
+            previous_findings,
+            asset_services,
+        ) = await self._build_result_contract(
             db,
             task_id=task_id,
             owner_id=owner_id,
@@ -1363,14 +1500,20 @@ class TaskExecutor:
             )
 
         structured_result["findings"] = findings_data
-        structured_result["severity_counts"] = self._build_severity_counts(findings_data)
+        structured_result["severity_counts"] = self._build_severity_counts(
+            findings_data
+        )
         structured_result["finding_groups"] = build_finding_groups(findings_data)
-        structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
-        structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
+        structured_result["asset_summary"] = build_asset_summary(
+            findings_data, asset_services
+        )
+        structured_result["scan_diff"] = build_scan_diff(
+            findings_data, previous_findings
+        )
 
         await db.execute(
             "UPDATE tasks SET structured_json = ? WHERE id = ?",
-            (json.dumps(structured_result), task_id)
+            (json.dumps(structured_result), task_id),
         )
 
         await db.execute(
@@ -1404,9 +1547,23 @@ class TaskExecutor:
             result=structured_result,
         )
 
-    async def _upsert_findings_and_report_from_scanner(self, db, task_id: str, owner_id: str, scanner: Any, plugin_id: str, target: str, status: str, result: Dict[str, Any]):
+    async def _upsert_findings_and_report_from_scanner(
+        self,
+        db,
+        task_id: str,
+        owner_id: str,
+        scanner: Any,
+        plugin_id: str,
+        target: str,
+        status: str,
+        result: Dict[str, Any],
+    ):
         """Persist modular scanner results into findings, and reports."""
-        structured_result, previous_findings, asset_services = await self._build_result_contract(
+        (
+            structured_result,
+            previous_findings,
+            asset_services,
+        ) = await self._build_result_contract(
             db,
             task_id=task_id,
             owner_id=owner_id,
@@ -1428,14 +1585,20 @@ class TaskExecutor:
             )
 
         structured_result["findings"] = findings_data
-        structured_result["severity_counts"] = self._build_severity_counts(findings_data)
+        structured_result["severity_counts"] = self._build_severity_counts(
+            findings_data
+        )
         structured_result["finding_groups"] = build_finding_groups(findings_data)
-        structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
-        structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
+        structured_result["asset_summary"] = build_asset_summary(
+            findings_data, asset_services
+        )
+        structured_result["scan_diff"] = build_scan_diff(
+            findings_data, previous_findings
+        )
 
         await db.execute(
             "UPDATE tasks SET structured_json = ? WHERE id = ?",
-            (json.dumps(structured_result), task_id)
+            (json.dumps(structured_result), task_id),
         )
 
         # Create/Update report
@@ -1457,7 +1620,7 @@ class TaskExecutor:
                 "professional" if status == TaskStatus.COMPLETED.value else "failed",
                 "ready" if status == TaskStatus.COMPLETED.value else "failed",
                 len(findings_data),
-                2, # Professional reports are typically multi-page
+                2,  # Professional reports are typically multi-page
             ),
         )
 
@@ -1506,12 +1669,12 @@ class TaskExecutor:
         """Route to appropriate parser based on plugin metadata."""
         parser_type = plugin.output.get("parser")
         parser_input = self._resolve_parser_input(plugin, output)
-        
+
         # 1. Check for custom parser.py in plugin directory (Recommended)
         plugin_manager = get_plugin_manager()
         plugin_dir = plugin_manager.plugins_dir / plugin.id
         parser_path = plugin_dir / "parser.py"
-        
+
         if parser_path.exists():
             if not plugin_manager.verify_parser_at_exec_time(plugin, plugin_dir):
                 raise ValueError(
@@ -1537,18 +1700,28 @@ class TaskExecutor:
                     f"Custom parser failed for plugin '{plugin.id}': {exc.reason}"
                 ) from exc
             except Exception as exc:
-                logger.error("Unexpected error running parser sandbox for '%s': %s", plugin.id, exc)
+                logger.error(
+                    "Unexpected error running parser sandbox for '%s': %s",
+                    plugin.id,
+                    exc,
+                )
                 raise RuntimeError(
                     f"Custom parser encountered an unexpected error for plugin '{plugin.id}': {exc}"
                 ) from exc
 
         # 2. Fallback to legacy built-in parsers (only reached when no parser.py exists)
         if parser_type == "builtin_nmap":
-            return self._normalize_parsed_result(plugin, parser_input, self._parse_nmap_output(parser_input))
+            return self._normalize_parsed_result(
+                plugin, parser_input, self._parse_nmap_output(parser_input)
+            )
         elif parser_type == "builtin_http":
-            return self._normalize_parsed_result(plugin, parser_input, self._parse_http_output(parser_input))
-        
-        return self._normalize_parsed_result(plugin, parser_input, {"findings": [], "raw": parser_input})
+            return self._normalize_parsed_result(
+                plugin, parser_input, self._parse_http_output(parser_input)
+            )
+
+        return self._normalize_parsed_result(
+            plugin, parser_input, {"findings": [], "raw": parser_input}
+        )
 
     def _resolve_parser_input(self, plugin, output: str) -> str:
         """Prefer report-file content when configured, fallback to command output."""
@@ -1560,11 +1733,15 @@ class TaskExecutor:
                     logger.info("Using parser report file for %s: %s", plugin.id, path)
                     return path.read_text(encoding="utf-8", errors="replace")
                 except Exception as exc:
-                    logger.warning("Failed to read parser report file %s: %s", path, exc)
+                    logger.warning(
+                        "Failed to read parser report file %s: %s", path, exc
+                    )
 
         return output
 
-    def _normalize_parsed_result(self, plugin, parser_input: str, parsed: Any) -> Dict[str, Any]:
+    def _normalize_parsed_result(
+        self, plugin, parser_input: str, parsed: Any
+    ) -> Dict[str, Any]:
         """
         Normalize parser output shape so downstream report/asset logic always receives:
         { findings: List[Finding], ... }.
@@ -1594,7 +1771,10 @@ class TaskExecutor:
         ]
 
         # Fallback for JSON/JSONL plugin outputs where parser returns empty or unexpected data.
-        if not findings and str(plugin.output.get("format", "")).lower() in {"json", "jsonl"}:
+        if not findings and str(plugin.output.get("format", "")).lower() in {
+            "json",
+            "jsonl",
+        }:
             findings = self._parse_json_fallback_findings(plugin, parser_input)
 
         normalized["findings"] = findings
@@ -1621,7 +1801,11 @@ class TaskExecutor:
         }
         normalized_severity = severity_map.get(severity, "info")
 
-        category = finding.get("category") or finding.get("type") or str(plugin.category).title()
+        category = (
+            finding.get("category")
+            or finding.get("type")
+            or str(plugin.category).title()
+        )
         title = finding.get("title") or finding.get("name") or "Security Finding"
         description = finding.get("description") or finding.get("message") or str(title)
 
@@ -1644,15 +1828,23 @@ class TaskExecutor:
             "validated": bool(finding.get("validated", False)),
             "validation_method": finding.get("validation_method"),
             "confidence_reason": finding.get("confidence_reason"),
-            "evidence": finding.get("evidence", []) if isinstance(finding.get("evidence"), list) else [],
-            "asset_refs": finding.get("asset_refs", []) if isinstance(finding.get("asset_refs"), list) else [],
+            "evidence": finding.get("evidence", [])
+            if isinstance(finding.get("evidence"), list)
+            else [],
+            "asset_refs": finding.get("asset_refs", [])
+            if isinstance(finding.get("asset_refs"), list)
+            else [],
             "service_fingerprint": finding.get("service_fingerprint"),
             "cpe": finding.get("cpe"),
-            "references": finding.get("references", []) if isinstance(finding.get("references"), list) else [],
+            "references": finding.get("references", [])
+            if isinstance(finding.get("references"), list)
+            else [],
             "asset_exposure": finding.get("asset_exposure"),
         }
 
-    def _parse_json_fallback_findings(self, plugin, parser_input: str) -> List[Dict[str, Any]]:
+    def _parse_json_fallback_findings(
+        self, plugin, parser_input: str
+    ) -> List[Dict[str, Any]]:
         """Best-effort conversion of JSON payloads into finding entries."""
         try:
             data = json.loads(parser_input)
@@ -1664,7 +1856,9 @@ class TaskExecutor:
         if isinstance(data, list):
             for idx, item in enumerate(data, start=1):
                 if isinstance(item, dict):
-                    findings.append(self._json_item_to_finding(plugin, item, f"Item {idx}"))
+                    findings.append(
+                        self._json_item_to_finding(plugin, item, f"Item {idx}")
+                    )
                 else:
                     findings.append(
                         self._normalize_finding(
@@ -1685,7 +1879,11 @@ class TaskExecutor:
                 if isinstance(data.get(list_key), list):
                     for idx, item in enumerate(data[list_key], start=1):
                         if isinstance(item, dict):
-                            findings.append(self._json_item_to_finding(plugin, item, f"{list_key} #{idx}"))
+                            findings.append(
+                                self._json_item_to_finding(
+                                    plugin, item, f"{list_key} #{idx}"
+                                )
+                            )
                     if findings:
                         return findings
 
@@ -1693,7 +1891,9 @@ class TaskExecutor:
 
         return findings
 
-    def _json_item_to_finding(self, plugin, item: Dict[str, Any], default_title: str) -> Dict[str, Any]:
+    def _json_item_to_finding(
+        self, plugin, item: Dict[str, Any], default_title: str
+    ) -> Dict[str, Any]:
         title = (
             item.get("title")
             or item.get("name")
@@ -1701,7 +1901,12 @@ class TaskExecutor:
             or item.get("message")
             or default_title
         )
-        description = item.get("description") or item.get("detail") or item.get("message") or str(item)
+        description = (
+            item.get("description")
+            or item.get("detail")
+            or item.get("message")
+            or str(item)
+        )
         severity = item.get("severity", "info")
         category = item.get("category", str(plugin.category).title())
         return self._normalize_finding(
@@ -1720,7 +1925,7 @@ class TaskExecutor:
         findings = []
         ports = []
         services = []
-        
+
         # Regex for open ports: 80/tcp open http
         port_pattern = re.compile(r"(\d+)/(tcp|udp)\s+open\s+([\w-]+)")
         for match in port_pattern.finditer(output):
@@ -1728,19 +1933,25 @@ class TaskExecutor:
             port_val = int(port_str)
             ports.append(port_val)
             services.append(service)
-            findings.append({
-                "title": f"Open Port: {port_str}/{proto} ({service})",
-                "category": "Network Service",
-                "severity": "low",
-                "description": f"Port {port_str} is open and running {service} service.",
-                "remediation": "Close unnecessary ports and use a firewall to restrict access.",
-                "metadata": {"port": port_str, "protocol": proto, "service": service}
-            })
-        
+            findings.append(
+                {
+                    "title": f"Open Port: {port_str}/{proto} ({service})",
+                    "category": "Network Service",
+                    "severity": "low",
+                    "description": f"Port {port_str} is open and running {service} service.",
+                    "remediation": "Close unnecessary ports and use a firewall to restrict access.",
+                    "metadata": {
+                        "port": port_str,
+                        "protocol": proto,
+                        "service": service,
+                    },
+                }
+            )
+
         return {
             "open_ports": sorted(list(set(ports))),
             "services": sorted(list(set(services))),
-            "findings": findings
+            "findings": findings,
         }
 
     def _parse_http_output(self, output: str) -> Dict[str, Any]:
@@ -1751,31 +1962,32 @@ class TaskExecutor:
         if server_match := re.search(r"(?i)Server:\s*(.+)", output):
             server = server_match[1].strip()
             techs.append(server)
-            findings.append({
-                "title": f"Web Server Disclosed: {server}",
-                "category": "Information Disclosure",
-                "severity": "low",
-                "description": f"The web server discloses its version: {server}",
-                "remediation": "Disable the Server header in web server configuration.",
-                "metadata": {"server": server}
-            })
+            findings.append(
+                {
+                    "title": f"Web Server Disclosed: {server}",
+                    "category": "Information Disclosure",
+                    "severity": "low",
+                    "description": f"The web server discloses its version: {server}",
+                    "remediation": "Disable the Server header in web server configuration.",
+                    "metadata": {"server": server},
+                }
+            )
 
         if powered_match := re.search(r"(?i)X-Powered-By:\s*(.+)", output):
             powered = powered_match[1].strip()
             techs.append(powered)
-            findings.append({
-                "title": f"X-Powered-By Disclosed: {powered}",
-                "category": "Information Disclosure",
-                "severity": "low",
-                "description": f"The application discloses its technology stack: {powered}",
-                "remediation": "Disable the X-Powered-By header.",
-                "metadata": {"tech": powered}
-            })
+            findings.append(
+                {
+                    "title": f"X-Powered-By Disclosed: {powered}",
+                    "category": "Information Disclosure",
+                    "severity": "low",
+                    "description": f"The application discloses its technology stack: {powered}",
+                    "remediation": "Disable the X-Powered-By header.",
+                    "metadata": {"tech": powered},
+                }
+            )
 
-        return {
-            "technologies": sorted(list(set(techs))),
-            "findings": findings
-        }
+        return {"technologies": sorted(list(set(techs))), "findings": findings}
 
     async def _dispatch_task_notifications(self, db, task_id: str) -> None:
         """Evaluate notification rules for all findings on a completed task."""

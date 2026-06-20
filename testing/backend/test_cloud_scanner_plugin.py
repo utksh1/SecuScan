@@ -55,9 +55,8 @@ def test_cloud_scanner_passes_validator():
     the checksum field is absent or malformed.
     """
     result = PluginMetadataValidator(PLUGIN_DIR).validate()
-    assert result.valid, (
-        "Plugin validation errors:\n"
-        + "\n".join(e.display() for e in result.errors)
+    assert result.valid, "Plugin validation errors:\n" + "\n".join(
+        e.display() for e in result.errors
     )
 
 
@@ -131,9 +130,9 @@ def test_cloud_scanner_command_full_token_sequence(setup_test_environment):
 
     assert command is not None
     assert command[0] == "python3"
-    assert command[-1] == "my-org", (
-        f"Last token must be the interpolated target. Got: {command}"
-    )
+    assert (
+        command[-1] == "my-org"
+    ), f"Last token must be the interpolated target. Got: {command}"
 
 
 def test_cloud_scanner_drops_target_token_when_absent(setup_test_environment):
@@ -204,14 +203,23 @@ def test_cloud_scanner_parser_finding_has_required_keys():
     result = parse(_CLOUD_SCAN_TEXT_FIXTURE)
     assert result["findings"], "Expected at least one finding"
     for finding in result["findings"]:
-        for key in ("title", "category", "severity", "description", "remediation", "metadata"):
+        for key in (
+            "title",
+            "category",
+            "severity",
+            "description",
+            "remediation",
+            "metadata",
+        ):
             assert key in finding, f"Finding missing key: {key}"
 
 
 def test_cloud_scanner_parser_critical_keyword_raises_to_high():
     """Lines containing 'critical' must be classified as 'high' severity."""
     result = parse(_CLOUD_SCAN_TEXT_FIXTURE)
-    critical_findings = [f for f in result["findings"] if "critical" in f["description"].lower()]
+    critical_findings = [
+        f for f in result["findings"] if "critical" in f["description"].lower()
+    ]
     assert critical_findings, "No findings from critical line"
     for finding in critical_findings:
         assert finding["severity"] == "high"
@@ -237,4 +245,7 @@ def test_cloud_scanner_parser_preserves_raw_line_in_metadata():
     single_line = "critical: public RDS instance detected\n"
     result = parse(single_line)
     assert result["findings"]
-    assert result["findings"][0]["metadata"]["raw"] == "critical: public RDS instance detected"
+    assert (
+        result["findings"][0]["metadata"]["raw"]
+        == "critical: public RDS instance detected"
+    )

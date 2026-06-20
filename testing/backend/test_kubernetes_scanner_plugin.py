@@ -55,9 +55,8 @@ def test_kubernetes_scanner_passes_validator():
     the checksum field is absent or malformed.
     """
     result = PluginMetadataValidator(PLUGIN_DIR).validate()
-    assert result.valid, (
-        "Plugin validation errors:\n"
-        + "\n".join(e.display() for e in result.errors)
+    assert result.valid, "Plugin validation errors:\n" + "\n".join(
+        e.display() for e in result.errors
     )
 
 
@@ -160,14 +159,23 @@ def test_kubernetes_scanner_parser_finding_has_required_keys():
     result = parse(_KUBERNETES_SCANNER_OUTPUT_FIXTURE)
     assert result["findings"], "Expected at least one finding"
     for finding in result["findings"]:
-        for key in ("title", "category", "severity", "description", "remediation", "metadata"):
+        for key in (
+            "title",
+            "category",
+            "severity",
+            "description",
+            "remediation",
+            "metadata",
+        ):
             assert key in finding, f"Finding missing key: {key}"
 
 
 def test_kubernetes_scanner_parser_items_list_matches_non_empty_lines():
     """items must contain each non-empty line from the output."""
     result = parse(_KUBERNETES_SCANNER_OUTPUT_FIXTURE)
-    expected_lines = [l.strip() for l in _KUBERNETES_SCANNER_OUTPUT_FIXTURE.splitlines() if l.strip()]
+    expected_lines = [
+        l.strip() for l in _KUBERNETES_SCANNER_OUTPUT_FIXTURE.splitlines() if l.strip()
+    ]
     assert result["items"] == expected_lines
 
 
@@ -184,4 +192,7 @@ def test_kubernetes_scanner_parser_preserves_raw_line_in_metadata():
     single_line = "RBAC Issue: admin role has excessive permissions\n"
     result = parse(single_line)
     assert result["findings"]
-    assert result["findings"][0]["metadata"]["raw"] == "RBAC Issue: admin role has excessive permissions"
+    assert (
+        result["findings"][0]["metadata"]["raw"]
+        == "RBAC Issue: admin role has excessive permissions"
+    )

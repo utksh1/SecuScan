@@ -238,9 +238,7 @@ class TestEffectiveCapabilitiesImpliedSets:
             caps = effective_capabilities(declared, level, plugin_id)
             if not caps:
                 bad.append(plugin_id)
-        assert not bad, (
-            f"Plugin(s) produced empty effective_capabilities: {bad}"
-        )
+        assert not bad, f"Plugin(s) produced empty effective_capabilities: {bad}"
 
 
 # ---------------------------------------------------------------------------
@@ -278,9 +276,9 @@ class TestDeniedCapabilityBlocksExecution:
             # This line must not be reached:
             fake_build_command("exploit_plugin", {})
 
-        assert build_command_called == [], (
-            "build_command must not be called when capability check raises"
-        )
+        assert (
+            build_command_called == []
+        ), "build_command must not be called when capability check raises"
 
     def test_exploit_plugin_blocked_when_exploit_denied(self):
         enforcer = CapabilityEnforcer(denied_capabilities=["exploit"])
@@ -310,7 +308,9 @@ class TestDeniedCapabilityBlocksExecution:
     def test_error_message_names_plugin_and_denied_caps(self):
         enforcer = CapabilityEnforcer(denied_capabilities=["docker"])
         with pytest.raises(CapabilityDeniedError) as exc_info:
-            enforcer.check("container_scanner", declared=["docker"], safety_level="safe")
+            enforcer.check(
+                "container_scanner", declared=["docker"], safety_level="safe"
+            )
         msg = str(exc_info.value)
         assert "container_scanner" in msg
         assert "docker" in msg
@@ -340,8 +340,10 @@ class TestDeniedCapabilityBlocksExecution:
             except CapabilityDeniedError:
                 blocked.append(plugin_id)
         # Every exploit-level plugin must be blocked.
-        assert not_blocked == [], (
-            f"Exploit-level plugin(s) not blocked when 'exploit' is denied: {not_blocked}"
-        )
+        assert (
+            not_blocked == []
+        ), f"Exploit-level plugin(s) not blocked when 'exploit' is denied: {not_blocked}"
         # Sanity: at least one exploit-level plugin must exist in the test corpus.
-        assert len(blocked) > 0, "No exploit-level plugins found — check plugins/ directory"
+        assert (
+            len(blocked) > 0
+        ), "No exploit-level plugins found — check plugins/ directory"

@@ -190,11 +190,15 @@ class TestExtractTechHints:
         assert "WordPress 6.4" in hints
 
     def test_wordpress_detected_from_body(self):
-        hints = _extract_tech_hints({}, [], [], "before /wp-content/themes/twenty/ after")
+        hints = _extract_tech_hints(
+            {}, [], [], "before /wp-content/themes/twenty/ after"
+        )
         assert "WordPress" in hints
 
     def test_drupal_detected_from_body(self):
-        hints = _extract_tech_hints({}, [], [], '<link href="/sites/default/files/x.css" />')
+        hints = _extract_tech_hints(
+            {}, [], [], '<link href="/sites/default/files/x.css" />'
+        )
         assert "Drupal" in hints
 
     def test_joomla_detected_from_body_string(self):
@@ -202,11 +206,15 @@ class TestExtractTechHints:
         assert "Joomla" in hints
 
     def test_joomla_detected_from_body_media(self):
-        hints = _extract_tech_hints({}, [], [], '<script src="/media/system/js/mootools.js"></script>')
+        hints = _extract_tech_hints(
+            {}, [], [], '<script src="/media/system/js/mootools.js"></script>'
+        )
         assert "Joomla" in hints
 
     def test_script_hints_for_react(self):
-        hints = _extract_tech_hints({}, [], ["https://example.com/static/react.production.min.js"], "")
+        hints = _extract_tech_hints(
+            {}, [], ["https://example.com/static/react.production.min.js"], ""
+        )
         assert "react.production.min.js" in hints
 
     def test_script_hints_for_vue(self):
@@ -263,7 +271,9 @@ class TestExtractCmsHints:
         assert "joomla" in hints
 
     def test_multiple_cms_detected(self):
-        hints = _extract_cms_hints(["WordPress 6.4", "Joomla"], "wp-content /media/system/js/", [])
+        hints = _extract_cms_hints(
+            ["WordPress 6.4", "Joomla"], "wp-content /media/system/js/", []
+        )
         # Both should be detected; the function sorts and dedupes
         assert "wordpress" in hints
         assert "joomla" in hints

@@ -12,6 +12,7 @@ UUID4_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
 )
 
+
 @pytest.fixture
 def log_capture():
     buf = io.StringIO()
@@ -27,8 +28,10 @@ def log_capture():
         root.removeHandler(handler)
         handler.close()
 
+
 def _parse_log_lines(buf):
     return [json.loads(line) for line in buf.getvalue().splitlines() if line.strip()]
+
 
 def test_request_id_appears_in_json_logs(test_client, log_capture):
     response = test_client.get("/api/v1/health")
@@ -50,6 +53,7 @@ def test_request_id_appears_in_json_logs(test_client, log_capture):
         f"No log line carries request_id={request_id!r}. "
         f"Seen IDs: {[e['request_id'] for e in entries]}"
     )
+
 
 def test_passthrough_request_id(test_client, log_capture):
     custom_id = "smoke-test-trace-abc123"

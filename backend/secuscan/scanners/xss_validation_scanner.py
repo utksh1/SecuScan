@@ -28,7 +28,11 @@ class XSSValidationScanner(BaseScanner):
         findings: List[Dict[str, Any]] = []
         self.update_progress(0.25)
 
-        async with httpx.AsyncClient(follow_redirects=True, timeout=int(inputs.get("timeout") or 10), verify=False) as client:
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=int(inputs.get("timeout") or 10),
+            verify=False,
+        ) as client:
             response = await client.get(probe_url)
 
         body = response.text
@@ -72,7 +76,13 @@ class XSSValidationScanner(BaseScanner):
                 f"Captured {len(findings)} bounded validation observations without external exfiltration.",
             ],
             "findings": findings,
-            "rows": [{"url": probe_url, "status_code": response.status_code, "reflected_raw": reflected_raw}],
+            "rows": [
+                {
+                    "url": probe_url,
+                    "status_code": response.status_code,
+                    "reflected_raw": reflected_raw,
+                }
+            ],
         }
 
     def _build_probe_url(self, target: str) -> str:

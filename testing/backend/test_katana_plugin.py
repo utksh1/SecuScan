@@ -235,4 +235,7 @@ def test_katana_parser_preserves_raw_line_in_metadata():
     single_line = "https://secuscan.in/admin/exposed\n"
     result = parse(single_line)
     assert result["findings"]
-    assert result["findings"][0]["metadata"]["raw_line"] == "https://secuscan.in/admin/exposed"
+    assert (
+        result["findings"][0]["metadata"]["raw_line"]
+        == "https://secuscan.in/admin/exposed"
+    )

@@ -155,9 +155,13 @@ def test_dns_enum_command_renders_with_default_type(setup_test_environment):
 
     command = manager.build_command("dns_enum", {"target": "example.com"})
 
-    assert command == ["dnsrecon", "-d", "example.com", "-t", "std"], (
-        f"Command template drift detected. Got: {command}"
-    )
+    assert command == [
+        "dnsrecon",
+        "-d",
+        "example.com",
+        "-t",
+        "std",
+    ], f"Command template drift detected. Got: {command}"
 
 
 def test_dns_enum_command_renders_explicit_zone_transfer(setup_test_environment):

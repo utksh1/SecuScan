@@ -30,8 +30,8 @@ export const ExecutiveStatsBar: React.FC<ExecutiveStatsBarProps> = ({
       <div className="px-6 first:pl-8">
         <span className="text-xs font-bold text-white/70 uppercase tracking-[0.3em] block mb-6">Status Profile</span>
         <div className="space-y-6">
-          <span 
-            className="text-7xl font-light text-[var(--rag-amber)] leading-none block" 
+          <span
+            className="text-7xl font-light text-[var(--rag-amber)] leading-none block"
             style={{ fontFamily: "'Libre Baskerville', Georgia, serif" }}
           >
             {riskLabel || 'Moderate'}

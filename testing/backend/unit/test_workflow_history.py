@@ -77,8 +77,12 @@ class TestSnapshotWorkflowVersion:
     @pytest.mark.asyncio
     async def test_definition_stored_correctly(self, db):
         wf_id = await _insert_workflow(db)
-        custom_steps = [{"plugin_id": "port_scanner", "inputs": {"target": "192.168.1.1"}}]
-        v = await db.snapshot_workflow_version(wf_id, "custom", 3600, False, custom_steps)
+        custom_steps = [
+            {"plugin_id": "port_scanner", "inputs": {"target": "192.168.1.1"}}
+        ]
+        v = await db.snapshot_workflow_version(
+            wf_id, "custom", 3600, False, custom_steps
+        )
         assert v["definition"]["name"] == "custom"
         assert v["definition"]["schedule_seconds"] == 3600
         assert v["definition"]["enabled"] is False
@@ -87,8 +91,12 @@ class TestSnapshotWorkflowVersion:
     @pytest.mark.asyncio
     async def test_created_by_stored(self, db):
         wf_id = await _insert_workflow(db)
-        v = await db.snapshot_workflow_version(wf_id, "wf", None, True, _STEPS, created_by="rollback_to_v2")
-        rows = await db.fetchall("SELECT * FROM workflow_versions WHERE workflow_id = ?", (wf_id,))
+        v = await db.snapshot_workflow_version(
+            wf_id, "wf", None, True, _STEPS, created_by="rollback_to_v2"
+        )
+        rows = await db.fetchall(
+            "SELECT * FROM workflow_versions WHERE workflow_id = ?", (wf_id,)
+        )
         assert rows[0]["created_by"] == "rollback_to_v2"
 
 
@@ -144,8 +152,12 @@ class TestRecordWorkflowRun:
     async def test_creates_run_row(self, db):
         wf_id = await _insert_workflow(db)
         v = await db.snapshot_workflow_version(wf_id, "wf", None, True, _STEPS)
-        run_id = await db.record_workflow_run(wf_id, v["id"], v["version_number"], ["task-1", "task-2"])
-        rows = await db.fetchall("SELECT * FROM workflow_runs WHERE workflow_id = ?", (wf_id,))
+        run_id = await db.record_workflow_run(
+            wf_id, v["id"], v["version_number"], ["task-1", "task-2"]
+        )
+        rows = await db.fetchall(
+            "SELECT * FROM workflow_runs WHERE workflow_id = ?", (wf_id,)
+        )
         assert len(rows) == 1
         assert rows[0]["id"] == run_id
         assert json.loads(rows[0]["task_ids_json"]) == ["task-1", "task-2"]
@@ -155,14 +167,18 @@ class TestRecordWorkflowRun:
     async def test_triggered_by_stored(self, db):
         wf_id = await _insert_workflow(db)
         await db.record_workflow_run(wf_id, None, None, [], triggered_by="scheduler")
-        rows = await db.fetchall("SELECT * FROM workflow_runs WHERE workflow_id = ?", (wf_id,))
+        rows = await db.fetchall(
+            "SELECT * FROM workflow_runs WHERE workflow_id = ?", (wf_id,)
+        )
         assert rows[0]["triggered_by"] == "scheduler"
 
     @pytest.mark.asyncio
     async def test_default_status_is_queued(self, db):
         wf_id = await _insert_workflow(db)
         await db.record_workflow_run(wf_id, None, None, [])
-        rows = await db.fetchall("SELECT * FROM workflow_runs WHERE workflow_id = ?", (wf_id,))
+        rows = await db.fetchall(
+            "SELECT * FROM workflow_runs WHERE workflow_id = ?", (wf_id,)
+        )
         assert rows[0]["status"] == "queued"
 
 
@@ -220,15 +236,24 @@ class TestRollbackIntegration:
     @pytest.mark.asyncio
     async def test_rollback_restores_definition(self, db):
         wf_id = await _insert_workflow(db)
-        v1 = await db.snapshot_workflow_version(wf_id, "original-name", None, True, _STEPS)
-        await db.execute("UPDATE workflows SET name = 'changed-name' WHERE id = ?", (wf_id,))
+        v1 = await db.snapshot_workflow_version(
+            wf_id, "original-name", None, True, _STEPS
+        )
+        await db.execute(
+            "UPDATE workflows SET name = 'changed-name' WHERE id = ?", (wf_id,)
+        )
         await db.snapshot_workflow_version(wf_id, "changed-name", 60, True, [])
         target = await db.get_workflow_version(wf_id, v1["version_number"])
         assert target is not None
         defn = target["definition"]
         await db.execute(
             "UPDATE workflows SET name = ?, steps_json = ?, schedule_seconds = ? WHERE id = ?",
-            (defn["name"], json.dumps(defn["steps"]), defn.get("schedule_seconds"), wf_id),
+            (
+                defn["name"],
+                json.dumps(defn["steps"]),
+                defn.get("schedule_seconds"),
+                wf_id,
+            ),
         )
         restored = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (wf_id,))
         assert restored["name"] == "original-name"
@@ -239,7 +264,12 @@ class TestRollbackIntegration:
         v1 = await db.snapshot_workflow_version(wf_id, "v1", None, True, _STEPS)
         await db.snapshot_workflow_version(wf_id, "v2", None, True, _STEPS)
         new_v = await db.snapshot_workflow_version(
-            wf_id, "v1", None, True, _STEPS, created_by=f"rollback_to_v{v1['version_number']}"
+            wf_id,
+            "v1",
+            None,
+            True,
+            _STEPS,
+            created_by=f"rollback_to_v{v1['version_number']}",
         )
         assert new_v["version_number"] == 3
         versions = await db.get_workflow_versions(wf_id)
@@ -249,7 +279,9 @@ class TestRollbackIntegration:
     async def test_five_version_sequence_correct(self, db):
         wf_id = await _insert_workflow(db)
         for i in range(5):
-            await db.snapshot_workflow_version(wf_id, f"wf-v{i+1}", i * 60, i % 2 == 0, _STEPS)
+            await db.snapshot_workflow_version(
+                wf_id, f"wf-v{i+1}", i * 60, i % 2 == 0, _STEPS
+            )
         versions = await db.get_workflow_versions(wf_id)
         assert len(versions) == 5
         assert versions[0]["version_number"] == 5

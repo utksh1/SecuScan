@@ -8,17 +8,30 @@ def parse(output: str) -> Dict[str, Any]:
     for line in lines[:200]:
         normalized = line.lower()
         severity = "info"
-        if any(keyword in normalized for keyword in ["vuln", "vulnerable", "exposed", "open", "found", "detected", "alive"]):
+        if any(
+            keyword in normalized
+            for keyword in [
+                "vuln",
+                "vulnerable",
+                "exposed",
+                "open",
+                "found",
+                "detected",
+                "alive",
+            ]
+        ):
             severity = "low"
 
-        findings.append({
-            "title": "Domain Finder Observation",
-            "category": "Recon",
-            "severity": severity,
-            "description": line,
-            "remediation": "Review discovery output and validate scope and exposure.",
-            "metadata": {"raw_line": line},
-        })
+        findings.append(
+            {
+                "title": "Domain Finder Observation",
+                "category": "Recon",
+                "severity": severity,
+                "description": line,
+                "remediation": "Review discovery output and validate scope and exposure.",
+                "metadata": {"raw_line": line},
+            }
+        )
 
     return {
         "findings": findings,

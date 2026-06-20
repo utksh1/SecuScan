@@ -106,7 +106,16 @@ def _sanitised_env() -> Dict[str, str]:
     installed packages) while stripping all credentials and application
     secrets present in the parent's environment.
     """
-    keep_keys = {"PATH", "PYTHONPATH", "HOME", "TMPDIR", "TEMP", "TMP", "LANG", "LC_ALL"}
+    keep_keys = {
+        "PATH",
+        "PYTHONPATH",
+        "HOME",
+        "TMPDIR",
+        "TEMP",
+        "TMP",
+        "LANG",
+        "LC_ALL",
+    }
     return {k: v for k, v in os.environ.items() if k in keep_keys}
 
 
@@ -223,7 +232,9 @@ def run_parser_in_sandbox(
             timeout_seconds,
             plugin_id,
         )
-        raise ParserSandboxError(plugin_id, f"timed out after {timeout_seconds}s", stderr_text)
+        raise ParserSandboxError(
+            plugin_id, f"timed out after {timeout_seconds}s", stderr_text
+        )
 
     if proc.returncode != 0:
         logger.error(

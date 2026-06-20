@@ -28,6 +28,7 @@ from backend.secuscan.config import settings
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _write_plugin(tmp_path: Path, parser_src: str = "", include_checksum: bool = True):
     """Create a minimal plugin directory with metadata.json and optional parser.py."""
     plugin_dir = tmp_path / "test-rce-plugin"
@@ -72,6 +73,7 @@ def _make_manager(tmp_path: Path) -> PluginManager:
 def _minimal_plugin_meta(checksum: str = None):
     """Return a PluginMetadata-like object for unit tests."""
     from backend.secuscan.models import PluginMetadata
+
     data = {
         "id": "test-rce-plugin",
         "name": "Test",
@@ -94,11 +96,14 @@ def _minimal_plugin_meta(checksum: str = None):
 # verify_parser_at_exec_time — unit tests
 # ---------------------------------------------------------------------------
 
+
 class TestVerifyParserAtExecTime:
     def test_matching_checksum_returns_true(self, tmp_path, monkeypatch):
         monkeypatch.setattr(settings, "enforce_plugin_signatures", False)
         parser_src = "def parse(output): return {'findings': []}\n"
-        plugin_dir, _ = _write_plugin(tmp_path, parser_src=parser_src, include_checksum=True)
+        plugin_dir, _ = _write_plugin(
+            tmp_path, parser_src=parser_src, include_checksum=True
+        )
 
         mgr = _make_manager(tmp_path)
         # Load the checksum from the written metadata
@@ -110,7 +115,9 @@ class TestVerifyParserAtExecTime:
     def test_tampered_parser_is_rejected(self, tmp_path, monkeypatch):
         monkeypatch.setattr(settings, "enforce_plugin_signatures", False)
         parser_src = "def parse(output): return {'findings': []}\n"
-        plugin_dir, _ = _write_plugin(tmp_path, parser_src=parser_src, include_checksum=True)
+        plugin_dir, _ = _write_plugin(
+            tmp_path, parser_src=parser_src, include_checksum=True
+        )
 
         # Record checksum with original parser
         metadata = json.loads((plugin_dir / "metadata.json").read_text())
@@ -150,7 +157,9 @@ class TestVerifyParserAtExecTime:
 
         mgr = _make_manager(tmp_path)
         with patch.object(
-            PluginManager, "compute_plugin_digest", side_effect=OSError("permission denied")
+            PluginManager,
+            "compute_plugin_digest",
+            side_effect=OSError("permission denied"),
         ):
             assert mgr.verify_parser_at_exec_time(plugin, plugin_dir) is False
 
@@ -159,13 +168,16 @@ class TestVerifyParserAtExecTime:
 # Executor integration — exec_module is NOT called when check fails
 # ---------------------------------------------------------------------------
 
+
 class TestExecutorParserGate:
     def test_integrity_failure_raises_and_blocks_exec(self, tmp_path, monkeypatch):
         """When verify_parser_at_exec_time returns False the task must fail with a security error."""
         monkeypatch.setattr(settings, "enforce_plugin_signatures", False)
 
         parser_src = "def parse(output): return {'findings': []}\n"
-        plugin_dir, _ = _write_plugin(tmp_path, parser_src=parser_src, include_checksum=True)
+        plugin_dir, _ = _write_plugin(
+            tmp_path, parser_src=parser_src, include_checksum=True
+        )
         metadata = json.loads((plugin_dir / "metadata.json").read_text())
 
         # Tamper with parser.py so the digest no longer matches
@@ -184,7 +196,9 @@ class TestExecutorParserGate:
 
         with patch("importlib.util.spec_from_file_location") as mock_spec:
             mock_loader = MagicMock()
-            mock_loader.exec_module = MagicMock(side_effect=lambda m: exec_called.append(True))
+            mock_loader.exec_module = MagicMock(
+                side_effect=lambda m: exec_called.append(True)
+            )
             mock_spec_obj = MagicMock()
             mock_spec_obj.loader = mock_loader
             mock_spec.return_value = mock_spec_obj
@@ -192,22 +206,30 @@ class TestExecutorParserGate:
             with patch("importlib.util.module_from_spec", return_value=MagicMock()):
                 from backend.secuscan import executor as executor_module
 
-                exec_instance = executor_module.TaskExecutor.__new__(executor_module.TaskExecutor)
+                exec_instance = executor_module.TaskExecutor.__new__(
+                    executor_module.TaskExecutor
+                )
 
                 with patch(
                     "backend.secuscan.executor.get_plugin_manager", return_value=mgr
                 ):
-                    with pytest.raises(ValueError, match="Security error.*integrity check failed"):
+                    with pytest.raises(
+                        ValueError, match="Security error.*integrity check failed"
+                    ):
                         exec_instance._parse_results(plugin, "raw output")
 
-        assert len(exec_called) == 0, "exec_module must not be called when integrity check fails"
+        assert (
+            len(exec_called) == 0
+        ), "exec_module must not be called when integrity check fails"
 
     def test_sandbox_called_when_integrity_passes(self, tmp_path, monkeypatch):
         """When verify_parser_at_exec_time returns True, run_parser_in_sandbox must be called."""
         monkeypatch.setattr(settings, "enforce_plugin_signatures", False)
 
         parser_src = "def parse(output):\n    return {'findings': []}\n"
-        plugin_dir, _ = _write_plugin(tmp_path, parser_src=parser_src, include_checksum=True)
+        plugin_dir, _ = _write_plugin(
+            tmp_path, parser_src=parser_src, include_checksum=True
+        )
         metadata = json.loads((plugin_dir / "metadata.json").read_text())
         plugin = _minimal_plugin_meta(checksum=metadata["checksum"])
 
@@ -222,13 +244,21 @@ class TestExecutorParserGate:
             return {"findings": []}
 
         from backend.secuscan import executor as executor_module
-        exec_instance = executor_module.TaskExecutor.__new__(executor_module.TaskExecutor)
 
-        with patch("backend.secuscan.executor.get_plugin_manager", return_value=mgr), \
-             patch("backend.secuscan.executor.run_parser_in_sandbox", side_effect=_fake_sandbox):
+        exec_instance = executor_module.TaskExecutor.__new__(
+            executor_module.TaskExecutor
+        )
+
+        with patch(
+            "backend.secuscan.executor.get_plugin_manager", return_value=mgr
+        ), patch(
+            "backend.secuscan.executor.run_parser_in_sandbox", side_effect=_fake_sandbox
+        ):
             result = exec_instance._parse_results(plugin, "raw output")
 
-        assert len(sandbox_called) == 1, "run_parser_in_sandbox must be called once when integrity check passes"
+        assert (
+            len(sandbox_called) == 1
+        ), "run_parser_in_sandbox must be called once when integrity check passes"
         assert sandbox_called[0] == plugin.id
 
 
@@ -243,10 +273,13 @@ class TestSandboxFailureIsHardError:
 
     def _make_exec_instance(self, tmp_path, plugin):
         from backend.secuscan import executor as executor_module
+
         mgr = _make_manager(tmp_path)
         mgr.plugins_dir = tmp_path
         mgr.plugins[plugin.id] = plugin
-        exec_instance = executor_module.TaskExecutor.__new__(executor_module.TaskExecutor)
+        exec_instance = executor_module.TaskExecutor.__new__(
+            executor_module.TaskExecutor
+        )
         return exec_instance, mgr
 
     def test_sandbox_crash_raises_runtime_error(self, tmp_path, monkeypatch):
@@ -254,7 +287,9 @@ class TestSandboxFailureIsHardError:
         monkeypatch.setattr(settings, "enforce_plugin_signatures", False)
 
         parser_src = "def parse(output): raise RuntimeError('boom')\n"
-        plugin_dir, _ = _write_plugin(tmp_path, parser_src=parser_src, include_checksum=True)
+        plugin_dir, _ = _write_plugin(
+            tmp_path, parser_src=parser_src, include_checksum=True
+        )
         metadata = json.loads((plugin_dir / "metadata.json").read_text())
         plugin = _minimal_plugin_meta(checksum=metadata["checksum"])
 
@@ -267,10 +302,13 @@ class TestSandboxFailureIsHardError:
     def test_sandbox_timeout_raises_runtime_error(self, tmp_path, monkeypatch):
         """ParserSandboxError from a timing-out parser must surface as RuntimeError."""
         from backend.secuscan.parser_sandbox import ParserSandboxError
+
         monkeypatch.setattr(settings, "enforce_plugin_signatures", False)
 
         parser_src = "def parse(output): return {}\n"
-        plugin_dir, _ = _write_plugin(tmp_path, parser_src=parser_src, include_checksum=True)
+        plugin_dir, _ = _write_plugin(
+            tmp_path, parser_src=parser_src, include_checksum=True
+        )
         metadata = json.loads((plugin_dir / "metadata.json").read_text())
         plugin = _minimal_plugin_meta(checksum=metadata["checksum"])
 
@@ -279,23 +317,33 @@ class TestSandboxFailureIsHardError:
         def _timeout_sandbox(**kwargs):
             raise ParserSandboxError(plugin.id, "timed out after 1s")
 
-        with patch("backend.secuscan.executor.get_plugin_manager", return_value=mgr), \
-             patch("backend.secuscan.executor.run_parser_in_sandbox", side_effect=_timeout_sandbox):
+        with patch(
+            "backend.secuscan.executor.get_plugin_manager", return_value=mgr
+        ), patch(
+            "backend.secuscan.executor.run_parser_in_sandbox",
+            side_effect=_timeout_sandbox,
+        ):
             with pytest.raises(RuntimeError, match="Custom parser failed"):
                 exec_instance._parse_results(plugin, "raw output")
 
-    def test_sandbox_failure_does_not_call_builtin_nmap_parser(self, tmp_path, monkeypatch):
+    def test_sandbox_failure_does_not_call_builtin_nmap_parser(
+        self, tmp_path, monkeypatch
+    ):
         """Regression: built-in nmap parser must NOT be invoked after sandbox failure."""
         from backend.secuscan.parser_sandbox import ParserSandboxError
+
         monkeypatch.setattr(settings, "enforce_plugin_signatures", False)
 
         parser_src = "def parse(output): return {}\n"
-        plugin_dir, _ = _write_plugin(tmp_path, parser_src=parser_src, include_checksum=True)
+        plugin_dir, _ = _write_plugin(
+            tmp_path, parser_src=parser_src, include_checksum=True
+        )
         metadata = json.loads((plugin_dir / "metadata.json").read_text())
 
         # Give the plugin parser_type = builtin_nmap so the fallback path would
         # normally produce nmap-structured output — proving it is never reached.
         from backend.secuscan.models import PluginMetadata
+
         plugin_data = {
             "id": "test-rce-plugin",
             "name": "Test",
@@ -319,13 +367,20 @@ class TestSandboxFailureIsHardError:
             raise ParserSandboxError(plugin.id, "subprocess exited with code 1")
 
         from backend.secuscan import executor as executor_module
-        with patch("backend.secuscan.executor.get_plugin_manager", return_value=mgr), \
-             patch("backend.secuscan.executor.run_parser_in_sandbox", side_effect=_crash_sandbox), \
-             patch.object(executor_module.TaskExecutor, "_parse_nmap_output",
-                          side_effect=lambda s: nmap_called.append(True) or {}):
+
+        with patch(
+            "backend.secuscan.executor.get_plugin_manager", return_value=mgr
+        ), patch(
+            "backend.secuscan.executor.run_parser_in_sandbox",
+            side_effect=_crash_sandbox,
+        ), patch.object(
+            executor_module.TaskExecutor,
+            "_parse_nmap_output",
+            side_effect=lambda s: nmap_called.append(True) or {},
+        ):
             with pytest.raises(RuntimeError):
                 exec_instance._parse_results(plugin, "raw output")
 
-        assert len(nmap_called) == 0, (
-            "_parse_nmap_output must never be called after sandbox failure"
-        )
+        assert (
+            len(nmap_called) == 0
+        ), "_parse_nmap_output must never be called after sandbox failure"

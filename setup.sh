@@ -26,7 +26,7 @@ log_info() { echo -e "${BLUE}INFO:${NC} $1"; }
 log_success() { echo -e "${GREEN}SUCCESS:${NC} $1"; }
 log_warning() { echo -e "${YELLOW}WARNING:${NC} $1"; }
 log_error() { echo -e "${RED}ERROR:${NC} $1"; }
-log_header() { 
+log_header() {
     echo -e "\n${BOLD}${CYAN}=== $1 ===${NC}"
 }
 
@@ -167,7 +167,7 @@ deactivate
 log_header "Frontend Setup"
 if [ -d "frontend" ]; then
     cd frontend
-    
+
     # Check if node_modules is missing or broken (missing vite binary)
     if [ ! -d "node_modules" ] || [ ! -f "node_modules/.bin/vite" ]; then
         log_info "node_modules is missing or incomplete. Performing clean install..."
@@ -177,7 +177,7 @@ if [ -d "frontend" ]; then
         log_info "Existing node_modules found. Updating dependencies..."
         npm install
     fi
-    
+
     log_success "Frontend dependencies installed successfully."
     cd ..
 else

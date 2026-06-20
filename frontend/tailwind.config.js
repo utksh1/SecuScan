@@ -21,10 +21,10 @@ export default {
         rag: {
           red: '#ef4444',
           amber: '#f59e0b',
-          'amber-bright': '#fbbf24',   
+          'amber-bright': '#fbbf24',
           green: '#10b981',
           blue: '#1e88e5',
-          'blue-bright': '#3b82f6',    
+          'blue-bright': '#3b82f6',
         },
         accent: {
           silver: '#3f3f46'
@@ -33,7 +33,7 @@ export default {
       fontFamily: {
         mono: ['"IBM Plex Mono"', 'Menlo', 'monospace'],
         sans: ['"Inter"', 'system-ui', 'sans-serif'],
-        serif: ['"Playfair Display"', 'Georgia', 'serif'],    
+        serif: ['"Playfair Display"', 'Georgia', 'serif'],
       },
       animation: {
         'fast-pulse': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',

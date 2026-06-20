@@ -22,7 +22,15 @@ class APIScanner(BaseScanner):
     ]
 
     GRAPHQL_PATHS = ["/graphql", "/api/graphql", "/query"]
-    HIGH_VALUE_TOKENS = ("/admin", "/internal", "/users", "/accounts", "/tokens", "/auth", "/config")
+    HIGH_VALUE_TOKENS = (
+        "/admin",
+        "/internal",
+        "/users",
+        "/accounts",
+        "/tokens",
+        "/auth",
+        "/config",
+    )
     RISKY_METHODS = {"put", "patch", "delete"}
 
     @property
@@ -35,13 +43,29 @@ class APIScanner(BaseScanner):
 
     async def run(self, target: str, inputs: Dict[str, Any]) -> Dict[str, Any]:
         timeout = int(inputs.get("timeout") or 10)
-        extra_headers = inputs.get("__extra_headers") if isinstance(inputs.get("__extra_headers"), dict) else {}
-        cookies = inputs.get("__cookies") if isinstance(inputs.get("__cookies"), dict) else {}
-        execution_context = inputs.get("__execution_context") if isinstance(inputs.get("__execution_context"), dict) else {}
-        target_policy = inputs.get("__target_policy") if isinstance(inputs.get("__target_policy"), dict) else {}
+        extra_headers = (
+            inputs.get("__extra_headers")
+            if isinstance(inputs.get("__extra_headers"), dict)
+            else {}
+        )
+        cookies = (
+            inputs.get("__cookies") if isinstance(inputs.get("__cookies"), dict) else {}
+        )
+        execution_context = (
+            inputs.get("__execution_context")
+            if isinstance(inputs.get("__execution_context"), dict)
+            else {}
+        )
+        target_policy = (
+            inputs.get("__target_policy")
+            if isinstance(inputs.get("__target_policy"), dict)
+            else {}
+        )
 
         self.update_progress(0.1)
-        crawl = await crawl_target(target, timeout=timeout, cookies=cookies, extra_headers=extra_headers)
+        crawl = await crawl_target(
+            target, timeout=timeout, cookies=cookies, extra_headers=extra_headers
+        )
         findings: List[Dict[str, Any]] = []
         api_hints = list(crawl.get("api_hints", []))
         endpoint_inventory: List[Dict[str, Any]] = []
@@ -75,9 +99,13 @@ class APIScanner(BaseScanner):
             )
             findings.extend(graphql_findings)
             endpoint_inventory.extend(graphql_endpoints)
-            api_hints.extend(item["url"] for item in graphql_endpoints if item.get("url"))
+            api_hints.extend(
+                item["url"] for item in graphql_endpoints if item.get("url")
+            )
 
-            method_findings = await self._probe_api_hints(client, sorted(set(api_hints))[:30], target)
+            method_findings = await self._probe_api_hints(
+                client, sorted(set(api_hints))[:30], target
+            )
             findings.extend(method_findings)
 
         if crawl.get("api_hints"):
@@ -91,7 +119,15 @@ class APIScanner(BaseScanner):
                     "validated": True,
                     "validation_method": "passive_crawl",
                     "confidence_reason": "API-like paths were observed directly in application responses and scripts.",
-                    "evidence": [{"type": "url", "label": "API hint", "value": item, "source": "crawl"} for item in sorted(set(crawl.get("api_hints", [])))[:10]],
+                    "evidence": [
+                        {
+                            "type": "url",
+                            "label": "API hint",
+                            "value": item,
+                            "source": "crawl",
+                        }
+                        for item in sorted(set(crawl.get("api_hints", [])))[:10]
+                    ],
                     "references": [],
                     "metadata": {"api_hint_count": len(crawl.get("api_hints", []))},
                 }
@@ -113,20 +149,32 @@ class APIScanner(BaseScanner):
             "rows": endpoint_inventory[:200],
         }
 
-    async def _fetch_spec(self, client: httpx.AsyncClient, url: str) -> Dict[str, Any] | None:
+    async def _fetch_spec(
+        self, client: httpx.AsyncClient, url: str
+    ) -> Dict[str, Any] | None:
         try:
             response = await client.get(url)
         except Exception:
             return None
-        if response.status_code != 200 or "json" not in response.headers.get("content-type", "").lower():
+        if (
+            response.status_code != 200
+            or "json" not in response.headers.get("content-type", "").lower()
+        ):
             return None
         try:
             parsed = response.json()
         except Exception:
             return None
-        return {"url": url, "document": parsed, "status_code": response.status_code, "content_type": response.headers.get("content-type", "")}
+        return {
+            "url": url,
+            "document": parsed,
+            "status_code": response.status_code,
+            "content_type": response.headers.get("content-type", ""),
+        }
 
-    def _analyze_spec(self, url: str, document_bundle: Dict[str, Any], target: str) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    def _analyze_spec(
+        self, url: str, document_bundle: Dict[str, Any], target: str
+    ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         document = document_bundle.get("document")
         if not isinstance(document, dict):
             return [], []
@@ -143,11 +191,24 @@ class APIScanner(BaseScanner):
                 "validation_method": "http_fetch",
                 "confidence_reason": "HTTP 200 response returned a machine-readable API schema document.",
                 "evidence": [
-                    {"type": "url", "label": "Specification URL", "value": url, "source": "openapi"},
-                    {"type": "status_code", "label": "Status code", "value": document_bundle.get("status_code"), "source": "openapi"},
+                    {
+                        "type": "url",
+                        "label": "Specification URL",
+                        "value": url,
+                        "source": "openapi",
+                    },
+                    {
+                        "type": "status_code",
+                        "label": "Status code",
+                        "value": document_bundle.get("status_code"),
+                        "source": "openapi",
+                    },
                 ],
                 "references": [],
-                "metadata": {"url": url, "content_type": document_bundle.get("content_type", "")},
+                "metadata": {
+                    "url": url,
+                    "content_type": document_bundle.get("content_type", ""),
+                },
             }
         ]
 
@@ -159,7 +220,11 @@ class APIScanner(BaseScanner):
         for path, operations in paths.items():
             if not isinstance(operations, dict):
                 continue
-            methods = [method.lower() for method, details in operations.items() if isinstance(details, dict)]
+            methods = [
+                method.lower()
+                for method, details in operations.items()
+                if isinstance(details, dict)
+            ]
             if not methods:
                 continue
             endpoint_url = urljoin(target.rstrip("/") + "/", str(path).lstrip("/"))
@@ -185,8 +250,18 @@ class APIScanner(BaseScanner):
                         "validation_method": "openapi_spec_analysis",
                         "confidence_reason": "The OpenAPI document explicitly lists these methods for the route.",
                         "evidence": [
-                            {"type": "endpoint", "label": "Route", "value": endpoint_url, "source": "openapi"},
-                            {"type": "methods", "label": "Methods", "value": ", ".join(sorted(methods)), "source": "openapi"},
+                            {
+                                "type": "endpoint",
+                                "label": "Route",
+                                "value": endpoint_url,
+                                "source": "openapi",
+                            },
+                            {
+                                "type": "methods",
+                                "label": "Methods",
+                                "value": ", ".join(sorted(methods)),
+                                "source": "openapi",
+                            },
                         ],
                         "metadata": {"path": path, "methods": methods},
                     }
@@ -202,7 +277,14 @@ class APIScanner(BaseScanner):
                         "validated": True,
                         "validation_method": "openapi_route_inventory",
                         "confidence_reason": "The route was listed directly in the exposed API definition.",
-                        "evidence": [{"type": "endpoint", "label": "Route", "value": endpoint_url, "source": "openapi"}],
+                        "evidence": [
+                            {
+                                "type": "endpoint",
+                                "label": "Route",
+                                "value": endpoint_url,
+                                "source": "openapi",
+                            }
+                        ],
                         "metadata": {"path": path, "methods": methods},
                     }
                 )
@@ -231,12 +313,19 @@ class APIScanner(BaseScanner):
                         "type": "graphql_endpoint",
                         "url": url,
                         "path": path,
-                        "methods": [item.strip().lower() for item in allowed_methods.split(",") if item.strip()],
+                        "methods": [
+                            item.strip().lower()
+                            for item in allowed_methods.split(",")
+                            if item.strip()
+                        ],
                         "source": "graphql",
                     }
                 )
 
-                if "GET" in allowed_methods.upper() and "POST" in allowed_methods.upper():
+                if (
+                    "GET" in allowed_methods.upper()
+                    and "POST" in allowed_methods.upper()
+                ):
                     findings.append(
                         {
                             "title": f"GraphQL Endpoint Exposed at {path}",
@@ -248,18 +337,30 @@ class APIScanner(BaseScanner):
                             "validation_method": "graphql_method_discovery",
                             "confidence_reason": "The endpoint responded directly to an OPTIONS request with advertised methods.",
                             "evidence": [
-                                {"type": "url", "label": "Endpoint", "value": url, "source": "graphql"},
-                                {"type": "methods", "label": "Allowed methods", "value": allowed_methods, "source": "graphql"},
+                                {
+                                    "type": "url",
+                                    "label": "Endpoint",
+                                    "value": url,
+                                    "source": "graphql",
+                                },
+                                {
+                                    "type": "methods",
+                                    "label": "Allowed methods",
+                                    "value": allowed_methods,
+                                    "source": "graphql",
+                                },
                             ],
                             "metadata": {"url": url},
-                    }
-                )
+                        }
+                    )
 
             if not allow_introspection:
                 continue
 
             try:
-                gql_response = await client.post(url, json={"query": "{__schema{queryType{name}}}"})
+                gql_response = await client.post(
+                    url, json={"query": "{__schema{queryType{name}}}"}
+                )
             except Exception:
                 continue
             if gql_response.status_code == 200 and "__schema" in gql_response.text:
@@ -275,8 +376,18 @@ class APIScanner(BaseScanner):
                         "validation_method": "graphql_introspection",
                         "confidence_reason": "The endpoint returned GraphQL schema metadata to an introspection query under an explicitly allowed policy.",
                         "evidence": [
-                            {"type": "url", "label": "Endpoint", "value": url, "source": "graphql"},
-                            {"type": "status_code", "label": "Status code", "value": gql_response.status_code, "source": "graphql"},
+                            {
+                                "type": "url",
+                                "label": "Endpoint",
+                                "value": url,
+                                "source": "graphql",
+                            },
+                            {
+                                "type": "status_code",
+                                "label": "Status code",
+                                "value": gql_response.status_code,
+                                "source": "graphql",
+                            },
                         ],
                         "references": [],
                         "metadata": {"url": url},
@@ -284,7 +395,9 @@ class APIScanner(BaseScanner):
                 )
         return findings, endpoints
 
-    async def _probe_api_hints(self, client: httpx.AsyncClient, api_hints: List[str], target: str) -> List[Dict[str, Any]]:
+    async def _probe_api_hints(
+        self, client: httpx.AsyncClient, api_hints: List[str], target: str
+    ) -> List[Dict[str, Any]]:
         findings: List[Dict[str, Any]] = []
         for url in api_hints:
             try:
@@ -294,7 +407,9 @@ class APIScanner(BaseScanner):
             allow_header = response.headers.get("allow", "")
             if not allow_header:
                 continue
-            methods = [item.strip().lower() for item in allow_header.split(",") if item.strip()]
+            methods = [
+                item.strip().lower() for item in allow_header.split(",") if item.strip()
+            ]
             risky = sorted(self.RISKY_METHODS.intersection(methods))
             if not risky:
                 continue
@@ -302,22 +417,36 @@ class APIScanner(BaseScanner):
                 {
                     "title": f"State-Changing Methods Exposed on {url}",
                     "category": "API Exposure",
-                    "severity": "medium" if any(token in url.lower() for token in self.HIGH_VALUE_TOKENS) else "low",
+                    "severity": "medium"
+                    if any(token in url.lower() for token in self.HIGH_VALUE_TOKENS)
+                    else "low",
                     "target": target,
                     "description": "The endpoint advertises state-changing methods and should be reviewed for authorization and browser abuse protections.",
                     "validated": True,
                     "validation_method": "options_method_discovery",
                     "confidence_reason": "The endpoint responded directly with allowed methods via HTTP OPTIONS.",
                     "evidence": [
-                        {"type": "url", "label": "Endpoint", "value": url, "source": "http_options"},
-                        {"type": "methods", "label": "Allowed methods", "value": ", ".join(sorted(methods)), "source": "http_options"},
+                        {
+                            "type": "url",
+                            "label": "Endpoint",
+                            "value": url,
+                            "source": "http_options",
+                        },
+                        {
+                            "type": "methods",
+                            "label": "Allowed methods",
+                            "value": ", ".join(sorted(methods)),
+                            "source": "http_options",
+                        },
                     ],
                     "metadata": {"url": url, "methods": methods},
                 }
             )
         return findings
 
-    def _dedupe_endpoints(self, endpoints: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _dedupe_endpoints(
+        self, endpoints: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         staged: Dict[str, Dict[str, Any]] = {}
         for endpoint in endpoints:
             key = f"{endpoint.get('source')}::{endpoint.get('url') or endpoint.get('path')}"

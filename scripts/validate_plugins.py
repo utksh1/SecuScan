@@ -65,9 +65,7 @@ def _results_to_dict(results: list[ValidationResult]) -> dict:
                 "id": r.plugin_id,
                 "dir": str(r.plugin_dir),
                 "valid": r.valid,
-                "errors": [
-                    {"path": e.path, "message": e.message} for e in r.errors
-                ],
+                "errors": [{"path": e.path, "message": e.message} for e in r.errors],
             }
             for r in results
         ],
@@ -148,8 +146,7 @@ def main(argv: list[str] | None = None) -> int:
 
         if failed:
             print(
-                f"\n✗ {len(failed)} plugin(s) failed validation, "
-                f"{passed} passed.\n"
+                f"\n✗ {len(failed)} plugin(s) failed validation, " f"{passed} passed.\n"
             )
             print("Fix the errors above, then re-run:")
             print("  python scripts/validate_plugins.py\n")

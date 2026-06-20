@@ -20,10 +20,15 @@ import pytest
 repo_root = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(repo_root))
 
-from scripts.refresh_plugin_checksum import compute_plugin_digest, refresh_plugin, refresh_all_plugins
+from scripts.refresh_plugin_checksum import (
+    compute_plugin_digest,
+    refresh_plugin,
+    refresh_all_plugins,
+)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def make_plugin(tmp_path: Path, plugin_id: str, checksum: str = "old-checksum") -> Path:
     """
@@ -49,8 +54,8 @@ def make_plugin(tmp_path: Path, plugin_id: str, checksum: str = "old-checksum") 
 
 # ── compute_plugin_digest ─────────────────────────────────────────────────────
 
-class TestComputePluginDigest:
 
+class TestComputePluginDigest:
     def test_returns_a_string(self, tmp_path):
         """Digest should be a non-empty string."""
         plugin_dir = make_plugin(tmp_path, "test-plugin")
@@ -156,7 +161,7 @@ class TestComputePluginDigest:
         """
         plugin_dir = make_plugin(tmp_path, "test-plugin")
         metadata_file = plugin_dir / "metadata.json"
-        parser_file   = plugin_dir / "parser.py"
+        parser_file = plugin_dir / "parser.py"
 
         # Manually replicate backend logic
         metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
@@ -164,7 +169,7 @@ class TestComputePluginDigest:
         metadata.pop("signature", None)
         canonical = json.dumps(metadata, sort_keys=True, separators=(",", ":"))
         metadata_digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-        parser_digest   = hashlib.sha256(parser_file.read_bytes()).hexdigest()
+        parser_digest = hashlib.sha256(parser_file.read_bytes()).hexdigest()
         expected = hashlib.sha256(
             f"{metadata_digest}:{parser_digest}".encode("utf-8")
         ).hexdigest()
@@ -175,8 +180,8 @@ class TestComputePluginDigest:
 
 # ── refresh_plugin ────────────────────────────────────────────────────────────
 
-class TestRefreshPlugin:
 
+class TestRefreshPlugin:
     def test_updates_checksum_in_metadata(self, tmp_path):
         """After refresh the checksum in metadata.json should be correct."""
         plugin_dir = make_plugin(tmp_path, "test-plugin", checksum="wrong-checksum")
@@ -239,8 +244,8 @@ class TestRefreshPlugin:
 
 # ── refresh_all_plugins ───────────────────────────────────────────────────────
 
-class TestRefreshAllPlugins:
 
+class TestRefreshAllPlugins:
     def test_refreshes_all_plugins(self, tmp_path):
         """All plugins in the directory should have correct checksums after refresh."""
         # Create three fake plugins with wrong checksums

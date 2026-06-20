@@ -87,9 +87,9 @@ def _container_uid(tag: str) -> int:
 
 def _container_user(tag: str) -> str:
     result = _run(["docker", "run", "--rm", tag, "whoami"])
-    assert result.returncode == 0, (
-        f"Could not get username from container: {result.stderr}"
-    )
+    assert (
+        result.returncode == 0
+    ), f"Could not get username from container: {result.stderr}"
     return result.stdout.strip()
 
 
@@ -188,15 +188,15 @@ class TestNonRootUser:
 
     def test_backend_user_is_secuscan(self, backend_image):
         user = _container_user(backend_image)
-        assert user == "secuscan", (
-            f"Expected backend container user to be 'secuscan', got '{user}'."
-        )
+        assert (
+            user == "secuscan"
+        ), f"Expected backend container user to be 'secuscan', got '{user}'."
 
     def test_frontend_user_is_nginx(self, frontend_image):
         user = _container_user(frontend_image)
-        assert user == "nginx", (
-            f"Expected frontend container user to be 'nginx', got '{user}'."
-        )
+        assert (
+            user == "nginx"
+        ), f"Expected frontend container user to be 'nginx', got '{user}'."
 
 
 # Tests: SUID/SGID
@@ -226,17 +226,19 @@ class TestSUIDFiles:
     def test_backend_no_unexpected_suid(self, backend_image):
         suid = set(_suid_files(backend_image))
         unexpected = suid - ALLOWED_SUID
-        assert not unexpected, (
-            f"Unexpected SUID/SGID binaries in backend image:\n"
-            + "\n".join(sorted(unexpected))
+        assert (
+            not unexpected
+        ), f"Unexpected SUID/SGID binaries in backend image:\n" + "\n".join(
+            sorted(unexpected)
         )
 
     def test_frontend_no_unexpected_suid(self, frontend_image):
         suid = set(_suid_files(frontend_image))
         unexpected = suid - ALLOWED_SUID
-        assert not unexpected, (
-            f"Unexpected SUID/SGID binaries in frontend image:\n"
-            + "\n".join(sorted(unexpected))
+        assert (
+            not unexpected
+        ), f"Unexpected SUID/SGID binaries in frontend image:\n" + "\n".join(
+            sorted(unexpected)
         )
 
 
@@ -257,18 +259,18 @@ class TestDockerfileStructure:
         assert user_lines, "backend/Dockerfile must contain a USER instruction."
         # Ensure it's not USER root
         for line in user_lines:
-            assert "root" not in line.lower(), (
-                f"backend/Dockerfile switches to root: {line}"
-            )
+            assert (
+                "root" not in line.lower()
+            ), f"backend/Dockerfile switches to root: {line}"
 
     def test_frontend_dockerfile_has_user_instruction(self):
         content = self._read_dockerfile("frontend")
         user_lines = [l for l in content.splitlines() if l.strip().startswith("USER ")]
         assert user_lines, "frontend/Dockerfile must contain a USER instruction."
         for line in user_lines:
-            assert "root" not in line.lower(), (
-                f"frontend/Dockerfile switches to root: {line}"
-            )
+            assert (
+                "root" not in line.lower()
+            ), f"frontend/Dockerfile switches to root: {line}"
 
     def test_backend_dockerfile_pinned_base(self):
         content = self._read_dockerfile("backend")
@@ -276,30 +278,30 @@ class TestDockerfileStructure:
         assert from_lines, "backend/Dockerfile has no FROM line."
         base = from_lines[0]
         # Must not use 'latest' tag
-        assert ":latest" not in base and " latest" not in base, (
-            f"backend/Dockerfile must not use ':latest' tag. Found: {base}"
-        )
+        assert (
+            ":latest" not in base and " latest" not in base
+        ), f"backend/Dockerfile must not use ':latest' tag. Found: {base}"
 
     def test_frontend_dockerfile_pinned_base(self):
         content = self._read_dockerfile("frontend")
         from_lines = [l for l in content.splitlines() if l.strip().startswith("FROM ")]
         assert from_lines, "frontend/Dockerfile has no FROM line."
         base = from_lines[0]
-        assert ":latest" not in base and " latest" not in base, (
-            f"frontend/Dockerfile must not use ':latest' tag. Found: {base}"
-        )
+        assert (
+            ":latest" not in base and " latest" not in base
+        ), f"frontend/Dockerfile must not use ':latest' tag. Found: {base}"
 
     def test_backend_dockerfile_has_healthcheck(self):
         content = self._read_dockerfile("backend")
-        assert "HEALTHCHECK" in content, (
-            "backend/Dockerfile must define a HEALTHCHECK instruction."
-        )
+        assert (
+            "HEALTHCHECK" in content
+        ), "backend/Dockerfile must define a HEALTHCHECK instruction."
 
     def test_frontend_dockerfile_has_healthcheck(self):
         content = self._read_dockerfile("frontend")
-        assert "HEALTHCHECK" in content, (
-            "frontend/Dockerfile must define a HEALTHCHECK instruction."
-        )
+        assert (
+            "HEALTHCHECK" in content
+        ), "frontend/Dockerfile must define a HEALTHCHECK instruction."
 
     def test_backend_no_apt_cache_left_behind(self):
         content = self._read_dockerfile("backend")
@@ -311,9 +313,9 @@ class TestDockerfileStructure:
         )
         for block in run_blocks:
             if "apt-get install" in block or "apt-get update" in block:
-                assert "rm -rf /var/lib/apt/lists" in block, (
-                    "apt-get install block must clean up apt lists in the same RUN layer."
-                )
+                assert (
+                    "rm -rf /var/lib/apt/lists" in block
+                ), "apt-get install block must clean up apt lists in the same RUN layer."
 
 
 # Tests: Trivy CVE gate

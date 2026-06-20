@@ -63,7 +63,10 @@ async def test_memory_classification_stderr_strings():
     limit = 512 * 1024 * 1024
     assert classify_memory_violation(1, "MemoryError: out of memory", 0, limit) is True
     assert classify_memory_violation(1, "Cannot allocate memory", 0, limit) is True
-    assert classify_memory_violation(1, "Segmentation fault (core dumped)", 0, limit) is False
+    assert (
+        classify_memory_violation(1, "Segmentation fault (core dumped)", 0, limit)
+        is False
+    )
 
 
 @pytest.mark.asyncio
@@ -127,7 +130,7 @@ async def test_output_limit_exact_boundary():
         [sys.executable, "-c", "print('x' * 2000)"],
         cfg,
     )
-    total_bytes = len(stdout.encode('utf-8')) + len(stderr.encode('utf-8'))
+    total_bytes = len(stdout.encode("utf-8")) + len(stderr.encode("utf-8"))
     assert total_bytes <= 1000
     assert violation == "output_limit"
 
@@ -140,7 +143,7 @@ async def test_output_limit_no_partial_chunks():
         [sys.executable, "-c", "print('A' * 1000000)"],
         cfg,
     )
-    total = len(stdout.encode('utf-8')) + len(stderr.encode('utf-8'))
+    total = len(stdout.encode("utf-8")) + len(stderr.encode("utf-8"))
     assert total <= 512
     assert violation == "output_limit"
 
@@ -159,7 +162,7 @@ for i in range(100):
         [sys.executable, "-c", script],
         cfg,
     )
-    total_bytes = len(stdout.encode('utf-8')) + len(stderr.encode('utf-8'))
+    total_bytes = len(stdout.encode("utf-8")) + len(stderr.encode("utf-8"))
     assert total_bytes <= 256
     assert violation == "output_limit"
 
@@ -172,7 +175,7 @@ async def test_output_limit_early_reader_termination():
         [sys.executable, "-c", "print('x' * 10000)"],
         cfg,
     )
-    total = len(stdout.encode('utf-8')) + len(stderr.encode('utf-8'))
+    total = len(stdout.encode("utf-8")) + len(stderr.encode("utf-8"))
     assert total <= 100
     assert violation == "output_limit"
 

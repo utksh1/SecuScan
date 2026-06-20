@@ -3,10 +3,10 @@
 
 ---
 
-**Document Version:** 1.0  
-**Classification:** Internal Release  
-**Target Audience:** Engineering Team, Security Researchers, Pentesting Students  
-**Last Updated:** November 2, 2025  
+**Document Version:** 1.0
+**Classification:** Internal Release
+**Target Audience:** Engineering Team, Security Researchers, Pentesting Students
+**Last Updated:** November 2, 2025
 
 ---
 
@@ -64,7 +64,7 @@ SecuScan is built on five foundational principles:
 
 ### 1.4 Product Purpose
 
-**Mission Statement:**  
+**Mission Statement:**
 "Enable learning-driven, ethical penetration testing for academic and self-training use without exposing external systems or requiring a remote backend."
 
 SecuScan bridges the gap between theoretical security knowledge and practical application. Students can safely experiment with professional-grade tools in controlled environments, while experienced practitioners benefit from a unified, privacy-respecting toolkit that doesn't send scan data to third-party services.
@@ -105,13 +105,13 @@ SecuScan bridges the gap between theoretical security knowledge and practical ap
 
 ### 1.6 Key Differentiators
 
-**vs. Kali Linux:**  
+**vs. Kali Linux:**
 SecuScan provides a curated, guided experience rather than a comprehensive toolkit. It's designed for learning specific workflows, not replacing a full penetration testing OS.
 
-**vs. Burp Suite:**  
+**vs. Burp Suite:**
 While Burp focuses on web application proxying and manual testing, SecuScan emphasizes automated scanning workflows with educational scaffolding.
 
-**vs. Cloud Scanning Services (Qualys, Rapid7):**  
+**vs. Cloud Scanning Services (Qualys, Rapid7):**
 Complete data privacy—no scan results leave your machine. No subscription fees, no internet requirement, no compliance concerns.
 
 ### 1.7 Success Metrics
@@ -147,9 +147,9 @@ The initial release includes five battle-tested tools, selected for their utilit
 
 #### 2.2.1 Nmap (Network Mapper)
 
-**Tool ID:** `nmap`  
-**Binary:** `nmap` (+ `python-nmap` wrapper)  
-**Category:** Network Discovery & Port Scanning  
+**Tool ID:** `nmap`
+**Binary:** `nmap` (+ `python-nmap` wrapper)
+**Category:** Network Discovery & Port Scanning
 
 ##### Purpose
 Nmap performs host discovery, port enumeration, service version detection, and OS fingerprinting. It's the industry standard for network reconnaissance and forms the foundation of most penetration testing engagements.
@@ -224,9 +224,9 @@ Nmap performs host discovery, port enumeration, service version detection, and O
 
 #### 2.2.2 HTTP Inspector
 
-**Tool ID:** `http_inspector`  
-**Library:** `requests` / `httpx`  
-**Category:** Web Reconnaissance  
+**Tool ID:** `http_inspector`
+**Library:** `requests` / `httpx`
+**Category:** Web Reconnaissance
 
 ##### Purpose
 Performs safe, read-only HTTP requests to validate endpoint availability, examine response headers, trace redirections, and inspect TLS configurations. Ideal for initial web target profiling without active exploitation attempts.
@@ -307,9 +307,9 @@ Performs safe, read-only HTTP requests to validate endpoint availability, examin
 
 #### 2.2.3 Directory Discovery
 
-**Tool ID:** `dir_brute`  
-**Engine:** Custom Python (asyncio + httpx)  
-**Category:** Web Enumeration  
+**Tool ID:** `dir_brute`
+**Engine:** Custom Python (asyncio + httpx)
+**Category:** Web Enumeration
 
 ##### Purpose
 Discovers hidden directories, files, and endpoints by testing common naming patterns against a target web application. Uses wordlists to systematically probe for unlinked resources that may contain sensitive information or administrative interfaces.
@@ -394,9 +394,9 @@ Discovers hidden directories, files, and endpoints by testing common naming patt
 
 #### 2.2.4 Nikto/Wapiti (Web Passive Scanner)
 
-**Tool ID:** `web_passive_scan`  
-**Binary:** `nikto` / `wapiti`  
-**Category:** Web Vulnerability Assessment  
+**Tool ID:** `web_passive_scan`
+**Binary:** `nikto` / `wapiti`
+**Category:** Web Vulnerability Assessment
 
 ##### Purpose
 Automated scanner for common web server misconfigurations, outdated software versions, dangerous HTTP methods, missing security headers, and known vulnerabilities. Operates in two modes: passive (read-only) and active (includes low-risk probes).
@@ -479,9 +479,9 @@ Automated scanner for common web server misconfigurations, outdated software ver
 
 #### 2.2.5 TLS / Certificate Inspector
 
-**Tool ID:** `tls_inspect`  
-**Library:** `ssl` / `cryptography`  
-**Category:** Transport Security Analysis  
+**Tool ID:** `tls_inspect`
+**Library:** `ssl` / `cryptography`
+**Category:** Transport Security Analysis
 
 ##### Purpose
 Examines TLS/SSL configurations, certificate validity, cipher suites, and protocol versions. Identifies weak cryptographic implementations, expired certificates, and misconfigured trust chains without performing any active exploitation.
@@ -651,8 +651,8 @@ High-risk tools requiring mature safety frameworks:
 
 SecuScan runs as a **single-page web application (SPA)** served from a local Python backend. The entire application stack operates on `127.0.0.1`, eliminating network exposure risks.
 
-**Access URL (Frontend):** `http://127.0.0.1:3000`  
-**Backend API:** `http://127.0.0.1:8000/api/v1`  
+**Access URL (Frontend):** `http://127.0.0.1:3000`
+**Backend API:** `http://127.0.0.1:8000/api/v1`
 
 ### 3.2 Visual Layout
 
@@ -1042,7 +1042,7 @@ Plugins can provide Python parser scripts:
 def parse(raw_output: str, task_config: dict) -> dict:
     """
     Parse Nmap XML output into standardized format.
-    
+
     Returns:
         {
             "summary": ["Found 2 hosts", "12 open ports"],
@@ -1051,14 +1051,14 @@ def parse(raw_output: str, task_config: dict) -> dict:
         }
     """
     import xml.etree.ElementTree as ET
-    
+
     root = ET.fromstring(raw_output)
     hosts = []
-    
+
     for host in root.findall('.//host'):
         # ... parsing logic ...
         hosts.append(host_data)
-    
+
     return {
         "summary": [f"Found {len(hosts)} hosts"],
         "structured": {"hosts": hosts},
@@ -1140,10 +1140,10 @@ plugins/
 
 ### 5.1 API Versioning
 
-**Base URL:** `http://127.0.0.1:8080/api/v1`  
-**Protocol:** REST over HTTP  
-**Serialization:** JSON  
-**Authentication:** Token-based (optional, disabled by default)  
+**Base URL:** `http://127.0.0.1:8080/api/v1`
+**Protocol:** REST over HTTP
+**Serialization:** JSON
+**Authentication:** Token-based (optional, disabled by default)
 
 ### 5.2 Endpoint Reference
 
@@ -1625,12 +1625,12 @@ All plugins produce output conforming to a standardized schema, enabling consist
   "duration_seconds": "float",
   "status": "completed|failed|cancelled",
   "exit_code": "integer (null if N/A)",
-  
+
   "summary": [
     "Human-readable summary line 1",
     "Human-readable summary line 2"
   ],
-  
+
   "severity_counts": {
     "critical": "integer",
     "high": "integer",
@@ -1638,14 +1638,14 @@ All plugins produce output conforming to a standardized schema, enabling consist
     "low": "integer",
     "info": "integer"
   },
-  
+
   "structured": {
     "tool-specific-key": "tool-specific-value"
   },
-  
+
   "raw_output_path": "string (file path)",
   "raw_output_excerpt": "string (first 1000 chars, optional)",
-  
+
   "errors": [
     {
       "code": "string",
@@ -1653,7 +1653,7 @@ All plugins produce output conforming to a standardized schema, enabling consist
       "timestamp": "ISO8601"
     }
   ],
-  
+
   "metadata": {
     "inputs": {"target": "...", "preset": "..."},
     "environment": {
@@ -1999,10 +1999,10 @@ Findings are categorized using industry-standard severity levels:
 
 ### 7.1 Database Technology
 
-**Engine:** SQLite 3.35+  
-**Location:** `$HOME/.secuscan/secuscan.db`  
-**Encryption:** Optional (SQLCipher extension)  
-**Backup:** Automatic daily snapshots to `$HOME/.secuscan/backups/`  
+**Engine:** SQLite 3.35+
+**Location:** `$HOME/.secuscan/secuscan.db`
+**Encryption:** Optional (SQLCipher extension)
+**Backup:** Automatic daily snapshots to `$HOME/.secuscan/backups/`
 
 ### 7.2 Database Schema
 
@@ -2018,26 +2018,26 @@ CREATE TABLE tasks (
     target TEXT NOT NULL,
     inputs_json TEXT NOT NULL,  -- JSON string of input parameters
     preset TEXT,
-    
+
     status TEXT NOT NULL,  -- queued|running|completed|failed|cancelled
     consent_granted BOOLEAN NOT NULL DEFAULT 0,
     safe_mode BOOLEAN NOT NULL DEFAULT 1,
-    
+
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     started_at DATETIME,
     completed_at DATETIME,
     duration_seconds REAL,
-    
+
     exit_code INTEGER,
     structured_json TEXT,  -- Parsed output in standard format
     raw_output_path TEXT,
     error_message TEXT,
-    
+
     -- Resource tracking
     container_id TEXT,
     cpu_seconds REAL,
     memory_peak_mb REAL,
-    
+
     -- Indexes
     FOREIGN KEY (plugin_id) REFERENCES plugins(id)
 );
@@ -2059,15 +2059,15 @@ CREATE TABLE plugins (
     version TEXT NOT NULL,
     category TEXT NOT NULL,
     metadata_json TEXT NOT NULL,  -- Full plugin metadata
-    
+
     enabled BOOLEAN NOT NULL DEFAULT 1,
     checksum TEXT,  -- SHA-256 of metadata file
     signature TEXT,  -- GPG signature (optional)
-    
+
     installed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_updated DATETIME,
     last_used DATETIME,
-    
+
     -- Dependency tracking
     binary_path TEXT,
     docker_image TEXT,
@@ -2091,7 +2091,7 @@ CREATE TABLE settings (
 );
 
 -- Example rows:
-INSERT INTO settings VALUES 
+INSERT INTO settings VALUES
     ('bind_address', '127.0.0.1', 'string', 'Server bind address', CURRENT_TIMESTAMP),
     ('bind_port', '8080', 'integer', 'Server port', CURRENT_TIMESTAMP),
     ('require_consent', '1', 'boolean', 'Force consent checkbox', CURRENT_TIMESTAMP),
@@ -2108,13 +2108,13 @@ CREATE TABLE audit_log (
     timestamp DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     event_type TEXT NOT NULL,  -- task_start|task_complete|consent_granted|setting_change|auth_attempt
     severity TEXT NOT NULL,  -- info|warning|error
-    
+
     user_id TEXT,  -- If authentication enabled
     ip_address TEXT,
-    
+
     message TEXT NOT NULL,
     context_json TEXT,  -- Additional structured data
-    
+
     task_id TEXT,  -- Link to task if applicable
     plugin_id TEXT
 );
@@ -2134,11 +2134,11 @@ CREATE TABLE presets (
     name TEXT NOT NULL,
     plugin_id TEXT NOT NULL,
     config_json TEXT NOT NULL,
-    
+
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     last_used DATETIME,
     use_count INTEGER DEFAULT 0,
-    
+
     FOREIGN KEY (plugin_id) REFERENCES plugins(id),
     UNIQUE(plugin_id, name)
 );
@@ -2381,14 +2381,14 @@ def run_sandboxed(command, timeout=300):
         "timeout", str(timeout),
         *command
     ]
-    
+
     result = subprocess.run(
         sandbox_command,
         capture_output=True,
         text=True,
         check=False
     )
-    
+
     return result
 ```
 
@@ -2479,30 +2479,30 @@ ALLOWED_PRIVATE = [
 def validate_target(target: str, safe_mode: bool = True) -> tuple[bool, str]:
     """
     Validate scan target address.
-    
+
     Returns: (is_valid, error_message)
     """
     try:
         ip = ipaddress.ip_address(target)
-        
+
         # Check blocked networks
         if any(ip in net for net in BLOCKED_NETWORKS):
             return False, "Target is in blocked network range"
-        
+
         # Safe mode: only allow private IPs
         if safe_mode and not any(ip in net for net in ALLOWED_PRIVATE):
             return False, "Public IPs not allowed in safe mode"
-        
+
         return True, ""
-        
+
     except ValueError:
         # Not an IP, check if hostname
         if not re.match(r'^[a-zA-Z0-9.-]+$', target):
             return False, "Invalid hostname format"
-        
+
         if target.endswith(('.mil', '.gov')) and safe_mode:
             return False, "Government domains blocked in safe mode"
-        
+
         return True, ""
 ```
 
@@ -2537,7 +2537,7 @@ def build_command(template: list, inputs: dict) -> list:
                 command.append(str(value))
         else:
             command.append(token)
-    
+
     return command  # Return as list, not shell string
 ```
 
@@ -2562,23 +2562,23 @@ from datetime import datetime, timedelta
 class RateLimiter:
     def __init__(self):
         self.task_history = defaultdict(list)  # plugin_id -> [timestamps]
-    
+
     def can_execute(self, plugin_id: str, max_per_hour: int) -> tuple[bool, str]:
         """Check if plugin can be executed based on rate limits."""
         now = datetime.now()
         hour_ago = now - timedelta(hours=1)
-        
+
         # Clean old entries
         self.task_history[plugin_id] = [
             ts for ts in self.task_history[plugin_id]
             if ts > hour_ago
         ]
-        
+
         recent_count = len(self.task_history[plugin_id])
-        
+
         if recent_count >= max_per_hour:
             return False, f"Rate limit exceeded: {recent_count}/{max_per_hour} per hour"
-        
+
         self.task_history[plugin_id].append(now)
         return True, ""
 ```
@@ -2597,7 +2597,7 @@ class CredentialVault:
         self.vault_path = vault_path
         self.key = self._load_or_generate_key()
         self.cipher = Fernet(self.key)
-    
+
     def store(self, name: str, value: str):
         """Encrypt and store credential."""
         encrypted = self.cipher.encrypt(value.encode())
@@ -2606,7 +2606,7 @@ class CredentialVault:
             "INSERT OR REPLACE INTO credentials VALUES (?, ?)",
             (name, encrypted)
         )
-    
+
     def retrieve(self, name: str) -> str:
         """Decrypt and retrieve credential."""
         encrypted = db.query("SELECT value FROM credentials WHERE name = ?", name)
@@ -2873,7 +2873,7 @@ Scan authorized by: [User confirmation recorded]
 
 3. KEY FINDINGS
    [Table with color-coded severity]
-   
+
 4. DETAILED RESULTS
    [Port-by-port breakdown with service details]
 
@@ -3265,7 +3265,7 @@ def test_nmap_scan_workflow(api_client):
     })
     assert response.status_code == 200
     task_id = response.json()["task_id"]
-    
+
     # Poll until complete
     for _ in range(30):
         status_response = requests.get(f"{api_client}/task/{task_id}/status")
@@ -3273,13 +3273,13 @@ def test_nmap_scan_workflow(api_client):
         if status == "completed":
             break
         time.sleep(1)
-    
+
     assert status == "completed"
-    
+
     # Retrieve results
     result_response = requests.get(f"{api_client}/task/{task_id}/result")
     result = result_response.json()
-    
+
     assert "structured" in result
     assert "hosts" in result["structured"]
     assert len(result["structured"]["hosts"]) > 0
@@ -3301,35 +3301,35 @@ from selenium.webdriver.support import expected_conditions as EC
 def test_first_scan_workflow():
     driver = webdriver.Chrome()
     driver.get("http://127.0.0.1:8080")
-    
+
     # Accept terms
     consent_checkbox = driver.find_element(By.ID, "consent-checkbox")
     consent_checkbox.click()
-    
+
     # Select tool
     driver.find_element(By.LINK_TEXT, "Nmap").click()
-    
+
     # Fill form
     target_input = driver.find_element(By.ID, "target")
     target_input.send_keys("scanme.nmap.org")
-    
+
     # Select preset
     preset_select = driver.find_element(By.ID, "preset")
     preset_select.send_keys("Quick Host Check")
-    
+
     # Start scan
     start_button = driver.find_element(By.ID, "start-scan")
     start_button.click()
-    
+
     # Wait for completion
     WebDriverWait(driver, 60).until(
         EC.text_to_be_present_in_element((By.ID, "task-status"), "Completed")
     )
-    
+
     # Verify results displayed
     results_panel = driver.find_element(By.ID, "structured-results")
     assert "open ports" in results_panel.text.lower()
-    
+
     driver.quit()
 ```
 

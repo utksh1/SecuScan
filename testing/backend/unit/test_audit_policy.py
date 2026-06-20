@@ -13,12 +13,14 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 
 # pyrefly: ignore [missing-import]
 import check_pip_audit
+
 # pyrefly: ignore [missing-import]
 import check_npm_audit
 
 # ==============================================================================
 # 1. UNIT TESTS: DATE AND EXCEPTION VALIDATION
 # ==============================================================================
+
 
 def test_pip_is_exception_valid():
     """Test pip-audit is_exception_valid with various dates and formats"""
@@ -27,26 +29,49 @@ def test_pip_is_exception_valid():
 
     # 1. Past date string (Expired)
     exc_past = {"expires_at": "2025-01-01"}
-    assert check_pip_audit.is_exception_valid(exc_past, current_date=current_utc) is False
+    assert (
+        check_pip_audit.is_exception_valid(exc_past, current_date=current_utc) is False
+    )
 
     # 2. Future date string (Valid)
     exc_future = {"expires_at": "2035-12-31"}
-    assert check_pip_audit.is_exception_valid(exc_future, current_date=current_utc) is True
+    assert (
+        check_pip_audit.is_exception_valid(exc_future, current_date=current_utc) is True
+    )
 
     # 3. Date object (Valid/Expired)
     exc_date_past = {"expires_at": datetime.date(2025, 1, 1)}
-    assert check_pip_audit.is_exception_valid(exc_date_past, current_date=current_utc) is False
+    assert (
+        check_pip_audit.is_exception_valid(exc_date_past, current_date=current_utc)
+        is False
+    )
 
     exc_date_future = {"expires_at": datetime.date(2035, 12, 31)}
-    assert check_pip_audit.is_exception_valid(exc_date_future, current_date=current_utc) is True
+    assert (
+        check_pip_audit.is_exception_valid(exc_date_future, current_date=current_utc)
+        is True
+    )
 
     # 4. Datetime object
-    exc_dt_future = {"expires_at": datetime.datetime(2035, 12, 31, 23, 59, 59, tzinfo=datetime.timezone.utc)}
-    assert check_pip_audit.is_exception_valid(exc_dt_future, current_date=current_utc) is True
+    exc_dt_future = {
+        "expires_at": datetime.datetime(
+            2035, 12, 31, 23, 59, 59, tzinfo=datetime.timezone.utc
+        )
+    }
+    assert (
+        check_pip_audit.is_exception_valid(exc_dt_future, current_date=current_utc)
+        is True
+    )
 
     # 5. Missing / Null fields
     assert check_pip_audit.is_exception_valid({}, current_date=current_utc) is False
-    assert check_pip_audit.is_exception_valid({"expires_at": None}, current_date=current_utc) is False
+    assert (
+        check_pip_audit.is_exception_valid(
+            {"expires_at": None}, current_date=current_utc
+        )
+        is False
+    )
+
 
 def test_npm_is_exception_valid():
     """Test npm-audit is_exception_valid with various dates and formats"""
@@ -54,19 +79,30 @@ def test_npm_is_exception_valid():
 
     # 1. Past date string
     exc_past = {"expires_at": "2025-01-01"}
-    assert check_npm_audit.is_exception_valid(exc_past, current_date=current_utc) is False
+    assert (
+        check_npm_audit.is_exception_valid(exc_past, current_date=current_utc) is False
+    )
 
     # 2. Future date string
     exc_future = {"expires_at": "2035-12-31"}
-    assert check_npm_audit.is_exception_valid(exc_future, current_date=current_utc) is True
+    assert (
+        check_npm_audit.is_exception_valid(exc_future, current_date=current_utc) is True
+    )
 
     # 3. Missing / Null fields
     assert check_npm_audit.is_exception_valid({}, current_date=current_utc) is False
-    assert check_npm_audit.is_exception_valid({"expires_at": None}, current_date=current_utc) is False
+    assert (
+        check_npm_audit.is_exception_valid(
+            {"expires_at": None}, current_date=current_utc
+        )
+        is False
+    )
+
 
 # ==============================================================================
 # 2. UNIT TESTS: UPSTREAM JSON SHAPES AND EXTRACTION
 # ==============================================================================
+
 
 def test_pip_parse_vulnerabilities_variations():
     """Test pip-audit parse_vulnerabilities with Variant A (Dictionary Wrapped) and Variant B (Flat List)"""
@@ -74,19 +110,13 @@ def test_pip_parse_vulnerabilities_variations():
         {
             "id": "GHSA-c5u2-73g7-4w73",
             "description": "Mock high severity vuln",
-            "severity": "HIGH"
+            "severity": "HIGH",
         }
     ]
 
     # Variant A: Dictionary Wrapped
     dict_report = {
-        "dependencies": [
-            {
-                "name": "requests",
-                "version": "2.25.0",
-                "vulns": vulns_mock
-            }
-        ]
+        "dependencies": [{"name": "requests", "version": "2.25.0", "vulns": vulns_mock}]
     }
     parsed_a = check_pip_audit.parse_vulnerabilities(dict_report)
     assert len(parsed_a) == 1
@@ -95,18 +125,13 @@ def test_pip_parse_vulnerabilities_variations():
     assert parsed_a[0]["vulnerability"]["severity"] == "HIGH"
 
     # Variant B: Flat List Array
-    list_report = [
-        {
-            "name": "requests",
-            "version": "2.25.0",
-            "vulns": vulns_mock
-        }
-    ]
+    list_report = [{"name": "requests", "version": "2.25.0", "vulns": vulns_mock}]
     parsed_b = check_pip_audit.parse_vulnerabilities(list_report)
     assert len(parsed_b) == 1
     assert parsed_b[0]["package"] == "requests"
     assert parsed_b[0]["cve"] == "GHSA-c5u2-73g7-4w73"
     assert parsed_b[0]["vulnerability"]["severity"] == "HIGH"
+
 
 def test_npm_extract_ghsa_or_cve():
     """Test npm-audit extract_ghsa_or_cve with different structures, specifically testing integer source IDs"""
@@ -115,7 +140,10 @@ def test_npm_extract_ghsa_or_cve():
     assert check_npm_audit.extract_ghsa_or_cve(issue_cwe) == "GHSA-c5u2-73g7-4w73"
 
     # 2. URL parsing
-    issue_url = {"url": "https://github.com/advisories/GHSA-1234-abcd-efgh", "severity": "high"}
+    issue_url = {
+        "url": "https://github.com/advisories/GHSA-1234-abcd-efgh",
+        "severity": "high",
+    }
     assert check_npm_audit.extract_ghsa_or_cve(issue_url) == "GHSA-1234-abcd-efgh"
 
     # 3. Source string matching
@@ -126,9 +154,11 @@ def test_npm_extract_ghsa_or_cve():
     issue_src_int = {"source": 1085097, "severity": "high"}
     assert check_npm_audit.extract_ghsa_or_cve(issue_src_int) == "ADVISORY-1085097"
 
+
 # ==============================================================================
 # 3. POLICY ENGINE INTEGRATION TESTS (FIXTURE BOUNDARIES)
 # ==============================================================================
+
 
 @pytest.fixture
 def base_config():
@@ -144,6 +174,7 @@ def base_config():
         "excluded_packages": [],
     }
 
+
 def test_empty_or_malformed_report_gate(tmp_path, base_config):
     """Verify checkers fail (exit code 1) on missing, empty, or malformed JSON reports"""
     config_file = tmp_path / "config.yaml"
@@ -154,11 +185,29 @@ def test_empty_or_malformed_report_gate(tmp_path, base_config):
     missing_report = tmp_path / "missing.json"
 
     # Pip audit
-    with patch("sys.argv", ["check_pip_audit.py", "--report", str(missing_report), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_pip_audit.py",
+            "--report",
+            str(missing_report),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_pip_audit.main() == 1
 
     # Npm audit
-    with patch("sys.argv", ["check_npm_audit.py", "--report", str(missing_report), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_npm_audit.py",
+            "--report",
+            str(missing_report),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_npm_audit.main() == 1
 
     # 2. Empty report (0 bytes)
@@ -166,11 +215,29 @@ def test_empty_or_malformed_report_gate(tmp_path, base_config):
     empty_report.touch()
 
     # Pip audit
-    with patch("sys.argv", ["check_pip_audit.py", "--report", str(empty_report), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_pip_audit.py",
+            "--report",
+            str(empty_report),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_pip_audit.main() == 1
 
     # Npm audit
-    with patch("sys.argv", ["check_npm_audit.py", "--report", str(empty_report), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_npm_audit.py",
+            "--report",
+            str(empty_report),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_npm_audit.main() == 1
 
     # 3. Malformed report (invalid JSON)
@@ -179,12 +246,31 @@ def test_empty_or_malformed_report_gate(tmp_path, base_config):
         f.write("{invalid_json: true}")
 
     # Pip audit
-    with patch("sys.argv", ["check_pip_audit.py", "--report", str(malformed_report), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_pip_audit.py",
+            "--report",
+            str(malformed_report),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_pip_audit.main() == 1
 
     # Npm audit
-    with patch("sys.argv", ["check_npm_audit.py", "--report", str(malformed_report), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_npm_audit.py",
+            "--report",
+            str(malformed_report),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_npm_audit.main() == 1
+
 
 def test_expired_exception_fixture(tmp_path, base_config):
     """Fixture 1: Verify expired exception causes build gate failure (exit code 1)"""
@@ -192,7 +278,7 @@ def test_expired_exception_fixture(tmp_path, base_config):
     base_config["exceptions"]["GHSA-c5u2-73g7-4w73"] = {
         "package": "requests",
         "expires_at": "2025-01-01",
-        "reason": "Expired exception test"
+        "reason": "Expired exception test",
     }
 
     config_file = tmp_path / "config.yaml"
@@ -210,16 +296,25 @@ def test_expired_exception_fixture(tmp_path, base_config):
                     {
                         "id": "GHSA-c5u2-73g7-4w73",
                         "severity": "HIGH",
-                        "description": "High vulnerability"
+                        "description": "High vulnerability",
                     }
-                ]
+                ],
             }
         ]
     }
     with open(pip_report, "w") as f:
         json.dump(pip_data, f)
 
-    with patch("sys.argv", ["check_pip_audit.py", "--report", str(pip_report), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_pip_audit.py",
+            "--report",
+            str(pip_report),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_pip_audit.main() == 1
 
     # 2. Npm audit expired exception test
@@ -234,16 +329,25 @@ def test_expired_exception_fixture(tmp_path, base_config):
                         "source": "GHSA-c5u2-73g7-4w73",
                         "name": "requests",
                         "severity": "high",
-                        "url": "https://github.com/advisories/GHSA-c5u2-73g7-4w73"
+                        "url": "https://github.com/advisories/GHSA-c5u2-73g7-4w73",
                     }
-                ]
+                ],
             }
         }
     }
     with open(npm_report, "w") as f:
         json.dump(npm_data, f)
 
-    with patch("sys.argv", ["check_npm_audit.py", "--report", str(npm_report), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_npm_audit.py",
+            "--report",
+            str(npm_report),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_npm_audit.main() == 1
 
     # 3. Verification of policy bypass flag: enforce_expiry = False
@@ -251,11 +355,30 @@ def test_expired_exception_fixture(tmp_path, base_config):
     with open(config_file, "w") as f:
         yaml.safe_dump(base_config, f)
 
-    with patch("sys.argv", ["check_pip_audit.py", "--report", str(pip_report), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_pip_audit.py",
+            "--report",
+            str(pip_report),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_pip_audit.main() == 0
 
-    with patch("sys.argv", ["check_npm_audit.py", "--report", str(npm_report), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_npm_audit.py",
+            "--report",
+            str(npm_report),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_npm_audit.main() == 0
+
 
 def test_blocking_severity_fixture(tmp_path, base_config):
     """Fixture 2: Verify high severity advisory triggers gate failure when threshold is MEDIUM/MODERATE"""
@@ -276,16 +399,25 @@ def test_blocking_severity_fixture(tmp_path, base_config):
                     {
                         "id": "GHSA-c5u2-73g7-4w73",
                         "severity": "CRITICAL",
-                        "description": "Critical vulnerability"
+                        "description": "Critical vulnerability",
                     }
-                ]
+                ],
             }
         ]
     }
     with open(pip_report_upper, "w") as f:
         json.dump(pip_data_upper, f)
 
-    with patch("sys.argv", ["check_pip_audit.py", "--report", str(pip_report_upper), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_pip_audit.py",
+            "--report",
+            str(pip_report_upper),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_pip_audit.main() == 1
 
     # 1b. Pip audit: critical (lowercase) vulnerability should fail
@@ -299,16 +431,25 @@ def test_blocking_severity_fixture(tmp_path, base_config):
                     {
                         "id": "GHSA-c5u2-73g7-4w74",
                         "severity": "critical",
-                        "description": "Critical vulnerability lowercase"
+                        "description": "Critical vulnerability lowercase",
                     }
-                ]
+                ],
             }
         ]
     }
     with open(pip_report_lower, "w") as f:
         json.dump(pip_data_lower, f)
 
-    with patch("sys.argv", ["check_pip_audit.py", "--report", str(pip_report_lower), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_pip_audit.py",
+            "--report",
+            str(pip_report_lower),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_pip_audit.main() == 1
 
     # 2. Npm audit: high vulnerability should fail
@@ -323,17 +464,27 @@ def test_blocking_severity_fixture(tmp_path, base_config):
                         "source": 1085097,
                         "name": "lodash",
                         "severity": "high",
-                        "url": "https://github.com/advisories/GHSA-lodash-123"
+                        "url": "https://github.com/advisories/GHSA-lodash-123",
                     }
-                ]
+                ],
             }
         }
     }
     with open(npm_report, "w") as f:
         json.dump(npm_data, f)
 
-    with patch("sys.argv", ["check_npm_audit.py", "--report", str(npm_report), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_npm_audit.py",
+            "--report",
+            str(npm_report),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_npm_audit.main() == 1
+
 
 def test_valid_exception_fixture(tmp_path, base_config):
     """Fixture 3: Verify vulnerability with valid future exception returns clean exit code (0)"""
@@ -341,7 +492,7 @@ def test_valid_exception_fixture(tmp_path, base_config):
     base_config["exceptions"]["GHSA-c5u2-73g7-4w73"] = {
         "package": "requests",
         "expires_at": "2035-12-31",
-        "reason": "Vulnerability monitored; valid future exception test"
+        "reason": "Vulnerability monitored; valid future exception test",
     }
 
     config_file = tmp_path / "config.yaml"
@@ -359,16 +510,25 @@ def test_valid_exception_fixture(tmp_path, base_config):
                     {
                         "id": "GHSA-c5u2-73g7-4w73",
                         "severity": "HIGH",
-                        "description": "High vulnerability"
+                        "description": "High vulnerability",
                     }
-                ]
+                ],
             }
         ]
     }
     with open(pip_report, "w") as f:
         json.dump(pip_data, f)
 
-    with patch("sys.argv", ["check_pip_audit.py", "--report", str(pip_report), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_pip_audit.py",
+            "--report",
+            str(pip_report),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_pip_audit.main() == 0
 
     # 2. Npm audit valid exception
@@ -383,17 +543,27 @@ def test_valid_exception_fixture(tmp_path, base_config):
                         "source": "GHSA-c5u2-73g7-4w73",
                         "name": "requests",
                         "severity": "high",
-                        "url": "https://github.com/advisories/GHSA-c5u2-73g7-4w73"
+                        "url": "https://github.com/advisories/GHSA-c5u2-73g7-4w73",
                     }
-                ]
+                ],
             }
         }
     }
     with open(npm_report, "w") as f:
         json.dump(npm_data, f)
 
-    with patch("sys.argv", ["check_npm_audit.py", "--report", str(npm_report), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_npm_audit.py",
+            "--report",
+            str(npm_report),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_npm_audit.main() == 0
+
 
 def test_pip_alias_exception_matching(tmp_path, base_config):
     """Test that pip exception matches by vulnerability alias (e.g. CVE ID)"""
@@ -401,7 +571,7 @@ def test_pip_alias_exception_matching(tmp_path, base_config):
     base_config["exceptions"]["CVE-2026-9999"] = {
         "package": "pyyaml",
         "expires_at": "2035-12-31",
-        "reason": "Alias matching test"
+        "reason": "Alias matching test",
     }
     config_file = tmp_path / "config.yaml"
     with open(config_file, "w") as f:
@@ -419,9 +589,9 @@ def test_pip_alias_exception_matching(tmp_path, base_config):
                         "id": "PYSEC-2026-9999",
                         "aliases": ["CVE-2026-9999", "GHSA-xxxx-xxxx-xxxx"],
                         "severity": "HIGH",
-                        "description": "YAML deserialization"
+                        "description": "YAML deserialization",
                     }
-                ]
+                ],
             }
         ]
     }
@@ -429,8 +599,18 @@ def test_pip_alias_exception_matching(tmp_path, base_config):
         json.dump(pip_data, f)
 
     # Run check_pip_audit.py, it should succeed (exit code 0) since the alias is excepted
-    with patch("sys.argv", ["check_pip_audit.py", "--report", str(pip_report), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_pip_audit.py",
+            "--report",
+            str(pip_report),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_pip_audit.main() == 0
+
 
 def test_exception_expiry_warnings_and_bypass(tmp_path, base_config):
     """Test exception close-to-expiry warning triggers, and enforce_expiry flag logic"""
@@ -441,12 +621,14 @@ def test_exception_expiry_warnings_and_bypass(tmp_path, base_config):
     exception = {
         "package": "requests",
         "expires_at": close_expiry_date,
-        "reason": "Soon expiring exception"
+        "reason": "Soon expiring exception",
     }
 
     # We should see warning printed or logged when checking expiry warning
     with patch("check_pip_audit.logger.warning") as mock_warn:
-        check_pip_audit.check_expiry_warning(exception, warn_days=14, current_date=current_utc)
+        check_pip_audit.check_expiry_warning(
+            exception, warn_days=14, current_date=current_utc
+        )
         assert mock_warn.called
         assert "expires in" in mock_warn.call_args[0][0]
 
@@ -454,7 +636,7 @@ def test_exception_expiry_warnings_and_bypass(tmp_path, base_config):
     base_config["exceptions"]["CVE-2025-0001"] = {
         "package": "requests",
         "expires_at": "2020-01-01",  # Definitely expired
-        "reason": "Expired but bypassed"
+        "reason": "Expired but bypassed",
     }
     base_config["policy"]["enforce_expiry"] = False
 
@@ -472,17 +654,27 @@ def test_exception_expiry_warnings_and_bypass(tmp_path, base_config):
                     {
                         "id": "CVE-2025-0001",
                         "severity": "HIGH",
-                        "description": "High vulnerability"
+                        "description": "High vulnerability",
                     }
-                ]
+                ],
             }
         ]
     }
     with open(pip_report, "w") as f:
         json.dump(pip_data, f)
 
-    with patch("sys.argv", ["check_pip_audit.py", "--report", str(pip_report), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_pip_audit.py",
+            "--report",
+            str(pip_report),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_pip_audit.main() == 0
+
 
 def test_blocking_severity_thresholds(tmp_path, base_config):
     """Test blocking severity threshold case-insensitivity, unknown severity, and strict gating"""
@@ -502,9 +694,9 @@ def test_blocking_severity_thresholds(tmp_path, base_config):
                     {
                         "id": "CVE-2026-9999",
                         "severity": "hIgH",
-                        "description": "High vuln"
+                        "description": "High vuln",
                     }
-                ]
+                ],
             }
         ]
     }
@@ -512,7 +704,16 @@ def test_blocking_severity_thresholds(tmp_path, base_config):
         json.dump(pip_data, f)
 
     # hIgH should trigger high blocking severity and return exit code 1
-    with patch("sys.argv", ["check_pip_audit.py", "--report", str(pip_report), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_pip_audit.py",
+            "--report",
+            str(pip_report),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_pip_audit.main() == 1
 
     # 2. Unknown severity: should not block when min-severity is high
@@ -525,9 +726,9 @@ def test_blocking_severity_thresholds(tmp_path, base_config):
                     {
                         "id": "CVE-2026-9999",
                         "severity": "unknown",
-                        "description": "Unknown severity"
+                        "description": "Unknown severity",
                     }
-                ]
+                ],
             }
         ]
     }
@@ -535,7 +736,16 @@ def test_blocking_severity_thresholds(tmp_path, base_config):
         json.dump(pip_data_unknown, f)
 
     # unknown is below HiGh threshold, should pass (0)
-    with patch("sys.argv", ["check_pip_audit.py", "--report", str(pip_report), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_pip_audit.py",
+            "--report",
+            str(pip_report),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_pip_audit.main() == 0
 
     # 3. Unknown severity: should block when min-severity is low
@@ -544,12 +754,27 @@ def test_blocking_severity_thresholds(tmp_path, base_config):
         yaml.safe_dump(base_config, f)
 
     # unknown is level 1, which blocks when min-severity is low
-    with patch("sys.argv", ["check_pip_audit.py", "--report", str(pip_report), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_pip_audit.py",
+            "--report",
+            str(pip_report),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_pip_audit.main() == 1
+
 
 def test_real_pip_audit_fixture_flow(tmp_path, base_config):
     """Verify that parse_vulnerabilities parses real pip-audit flat list shape and main() blocks on high severity"""
-    fixture_path = Path(__file__).resolve().parents[0] / "fixtures" / "audit" / "pip_audit_real_shape.json"
+    fixture_path = (
+        Path(__file__).resolve().parents[0]
+        / "fixtures"
+        / "audit"
+        / "pip_audit_real_shape.json"
+    )
     with open(fixture_path) as f:
         report_data = json.load(f)
 
@@ -564,12 +789,27 @@ def test_real_pip_audit_fixture_flow(tmp_path, base_config):
     with open(config_file, "w") as f:
         yaml.safe_dump(base_config, f)
 
-    with patch("sys.argv", ["check_pip_audit.py", "--report", str(fixture_path), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_pip_audit.py",
+            "--report",
+            str(fixture_path),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_pip_audit.main() == 1
+
 
 def test_real_npm_audit_fixture_flow(tmp_path, base_config):
     """Verify extract_ghsa_or_cve handles integer sources and that main() blocks on high severity from real npm shape"""
-    fixture_path = Path(__file__).resolve().parents[0] / "fixtures" / "audit" / "npm_audit_real_shape.json"
+    fixture_path = (
+        Path(__file__).resolve().parents[0]
+        / "fixtures"
+        / "audit"
+        / "npm_audit_real_shape.json"
+    )
     with open(fixture_path) as f:
         report_data = json.load(f)
 
@@ -590,8 +830,18 @@ def test_real_npm_audit_fixture_flow(tmp_path, base_config):
     with open(config_file, "w") as f:
         yaml.safe_dump(base_config, f)
 
-    with patch("sys.argv", ["check_npm_audit.py", "--report", str(fixture_path), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_npm_audit.py",
+            "--report",
+            str(fixture_path),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_npm_audit.main() == 1
+
 
 def test_expired_exception_low_severity_no_block(tmp_path, base_config):
     """Expired exception on a LOW severity vuln should NOT block when threshold=high"""
@@ -599,7 +849,7 @@ def test_expired_exception_low_severity_no_block(tmp_path, base_config):
     base_config["exceptions"]["CVE-2025-LOW"] = {
         "package": "somepkg",
         "expires_at": "2020-01-01",  # expired
-        "reason": "old"
+        "reason": "old",
     }
     base_config["policy"]["min_severity_to_block"] = "high"
 
@@ -618,16 +868,25 @@ def test_expired_exception_low_severity_no_block(tmp_path, base_config):
                     {
                         "id": "CVE-2025-LOW",
                         "severity": "low",
-                        "description": "Low severity vuln"
+                        "description": "Low severity vuln",
                     }
-                ]
+                ],
             }
         ]
     }
     with open(pip_report, "w") as f:
         json.dump(pip_data, f)
 
-    with patch("sys.argv", ["check_pip_audit.py", "--report", str(pip_report), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_pip_audit.py",
+            "--report",
+            str(pip_report),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_pip_audit.main() == 0
 
     # Npm report with severity="low"
@@ -642,21 +901,32 @@ def test_expired_exception_low_severity_no_block(tmp_path, base_config):
                         "source": "CVE-2025-LOW",
                         "name": "somepkg",
                         "severity": "low",
-                        "url": "https://github.com/advisories/CVE-2025-LOW"
+                        "url": "https://github.com/advisories/CVE-2025-LOW",
                     }
-                ]
+                ],
             }
         }
     }
     with open(npm_report, "w") as f:
         json.dump(npm_data, f)
 
-    with patch("sys.argv", ["check_npm_audit.py", "--report", str(npm_report), "--config", str(config_file)]):
+    with patch(
+        "sys.argv",
+        [
+            "check_npm_audit.py",
+            "--report",
+            str(npm_report),
+            "--config",
+            str(config_file),
+        ],
+    ):
         assert check_npm_audit.main() == 0
+
 
 # ==============================================================================
 # 4. DIRECT UNIT TESTS: MALFORMED CONFIGS & REPORTS
 # ==============================================================================
+
 
 def test_load_config_malformed_yaml(tmp_path):
     """Test load_config function directly with malformed/invalid YAML"""
@@ -674,6 +944,7 @@ def test_load_config_malformed_yaml(tmp_path):
     assert isinstance(config_npm, dict)
     assert config_npm["policy"]["min_severity_to_block"] == "high"
 
+
 def test_load_config_missing_file():
     """Test load_config function directly with missing config file"""
     missing_file_path = "non_existent_file_path_xyz.yaml"
@@ -688,6 +959,7 @@ def test_load_config_missing_file():
     assert isinstance(config_npm, dict)
     assert config_npm["policy"]["min_severity_to_block"] == "high"
 
+
 def test_load_report_malformed_json(tmp_path):
     """Test load_report function directly with malformed JSON"""
     malformed_json_file = tmp_path / "malformed_report.json"
@@ -701,6 +973,7 @@ def test_load_report_malformed_json(tmp_path):
     # check_npm_audit.load_npm_audit_report should raise json.JSONDecodeError
     with pytest.raises(json.JSONDecodeError):
         check_npm_audit.load_npm_audit_report(str(malformed_json_file))
+
 
 def test_pip_parse_vulnerabilities_malformed_structure():
     """Test pip-audit parse_vulnerabilities directly with unexpected/malformed report structures"""
@@ -722,7 +995,7 @@ def test_pip_parse_vulnerabilities_malformed_structure():
         {
             "name": "requests",
             "version": "2.25.0",
-            "vulns": "not a list"  # vulns key is not a list
+            "vulns": "not a list",  # vulns key is not a list
         }
     ]
     assert check_pip_audit.parse_vulnerabilities(bad_dep_report) == []
@@ -731,10 +1004,11 @@ def test_pip_parse_vulnerabilities_malformed_structure():
         {
             "name": "requests",
             "version": "2.25.0",
-            "vulns": [None, "invalid_vuln_format"]  # elements in list are not dicts
+            "vulns": [None, "invalid_vuln_format"],  # elements in list are not dicts
         }
     ]
     assert check_pip_audit.parse_vulnerabilities(bad_vuln_report) == []
+
 
 def test_npm_extract_ghsa_or_cve_malformed_structure():
     """Test npm-audit extract_ghsa_or_cve handles malformed structures and empty keys gracefully"""

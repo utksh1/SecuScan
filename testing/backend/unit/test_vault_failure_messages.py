@@ -17,8 +17,8 @@ import pytest
 from backend.secuscan.vault import VaultCrypto
 from backend.secuscan.config import settings
 
-ENDPOINT_PUT    = "/api/v1/vault/{name}"
-ENDPOINT_GET    = "/api/v1/vault/{name}"
+ENDPOINT_PUT = "/api/v1/vault/{name}"
+ENDPOINT_GET = "/api/v1/vault/{name}"
 ENDPOINT_DELETE = "/api/v1/vault/{name}"
 
 
@@ -26,11 +26,14 @@ ENDPOINT_DELETE = "/api/v1/vault/{name}"
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def put_secret(client, name: str, value: str):
     return client.put(ENDPOINT_PUT.format(name=name), json={"value": value})
 
+
 def get_secret(client, name: str):
     return client.get(ENDPOINT_GET.format(name=name))
+
 
 def delete_secret(client, name: str):
     return client.delete(ENDPOINT_DELETE.format(name=name))
@@ -39,6 +42,7 @@ def delete_secret(client, name: str):
 # ---------------------------------------------------------------------------
 # 1. VaultCrypto unit — failure paths
 # ---------------------------------------------------------------------------
+
 
 class TestVaultCryptoFailures:
     """
@@ -117,6 +121,7 @@ class TestVaultCryptoFailures:
 # 2. Route-level failure paths
 # ---------------------------------------------------------------------------
 
+
 class TestVaultRouteFailures:
     """
     Integration tests for vault HTTP routes.
@@ -137,8 +142,7 @@ class TestVaultRouteFailures:
         """400 error must not leak any secret material."""
         sentinel = "SENTINEL_SECRET_LEAK"
         r = test_client.put(
-            ENDPOINT_PUT.format(name="test-leak"),
-            json={"value": sentinel}
+            ENDPOINT_PUT.format(name="test-leak"), json={"value": sentinel}
         )
         # Only check leak if it was actually rejected
         if r.status_code == 400:

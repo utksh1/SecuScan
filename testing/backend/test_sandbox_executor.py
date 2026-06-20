@@ -45,55 +45,73 @@ async def test_signal_escalation():
 class TestMemoryLimitClassification:
     @pytest.mark.parametrize("exit_code", [-11, 139])
     def test_sigsegv(self, exit_code):
-        assert classify_memory_violation(
-            exit_code=exit_code,
-            stderr_text="",
-            rss_bytes=0,
-            limit_bytes=512 * 1024 * 1024,
-        ) is True
+        assert (
+            classify_memory_violation(
+                exit_code=exit_code,
+                stderr_text="",
+                rss_bytes=0,
+                limit_bytes=512 * 1024 * 1024,
+            )
+            is True
+        )
 
     def test_memory_error_string(self):
-        assert classify_memory_violation(
-            exit_code=1,
-            stderr_text="MemoryError: unable to allocate",
-            rss_bytes=0,
-            limit_bytes=512 * 1024 * 1024,
-        ) is True
+        assert (
+            classify_memory_violation(
+                exit_code=1,
+                stderr_text="MemoryError: unable to allocate",
+                rss_bytes=0,
+                limit_bytes=512 * 1024 * 1024,
+            )
+            is True
+        )
 
     def test_cannot_allocate_memory(self):
-        assert classify_memory_violation(
-            exit_code=1,
-            stderr_text="Cannot allocate memory",
-            rss_bytes=0,
-            limit_bytes=512 * 1024 * 1024,
-        ) is True
+        assert (
+            classify_memory_violation(
+                exit_code=1,
+                stderr_text="Cannot allocate memory",
+                rss_bytes=0,
+                limit_bytes=512 * 1024 * 1024,
+            )
+            is True
+        )
 
     def test_rss_heuristic(self):
         limit_bytes = 512 * 1024 * 1024
-        assert classify_memory_violation(
-            exit_code=137,
-            stderr_text="",
-            rss_bytes=limit_bytes,
-            limit_bytes=limit_bytes,
-        ) is True
+        assert (
+            classify_memory_violation(
+                exit_code=137,
+                stderr_text="",
+                rss_bytes=limit_bytes,
+                limit_bytes=limit_bytes,
+            )
+            is True
+        )
 
     def test_rss_below_threshold(self):
         limit_bytes = 512 * 1024 * 1024
-        assert classify_memory_violation(
-            exit_code=1,
-            stderr_text="",
-            rss_bytes=int(limit_bytes * 0.50),
-            limit_bytes=limit_bytes,
-        ) is False
+        assert (
+            classify_memory_violation(
+                exit_code=1,
+                stderr_text="",
+                rss_bytes=int(limit_bytes * 0.50),
+                limit_bytes=limit_bytes,
+            )
+            is False
+        )
 
     def test_zero_exit_not_classified(self):
         limit_bytes = 512 * 1024 * 1024
-        assert classify_memory_violation(
-            exit_code=0,
-            stderr_text="",
-            rss_bytes=int(limit_bytes * 0.99),
-            limit_bytes=limit_bytes,
-        ) is False
+        assert (
+            classify_memory_violation(
+                exit_code=0,
+                stderr_text="",
+                rss_bytes=int(limit_bytes * 0.99),
+                limit_bytes=limit_bytes,
+            )
+            is False
+        )
 
 
 @pytest.mark.asyncio
@@ -202,6 +220,7 @@ async def test_live_output_via_broadcast_callback():
 
 def test_sandbox_violation_exception():
     from backend.secuscan.models import SandboxViolation
+
     exc = SandboxViolation("timeout")
     assert exc.reason == "timeout"
     assert str(exc) == "timeout"
@@ -210,6 +229,7 @@ def test_sandbox_violation_exception():
 @pytest.mark.asyncio
 async def test_resolve_sandbox_config_global_defaults(monkeypatch):
     from backend.secuscan.sandbox_executor import resolve_sandbox_config
+
     monkeypatch.setattr(
         "backend.secuscan.config.settings.sandbox_timeout",
         42,
@@ -227,6 +247,7 @@ async def test_resolve_sandbox_config_global_defaults(monkeypatch):
 @pytest.mark.asyncio
 async def test_resolve_sandbox_config_plugin_overrides():
     from backend.secuscan.sandbox_executor import resolve_sandbox_config
+
     resolved = resolve_sandbox_config(
         SandboxConfig(timeout_seconds=999, max_memory_mb=2048)
     )

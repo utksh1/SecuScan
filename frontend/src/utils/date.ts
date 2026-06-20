@@ -10,10 +10,10 @@ export function parseDateSafe(rawValue: string | null | undefined): Date | null 
   try {
     // Handle formats like "YYYY-MM-DD HH:MM:SS" (SQLite) vs standard ISO-8601
     const isoCompatible = raw.includes('T') ? raw : raw.replace(' ', 'T')
-    
+
     // Check if the string already has timezone info (e.g. "Z" or "+HH:MM")
     const hasTimezone = /(?:Z|[+-]\d{2}:\d{2})$/.test(isoCompatible)
-    
+
     // We try multiple candidate strings if timezone is missing
     const candidates = hasTimezone
       ? [isoCompatible, raw]
@@ -26,7 +26,7 @@ export function parseDateSafe(rawValue: string | null | undefined): Date | null 
   } catch (error) {
     console.error('Date parsing failed:', error, raw)
   }
-  
+
   return null
 }
 
@@ -67,7 +67,7 @@ export function getCurrentTimeZone(): string {
 export function getTimeZoneAbbreviation(): string {
   try {
     const tz = getPreferredTimeZone();
-    const formatter = new Intl.DateTimeFormat([], { 
+    const formatter = new Intl.DateTimeFormat([], {
         timeZoneName: 'short',
         ...(tz ? { timeZone: tz } : {})
     });
@@ -85,15 +85,15 @@ export function getTimeZoneAbbreviation(): string {
 export function formatBriefingDate(dateStr: string | null): string {
   const d = parseDateSafe(dateStr)
   if (!d) return ''
-  
+
   const tz = getPreferredTimeZone();
   const options: Intl.DateTimeFormatOptions = tz ? { timeZone: tz } : {};
-  
+
   const day = d.toLocaleDateString([], { ...options, day: '2-digit' })
   const month = d.toLocaleDateString([], { ...options, month: 'short' }).toUpperCase()
   const year = d.toLocaleDateString([], { ...options, year: '2-digit' })
   const time = d.toLocaleTimeString([], { ...options, hour: '2-digit', minute: '2-digit', hour12: false })
-  
+
   return `${day} ${month}, ${year}, ${time}`
 }
 
@@ -103,7 +103,7 @@ export function formatBriefingDate(dateStr: string | null): string {
 export function formatTaskInit(dateStr: string): { date: string, time: string, tz: string } {
   const parsed = parseDateSafe(dateStr)
   if (!parsed) return { date: 'UNKNOWN DATE', time: 'UNKNOWN TIME', tz: '' }
-  
+
   const tz = getPreferredTimeZone();
   const date = parsed.toLocaleDateString([], {
     month: 'short',
@@ -111,7 +111,7 @@ export function formatTaskInit(dateStr: string): { date: string, time: string, t
     year: 'numeric',
     ...(tz ? { timeZone: tz } : {})
   }).toUpperCase()
-  
+
   const time = parsed.toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
@@ -119,9 +119,9 @@ export function formatTaskInit(dateStr: string): { date: string, time: string, t
     hour12: false,
     ...(tz ? { timeZone: tz } : {})
   })
-  
+
   const tzAbbr = getTimeZoneAbbreviation();
-  
+
   return { date, time, tz: tzAbbr }
 }
 
@@ -131,7 +131,7 @@ export function formatTaskInit(dateStr: string): { date: string, time: string, t
 export function formatDateLong(dateStr: string | null): string {
     const d = parseDateSafe(dateStr)
     if (!d) return 'N/A'
-    
+
     const tz = getPreferredTimeZone();
     const formatted = d.toLocaleString([], {
         day: '2-digit',
@@ -143,7 +143,7 @@ export function formatDateLong(dateStr: string | null): string {
         hour12: false,
         ...(tz ? { timeZone: tz } : {})
     }).toUpperCase()
-    
+
     const tzAbbr = getTimeZoneAbbreviation();
     return tzAbbr ? `${formatted} ${tzAbbr}` : formatted;
 }

@@ -12,6 +12,7 @@ from backend.secuscan.main import app
 # Shared test client
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="module")
 def client():
     with TestClient(app) as c:
@@ -21,6 +22,7 @@ def client():
 # ---------------------------------------------------------------------------
 # Helpers — payload / step builders
 # ---------------------------------------------------------------------------
+
 
 def _step(plugin_id="port_scan", **extra):
     """Return a minimal valid step dict, with optional field overrides."""
@@ -43,20 +45,22 @@ def _payload(steps=None, **extra):
 # Helper — assert the response is a well-formed JSON error
 # ---------------------------------------------------------------------------
 
+
 def _assert_error_response(response, *, expected_statuses=(400, 422)):
     """Assert status is one of expected_statuses and body is a JSON object."""
     assert response.status_code in expected_statuses, (
         f"Expected one of {expected_statuses}, got {response.status_code}. "
         f"Body: {response.text}"
     )
-    assert isinstance(response.json(), dict), (
-        f"Expected JSON object body, got: {response.text}"
-    )
+    assert isinstance(
+        response.json(), dict
+    ), f"Expected JSON object body, got: {response.text}"
 
 
 # ---------------------------------------------------------------------------
 # Mock-DB factory for valid-creation tests
 # ---------------------------------------------------------------------------
+
 
 def _make_fake_row(name="edge-case-workflow", schedule_seconds=None):
     """Return a dict that mimics the DB row the route would insert/fetch."""
@@ -117,6 +121,7 @@ def _patch_get_db(fake_row):
 # Empty steps — rejected before DB is touched
 # ---------------------------------------------------------------------------
 
+
 class TestEmptySteps:
     """POST /api/v1/workflows with an empty or missing steps field is rejected."""
 
@@ -131,9 +136,7 @@ class TestEmptySteps:
 
     def test_missing_steps_field_is_rejected(self, client):
         """Omitting steps entirely is equivalent to an empty list."""
-        response = client.post(
-            "/api/v1/workflows", json={"name": "no-steps-workflow"}
-        )
+        response = client.post("/api/v1/workflows", json={"name": "no-steps-workflow"})
         _assert_error_response(response)
 
 
@@ -141,27 +144,22 @@ class TestEmptySteps:
 # Malformed step payloads — rejected before DB is touched
 # ---------------------------------------------------------------------------
 
+
 class TestMalformedSteps:
     """Steps that are structurally invalid must cause the request to fail."""
 
     def test_step_missing_plugin_id_is_rejected(self, client):
         bad_step = {"params": {"target": "127.0.0.1"}}
-        response = client.post(
-            "/api/v1/workflows", json=_payload(steps=[bad_step])
-        )
+        response = client.post("/api/v1/workflows", json=_payload(steps=[bad_step]))
         _assert_error_response(response)
 
     def test_step_plugin_id_wrong_type_integer_is_rejected(self, client):
         bad_step = {"plugin_id": 42, "params": {}}
-        response = client.post(
-            "/api/v1/workflows", json=_payload(steps=[bad_step])
-        )
+        response = client.post("/api/v1/workflows", json=_payload(steps=[bad_step]))
         _assert_error_response(response)
 
     def test_step_is_null_is_rejected(self, client):
-        response = client.post(
-            "/api/v1/workflows", json=_payload(steps=[None])
-        )
+        response = client.post("/api/v1/workflows", json=_payload(steps=[None]))
         _assert_error_response(response)
 
     def test_step_is_bare_string_is_rejected(self, client):
@@ -181,12 +179,10 @@ class TestMalformedSteps:
     def test_one_malformed_step_among_valid_steps_is_rejected(self, client):
         """A single bad step in an otherwise valid list must still fail."""
         mixed = [
-            _step("port_scan"),           # valid
+            _step("port_scan"),  # valid
             {"params": {"target": "x"}},  # missing plugin_id
         ]
-        response = client.post(
-            "/api/v1/workflows", json=_payload(steps=mixed)
-        )
+        response = client.post("/api/v1/workflows", json=_payload(steps=mixed))
         _assert_error_response(response)
 
 
@@ -194,19 +190,16 @@ class TestMalformedSteps:
 # Invalid schedule_seconds — rejected before DB is touched
 # ---------------------------------------------------------------------------
 
+
 class TestInvalidScheduleSeconds:
     """schedule_seconds must be a positive integer ≥ 1 when supplied."""
 
     def test_schedule_seconds_zero_is_rejected(self, client):
-        response = client.post(
-            "/api/v1/workflows", json=_payload(schedule_seconds=0)
-        )
+        response = client.post("/api/v1/workflows", json=_payload(schedule_seconds=0))
         _assert_error_response(response)
 
     def test_schedule_seconds_negative_is_rejected(self, client):
-        response = client.post(
-            "/api/v1/workflows", json=_payload(schedule_seconds=-60)
-        )
+        response = client.post("/api/v1/workflows", json=_payload(schedule_seconds=-60))
         _assert_error_response(response)
 
     def test_schedule_seconds_string_is_rejected(self, client):
@@ -231,6 +224,7 @@ class TestInvalidScheduleSeconds:
 # ---------------------------------------------------------------------------
 # Valid / boundary schedule_seconds — patch get_db for determinism
 # ---------------------------------------------------------------------------
+
 
 class TestValidScheduleSeconds:
     """Boundary-valid schedule_seconds values (and absence thereof) are accepted."""
@@ -286,6 +280,6 @@ class TestValidScheduleSeconds:
         with _patch_get_db(fake_row):
             response = client.post("/api/v1/workflows", json=_payload())
         assert response.status_code in (200, 201)
-        assert isinstance(response.json(), dict), (
-            f"Expected JSON object, got: {response.text}"
-        )
+        assert isinstance(
+            response.json(), dict
+        ), f"Expected JSON object, got: {response.text}"

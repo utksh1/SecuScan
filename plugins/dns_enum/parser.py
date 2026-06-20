@@ -25,9 +25,15 @@ def _split_record_value(value: str) -> tuple[str, List[str]]:
     return parts[0], parts[1:]
 
 
-def _format_group_description(rec_type: str, host: str, details: List[str], total: int) -> str:
+def _format_group_description(
+    rec_type: str, host: str, details: List[str], total: int
+) -> str:
     if details:
-        detail_label = "Resolved values" if rec_type in {"A", "AAAA", "NS", "SOA", "MX"} else "Values"
+        detail_label = (
+            "Resolved values"
+            if rec_type in {"A", "AAAA", "NS", "SOA", "MX"}
+            else "Values"
+        )
         return (
             f"{rec_type} record for {host}\n"
             f"{detail_label} ({len(details)}):\n"
@@ -36,7 +42,9 @@ def _format_group_description(rec_type: str, host: str, details: List[str], tota
     return f"{rec_type} record observed for {host}. Seen {total} time{'s' if total != 1 else ''}."
 
 
-def _summarize_dns_records(records: List[Dict[str, str]], groups: List[Dict[str, Any]]) -> List[str]:
+def _summarize_dns_records(
+    records: List[Dict[str, str]], groups: List[Dict[str, Any]]
+) -> List[str]:
     if not records:
         return ["DNS reconnaissance did not return structured DNS records."]
 
@@ -56,7 +64,9 @@ def _summarize_dns_records(records: List[Dict[str, str]], groups: List[Dict[str,
     name_servers = [group["host"] for group in groups if group["type"] == "NS"]
     mail_exchangers = [group["host"] for group in groups if group["type"] == "MX"]
     if name_servers:
-        summary.append(f"Authoritative name servers: {', '.join(_unique(name_servers)[:6])}.")
+        summary.append(
+            f"Authoritative name servers: {', '.join(_unique(name_servers)[:6])}."
+        )
     if mail_exchangers:
         summary.append(f"Mail exchangers: {', '.join(_unique(mail_exchangers)[:6])}.")
 
@@ -69,10 +79,10 @@ def parse(output: str) -> Dict[str, Any]:
     """
     records: List[Dict[str, str]] = []
     grouped_records: Dict[tuple[str, str], Dict[str, Any]] = {}
-    
+
     # Simple regex to find common record types: [*] TYPE value
     record_pattern = re.compile(r"\[\*\]\s+([A-Z]+)\s+(.*)")
-    
+
     for match in record_pattern.finditer(output):
         rec_type, value = match.groups()
         value = value.strip()
@@ -108,30 +118,36 @@ def parse(output: str) -> Dict[str, Any]:
         }
         groups.append(normalized_group)
 
-        findings.append({
-            "title": f"DNS {group['type']} Record: {group['host']}",
-            "category": "DNS Configuration",
-            "severity": "info",
-            "description": _format_group_description(group["type"], group["host"], values, group["count"]),
-            "remediation": RECORD_REMEDIATION,
-            "metadata": {
-                "type": group["type"],
-                "host": group["host"],
-                "values": values,
-                "raw_values": raw_values,
-                "record_count": group["count"],
+        findings.append(
+            {
+                "title": f"DNS {group['type']} Record: {group['host']}",
+                "category": "DNS Configuration",
+                "severity": "info",
+                "description": _format_group_description(
+                    group["type"], group["host"], values, group["count"]
+                ),
+                "remediation": RECORD_REMEDIATION,
+                "metadata": {
+                    "type": group["type"],
+                    "host": group["host"],
+                    "values": values,
+                    "raw_values": raw_values,
+                    "record_count": group["count"],
+                },
             }
-        })
-        
+        )
+
     if "Zone Transfer Successful" in output:
-        findings.append({
-            "title": "Critical: DNS Zone Transfer Successful",
-            "category": "DNS Misconfiguration",
-            "severity": "critical",
-            "description": "The DNS server allowed a full zone transfer (AXFR). This exposes all internal DNS records.",
-            "remediation": "Restrict AXFR transfers to authorized slave servers only."
-        })
-            
+        findings.append(
+            {
+                "title": "Critical: DNS Zone Transfer Successful",
+                "category": "DNS Misconfiguration",
+                "severity": "critical",
+                "description": "The DNS server allowed a full zone transfer (AXFR). This exposes all internal DNS records.",
+                "remediation": "Restrict AXFR transfers to authorized slave servers only.",
+            }
+        )
+
     return {
         "findings": findings,
         "count": len(records),

@@ -13,6 +13,7 @@ import backend.secuscan.database as _db_module
 
 # ─── Fixtures ─────────────────────────────────────────────────────────────────
 
+
 @pytest_asyncio.fixture
 async def app_client():
     """
@@ -39,22 +40,22 @@ async def app_client():
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 VALID_PRESET = {
-    "severity":    "critical",
-    "target":      "example.com",
-    "scanner":     "nmap",
-    "sortMode":    "newest",
-    "dateFrom":    "2025-01-01",
-    "dateTo":      "2025-12-31",
+    "severity": "critical",
+    "target": "example.com",
+    "scanner": "nmap",
+    "sortMode": "newest",
+    "dateFrom": "2025-01-01",
+    "dateTo": "2025-12-31",
     "searchQuery": "open port",
 }
 
 ALL_FILTER_PRESET = {
-    "severity":    "all",
-    "target":      "all",
-    "scanner":     "all",
-    "sortMode":    "severity",
-    "dateFrom":    "",
-    "dateTo":      "",
+    "severity": "all",
+    "target": "all",
+    "scanner": "all",
+    "sortMode": "severity",
+    "dateFrom": "",
+    "dateTo": "",
     "searchQuery": "",
 }
 
@@ -64,6 +65,7 @@ def make_body(name: str, preset: dict = VALID_PRESET) -> dict:
 
 
 # ─── LIST (GET /saved-views) ──────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_list_empty(app_client: AsyncClient):
@@ -77,10 +79,13 @@ async def test_list_empty(app_client: AsyncClient):
 
 # ─── CREATE (POST /saved-views) ───────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_create_success(app_client: AsyncClient):
     """Creating a new view returns 201 with an id."""
-    res = await app_client.post("/api/v1/saved-views", json=make_body("Critical Web Scan"))
+    res = await app_client.post(
+        "/api/v1/saved-views", json=make_body("Critical Web Scan")
+    )
     assert res.status_code == 201
     body = res.json()
     assert body["created"] is True
@@ -119,14 +124,19 @@ async def test_create_case_insensitive_duplicate(app_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_create_empty_name_rejected(app_client: AsyncClient):
     """Blank name is rejected with 422."""
-    res = await app_client.post("/api/v1/saved-views", json={"name": "   ", "filter_json": json.dumps(VALID_PRESET)})
+    res = await app_client.post(
+        "/api/v1/saved-views",
+        json={"name": "   ", "filter_json": json.dumps(VALID_PRESET)},
+    )
     assert res.status_code == 422
 
 
 @pytest.mark.asyncio
 async def test_create_invalid_json_rejected(app_client: AsyncClient):
     """Non-JSON filter_json is rejected with 422."""
-    res = await app_client.post("/api/v1/saved-views", json={"name": "Bad", "filter_json": "not json at all"})
+    res = await app_client.post(
+        "/api/v1/saved-views", json={"name": "Bad", "filter_json": "not json at all"}
+    )
     assert res.status_code == 422
 
 
@@ -134,7 +144,9 @@ async def test_create_invalid_json_rejected(app_client: AsyncClient):
 async def test_create_invalid_sort_mode_rejected(app_client: AsyncClient):
     """filter_json with an invalid sortMode is rejected."""
     bad_preset = {**VALID_PRESET, "sortMode": "by_moon_phase"}
-    res = await app_client.post("/api/v1/saved-views", json=make_body("Bad Sort", bad_preset))
+    res = await app_client.post(
+        "/api/v1/saved-views", json=make_body("Bad Sort", bad_preset)
+    )
     assert res.status_code == 422
 
 
@@ -142,7 +154,9 @@ async def test_create_invalid_sort_mode_rejected(app_client: AsyncClient):
 async def test_create_invalid_severity_rejected(app_client: AsyncClient):
     """filter_json with an invalid severity is rejected."""
     bad_preset = {**VALID_PRESET, "severity": "apocalyptic"}
-    res = await app_client.post("/api/v1/saved-views", json=make_body("Bad Sev", bad_preset))
+    res = await app_client.post(
+        "/api/v1/saved-views", json=make_body("Bad Sev", bad_preset)
+    )
     assert res.status_code == 422
 
 
@@ -155,13 +169,16 @@ async def test_create_missing_filter_json_rejected(app_client: AsyncClient):
 
 # ─── APPLY — list then cherry-pick (simulates frontend restore) ───────────────
 
+
 @pytest.mark.asyncio
 async def test_apply_restores_correct_preset(app_client: AsyncClient):
     """
     'Applying' a view means the frontend reads filter_json and restores state.
     We verify the stored preset round-trips correctly.
     """
-    await app_client.post("/api/v1/saved-views", json=make_body("Pentest View", VALID_PRESET))
+    await app_client.post(
+        "/api/v1/saved-views", json=make_body("Pentest View", VALID_PRESET)
+    )
     list_res = await app_client.get("/api/v1/saved-views")
     views = list_res.json()["views"]
     assert len(views) == 1
@@ -171,10 +188,13 @@ async def test_apply_restores_correct_preset(app_client: AsyncClient):
 
 # ─── OVERWRITE / UPDATE (PUT /saved-views/{id}) ───────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_overwrite_filter_json(app_client: AsyncClient):
     """PUT updates filter_json for an existing view."""
-    create_res = await app_client.post("/api/v1/saved-views", json=make_body("Overwrite Me"))
+    create_res = await app_client.post(
+        "/api/v1/saved-views", json=make_body("Overwrite Me")
+    )
     view_id = create_res.json()["id"]
 
     new_preset = {**VALID_PRESET, "severity": "high", "sortMode": "oldest"}
@@ -195,7 +215,9 @@ async def test_overwrite_filter_json(app_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_rename_view(app_client: AsyncClient):
     """PUT with only a new name renames the view."""
-    create_res = await app_client.post("/api/v1/saved-views", json=make_body("Old Name"))
+    create_res = await app_client.post(
+        "/api/v1/saved-views", json=make_body("Old Name")
+    )
     view_id = create_res.json()["id"]
 
     put_res = await app_client.put(
@@ -232,7 +254,9 @@ async def test_update_nonexistent_view_returns_404(app_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_update_with_no_fields_returns_400(app_client: AsyncClient):
     """PUT with an empty body returns 400."""
-    create_res = await app_client.post("/api/v1/saved-views", json=make_body("Empty Update"))
+    create_res = await app_client.post(
+        "/api/v1/saved-views", json=make_body("Empty Update")
+    )
     view_id = create_res.json()["id"]
     res = await app_client.put(f"/api/v1/saved-views/{view_id}", json={})
     assert res.status_code == 400
@@ -241,7 +265,9 @@ async def test_update_with_no_fields_returns_400(app_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_update_invalid_filter_json_rejected(app_client: AsyncClient):
     """PUT with malformed filter_json returns 422."""
-    create_res = await app_client.post("/api/v1/saved-views", json=make_body("Will Fail"))
+    create_res = await app_client.post(
+        "/api/v1/saved-views", json=make_body("Will Fail")
+    )
     view_id = create_res.json()["id"]
     res = await app_client.put(
         f"/api/v1/saved-views/{view_id}",
@@ -252,10 +278,13 @@ async def test_update_invalid_filter_json_rejected(app_client: AsyncClient):
 
 # ─── DELETE (DELETE /saved-views/{id}) ───────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_delete_removes_view(app_client: AsyncClient):
     """Deleted view no longer appears in the list."""
-    create_res = await app_client.post("/api/v1/saved-views", json=make_body("Delete Me"))
+    create_res = await app_client.post(
+        "/api/v1/saved-views", json=make_body("Delete Me")
+    )
     view_id = create_res.json()["id"]
 
     del_res = await app_client.delete(f"/api/v1/saved-views/{view_id}")
@@ -290,6 +319,7 @@ async def test_delete_only_removes_target(app_client: AsyncClient):
 
 # ─── Security / negative path edge-cases ─────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_name_too_long_rejected(app_client: AsyncClient):
     """Names over 60 chars are rejected."""
@@ -301,8 +331,13 @@ async def test_name_too_long_rejected(app_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_filter_json_extra_fields_ignored(app_client: AsyncClient):
     """Extra unknown fields in filter_json don't cause a 422 (Pydantic extra='ignore')."""
-    preset_with_extra = {**VALID_PRESET, "injected_field": "'; DROP TABLE saved_views; --"}
-    res = await app_client.post("/api/v1/saved-views", json=make_body("Extra Fields", preset_with_extra))
+    preset_with_extra = {
+        **VALID_PRESET,
+        "injected_field": "'; DROP TABLE saved_views; --",
+    }
+    res = await app_client.post(
+        "/api/v1/saved-views", json=make_body("Extra Fields", preset_with_extra)
+    )
     # Should succeed; FilterPreset ignores unknown fields by default
     assert res.status_code == 201
 
@@ -311,10 +346,14 @@ async def test_filter_json_extra_fields_ignored(app_client: AsyncClient):
 async def test_filter_json_with_null_values_rejected(app_client: AsyncClient):
     """filter_json with null where string expected is rejected."""
     bad_preset = {**VALID_PRESET, "severity": None}
-    res = await app_client.post("/api/v1/saved-views", json=make_body("Null Sev", bad_preset))
+    res = await app_client.post(
+        "/api/v1/saved-views", json=make_body("Null Sev", bad_preset)
+    )
     assert res.status_code == 422
 
+
 # ── File-backed DB migration path ─────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_saved_views_migration_runs_for_file_db(tmp_path):
@@ -342,6 +381,7 @@ async def test_saved_views_migration_runs_for_file_db(tmp_path):
 
     finally:
         await db.disconnect()
+
 
 @pytest.mark.asyncio
 async def test_migration_failure_raises_runtime_error(tmp_path):

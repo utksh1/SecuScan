@@ -19,7 +19,9 @@ OPPORTUNISTIC_SWEEP_INTERVAL = 50
 class CacheClient:
     """In-memory dictionary based cache client with TTL, size limit, and LRU eviction."""
 
-    def __init__(self, url: Optional[str] = None, max_entries: int = DEFAULT_MAX_ENTRIES):
+    def __init__(
+        self, url: Optional[str] = None, max_entries: int = DEFAULT_MAX_ENTRIES
+    ):
         self.url = url
         self._data: Dict[str, Any] = {}
         self._expires: Dict[str, float] = {}

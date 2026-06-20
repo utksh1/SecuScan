@@ -29,4 +29,5 @@ class TestInvalidateViewCache:
     def test_function_exists(self):
         """Test that invalidate_view_cache function exists"""
         from backend.secuscan.routes import invalidate_view_cache
+
         assert callable(invalidate_view_cache)
