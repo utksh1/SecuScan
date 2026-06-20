@@ -91,7 +91,7 @@ export default function Scans() {
     stopPolling();
     intervalRef.current = setInterval(() => {
   loadTasks();
-}, 3000);
+}, 5000);
   }
 
   function stopPolling() {
