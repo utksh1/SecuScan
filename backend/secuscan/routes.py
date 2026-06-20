@@ -101,10 +101,12 @@ from .models import (
     NotificationRuleCreate, NotificationRuleUpdate,
     NotificationChannelType, TaskStatus,
     ExecutionContext, WorkflowStep, ValidationMode, EvidenceLevel,
+    NotificationDiagnosticsResponse,
 )
 from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager, init_plugins
+from . import notification_service
 from .executor import executor
 from .redaction import redact_inputs
 from .ratelimit import (
@@ -2247,6 +2249,15 @@ def verify_admin_access(
             detail="Invalid or missing Admin API Key"
         )
     return candidate
+
+@router.get(
+    "/admin/diagnostics/notifications",
+    response_model=NotificationDiagnosticsResponse,
+    dependencies=[Depends(verify_admin_access), Depends(admin_limiter)]
+)
+async def get_notification_diagnostics():
+    """Get active notification delivery configuration and retry policy"""
+    return notification_service.get_delivery_configuration()
 
 @router.get("/admin/network-policy", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
 async def get_network_policy():

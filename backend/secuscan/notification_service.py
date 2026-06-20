@@ -47,6 +47,15 @@ _WEBHOOK_TIMEOUT_SECONDS = 10.0
 _WEBHOOK_CONNECT_TIMEOUT_SECONDS = 5.0
 _USER_AGENT = "SecuScan-Notifications/1.0"
 
+def get_delivery_configuration() -> Dict[str, Any]:
+    """Return the currently active configuration for notification delivery."""
+    return {
+        "webhook_timeout_seconds": _WEBHOOK_TIMEOUT_SECONDS,
+        "webhook_connect_timeout_seconds": _WEBHOOK_CONNECT_TIMEOUT_SECONDS,
+        "max_retries": 0,
+        "backoff_factor_seconds": 0.0,
+    }
+
 SOCKET_OPTION = Tuple[int, int, int | bytes]
 
 
