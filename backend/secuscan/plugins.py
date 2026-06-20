@@ -141,14 +141,14 @@ class PluginManager:
                 logger.error(f"Failed to load plugin from {plugin_dir}: {e}")
 
         logger.info(f"Loaded {loaded} plugins")
-        
+
         # Invalidate caches when plugin state changes
         try:
             from .cache import invalidate_plugin_caches
             await invalidate_plugin_caches()
         except Exception as e:
             logger.warning(f"Failed to invalidate plugin caches: {e}")
-            
+
         return loaded
 
     async def _load_plugin_metadata(self, metadata_file: Path) -> PluginMetadata:
