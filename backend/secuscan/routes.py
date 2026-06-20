@@ -94,7 +94,7 @@ def build_report_filename(task: Dict[str, Any], extension: str) -> str:
 
 logger = logging.getLogger(__name__)
 
-from .cache import get_cache
+from .cache import get_cache, invalidate_view_cache
 from .models import (
     TaskCreateRequest, TaskResponse, TaskResult,
     PluginListResponse, ErrorResponse, BulkDeleteRequest,
@@ -204,11 +204,7 @@ async def get_or_set_cached(key: str, builder):
     await cache.set_json(key, value)
     return value
 
-async def invalidate_view_cache():
-    """Clear aggregate caches after writes."""
-    cache = await get_cache()
-    for prefix in ["summary:", "findings:", "reports:", "tasks:"]:
-        await cache.delete_prefix(prefix)
+
 
 
 async def require_owned_task(db, task_id: str, owner: str, columns: str = "owner_id") -> Dict[str, Any]:
