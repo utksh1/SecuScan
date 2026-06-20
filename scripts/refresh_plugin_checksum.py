@@ -63,7 +63,7 @@ def compute_plugin_digest(metadata_file: Path, parser_file: Path) -> str:
 
 # ── Core refresh logic ────────────────────────────────────────────────────────
 
-def refresh_plugin(plugin_dir: Path, dry_run: bool = False) -> bool:
+def refresh_plugin(plugin_dir: Path, dry_run: bool = False, check: bool = False) -> bool:
     """
     Recalculate and write the checksum for a single plugin.
 
@@ -107,6 +107,12 @@ def refresh_plugin(plugin_dir: Path, dry_run: bool = False) -> bool:
         print(f"  [OK]    {plugin_dir.name} — checksum already up to date")
         return True
 
+    if check:
+        print(f"  [DRIFT] {plugin_dir.name}")
+        print(f"           stored:   {old_checksum}")
+        print(f"           computed: {new_checksum}")
+        return False
+
     print(f"  [UPDATE] {plugin_dir.name}")
     print(f"           old: {old_checksum}")
     print(f"           new: {new_checksum}")
@@ -125,7 +131,7 @@ def refresh_plugin(plugin_dir: Path, dry_run: bool = False) -> bool:
     return True
 
 
-def refresh_all_plugins(plugins_dir: Path, dry_run: bool = False) -> None:
+def refresh_all_plugins(plugins_dir: Path, dry_run: bool = False, check: bool = False) -> None:
     """Refresh checksums for every plugin found in plugins_dir."""
     if not plugins_dir.exists():
         print(f"[ERROR] Plugins directory not found: {plugins_dir}", file=sys.stderr)
@@ -145,10 +151,17 @@ def refresh_all_plugins(plugins_dir: Path, dry_run: bool = False) -> None:
     error_count   = 0
 
     for plugin_dir in plugin_dirs:
-        if refresh_plugin(plugin_dir, dry_run=dry_run):
+        if refresh_plugin(plugin_dir, dry_run=dry_run, check=check):
             success_count += 1
         else:
             error_count += 1
+
+    if check:
+        print(f"\nDone — {success_count} up to date, {error_count} drifted.")
+        if error_count > 0:
+            print("\nRun: python scripts/refresh_plugin_checksum.py --all")
+            sys.exit(1)
+        sys.exit(0)
 
     print(f"\nDone — {success_count} succeeded, {error_count} failed.")
 
@@ -199,18 +212,30 @@ Examples:
         action="store_true",
         help="Show what would change without writing anything",
     )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Verify checksums are up to date; exit 1 if any plugin has drifted (CI mode)",
+    )
 
     args = parser.parse_args()
+
+    if args.check and args.dry_run:
+        print("[ERROR] --check and --dry-run cannot be used together.", file=sys.stderr)
+        sys.exit(2)
 
     if args.dry_run:
         print("[DRY RUN] No files will be modified.\n")
 
+    if args.check:
+        print("[CHECK] Verifying checksums are up to date (no files will be modified).\n")
+
     if args.all:
-        refresh_all_plugins(args.plugins_dir, dry_run=args.dry_run)
+        refresh_all_plugins(args.plugins_dir, dry_run=args.dry_run, check=args.check)
     else:
         plugin_dir = args.plugins_dir / args.plugin
         print(f"Refreshing checksum for plugin: {args.plugin}\n")
-        success = refresh_plugin(plugin_dir, dry_run=args.dry_run)
+        success = refresh_plugin(plugin_dir, dry_run=args.dry_run, check=args.check)
         if not success:
             sys.exit(1)
         print("\nDone.")

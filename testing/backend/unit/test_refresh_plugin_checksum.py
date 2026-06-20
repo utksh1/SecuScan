@@ -277,3 +277,70 @@ class TestRefreshAllPlugins:
 
         with pytest.raises(SystemExit):
             refresh_all_plugins(missing_dir)
+
+# ── check mode ─────────────────────────────────────────────────────────────────
+
+class TestRefreshPluginCheckMode:
+
+    def test_check_returns_true_when_up_to_date(self, tmp_path):
+        """check mode should return True and not write when checksum already matches."""
+        plugin_dir = make_plugin(tmp_path, "test-plugin", checksum="placeholder")
+        # First bring it up to date normally
+        refresh_plugin(plugin_dir)
+        # Now check mode should report it as current
+        result = refresh_plugin(plugin_dir, check=True)
+        assert result is True
+
+    def test_check_returns_false_on_drift(self, tmp_path):
+        """check mode should return False when stored checksum does not match computed digest."""
+        plugin_dir = make_plugin(tmp_path, "test-plugin", checksum="stale-checksum")
+        result = refresh_plugin(plugin_dir, check=True)
+        assert result is False
+
+    def test_check_does_not_write_on_drift(self, tmp_path):
+        """check mode must never modify metadata.json, even when drift is detected."""
+        plugin_dir = make_plugin(tmp_path, "test-plugin", checksum="stale-checksum")
+        refresh_plugin(plugin_dir, check=True)
+        metadata = json.loads((plugin_dir / "metadata.json").read_text())
+        assert metadata["checksum"] == "stale-checksum"
+
+    def test_check_does_not_write_when_up_to_date(self, tmp_path):
+        """check mode must never modify metadata.json when already current."""
+        plugin_dir = make_plugin(tmp_path, "test-plugin", checksum="placeholder")
+        refresh_plugin(plugin_dir)
+        before = json.loads((plugin_dir / "metadata.json").read_text())
+        refresh_plugin(plugin_dir, check=True)
+        after = json.loads((plugin_dir / "metadata.json").read_text())
+        assert before == after
+
+
+class TestRefreshAllPluginsCheckMode:
+
+    def test_check_exits_zero_when_all_up_to_date(self, tmp_path):
+        """refresh_all_plugins with check=True should exit 0 when nothing has drifted."""
+        for plugin_id in ["plugin-a", "plugin-b"]:
+            plugin_dir = make_plugin(tmp_path, plugin_id, checksum="placeholder")
+            refresh_plugin(plugin_dir)
+        with pytest.raises(SystemExit) as exc_info:
+            refresh_all_plugins(tmp_path, check=True)
+        assert exc_info.value.code == 0
+
+    def test_check_exits_one_when_any_plugin_drifted(self, tmp_path):
+        """refresh_all_plugins with check=True should exit 1 if any plugin has drifted."""
+        plugin_a = make_plugin(tmp_path, "plugin-a", checksum="placeholder")
+        refresh_plugin(plugin_a)
+        make_plugin(tmp_path, "plugin-b", checksum="stale-checksum")
+        with pytest.raises(SystemExit) as exc_info:
+            refresh_all_plugins(tmp_path, check=True)
+        assert exc_info.value.code == 1
+
+    def test_check_does_not_write_any_plugin(self, tmp_path):
+        """check mode across all plugins must not modify any metadata.json."""
+        for plugin_id in ["plugin-a", "plugin-b"]:
+            make_plugin(tmp_path, plugin_id, checksum="stale-checksum")
+        with pytest.raises(SystemExit):
+            refresh_all_plugins(tmp_path, check=True)
+        for plugin_id in ["plugin-a", "plugin-b"]:
+            plugin_dir = tmp_path / plugin_id
+            metadata = json.loads((plugin_dir / "metadata.json").read_text())
+            assert metadata["checksum"] == "stale-checksum"
