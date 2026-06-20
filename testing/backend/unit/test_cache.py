@@ -138,11 +138,14 @@ class TestSetJson:
         assert client._data["key1"] == {"a": 1}
         assert 590 < client._expires["key1"] - time.time() < 610
 
-    async def test_uses_settings_ttl_when_ttl_not_provided(self):
+    async def test_uses_settings_ttl_when_ttl_not_provided(self, monkeypatch):
         """When ttl is None, settings.cache_ttl_seconds is used."""
+        # Use a real Settings-like object for the override so we don't mutate the global.
+        class FakeSettings:
+            cache_ttl_seconds = 42
+
         client = CacheClient()
-        import backend.secuscan.cache as cache_module
-        cache_module.settings.cache_ttl_seconds = 42
+        monkeypatch.setattr("backend.secuscan.cache.settings", FakeSettings())
 
         await client.set_json("key1", "val", ttl=None)
 
@@ -202,3 +205,4 @@ class TestProperties:
         assert stats["eviction_count"] == 3
         assert stats["sweep_count"] == 7
         assert stats["max_entries"] == 5
+
