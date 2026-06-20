@@ -205,4 +205,3 @@ class TestProperties:
         assert stats["eviction_count"] == 3
         assert stats["sweep_count"] == 7
         assert stats["max_entries"] == 5
-
