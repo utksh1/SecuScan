@@ -38,6 +38,7 @@ class Database:
         conn = await aiosqlite.connect(self.db_path)
         self._connection = conn
         conn.row_factory = aiosqlite.Row
+        await conn.execute("PRAGMA foreign_keys = ON")
         await self._create_schema()
         await self._run_migrations()
 

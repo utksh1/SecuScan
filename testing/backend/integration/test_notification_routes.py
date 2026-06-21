@@ -153,3 +153,27 @@ def test_notification_history_list_contract(test_client):
     assert filtered_data["history"][0]["rule_id"] == rule_id
     assert filtered_data["history"][0]["finding_id"]
     assert filtered_data["history"][0]["status"] == "success"
+
+
+def test_admin_diagnostics_notifications(test_client, monkeypatch):
+    from backend.secuscan.config import settings
+
+    monkeypatch.setattr(settings, "admin_api_key", "secret-test-key-long")
+
+    # Unauthorized without key
+    unauth_resp = test_client.get("/api/v1/admin/diagnostics/notifications")
+    assert unauth_resp.status_code == 401
+
+    # Success with key
+    auth_resp = test_client.get(
+        "/api/v1/admin/diagnostics/notifications",
+        headers={"X-API-Key": "secret-test-key-long"},
+    )
+    assert auth_resp.status_code == 200
+    data = auth_resp.json()
+    assert "webhook_timeout_seconds" in data
+    assert "webhook_connect_timeout_seconds" in data
+    assert "max_retries" in data
+    assert "backoff_factor_seconds" in data
+    assert type(data["max_retries"]) is int
+    assert type(data["webhook_timeout_seconds"]) is float

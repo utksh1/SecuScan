@@ -51,6 +51,57 @@ The script classifies changed files into these categories:
   - `setup.sh`, `docker-compose.yml` → full suite (system changes)
   - These affect multiple subsystems and must be fully tested
 
+## Fallback Behavior
+
+The changed-file detection relies on `scripts/detect_changes.py` reading Git diff information. In some environments, this detection may fail or return incomplete results. The following fallback rules apply:
+
+### When detect_changes.py fails or returns an error
+
+If `detect_changes.py` exits with a non-zero status or produces no output:
+- **Pull request events**: Run the full test suite (default safe behavior)
+- **Push events**: Run the full test suite (safe default, no blocking risk)
+
+This ensures that in non-standard CI environments (e.g., shallow clones without full Git history), no regressions are silently missed.
+
+### When detect_changes.py returns an empty file list
+
+An empty changed-files list is treated as "unknown" rather than "no files changed":
+- **Pull request events**: Run full suite (unknown in PR = safe to run everything)
+- **Push events**: Run full suite (unknown in push = conservative, no blocking risk)
+
+```bash
+# Example: shallow clone fallback
+$ python3 scripts/detect_changes.py
+# exit code: 0, output: [] (empty list)
+
+$ python3 scripts/select_tests.py --event-name push
+# Result: run_backend=true, run_frontend=true (fallback to full suite)
+```
+
+### When Git history is unavailable (shallow clone, S3 archive)
+
+`detect_changes.py` uses `git diff --name-only HEAD~1` which requires at least one ancestor commit. In a shallow clone with `git clone --depth=1`:
+
+```bash
+$ git log --oneline
+bea5b3b ci: restore Node.js 20/22 runtime matrix coverage (#1072)
+# Only one commit — HEAD~1 does not exist
+
+$ python3 scripts/detect_changes.py
+# Error: git exited with code 128 (no ancestor)
+# Script exits non-zero → select_tests.py falls back to full suite
+```
+
+**Safe default**: Full test suite runs, ensuring nothing is missed.
+
+### When only unknown files are detected
+
+If the changed files cannot be classified into any known category (e.g., new file with unrecognized extension):
+- The file is treated as **SHARED_OR_CONFIG**
+- Result: Full test suite runs
+
+This is conservative and ensures new file types do not bypass CI.
+
 ## Why This is Safe
 
 1. **Conservative Fallbacks**
@@ -58,6 +109,9 @@ The script classifies changed files into these categories:
    - Docs-only + shared config → full suite
    - Backend + frontend → full suite
    - Mixed categories → full suite
+   - Detection failure → full suite
+   - Empty detection → full suite
+   - Unknown file type → full suite
 
 2. **Branch Protection Guaranteed**
    - PRs cannot skip required checks (always full suite)
