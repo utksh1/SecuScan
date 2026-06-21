@@ -117,7 +117,7 @@ from .ratelimit import (
 from .validation import validate_target, validate_task_start_payload, validate_url
 from .reporting import reporting
 from .vault import VaultCrypto
-from .workflows import scheduler
+from .workflows import scheduler, _finalize_workflow_run
 from .auth import require_api_key, get_current_owner
 from .execution_context import is_offensive_validation, normalize_execution_context
 from .finding_intelligence import build_asset_summary, build_finding_groups
@@ -1710,8 +1710,17 @@ async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_o
         "WHERE workflow_id = ? ORDER BY version_number DESC LIMIT 1",
         (workflow_id,),
     )
-    version_id = active_version["id"] if active_version else None
-    version_number = active_version["version_number"] if active_version else None
+    if not active_version:
+        active_version = await db.snapshot_workflow_version(
+            workflow_id=workflow_id,
+            name=row["name"],
+            schedule_seconds=row["schedule_seconds"],
+            enabled=bool(row["enabled"]),
+            steps=steps,
+            created_by="system",
+        )
+    version_id = active_version["id"]
+    version_number = active_version["version_number"]
     created_task_ids: List[str] = []
     for step in steps:
         execution_context = normalize_execution_context(step.get("execution_context") or {})
@@ -1751,34 +1760,6 @@ async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_o
         "queued_tasks": created_task_ids,
     }
 
-
-async def _finalize_workflow_run(run_id: str, poll_interval: float = 5.0, max_polls: int = 720) -> None:
-    """Background task that polls task statuses and marks the run terminal.
-
-    Polls every *poll_interval* seconds for up to *max_polls* iterations
-    (default: 5 s × 720 = 1 hour). If tasks are still running after the
-    limit, the run is marked failed with a timeout message so it never stays
-    permanently in the 'queued' state.
-    """
-    from .database import get_db as _get_db
-    for _ in range(max_polls):
-        await asyncio.sleep(poll_interval)
-        try:
-            db = await _get_db()
-            terminal_status = await db.check_workflow_run_tasks(run_id)
-            if terminal_status is not None:
-                await db.finalize_workflow_run(run_id, terminal_status)
-                return
-        except Exception as exc:
-            logger.warning("workflow run finalization error for %s: %s", run_id, exc)
-            return
-    try:
-        db = await _get_db()
-        await db.finalize_workflow_run(
-            run_id, "failed", "Run finalization timed out — check individual task statuses"
-        )
-    except Exception as exc:
-        logger.warning("workflow run timeout finalization failed for %s: %s", run_id, exc)
 
 
 @router.get("/workflows/{workflow_id}/runs")
