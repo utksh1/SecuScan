@@ -16,6 +16,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   AUTH_REQUIRED_EVENT,
+  clearStoredApiKey,
   getStoredApiKey,
   setStoredApiKey,
   listPlugins,
@@ -39,6 +40,7 @@ function mockResponse(status: number, body: unknown = {}) {
 
 describe('getStoredApiKey / setStoredApiKey', () => {
   beforeEach(() => {
+    clearStoredApiKey()
     localStorage.clear()
   })
 
@@ -57,11 +59,9 @@ describe('getStoredApiKey / setStoredApiKey', () => {
     expect(getStoredApiKey()).toBe('new-key')
   })
 
-  it('stores the key only under secuscan_api_key', () => {
+  it('does not write the key to localStorage', () => {
     setStoredApiKey('abc123')
-    expect(localStorage.getItem('secuscan_api_key')).toBe('abc123')
-    // No other localStorage entry should be written by setStoredApiKey.
-    expect(localStorage.length).toBe(1)
+    expect(localStorage.getItem('secuscan_api_key')).toBeNull()
   })
 })
 
@@ -72,6 +72,7 @@ describe('getStoredApiKey / setStoredApiKey', () => {
 describe('request() X-Api-Key header', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+    clearStoredApiKey()
     localStorage.clear()
   })
 

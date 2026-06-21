@@ -42,7 +42,9 @@ async def create_session(request: Request, response: Response):
     cookie so the key itself never needs to touch localStorage.
     """
     if _api_key is None:
-        raise HTTPException(status_code=503, detail="Authentication service not initialised")
+        raise HTTPException(
+            status_code=503, detail="Authentication service not initialised"
+        )
 
     candidate = request.headers.get("X-Api-Key")
     if not candidate:
