@@ -18,7 +18,7 @@ import { ThemeProvider } from './components/ThemeContext'
 import { ToastProvider } from './components/ToastContext'
 import { I18nProvider } from './components/I18nContext'
 import { routes } from './routes'
-import { AUTH_REQUIRED_EVENT, getStoredApiKey } from './api'
+import { AUTH_REQUIRED_EVENT, getStoredApiKey, checkAuthSession } from './api'
 
 export function AppRoutes() {
   return (
@@ -40,8 +40,15 @@ export function AppRoutes() {
 }
 
 export default function App() {
-  // True when setup is needed: no key stored, or any request got a 401.
-  const [needsKey, setNeedsKey] = useState(() => !getStoredApiKey())
+  const [needsKey, setNeedsKey] = useState(true)
+  const [checkingSession, setCheckingSession] = useState(true)
+
+  useEffect(() => {
+    checkAuthSession().then((authenticated) => {
+      setNeedsKey(!authenticated)
+      setCheckingSession(false)
+    })
+  }, [])
 
   useEffect(() => {
     function onAuthRequired() {
@@ -50,6 +57,10 @@ export default function App() {
     window.addEventListener(AUTH_REQUIRED_EVENT, onAuthRequired)
     return () => window.removeEventListener(AUTH_REQUIRED_EVENT, onAuthRequired)
   }, [])
+
+  if (checkingSession) {
+    return null
+  }
 
   return (
     <ThemeProvider>
