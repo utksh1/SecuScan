@@ -94,17 +94,19 @@ def build_report_filename(task: Dict[str, Any], extension: str) -> str:
 
 logger = logging.getLogger(__name__)
 
-from .cache import get_cache
+from .cache import get_cache, invalidate_view_cache
 from .models import (
     TaskCreateRequest, TaskResponse, TaskResult,
     PluginListResponse, ErrorResponse, BulkDeleteRequest,
     NotificationRuleCreate, NotificationRuleUpdate,
     NotificationChannelType, TaskStatus,
     ExecutionContext, WorkflowStep, ValidationMode, EvidenceLevel,
+    NotificationDiagnosticsResponse,
 )
 from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager, init_plugins
+from . import notification_service
 from .executor import executor
 from .redaction import redact_inputs
 from .ratelimit import (
@@ -204,11 +206,7 @@ async def get_or_set_cached(key: str, builder):
     await cache.set_json(key, value)
     return value
 
-async def invalidate_view_cache():
-    """Clear aggregate caches after writes."""
-    cache = await get_cache()
-    for prefix in ["summary:", "findings:", "reports:", "tasks:"]:
-        await cache.delete_prefix(prefix)
+
 
 
 async def require_owned_task(db, task_id: str, owner: str, columns: str = "owner_id") -> Dict[str, Any]:
@@ -976,25 +974,51 @@ async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
 
 
 @router.get("/findings", dependencies=[Depends(read_heavy_limiter)])
-async def get_findings(owner: str = Depends(get_current_owner)):
-    """Return the caller's vulnerability findings."""
+async def get_findings(
+    owner: str = Depends(get_current_owner),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
+):
+    """Return the caller's vulnerability findings with pagination."""
 
     async def build():
         db = await get_db()
+        offset = (page - 1) * per_page
         rows = await db.fetchall(
+            "SELECT * FROM findings WHERE owner_id = ? ORDER BY discovered_at DESC LIMIT ? OFFSET ?",
+            (owner, per_page, offset),
+        )
+        total_row = await db.fetchone(
+            "SELECT COUNT(*) as count FROM findings WHERE owner_id = ?",
+            (owner,),
+        )
+        total = total_row["count"] if total_row else 0
+        findings = deserialize_finding_rows(rows)
+        # Build finding_groups from *all* findings so group counts remain accurate
+        # regardless of which page is being viewed.
+        all_rows = await db.fetchall(
             "SELECT * FROM findings WHERE owner_id = ? ORDER BY discovered_at DESC",
             (owner,),
         )
-        findings = deserialize_finding_rows(rows)
-        return {"findings": findings, "finding_groups": build_finding_groups(findings)}
+        all_findings = deserialize_finding_rows(all_rows)
+        return {
+            "findings": findings,
+            "finding_groups": build_finding_groups(all_findings),
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+        }
 
-    # Cache key is namespaced by owner so one user's list is never served to
-    # another (issue #401).
-    return await get_or_set_cached(f"findings:list:{owner}", build)
+    # Cache key includes pagination params so different pages do not collide.
+    return await get_or_set_cached(f"findings:list:{owner}:page={page}:per_page={per_page}", build)
 
 
 @router.get("/finding-groups", dependencies=[Depends(read_heavy_limiter)])
-async def get_finding_groups(owner: str = Depends(get_current_owner)):
+async def get_finding_groups(
+    owner: str = Depends(get_current_owner),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
+):
     async def build():
         db = await get_db()
         rows = await db.fetchall(
@@ -1002,9 +1026,16 @@ async def get_finding_groups(owner: str = Depends(get_current_owner)):
             (owner,),
         )
         findings = deserialize_finding_rows(rows)
-        return {"groups": build_finding_groups(findings), "total": len(findings)}
+        # Groups are always computed from *all* findings so the returned
+        # groups represent the full picture, not a subset.
+        return {
+            "groups": build_finding_groups(findings),
+            "total": len(findings),
+            "page": page,
+            "per_page": per_page,
+        }
 
-    return await get_or_set_cached(f"findings:groups:{owner}", build)
+    return await get_or_set_cached(f"findings:groups:{owner}:page={page}:per_page={per_page}", build)
 
 
 @router.get("/task/{task_id}/diff", dependencies=[Depends(read_heavy_limiter)])
@@ -1181,17 +1212,27 @@ async def delete_task_records(task_ids: List[str]):
         for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
             chunk = task_ids[i : i + SQLITE_CHUNK_SIZE]
             placeholders = ",".join(["?"] * len(chunk))
+            # Delete notification_history first (depends on findings via finding_id)
             await db.execute_no_commit(
-                f"DELETE FROM findings   WHERE task_id IN ({placeholders})", tuple(chunk)
+                f"DELETE FROM notification_history WHERE finding_id IN (SELECT id FROM findings WHERE task_id IN ({placeholders}))", tuple(chunk)
             )
             await db.execute_no_commit(
-                f"DELETE FROM reports    WHERE task_id IN ({placeholders})", tuple(chunk)
+                f"DELETE FROM findings             WHERE task_id IN ({placeholders})", tuple(chunk)
             )
             await db.execute_no_commit(
-                f"DELETE FROM audit_log  WHERE task_id IN ({placeholders})", tuple(chunk)
+                f"DELETE FROM reports              WHERE task_id IN ({placeholders})", tuple(chunk)
             )
             await db.execute_no_commit(
-                f"DELETE FROM tasks      WHERE id       IN ({placeholders})", tuple(chunk)
+                f"DELETE FROM audit_log            WHERE task_id IN ({placeholders})", tuple(chunk)
+            )
+            await db.execute_no_commit(
+                f"DELETE FROM crawl_runs           WHERE task_id IN ({placeholders})", tuple(chunk)
+            )
+            await db.execute_no_commit(
+                f"DELETE FROM asset_services       WHERE task_id IN ({placeholders})", tuple(chunk)
+            )
+            await db.execute_no_commit(
+                f"DELETE FROM tasks                WHERE id         IN ({placeholders})", tuple(chunk)
             )
         await db.commit()
     except HTTPException:
@@ -2237,6 +2278,15 @@ def verify_admin_access(
         )
     return candidate
 
+@router.get(
+    "/admin/diagnostics/notifications",
+    response_model=NotificationDiagnosticsResponse,
+    dependencies=[Depends(verify_admin_access), Depends(admin_limiter)]
+)
+async def get_notification_diagnostics():
+    """Get active notification delivery configuration and retry policy"""
+    return notification_service.get_delivery_configuration()
+
 @router.get("/admin/network-policy", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
 async def get_network_policy():
     """Get current network policy configuration"""
@@ -2316,3 +2366,40 @@ async def export_audit_log(format: str = "json"):
         media_type=mime_type,
         headers={"Content-Disposition": f"attachment; filename=network-audit.{format}"}
     )
+
+
+@router.get("/admin/vault/diagnostics", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
+async def get_vault_diagnostics():
+    """Report non-secret diagnostics for the credential vault key.
+    Surfaces a one-way fingerprint of the active vault key so operators can confirm key-rotation state without the key material ever leaving the server.
+    Applies across deployments or before/after a rotation.
+    The endpoint never fails on configuration state: when no key is configured it reports ``configured: false`` with a null fingerprint.
+    So it can double as a health probe for vault configuration.
+    The route is admin-gated: while the fingerprint is non-secret, the key source and configuration status are operational details that belong behind the same boundary as the rest of the ``/admin`` surface.
+    """
+    if settings.vault_key:
+        key_source = "vault_key"
+    elif settings.plugin_signature_key:
+        key_source = "plugin_signature_key"
+    else:
+        key_source = None
+
+    try:
+        crypto = VaultCrypto(settings.resolved_vault_key)
+    except RuntimeError:
+        # No SECUSCAN_VAULT_KEY / plugin signature key configured.
+        return {
+            "configured": False,
+            "key_source": None,
+            "algorithm": "AES-256-GCM",
+            "key_fingerprint": None,
+            "fingerprint_algorithm": "sha256-trunc64",
+        }
+
+    return {
+        "configured": True,
+        "key_source": key_source,
+        "algorithm": "AES-256-GCM",
+        "key_fingerprint": crypto.key_fingerprint,
+        "fingerprint_algorithm": "sha256-trunc64",
+    }
