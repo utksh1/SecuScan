@@ -870,20 +870,19 @@ export default function Settings() {
                         <div className="space-y-4">
                             <button
                                 onClick={handleExport}
-                                className="w-full py-4 bg-charcoal-dark border-4 border-black text-[10px] font-black text-silver/40 uppercase tracking-[0.3em] hover:bg-black hover:text-white transition-all italic"
+                                className="w-full py-4 bg-charcoal-dark border-4 border-black text-[10px] font-black text-silver/40 uppercase tracking-[0.08em] whitespace-nowrap overflow-hidden hover:bg-black hover:text-white transition-all italic"
                             >
                                 TELEMETRY_EXPORT
                             </button>
                             <button
                                 onClick={handleReset}
-                                className="w-full py-4 bg-rag-amber border-4 border-black text-[10px] font-black text-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all italic"
+                                className="w-full py-4 bg-rag-amber border-4 border-black text-[10px] font-black text-black uppercase tracking-[0.08em] whitespace-nowrap overflow-hidden hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all italic"
                             >
                                 ENGINE_RESET
                             </button>
                             <button
                                 onClick={handleNuclearPurge}
-                                className="w-full py-4 bg-rag-red border-4 border-black text-[10px] font-black text-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all italic"
-                            >
+                                className="w-full py-4 bg-rag-red border-4 border-black text-[10px] font-black text-black uppercase tracking-[0.08em] whitespace-nowrap overflow-hidden hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all italic"                            >
                                 NUCLEAR_PURGE
                             </button>
                         </div>
