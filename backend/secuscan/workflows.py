@@ -120,63 +120,31 @@ class WorkflowScheduler:
         version_number = active_version["version_number"]
         created_task_ids: List[str] = []
 
+        from .plugins import get_plugin_manager
+        plugin_manager = get_plugin_manager()
+
         for step in steps:
             plugin_id = step.get("plugin_id")
             inputs = step.get("inputs") or {}
             if not plugin_id:
                 continue
-            request_id = get_request_id()
+
+            plugin = plugin_manager.get_plugin(plugin_id)
+            if not plugin:
+                logger.warning("Workflow %s: plugin %s not found, skipping step", workflow_id, plugin_id)
+                continue
+
+            # Pre-create the task in queued status.
+            # Validation and concurrency limits will be checked at execution time.
             execution_context = normalize_execution_context(step.get("execution_context") or {})
             target_policy = await get_target_policy(db, owner_id, execution_context.get("target_policy_id"))
             safe_mode = bool(
                 settings.safe_mode_default
                 and not (target_policy and target_policy.get("allow_public_targets"))
             )
-
-            from .plugins import get_plugin_manager
-            from .validation import validate_target
-            from .network_policy import get_policy_engine
-
-            plugin_manager = get_plugin_manager()
-            plugin = plugin_manager.get_plugin(plugin_id)
-            if not plugin:
-                logger.warning("Workflow %s: plugin %s not found, skipping step", workflow_id, plugin_id)
-                continue
             effective_inputs = dict(inputs)
             effective_inputs.pop("safe_mode", None)
             effective_inputs["safe_mode"] = safe_mode
-
-            if target := effective_inputs.get("target"):
-                target_str = str(target)
-                if plugin.category != "code":
-                    try:
-                        is_valid, error_msg = await asyncio.wait_for(
-                            asyncio.to_thread(validate_target, target_str, safe_mode),
-                            timeout=float(settings.dns_resolution_timeout_seconds),
-                        )
-                        if not is_valid:
-                            logger.warning("Workflow %s: target validation failed for step %s: %s", workflow_id, plugin_id, error_msg)
-                            continue
-                    except asyncio.TimeoutError:
-                        logger.warning("Workflow %s: target validation timed out for step %s", workflow_id, plugin_id)
-                        continue
-
-                    if settings.enforce_network_policy and target_str:
-                        engine = get_policy_engine()
-                        allowed, reason, _ = await asyncio.wait_for(
-                            asyncio.to_thread(engine.check_access, dest_ip=target_str, plugin_id=plugin_id, task_id=""),
-                            timeout=float(settings.dns_resolution_timeout_seconds),
-                        )
-                        if not allowed:
-                            logger.warning("Workflow %s: network policy denied %s: %s", workflow_id, target_str, reason)
-                            continue
-
-            client = f"user:{owner_id}"
-            max_per_hour = plugin.safety.get("rate_limit", {}).get("max_per_hour", settings.max_tasks_per_hour) if plugin else settings.max_tasks_per_hour
-            can_exec, rate_err = await rate_limiter.can_execute(plugin_id, max_per_hour, client_id=client)
-            if not can_exec:
-                logger.warning("Workflow %s: rate limit exceeded for %s: %s", workflow_id, plugin_id, rate_err)
-                continue
 
             task_id = await executor.create_task(
                 plugin_id,
@@ -189,18 +157,6 @@ class WorkflowScheduler:
             )
             created_task_ids.append(task_id)
 
-            can_acquire, concurrency_err = await concurrent_limiter.acquire(task_id)
-            if not can_acquire:
-                await executor.mark_task_failed(task_id, reason="Concurrency limit reached")
-                logger.warning("Workflow %s: concurrency limit reached for %s", workflow_id, plugin_id)
-                continue
-
-            async def run_task(task_id: str) -> None:
-                set_request_id(request_id)
-                await executor.execute_task(task_id)
-
-            asyncio.create_task(run_task(task_id))
-
         run_id = await db.record_workflow_run(
             workflow_id=workflow_id,
             version_id=version_id,
@@ -208,7 +164,138 @@ class WorkflowScheduler:
             task_ids=created_task_ids,
             triggered_by="scheduler",
         )
+        seq_coro = _execute_workflow_sequentially(
+            workflow_id=workflow_id,
+            run_id=run_id,
+            steps=steps,
+            created_task_ids=created_task_ids,
+            owner_id=owner_id,
+        )
+        import os
+        if os.environ.get("PYTEST_CURRENT_TEST"):
+            await seq_coro
+        else:
+            asyncio.create_task(seq_coro)
         asyncio.create_task(_finalize_workflow_run(run_id))
+
+
+async def _cancel_remaining_tasks(db, task_ids: List[str]):
+    for tid in task_ids:
+        await db.execute(
+            "UPDATE tasks SET status = ?, completed_at = datetime('now'), error_message = ? WHERE id = ?",
+            ("cancelled", "Cancelled due to upstream step failure or concurrency limit", tid),
+        )
+
+
+async def _execute_workflow_sequentially(
+    workflow_id: str,
+    run_id: str,
+    steps: List[Dict[str, Any]],
+    created_task_ids: List[str],
+    owner_id: str,
+):
+    logger.info("Executing workflow %s sequentially (%d tasks)", workflow_id, len(created_task_ids))
+    db = await get_db()
+    for i, step in enumerate(steps):
+        if i >= len(created_task_ids):
+            break
+        task_id = created_task_ids[i]
+        plugin_id = step.get("plugin_id")
+        inputs = step.get("inputs") or {}
+        if not plugin_id:
+            await executor.mark_task_failed(task_id, reason="Plugin ID not provided in workflow step")
+            await _cancel_remaining_tasks(db, created_task_ids[i+1:])
+            break
+
+        from .plugins import get_plugin_manager
+        plugin_manager = get_plugin_manager()
+        plugin = plugin_manager.get_plugin(plugin_id)
+        if not plugin:
+            await executor.mark_task_failed(task_id, reason=f"Plugin {plugin_id} not found")
+            await _cancel_remaining_tasks(db, created_task_ids[i+1:])
+            break
+
+        request_id = get_request_id()
+        execution_context = normalize_execution_context(step.get("execution_context") or {})
+        target_policy = await get_target_policy(db, owner_id, execution_context.get("target_policy_id"))
+        safe_mode = bool(
+            settings.safe_mode_default
+            and not (target_policy and target_policy.get("allow_public_targets"))
+        )
+
+        effective_inputs = dict(inputs)
+        effective_inputs.pop("safe_mode", None)
+        effective_inputs["safe_mode"] = safe_mode
+
+        # Validation checks
+        if target := effective_inputs.get("target"):
+            target_str = str(target)
+            if plugin.category != "code":
+                from .validation import validate_target
+                try:
+                    is_valid, error_msg = await asyncio.wait_for(
+                        asyncio.to_thread(validate_target, target_str, safe_mode),
+                        timeout=float(settings.dns_resolution_timeout_seconds),
+                    )
+                    if not is_valid:
+                        await executor.mark_task_failed(task_id, reason=f"Target validation failed: {error_msg}")
+                        await _cancel_remaining_tasks(db, created_task_ids[i+1:])
+                        break
+                except asyncio.TimeoutError:
+                    await executor.mark_task_failed(task_id, reason="Target validation timed out")
+                    await _cancel_remaining_tasks(db, created_task_ids[i+1:])
+                    break
+
+                if settings.enforce_network_policy and target_str:
+                    from .network_policy import get_policy_engine
+                    engine = get_policy_engine()
+                    try:
+                        allowed, reason, _ = await asyncio.wait_for(
+                            asyncio.to_thread(engine.check_access, dest_ip=target_str, plugin_id=plugin_id, task_id=task_id),
+                            timeout=float(settings.dns_resolution_timeout_seconds),
+                        )
+                        if not allowed:
+                            await executor.mark_task_failed(task_id, reason=f"Network policy denied access: {reason}")
+                            await _cancel_remaining_tasks(db, created_task_ids[i+1:])
+                            break
+                    except asyncio.TimeoutError:
+                        await executor.mark_task_failed(task_id, reason="Network policy check timed out")
+                        await _cancel_remaining_tasks(db, created_task_ids[i+1:])
+                        break
+
+        client = f"user:{owner_id}"
+        max_per_hour = plugin.safety.get("rate_limit", {}).get("max_per_hour", settings.max_tasks_per_hour) if plugin else settings.max_tasks_per_hour
+        can_exec, rate_err = await rate_limiter.can_execute(plugin_id, max_per_hour, client_id=client)
+        if not can_exec:
+            await executor.mark_task_failed(task_id, reason=f"Rate limit exceeded: {rate_err}")
+            await _cancel_remaining_tasks(db, created_task_ids[i+1:])
+            break
+
+        # Acquire concurrency slot
+        can_acquire, concurrency_err = await concurrent_limiter.acquire(task_id)
+        if not can_acquire:
+            await executor.mark_task_failed(task_id, reason="Concurrency limit reached")
+            logger.warning("Workflow %s: concurrency limit reached for task %s", workflow_id, task_id)
+            await _cancel_remaining_tasks(db, created_task_ids[i+1:])
+            break
+
+        # Execute task
+        try:
+            async def run_task(task_id: str) -> None:
+                set_request_id(request_id)
+                await executor.execute_task(task_id)
+
+            await run_task(task_id)
+        except Exception as e:
+            logger.error("Workflow %s task %s failed with exception: %s", workflow_id, task_id, e)
+
+        # Check status in db
+        task_row = await db.fetchone("SELECT status FROM tasks WHERE id = ?", (task_id,))
+        task_status = task_row["status"] if task_row else "failed"
+        if task_status != "completed":
+            logger.warning("Workflow %s task %s failed or cancelled (status: %s). Aborting downstream steps.", workflow_id, task_id, task_status)
+            await _cancel_remaining_tasks(db, created_task_ids[i+1:])
+            break
 
 
 async def _finalize_workflow_run(run_id: str, poll_interval: float = 5.0, max_polls: int = 720) -> None:

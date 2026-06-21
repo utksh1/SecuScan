@@ -117,7 +117,7 @@ from .ratelimit import (
 from .validation import validate_target, validate_task_start_payload, validate_url
 from .reporting import reporting
 from .vault import VaultCrypto
-from .workflows import scheduler, _finalize_workflow_run
+from .workflows import scheduler, _finalize_workflow_run, _execute_workflow_sequentially
 from .auth import require_api_key, get_current_owner
 from .execution_context import is_offensive_validation, normalize_execution_context
 from .finding_intelligence import build_asset_summary, build_finding_groups
@@ -1741,7 +1741,6 @@ async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_o
             consent_granted=True,
             owner_id=owner,
         )
-        asyncio.create_task(executor.execute_task(task_id))
         created_task_ids.append(task_id)
     await db.execute("UPDATE workflows SET last_run_at = datetime('now') WHERE id = ?", (workflow_id,))
     run_id = await db.record_workflow_run(
@@ -1750,6 +1749,15 @@ async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_o
         version_number=version_number,
         task_ids=created_task_ids,
         triggered_by="manual",
+    )
+    asyncio.create_task(
+        _execute_workflow_sequentially(
+            workflow_id=workflow_id,
+            run_id=run_id,
+            steps=steps,
+            created_task_ids=created_task_ids,
+            owner_id=owner,
+        )
     )
     asyncio.create_task(_finalize_workflow_run(run_id))
     return {

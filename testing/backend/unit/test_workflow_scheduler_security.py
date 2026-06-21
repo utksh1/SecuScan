@@ -80,7 +80,9 @@ class TestSchedulerSecurityControls:
         }]
         with patch("backend.secuscan.workflows.get_db", new_callable=AsyncMock), \
              patch("backend.secuscan.plugins.get_plugin_manager") as mock_get_pm, \
-             patch("backend.secuscan.validation.validate_target", return_value=(False, "Target not allowed")) as mock_val:
+             patch("backend.secuscan.validation.validate_target", return_value=(False, "Target not allowed")) as mock_val, \
+             patch("backend.secuscan.executor.executor.create_task", new_callable=AsyncMock, return_value="task-1"), \
+             patch("backend.secuscan.executor.executor.mark_task_failed", new_callable=AsyncMock) as mock_fail:
 
             mock_pm = MagicMock()
             plugin = MagicMock()
@@ -92,6 +94,7 @@ class TestSchedulerSecurityControls:
 
             await scheduler._run_workflow("wf-1", steps)
             mock_val.assert_called_once()
+            mock_fail.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_skips_step_when_rate_limit_exceeded(self, scheduler):
@@ -102,7 +105,9 @@ class TestSchedulerSecurityControls:
         with patch("backend.secuscan.workflows.get_db", new_callable=AsyncMock), \
              patch("backend.secuscan.plugins.get_plugin_manager") as mock_get_pm, \
              patch("backend.secuscan.validation.validate_target", return_value=(True, "")), \
-             patch("backend.secuscan.ratelimit.rate_limiter.can_execute", new_callable=AsyncMock) as mock_rate:
+             patch("backend.secuscan.ratelimit.rate_limiter.can_execute", new_callable=AsyncMock) as mock_rate, \
+             patch("backend.secuscan.executor.executor.create_task", new_callable=AsyncMock, return_value="task-1"), \
+             patch("backend.secuscan.executor.executor.mark_task_failed", new_callable=AsyncMock) as mock_fail:
 
             mock_pm = MagicMock()
             plugin = MagicMock()
@@ -115,6 +120,7 @@ class TestSchedulerSecurityControls:
 
             await scheduler._run_workflow("wf-1", steps)
             mock_rate.assert_called_once()
+            mock_fail.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_applies_safe_mode_consistently(self, scheduler):

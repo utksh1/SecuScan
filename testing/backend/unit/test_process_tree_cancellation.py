@@ -22,25 +22,28 @@ import pytest
 import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock, patch, call
 
+if not hasattr(signal, "SIGKILL"):
+    signal.SIGKILL = 9
+
 from backend.secuscan.executor import _terminate_process_group, _CANCEL_GRACE_SECONDS
 
 
 class TestTerminateProcessGroup:
     @pytest.mark.asyncio
     async def test_already_dead_process_no_error(self):
-        with patch("os.getpgid", side_effect=ProcessLookupError("no such process")):
+        with patch("os.getpgid", side_effect=ProcessLookupError("no such process"), create=True):
             await _terminate_process_group(99999, "task-dead")
 
     @pytest.mark.asyncio
     async def test_permission_error_on_getpgid_no_error(self):
-        with patch("os.getpgid", side_effect=PermissionError("permission denied")):
+        with patch("os.getpgid", side_effect=PermissionError("permission denied"), create=True):
             await _terminate_process_group(99999, "task-perm")
 
     @pytest.mark.asyncio
     async def test_sigterm_sent_to_process_group(self):
         with (
-            patch("os.getpgid", return_value=5000),
-            patch("os.killpg") as mock_killpg,
+            patch("os.getpgid", return_value=5000, create=True),
+            patch("os.killpg", create=True) as mock_killpg,
         ):
             mock_killpg.side_effect = [None, ProcessLookupError()]
             await _terminate_process_group(1234, "task-sigterm")
@@ -65,8 +68,8 @@ class TestTerminateProcessGroup:
                 killpg_calls.append(sig)
 
         with (
-            patch("os.getpgid", return_value=5001),
-            patch("os.killpg", side_effect=fake_killpg_probe),
+            patch("os.getpgid", return_value=5001, create=True),
+            patch("os.killpg", side_effect=fake_killpg_probe, create=True),
         ):
             await _terminate_process_group(1235, "task-exits-early")
         assert signal.SIGKILL not in killpg_calls
@@ -74,8 +77,8 @@ class TestTerminateProcessGroup:
     @pytest.mark.asyncio
     async def test_sigterm_permission_error_no_sigkill(self):
         with (
-            patch("os.getpgid", return_value=5002),
-            patch("os.killpg", side_effect=PermissionError()) as mock_killpg,
+            patch("os.getpgid", return_value=5002, create=True),
+            patch("os.killpg", side_effect=PermissionError(), create=True) as mock_killpg,
         ):
             await _terminate_process_group(1236, "task-perm-kill")
         mock_killpg.assert_called_once_with(5002, signal.SIGTERM)
@@ -90,14 +93,15 @@ class TestTerminateProcessGroup:
                 raise ProcessLookupError()
 
         with (
-            patch("os.getpgid", return_value=5003),
-            patch("os.killpg", side_effect=fake_killpg) as mock_killpg,
+            patch("os.getpgid", return_value=5003, create=True),
+            patch("os.killpg", side_effect=fake_killpg, create=True) as mock_killpg,
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
             await _terminate_process_group(1237, "task-stubborn", grace_seconds=1)
         sigs = [c.args[1] for c in mock_killpg.call_args_list]
         assert signal.SIGTERM in sigs
         assert signal.SIGKILL in sigs
+
 
 
 class TestExecuteCommandProcessGroup:

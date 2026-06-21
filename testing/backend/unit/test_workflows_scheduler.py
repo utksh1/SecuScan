@@ -151,7 +151,7 @@ class TestRunWorkflowErrorPaths:
         mock_executor.create_task.assert_not_called()
 
     def test_skips_invalid_target(self):
-        """When target validation fails, _run_workflow skips the step and does not create a task."""
+        """When target validation fails, _run_workflow creates a task and then marks it failed."""
         scheduler = WorkflowScheduler()
         mock_db = _make_mock_db()
         mock_executor = asyncio.run(
@@ -163,10 +163,11 @@ class TestRunWorkflowErrorPaths:
                 validate_result=(False, "Invalid target"),
             )
         )
-        mock_executor.create_task.assert_not_called()
+        mock_executor.create_task.assert_called_once()
+        mock_executor.mark_task_failed.assert_called_once()
 
     def test_skips_target_validation_timeout(self):
-        """When target validation times out, _run_workflow skips the step without creating a task."""
+        """When target validation times out, _run_workflow creates a task and then marks it failed."""
         scheduler = WorkflowScheduler()
         mock_db = _make_mock_db()
 
@@ -175,6 +176,7 @@ class TestRunWorkflowErrorPaths:
 
         mock_executor = MagicMock()
         mock_executor.create_task = AsyncMock(return_value="tid-test")
+        mock_executor.mark_task_failed = AsyncMock()
 
         mock_concurrent_limiter = MagicMock()
         mock_concurrent_limiter.acquire = AsyncMock(return_value=(True, ""))
@@ -198,7 +200,8 @@ class TestRunWorkflowErrorPaths:
                                                 await scheduler._run_workflow("wf-1", [{"plugin_id": "nmap", "inputs": {"target": "bad"}}])
 
         asyncio.run(run_test())
-        mock_executor.create_task.assert_not_called()
+        mock_executor.create_task.assert_called_once()
+        mock_executor.mark_task_failed.assert_called_once()
 
     def test_creates_task_when_valid(self):
         """When plugin found and target valid, _run_workflow creates a task."""
