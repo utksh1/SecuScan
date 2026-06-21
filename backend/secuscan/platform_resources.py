@@ -114,8 +114,9 @@ async def replace_asset_services(
     target: str,
     services: Iterable[Dict[str, Any]],
 ) -> None:
-    await db.execute("DELETE FROM asset_services WHERE task_id = ?", (task_id,))
-    for item in services:
+    async with db.transaction():
+        await db.execute("DELETE FROM asset_services WHERE task_id = ?", (task_id,))
+        for item in services:
         metadata = item.get("metadata", {}) if isinstance(item.get("metadata"), dict) else {}
         host = str(item.get("host") or target)
         port = item.get("port")

@@ -1243,8 +1243,7 @@ async def delete_task_records(task_ids: List[str]):
         all_task_rows.extend(rows)
 
     # Delete associated records in chunks, atomic within a transaction
-    await db.begin()
-    try:
+    async with db.transaction():
         # Re-check running status inside the transaction to prevent the
         # race where a task starts running between the check and the delete.
         for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
@@ -1285,13 +1284,6 @@ async def delete_task_records(task_ids: List[str]):
             await db.execute_no_commit(
                 f"DELETE FROM tasks                WHERE id         IN ({placeholders})", tuple(chunk)
             )
-        await db.commit()
-    except HTTPException:
-        await db.rollback()
-        raise
-    except Exception:
-        await db.rollback()
-        raise
 
     # Cleanup files on disk (outside the transaction — file deletion is not
     # transactional; a failure here does not leave the DB in an inconsistent
@@ -1475,34 +1467,21 @@ async def upsert_vault_secret(
     encrypted = crypto.encrypt(value)
     secret_id = str(uuid.uuid4())
 
-    existing = await db.fetchone(
-        """
-        SELECT id
-        FROM credential_vault
-        WHERE owner_id = ? AND name = ?
-        """,
-        (owner, name),
-    )
-
-    if existing:
-        await db.execute(
-            """
-            UPDATE credential_vault
-            SET encrypted_value = ?, updated_at = datetime('now')
-            WHERE owner_id = ? AND name = ?
-            """,
-            (encrypted, owner, name),
+    async with db.transaction():
+        existing = await db.fetchone(
+            "SELECT id FROM credential_vault WHERE owner_id = ? AND name = ?",
+            (owner, name),
         )
-    else:
-        await db.execute(
-            """
-            INSERT INTO credential_vault
-            (id, owner_id, name, encrypted_value)
-            VALUES (?, ?, ?, ?)
-            """,
-            (secret_id, owner, name, encrypted),
-        )
-
+        if existing:
+            await db.execute(
+                "UPDATE credential_vault SET encrypted_value = ?, updated_at = datetime('now') WHERE owner_id = ? AND name = ?",
+                (encrypted, owner, name),
+            )
+        else:
+            await db.execute(
+                "INSERT INTO credential_vault (id, owner_id, name, encrypted_value) VALUES (?, ?, ?, ?)",
+                (secret_id, owner, name, encrypted),
+            )
     return {"name": name, "stored": True}
 
 @router.get("/vault/{name}", dependencies=[Depends(vault_limiter)])

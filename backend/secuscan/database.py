@@ -3,10 +3,11 @@ SQLite database access for SecuScan.
 """
 
 import asyncio
+import contextlib
 import json
 import sqlite3
 from pathlib import Path
-from typing import Any, Optional, List, Dict
+from typing import Any, Optional, List, Dict, AsyncIterator
 
 import aiosqlite
 from .config import settings
@@ -700,6 +701,27 @@ ON credential_vault(owner_id);
                 (score, json.dumps(factors), row["id"]),
             )
         print(f"Backfilled risk scores for {len(rows)} existing finding(s).")
+
+    @contextlib.asynccontextmanager
+    async def transaction(self) -> AsyncIterator["Database"]:
+        """Context manager for atomic transactions.
+
+        Usage::
+
+            async with db.transaction():
+                await db.execute("INSERT INTO ...")
+                await db.execute("UPDATE ...")
+
+        If any statement raises, the entire transaction is rolled back.
+        On success the transaction is committed automatically.
+        """
+        await self.begin()
+        try:
+            yield self
+            await self.commit()
+        except Exception:
+            await self.rollback()
+            raise
 
     async def execute(self, query: str, params: tuple = ()):
         """Execute a write query and return the cursor (so callers can inspect rowcount)."""
