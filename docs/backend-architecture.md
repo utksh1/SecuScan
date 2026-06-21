@@ -153,7 +153,23 @@ This security layer validates inputs, checks permissions, and guards data.
 `reporting.py` manages report rendering, taking tasks results and outputting PDF documents, static HTML formats, spreadsheet CSV formats, or standard SARIF output.
 
 ### Workflow Automation (`workflows.py`)
-`workflows.py` schedules recurring scanning steps and monitors tasks.
+The workflow engine handles the execution of automated, recurring scan sequences. It coordinates the lifecycle of complex scans from scheduling through task queue handoffs via the `WorkflowScheduler` class.
+
+#### 1. Persistence
+Workflow execution configurations, schedules, and histories are stored in and retrieved from the central SQLite database managed by `database.py`.
+* **State Management:** The system reads configurations (`schedule_seconds`, `steps_json`) directly from the `workflows` table.
+* **Reliability:** Immediately after a workflow run sequence successfully initializes its underlying steps, the scheduler updates persistence state records by issuing an `UPDATE workflows SET last_run_at = datetime('now')` command.
+
+#### 2. Scheduling & Execution Engine
+The `WorkflowScheduler` runs an asynchronous background loop (`_run_loop()`) acting as a continuous evaluation engine.
+* **The Loop:** The scheduler triggers a `tick()` evaluation sequence continuously on a configured clock interval using `await asyncio.sleep(5)`.
+* **Evaluation Boundary:** During each tick, the scheduler queries active workflows and passes their last execution timestamps into `_should_run()`. If the calculated elapsed delta exceeds the target threshold, the sequence moves into the `_run_workflow()` coordinator.
+
+#### 3. Queue Interaction & Task Handoff
+Once a workflow is triggered, its individual steps are verified and dynamically scheduled without blocking the core loop.
+* **Validation Guards:** Individual steps undergo target validation via `validate_target()`, network policy matching via `get_policy_engine()`, and rate-limiting validation via the `workflow_rate_limiter` and `rate_limiter` wrappers.
+* **Asynchronous Handoff:** Once cleared, a task tracking ID is generated through `await executor.create_task()`. Rather than blocking the main scheduler timeline, the task execution sequence is handed off safely to the background event loop via `asyncio.create_task(run_task(task_id))`.
+
 > [!WARNING]
 > The `WorkflowScheduler` ticks continuously every 5 seconds without utilizing a task queue. If the steps of a workflow take longer than its configured `schedule_seconds`, the scheduler will trigger a duplicate execution in the next tick. Contributors modifying this scheduler should account for this behavior.
 
