@@ -20,12 +20,18 @@ from .routes_json_helpers import (
     deserialize_finding_rows,
     parse_json_fields,
 )
+from .routes_report_helpers import (
+    _slugify_filename_part,
+    build_report_filename,
+)
 
 __all__ = [
     "FINDING_JSON_FIELDS",
     "parse_json_fields",
     "deserialize_finding_rows",
     "deserialize_asset_service_rows",
+    "_slugify_filename_part",
+    "build_report_filename",
 ]
 
 def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
@@ -73,24 +79,6 @@ def _json_payload(value: Any, fallback: str) -> str:
 
 
 from .validation import is_filesystem_target  # noqa: E402
-
-def _slugify_filename_part(value: str, fallback: str) -> str:
-    cleaned = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
-    return cleaned or fallback
-
-def build_report_filename(task: Dict[str, Any], extension: str) -> str:
-    tool = _slugify_filename_part(str(task.get("tool_name") or task.get("plugin_id") or "scan"), "scan")
-
-    raw_target = str(task.get("target") or "")
-    parsed = urlparse(raw_target if "://" in raw_target else f"//{raw_target}")
-    target_source = parsed.netloc or parsed.path or raw_target
-    target = _slugify_filename_part(target_source, "target")
-
-    created_at = str(task.get("created_at") or "")
-    date_match = re.search(r"\d{4}-\d{2}-\d{2}", created_at)
-    date_part = date_match.group(0) if date_match else "report"
-
-    return f"secuscan_{tool}_{target}_{date_part}.{extension}"
 
 logger = logging.getLogger(__name__)
 
