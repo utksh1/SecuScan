@@ -16,6 +16,7 @@ import {
   UserShield02Icon,
 } from '@hugeicons/core-free-icons'
 import { getDashboardSummary, getReports, API_BASE } from '../api'
+import Skeleton from '../components/Skeleton'
 import { usePreferredExportFormat } from '../hooks/usePreferredExportFormat'
 import { formatDateLong, isWithinDateRange, type DateRange } from '../utils/date'
 
@@ -177,13 +178,8 @@ export default function Reports() {
 
       {/* Loading State */}
       {loading && (
-        <div className="flex items-center justify-center py-40 gap-6">
-          <div className="animate-spin">
-            <ReportIcon icon={Refresh01Icon} size={48} className="text-silver/20" aria-hidden="true" />
-          </div>
-          <p className="text-[10px] font-black text-silver/20 uppercase tracking-[0.4em] italic animate-pulse">
-            Retrieving Archive Data...
-          </p>
+        <div className="py-40">
+          <Skeleton title="Retrieving Archive Data..." lines={4} />
         </div>
       )}
 

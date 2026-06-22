@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { getDashboardSummary, getHealth, cancelTask } from '../api'
 import { ExecutiveStatsBar } from '../components/ExecutiveStatsBar'
+import Skeleton from '../components/Skeleton'
 import { routePath, routes } from '../routes'
 import { formatBriefingDate, formatTaskInit, formatLocaleDate, formatLocaleTime } from '../utils/date'
 
@@ -329,14 +330,9 @@ export default function Dashboard() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="mt-12 py-20 border-t border-accent-silver/10 text-xs text-silver/80 uppercase tracking-[0.25em] flex items-center gap-4"
+              className="mt-12 py-20 border-t border-accent-silver/10 text-xs text-silver/80 uppercase tracking-[0.25em]"
             >
-              <motion.span
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                className="w-4 h-4 border border-accent-silver/20 border-t-silver-bright rounded-full"
-              />
-              Syncing operational data...
+              <Skeleton title="Syncing operational data..." lines={4} />
             </motion.section>
       ) : error ? (
             <motion.section

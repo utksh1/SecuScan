@@ -20,6 +20,7 @@ import {
 import { useToast } from '../components/ToastContext'
 import { routePath, routes } from '../routes'
 import { getValidationError } from '../utils/validation'
+import Skeleton from '../components/Skeleton'
 
 type InputState = Record<string, unknown>
 
@@ -213,10 +214,7 @@ export default function ToolConfig() {
   if (loading) {
     return (
       <div className="min-h-screen bg-charcoal-dark flex items-center justify-center p-12">
-        <div className="space-y-4 text-center">
-          <div className="w-20 h-20 border-8 border-silver-bright/10 border-t-rag-blue animate-spin mx-auto shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]" />
-          <p className="text-xs font-black text-silver-bright uppercase tracking-[0.5em] italic">Loading_Config...</p>
-        </div>
+        <Skeleton title="Loading config..." lines={4} />
       </div>
     )
   }

@@ -10,6 +10,7 @@ import {
   type WorkflowCreatePayload,
 } from '../api'
 import { formatDateLong } from '../utils/date'
+import Skeleton from '../components/Skeleton'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -409,11 +410,8 @@ export default function Workflows() {
       </header>
 
       {loading && (
-        <div className="flex items-center justify-center py-40 gap-6">
-          <span className="material-symbols-outlined text-silver/20 text-5xl animate-spin">progress_activity</span>
-          <p className="text-[10px] font-black text-silver/20 uppercase tracking-[0.4em] italic animate-pulse">
-            Loading Workflows...
-          </p>
+        <div className="py-40">
+          <Skeleton title="Loading Workflows..." lines={4} />
         </div>
       )}
 

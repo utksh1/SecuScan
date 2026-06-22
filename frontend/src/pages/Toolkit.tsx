@@ -5,6 +5,7 @@ import { listPlugins, PluginListItem } from '../api'
 import { scanTools } from '../data/scanTools'
 import { routePath } from '../routes'
 import { ToolCheatSheet } from '../components/ToolCheatSheet'
+import Skeleton from '../components/Skeleton'
 
 type RiskLevel = 'passive' | 'active' | 'aggressive'
 type PresetCompatibility = 'quick-recon' | 'deep-scan' | 'both' | 'none'
@@ -386,6 +387,11 @@ export default function Scanner() {
             exit={{ opacity: 0, y: 20 }}
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8"
           >
+            {loading && (
+              <div className="md:col-span-2 xl:col-span-4">
+                <Skeleton title="Loading toolkit catalog..." lines={6} />
+              </div>
+            )}
             {!loading &&
               filteredTools.map((tool) => {
                 const toolId = toDomId(tool.id)

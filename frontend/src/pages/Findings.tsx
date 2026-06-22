@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { getFindings } from '../api'
+import Skeleton from '../components/Skeleton'
 import { formatLocaleDate, parseDateSafe, getCurrentTimeZone } from '../utils/date'
 import SavedViewsPanel from '../components/SavedViewsPanel'
 import { useSavedViews, FilterPreset } from '../hooks/useSavedViews'
@@ -771,9 +772,7 @@ export default function Findings() {
           {/* ── Virtualized Findings List ── */}
           <motion.section variants={sectionVariants} initial="hidden" animate="visible">
             {loading ? (
-              <div className="border-4 border-dashed border-silver-bright/10 bg-charcoal/40 px-6 py-16 text-center">
-                <p className="text-sm font-mono uppercase tracking-[0.25em] text-silver/50">Synchronizing findings feed...</p>
-              </div>
+              <Skeleton title="Synchronizing findings feed..." lines={4} className="border-4 border-dashed border-silver-bright/10 bg-charcoal/40 px-6 py-16 text-center" />
             ) : filteredFindings.length === 0 ? (
               <div className="border-4 border-dashed border-silver-bright/10 bg-charcoal/40 px-6 py-20 text-center">
                 <p className="text-2xl font-black uppercase tracking-[0.25em] text-silver/25 italic">No Findings Match</p>
