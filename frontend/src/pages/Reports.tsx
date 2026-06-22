@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate, Link } from 'react-router-dom'
 import { routes } from '../routes'
@@ -18,6 +18,8 @@ import {
 import { getDashboardSummary, getReports, API_BASE } from '../api'
 import { usePreferredExportFormat } from '../hooks/usePreferredExportFormat'
 import { formatDateLong, isWithinDateRange, type DateRange } from '../utils/date'
+import html2canvas from 'html2canvas'
+import jsPDF from 'jspdf'
 
 type Report = {
   id: string
@@ -97,6 +99,48 @@ export default function Reports() {
   const [selectedDateRange, setSelectedDateRange] = useState<DateRange>('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const reportRefs = useRef<Record<string, HTMLDivElement | null>>({})
+
+  const downloadPdfReport = async (report: Report) => {
+    const element = reportRefs.current[report.id]
+
+    if (!element) return
+
+    try {
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        backgroundColor: '#111111',
+      })
+
+      const imageData = canvas.toDataURL('image/png')
+
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      })
+
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+
+      const imgHeight =
+        (canvas.height * pdfWidth) / canvas.width
+
+      pdf.addImage(
+        imageData,
+        'PNG',
+        0,
+        0,
+        pdfWidth,
+        imgHeight
+      )
+
+      pdf.save(
+        `${report.name.replace(/\s+/g, '_')}.pdf`
+      )
+    } catch (error) {
+      console.error('PDF generation failed', error)
+    }
+  }
   const { preferred: preferredFormat, savePreference } = usePreferredExportFormat()
   const latestReadyReport = [...reports]
     .filter((report) => report.status === 'ready')
@@ -335,6 +379,9 @@ export default function Reports() {
                 >
                   {filteredReports.map((report) => (
                     <motion.div
+                      ref={(el) => {
+                        reportRefs.current[report.id] = el
+                      }}
                       key={report.id}
                       variants={itemVariants}
                       className="group bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[14px_14px_0px_0px_rgba(0,0,0,1)] transition-all relative overflow-hidden"
@@ -390,7 +437,15 @@ export default function Reports() {
                               className="bg-charcoal-dark border-4 border-black p-3 text-silver/20 group-hover:text-silver-bright group-hover:bg-black transition-all"
                               title="View Briefing" aria-label="View briefing"
                             >
-                              <ReportIcon icon={ScanEyeIcon} size={18} aria-hidden="true"/>
+                              <ReportIcon icon={ScanEyeIcon} size={18} aria-hidden="true" />
+                            </button>
+
+                            <button
+                              onClick={() => downloadPdfReport(report)}
+                              className="bg-rag-green border-4 border-black px-3 py-2 text-[9px] font-black uppercase tracking-widest text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
+                              title="Download PDF Report"
+                            >
+                              PDF
                             </button>
                             {(() => {
                               const ordered = preferredFormat
