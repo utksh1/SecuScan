@@ -248,7 +248,7 @@ jobs:
         if: steps.run_benchmarks.outcome == 'failure'
         run: |
           echo "::warning::Performance benchmark thresholds exceeded or benchmarks failed to run. Check the job logs for details."
-  frontend-checks:
+  frontend-checks-matrix:
     needs: [detect-changes, formatting-hygiene]
     if: |
       always() &&
@@ -302,3 +302,14 @@ jobs:
         run: npm run test
       - name: Build frontend
         run: npm run build
+
+  frontend-checks:
+    needs:
+      - frontend-checks-matrix
+    runs-on: ubuntu-latest
+    if: |
+      always() &&
+      (needs.frontend-checks-matrix.result == 'success' || needs.frontend-checks-matrix.result == 'skipped')
+    steps:
+      - name: Frontend checks completed
+        run: echo "frontend-checks-matrix completed successfully"

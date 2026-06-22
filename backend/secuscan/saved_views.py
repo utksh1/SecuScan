@@ -4,9 +4,10 @@ import json
 import uuid
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, Field, field_validator
 
+from .auth import get_current_owner
 from .database import get_db
 
 saved_views_router = APIRouter(prefix="/api/v1/saved-views", tags=["saved-views"])
@@ -17,12 +18,13 @@ _VALID_SEVERITIES = {"all", "critical", "high", "medium", "low", "info"}
 
 class FilterPreset(BaseModel):
     """Validated representation of the frontend filter state."""
-    severity:    str = "all"
-    target:      str = "all"
-    scanner:     str = "all"
-    sortMode:    str = "severity"
-    dateFrom:    str = ""
-    dateTo:      str = ""
+
+    severity: str = "all"
+    target: str = "all"
+    scanner: str = "all"
+    sortMode: str = "severity"
+    dateFrom: str = ""
+    dateTo: str = ""
     searchQuery: str = ""
 
     @field_validator("sortMode")
@@ -42,7 +44,8 @@ class FilterPreset(BaseModel):
 
 class SavedViewCreate(BaseModel):
     """Request body for POST /saved-views."""
-    name:        str = Field(..., min_length=1, max_length=60)
+
+    name: str = Field(..., min_length=1, max_length=60)
     filter_json: str
 
     @field_validator("name")
@@ -66,7 +69,8 @@ class SavedViewCreate(BaseModel):
 
 class SavedViewUpdate(BaseModel):
     """Request body for PUT /saved-views/{id}."""
-    name:        Optional[str] = Field(None, min_length=1, max_length=60)
+
+    name: Optional[str] = Field(None, min_length=1, max_length=60)
     filter_json: Optional[str] = None
 
     @field_validator("name")
@@ -92,59 +96,63 @@ class SavedViewUpdate(BaseModel):
         return v
 
 
-
-
-
 @saved_views_router.get("")
-async def list_saved_views() -> Dict[str, Any]:
+async def list_saved_views(owner: str = Depends(get_current_owner)) -> Dict[str, Any]:
     """Return all saved views ordered by creation date."""
     db = await get_db()
     rows: List[Dict] = await db.fetchall(
         "SELECT id, name, filter_json, created_at, updated_at "
-        "FROM saved_views ORDER BY created_at ASC"
+        "FROM saved_views WHERE owner_id = ? ORDER BY created_at ASC",
+        (owner,),
     )
     return {"views": rows, "total": len(rows)}
 
 
 @saved_views_router.post("", status_code=201)
-async def create_saved_view(body: SavedViewCreate) -> Dict[str, Any]:
+async def create_saved_view(
+    body: SavedViewCreate, owner: str = Depends(get_current_owner)
+) -> Dict[str, Any]:
     """
     Create a new saved view.
     Returns 409 if a view with the same name already exists.
     """
     db = await get_db()
 
-
     existing = await db.fetchone(
-        "SELECT id FROM saved_views WHERE LOWER(name) = LOWER(?)", (body.name,)
+        "SELECT id FROM saved_views WHERE LOWER(name) = LOWER(?) AND owner_id = ?",
+        (body.name, owner),
     )
     if existing:
         raise HTTPException(
             status_code=409,
             detail=f"A saved view named '{body.name}' already exists. "
-                   "Use PUT to overwrite it.",
+            "Use PUT to overwrite it.",
         )
 
     view_id = str(uuid.uuid4())
     await db.execute(
         """
-        INSERT INTO saved_views (id, name, filter_json)
-        VALUES (?, ?, ?)
+        INSERT INTO saved_views (id, name, owner_id, filter_json)
+        VALUES (?, ?, ?, ?)
         """,
-        (view_id, body.name, body.filter_json),
+        (view_id, body.name, owner, body.filter_json),
     )
     return {"id": view_id, "name": body.name, "created": True}
 
 
 @saved_views_router.put("/{view_id}")
-async def update_saved_view(view_id: str, body: SavedViewUpdate) -> Dict[str, Any]:
+async def update_saved_view(
+    view_id: str, body: SavedViewUpdate, owner: str = Depends(get_current_owner)
+) -> Dict[str, Any]:
     """
     Overwrite name and/or filter_json for an existing view.
     Also accepts PATCH semantics — only supplied fields are updated.
     """
     db = await get_db()
 
-    row = await db.fetchone("SELECT id FROM saved_views WHERE id = ?", (view_id,))
+    row = await db.fetchone(
+        "SELECT id FROM saved_views WHERE id = ? AND owner_id = ?", (view_id, owner)
+    )
     if not row:
         raise HTTPException(status_code=404, detail="Saved view not found")
 
@@ -154,8 +162,8 @@ async def update_saved_view(view_id: str, body: SavedViewUpdate) -> Dict[str, An
     if body.name is not None:
         # Check for name collision with a *different* record
         collision = await db.fetchone(
-            "SELECT id FROM saved_views WHERE LOWER(name) = LOWER(?) AND id != ?",
-            (body.name, view_id),
+            "SELECT id FROM saved_views WHERE LOWER(name) = LOWER(?) AND owner_id = ? AND id != ?",
+            (body.name, owner, view_id),
         )
         if collision:
             raise HTTPException(
@@ -174,17 +182,22 @@ async def update_saved_view(view_id: str, body: SavedViewUpdate) -> Dict[str, An
 
     updates.append("updated_at = datetime('now')")
     params.append(view_id)
+    params.append(owner)
 
     await db.execute(
-        f"UPDATE saved_views SET {', '.join(updates)} WHERE id = ?",
+        f"UPDATE saved_views SET {', '.join(updates)} WHERE id = ? AND owner_id = ?",
         tuple(params),
     )
     return {"id": view_id, "updated": True}
 
 
 @saved_views_router.delete("/{view_id}")
-async def delete_saved_view(view_id: str) -> Dict[str, Any]:
+async def delete_saved_view(
+    view_id: str, owner: str = Depends(get_current_owner)
+) -> Dict[str, Any]:
     """Delete a saved view by id. Idempotent — returns 200 even if not found."""
     db = await get_db()
-    await db.execute("DELETE FROM saved_views WHERE id = ?", (view_id,))
+    await db.execute(
+        "DELETE FROM saved_views WHERE id = ? AND owner_id = ?", (view_id, owner)
+    )
     return {"id": view_id, "deleted": True}

@@ -27,7 +27,9 @@ class Database:
     def connection(self) -> aiosqlite.Connection:
         """Get the active database connection, raising an error if it's not connected."""
         if self._connection is None:
-            raise RuntimeError("Database not connected. Did you forget to await connect()?")
+            raise RuntimeError(
+                "Database not connected. Did you forget to await connect()?"
+            )
         return self._connection
 
     async def connect(self):
@@ -314,6 +316,16 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_wf_runs_status     ON workflow_runs(status);
             CREATE INDEX IF NOT EXISTS idx_wf_runs_version_id ON workflow_runs(version_id);
 
+            CREATE TABLE IF NOT EXISTS saved_views (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                filter_json TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                owner_id TEXT NOT NULL DEFAULT 'default',
+                UNIQUE(owner_id, name)
+            );
+
             CREATE TABLE IF NOT EXISTS notification_rules (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -378,6 +390,7 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_notification_history_rule_id ON notification_history(rule_id);
             CREATE INDEX IF NOT EXISTS idx_notification_history_finding_id ON notification_history(finding_id);
             CREATE INDEX IF NOT EXISTS idx_notification_history_sent_at ON notification_history(sent_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_saved_views_owner ON saved_views(owner_id);
             CREATE INDEX IF NOT EXISTS idx_target_policies_owner ON target_policies(owner_id);
             CREATE INDEX IF NOT EXISTS idx_credential_profiles_owner ON credential_profiles(owner_id);
             CREATE INDEX IF NOT EXISTS idx_session_profiles_owner ON session_profiles(owner_id);
@@ -392,7 +405,7 @@ class Database:
         # Migration logic: ensure latest columns exist in 'tasks' table
         tasks_columns = await self.fetchall("PRAGMA table_info(tasks)")
         existing_cols = {col["name"] for col in tasks_columns}
-        
+
         needed_cols = {
             # Per-user ownership for BOLA prevention (issue #401). NOT NULL with a
             # constant default backfills every existing row to the shared default
@@ -410,13 +423,15 @@ class Database:
             "inputs_json": "TEXT NOT NULL DEFAULT '{}'",
             "execution_context_json": "TEXT NOT NULL DEFAULT '{}'",
             "preset": "TEXT",
-            "safe_mode": "BOOLEAN NOT NULL DEFAULT 1"
+            "safe_mode": "BOOLEAN NOT NULL DEFAULT 1",
         }
 
         for col_name, col_type in needed_cols.items():
             if col_name not in existing_cols:
                 try:
-                    await self.execute(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_type}")
+                    await self.execute(
+                        f"ALTER TABLE tasks ADD COLUMN {col_name} {col_type}"
+                    )
                     print(f"Added missing column {col_name} to tasks table.")
                 except Exception as e:
                     print(f"Failed to add column {col_name}: {e}")
@@ -460,7 +475,9 @@ class Database:
         for col_name, col_type in risk_cols.items():
             if col_name not in existing_finding_cols:
                 try:
-                    await self.execute(f"ALTER TABLE findings ADD COLUMN {col_name} {col_type}")
+                    await self.execute(
+                        f"ALTER TABLE findings ADD COLUMN {col_name} {col_type}"
+                    )
                     print(f"Added missing column {col_name} to findings table.")
                 except Exception as e:
                     print(f"Failed to add column {col_name}: {e}")
@@ -480,7 +497,9 @@ class Database:
         for col_name, col_type in asset_service_needed.items():
             if col_name not in existing_asset_service_cols:
                 try:
-                    await self.execute(f"ALTER TABLE asset_services ADD COLUMN {col_name} {col_type}")
+                    await self.execute(
+                        f"ALTER TABLE asset_services ADD COLUMN {col_name} {col_type}"
+                    )
                     print(f"Added missing column {col_name} to asset_services table.")
                 except Exception as e:
                     print(f"Failed to add column {col_name} to asset_services: {e}")
@@ -525,7 +544,8 @@ class Database:
                 if old_fk:
                     await self.execute("PRAGMA foreign_keys = OFF")
                 try:
-                    await self.connection.executescript("""
+                    await self.connection.executescript(
+                        """
                         CREATE TABLE workflows_new (
                             id TEXT PRIMARY KEY,
                             name TEXT NOT NULL,
@@ -546,9 +566,12 @@ class Database:
                         FROM workflows;
                         DROP TABLE workflows;
                         ALTER TABLE workflows_new RENAME TO workflows;
-                    """)
+                    """
+                    )
                     await self.connection.commit()
-                    print("Replaced workflows UNIQUE(name) constraint with UNIQUE(owner_id, name).")
+                    print(
+                        "Replaced workflows UNIQUE(name) constraint with UNIQUE(owner_id, name)."
+                    )
                 finally:
                     if old_fk:
                         await self.execute("PRAGMA foreign_keys = ON")
@@ -565,6 +588,64 @@ class Database:
             except Exception as e:
                 print(f"Failed to add 'owner_id' to notification_rules: {e}")
 
+        # Saved views table migration: ensure owner_id and composite unique exist
+        try:
+            saved_views_columns = await self.fetchall("PRAGMA table_info(saved_views)")
+            existing_sv_cols = {col["name"] for col in saved_views_columns}
+            if existing_sv_cols and "owner_id" not in existing_sv_cols:
+                try:
+                    await self.execute(
+                        "ALTER TABLE saved_views ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'default'"
+                    )
+                    print("Added missing column 'owner_id' to saved_views table.")
+                except Exception as e:
+                    print(f"Failed to add 'owner_id' to saved_views: {e}")
+
+            sv_schema = await self.fetchone(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='saved_views'"
+            )
+            if sv_schema and "owner_id" in existing_sv_cols:
+                ddl = sv_schema["sql"]
+                has_old_unique = (
+                    "name TEXT NOT NULL UNIQUE" in ddl
+                    or "UNIQUE(name)" in ddl.replace(" ", "")
+                )
+                has_composite = "UNIQUE(owner_id,name)" in ddl.replace(" ", "")
+                if has_old_unique or not has_composite:
+                    old_fk = await self.fetchone("PRAGMA foreign_keys")
+                    if old_fk:
+                        await self.execute("PRAGMA foreign_keys = OFF")
+                    try:
+                        await self.connection.executescript(
+                            """
+                            CREATE TABLE saved_views_new (
+                                id TEXT PRIMARY KEY,
+                                name TEXT NOT NULL,
+                                filter_json TEXT NOT NULL,
+                                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                                updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                                owner_id TEXT NOT NULL DEFAULT 'default',
+                                UNIQUE(owner_id, name)
+                            );
+                            INSERT INTO saved_views_new
+                                (id, name, filter_json, created_at, updated_at, owner_id)
+                            SELECT
+                                id, name, filter_json, created_at, updated_at, COALESCE(owner_id, 'default')
+                            FROM saved_views;
+                            DROP TABLE saved_views;
+                            ALTER TABLE saved_views_new RENAME TO saved_views;
+                        """
+                        )
+                        await self.connection.commit()
+                        print(
+                            "Replaced saved_views UNIQUE(name) constraint with UNIQUE(owner_id, name)."
+                        )
+                    finally:
+                        if old_fk:
+                            await self.execute("PRAGMA foreign_keys = ON")
+        except Exception as e:
+            print(f"Skipping saved_views migration: {e}")
+
         # Owner indexes must run after ALTER TABLE backfills owner_id on legacy DBs.
         await self.connection.executescript(
             """
@@ -573,6 +654,7 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_reports_owner ON reports(owner_id);
             CREATE INDEX IF NOT EXISTS idx_workflows_owner ON workflows(owner_id);
             CREATE INDEX IF NOT EXISTS idx_notification_rules_owner ON notification_rules(owner_id);
+            CREATE INDEX IF NOT EXISTS idx_saved_views_owner ON saved_views(owner_id);
             """
         )
 
@@ -581,9 +663,9 @@ class Database:
 
         if not migrations_dir.exists():
             raise RuntimeError(
-            f"Migrations directory not found at {migrations_dir} — "
-            "ensure the backend package is installed correctly."
-        )
+                f"Migrations directory not found at {migrations_dir} — "
+                "ensure the backend package is installed correctly."
+            )
 
         for migration_file in sorted(migrations_dir.glob("*.sql")):
             sql = migration_file.read_text(encoding="utf-8")
@@ -599,6 +681,7 @@ class Database:
     async def _backfill_risk_scores(self):
         """Compute risk scores for existing findings that have none."""
         from datetime import datetime, timezone
+
         rows = await self.fetchall(
             "SELECT id, severity, exploitability, confidence, asset_exposure, discovered_at, risk_score FROM findings WHERE risk_score IS NULL"
         )
@@ -713,7 +796,6 @@ class Database:
             ),
         )
 
-
     async def snapshot_workflow_version(
         self,
         workflow_id: str,
@@ -767,17 +849,21 @@ class Database:
                 defn = json.loads(row["definition_json"])
             except (json.JSONDecodeError, TypeError):
                 defn = {}
-            result.append({
-                "id": row["id"],
-                "workflow_id": row["workflow_id"],
-                "version_number": row["version_number"],
-                "definition": defn,
-                "created_at": row["created_at"],
-                "created_by": row["created_by"],
-            })
+            result.append(
+                {
+                    "id": row["id"],
+                    "workflow_id": row["workflow_id"],
+                    "version_number": row["version_number"],
+                    "definition": defn,
+                    "created_at": row["created_at"],
+                    "created_by": row["created_by"],
+                }
+            )
         return result
 
-    async def get_workflow_version(self, workflow_id: str, version_number: int) -> Optional[Dict]:
+    async def get_workflow_version(
+        self, workflow_id: str, version_number: int
+    ) -> Optional[Dict]:
         """Return a specific version record or None if it does not exist."""
         row = await self.fetchone(
             "SELECT id, workflow_id, version_number, definition_json, created_at, created_by "
@@ -813,11 +899,20 @@ class Database:
             "INSERT INTO workflow_runs "
             "(id, workflow_id, version_id, version_number, triggered_by, status, task_ids_json) "
             "VALUES (?, ?, ?, ?, ?, 'queued', ?)",
-            (run_id, workflow_id, version_id, version_number, triggered_by, json.dumps(task_ids)),
+            (
+                run_id,
+                workflow_id,
+                version_id,
+                version_number,
+                triggered_by,
+                json.dumps(task_ids),
+            ),
         )
         return run_id
 
-    async def finalize_workflow_run(self, run_id: str, status: str, error_message: Optional[str] = None) -> None:
+    async def finalize_workflow_run(
+        self, run_id: str, status: str, error_message: Optional[str] = None
+    ) -> None:
         """Mark a workflow run as completed, failed, or cancelled with a timestamp.
 
         status must be one of: completed | failed | cancelled.
@@ -838,7 +933,9 @@ class Database:
           'cancelled' if any task was cancelled and none are still running/queued.
           None        if tasks are still in progress.
         """
-        run_row = await self.fetchone("SELECT task_ids_json FROM workflow_runs WHERE id = ?", (run_id,))
+        run_row = await self.fetchone(
+            "SELECT task_ids_json FROM workflow_runs WHERE id = ?", (run_id,)
+        )
         if run_row is None:
             return None
         try:
@@ -863,10 +960,13 @@ class Database:
             return "cancelled"
         return "failed"
 
-    async def get_workflow_runs(self, workflow_id: str, limit: int = 50, offset: int = 0) -> Dict:
+    async def get_workflow_runs(
+        self, workflow_id: str, limit: int = 50, offset: int = 0
+    ) -> Dict:
         """Return paginated run history for a workflow."""
         count_row = await self.fetchone(
-            "SELECT COUNT(*) AS total FROM workflow_runs WHERE workflow_id = ?", (workflow_id,)
+            "SELECT COUNT(*) AS total FROM workflow_runs WHERE workflow_id = ?",
+            (workflow_id,),
         )
         total = count_row["total"] if count_row else 0
         rows = await self.fetchall(
@@ -880,18 +980,20 @@ class Database:
                 task_ids = json.loads(row["task_ids_json"] or "[]")
             except (json.JSONDecodeError, TypeError):
                 task_ids = []
-            entries.append({
-                "id": row["id"],
-                "workflow_id": row["workflow_id"],
-                "version_id": row["version_id"],
-                "version_number": row["version_number"],
-                "triggered_by": row["triggered_by"],
-                "status": row["status"],
-                "task_ids": task_ids,
-                "started_at": row["started_at"],
-                "completed_at": row["completed_at"],
-                "error_message": row["error_message"],
-            })
+            entries.append(
+                {
+                    "id": row["id"],
+                    "workflow_id": row["workflow_id"],
+                    "version_id": row["version_id"],
+                    "version_number": row["version_number"],
+                    "triggered_by": row["triggered_by"],
+                    "status": row["status"],
+                    "task_ids": task_ids,
+                    "started_at": row["started_at"],
+                    "completed_at": row["completed_at"],
+                    "error_message": row["error_message"],
+                }
+            )
         return {"total": total, "runs": entries}
 
 
