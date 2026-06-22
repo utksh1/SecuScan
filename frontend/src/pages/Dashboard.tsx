@@ -321,7 +321,7 @@ export default function Dashboard() {
         </motion.div>
       </header>
 
-      <main className="flex-1 px-0 pb-20 space-y-12 w-full">
+      <main className="flex-1 px-0 pb-24 space-y-12 w-full">
         <AnimatePresence mode="wait">
           {loading ? (
             <motion.section

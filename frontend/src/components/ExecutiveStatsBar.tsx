@@ -45,9 +45,9 @@ export const ExecutiveStatsBar: React.FC<ExecutiveStatsBarProps> = ({
       {/* 2. Critical Vulns */}
       <div className="px-6">
         <span className="text-xs font-bold text-white/70 uppercase tracking-[0.3em] block mb-6">Critical Vulns</span>
-        <div className="space-y-8">
+        <div className="space-y-3">
           <span
-            className={`text-8xl font-normal leading-[0.8] block ${hasCritical ? 'text-[var(--rag-red)]' : 'text-white'}`}
+            className={`text-8xl font-normal leading-none block ${hasCritical ? 'text-[var(--rag-red)]' : 'text-white'}`}
             style={{ fontFamily: 'var(--font-display)' }}
           >
             {criticalCount}
