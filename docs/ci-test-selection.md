@@ -2,7 +2,11 @@
 
 Purpose
 -------
-This document explains the changed-file scoped CI test selection implemented in `scripts/select_tests.py`.
+This document explains the changed-file scoped CI test selection implemented in
+`scripts/select_tests.py` and wired into the `detect-changes` job in
+`.github/workflows/ci.yml`. For runnable, verified examples of targeted selection and
+full-suite fallback, jump to
+[Local testing and worked examples](#local-testing-and-worked-examples).
 
 ## Branch Protection Safety Guarantee
 
@@ -40,67 +44,60 @@ The script classifies changed files into these categories:
 - **FRONTEND**: `frontend/` directory
   - Runs frontend tests only (unless mixed with backend)
 
-- **BACKEND**: `backend/`, `testing/backend/`, `pyproject.toml`, `scripts/*.py`
+- **BACKEND**: `backend/`, `testing/backend/`, `pyproject.toml`, and **any file under
+  `scripts/`** (regardless of extension) — except `scripts/check-artifacts.sh`
   - Runs backend tests; includes plugins via plugin dependencies
 
 - **PLUGINS**: `plugins/` directory
   - Treated as backend changes (runs backend tests)
 
-- **SHARED_OR_CONFIG** (forces full suite): `.github/`, root scripts, config files
+- **SHARED_OR_CONFIG** (forces full suite): `.github/`, root scripts/config files, and
+  **anything that matches no category above**
   - `.github/workflows/` changes → full suite (CI behavior changes)
-  - `setup.sh`, `docker-compose.yml` → full suite (system changes)
+  - `setup.sh`, `docker-compose.yml`, root `Makefile` → full suite (system changes)
+  - `scripts/check-artifacts.sh` → full suite (the one `scripts/` file kept out of BACKEND)
   - These affect multiple subsystems and must be fully tested
 
 ## Fallback Behavior
 
-The changed-file detection relies on `scripts/detect_changes.py` reading Git diff information. In some environments, this detection may fail or return incomplete results. The following fallback rules apply:
+Changed-file detection lives **inside `scripts/select_tests.py`** — the `detect-changes`
+job runs `python3 scripts/select_tests.py` directly (see `.github/workflows/ci.yml`),
+so there is no separate `detect_changes.py`. When the workflow does not pass `--files`,
+the script's `get_changed_files()` helper tries these git commands in order and uses the
+first one that returns a non-empty list:
 
-### When detect_changes.py fails or returns an error
+1. `git diff --name-only origin/<base>...HEAD` — PRs; `<base>` = `GITHUB_BASE_REF` (default `main`)
+2. `git diff --name-only <base>...HEAD`
+3. `git diff --name-only HEAD~1`
+4. `git diff --name-only` — uncommitted working-tree changes
 
-If `detect_changes.py` exits with a non-zero status or produces no output:
-- **Pull request events**: Run the full test suite (default safe behavior)
-- **Push events**: Run the full test suite (safe default, no blocking risk)
+If every command fails (or all return nothing), `get_changed_files()` returns an
+**empty list**, which `select_tests()` treats as "run everything." A detection failure
+can therefore never silently skip tests.
 
-This ensures that in non-standard CI environments (e.g., shallow clones without full Git history), no regressions are silently missed.
+> In CI the `detect-changes` job checks out with `fetch-depth: 0` and, for pull
+> requests, fetches the base branch first, so commands (1)–(2) normally succeed.
 
-### When detect_changes.py returns an empty file list
+### Detection fails or returns no files → full suite
 
-An empty changed-files list is treated as "unknown" rather than "no files changed":
-- **Pull request events**: Run full suite (unknown in PR = safe to run everything)
-- **Push events**: Run full suite (unknown in push = conservative, no blocking risk)
+An empty changed-files list is treated as "unknown," not "nothing changed," so both
+`push` and `pull_request` fall back to the full suite. See the *Empty changeset* and
+*pull request* examples under
+[Local testing and worked examples](#local-testing-and-worked-examples).
 
-```bash
-# Example: shallow clone fallback
-$ python3 scripts/detect_changes.py
-# exit code: 0, output: [] (empty list)
+### Git history unavailable (shallow clone)
 
-$ python3 scripts/select_tests.py --event-name push
-# Result: run_backend=true, run_frontend=true (fallback to full suite)
-```
+Commands (1)–(3) need at least one ancestor commit. In a `git clone --depth=1` checkout
+with a single commit they all fail, and command (4) sees no uncommitted changes, so
+`get_changed_files()` returns `[]` → full suite. This is exactly why CI uses
+`fetch-depth: 0` instead of a shallow clone.
 
-### When Git history is unavailable (shallow clone, S3 archive)
+### Unknown / unrecognized files → full suite
 
-`detect_changes.py` uses `git diff --name-only HEAD~1` which requires at least one ancestor commit. In a shallow clone with `git clone --depth=1`:
-
-```bash
-$ git log --oneline
-bea5b3b ci: restore Node.js 20/22 runtime matrix coverage (#1072)
-# Only one commit — HEAD~1 does not exist
-
-$ python3 scripts/detect_changes.py
-# Error: git exited with code 128 (no ancestor)
-# Script exits non-zero → select_tests.py falls back to full suite
-```
-
-**Safe default**: Full test suite runs, ensuring nothing is missed.
-
-### When only unknown files are detected
-
-If the changed files cannot be classified into any known category (e.g., new file with unrecognized extension):
-- The file is treated as **SHARED_OR_CONFIG**
-- Result: Full test suite runs
-
-This is conservative and ensures new file types do not bypass CI.
+A path that matches no known prefix (not `docs/`, `frontend/`, `plugins/`, `backend/`,
+…) is classified as **SHARED_OR_CONFIG**, which forces the full suite (see the *Unknown
+file* example below). This is conservative: new or unclassified file types never bypass
+CI.
 
 ## Why This is Safe
 
@@ -133,21 +130,64 @@ To modify the test selection policy:
 4. Run tests locally: `pytest testing/backend/unit/test_select_tests.py -v`
 5. Update this document if behavior changes
 
-## Local Testing
+## Local testing and worked examples
 
-Dry-run the selection tool locally:
+Reproduce any selection decision locally with `--files` (to simulate a changeset) and
+`--event-name` (to simulate the trigger). The comments below are the script's actual
+stdout (`select_tests.py` prints `run_backend=...` / `run_frontend=...`).
+
+### Targeted selection (push events)
+
+On `push`, only the suites touched by the change run:
 
 ```bash
-# Test with specific files (simulating a PR/push)
-python3 scripts/select_tests.py --files backend/main.py frontend/App.tsx --event-name pull_request
-# Output: run_backend=true, run_frontend=true (PR always runs full suite)
+# Backend-only change → backend suite only
+python3 scripts/select_tests.py --files backend/secuscan/routes.py --event-name push
+# run_backend=true, run_frontend=false
 
-python3 scripts/select_tests.py --files README.md --event-name push
-# Output: run_backend=false, run_frontend=false (docs-only push skips tests)
+# Frontend-only change → frontend checks only
+python3 scripts/select_tests.py --files frontend/src/App.tsx --event-name push
+# run_backend=false, run_frontend=true
 
-python3 scripts/select_tests.py --files .github/workflows/ci.yml
-# Output: run_backend=true, run_frontend=true (config changes run full suite)
+# Plugin-only change → backend suite (plugins run under backend)
+python3 scripts/select_tests.py --files plugins/nmap/metadata.json --event-name push
+# run_backend=true, run_frontend=false
+
+# Docs-only change → nothing runs (selective skip is push-only)
+python3 scripts/select_tests.py --files docs/ci-test-selection.md --event-name push
+# run_backend=false, run_frontend=false
 ```
+
+### Full-suite fallback
+
+The full suite runs whenever the change is mixed, touches shared config, cannot be
+classified, produces no detected files, or the event is a pull request:
+
+```bash
+# Mixed backend + frontend → full suite
+python3 scripts/select_tests.py --files backend/secuscan/routes.py frontend/src/App.tsx --event-name push
+# run_backend=true, run_frontend=true
+
+# Shared CI/config change → full suite
+python3 scripts/select_tests.py --files .github/workflows/ci.yml --event-name push
+# run_backend=true, run_frontend=true
+
+# Unknown / unclassified file → full suite (treated as SHARED_OR_CONFIG)
+python3 scripts/select_tests.py --files Makefile --event-name push
+# run_backend=true, run_frontend=true
+
+# Empty changeset (detection returned nothing) → full suite
+python3 scripts/select_tests.py --files --event-name push
+# run_backend=true, run_frontend=true
+
+# Any pull request → full suite regardless of files (branch-protection safety)
+python3 scripts/select_tests.py --files docs/ci-test-selection.md --event-name pull_request
+# run_backend=true, run_frontend=true
+```
+
+> These exact decisions are asserted in
+> [`testing/backend/unit/test_select_tests.py`](../testing/backend/unit/test_select_tests.py).
+> Run them with `pytest testing/backend/unit/test_select_tests.py -v`.
 
 ## Required Checks in GitHub
 
