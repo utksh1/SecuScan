@@ -274,8 +274,8 @@ class Database:
                 updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(owner_id, name)
                 );
-                
-                
+
+
 
 CREATE INDEX IF NOT EXISTS idx_credential_vault_owner
 ON credential_vault(owner_id);
@@ -513,7 +513,7 @@ ON credential_vault(owner_id);
             "SELECT sql FROM sqlite_master "
             "WHERE type='table' AND name='credential_vault'"
             )
-        
+
         if "owner_id" not in existing_vault_cols:
             try:
                 await self.execute(
@@ -523,7 +523,7 @@ ON credential_vault(owner_id);
                 print("Added missing column 'owner_id' to credential_vault table.")
             except Exception as e:
                 print(f"Failed to add 'owner_id' to credential_vault: {e}")
-        
+
         if vault_schema:
             ddl = vault_schema["sql"]
             has_composite = "UNIQUE(owner_id, name)" in ddl
@@ -538,7 +538,7 @@ ON credential_vault(owner_id);
                         updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
                         UNIQUE(owner_id, name)
                         );
-                        
+
 
             INSERT INTO credential_vault_new
             (
@@ -643,7 +643,7 @@ ON credential_vault(owner_id);
             CREATE INDEX IF NOT EXISTS idx_notification_rules_owner ON notification_rules(owner_id);
             """
             )
-        
+
 
     async def _run_migrations(self):
         migrations_dir = Path(__file__).parent / "migrations"
