@@ -325,7 +325,7 @@ export default function Scanner() {
               type="text"
               aria-label="Search scanner catalog"
               placeholder="SEARCH_PROTOCOLS..."
-              className="bg-charcoal border-4 border-black pl-12 pr-4 py-4 text-xs font-black uppercase tracking-widest text-silver-bright focus:outline-none focus:border-rag-red transition-all w-80 placeholder:text-silver/10 italic shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+              className="bg-slate-800 border-2 border-slate-500 pl-12 pr-4 py-4 text-xs font-black text-white rounded placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
             />
