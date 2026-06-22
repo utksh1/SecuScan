@@ -20,53 +20,19 @@ from .routes_json_helpers import (
     deserialize_finding_rows,
     parse_json_fields,
 )
+from .routes_workflow_helpers import (
+    _parse_workflow_steps,
+    _serialize_workflow,
+)
 
 __all__ = [
     "FINDING_JSON_FIELDS",
     "parse_json_fields",
     "deserialize_finding_rows",
     "deserialize_asset_service_rows",
+    "_parse_workflow_steps",
+    "_serialize_workflow",
 ]
-
-def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
-    if isinstance(raw_steps, list):
-        parsed = raw_steps
-    elif not raw_steps:
-        parsed = []
-    else:
-        try:
-            parsed = json.loads(raw_steps)
-        except (TypeError, json.JSONDecodeError):
-            parsed = []
-    normalized: List[Dict[str, Any]] = []
-    for step in parsed if isinstance(parsed, list) else []:
-        if not isinstance(step, dict):
-            continue
-        try:
-            model = WorkflowStep(
-                plugin_id=str(step.get("plugin_id", "")),
-                inputs=step.get("inputs") or {},
-                preset=step.get("preset"),
-                execution_context=step.get("execution_context") or {},
-            )
-        except Exception:
-            continue
-        normalized.append(model.model_dump())
-    return normalized
-
-def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]] = None) -> Dict[str, Any]:
-    """Return the workflow shape consumed by the frontend."""
-    return {
-        "id": row["id"],
-        "name": row["name"],
-        "schedule_seconds": row.get("schedule_seconds"),
-        "enabled": bool(row.get("enabled")),
-        "steps": _parse_workflow_steps(row.get("steps_json")),
-        "created_at": row.get("created_at"),
-        "last_run_at": row.get("last_run_at"),
-        "queued_task_ids": queued_task_ids or [],
-    }
-
 
 def _json_payload(value: Any, fallback: str) -> str:
     return json.dumps(value if value is not None else json.loads(fallback))
@@ -74,11 +40,13 @@ def _json_payload(value: Any, fallback: str) -> str:
 
 from .validation import is_filesystem_target  # noqa: E402
 
+
 def _slugify_filename_part(value: str, fallback: str) -> str:
     cleaned = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
     return cleaned or fallback
 
-def build_report_filename(task: Dict[str, Any], extension: str) -> str:
+
+def build_report_filename(task: Any, extension: str) -> str:
     tool = _slugify_filename_part(str(task.get("tool_name") or task.get("plugin_id") or "scan"), "scan")
 
     raw_target = str(task.get("target") or "")
@@ -91,7 +59,6 @@ def build_report_filename(task: Dict[str, Any], extension: str) -> str:
     date_part = date_match.group(0) if date_match else "report"
 
     return f"secuscan_{tool}_{target}_{date_part}.{extension}"
-
 logger = logging.getLogger(__name__)
 
 from .cache import get_cache, invalidate_view_cache
