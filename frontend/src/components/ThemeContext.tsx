@@ -27,13 +27,13 @@ function getSystemTheme(): Theme {
 }
 
 function applyTheme(theme: Theme) {
-  const root = document.documentElement
+  const root = document.documentElement;
+  console.log("Applying theme:", theme); // Open your browser console (F12)
+  
   if (theme === 'dark') {
-    root.classList.add('dark')
-    root.classList.remove('theme-light')
+    root.classList.add('dark');
   } else {
-    root.classList.remove('dark')
-    root.classList.add('theme-light')
+    root.classList.remove('dark');
   }
 }
 

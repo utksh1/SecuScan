@@ -65,6 +65,7 @@
 
 /* Base Overrides */
 body {
+ 
   background-color: var(--bg-primary);
   color: var(--accent-silver);
   font-family: var(--font-sans);
@@ -106,7 +107,7 @@ html {
   -moz-osx-font-smoothing: grayscale;
 }
 
-body {
+/* body {
   font-family: var(--font-ui);
   font-size: var(--text-sm);
   font-weight: var(--font-normal);
@@ -114,7 +115,7 @@ body {
   color: var(--text-primary);
   background: var(--bg-primary);
   min-height: 100vh;
-}
+} */
 
 /* ============================================
    Typography
@@ -3854,4 +3855,16 @@ button,
   .scanner-tab {
     white-space: nowrap;
   }
+}
+.dark {
+  --bg-primary: #0a0b0d; /* Your dark mode color */
+  --text-primary: #f4f4f5;
+ 
+}
+
+/* Define the light mode overrides */
+:root:not(.dark) {
+  --bg-primary: #ffffff; /* Your light mode color */
+  --text-primary: #121214;
+  
 }

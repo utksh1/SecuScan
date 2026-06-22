@@ -4,12 +4,14 @@ import Sidebar from './Sidebar'
 import Background from './Background'
 import { useShortcuts } from '../hooks/useShortcuts'
 import { routes } from '../routes'
+import { useTheme } from './ThemeContext'
 
 interface AppShellProps {
     children: React.ReactNode
 }
 
 export default function AppShell({ children }: AppShellProps) {
+    const { theme } = useTheme();
     const { pathname } = useLocation()
 
     useShortcuts()
@@ -112,7 +114,8 @@ export default function AppShell({ children }: AppShellProps) {
     return (
         <>
             <Background state="idle" />
-            <div className="flex bg-charcoal-dark min-h-screen">
+            {/* <div className="flex bg-charcoal-dark min-h-screen"> */}
+            <div className={`flex min-h-screen ${theme === 'dark' ? 'dark' : ''}`}>
                 <Sidebar />
                 <div className="lg:hidden fixed inset-x-0 top-0 z-[60] bg-[var(--bg-secondary)] border-b border-accent-silver/10 h-14 px-4 flex items-center justify-between">
                     <button
