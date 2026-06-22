@@ -1,6 +1,6 @@
 # SecuScan API Documentation
 
-## Authentication & ownership
+## Authentication and ownership
 
 Every endpoint below requires the API key (`X-Api-Key` or `Authorization: Bearer`),
 and every result is **owner-scoped**: list and lookup endpoints only return rows
@@ -19,7 +19,7 @@ cross-owner test.
 
 **Description:** Returns a paginated list of the **caller's** scan tasks with
 navigation metadata. The list is owner-scoped (see
-[Authentication & ownership](#authentication--ownership)) — it never includes tasks
+[Authentication and ownership](#authentication-and-ownership)) — it never includes tasks
 owned by another `X-User-Id`.
 
 **Query Parameters:**
