@@ -2,6 +2,8 @@ import asyncio
 import time
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from backend.secuscan.cache import CacheClient
 
 
@@ -23,8 +25,13 @@ async def _get_or_set_cached(cache: CacheClient, key: str, builder):
     return value
 
 
-def test_first_call_invokes_builder_and_stores_result():
+def test_first_call_invokes_builder_and_stores_result(monkeypatch):
     cache = CacheClient()
+
+    class FakeSettings:
+        cache_ttl_seconds = 3600
+
+    monkeypatch.setattr("backend.secuscan.cache.settings", FakeSettings())
 
     build_calls = 0
 
@@ -41,8 +48,13 @@ def test_first_call_invokes_builder_and_stores_result():
     assert build_calls == 1
 
 
-def test_second_call_returns_cached_value_without_rebuilding():
+def test_second_call_returns_cached_value_without_rebuilding(monkeypatch):
     cache = CacheClient()
+
+    class FakeSettings:
+        cache_ttl_seconds = 3600
+
+    monkeypatch.setattr("backend.secuscan.cache.settings", FakeSettings())
 
     build_calls = 0
 
@@ -61,8 +73,13 @@ def test_second_call_returns_cached_value_without_rebuilding():
     assert build_calls == 1
 
 
-def test_different_keys_are_cached_independently():
+def test_different_keys_are_cached_independently(monkeypatch):
     cache = CacheClient()
+
+    class FakeSettings:
+        cache_ttl_seconds = 3600
+
+    monkeypatch.setattr("backend.secuscan.cache.settings", FakeSettings())
 
     async def builder_a():
         return {"key": "a"}
@@ -82,8 +99,13 @@ def test_different_keys_are_cached_independently():
     assert b == b2 == {"key": "b"}
 
 
-def test_delete_prefix_invalidates_cache():
+def test_delete_prefix_invalidates_cache(monkeypatch):
     cache = CacheClient()
+
+    class FakeSettings:
+        cache_ttl_seconds = 3600
+
+    monkeypatch.setattr("backend.secuscan.cache.settings", FakeSettings())
 
     async def builder():
         return {"fresh": True}
@@ -107,10 +129,10 @@ def test_lru_eviction_evicts_oldest_when_over_capacity():
     cache = CacheClient(max_entries=3)
 
     async def run():
-        await cache.set_json("key:1", "val1")
-        await cache.set_json("key:2", "val2")
-        await cache.set_json("key:3", "val3")
-        await cache.set_json("key:4", "val4")
+        await cache.set_json("key:1", "val1", ttl=3600)
+        await cache.set_json("key:2", "val2", ttl=3600)
+        await cache.set_json("key:3", "val3", ttl=3600)
+        await cache.set_json("key:4", "val4", ttl=3600)
 
     _run(run())
     assert cache.size == 3
@@ -124,8 +146,8 @@ def test_lru_eviction_skips_when_under_capacity():
     cache = CacheClient(max_entries=5)
 
     async def run():
-        await cache.set_json("key:1", "val1")
-        await cache.set_json("key:2", "val2")
+        await cache.set_json("key:1", "val1", ttl=3600)
+        await cache.set_json("key:2", "val2", ttl=3600)
 
     _run(run())
     assert cache.size == 2
@@ -137,13 +159,13 @@ def test_lru_eviction_preserves_recently_accessed():
     cache = CacheClient(max_entries=3)
 
     async def run():
-        await cache.set_json("key:1", "val1")
-        await cache.set_json("key:2", "val2")
-        await cache.set_json("key:3", "val3")
+        await cache.set_json("key:1", "val1", ttl=3600)
+        await cache.set_json("key:2", "val2", ttl=3600)
+        await cache.set_json("key:3", "val3", ttl=3600)
         cache._access_order["key:2"] = 1.0       # Oldest
         cache._access_order["key:3"] = 2.0        # Middle
         await cache.get_json("key:1")              # Refreshes to ~now (most recent)
-        await cache.set_json("key:4", "val4")
+        await cache.set_json("key:4", "val4", ttl=3600)
 
     _run(run())
     assert cache.size == 3
@@ -212,9 +234,9 @@ def test_delete_prefix_removes_from_all_internal_dicts():
     cache = CacheClient()
 
     async def run():
-        await cache.set_json("prefix:a", "val_a")
-        await cache.set_json("prefix:b", "val_b")
-        await cache.set_json("other:c", "val_c")
+        await cache.set_json("prefix:a", "val_a", ttl=3600)
+        await cache.set_json("prefix:b", "val_b", ttl=3600)
+        await cache.set_json("other:c", "val_c", ttl=3600)
         await cache.delete_prefix("prefix:")
 
     _run(run())
@@ -235,8 +257,8 @@ def test_max_entries_zero_does_not_crash():
     cache = CacheClient(max_entries=0)
 
     async def run():
-        await cache.set_json("key:1", "val1")
-        await cache.set_json("key:2", "val2")
+        await cache.set_json("key:1", "val1", ttl=3600)
+        await cache.set_json("key:2", "val2", ttl=3600)
 
     _run(run())
     assert cache.size >= 0
@@ -246,8 +268,8 @@ def test_max_entries_negative_does_not_crash():
     cache = CacheClient(max_entries=-1)
 
     async def run():
-        await cache.set_json("key:1", "val1")
-        await cache.set_json("key:2", "val2")
+        await cache.set_json("key:1", "val1", ttl=3600)
+        await cache.set_json("key:2", "val2", ttl=3600)
 
     _run(run())
     assert cache.size >= 0
