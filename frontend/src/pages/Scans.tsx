@@ -89,7 +89,9 @@ export default function Scans() {
 
   function startPolling() {
     stopPolling();
-    intervalRef.current = setInterval(loadTasks, 5000);
+    intervalRef.current = setInterval(() => {
+      loadTasks();
+    }, 5000);
   }
 
   function stopPolling() {
@@ -148,7 +150,7 @@ export default function Scans() {
       const data = await res.json();
       if (requestSeq !== requestSeqRef.current) return;
 
-      setTasks(data.tasks || []);
+      setTasks([...(data.tasks || [])]);
       if (data.pagination?.total_items !== undefined) {
         setTotal(data.pagination.total_items);
       }
