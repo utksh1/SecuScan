@@ -112,14 +112,15 @@ export default function AppShell({ children }: AppShellProps) {
     return (
         <>
             <Background state="idle" />
-            <div className="flex bg-charcoal-dark min-h-screen">
-                <Sidebar />
-                <div className="lg:hidden fixed inset-x-0 top-0 z-[60] bg-[var(--bg-secondary)] border-b border-accent-silver/10 h-14 px-4 flex items-center justify-between">
+<div className="flex min-h-screen bg-white text-slate-900 dark:bg-[var(--bg-primary)] dark:text-[var(--text-primary)]">                <Sidebar />
+                <div className="lg:hidden fixed inset-x-0 top-0 z-[60] bg-[var(--bg-secondary)]
+text-[var(--text-primary)] border-b border-accent-silver/10 h-14 px-4 flex items-center justify-between">
                     <button
                         ref={menuButtonRef}
                         onClick={() => setMobileMenuOpen((prev) => !prev)}
-                        className="w-9 h-9 border border-accent-silver/20 flex items-center justify-center text-silver-bright bg-charcoal-dark"
-                        aria-label="Toggle navigation menu"
+className="w-9 h-9 border border-accent-silver/20 flex items-center justify-center
+bg-white text-slate-900
+dark:bg-[var(--bg-primary)] dark:text-[var(--text-secondary)]-bright" aria-label="Toggle navigation menu"
                         aria-expanded={mobileMenuOpen}
                         aria-controls="mobile-nav-drawer"
                     >
@@ -127,7 +128,7 @@ export default function AppShell({ children }: AppShellProps) {
                             {mobileMenuOpen ? 'close' : 'menu'}
                         </span>
                     </button>
-                    <span className="text-[12px] font-black tracking-[0.2em] text-silver-bright uppercase">SecuScan</span>
+                    <span className="text-[12px] font-black tracking-[0.2em] text-[var(--text-secondary)]-bright uppercase">SecuScan</span>
                     <span className="w-9 h-9" />
                 </div>
 
@@ -135,7 +136,7 @@ export default function AppShell({ children }: AppShellProps) {
                     <>
                         <button
                             type="button"
-                            className="lg:hidden fixed inset-0 z-50 bg-charcoal-dark/80 backdrop-blur-sm"
+                            className="lg:hidden fixed inset-0 z-50 bg-[var(--bg-primary)]/80 backdrop-blur-sm"
                             onClick={() => setMobileMenuOpen(false)}
                             aria-label="Close navigation menu"
                         />
@@ -145,7 +146,8 @@ export default function AppShell({ children }: AppShellProps) {
                             role="dialog"
                             aria-modal="true"
                             aria-label="Navigation menu"
-                            className="lg:hidden fixed top-14 left-0 right-0 z-50 bg-[var(--bg-secondary)] border-b border-accent-silver/10 p-4 shadow-[0_12px_32px_rgba(0,0,0,0.6)]"
+                            className="lg:hidden fixed top-14 left-0 right-0 z-50 bg-[var(--bg-secondary)]
+text-[var(--text-primary)] border-b border-accent-silver/10 p-4 shadow-[0_12px_32px_rgba(0,0,0,0.6)]"
                             onKeyDown={handleDrawerKeyDown}
                         >
                             <nav className="grid grid-cols-2 gap-2">
@@ -156,8 +158,8 @@ export default function AppShell({ children }: AppShellProps) {
                                         className={({ isActive }) =>
                                             `px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] border rounded ${
                                                 isActive
-                                                    ? 'border-rag-red/50 bg-rag-red/10 text-silver-bright'
-                                                    : 'border-accent-silver/20 text-silver/80'
+                                                    ? 'border-rag-red/50 bg-rag-red/10 text-[var(--text-secondary)]-bright'
+                                                    : 'border-accent-silver/20 text-[var(--text-secondary)]/80'
                                             }`
                                         }
                                     >
@@ -176,14 +178,15 @@ export default function AppShell({ children }: AppShellProps) {
                     {children}
                 </main>
 
-                <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 h-16 bg-[var(--bg-secondary)] border-t border-accent-silver/10 grid grid-cols-5">
+                <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 h-16 bg-[var(--bg-secondary)]
+text-[var(--text-primary)] border-t border-accent-silver/10 grid grid-cols-5">
                     {mobilePrimaryNav.map((item) => (
                         <NavLink
                             key={item.to}
                             to={item.to}
                             className={({ isActive }) =>
                                 `flex flex-col items-center justify-center gap-1 text-[9px] font-bold uppercase tracking-[0.08em] ${
-                                    isActive ? 'text-rag-red bg-rag-red/10' : 'text-silver/70'
+                                    isActive ? 'text-rag-red bg-rag-red/10' : 'text-[var(--text-secondary)]/70'
                                 }`
                             }
                         >

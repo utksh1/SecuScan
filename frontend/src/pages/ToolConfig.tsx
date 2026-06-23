@@ -212,10 +212,10 @@ export default function ToolConfig() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-charcoal-dark flex items-center justify-center p-12">
+      <div className="min-h-screen bg-[var(--bg-primary)] flex items-center justify-center p-12">
         <div className="space-y-4 text-center">
           <div className="w-20 h-20 border-8 border-silver-bright/10 border-t-rag-blue animate-spin mx-auto shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]" />
-          <p className="text-xs font-black text-silver-bright uppercase tracking-[0.5em] italic">Loading_Config...</p>
+          <p className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.5em] italic">Loading_Config...</p>
         </div>
       </div>
     )
@@ -224,7 +224,7 @@ export default function ToolConfig() {
   if (!plugin || !schema) return null
 
   return (
-    <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
+    <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-secondary)] p-6 md:p-12 space-y-12">
       <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-black/20">
         <div className="space-y-6">
           <div className="flex items-center gap-4">
@@ -241,17 +241,17 @@ export default function ToolConfig() {
             </div>
           </div>
           <div className="space-y-2">
-            <h1 className="text-5xl md:text-7xl text-silver-bright uppercase tracking-tighter leading-none italic font-black">
+            <h1 className="text-5xl md:text-7xl text-[var(--text-secondary)]-bright uppercase tracking-tighter leading-none italic font-black">
               {plugin.name}
             </h1>
-            <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic leading-relaxed pt-2">
+            <p className="text-sm font-mono text-[var(--text-secondary)]/40 uppercase tracking-widest italic leading-relaxed pt-2">
               {schema.description}
             </p>
           </div>
         </div>
 
         <div className="hidden lg:flex flex-col items-end gap-2 text-right">
-          <span className="text-[10px] font-black text-silver/20 uppercase tracking-[0.5em] italic">RISK_PROTOCOL</span>
+          <span className="text-[10px] font-black text-[var(--text-secondary)]/20 uppercase tracking-[0.5em] italic">RISK_PROTOCOL</span>
           <div
             className={`px-6 py-2 border-4 border-black text-black font-black uppercase tracking-widest shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] ${
               safetyLevel === 'exploit'
@@ -271,11 +271,11 @@ export default function ToolConfig() {
           <p className="text-[10px] uppercase font-black tracking-[0.3em] text-rag-amber">
             Plugin unavailable
           </p>
-          <p className="text-[10px] text-silver/70 uppercase tracking-widest mt-2 leading-relaxed">
+          <p className="text-[10px] text-[var(--text-secondary)]/70 uppercase tracking-widest mt-2 leading-relaxed">
             {availability?.guidance ||
               `Unavailable: Requires external binaries (${missingBinaries.join(', ')}). Install required tools locally to enable this scanner.`}
           </p>
-          <p className="text-[9px] text-silver/40 uppercase tracking-widest mt-3">
+          <p className="text-[9px] text-[var(--text-secondary)]/40 uppercase tracking-widest mt-3">
             Task launch remains available, but execution may fail until dependencies are installed.
           </p>
         </section>
@@ -285,7 +285,7 @@ export default function ToolConfig() {
         <div className="xl:col-span-3 space-y-10">
           {presetNames.length > 0 && (
             <section className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-              <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic mb-6">Preset_Profile</h3>
+              <h3 className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.4em] italic mb-6">Preset_Profile</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {presetNames.map((preset) => (
                   <button
@@ -294,7 +294,7 @@ export default function ToolConfig() {
                     className={`py-3 text-[10px] font-black uppercase tracking-[0.25em] border-4 transition-all ${
                       selectedPreset === preset
                         ? 'bg-rag-red text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
-                        : 'bg-charcoal-dark border-black text-silver/30 hover:text-silver-bright'
+                        : 'bg-[var(--bg-primary)] border-black text-[var(--text-secondary)]/30 hover:text-[var(--text-secondary)]-bright'
                     }`}
                   >
                     {preset}
@@ -305,7 +305,7 @@ export default function ToolConfig() {
           )}
 
           <section className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-8">
-            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Input_Vector</h3>
+            <h3 className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.4em] italic">Input_Vector</h3>
 
             <div className="space-y-6">
               {schema.fields.map((field) => {
@@ -327,7 +327,7 @@ export default function ToolConfig() {
                       <label
                         htmlFor={fieldId}
                         id={labelId}
-                        className="text-[10px] font-black uppercase tracking-[0.3em] text-silver-bright italic"
+                        className="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--text-secondary)]-bright italic"
                       >
                         {field.label}
                         {field.required && <span className="text-rag-red ml-2" aria-hidden="true">*</span>}
@@ -350,7 +350,7 @@ export default function ToolConfig() {
                         placeholder={field.placeholder || ''}
                         aria-invalid={isInvalid}
                         aria-describedby={describedBy}
-                        className={`w-full min-h-[120px] bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
+                        className={`w-full min-h-[120px] bg-[var(--bg-primary)] border-4 p-4 text-sm text-[var(--text-secondary)]-bright focus:outline-none ${inputBorderClass}`}
                       />
                     ) : field.type === 'integer' ? (
                       <input
@@ -366,7 +366,7 @@ export default function ToolConfig() {
                         placeholder={field.placeholder || ''}
                         aria-invalid={isInvalid}
                         aria-describedby={describedBy}
-                        className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
+                        className={`w-full bg-[var(--bg-primary)] border-4 p-4 text-sm text-[var(--text-secondary)]-bright focus:outline-none ${inputBorderClass}`}
                       />
                     ) : field.type === 'boolean' ? (
                       <button
@@ -379,7 +379,7 @@ export default function ToolConfig() {
                         aria-pressed={Boolean(value)}
                         aria-describedby={describedBy}
                         className={`w-full flex items-center justify-between p-4 border-4 border-black transition-all ${
-                          value ? 'bg-rag-green text-black' : 'bg-charcoal-dark text-silver-bright'
+                          value ? 'bg-rag-green text-black' : 'bg-[var(--bg-primary)] text-[var(--text-secondary)]-bright'
                         }`}
                       >
                         <span className="text-[10px] font-black uppercase tracking-[0.2em]">{field.help || field.label}</span>
@@ -395,7 +395,7 @@ export default function ToolConfig() {
                         onChange={(event) => handleFieldChange(field, event.target.value)}
                         aria-invalid={isInvalid}
                         aria-describedby={describedBy}
-                        className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
+                        className={`w-full bg-[var(--bg-primary)] border-4 p-4 text-sm text-[var(--text-secondary)]-bright focus:outline-none ${inputBorderClass}`}
                       >
                         <option value="">Select option</option>
                         {(field.options || []).map((option) => (
@@ -429,7 +429,7 @@ export default function ToolConfig() {
                                 handleFieldChange(field, next)
                               }}
                               className={`p-3 border-4 border-black text-[10px] font-black uppercase tracking-[0.15em] ${
-                                selected ? 'bg-rag-blue text-black' : 'bg-charcoal-dark text-silver-bright'
+                                selected ? 'bg-rag-blue text-black' : 'bg-[var(--bg-primary)] text-[var(--text-secondary)]-bright'
                               }`}
                             >
                               {option.label}
@@ -449,12 +449,12 @@ export default function ToolConfig() {
                         placeholder={field.placeholder || ''}
                         aria-invalid={isInvalid}
                         aria-describedby={describedBy}
-                        className={`w-full bg-charcoal-dark border-4 p-4 text-sm text-silver-bright focus:outline-none ${inputBorderClass}`}
+                        className={`w-full bg-[var(--bg-primary)] border-4 p-4 text-sm text-[var(--text-secondary)]-bright focus:outline-none ${inputBorderClass}`}
                       />
                     )}
 
                     {field.help && (
-                      <p id={helpId} className="text-[10px] text-silver/40 uppercase tracking-widest">
+                      <p id={helpId} className="text-[10px] text-[var(--text-secondary)]/40 uppercase tracking-widest">
                         {field.help}
                       </p>
                     )}
@@ -471,8 +471,8 @@ export default function ToolConfig() {
         </div>
 
         <aside className="xl:col-span-1">
-          <section className="bg-charcoal-dark border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
-            <h3 className="text-[11px] font-black text-silver-bright uppercase tracking-[0.4em] italic">Deploy_Control</h3>
+          <section className="bg-[var(--bg-primary)] border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
+            <h3 className="text-[11px] font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.4em] italic">Deploy_Control</h3>
             <p
               role={hasValidationErrors ? 'alert' : 'status'}
               aria-live="polite"
@@ -485,13 +485,13 @@ export default function ToolConfig() {
                 : 'All fields valid'}
             </p>
             <div className="space-y-4 border-4 border-black bg-charcoal p-5">
-              <p className="text-[10px] text-silver-bright uppercase tracking-[0.3em] font-black">Execution Context</p>
+              <p className="text-[10px] text-[var(--text-secondary)]-bright uppercase tracking-[0.3em] font-black">Execution Context</p>
               <div className="space-y-2">
-                <label className="text-[10px] text-silver/60 uppercase tracking-widest font-black">Target Policy</label>
+                <label className="text-[10px] text-[var(--text-secondary)]/60 uppercase tracking-widest font-black">Target Policy</label>
                 <select
                   value={executionContext.target_policy_id ?? ''}
                   onChange={(event) => handleExecutionContextChange('target_policy_id', event.target.value || null)}
-                  className="w-full bg-charcoal-dark border-4 border-black px-3 py-3 text-[11px] text-silver-bright uppercase tracking-widest"
+                  className="w-full bg-[var(--bg-primary)] border-4 border-black px-3 py-3 text-[11px] text-[var(--text-secondary)]-bright uppercase tracking-widest"
                 >
                   <option value="">Default Local Policy</option>
                   {targetPolicies.map((policy) => (
@@ -500,11 +500,11 @@ export default function ToolConfig() {
                 </select>
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] text-silver/60 uppercase tracking-widest font-black">Scan Profile</label>
+                <label className="text-[10px] text-[var(--text-secondary)]/60 uppercase tracking-widest font-black">Scan Profile</label>
                 <select
                   value={executionContext.scan_profile}
                   onChange={(event) => handleExecutionContextChange('scan_profile', event.target.value)}
-                  className="w-full bg-charcoal-dark border-4 border-black px-3 py-3 text-[11px] text-silver-bright uppercase tracking-widest"
+                  className="w-full bg-[var(--bg-primary)] border-4 border-black px-3 py-3 text-[11px] text-[var(--text-secondary)]-bright uppercase tracking-widest"
                 >
                   <option value="standard">Standard Profile</option>
                   <option value="authenticated">Authenticated Profile</option>
@@ -512,11 +512,11 @@ export default function ToolConfig() {
                 </select>
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] text-silver/60 uppercase tracking-widest font-black">Validation Mode</label>
+                <label className="text-[10px] text-[var(--text-secondary)]/60 uppercase tracking-widest font-black">Validation Mode</label>
                 <select
                   value={executionContext.validation_mode}
                   onChange={(event) => handleExecutionContextChange('validation_mode', event.target.value as ExecutionContext['validation_mode'])}
-                  className="w-full bg-charcoal-dark border-4 border-black px-3 py-3 text-[11px] text-silver-bright uppercase tracking-widest"
+                  className="w-full bg-[var(--bg-primary)] border-4 border-black px-3 py-3 text-[11px] text-[var(--text-secondary)]-bright uppercase tracking-widest"
                 >
                   <option value="detect_only">Detect Only</option>
                   <option value="proof">Proof</option>
@@ -524,11 +524,11 @@ export default function ToolConfig() {
                 </select>
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] text-silver/60 uppercase tracking-widest font-black">Evidence Level</label>
+                <label className="text-[10px] text-[var(--text-secondary)]/60 uppercase tracking-widest font-black">Evidence Level</label>
                 <select
                   value={executionContext.evidence_level}
                   onChange={(event) => handleExecutionContextChange('evidence_level', event.target.value as ExecutionContext['evidence_level'])}
-                  className="w-full bg-charcoal-dark border-4 border-black px-3 py-3 text-[11px] text-silver-bright uppercase tracking-widest"
+                  className="w-full bg-[var(--bg-primary)] border-4 border-black px-3 py-3 text-[11px] text-[var(--text-secondary)]-bright uppercase tracking-widest"
                 >
                   <option value="minimal">Minimal</option>
                   <option value="standard">Standard</option>
@@ -536,11 +536,11 @@ export default function ToolConfig() {
                 </select>
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] text-silver/60 uppercase tracking-widest font-black">Credential Profile</label>
+                <label className="text-[10px] text-[var(--text-secondary)]/60 uppercase tracking-widest font-black">Credential Profile</label>
                 <select
                   value={executionContext.credential_profile_id ?? ''}
                   onChange={(event) => handleExecutionContextChange('credential_profile_id', event.target.value || null)}
-                  className="w-full bg-charcoal-dark border-4 border-black px-3 py-3 text-[11px] text-silver-bright uppercase tracking-widest"
+                  className="w-full bg-[var(--bg-primary)] border-4 border-black px-3 py-3 text-[11px] text-[var(--text-secondary)]-bright uppercase tracking-widest"
                 >
                   <option value="">None</option>
                   {credentialProfiles.map((profile) => (
@@ -549,11 +549,11 @@ export default function ToolConfig() {
                 </select>
               </div>
               <div className="space-y-2">
-                <label className="text-[10px] text-silver/60 uppercase tracking-widest font-black">Session Profile</label>
+                <label className="text-[10px] text-[var(--text-secondary)]/60 uppercase tracking-widest font-black">Session Profile</label>
                 <select
                   value={executionContext.session_profile_id ?? ''}
                   onChange={(event) => handleExecutionContextChange('session_profile_id', event.target.value || null)}
-                  className="w-full bg-charcoal-dark border-4 border-black px-3 py-3 text-[11px] text-silver-bright uppercase tracking-widest"
+                  className="w-full bg-[var(--bg-primary)] border-4 border-black px-3 py-3 text-[11px] text-[var(--text-secondary)]-bright uppercase tracking-widest"
                 >
                   <option value="">None</option>
                   {sessionProfiles.map((profile) => (
@@ -564,10 +564,10 @@ export default function ToolConfig() {
             </div>
             {plugin.requires_consent && (
               <div className="space-y-4 border-4 border-black bg-charcoal p-5">
-                <p className="text-[10px] text-silver/60 uppercase tracking-widest leading-6">
+                <p className="text-[10px] text-[var(--text-secondary)]/60 uppercase tracking-widest leading-6">
                   {plugin.consent_message || 'This plugin requires explicit authorization before execution.'}
                 </p>
-                <label className="flex items-start gap-3 text-[10px] uppercase tracking-widest font-black text-silver-bright">
+                <label className="flex items-start gap-3 text-[10px] uppercase tracking-widest font-black text-[var(--text-secondary)]-bright">
                   <input
                     type="checkbox"
                     checked={consentGranted}

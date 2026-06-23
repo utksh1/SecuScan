@@ -275,14 +275,14 @@ export default function Scans() {
   }
 
   return (
-    <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
+    <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-secondary)] p-6 md:p-12 space-y-12">
       {/* Neo-Brutalist Header */}
       <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10">
         <div className="space-y-4">
           <div className="bg-rag-blue text-black px-4 py-1 text-xs font-black uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
             Operational_Registry_v10.1
           </div>
-          <h1 className="text-6xl md:text-8xl font-black text-silver-bright uppercase tracking-tighter leading-none italic">
+          <h1 className="text-6xl md:text-8xl font-black text-[var(--text-secondary)]-bright uppercase tracking-tighter leading-none italic">
             Operational{" "}
             <span
               className="text-transparent stroke-white"
@@ -291,7 +291,7 @@ export default function Scans() {
               Registry
             </span>
           </h1>
-          <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic flex items-center gap-4">
+          <p className="text-sm font-mono text-[var(--text-secondary)]/40 uppercase tracking-widest italic flex items-center gap-4">
             Total_Registry_Keys: {total} // SYSTEM_STATUS:{" "}
             {loading ? "SYNCING..." : "SYNCED"}
             <span
@@ -302,7 +302,7 @@ export default function Scans() {
 
         <div className="flex items-center gap-12 border-l-4 border-silver-bright/10 pl-12 hidden lg:flex">
           <div className="text-right">
-            <span className="text-[10px] font-black text-silver/40 uppercase tracking-[0.3em] block mb-2 italic">
+            <span className="text-[10px] font-black text-[var(--text-secondary)]/40 uppercase tracking-[0.3em] block mb-2 italic">
               Integrity_Check
             </span>
             <span className="text-xs font-mono text-rag-green uppercase font-black">
@@ -320,7 +320,7 @@ export default function Scans() {
             className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-3 ${
               selectedIds.length === tasks.length && tasks.length > 0
                 ? "bg-rag-blue text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
-                : "bg-charcoal-dark text-silver/30 border-silver-bright/5 hover:border-silver-bright/20"
+                : "bg-[var(--bg-primary)] text-[var(--text-secondary)]/30 border-silver-bright/5 hover:border-silver-bright/20"
             }`}
           >
             <span className="material-symbols-outlined text-sm">
@@ -338,7 +338,7 @@ export default function Scans() {
               className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-2 ${
                 filter === f.value
                   ? "bg-silver-bright text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-x-0.5 -translate-y-0.5"
-                  : "bg-charcoal-dark text-silver/30 border-silver-bright/5 hover:border-silver-bright/20"
+                  : "bg-[var(--bg-primary)] text-[var(--text-secondary)]/30 border-silver-bright/5 hover:border-silver-bright/20"
               }`}
             >
               {f.label}
@@ -358,7 +358,7 @@ export default function Scans() {
               </span>
             </button>
           )}
-          <div className="flex items-center gap-4 text-[10px] font-mono text-silver/20 uppercase italic tracking-widest hidden sm:flex">
+          <div className="flex items-center gap-4 text-[10px] font-mono text-[var(--text-secondary)]/20 uppercase italic tracking-widest hidden sm:flex">
             Isolation_Protocol_Active //{" "}
             <span className="text-rag-blue">v4_stable</span>
           </div>
@@ -427,7 +427,7 @@ export default function Scans() {
                               className={`w-10 h-10 border-4 border-black flex items-center justify-center transition-all ${
                                 selectedIds.includes(task.task_id)
                                   ? "bg-rag-blue text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-x-1 -translate-y-1"
-                                  : "bg-charcoal-dark text-silver/10 hover:border-rag-blue/40"
+                                  : "bg-[var(--bg-primary)] text-[var(--text-secondary)]/10 hover:border-rag-blue/40"
                               }`}
                             >
                               <span className="material-symbols-outlined text-base font-black">
@@ -442,7 +442,7 @@ export default function Scans() {
                                   ? "bg-rag-green text-black"
                                   : task.status === "failed"
                                     ? "bg-rag-red text-black"
-                                    : "bg-charcoal-dark text-silver-bright/50"
+                                    : "bg-[var(--bg-primary)] text-[var(--text-secondary)]-bright/50"
                               }`}
                             >
                               {task.status}
@@ -454,16 +454,16 @@ export default function Scans() {
                                   {task.pending_count}
                                 </span>
                               )}
-                            <span className="text-[10px] font-mono text-silver/20 uppercase tracking-widest italic">
+                            <span className="text-[10px] font-mono text-[var(--text-secondary)]/20 uppercase tracking-widest italic">
                               OP_ID_{task.task_id.split("-")[0].toUpperCase()}
                             </span>
                           </div>
 
                           <div className="space-y-2">
-                            <h3 className="text-3xl font-black text-silver-bright uppercase tracking-tighter italic leading-none group-hover/card:text-rag-blue transition-colors">
+                            <h3 className="text-3xl font-black text-[var(--text-secondary)]-bright uppercase tracking-tighter italic leading-none group-hover/card:text-rag-blue transition-colors">
                               {task.tool}
                             </h3>
-                            <p className="text-xs font-mono text-silver/40 uppercase tracking-widest flex items-center gap-3">
+                            <p className="text-xs font-mono text-[var(--text-secondary)]/40 uppercase tracking-widest flex items-center gap-3">
                               <span className="material-symbols-outlined text-sm">
                                 target
                               </span>
@@ -474,16 +474,16 @@ export default function Scans() {
 
                         <div className="flex flex-row xl:flex-col items-center xl:items-end justify-between xl:justify-center gap-8 shrink-0">
                           <div className="text-left xl:text-right">
-                            <p className="text-[8px] font-black uppercase text-silver/20 tracking-[0.3em] mb-1 italic">
+                            <p className="text-[8px] font-black uppercase text-[var(--text-secondary)]/20 tracking-[0.3em] mb-1 italic">
                               Historical_Execution
                             </p>
-                            <p className="text-xs font-mono text-silver-bright/80 uppercase">
+                            <p className="text-xs font-mono text-[var(--text-secondary)]-bright/80 uppercase">
                               {formatLocaleDate(createDate)} //{" "}
                               {formatLocaleTime(createDate)}
                             </p>
                           </div>
                           {task.duration_seconds && (
-                            <div className="bg-charcoal-dark border-2 border-black px-4 py-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                            <div className="bg-[var(--bg-primary)] border-2 border-black px-4 py-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
                               <p className="text-[10px] font-black font-mono text-rag-blue leading-none">
                                 {formatDuration(
                                   task.duration_seconds,
@@ -525,11 +525,11 @@ export default function Scans() {
                                   {isTimeoutFailure ? "SCAN_TIMEOUT_DETECTED" : "SCAN_FAILED"}
                                 </p>
                                 {isTimeoutFailure && (
-                                  <p className="text-[10px] font-mono text-silver/60 uppercase tracking-widest">
+                                  <p className="text-[10px] font-mono text-[var(--text-secondary)]/60 uppercase tracking-widest">
                                     This scan exceeded its execution limit and was terminated automatically.
                                   </p>
                                 )}
-                                <p className="text-[10px] font-mono text-silver/50 break-words">
+                                <p className="text-[10px] font-mono text-[var(--text-secondary)]/50 break-words">
                                   {task.error_message}
                                 </p>
                               </div>
@@ -547,17 +547,17 @@ export default function Scans() {
                             exit={{ height: 0, opacity: 0 }}
                             className="overflow-hidden"
                           >
-                            <div className="mt-12 pt-12 border-t-4 border-black flex flex-wrap items-center justify-between gap-4 w-full bg-charcoal-dark/20 -mx-8 -mb-8 p-8 border-dashed">
+                            <div className="mt-12 pt-12 border-t-4 border-black flex flex-wrap items-center justify-between gap-4 w-full bg-[var(--bg-primary)]/20 -mx-8 -mb-8 p-8 border-dashed">
                               <div className="flex flex-wrap items-start gap-4">
                                 <div className="space-y-4">
-                                  <h5 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.3em] italic flex items-center gap-3">
+                                  <h5 className="text-[10px] font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.3em] italic flex items-center gap-3">
                                     <span className="w-1.5 h-3 bg-rag-blue"></span>{" "}
                                     Signal_Metadata
                                   </h5>
                                   <div className="space-y-2">
-                                    <p className="text-[10px] font-mono text-silver/40">
+                                    <p className="text-[10px] font-mono text-[var(--text-secondary)]/40">
                                       PLUGIN:{" "}
-                                      <span className="text-silver-bright uppercase">
+                                      <span className="text-[var(--text-secondary)]-bright uppercase">
                                         {task.plugin_id}
                                       </span>
                                     </p>
@@ -566,9 +566,9 @@ export default function Scans() {
                                         PHASE: {task.scan_phase.replace(/_/g, ' ')}
                                       </p>
                                     )}
-                                    <p className="text-[10px] font-mono text-silver/40">
+                                    <p className="text-[10px] font-mono text-[var(--text-secondary)]/40">
                                       SESSION:{" "}
-                                      <span className="text-silver-bright uppercase">
+                                      <span className="text-[var(--text-secondary)]-bright uppercase">
                                         ENCRYPTED_VTX
                                       </span>
                                     </p>
@@ -576,26 +576,26 @@ export default function Scans() {
                                 </div>
 
                                 <div className="space-y-4">
-                                  <h5 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.3em] italic flex items-center gap-3">
+                                  <h5 className="text-[10px] font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.3em] italic flex items-center gap-3">
                                     <span className="w-1.5 h-3 bg-rag-amber"></span>{" "}
                                     Time_Matrix
                                   </h5>
                                   <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1">
-                                      <span className="text-[8px] text-silver/20 uppercase font-black tracking-widest">
+                                      <span className="text-[8px] text-[var(--text-secondary)]/20 uppercase font-black tracking-widest">
                                         In_Lock
                                       </span>
-                                      <span className="text-[10px] font-mono text-silver-bright block">
+                                      <span className="text-[10px] font-mono text-[var(--text-secondary)]-bright block">
                                         {startDate
                                           ? formatLocaleTime(startDate)
                                           : "PENDING"}
                                       </span>
                                     </div>
                                     <div className="space-y-1">
-                                      <span className="text-[8px] text-silver/20 uppercase font-black tracking-widest">
+                                      <span className="text-[8px] text-[var(--text-secondary)]/20 uppercase font-black tracking-widest">
                                         Release
                                       </span>
-                                      <span className="text-[10px] font-mono text-silver-bright block">
+                                      <span className="text-[10px] font-mono text-[var(--text-secondary)]-bright block">
                                         {endDate
                                           ? formatLocaleTime(endDate)
                                           : "N/A"}
@@ -661,14 +661,14 @@ export default function Scans() {
             </motion.div>
           ) : (
             <div className="py-40 bg-charcoal/30 border-4 border-dashed border-silver-bright/5 text-center flex flex-col items-center gap-8">
-              <span className="material-symbols-outlined text-silver/5 text-9xl">
+              <span className="material-symbols-outlined text-[var(--text-secondary)]/5 text-9xl">
                 inventory_2
               </span>
               <div className="space-y-2">
-                <p className="text-xl font-black text-silver/20 uppercase tracking-[0.4em] italic">
+                <p className="text-xl font-black text-[var(--text-secondary)]/20 uppercase tracking-[0.4em] italic">
                   Archive Isolated
                 </p>
-                <p className="text-xs font-mono text-silver/10 uppercase tracking-widest">
+                <p className="text-xs font-mono text-[var(--text-secondary)]/10 uppercase tracking-widest">
                   No historical signal streams available for current selection
                 </p>
               </div>
@@ -705,7 +705,7 @@ export default function Scans() {
                   <p className="text-[10px] font-black text-rag-blue uppercase tracking-widest italic">
                     Records_Selected_For_Pruning
                   </p>
-                  <p className="text-[8px] font-mono text-silver/30 uppercase tracking-[0.2em]">
+                  <p className="text-[8px] font-mono text-[var(--text-secondary)]/30 uppercase tracking-[0.2em]">
                     Bulk_Action_Protocol_v4_Active
                   </p>
                 </div>
@@ -713,7 +713,7 @@ export default function Scans() {
               <div className="flex items-center gap-4">
                 <button
                   onClick={() => setSelectedIds([])}
-                  className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-silver/40 hover:text-silver transition-colors"
+                  className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)]/40 hover:text-[var(--text-secondary)] transition-colors"
                 >
                   Cancel
                 </button>

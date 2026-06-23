@@ -21,7 +21,7 @@ const CopyToClipboard: React.FC<CopyToClipboardProps> = ({ textToCopy }) => {
   };
 
   const buttonTone = {
-    idle: 'bg-black/30 border-white/10 text-silver hover:bg-white/5 hover:text-white',
+    idle: 'bg-black/30 border-white/10 text-[var(--text-secondary)] hover:bg-white/5 hover:text-[var(--text-primary)]',
     copied: 'bg-green-900/30 border-green-500 text-green-400',
     error: 'bg-red-900/30 border-red-500 text-red-300',
   }[copyState];

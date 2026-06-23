@@ -14,20 +14,23 @@
    Design Tokens
    ============================================ */
 :root {
-  /* Core Palette - Premium SOC */
-  --bg-primary: #0a0b0d;
-  /* Deep Onyx */
-  --bg-secondary: #121418;
-  /* Charcoal Dark */
-  --bg-tertiary: #1a1d23;
-  /* Charcoal Light */
-  --bg-elevated: #242930;
+ --bg-primary: #f8fafc;
 
+  --bg-secondary: #ffffff;
+
+  --bg-tertiary: #f1f5f9;
+
+  --bg-elevated: #e2e8f0
   /* Executive Silver Tokens */
+
   --accent-silver: #c0c0c8;
   --accent-silver-dim: #8e9196;
   --accent-silver-bright: #f0f1f5;
+ --text-primary: #111827;
 
+  --text-secondary: #4b5563;
+
+  --text-muted: #6b7280;
   /* Status Signals (Neo-Brutalist RAG) */
   --rag-red: #ff3b3b;
   --rag-amber: #ffb800;
@@ -62,7 +65,25 @@
   --sidebar-collapsed: 80px;
   --sidebar-expanded: 280px;
 }
+.dark {
 
+  /* Dark theme */
+
+  --bg-primary: #0a0b0d;
+
+  --bg-secondary: #121418;
+
+  --bg-tertiary: #1a1d23;
+
+  --bg-elevated: #242930;
+
+  --text-primary: #f4f4f5;
+
+  --text-secondary: #a1a1aa;
+
+  --text-muted: #858b99;
+
+}
 /* Base Overrides */
 body {
   background-color: var(--bg-primary);
@@ -105,7 +126,29 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+.theme-light {
+  /* Backgrounds */
+  --bg-primary: #f8fafc;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f1f5f9;
+  --bg-elevated: #e2e8f0;
 
+  /* Typography */
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-muted: #6b7280;
+
+  /* Executive Silver */
+  --accent-silver: #374151;
+  --accent-silver-dim: #6b7280;
+  --accent-silver-bright: #111827;
+
+  /* Keep Brand Colors */
+  --rag-red: #ef4444;
+  --rag-amber: #f59e0b;
+  --rag-green: #10b981;
+  --rag-blue: #2563eb;
+}
 body {
   font-family: var(--font-ui);
   font-size: var(--text-sm);
@@ -476,35 +519,35 @@ button,
     line-height: 1.4 !important;
   }
 
-  .text-silver\/5 {
+  .text-\[var\(--text-secondary\)\]\/5 {
     color: rgb(161 161 170 / 0.38) !important;
   }
 
-  .text-silver\/10 {
+  .text-\[var\(--text-secondary\)\]\/10 {
     color: rgb(161 161 170 / 0.48) !important;
   }
 
-  .text-silver\/20 {
+  .text-\[var\(--text-secondary\)\]\/20 {
     color: rgb(161 161 170 / 0.60) !important;
   }
 
-  .text-silver\/25 {
+  .text-\[var\(--text-secondary\)\]\/25 {
     color: rgb(161 161 170 / 0.64) !important;
   }
 
-  .text-silver\/30 {
+  .text-\[var\(--text-secondary\)\]\/30 {
     color: rgb(161 161 170 / 0.68) !important;
   }
 
-  .text-silver\/40 {
+  .text-\[var\(--text-secondary\)\]\/40 {
     color: rgb(161 161 170 / 0.76) !important;
   }
 
-  .placeholder\:text-silver\/10::placeholder {
+  .placeholder\:text-\[var\(--text-secondary\)\]\/10::placeholder {
     color: rgb(161 161 170 / 0.58) !important;
   }
 
-  .placeholder\:text-silver\/20::placeholder {
+  .placeholder\:text-\[var\(--text-secondary\)\]\/20::placeholder {
     color: rgb(161 161 170 / 0.66) !important;
   }
 }

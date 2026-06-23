@@ -125,14 +125,14 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
         <div className="bg-charcoal border-4 border-black shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]">
           {/* Header */}
           <div className="border-b-4 border-black p-6">
-            <h2 id="modal-title" className="text-xl font-black uppercase tracking-wider text-silver-bright">
+            <h2 id="modal-title" className="text-xl font-black uppercase tracking-wider text-[var(--text-secondary)]-bright">
               {title}
             </h2>
           </div>
 
           {/* Body */}
           <div className="p-6">
-            <p id="modal-description" className="text-sm font-mono text-silver-bright/70 leading-relaxed">
+            <p id="modal-description" className="text-sm font-mono text-[var(--text-secondary)]-bright/70 leading-relaxed">
               {message}
             </p>
           </div>
@@ -141,7 +141,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
           <div className="border-t-4 border-black p-6 flex justify-end gap-4">
             <button
               onClick={onCancel}
-              className="px-6 py-3 bg-charcoal-dark border-2 border-black text-xs font-black uppercase tracking-wider text-silver-bright/60 hover:text-silver-bright hover:border-silver-bright/30 transition-all"
+              className="px-6 py-3 bg-[var(--bg-primary)] border-2 border-black text-xs font-black uppercase tracking-wider text-[var(--text-secondary)]-bright/60 hover:text-[var(--text-secondary)]-bright hover:border-silver-bright/30 transition-all"
             >
               {cancelText}
             </button>

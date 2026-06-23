@@ -25,7 +25,6 @@ function getSystemTheme(): Theme {
   }
   return 'dark'
 }
-
 function applyTheme(theme: Theme) {
   const root = document.documentElement
   if (theme === 'dark') {
@@ -36,13 +35,12 @@ function applyTheme(theme: Theme) {
     root.classList.add('theme-light')
   }
 }
-
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
-
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     // Priority 1: manual localStorage override
     const saved = localStorage.getItem(STORAGE_KEY)
+   
     if (saved === 'light' || saved === 'dark') return saved
     // Priority 2: OS preference
     return getSystemTheme()
@@ -78,6 +76,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const toggleTheme = useCallback(() => {
+    console.log('hi')
     setTheme(theme === 'dark' ? 'light' : 'dark')
   }, [theme, setTheme])
 

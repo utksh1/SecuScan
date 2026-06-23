@@ -24,7 +24,7 @@ const NavItem = ({ to, icon, label, isExpanded, highlight = false }: NavItemProp
                 ${isActive
                     ? 'bg-accent-silver/10 text-primary shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)]'
                     : highlight
-                        ? 'bg-rag-blue/15 border border-rag-blue/30 text-silver-bright hover:bg-rag-blue/25'
+                        ? 'bg-rag-blue/15 border border-rag-blue/30 text-[var(--text-secondary)]-bright hover:bg-rag-blue/25'
                         : 'text-secondary hover:text-primary hover:bg-accent-silver/5'}
             `}
             title={!isExpanded ? label : undefined}
@@ -67,7 +67,7 @@ const NavItem = ({ to, icon, label, isExpanded, highlight = false }: NavItemProp
                                 exit={{ opacity: 0, x: -10 }}
                                 className={`
                                     text-[11px] font-bold tracking-[0.15em] uppercase whitespace-nowrap z-10
-                                    ${isActive ? 'text-primary' : highlight ? 'text-silver-bright' : 'text-secondary'}
+                                    ${isActive ? 'text-primary' : highlight ? 'text-[var(--text-secondary)]-bright' : 'text-secondary'}
                                 `}
                             >
                                 {label}
@@ -117,7 +117,14 @@ export default function Sidebar() {
             animate={{ width: isExpanded ? 220 : 64 }}
             onClick={() => setIsExpanded(!isExpanded)}
             className={`
-                hidden lg:flex flex-col h-screen fixed left-0 top-0 bg-secondary border-r border-accent-silver/10 z-50
+                 hidden lg:flex flex-col h-screen fixed left-0 top-0
+
+    bg-white text-black
+
+    dark:bg-[var(--bg-secondary)]
+text-[var(--text-primary)] dark:text-[var(--text-primary)]
+
+    border-r border-slate-200 dark:border-slate-700 z-50
                 shadow-[4px_0_24px_rgba(0,0,0,0.4)] overflow-hidden cursor-pointer
             `}
         >

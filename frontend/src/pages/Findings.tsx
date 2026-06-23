@@ -79,14 +79,14 @@ const severityConfig: Record<string, { label: string; accent: string; chip: stri
   },
   low: {
     label: 'Low',
-    accent: 'text-silver-bright',
-    chip: 'bg-charcoal-dark text-silver-bright border border-silver-bright/15',
+    accent: 'text-[var(--text-secondary)]-bright',
+    chip: 'bg-[var(--bg-primary)] text-[var(--text-secondary)]-bright border border-silver-bright/15',
     rail: 'bg-silver/50',
   },
   info: {
     label: 'Info',
-    accent: 'text-silver',
-    chip: 'bg-charcoal-dark text-silver border border-silver/15',
+    accent: 'text-[var(--text-secondary)]',
+    chip: 'bg-[var(--bg-primary)] text-[var(--text-secondary)] border border-silver/15',
     rail: 'bg-silver/20',
   },
 }
@@ -109,7 +109,7 @@ function getStatusTone(status: FindingStatus) {
     case 'reviewed':
       return 'text-rag-green border-rag-green/25 bg-rag-green/10'
     case 'suppressed':
-      return 'text-silver border-silver/20 bg-silver/5'
+      return 'text-[var(--text-secondary)] border-silver/20 bg-silver/5'
     default:
       return 'text-rag-amber border-rag-amber/20 bg-rag-amber/10'
   }
@@ -118,12 +118,12 @@ function getStatusTone(status: FindingStatus) {
 function filterPillClasses(isActive: boolean) {
   return isActive
     ? 'border-black bg-silver-bright text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
-    : 'border-silver-bright/10 bg-charcoal-dark text-silver/65 hover:border-silver-bright/30 hover:text-silver-bright'
+    : 'border-silver-bright/10 bg-[var(--bg-primary)] text-[var(--text-secondary)]/65 hover:border-silver-bright/30 hover:text-[var(--text-secondary)]-bright'
 }
 
-const filterLabelClass ='block text-[10px] font-black uppercase tracking-[0.2em] text-silver-bright'
+const filterLabelClass ='block text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]-bright'
 const filterControlClass =
-  'h-11 w-full border-2 border-silver-bright/10 bg-charcoal-dark px-3 text-xs font-mono text-silver-bright focus:border-rag-red focus:outline-none'
+  'h-11 w-full border-2 border-silver-bright/10 bg-[var(--bg-primary)] px-3 text-xs font-mono text-[var(--text-secondary)]-bright focus:border-rag-red focus:outline-none'
 
 type SortMode = 'risk' | 'severity' | 'newest' | 'oldest' | 'target'
 
@@ -531,7 +531,7 @@ export default function Findings() {
     }
   }, [selectedFindingId]) // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <div className="min-h-screen bg-charcoal-dark text-silver px-4 py-6 md:px-8 md:py-10">
+    <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-secondary)] px-4 py-6 md:px-8 md:py-10">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8">
         {/* Header */}
         <header className="border-b-4 border-silver-bright/10 pb-8">
@@ -540,17 +540,17 @@ export default function Findings() {
           </div>
           <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
             <div className="space-y-3">
-              <h1 className="text-5xl font-black uppercase tracking-tighter text-silver-bright italic md:text-7xl">
+              <h1 className="text-5xl font-black uppercase tracking-tighter text-[var(--text-secondary)]-bright italic md:text-7xl">
                 Findings <span className="text-transparent" style={{ WebkitTextStroke: '1px var(--accent-silver-bright)' }}>Desk</span>
               </h1>
-              <p className="text-xs font-mono uppercase tracking-[0.24em] text-silver/45">
+              <p className="text-xs font-mono uppercase tracking-[0.24em] text-[var(--text-secondary)]/45">
                 Active triage feed // {triageMetrics.total} total signals // {triageMetrics.unresolved} awaiting analyst action
               </p>
             </div>
 
             <div className="grid w-full gap-3 sm:grid-cols-2 xl:w-auto xl:grid-cols-4">
               {[
-                { label: 'Visible', value: triageMetrics.visible, tone: 'text-silver-bright' },
+                { label: 'Visible', value: triageMetrics.visible, tone: 'text-[var(--text-secondary)]-bright' },
                 { label: 'Critical + High', value: triageMetrics.active, tone: 'text-rag-red' },
                 { label: 'Unresolved', value: triageMetrics.unresolved, tone: 'text-rag-amber' },
                 { label: 'Reviewed', value: enrichedFindings.filter((finding) => finding.status === 'reviewed').length, tone: 'text-rag-green' },
@@ -559,7 +559,7 @@ export default function Findings() {
                   key={metric.label}
                   className="border-2 border-black bg-charcoal px-4 py-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
                 >
-                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.25em] text-silver/55">{metric.label}</p>
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.25em] text-[var(--text-secondary)]/55">{metric.label}</p>
                   <p className={`text-3xl font-black italic tracking-tight ${metric.tone}`}>{String(metric.value).padStart(2, '0')}</p>
                 </div>
               ))}
@@ -579,14 +579,14 @@ export default function Findings() {
                     value={searchQuery}
                     onChange={(event) => setSearchQuery(event.target.value)}
                     placeholder="Title, target, CVE, remediation..."
-                    className={`${filterControlClass} px-4 pr-12 placeholder:text-silver/20`}
+                    className={`${filterControlClass} px-4 pr-12 placeholder:text-[var(--text-secondary)]/20`}
                   />
                   {searchQuery.trim() && (
                     <button
                       type="button"
                       aria-label="Clear search"
                       onClick={() => setSearchQuery('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-silver/50 hover:text-silver-bright transition"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]/50 hover:text-[var(--text-secondary)]-bright transition"
                     >
                       ✕
                     </button>
@@ -610,7 +610,7 @@ export default function Findings() {
                     className={`min-h-10 border px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] transition-all ${
                       filterSeverity === severity
                         ? `${severityConfig[severity].chip} border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]`
-                        : 'border-silver-bright/10 bg-charcoal-dark text-silver/65 hover:border-silver-bright/30'
+                        : 'border-silver-bright/10 bg-[var(--bg-primary)] text-[var(--text-secondary)]/65 hover:border-silver-bright/30'
                     }`}
                   >
                     {severityConfig[severity].label} {countsBySeverity[severity] || 0}
@@ -728,7 +728,7 @@ export default function Findings() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <label className="inline-flex h-11 items-center gap-3 border border-silver-bright/10 bg-charcoal-dark px-4 text-[10px] font-black uppercase tracking-[0.18em] text-silver/75">
+                <label className="inline-flex h-11 items-center gap-3 border border-silver-bright/10 bg-[var(--bg-primary)] px-4 text-[10px] font-black uppercase tracking-[0.18em] text-[var(--text-secondary)]/75">
                   <input
                     type="checkbox"
                     checked={filterValidatedOnly}
@@ -737,7 +737,7 @@ export default function Findings() {
                   />
                   Validated Only
                 </label>
-                <label className="inline-flex h-11 items-center gap-3 border border-silver-bright/10 bg-charcoal-dark px-4 text-[10px] font-black uppercase tracking-[0.18em] text-silver/75">
+                <label className="inline-flex h-11 items-center gap-3 border border-silver-bright/10 bg-[var(--bg-primary)] px-4 text-[10px] font-black uppercase tracking-[0.18em] text-[var(--text-secondary)]/75">
                   <input
                     type="checkbox"
                     checked={filterHighConfidence}
@@ -758,7 +758,7 @@ export default function Findings() {
                 <button
                   type="button"
                   onClick={resetAllFilters}
-                  className="h-11 w-full border border-silver-bright/20 bg-charcoal-dark px-4 text-[10px] font-black uppercase tracking-[0.18em] text-silver/65 transition-all hover:border-rag-red hover:text-silver-bright xl:w-auto xl:min-w-[180px]"
+                  className="h-11 w-full border border-silver-bright/20 bg-[var(--bg-primary)] px-4 text-[10px] font-black uppercase tracking-[0.18em] text-[var(--text-secondary)]/65 transition-all hover:border-rag-red hover:text-[var(--text-secondary)]-bright xl:w-auto xl:min-w-[180px]"
                 >
                   Reset Filters
                 </button>
@@ -773,7 +773,7 @@ export default function Findings() {
             aria-label="active filters"
             className="flex flex-wrap items-center gap-2 border border-silver-bright/10 bg-charcoal/60 px-4 py-3"
           >
-            <span className="mr-1 text-[10px] font-black uppercase tracking-[0.2em] text-silver/40">
+            <span className="mr-1 text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/40">
               Active Filters
             </span>
             {activeFilters.map(({ key, label }) => (
@@ -793,12 +793,12 @@ export default function Findings() {
           <motion.section variants={sectionVariants} initial="hidden" animate="visible">
             {loading ? (
               <div className="border-4 border-dashed border-silver-bright/10 bg-charcoal/40 px-6 py-16 text-center">
-                <p className="text-sm font-mono uppercase tracking-[0.25em] text-silver/50">Synchronizing findings feed...</p>
+                <p className="text-sm font-mono uppercase tracking-[0.25em] text-[var(--text-secondary)]/50">Synchronizing findings feed...</p>
               </div>
             ) : filteredFindings.length === 0 ? (
               <div className="border-4 border-dashed border-silver-bright/10 bg-charcoal/40 px-6 py-20 text-center">
-                <p className="text-2xl font-black uppercase tracking-[0.25em] text-silver/25 italic">No Findings Match</p>
-                <p className="mt-3 text-xs font-mono uppercase tracking-[0.2em] text-silver/15">Adjust filters to reopen the queue.</p>
+                <p className="text-2xl font-black uppercase tracking-[0.25em] text-[var(--text-secondary)]/25 italic">No Findings Match</p>
+                <p className="mt-3 text-xs font-mono uppercase tracking-[0.2em] text-[var(--text-secondary)]/15">Adjust filters to reopen the queue.</p>
               </div>
             ) : (
               <div
@@ -839,7 +839,7 @@ export default function Findings() {
                                 <p className={`text-lg font-black uppercase tracking-[0.18em] ${severityConfig[row.severity].accent}`}>
                                   {severityConfig[row.severity].label}
                                 </p>
-                                <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-silver/40">
+                                <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-[var(--text-secondary)]/40">
                                   {row.count} visible in queue
                                 </p>
                               </div>
@@ -873,11 +873,11 @@ export default function Findings() {
                                       <span className={`border px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${getStatusTone(finding.status)}`}>
                                         {finding.status}
                                       </span>
-                                      <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-silver/35">
+                                      <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-[var(--text-secondary)]/35">
                                         {finding.category || 'Uncategorized'}
                                       </span>
                                       {finding.finding_kind ? (
-                                        <span className="border border-silver-bright/10 bg-charcoal-dark px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-silver/70">
+                                        <span className="border border-silver-bright/10 bg-[var(--bg-primary)] px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-[var(--text-secondary)]/70">
                                           {finding.finding_kind.replace('_', ' ')}
                                         </span>
                                       ) : null}
@@ -887,20 +887,20 @@ export default function Findings() {
                                         </span>
                                       ) : null}
                                       {typeof finding.confidence === 'number' ? (
-                                        <span className="border border-silver-bright/10 bg-charcoal-dark px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-silver-bright">
+                                        <span className="border border-silver-bright/10 bg-[var(--bg-primary)] px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-[var(--text-secondary)]-bright">
                                           {(finding.confidence * 100).toFixed(0)}% confidence
                                         </span>
                                       ) : null}
                                     </div>
 
                                     <div>
-                                      <h3 className="text-xl font-black uppercase tracking-tight text-silver-bright">{finding.title}</h3>
-                                      <p className="mt-2 text-[11px] font-mono uppercase tracking-[0.16em] text-silver/45">
+                                      <h3 className="text-xl font-black uppercase tracking-tight text-[var(--text-secondary)]-bright">{finding.title}</h3>
+                                      <p className="mt-2 text-[11px] font-mono uppercase tracking-[0.16em] text-[var(--text-secondary)]/45">
                                         Target // {finding.target || 'Unknown'} // Observed // {formatLocaleDate(finding.discovered_at)}
                                       </p>
                                     </div>
 
-                                    <p className="max-w-4xl text-sm leading-relaxed text-silver/70">
+                                    <p className="max-w-4xl text-sm leading-relaxed text-[var(--text-secondary)]/70">
                                       {finding.description || 'No description provided.'}
                                     </p>
                                   </div>
@@ -908,22 +908,22 @@ export default function Findings() {
                                   <div className="flex flex-row items-end gap-6 lg:min-w-[140px] lg:flex-col lg:items-end">
                                     {typeof finding.occurrence_count === 'number' && finding.occurrence_count > 1 ? (
                                       <div className="text-right">
-                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Seen</p>
-                                        <p className="text-2xl font-black italic text-silver-bright">
+                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/35">Seen</p>
+                                        <p className="text-2xl font-black italic text-[var(--text-secondary)]-bright">
                                           {finding.occurrence_count}
                                         </p>
                                       </div>
                                     ) : null}
                                     {typeof finding.cvss === 'number' ? (
                                       <div className="text-right">
-                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">CVSS</p>
-                                        <p className={`text-3xl font-black italic ${finding.cvss >= 9 ? 'text-rag-red' : 'text-silver-bright'}`}>
+                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/35">CVSS</p>
+                                        <p className={`text-3xl font-black italic ${finding.cvss >= 9 ? 'text-rag-red' : 'text-[var(--text-secondary)]-bright'}`}>
                                           {finding.cvss.toFixed(1)}
                                         </p>
                                       </div>
                                     ) : null}
 
-                                    <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-silver-bright' : 'text-silver/30'}`}>
+                                    <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-[var(--text-secondary)]-bright' : 'text-[var(--text-secondary)]/30'}`}>
                                       east
                                     </span>
                                   </div>
@@ -973,79 +973,79 @@ export default function Findings() {
                     </div>
 
                     <div>
-                      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-silver/35">Selected Finding</p>
-                      <h2 className="text-3xl font-black uppercase italic tracking-tight text-silver-bright">{selectedFinding.title}</h2>
+                      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/35">Selected Finding</p>
+                      <h2 className="text-3xl font-black uppercase italic tracking-tight text-[var(--text-secondary)]-bright">{selectedFinding.title}</h2>
                     </div>
 
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
-                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Target</p>
-                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">{selectedFinding.target || 'Unknown'}</p>
+                      <div className="border border-silver-bright/8 bg-[var(--bg-primary)] p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/35">Target</p>
+                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-[var(--text-secondary)]-bright">{selectedFinding.target || 'Unknown'}</p>
                       </div>
-                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
-                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Asset</p>
-                        <p className="mt-2 text-xs font-mono uppercase tracking-[0.14em] text-silver-bright break-all">
+                      <div className="border border-silver-bright/8 bg-[var(--bg-primary)] p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/35">Asset</p>
+                        <p className="mt-2 text-xs font-mono uppercase tracking-[0.14em] text-[var(--text-secondary)]-bright break-all">
                           {selectedFinding.asset_id || selectedFinding.asset_refs?.[0] || 'N/A'}
                         </p>
                       </div>
-                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
-                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Category</p>
-                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">{selectedFinding.category || 'Uncategorized'}</p>
+                      <div className="border border-silver-bright/8 bg-[var(--bg-primary)] p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/35">Category</p>
+                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-[var(--text-secondary)]-bright">{selectedFinding.category || 'Uncategorized'}</p>
                       </div>
-                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
-                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Finding Kind</p>
-                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">
+                      <div className="border border-silver-bright/8 bg-[var(--bg-primary)] p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/35">Finding Kind</p>
+                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-[var(--text-secondary)]-bright">
                           {selectedFinding.finding_kind?.replace('_', ' ') || 'N/A'}
                         </p>
                       </div>
-                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
-                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Observed</p>
-                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">
+                      <div className="border border-silver-bright/8 bg-[var(--bg-primary)] p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/35">Observed</p>
+                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-[var(--text-secondary)]-bright">
                           {formatLocaleDate(selectedFinding.discovered_at)}
                         </p>
                       </div>
-                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
-                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">CVSS</p>
-                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">
+                      <div className="border border-silver-bright/8 bg-[var(--bg-primary)] p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/35">CVSS</p>
+                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-[var(--text-secondary)]-bright">
                           {typeof selectedFinding.cvss === 'number' ? selectedFinding.cvss.toFixed(1) : 'N/A'}
                         </p>
                       </div>
-                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
-                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Validation</p>
-                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">
+                      <div className="border border-silver-bright/8 bg-[var(--bg-primary)] p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/35">Validation</p>
+                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-[var(--text-secondary)]-bright">
                           {selectedFinding.validated ? 'Validated' : selectedFinding.validation_method || 'Unvalidated'}
                         </p>
                       </div>
-                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
-                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Analyst State</p>
-                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">
+                      <div className="border border-silver-bright/8 bg-[var(--bg-primary)] p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/35">Analyst State</p>
+                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-[var(--text-secondary)]-bright">
                           {selectedFinding.analyst_status || 'N/A'}
                         </p>
                       </div>
-                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
-                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">CPE</p>
-                        <p className="mt-2 text-xs font-mono uppercase tracking-[0.14em] text-silver-bright">
+                      <div className="border border-silver-bright/8 bg-[var(--bg-primary)] p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/35">CPE</p>
+                        <p className="mt-2 text-xs font-mono uppercase tracking-[0.14em] text-[var(--text-secondary)]-bright">
                           {selectedFinding.cpe || 'N/A'}
                         </p>
                       </div>
-                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
-                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Seen Across Scans</p>
-                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">
+                      <div className="border border-silver-bright/8 bg-[var(--bg-primary)] p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/35">Seen Across Scans</p>
+                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-[var(--text-secondary)]-bright">
                           {selectedFinding.occurrence_count || 1}
                         </p>
                       </div>
-                      <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
-                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Evidence Count</p>
-                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-silver-bright">
+                      <div className="border border-silver-bright/8 bg-[var(--bg-primary)] p-3">
+                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/35">Evidence Count</p>
+                        <p className="mt-2 text-sm font-mono uppercase tracking-[0.14em] text-[var(--text-secondary)]-bright">
                           {selectedFinding.evidence_count || selectedFinding.evidence?.length || 0}
                         </p>
                       </div>
                     </div>
 
                     {typeof selectedFinding.risk_score === 'number' && (
-                      <div className="border-2 border-black bg-charcoal-dark p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                      <div className="border-2 border-black bg-[var(--bg-primary)] p-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                         <div className="flex items-center justify-between">
-                          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Risk Score</p>
+                          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/35">Risk Score</p>
                           <p className={`text-2xl font-black italic ${
                             selectedFinding.risk_score >= 7 ? 'text-rag-red' :
                             selectedFinding.risk_score >= 4 ? 'text-rag-amber' : 'text-rag-blue'
@@ -1058,14 +1058,14 @@ export default function Findings() {
                             {selectedFinding.risk_factors.map((rf) => (
                               <div key={rf.factor} className="flex items-center justify-between text-[10px]">
                                 <div className="flex items-center gap-2 min-w-0">
-                                  <span className="font-black uppercase tracking-[0.15em] text-silver/45">{rf.label}</span>
-                                  <span className="text-silver/30 text-[9px] font-mono">({(rf.weight * 100).toFixed(0)}%)</span>
+                                  <span className="font-black uppercase tracking-[0.15em] text-[var(--text-secondary)]/45">{rf.label}</span>
+                                  <span className="text-[var(--text-secondary)]/30 text-[9px] font-mono">({(rf.weight * 100).toFixed(0)}%)</span>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
-                                  <span className="font-mono text-silver-bright">{rf.score.toFixed(1)}</span>
+                                  <span className="font-mono text-[var(--text-secondary)]-bright">{rf.score.toFixed(1)}</span>
                                   <span className={`text-[9px] font-mono ${
                                     rf.contribution >= 2 ? 'text-rag-red' :
-                                    rf.contribution >= 1 ? 'text-rag-amber' : 'text-silver/40'
+                                    rf.contribution >= 1 ? 'text-rag-amber' : 'text-[var(--text-secondary)]/40'
                                   }`}>
                                     +{rf.contribution.toFixed(1)}
                                   </span>
@@ -1080,11 +1080,11 @@ export default function Findings() {
 
                   <div className="space-y-5">
                     <div>
-                      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-silver/35">Evidence Brief</p>
-                      <div className="border-l-4 border-rag-red bg-charcoal-dark p-4">
-                        <p className="text-sm leading-relaxed text-silver/78">{selectedFinding.description || 'No description provided.'}</p>
+                      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/35">Evidence Brief</p>
+                      <div className="border-l-4 border-rag-red bg-[var(--bg-primary)] p-4">
+                        <p className="text-sm leading-relaxed text-[var(--text-secondary)]/78">{selectedFinding.description || 'No description provided.'}</p>
                         {selectedFinding.confidence_reason ? (
-                          <p className="mt-3 text-[11px] font-mono uppercase tracking-[0.12em] text-silver/45">
+                          <p className="mt-3 text-[11px] font-mono uppercase tracking-[0.12em] text-[var(--text-secondary)]/45">
                             {selectedFinding.confidence_reason}
                           </p>
                         ) : null}
@@ -1093,17 +1093,17 @@ export default function Findings() {
 
                     {selectedFinding.evidence && selectedFinding.evidence.length > 0 ? (
                       <div>
-                        <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-silver/35">Evidence Items</p>
+                        <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/35">Evidence Items</p>
                         <div className="space-y-2">
                           {selectedFinding.evidence.slice(0, 5).map((item, index) => (
-                            <div key={`${selectedFinding.id}-evidence-${index}`} className="border border-silver-bright/8 bg-charcoal-dark p-3 text-[11px] font-mono text-silver/72">
-                              <p className="text-[10px] uppercase tracking-[0.18em] text-silver/35">
+                            <div key={`${selectedFinding.id}-evidence-${index}`} className="border border-silver-bright/8 bg-[var(--bg-primary)] p-3 text-[11px] font-mono text-[var(--text-secondary)]/72">
+                              <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--text-secondary)]/35">
                                 {String(item.label || item.type || 'evidence')}
                               </p>
-                              <p className="mt-2 break-words whitespace-pre-wrap text-silver-bright">
+                              <p className="mt-2 break-words whitespace-pre-wrap text-[var(--text-secondary)]-bright">
                                 {String(item.value ?? '')}
                               </p>
-                              <p className="mt-2 text-[9px] uppercase tracking-[0.16em] text-silver/30">
+                              <p className="mt-2 text-[9px] uppercase tracking-[0.16em] text-[var(--text-secondary)]/30">
                                 {String(item.source || 'scanner')} {item.confidence ? `// ${(Number(item.confidence) * 100).toFixed(0)}%` : ''}
                               </p>
                             </div>
@@ -1114,10 +1114,10 @@ export default function Findings() {
 
                     {selectedFinding.corroborating_sources && selectedFinding.corroborating_sources.length > 0 ? (
                       <div>
-                        <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-silver/35">Corroborating Sources</p>
+                        <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/35">Corroborating Sources</p>
                         <div className="flex flex-wrap gap-2">
                           {selectedFinding.corroborating_sources.map((source) => (
-                            <span key={source} className="border border-silver-bright/10 bg-charcoal-dark px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-silver-bright">
+                            <span key={source} className="border border-silver-bright/10 bg-[var(--bg-primary)] px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-[var(--text-secondary)]-bright">
                               {source}
                             </span>
                           ))}
@@ -1126,8 +1126,8 @@ export default function Findings() {
                     ) : null}
 
                     <div>
-                      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-silver/35">Remediation</p>
-                      <div className="border-l-4 border-rag-green bg-charcoal-dark p-4">
+                      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/35">Remediation</p>
+                      <div className="border-l-4 border-rag-green bg-[var(--bg-primary)] p-4">
                         <p className="text-sm leading-relaxed text-rag-green/85">
                           {selectedFinding.remediation || 'No remediation guidance captured.'}
                         </p>
@@ -1136,7 +1136,7 @@ export default function Findings() {
                   </div>
 
                   <div className="space-y-3 border-t border-silver-bright/8 pt-5">
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-silver/35">Workflow Actions</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/35">Workflow Actions</p>
                     <div className="grid gap-2 sm:grid-cols-2">
                       <button
                         type="button"
@@ -1155,7 +1155,7 @@ export default function Findings() {
                       <button
                         type="button"
                         onClick={() => updateFindingStatus(selectedFinding.id, 'suppressed')}
-                        className="border border-silver/20 bg-silver/5 px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-silver"
+                        className="border border-silver/20 bg-silver/5 px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-[var(--text-secondary)]"
                       >
                         Suppress
                       </button>
@@ -1171,8 +1171,8 @@ export default function Findings() {
                 </div>
               ) : (
                 <div className="px-6 py-16 text-center">
-                  <p className="text-2xl font-black uppercase tracking-[0.22em] text-silver/20 italic">Queue Clear</p>
-                  <p className="mt-3 text-xs font-mono uppercase tracking-[0.2em] text-silver/15">
+                  <p className="text-2xl font-black uppercase tracking-[0.22em] text-[var(--text-secondary)]/20 italic">Queue Clear</p>
+                  <p className="mt-3 text-xs font-mono uppercase tracking-[0.2em] text-[var(--text-secondary)]/15">
                     Select a finding to review evidence and remediation.
                   </p>
                 </div>

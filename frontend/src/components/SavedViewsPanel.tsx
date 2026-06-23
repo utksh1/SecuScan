@@ -92,18 +92,18 @@ function ViewRow({ view, onApply, onRename, onDelete }: ViewRowProps) {
               onClick={(e) => e.stopPropagation()}
               autoFocus
               maxLength={60}
-              className="w-full border-0 border-b-2 border-rag-blue bg-transparent text-[11px] font-black uppercase tracking-widest text-silver-bright outline-none"
+              className="w-full border-0 border-b-2 border-rag-blue bg-transparent text-[11px] font-black uppercase tracking-widest text-[var(--text-secondary)]-bright outline-none"
               aria-label="Rename saved view"
             />
           ) : (
-            <p className="truncate text-[11px] font-black uppercase tracking-[0.18em] text-silver-bright transition-colors group-hover:text-white">
+            <p className="truncate text-[11px] font-black uppercase tracking-[0.18em] text-[var(--text-secondary)]-bright transition-colors group-hover:text-[var(--text-primary)]">
               {view.name}
             </p>
           )}
-          <p className="mt-1 truncate text-[9px] font-mono uppercase tracking-[0.12em] text-silver/35">
+          <p className="mt-1 truncate text-[9px] font-mono uppercase tracking-[0.12em] text-[var(--text-secondary)]/35">
             {presetSummary(view.preset)}
           </p>
-          <p className="mt-0.5 text-[8px] font-mono text-silver/20">
+          <p className="mt-0.5 text-[8px] font-mono text-[var(--text-secondary)]/20">
             {formatRelative(view.updatedAt)}
           </p>
         </button>
@@ -119,7 +119,7 @@ function ViewRow({ view, onApply, onRename, onDelete }: ViewRowProps) {
                 setEditing(true)
                 setTimeout(() => inputRef.current?.select(), 0)
               }}
-              className="flex h-6 w-6 items-center justify-center text-silver/40 transition-colors hover:text-rag-blue"
+              className="flex h-6 w-6 items-center justify-center text-[var(--text-secondary)]/40 transition-colors hover:text-rag-blue"
             >
               <span className="material-symbols-outlined text-sm">edit</span>
             </button>
@@ -142,7 +142,7 @@ function ViewRow({ view, onApply, onRename, onDelete }: ViewRowProps) {
                 type="button"
                 aria-label="Delete view"
                 onClick={() => setConfirmDelete(true)}
-                className="flex h-6 w-6 items-center justify-center text-silver/40 transition-colors hover:text-rag-red"
+                className="flex h-6 w-6 items-center justify-center text-[var(--text-secondary)]/40 transition-colors hover:text-rag-red"
               >
                 <span className="material-symbols-outlined text-sm">delete</span>
               </button>
@@ -212,7 +212,7 @@ export default function SavedViewsPanel({
         className={`flex items-center gap-2 border-2 px-4 py-2 text-[10px] font-black uppercase tracking-[0.2em] transition-all whitespace-nowrap ${
           open
             ? 'border-black bg-silver-bright text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
-            : 'border-silver-bright/10 bg-charcoal-dark text-silver/65 hover:border-silver-bright/30 hover:text-silver-bright'
+            : 'border-silver-bright/10 bg-[var(--bg-primary)] text-[var(--text-secondary)]/65 hover:border-silver-bright/30 hover:text-[var(--text-secondary)]-bright'
         }`}
       >
         <span className="material-symbols-outlined text-sm">bookmarks</span>
@@ -220,7 +220,7 @@ export default function SavedViewsPanel({
         {views.length > 0 && (
           <span
             className={`flex h-4 min-w-4 items-center justify-center px-1 text-[8px] font-black ${
-              open ? 'bg-black text-silver-bright' : 'bg-rag-blue text-black'
+              open ? 'bg-black text-[var(--text-secondary)]-bright' : 'bg-rag-blue text-black'
             }`}
           >
             {views.length}
@@ -243,21 +243,21 @@ export default function SavedViewsPanel({
           >
             {/* Header */}
             <div className="flex items-center justify-between border-b-2 border-black px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-silver-bright">
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[var(--text-secondary)]-bright">
                 Filter_Presets
               </p>
               <button
                 type="button"
                 aria-label="Close panel"
                 onClick={() => setOpen(false)}
-                className="text-silver/40 transition-colors hover:text-silver-bright"
+                className="text-[var(--text-secondary)]/40 transition-colors hover:text-[var(--text-secondary)]-bright"
               >
                 <span className="material-symbols-outlined text-base">close</span>
               </button>
             </div>
 
             <div className="border-b border-silver-bright/10 px-4 py-4 space-y-3">
-              <p className="text-[9px] font-black uppercase tracking-[0.25em] text-silver/40">
+              <p className="text-[9px] font-black uppercase tracking-[0.25em] text-[var(--text-secondary)]/40">
                 Save Current Filters
               </p>
               <div className="flex gap-2">
@@ -272,7 +272,7 @@ export default function SavedViewsPanel({
                   placeholder="Name this view…"
                   maxLength={60}
                   aria-label="Saved view name"
-                  className="flex-1 border-2 border-silver-bright/10 bg-charcoal-dark px-3 py-2 text-[10px] font-mono text-silver-bright placeholder:text-silver/25 focus:border-rag-blue focus:outline-none"
+                  className="flex-1 border-2 border-silver-bright/10 bg-[var(--bg-primary)] px-3 py-2 text-[10px] font-mono text-[var(--text-secondary)]-bright placeholder:text-[var(--text-secondary)]/25 focus:border-rag-blue focus:outline-none"
                 />
                 <button
                   type="button"
@@ -321,15 +321,15 @@ export default function SavedViewsPanel({
 
             <div className="max-h-72 overflow-y-auto">
               {loading ? (
-                <p className="px-4 py-6 text-center text-[9px] font-mono uppercase tracking-widest text-silver/30">
+                <p className="px-4 py-6 text-center text-[9px] font-mono uppercase tracking-widest text-[var(--text-secondary)]/30">
                   Loading presets…
                 </p>
               ) : views.length === 0 ? (
                 <div className="px-4 py-8 text-center">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-silver/20 italic">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--text-secondary)]/20 italic">
                     No Saved Views
                   </p>
-                  <p className="mt-1 text-[8px] font-mono uppercase tracking-widest text-silver/15">
+                  <p className="mt-1 text-[8px] font-mono uppercase tracking-widest text-[var(--text-secondary)]/15">
                     Configure filters then save above.
                   </p>
                 </div>
@@ -353,7 +353,7 @@ export default function SavedViewsPanel({
 
             {views.length > 0 && (
               <div className="border-t border-silver-bright/6 px-4 py-2">
-                <p className="text-[8px] font-mono uppercase tracking-widest text-silver/20">
+                <p className="text-[8px] font-mono uppercase tracking-widest text-[var(--text-secondary)]/20">
                   Click a preset to apply · Hover to rename or delete
                 </p>
               </div>

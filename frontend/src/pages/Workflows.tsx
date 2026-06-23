@@ -76,16 +76,16 @@ function DeleteDialog({ name, onConfirm, onCancel, loading }: DeleteDialogProps)
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
       <div className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] w-full max-w-sm space-y-6">
         <div className="space-y-2">
-          <h3 className="text-lg font-black text-silver-bright uppercase tracking-tight">Delete Workflow</h3>
-          <p className="text-[11px] text-silver/50 uppercase tracking-widest font-black">
-            Delete <span className="text-silver-bright">{name}</span>? This cannot be undone.
+          <h3 className="text-lg font-black text-[var(--text-secondary)]-bright uppercase tracking-tight">Delete Workflow</h3>
+          <p className="text-[11px] text-[var(--text-secondary)]/50 uppercase tracking-widest font-black">
+            Delete <span className="text-[var(--text-secondary)]-bright">{name}</span>? This cannot be undone.
           </p>
         </div>
         <div className="flex gap-4">
           <button
             onClick={onCancel}
             disabled={loading}
-            className="flex-1 border-4 border-black px-4 py-3 text-[10px] font-black uppercase tracking-widest text-silver/60 hover:text-silver-bright transition-colors disabled:opacity-40"
+            className="flex-1 border-4 border-black px-4 py-3 text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)]/60 hover:text-[var(--text-secondary)]-bright transition-colors disabled:opacity-40"
           >
             Cancel
           </button>
@@ -155,53 +155,53 @@ function CreateSheet({ onClose, onCreated }: CreateSheetProps) {
     <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/60">
       <div className="bg-charcoal border-4 border-black w-full max-w-lg shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between px-8 py-6 border-b-4 border-black">
-          <h2 className="text-xl font-black text-silver-bright uppercase tracking-tight">New Workflow</h2>
-          <button onClick={onClose} className="text-silver/40 hover:text-silver-bright transition-colors">
+          <h2 className="text-xl font-black text-[var(--text-secondary)]-bright uppercase tracking-tight">New Workflow</h2>
+          <button onClick={onClose} className="text-[var(--text-secondary)]/40 hover:text-[var(--text-secondary)]-bright transition-colors">
             <span className="material-symbols-outlined">close</span>
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-8 space-y-6">
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em]">Name</label>
+            <label className="text-[10px] font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.2em]">Name</label>
             <input
               required
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="My Workflow"
-              className="w-full bg-charcoal-dark border-4 border-black px-4 py-3 text-sm text-silver-bright placeholder:text-silver/30 focus:outline-none focus:border-rag-red transition-colors"
+              className="w-full bg-[var(--bg-primary)] border-4 border-black px-4 py-3 text-sm text-[var(--text-secondary)]-bright placeholder:text-[var(--text-secondary)]/30 focus:outline-none focus:border-rag-red transition-colors"
             />
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em]">Schedule (seconds)</label>
+            <label className="text-[10px] font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.2em]">Schedule (seconds)</label>
             <input
               value={scheduleSeconds}
               onChange={e => setScheduleSeconds(e.target.value)}
               placeholder="3600"
               inputMode="numeric"
-              className="w-full bg-charcoal-dark border-4 border-black px-4 py-3 text-sm text-silver-bright font-mono placeholder:text-silver/30 focus:outline-none focus:border-rag-red transition-colors"
+              className="w-full bg-[var(--bg-primary)] border-4 border-black px-4 py-3 text-sm text-[var(--text-secondary)]-bright font-mono placeholder:text-[var(--text-secondary)]/30 focus:outline-none focus:border-rag-red transition-colors"
             />
           </div>
 
           <div className="flex items-center justify-between">
-            <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em]">Enabled</label>
+            <label className="text-[10px] font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.2em]">Enabled</label>
             <button
               type="button"
               onClick={() => setEnabled(v => !v)}
-              className={`w-12 h-6 border-4 border-black transition-colors relative ${enabled ? 'bg-rag-green' : 'bg-charcoal-dark'}`}
+              className={`w-12 h-6 border-4 border-black transition-colors relative ${enabled ? 'bg-rag-green' : 'bg-[var(--bg-primary)]'}`}
             >
               <span className={`absolute top-0 bottom-0 w-4 bg-black transition-all ${enabled ? 'right-0' : 'left-0'}`} />
             </button>
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em]">Steps (JSON)</label>
+            <label className="text-[10px] font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.2em]">Steps (JSON)</label>
             <textarea
               rows={6}
               value={stepsJson}
               onChange={e => { setStepsJson(e.target.value); setJsonError(null) }}
-              className="w-full bg-charcoal-dark border-4 border-black px-4 py-3 text-xs text-silver-bright font-mono placeholder:text-silver/30 focus:outline-none focus:border-rag-red transition-colors resize-none"
+              className="w-full bg-[var(--bg-primary)] border-4 border-black px-4 py-3 text-xs text-[var(--text-secondary)]-bright font-mono placeholder:text-[var(--text-secondary)]/30 focus:outline-none focus:border-rag-red transition-colors resize-none"
             />
             {jsonError && <p className="text-[10px] text-rag-red font-black uppercase tracking-widest">{jsonError}</p>}
           </div>
@@ -212,7 +212,7 @@ function CreateSheet({ onClose, onCreated }: CreateSheetProps) {
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 border-4 border-black px-4 py-3 text-[10px] font-black uppercase tracking-widest text-silver/60 hover:text-silver-bright transition-colors"
+              className="flex-1 border-4 border-black px-4 py-3 text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)]/60 hover:text-[var(--text-secondary)]-bright transition-colors"
             >
               Cancel
             </button>
@@ -250,31 +250,31 @@ function WorkflowCard({ workflow, onToggle, onRun, onDelete, running, toggling }
       <div className="space-y-6">
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1 min-w-0">
-            <h3 className="text-xl font-black text-silver-bright uppercase tracking-tight truncate">{workflow.name}</h3>
-            <p className="text-[10px] font-mono text-silver/40 uppercase tracking-widest">{formatSchedule(workflow.schedule_seconds)}</p>
+            <h3 className="text-xl font-black text-[var(--text-secondary)]-bright uppercase tracking-tight truncate">{workflow.name}</h3>
+            <p className="text-[10px] font-mono text-[var(--text-secondary)]/40 uppercase tracking-widest">{formatSchedule(workflow.schedule_seconds)}</p>
           </div>
-          <span className={`shrink-0 px-2 py-1 text-[9px] font-black uppercase tracking-widest border-2 border-black ${workflow.enabled ? 'bg-rag-green text-black' : 'bg-charcoal-dark text-silver/40'}`}>
+          <span className={`shrink-0 px-2 py-1 text-[9px] font-black uppercase tracking-widest border-2 border-black ${workflow.enabled ? 'bg-rag-green text-black' : 'bg-[var(--bg-primary)] text-[var(--text-secondary)]/40'}`}>
             {workflow.enabled ? 'Enabled' : 'Disabled'}
           </span>
         </div>
 
         <div className="grid grid-cols-2 gap-4 py-4 border-y-2 border-black border-dashed text-[10px] font-black uppercase tracking-widest">
           <div className="space-y-1">
-            <span className="text-silver/30 block">Steps</span>
-            <span className="text-silver-bright">{workflow.steps?.length ?? 0}</span>
+            <span className="text-[var(--text-secondary)]/30 block">Steps</span>
+            <span className="text-[var(--text-secondary)]-bright">{workflow.steps?.length ?? 0}</span>
           </div>
           <div className="space-y-1">
-            <span className="text-silver/30 block">Last Run</span>
-            <span className="text-silver-bright">{timeAgo(workflow.last_run_at) ?? 'Never'}</span>
+            <span className="text-[var(--text-secondary)]/30 block">Last Run</span>
+            <span className="text-[var(--text-secondary)]-bright">{timeAgo(workflow.last_run_at) ?? 'Never'}</span>
           </div>
         </div>
 
         {workflow.queued_task_ids && workflow.queued_task_ids.length > 0 && (
           <div className="space-y-1">
-            <p className="text-[9px] font-black text-silver/30 uppercase tracking-widest">Queued Tasks</p>
+            <p className="text-[9px] font-black text-[var(--text-secondary)]/30 uppercase tracking-widest">Queued Tasks</p>
             <div className="flex flex-wrap gap-1">
               {workflow.queued_task_ids.map(id => (
-                <span key={id} className="text-[9px] font-mono text-silver/50 bg-charcoal-dark px-2 py-0.5 border border-black">
+                <span key={id} className="text-[9px] font-mono text-[var(--text-secondary)]/50 bg-[var(--bg-primary)] px-2 py-0.5 border border-black">
                   {id.slice(0, 8)}
                 </span>
               ))}
@@ -296,7 +296,7 @@ function WorkflowCard({ workflow, onToggle, onRun, onDelete, running, toggling }
             onClick={onToggle}
             disabled={toggling}
             title={workflow.enabled ? 'Disable' : 'Enable'}
-            className="border-4 border-black p-2.5 text-silver/50 hover:text-silver-bright hover:bg-charcoal-dark transition-all disabled:opacity-40"
+            className="border-4 border-black p-2.5 text-[var(--text-secondary)]/50 hover:text-[var(--text-secondary)]-bright hover:bg-[var(--bg-primary)] transition-all disabled:opacity-40"
           >
             <span className="material-symbols-outlined text-[18px]">{workflow.enabled ? 'pause' : 'play_circle'}</span>
           </button>
@@ -304,7 +304,7 @@ function WorkflowCard({ workflow, onToggle, onRun, onDelete, running, toggling }
           <button
             onClick={onDelete}
             title="Delete"
-            className="ml-auto border-4 border-black p-2.5 text-silver/30 hover:text-rag-red hover:bg-rag-red/10 transition-all"
+            className="ml-auto border-4 border-black p-2.5 text-[var(--text-secondary)]/30 hover:text-rag-red hover:bg-rag-red/10 transition-all"
           >
             <span className="material-symbols-outlined text-[18px]">delete</span>
           </button>
@@ -378,23 +378,23 @@ export default function Workflows() {
   }
 
   return (
-    <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
+    <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-secondary)] p-6 md:p-12 space-y-12">
       <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10">
         <div className="space-y-4">
           <div className="bg-rag-blue text-black px-4 py-1 text-xs uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-black">
             Automation
           </div>
-          <h1 className="text-6xl md:text-8xl text-silver-bright uppercase tracking-tighter leading-none italic font-black">
+          <h1 className="text-6xl md:text-8xl text-[var(--text-secondary)]-bright uppercase tracking-tighter leading-none italic font-black">
             Workflows
           </h1>
-          <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic">
+          <p className="text-sm font-mono text-[var(--text-secondary)]/40 uppercase tracking-widest italic">
             Scheduled scan workflows
           </p>
         </div>
         <div className="flex items-center gap-4">
           <button
             onClick={fetchWorkflows}
-            className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
+            className="bg-charcoal border-4 border-black p-4 text-[var(--text-secondary)]-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
             title="Refresh"
           >
             <span className="material-symbols-outlined">sync</span>
@@ -410,8 +410,8 @@ export default function Workflows() {
 
       {loading && (
         <div className="flex items-center justify-center py-40 gap-6">
-          <span className="material-symbols-outlined text-silver/20 text-5xl animate-spin">progress_activity</span>
-          <p className="text-[10px] font-black text-silver/20 uppercase tracking-[0.4em] italic animate-pulse">
+          <span className="material-symbols-outlined text-[var(--text-secondary)]/20 text-5xl animate-spin">progress_activity</span>
+          <p className="text-[10px] font-black text-[var(--text-secondary)]/20 uppercase tracking-[0.4em] italic animate-pulse">
             Loading Workflows...
           </p>
         </div>
@@ -422,7 +422,7 @@ export default function Workflows() {
           <span className="material-symbols-outlined text-rag-red text-3xl">error</span>
           <div className="space-y-1">
             <p className="text-xs font-black text-rag-red uppercase tracking-widest">Failed to load</p>
-            <p className="text-[10px] font-mono text-silver/40 uppercase tracking-widest">{error}</p>
+            <p className="text-[10px] font-mono text-[var(--text-secondary)]/40 uppercase tracking-widest">{error}</p>
           </div>
           <button
             onClick={fetchWorkflows}
@@ -435,10 +435,10 @@ export default function Workflows() {
 
       {!loading && !error && workflows.length === 0 && (
         <div className="py-40 border-4 border-dashed border-black/5 text-center flex flex-col items-center gap-8 bg-charcoal/30">
-          <span className="material-symbols-outlined text-silver/5 text-9xl">account_tree</span>
+          <span className="material-symbols-outlined text-[var(--text-secondary)]/5 text-9xl">account_tree</span>
           <div className="space-y-2">
-            <p className="text-xl font-black text-silver/20 uppercase tracking-[0.4em] italic">No Workflows</p>
-            <p className="text-xs font-mono text-silver/10 uppercase tracking-widest">Create a workflow to automate recurring scans</p>
+            <p className="text-xl font-black text-[var(--text-secondary)]/20 uppercase tracking-[0.4em] italic">No Workflows</p>
+            <p className="text-xs font-mono text-[var(--text-secondary)]/10 uppercase tracking-widest">Create a workflow to automate recurring scans</p>
           </div>
           <button
             onClick={() => setShowCreate(true)}

@@ -130,17 +130,17 @@ export default function Reports() {
   )
 
   return (
-    <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
+    <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-secondary)] p-6 md:p-12 space-y-12">
       {/* Neo-Brutalist Header */}
       <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10 font-black">
         <div className="space-y-4">
           <div className="bg-rag-amber text-black px-4 py-1 text-xs uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-black">
             Archive_Matrix v8.2
           </div>
-          <h1 className="text-6xl md:text-8xl text-silver-bright uppercase tracking-tighter leading-none italic font-black">
+          <h1 className="text-6xl md:text-8xl text-[var(--text-secondary)]-bright uppercase tracking-tighter leading-none italic font-black">
             Analytics <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '2px var(--accent-silver-bright)' }}>Archive</span>
           </h1>
-          <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic leading-relaxed">
+          <p className="text-sm font-mono text-[var(--text-secondary)]/40 uppercase tracking-widest italic leading-relaxed">
             HISTORICAL_BRIEFINGS // ENCRYPTED_DOSSIERS // AUDIT_FEED
           </p>
         </div>
@@ -161,13 +161,13 @@ export default function Reports() {
             aria-label={`Download latest ready report ${(preferredFormat ?? 'pdf').toUpperCase()}`}
             title={latestReadyReport ? `Download latest ready report ${(preferredFormat ?? 'pdf').toUpperCase()}` : 'No ready report available'}
             disabled={!latestReadyReport}
-            className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            className="bg-charcoal border-4 border-black p-4 text-[var(--text-secondary)]-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <ReportIcon icon={Download01Icon} className="block" aria-hidden="true" />
           </button>
           <button
             onClick={fetchReports}
-            className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
+            className="bg-charcoal border-4 border-black p-4 text-[var(--text-secondary)]-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
             title="Refresh Archive"
           >
             <ReportIcon icon={Refresh01Icon} className="block" aria-hidden="true" />
@@ -179,9 +179,9 @@ export default function Reports() {
       {loading && (
         <div className="flex items-center justify-center py-40 gap-6">
           <div className="animate-spin">
-            <ReportIcon icon={Refresh01Icon} size={48} className="text-silver/20" aria-hidden="true" />
+            <ReportIcon icon={Refresh01Icon} size={48} className="text-[var(--text-secondary)]/20" aria-hidden="true" />
           </div>
-          <p className="text-[10px] font-black text-silver/20 uppercase tracking-[0.4em] italic animate-pulse">
+          <p className="text-[10px] font-black text-[var(--text-secondary)]/20 uppercase tracking-[0.4em] italic animate-pulse">
             Retrieving Archive Data...
           </p>
         </div>
@@ -192,7 +192,7 @@ export default function Reports() {
         <div className="border-4 border-rag-red bg-rag-red/10 p-8 flex items-center gap-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
           <div className="space-y-1">
             <p className="text-xs font-black text-rag-red uppercase tracking-widest">Archive_Retrieval_Failed</p>
-            <p className="text-[10px] font-mono text-silver/40 uppercase tracking-widest">{error}</p>
+            <p className="text-[10px] font-mono text-[var(--text-secondary)]/40 uppercase tracking-widest">{error}</p>
           </div>
           <button
             onClick={fetchReports}
@@ -233,7 +233,7 @@ export default function Reports() {
 
                 {/* Type Filter */}
                 <div className="space-y-4">
-                  <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic">Classification_Isolation</label>
+                  <label className="text-[10px] font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.2em] italic">Classification_Isolation</label>
                   <div className="grid grid-cols-1 gap-2">
                     {['all', 'executive', 'technical', 'compliance'].map(t => (
                       <button
@@ -242,7 +242,7 @@ export default function Reports() {
                         className={`px-6 py-4 text-left text-[10px] font-black uppercase tracking-widest border-4 transition-all flex justify-between items-center ${
                           selectedType === t
                             ? 'bg-rag-red border-black text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
-                            : 'bg-charcoal-dark border-black text-silver/40 hover:border-silver-bright/20'
+                            : 'bg-[var(--bg-primary)] border-black text-[var(--text-secondary)]/40 hover:border-silver-bright/20'
                         }`}
                       >
                         {t} BRIEFINGS
@@ -254,7 +254,7 @@ export default function Reports() {
 
                 {/* Status Filter */}
                 <div className="space-y-4">
-                  <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic">Status_Filter</label>
+                  <label className="text-[10px] font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.2em] italic">Status_Filter</label>
                   <div className="grid grid-cols-1 gap-2">
                     {([
                       { value: 'all',        label: 'All Statuses' },
@@ -269,7 +269,7 @@ export default function Reports() {
                         className={`px-6 py-4 text-left text-[10px] font-black uppercase tracking-widest border-4 transition-all flex justify-between items-center ${
                           selectedStatus === value
                             ? 'bg-rag-amber border-black text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
-                            : 'bg-charcoal-dark border-black text-silver/40 hover:border-silver-bright/20'
+                            : 'bg-[var(--bg-primary)] border-black text-[var(--text-secondary)]/40 hover:border-silver-bright/20'
                         }`}
                       >
                         {label}
@@ -281,7 +281,7 @@ export default function Reports() {
 
                 {/* Date Range Filter */}
                 <div className="space-y-4">
-                  <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic">Date_Range</label>
+                  <label className="text-[10px] font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.2em] italic">Date_Range</label>
                   <div className="grid grid-cols-1 gap-2">
                     {([
                       { value: 'all', label: 'All Time' },
@@ -296,7 +296,7 @@ export default function Reports() {
                         className={`px-6 py-4 text-left text-[10px] font-black uppercase tracking-widest border-4 transition-all flex justify-between items-center ${
                           selectedDateRange === value
                             ? 'bg-rag-blue border-black text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
-                            : 'bg-charcoal-dark border-black text-silver/40 hover:border-silver-bright/20'
+                            : 'bg-[var(--bg-primary)] border-black text-[var(--text-secondary)]/40 hover:border-silver-bright/20'
                         }`}
                       >
                         {label}
@@ -306,12 +306,12 @@ export default function Reports() {
                   </div>
                 </div>
 
-                <div className="p-8 border-4 border-black border-dashed space-y-4 bg-charcoal-dark/50">
+                <div className="p-8 border-4 border-black border-dashed space-y-4 bg-[var(--bg-primary)]/50">
                   <div className="flex items-center gap-3">
                     <ReportIcon icon={KnightShieldIcon} className="text-rag-green" aria-hidden="true" />
-                    <h4 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic leading-none">Integrity_Secure</h4>
+                    <h4 className="text-[10px] font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.2em] italic leading-none">Integrity_Secure</h4>
                   </div>
-                  <p className="text-[10px] text-silver/40 font-black uppercase tracking-widest leading-loose italic">
+                  <p className="text-[10px] text-[var(--text-secondary)]/40 font-black uppercase tracking-widest leading-loose italic">
                     Dossiers are cryptographically hashed and recorded. Modifications are strictly detectable by the Enclave audit daemon.
                   </p>
                 </div>
@@ -321,9 +321,9 @@ export default function Reports() {
             {/* Ledger Section */}
             <main className="xl:col-span-3 space-y-8">
               <div className="flex flex-col md:flex-row justify-between items-end gap-6 border-b-4 border-black pb-8">
-                <h2 className="text-5xl font-black text-silver-bright italic uppercase tracking-tighter shrink-0">Historical_Ledger</h2>
+                <h2 className="text-5xl font-black text-[var(--text-secondary)]-bright italic uppercase tracking-tighter shrink-0">Historical_Ledger</h2>
                 <div className="h-0.5 bg-black/10 flex-1 mb-2 hidden md:block"></div>
-                <span className="text-[10px] font-mono text-silver/20 uppercase font-black mb-2 animate-pulse">{filteredReports.length} ENTRIES_LOCATED</span>
+                <span className="text-[10px] font-mono text-[var(--text-secondary)]/20 uppercase font-black mb-2 animate-pulse">{filteredReports.length} ENTRIES_LOCATED</span>
               </div>
 
               <AnimatePresence mode="popLayout">
@@ -354,11 +354,11 @@ export default function Reports() {
                           }`}>
                             {report.type}_TYPE
                           </span>
-                          <ReportIcon icon={File01Icon} size={24} className="text-silver/10 group-hover:text-silver-bright transition-colors" aria-hidden="true" />
+                          <ReportIcon icon={File01Icon} size={24} className="text-[var(--text-secondary)]/10 group-hover:text-[var(--text-secondary)]-bright transition-colors" aria-hidden="true" />
                         </div>
 
                         <div>
-                          <h3 className="text-3xl font-black text-silver-bright uppercase tracking-tighter italic leading-tight group-hover:text-rag-red transition-colors font-mono">
+                          <h3 className="text-3xl font-black text-[var(--text-secondary)]-bright uppercase tracking-tighter italic leading-tight group-hover:text-rag-red transition-colors font-mono">
                             {report.name}
                           </h3>
                           <div className="w-12 h-1 bg-silver-bright/10 mt-6 group-hover:w-full group-hover:bg-rag-red/30 transition-all duration-700"></div>
@@ -366,28 +366,28 @@ export default function Reports() {
 
                         <div className="grid grid-cols-3 gap-6 py-6 border-y-2 border-black border-dashed">
                           <div className="space-y-1">
-                            <span className="text-[8px] font-black text-silver/20 uppercase tracking-widest italic block">Findings</span>
-                            <span className="text-xs font-black font-mono text-silver-bright">{report.findings.toString().padStart(3, '0')}</span>
+                            <span className="text-[8px] font-black text-[var(--text-secondary)]/20 uppercase tracking-widest italic block">Findings</span>
+                            <span className="text-xs font-black font-mono text-[var(--text-secondary)]-bright">{report.findings.toString().padStart(3, '0')}</span>
                           </div>
                           <div className="space-y-1 text-center">
-                            <span className="text-[8px] font-black text-silver/20 uppercase tracking-widest italic block">Assets</span>
-                            <span className="text-xs font-black font-mono text-silver-bright">{report.assets.toString().padStart(3, '0')}</span>
+                            <span className="text-[8px] font-black text-[var(--text-secondary)]/20 uppercase tracking-widest italic block">Assets</span>
+                            <span className="text-xs font-black font-mono text-[var(--text-secondary)]-bright">{report.assets.toString().padStart(3, '0')}</span>
                           </div>
                           <div className="space-y-1 text-right">
-                            <span className="text-[8px] font-black text-silver/20 uppercase tracking-widest italic block">Pages</span>
-                            <span className="text-xs font-black font-mono text-silver-bright">{report.pages.toString().padStart(3, '0')}</span>
+                            <span className="text-[8px] font-black text-[var(--text-secondary)]/20 uppercase tracking-widest italic block">Pages</span>
+                            <span className="text-xs font-black font-mono text-[var(--text-secondary)]-bright">{report.pages.toString().padStart(3, '0')}</span>
                           </div>
                         </div>
 
                         <div className="flex justify-between items-end pt-2">
                           <div className="space-y-1">
-                            <p className="text-[8px] font-black uppercase text-silver/20 tracking-[0.3em] italic leading-none">TIMESTAMP</p>
-                            <p className="text-[10px] font-mono text-silver-bright uppercase font-black">{formatDateLong(report.generated_at)}</p>
+                            <p className="text-[8px] font-black uppercase text-[var(--text-secondary)]/20 tracking-[0.3em] italic leading-none">TIMESTAMP</p>
+                            <p className="text-[10px] font-mono text-[var(--text-secondary)]-bright uppercase font-black">{formatDateLong(report.generated_at)}</p>
                           </div>
                           <div className="flex gap-4">
                             <button
                               onClick={() => navigate(`/task/${report.task_id}`)}
-                              className="bg-charcoal-dark border-4 border-black p-3 text-silver/20 group-hover:text-silver-bright group-hover:bg-black transition-all"
+                              className="bg-[var(--bg-primary)] border-4 border-black p-3 text-[var(--text-secondary)]/20 group-hover:text-[var(--text-secondary)]-bright group-hover:bg-black transition-all"
                               title="View Briefing" aria-label="View briefing"
                             >
                               <ReportIcon icon={ScanEyeIcon} size={18} aria-hidden="true"/>
@@ -406,10 +406,10 @@ export default function Reports() {
                                     window.open(`${API_BASE}/task/${report.task_id}/report/${format}`, '_blank')
                                   }}
                                   disabled={report.status === 'generating'}
-                                  className={`border-4 border-black px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:group-hover:text-silver/20 disabled:group-hover:bg-charcoal-dark ${
+                                  className={`border-4 border-black px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:group-hover:text-[var(--text-secondary)]/20 disabled:group-hover:bg-[var(--bg-primary)] ${
                                     format === preferredFormat
                                       ? 'bg-rag-amber border-black text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
-                                      : 'bg-charcoal-dark text-silver/20 group-hover:text-silver-bright group-hover:bg-black'
+                                      : 'bg-[var(--bg-primary)] text-[var(--text-secondary)]/20 group-hover:text-[var(--text-secondary)]-bright group-hover:bg-black'
                                   }`}
                                   title={report.status === 'generating' ? 'Export unavailable while report is generating' : `Download ${format.toUpperCase()}`}
                                 >
@@ -423,7 +423,7 @@ export default function Reports() {
 
                       {/* Background Hover Icon */}
                       <div className="absolute -right-12 -bottom-12 opacity-0 group-hover:opacity-[0.03] transition-all duration-1000 transform scale-150 rotate-12 pointer-events-none">
-                        <div className="text-silver-bright">
+                        <div className="text-[var(--text-secondary)]-bright">
                           <ReportIcon
                             icon={report.type === 'executive' ? Analytics02Icon : report.type === 'compliance' ? UserShield02Icon : ShieldUserIcon}
                             size={200} aria-hidden="true"
@@ -435,10 +435,10 @@ export default function Reports() {
 
                   {filteredReports.length === 0 && (
                     <div className="col-span-2 py-40 border-4 border-dashed border-black/5 text-center flex flex-col items-center gap-8 bg-charcoal/30">
-                      <ReportIcon icon={Archive02Icon} size={120} className="text-silver/5" aria-hidden="true" />
+                      <ReportIcon icon={Archive02Icon} size={120} className="text-[var(--text-secondary)]/5" aria-hidden="true" />
                       <div className="space-y-2">
-                        <p className="text-xl font-black text-silver/20 uppercase tracking-[0.4em] italic">Archive Isolated</p>
-                        <p className="text-xs font-mono text-silver/10 uppercase tracking-widest leading-relaxed">No entries match the selected filters</p>
+                        <p className="text-xl font-black text-[var(--text-secondary)]/20 uppercase tracking-[0.4em] italic">Archive Isolated</p>
+                        <p className="text-xs font-mono text-[var(--text-secondary)]/10 uppercase tracking-widest leading-relaxed">No entries match the selected filters</p>
                       </div>
                     </div>
                   )}

@@ -1,6 +1,7 @@
 import React from 'react'
+import { useEffect } from 'react'
 import { useTheme } from './ThemeContext'
-
+console.log(useTheme)
 type Size = 'sm' | 'md'
 
 interface ThemeToggleProps {
@@ -9,16 +10,17 @@ interface ThemeToggleProps {
 
 export default function ThemeToggle({ size = 'md' }: ThemeToggleProps) {
   const { theme, toggleTheme } = useTheme()
-
+useEffect(() => {
+}, [theme])
   const sizeClass = size === 'sm' ? 'w-9 h-9' : 'w-10 h-10'
   const iconSize = size === 'sm' ? 'text-lg' : 'text-xl'
 
   return (
     <button
       onClick={(e) => {
-        e.stopPropagation()
-        toggleTheme()
-      }}
+  e.stopPropagation()
+  toggleTheme()
+}}
       className={`
         ${sizeClass}
         flex items-center justify-center

@@ -148,7 +148,7 @@ function severityTone(severity: string) {
     case 'high':
       return 'text-rag-amber border-rag-amber/20'
     case 'medium':
-      return 'text-silver-bright border-accent-silver/20'
+      return 'text-[var(--text-secondary)]-bright border-accent-silver/20'
     default:
       return 'text-rag-green border-rag-green/20'
   }
@@ -247,7 +247,7 @@ export default function Dashboard() {
     : 0
 
   const statusBadgeClasses = backendConnected === null
-    ? 'border-accent-silver/10 bg-silver/5 text-silver-bright'
+    ? 'border-accent-silver/10 bg-silver/5 text-[var(--text-secondary)]-bright'
     : backendConnected
       ? 'border-rag-green/30 bg-rag-green/10 text-rag-green'
       : 'border-rag-red/30 bg-rag-red/10 text-rag-red'
@@ -258,7 +258,7 @@ export default function Dashboard() {
       : 'Backend Offline'
 
   return (
-    <div className="min-h-screen flex flex-col bg-charcoal-dark selection:bg-silver-bright selection:text-charcoal-dark">
+    <div className="min-h-screen flex flex-col bg-[var(--bg-primary)] selection:bg-silver-bright selection:text-charcoal-dark">
       <header className="w-full pt-8 pb-6 flex flex-col gap-6 xl:flex-row xl:items-center xl:justify-between border-b border-silver-bright/10 mb-8 px-8">
         <motion.div
           initial={{ opacity: 0, x: -20 }}
@@ -269,10 +269,10 @@ export default function Dashboard() {
           <div className="bg-rag-amber text-black px-4 py-1 text-xs uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
             SECUSCAN_WORKSPACE v2.4
           </div>
-         <h1 className="text-4xl md:text-5xl lg:text-6xl text-silver-bright tracking-tight leading-none whitespace-nowrap font-bold">
+         <h1 className="text-4xl md:text-5xl lg:text-6xl text-[var(--text-secondary)]-bright tracking-tight leading-none whitespace-nowrap font-bold">
   SecuScan <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '1px var(--accent-silver-bright)' }}>Workspace</span>
 </h1>
-<p className="text-sm font-mono text-silver/60 tracking-wider leading-relaxed mt-2">
+<p className="text-sm font-mono text-[var(--text-secondary)]/60 tracking-wider leading-relaxed mt-2">
   Central Intelligence Overview // Vulnerabilities: {summary.total_findings} // Threat Level: {risk.label}
 </p>
         </motion.div>
@@ -289,12 +289,12 @@ export default function Dashboard() {
             <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-rag-blue/30 to-transparent opacity-50"></div>
 
             <div className="flex flex-col items-end text-right flex-1">
-              <span className="text-[10px] font-black text-silver-bright/80 uppercase tracking-[0.35em] italic mb-2 leading-tight">
+              <span className="text-[10px] font-black text-[var(--text-secondary)]-bright/80 uppercase tracking-[0.35em] italic mb-2 leading-tight">
                 SYSTEM_STATUS_SYNC
               </span>
               <div className="flex items-baseline gap-5 mb-1">
                 <div className="flex items-baseline gap-2.5">
-                  <span className="text-2xl font-mono text-silver-bright font-black tracking-tighter italic leading-none">
+                  <span className="text-2xl font-mono text-[var(--text-secondary)]-bright font-black tracking-tighter italic leading-none">
                     {lastSync ? (formatBriefingDate(lastSync).split(',')[0]?.trim().toUpperCase()) : 'INITIALIZING'}
                   </span>
                   <span className="text-sm font-mono text-rag-blue/90 font-black italic leading-none">
@@ -307,13 +307,13 @@ export default function Dashboard() {
                 </span>
               </div>
               {lastSync ? (
-                <p className="text-[9px] font-mono text-silver/50 uppercase tracking-[0.2em] whitespace-nowrap">
+                <p className="text-[9px] font-mono text-[var(--text-secondary)]/50 uppercase tracking-[0.2em] whitespace-nowrap">
                   Last updated: <time dateTime={lastSync} className="text-rag-blue/70">{formatLocaleTime(lastSync)}</time>
                 </p>
               ) : null}
             </div>
 
-            <div className="flex items-center justify-center w-12 h-12 bg-charcoal-dark/60 border border-rag-blue/30 rounded-sm text-rag-blue/80 group-hover:text-rag-blue group-hover:bg-charcoal-dark group-hover:border-rag-blue/60 group-hover:shadow-[0_0_12px_rgba(59,130,246,0.3)] transition-all duration-300">
+            <div className="flex items-center justify-center w-12 h-12 bg-[var(--bg-primary)]/60 border border-rag-blue/30 rounded-sm text-rag-blue/80 group-hover:text-rag-blue group-hover:bg-[var(--bg-primary)] group-hover:border-rag-blue/60 group-hover:shadow-[0_0_12px_rgba(59,130,246,0.3)] transition-all duration-300">
               <span className="material-symbols-outlined text-xl font-black">terminal</span>
             </div>
           </div>
@@ -329,7 +329,7 @@ export default function Dashboard() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="mt-12 py-20 border-t border-accent-silver/10 text-xs text-silver/80 uppercase tracking-[0.25em] flex items-center gap-4"
+              className="mt-12 py-20 border-t border-accent-silver/10 text-xs text-[var(--text-secondary)]/80 uppercase tracking-[0.25em] flex items-center gap-4"
             >
               <motion.span
                 animate={{ rotate: 360 }}
@@ -350,12 +350,12 @@ export default function Dashboard() {
               <h3 className="text-rag-red text-lg font-bold tracking-widest uppercase mb-2">
                 System Offline
               </h3>
-              <p className="text-silver/80 text-sm font-mono text-center px-8 mb-6 uppercase">
+              <p className="text-[var(--text-secondary)]/80 text-sm font-mono text-center px-8 mb-6 uppercase">
                 {error}. Please verify network connectivity.
               </p>
               <button
                 onClick={() => window.location.reload()}
-                className="px-6 py-2 bg-rag-red/20 hover:bg-rag-red border border-rag-red/50 text-white text-xs font-bold uppercase tracking-widest rounded transition-all"
+                className="px-6 py-2 bg-rag-red/20 hover:bg-rag-red border border-rag-red/50 text-[var(--text-primary)] text-xs font-bold uppercase tracking-widest rounded transition-all"
               >
                 Retry Connection
               </button>
@@ -388,7 +388,7 @@ export default function Dashboard() {
               <motion.section variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-12 px-8">
                 <div className="space-y-10">
                   <header>
-                    <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-silver-bright flex items-center gap-3">
+                    <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)]-bright flex items-center gap-3">
                       <span className="w-2 h-2 border border-accent-silver/40 rotate-45"></span>
                       Vulnerability Summary
                     </h3>
@@ -398,9 +398,9 @@ export default function Dashboard() {
                     {[
                       ['Critical Risk', summary.critical_findings, 'text-rag-red', summary.critical_findings > 0 ? 'DECREASING' : 'STABLE'],
                       ['High Severity', summary.high_findings, 'text-rag-amber', 'ACTION REQ'],
-                      ['Medium Alert', summary.medium_findings, 'text-silver-bright', null],
+                      ['Medium Alert', summary.medium_findings, 'text-[var(--text-secondary)]-bright', null],
                       ['Low Exposure', summary.low_findings, 'text-rag-amber/70', null],
-                      ['Informational', summary.info_findings, 'text-silver/70', null],
+                      ['Informational', summary.info_findings, 'text-[var(--text-secondary)]/70', null],
                     ].map(([label, count, color, note]) => {
                       const total = summary.total_findings || 1;
                       const percentage = (count as number / total) * 100;
@@ -411,11 +411,11 @@ export default function Dashboard() {
                               <span className={`text-xs font-bold uppercase tracking-[0.15em] ${color}`}>{label}</span>
                             </div>
                             <div className="flex items-baseline gap-3">
-                              <span className="text-2xl font-light text-silver-bright font-mono">
+                              <span className="text-2xl font-light text-[var(--text-secondary)]-bright font-mono">
                                 {count as number}
                               </span>
                               {note ? (
-                                <span className={`min-w-[120px] text-right text-[11px] font-bold uppercase tracking-widest ${note === 'STABLE' ? 'text-rag-green' : 'text-silver/80'}`}>
+                                <span className={`min-w-[120px] text-right text-[11px] font-bold uppercase tracking-widest ${note === 'STABLE' ? 'text-rag-green' : 'text-[var(--text-secondary)]/80'}`}>
                                   {note}
                                 </span>
                               ) : null}
@@ -439,7 +439,7 @@ export default function Dashboard() {
                 <div className="space-y-10">
                   <header className="flex justify-between items-center">
                     <div className="flex items-center gap-4">
-                      <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-silver-bright flex items-center gap-3">
+                      <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)]-bright flex items-center gap-3">
                         <span className="w-2 h-2 border border-accent-silver/40 rotate-45"></span>
                         Task Activity Feed
                       </h3>
@@ -451,10 +451,10 @@ export default function Dashboard() {
                       )}
                     </div>
                     <div className="flex gap-6">
-                      <Link className="text-[10px] font-bold text-silver/70 hover:text-silver-bright uppercase tracking-widest transition-all" to={routes.scans}>
+                      <Link className="text-[10px] font-bold text-[var(--text-secondary)]/70 hover:text-[var(--text-secondary)]-bright uppercase tracking-widest transition-all" to={routes.scans}>
                         Full Schedule
                       </Link>
-                      <Link className="text-[10px] font-bold text-silver/70 hover:text-silver-bright uppercase tracking-widest transition-all" to={routes.findings}>
+                      <Link className="text-[10px] font-bold text-[var(--text-secondary)]/70 hover:text-[var(--text-secondary)]-bright uppercase tracking-widest transition-all" to={routes.findings}>
                         Audit Ledger
                       </Link>
                     </div>
@@ -464,7 +464,7 @@ export default function Dashboard() {
                     {summary.recent_tasks.length === 0 && (
                       <div className="bg-charcoal/30 p-12 text-center border border-accent-silver/5 relative overflow-hidden">
                         <div className="absolute inset-0 bg-accent-silver/2 animate-pulse" />
-                        <p className="text-[10px] text-silver/70 uppercase tracking-[0.3em] italic relative z-10">
+                        <p className="text-[10px] text-[var(--text-secondary)]/70 uppercase tracking-[0.3em] italic relative z-10">
                           Surveillance systems idle. No activity detected.
                         </p>
                       </div>
@@ -498,20 +498,20 @@ export default function Dashboard() {
                                 }`} />
                               <div>
                                 <div className="flex items-center gap-3">
-                                  <p className="text-[13px] font-semibold text-silver-bright tracking-wide group-hover:text-white transition-colors">
+                                  <p className="text-[13px] font-semibold text-[var(--text-secondary)]-bright tracking-wide group-hover:text-[var(--text-primary)] transition-colors">
                                     {displayToolName(task)}
                                   </p>
                                   <span className={`text-[8px] font-mono px-1.5 py-0.5 border rounded-sm ${isActive ? 'text-rag-green border-rag-green/20 bg-rag-green/5' :
                                       isFailed ? 'text-rag-red border-rag-red/20 bg-rag-red/5' :
-                                        'text-silver/70 border-silver/20'
+                                        'text-[var(--text-secondary)]/70 border-silver/20'
                                     }`}>
                                     {task.status.toUpperCase()}
                                   </span>
                                 </div>
-                                <p className="text-[10px] text-silver/85 uppercase tracking-widest mt-1 flex items-center gap-2 font-mono italic">
+                                <p className="text-[10px] text-[var(--text-secondary)]/85 uppercase tracking-widest mt-1 flex items-center gap-2 font-mono italic">
                                   TARGET:: {task.target || 'N/A'}
                                 </p>
-                                <p className="text-[10px] text-silver/80 uppercase tracking-widest mt-1 flex items-center gap-3 font-mono">
+                                <p className="text-[10px] text-[var(--text-secondary)]/80 uppercase tracking-widest mt-1 flex items-center gap-3 font-mono">
                                   <span>PLUGIN:: {task.plugin_id || 'N/A'}</span>
                                   <span>TASK:: {task.id.slice(0, 8)}</span>
                                 </p>
@@ -520,13 +520,13 @@ export default function Dashboard() {
 
                             <div className="flex items-center gap-6">
                               <div className="text-right hidden sm:block">
-                                <span className={`text-[9px] font-bold uppercase tracking-[0.2em] block mb-0.5 ${isActive ? 'text-rag-green' : 'text-silver/80'}`}>
+                                <span className={`text-[9px] font-bold uppercase tracking-[0.2em] block mb-0.5 ${isActive ? 'text-rag-green' : 'text-[var(--text-secondary)]/80'}`}>
                                   {isActive ? 'Live Processing' : 'Cycle Log'}
                                 </span>
-                                <span className="text-[9px] font-mono text-silver/80 uppercase block">
+                                <span className="text-[9px] font-mono text-[var(--text-secondary)]/80 uppercase block">
                                   INIT:: {taskInit.date} @ {taskInit.time} {taskInit.tz}
                                 </span>
-                                <span className="text-[9px] font-mono text-silver/70 uppercase block mt-0.5">
+                                <span className="text-[9px] font-mono text-[var(--text-secondary)]/70 uppercase block mt-0.5">
                                   DURATION:: {formatDuration(task.duration_seconds)}
                                 </span>
                               </div>
@@ -536,7 +536,7 @@ export default function Dashboard() {
                                   <div className="h-8 w-px bg-white/5 hidden sm:block" />
                                   <button
                                     onClick={() => handleAbort(task.id)}
-                                    className="text-[10px] font-bold text-silver/40 hover:text-rag-red uppercase tracking-widest transition-colors flex items-center gap-2"
+                                    className="text-[10px] font-bold text-[var(--text-secondary)]/40 hover:text-rag-red uppercase tracking-widest transition-colors flex items-center gap-2"
                                   >
                                     <span className="material-symbols-outlined text-[14px]">cancel</span>
                                     Abort
@@ -545,7 +545,7 @@ export default function Dashboard() {
                               ) : (
                                 <Link
                                   to={routePath.task(task.id)}
-                                  className="text-[10px] font-bold text-silver/20 hover:text-silver-bright uppercase tracking-widest transition-colors"
+                                  className="text-[10px] font-bold text-[var(--text-secondary)]/20 hover:text-[var(--text-secondary)]-bright uppercase tracking-widest transition-colors"
                                 >
                                   Details
                                 </Link>
@@ -562,12 +562,12 @@ export default function Dashboard() {
                   {/* Operational Stats: Minimized and Integrated */}
                   <div className="pt-6 grid grid-cols-1 md:grid-cols-3 gap-px bg-accent-silver/10 border border-accent-silver/5">
                     <div className="bg-charcoal px-6 py-5">
-                      <span className="text-xs font-bold text-silver/70 uppercase tracking-[0.2em] block mb-2">Total Cycles</span>
-                      <span className="text-2xl font-light text-silver-bright font-mono italic">{summary.scan_activity.total}</span>
+                      <span className="text-xs font-bold text-[var(--text-secondary)]/70 uppercase tracking-[0.2em] block mb-2">Total Cycles</span>
+                      <span className="text-2xl font-light text-[var(--text-secondary)]-bright font-mono italic">{summary.scan_activity.total}</span>
                     </div>
                     <div className="bg-charcoal px-8 py-8 md:col-span-2">
                       <div className="flex justify-between items-baseline mb-3">
-                        <span className="text-[10px] font-bold text-silver/80 uppercase tracking-widest">Efficiency Posture</span>
+                        <span className="text-[10px] font-bold text-[var(--text-secondary)]/80 uppercase tracking-widest">Efficiency Posture</span>
                         <span className="text-[10px] text-rag-green font-mono uppercase">{progressWidth.toFixed(0)}% SYNCHRONIZED</span>
                       </div>
                       <div className="h-1 w-full bg-accent-silver/10 relative overflow-hidden">
@@ -586,7 +586,7 @@ export default function Dashboard() {
               {/* Section: Recent Findings Ledger */}
               <motion.section variants={itemVariants} className="px-8">
                   <header className="mb-10">
-                    <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-silver-bright flex items-center gap-3">
+                    <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-[var(--text-secondary)]-bright flex items-center gap-3">
                       <span className="w-2 h-2 border border-accent-silver/40 rotate-45"></span>
                       Recent Audit Findings
                     </h3>
@@ -595,7 +595,7 @@ export default function Dashboard() {
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                       {summary.recent_findings.length === 0 ? (
                           <div className="col-span-full bg-charcoal/30 p-12 text-center border border-accent-silver/5">
-                              <p className="text-[10px] text-silver/70 uppercase tracking-[0.3em] italic">No findings detected in recent audits.</p>
+                              <p className="text-[10px] text-[var(--text-secondary)]/70 uppercase tracking-[0.3em] italic">No findings detected in recent audits.</p>
                           </div>
                       ) : (
                           summary.recent_findings.map((finding) => (
@@ -604,10 +604,10 @@ export default function Dashboard() {
                                       <span className={`text-[9px] font-black px-2 py-0.5 uppercase tracking-widest border ${severityTone(finding.severity)}`}>
                                           {finding.severity}
                                       </span>
-                                      <span className="text-[9px] font-mono text-silver/40 uppercase">{formatLocaleDate(finding.discovered_at)}</span>
+                                      <span className="text-[9px] font-mono text-[var(--text-secondary)]/40 uppercase">{formatLocaleDate(finding.discovered_at)}</span>
                                   </div>
-                                  <h4 className="text-sm font-bold text-silver-bright mb-2 group-hover:text-white transition-colors">{finding.title}</h4>
-                                  <p className="text-[10px] text-silver/60 uppercase tracking-widest font-mono italic truncate">Target: {finding.target}</p>
+                                  <h4 className="text-sm font-bold text-[var(--text-secondary)]-bright mb-2 group-hover:text-[var(--text-primary)] transition-colors">{finding.title}</h4>
+                                  <p className="text-[10px] text-[var(--text-secondary)]/60 uppercase tracking-widest font-mono italic truncate">Target: {finding.target}</p>
                               </div>
                           ))
                       )}
@@ -620,7 +620,7 @@ export default function Dashboard() {
       </main>
 
       <footer className="px-12 py-12 text-center border-t border-accent-silver/5">
-        <p className="text-[10px] text-silver/70 uppercase tracking-[0.5em] font-light">
+        <p className="text-[10px] text-[var(--text-secondary)]/70 uppercase tracking-[0.5em] font-light">
           SecuScan Intelligence Systems • Class 1 Operational View
         </p>
       </footer>

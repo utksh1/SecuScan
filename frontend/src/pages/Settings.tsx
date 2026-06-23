@@ -315,8 +315,8 @@ export default function Settings() {
     const InputField = ({ label, description, type = "text", value, onChange, placeholder }: any) => (
         <div className="bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] transition-all group">
             <div className="space-y-2 mb-6">
-                <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] block italic group-hover:text-rag-blue transition-colors">{label}</label>
-                <p className="text-[9px] text-silver/40 uppercase font-mono font-bold tracking-widest leading-relaxed">{description}</p>
+                <label className="text-[10px] font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.2em] block italic group-hover:text-rag-blue transition-colors">{label}</label>
+                <p className="text-[9px] text-[var(--text-secondary)]/40 uppercase font-mono font-bold tracking-widest leading-relaxed">{description}</p>
             </div>
             <input
                 type={type}
@@ -331,8 +331,8 @@ export default function Settings() {
     const SelectField = ({ label, description, value, onChange, options }: any) => (
         <div className="bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] transition-all group">
             <div className="space-y-2 mb-6">
-                <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] block italic group-hover:text-rag-blue transition-colors">{label}</label>
-                <p className="text-[9px] text-silver/40 uppercase font-mono font-bold tracking-widest leading-relaxed">{description}</p>
+                <label className="text-[10px] font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.2em] block italic group-hover:text-rag-blue transition-colors">{label}</label>
+                <p className="text-[9px] text-[var(--text-secondary)]/40 uppercase font-mono font-bold tracking-widest leading-relaxed">{description}</p>
             </div>
             <select
                 value={value}
@@ -340,7 +340,7 @@ export default function Settings() {
                 className="w-full bg-black/40 border-4 border-black p-4 text-xs font-mono text-rag-blue font-bold focus:outline-none focus:border-rag-blue/50 transition-colors uppercase appearance-none"
             >
                 {options.map((opt: any) => (
-                    <option key={opt.value} value={opt.value} className="bg-charcoal text-silver-bright">{opt.label}</option>
+                    <option key={opt.value} value={opt.value} className="bg-charcoal text-[var(--text-secondary)]-bright">{opt.label}</option>
                 ))}
             </select>
         </div>
@@ -356,32 +356,32 @@ export default function Settings() {
             }`}
         >
             <div className="space-y-2 text-left mr-8">
-                <label className="text-[10px] font-black text-silver-bright uppercase tracking-widest block group-hover:text-rag-green transition-colors">{label}</label>
-                <span className="text-[9px] text-silver/30 uppercase tracking-tighter italic font-mono font-bold leading-relaxed">{description}</span>
+                <label className="text-[10px] font-black text-[var(--text-secondary)]-bright uppercase tracking-widest block group-hover:text-rag-green transition-colors">{label}</label>
+                <span className="text-[9px] text-[var(--text-secondary)]/30 uppercase tracking-tighter italic font-mono font-bold leading-relaxed">{description}</span>
             </div>
-            <div className={`w-14 h-7 border-4 border-black relative shrink-0 transition-all ${checked ? 'bg-rag-green' : 'bg-charcoal-dark'}`}>
+            <div className={`w-14 h-7 border-4 border-black relative shrink-0 transition-all ${checked ? 'bg-rag-green' : 'bg-[var(--bg-primary)]'}`}>
                 <div className={`absolute top-0 w-5 h-full bg-black transition-all ${checked ? 'left-7' : 'left-0'}`}></div>
             </div>
         </button>
     )
 
     return (
-        <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
+        <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-secondary)] p-6 md:p-12 space-y-12">
             <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10 font-black">
                 <div className="space-y-4">
                   <div className="bg-rag-blue text-black px-4 py-1 text-xs uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-black">
                     Engine_Nexus_v4.5.3
                   </div>
-                  <h1 className="text-6xl md:text-8xl text-silver-bright uppercase tracking-tighter leading-none italic font-black">
+                  <h1 className="text-6xl md:text-8xl text-[var(--text-secondary)]-bright uppercase tracking-tighter leading-none italic font-black">
                     Core <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '2px var(--accent-silver-bright)' }}>Array</span>
                   </h1>
-                  <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic leading-relaxed">
+                  <p className="text-sm font-mono text-[var(--text-secondary)]/40 uppercase tracking-widest italic leading-relaxed">
                     HARDWARE_TUNING // AUDIT_STRATEGY // SECTOR_ISOLATION
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-4">
                    <div className="bg-charcoal border-4 border-black px-8 py-4 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
-                        <span className="text-[10px] font-black text-silver/20 uppercase tracking-[0.4em] block mb-1 italic">SYSTEM_TIMEZONE_SYNC</span>
+                        <span className="text-[10px] font-black text-[var(--text-secondary)]/20 uppercase tracking-[0.4em] block mb-1 italic">SYSTEM_TIMEZONE_SYNC</span>
                         <span className="text-xs font-black font-mono text-rag-blue tracking-widest italic">{systemTimezone.toUpperCase()}</span>
                     </div>
                 </div>
@@ -391,13 +391,13 @@ export default function Settings() {
 
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
-                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">API_Key_Configuration</h3>
+                            <h3 className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.4em] italic">API_Key_Configuration</h3>
                             <div className="h-0.5 flex-1 bg-black/10"></div>
                         </div>
                         <div className="bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black text-silver-bright uppercase tracking-widest block italic">Backend_API_Key</label>
-                                <p className="text-[10px] text-silver/40 uppercase font-bold italic mb-4 leading-relaxed">
+                                <label className="text-[10px] font-black text-[var(--text-secondary)]-bright uppercase tracking-widest block italic">Backend_API_Key</label>
+                                <p className="text-[10px] text-[var(--text-secondary)]/40 uppercase font-bold italic mb-4 leading-relaxed">
                                     Read from <span className="text-rag-blue font-mono">backend/data/.api_key</span> after starting the backend. Stored locally in browser — never sent to any remote server.
                                 </p>
                             </div>
@@ -413,7 +413,7 @@ export default function Settings() {
                                 />
                                 <button
                                     onClick={() => setApiKeyVisible(v => !v)}
-                                    className="px-4 bg-charcoal-dark border-4 border-black text-[10px] font-black text-silver/40 uppercase tracking-widest hover:text-white transition-colors"
+                                    className="px-4 bg-[var(--bg-primary)] border-4 border-black text-[10px] font-black text-[var(--text-secondary)]/40 uppercase tracking-widest hover:text-[var(--text-primary)] transition-colors"
                                     title={apiKeyVisible ? 'Hide key' : 'Show key'}
                                 >
                                     {apiKeyVisible ? 'HIDE' : 'SHOW'}
@@ -447,12 +447,12 @@ export default function Settings() {
 
                     <section className="space-y-8" aria-label="Notification rules">
                         <div className="flex items-center gap-4">
-                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Notification_Rules</h3>
+                            <h3 className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.4em] italic">Notification_Rules</h3>
                             <div className="h-0.5 flex-1 bg-black/10"></div>
                             <button
                                 type="button"
                                 onClick={refreshNotificationRules}
-                                className="px-4 py-2 bg-charcoal border-4 border-black text-[10px] font-black uppercase tracking-widest text-silver/60 hover:text-silver-bright hover:bg-black/40 transition-all"
+                                className="px-4 py-2 bg-charcoal border-4 border-black text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)]/60 hover:text-[var(--text-secondary)]-bright hover:bg-black/40 transition-all"
                                 aria-label="Refresh notification rules"
                             >
                                 Refresh
@@ -461,35 +461,35 @@ export default function Settings() {
 
                         <div className="bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-8">
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black text-silver-bright uppercase tracking-widest block italic">Create_Rule</label>
-                                <p className="text-[10px] text-silver/40 uppercase font-bold italic mb-4 leading-relaxed">
+                                <label className="text-[10px] font-black text-[var(--text-secondary)]-bright uppercase tracking-widest block italic">Create_Rule</label>
+                                <p className="text-[10px] text-[var(--text-secondary)]/40 uppercase font-bold italic mb-4 leading-relaxed">
                                     Configure alerts for high-risk findings via webhook or email placeholder.
                                 </p>
                             </div>
 
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                <div className="bg-charcoal-dark border-4 border-black p-6 space-y-4">
-                                    <label className="text-[10px] font-black text-silver/50 uppercase tracking-widest">Rule_Name</label>
+                                <div className="bg-[var(--bg-primary)] border-4 border-black p-6 space-y-4">
+                                    <label className="text-[10px] font-black text-[var(--text-secondary)]/50 uppercase tracking-widest">Rule_Name</label>
                                     <input
                                         value={newRule.name}
                                         onChange={(e) => setNewRule((p) => ({ ...p, name: e.target.value }))}
-                                        className="w-full bg-black/40 border-4 border-black p-4 text-xs font-mono text-silver-bright font-bold focus:outline-none focus:border-rag-blue/50 transition-colors"
+                                        className="w-full bg-black/40 border-4 border-black p-4 text-xs font-mono text-[var(--text-secondary)]-bright font-bold focus:outline-none focus:border-rag-blue/50 transition-colors"
                                         placeholder="High risk webhook"
                                         aria-label="New rule name"
                                     />
                                 </div>
-                                <div className="bg-charcoal-dark border-4 border-black p-6 space-y-4">
-                                    <label className="text-[10px] font-black text-silver/50 uppercase tracking-widest">Target</label>
+                                <div className="bg-[var(--bg-primary)] border-4 border-black p-6 space-y-4">
+                                    <label className="text-[10px] font-black text-[var(--text-secondary)]/50 uppercase tracking-widest">Target</label>
                                     <input
                                         value={newRule.target_url_or_email}
                                         onChange={(e) => setNewRule((p) => ({ ...p, target_url_or_email: e.target.value }))}
-                                        className="w-full bg-black/40 border-4 border-black p-4 text-xs font-mono text-silver-bright font-bold focus:outline-none focus:border-rag-blue/50 transition-colors"
+                                        className="w-full bg-black/40 border-4 border-black p-4 text-xs font-mono text-[var(--text-secondary)]-bright font-bold focus:outline-none focus:border-rag-blue/50 transition-colors"
                                         placeholder={newRule.channel_type === 'webhook' ? 'https://example.com/hook' : 'alerts@example.com'}
                                         aria-label="New rule target"
                                     />
                                 </div>
-                                <div className="bg-charcoal-dark border-4 border-black p-6 space-y-4">
-                                    <label className="text-[10px] font-black text-silver/50 uppercase tracking-widest">Severity_Threshold</label>
+                                <div className="bg-[var(--bg-primary)] border-4 border-black p-6 space-y-4">
+                                    <label className="text-[10px] font-black text-[var(--text-secondary)]/50 uppercase tracking-widest">Severity_Threshold</label>
                                     <select
                                         value={newRule.severity_threshold}
                                         onChange={(e) => setNewRule((p) => ({ ...p, severity_threshold: e.target.value as NotificationSeverityThreshold }))}
@@ -497,12 +497,12 @@ export default function Settings() {
                                         aria-label="New rule severity threshold"
                                     >
                                         {(['critical','high','medium','low','info'] as NotificationSeverityThreshold[]).map((s) => (
-                                            <option key={s} value={s} className="bg-charcoal text-silver-bright">{s}</option>
+                                            <option key={s} value={s} className="bg-charcoal text-[var(--text-secondary)]-bright">{s}</option>
                                         ))}
                                     </select>
                                 </div>
-                                <div className="bg-charcoal-dark border-4 border-black p-6 space-y-4">
-                                    <label className="text-[10px] font-black text-silver/50 uppercase tracking-widest">Channel</label>
+                                <div className="bg-[var(--bg-primary)] border-4 border-black p-6 space-y-4">
+                                    <label className="text-[10px] font-black text-[var(--text-secondary)]/50 uppercase tracking-widest">Channel</label>
                                     <select
                                         value={newRule.channel_type}
                                         onChange={(e) => setNewRule((p) => ({ ...p, channel_type: e.target.value as NotificationChannelType }))}
@@ -510,7 +510,7 @@ export default function Settings() {
                                         aria-label="New rule channel type"
                                     >
                                         {(['webhook','email'] as NotificationChannelType[]).map((c) => (
-                                            <option key={c} value={c} className="bg-charcoal text-silver-bright">{c}</option>
+                                            <option key={c} value={c} className="bg-charcoal text-[var(--text-secondary)]-bright">{c}</option>
                                         ))}
                                     </select>
                                 </div>
@@ -535,7 +535,7 @@ export default function Settings() {
 
                         <div className="space-y-4">
                             {notificationRulesLoading && (
-                                <p className="text-[10px] font-black uppercase tracking-widest text-silver/30">Loading rules...</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)]/30">Loading rules...</p>
                             )}
                             {notificationRulesError && (
                                 <div className="border-4 border-rag-red bg-rag-red/10 p-6 text-rag-red text-[10px] font-black uppercase tracking-widest">
@@ -543,7 +543,7 @@ export default function Settings() {
                                 </div>
                             )}
                             {!notificationRulesLoading && !notificationRulesError && notificationRules.length === 0 && (
-                                <p className="text-[10px] font-black uppercase tracking-widest text-silver/30 italic">No rules yet.</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)]/30 italic">No rules yet.</p>
                             )}
 
                             {notificationRules.map((rule) => {
@@ -557,58 +557,58 @@ export default function Settings() {
                                         <div className="flex flex-col lg:flex-row gap-6 lg:items-start lg:justify-between">
                                             <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4">
                                                 <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-silver/50 uppercase tracking-widest">Name</label>
+                                                    <label className="text-[10px] font-black text-[var(--text-secondary)]/50 uppercase tracking-widest">Name</label>
                                                     <input
                                                         value={row.name}
                                                         disabled={!isEditing}
                                                         onChange={(e) => setEditRules((p) => ({ ...p, [rule.id]: { ...(p[rule.id] ?? {}), name: e.target.value } }))}
                                                         className={`w-full border-4 border-black p-3 text-xs font-mono font-bold focus:outline-none transition-colors ${
-                                                            isEditing ? 'bg-black/40 text-silver-bright focus:border-rag-blue/50' : 'bg-black/20 text-silver/60'
+                                                            isEditing ? 'bg-black/40 text-[var(--text-secondary)]-bright focus:border-rag-blue/50' : 'bg-black/20 text-[var(--text-secondary)]/60'
                                                         }`}
                                                         aria-label={`Rule name ${rule.id}`}
                                                     />
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-silver/50 uppercase tracking-widest">Target</label>
+                                                    <label className="text-[10px] font-black text-[var(--text-secondary)]/50 uppercase tracking-widest">Target</label>
                                                     <input
                                                         value={row.target_url_or_email}
                                                         disabled={!isEditing}
                                                         onChange={(e) => setEditRules((p) => ({ ...p, [rule.id]: { ...(p[rule.id] ?? {}), target_url_or_email: e.target.value } }))}
                                                         className={`w-full border-4 border-black p-3 text-xs font-mono font-bold focus:outline-none transition-colors ${
-                                                            isEditing ? 'bg-black/40 text-silver-bright focus:border-rag-blue/50' : 'bg-black/20 text-silver/60'
+                                                            isEditing ? 'bg-black/40 text-[var(--text-secondary)]-bright focus:border-rag-blue/50' : 'bg-black/20 text-[var(--text-secondary)]/60'
                                                         }`}
                                                         aria-label={`Rule target ${rule.id}`}
                                                     />
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-silver/50 uppercase tracking-widest">Severity</label>
+                                                    <label className="text-[10px] font-black text-[var(--text-secondary)]/50 uppercase tracking-widest">Severity</label>
                                                     <select
                                                         value={row.severity_threshold}
                                                         disabled={!isEditing}
                                                         onChange={(e) => setEditRules((p) => ({ ...p, [rule.id]: { ...(p[rule.id] ?? {}), severity_threshold: e.target.value } }))}
                                                         className={`w-full border-4 border-black p-3 text-xs font-mono font-bold focus:outline-none transition-colors uppercase appearance-none ${
-                                                            isEditing ? 'bg-black/40 text-rag-blue focus:border-rag-blue/50' : 'bg-black/20 text-silver/60'
+                                                            isEditing ? 'bg-black/40 text-rag-blue focus:border-rag-blue/50' : 'bg-black/20 text-[var(--text-secondary)]/60'
                                                         }`}
                                                         aria-label={`Rule severity ${rule.id}`}
                                                     >
                                                         {(['critical','high','medium','low','info'] as NotificationSeverityThreshold[]).map((s) => (
-                                                            <option key={s} value={s} className="bg-charcoal text-silver-bright">{s}</option>
+                                                            <option key={s} value={s} className="bg-charcoal text-[var(--text-secondary)]-bright">{s}</option>
                                                         ))}
                                                     </select>
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-silver/50 uppercase tracking-widest">Channel</label>
+                                                    <label className="text-[10px] font-black text-[var(--text-secondary)]/50 uppercase tracking-widest">Channel</label>
                                                     <select
                                                         value={row.channel_type}
                                                         disabled={!isEditing}
                                                         onChange={(e) => setEditRules((p) => ({ ...p, [rule.id]: { ...(p[rule.id] ?? {}), channel_type: e.target.value } }))}
                                                         className={`w-full border-4 border-black p-3 text-xs font-mono font-bold focus:outline-none transition-colors uppercase appearance-none ${
-                                                            isEditing ? 'bg-black/40 text-rag-blue focus:border-rag-blue/50' : 'bg-black/20 text-silver/60'
+                                                            isEditing ? 'bg-black/40 text-rag-blue focus:border-rag-blue/50' : 'bg-black/20 text-[var(--text-secondary)]/60'
                                                         }`}
                                                         aria-label={`Rule channel ${rule.id}`}
                                                     >
                                                         {(['webhook','email'] as NotificationChannelType[]).map((c) => (
-                                                            <option key={c} value={c} className="bg-charcoal text-silver-bright">{c}</option>
+                                                            <option key={c} value={c} className="bg-charcoal text-[var(--text-secondary)]-bright">{c}</option>
                                                         ))}
                                                     </select>
                                                 </div>
@@ -631,7 +631,7 @@ export default function Settings() {
                                                     <button
                                                         type="button"
                                                         onClick={() => startEditRule(rule)}
-                                                        className="px-6 py-3 bg-charcoal-dark border-4 border-black text-[10px] font-black uppercase tracking-widest text-silver/60 hover:text-silver-bright hover:bg-black/40 transition-all"
+                                                        className="px-6 py-3 bg-[var(--bg-primary)] border-4 border-black text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)]/60 hover:text-[var(--text-secondary)]-bright hover:bg-black/40 transition-all"
                                                     >
                                                         Edit
                                                     </button>
@@ -655,7 +655,7 @@ export default function Settings() {
                                                     <button
                                                         type="button"
                                                         onClick={() => cancelEditRule(rule.id)}
-                                                        className="px-6 py-3 bg-charcoal-dark border-4 border-black text-[10px] font-black uppercase tracking-widest text-silver/60 hover:text-silver-bright hover:bg-black/40 transition-all"
+                                                        className="px-6 py-3 bg-[var(--bg-primary)] border-4 border-black text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)]/60 hover:text-[var(--text-secondary)]-bright hover:bg-black/40 transition-all"
                                                     >
                                                         Cancel
                                                     </button>
@@ -665,7 +665,7 @@ export default function Settings() {
                                             <button
                                                 type="button"
                                                 onClick={() => loadRuleHistory(rule.id)}
-                                                className="px-6 py-3 bg-charcoal-dark border-4 border-black text-[10px] font-black uppercase tracking-widest text-silver/60 hover:text-silver-bright hover:bg-black/40 transition-all"
+                                                className="px-6 py-3 bg-[var(--bg-primary)] border-4 border-black text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)]/60 hover:text-[var(--text-secondary)]-bright hover:bg-black/40 transition-all"
                                                 aria-label={`Load history ${rule.id}`}
                                             >
                                                 {histLoading ? 'Loading history…' : 'Load history'}
@@ -674,14 +674,14 @@ export default function Settings() {
 
                                         {history.length > 0 && (
                                             <div className="border-t-4 border-black/20 pt-6 space-y-3">
-                                                <p className="text-[10px] font-black uppercase tracking-widest text-silver/40">Recent history</p>
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-secondary)]/40">Recent history</p>
                                                 <div className="space-y-2">
                                                     {history.map((h) => (
                                                         <div key={h.id} className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 bg-black/20 border-2 border-black p-3">
-                                                            <div className="text-[10px] font-mono text-silver/60">
-                                                                <span className="text-silver-bright">{h.status}</span> · finding {h.finding_id}
+                                                            <div className="text-[10px] font-mono text-[var(--text-secondary)]/60">
+                                                                <span className="text-[var(--text-secondary)]-bright">{h.status}</span> · finding {h.finding_id}
                                                             </div>
-                                                            <div className="text-[10px] font-mono text-silver/40">
+                                                            <div className="text-[10px] font-mono text-[var(--text-secondary)]/40">
                                                                 {h.error_message ? `error: ${h.error_message}` : ''} {h.sent_at ? `· ${h.sent_at}` : ''}
                                                             </div>
                                                         </div>
@@ -697,7 +697,7 @@ export default function Settings() {
 
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
-                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Engine_Parameters</h3>
+                            <h3 className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.4em] italic">Engine_Parameters</h3>
                             <div className="h-0.5 flex-1 bg-black/10"></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -742,7 +742,7 @@ export default function Settings() {
                     </section>
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
-                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Security_Interface</h3>
+                            <h3 className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.4em] italic">Security_Interface</h3>
                             <div className="h-0.5 flex-1 bg-black/10"></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -759,18 +759,18 @@ export default function Settings() {
                             />
                             <div className="bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] transition-all group">
                                 <div className="space-y-2 mb-6">
-                                    <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] block italic group-hover:text-rag-blue transition-colors">Visual_Spectrum</label>
-                                    <p className="text-[9px] text-silver/40 uppercase font-mono font-bold tracking-widest leading-relaxed">OPERATIONAL_AESTHETIC_MODE</p>
+                                    <label className="text-[10px] font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.2em] block italic group-hover:text-rag-blue transition-colors">Visual_Spectrum</label>
+                                    <p className="text-[9px] text-[var(--text-secondary)]/40 uppercase font-mono font-bold tracking-widest leading-relaxed">OPERATIONAL_AESTHETIC_MODE</p>
                                 </div>
                                 <div className="space-y-3">
                                     <select
                                         value={config.theme}
                                         onChange={(e) => setConfig({ ...config, theme: e.target.value })}
                                         aria-label="Visual spectrum theme"
-                                        className="w-full bg-black/40 border-4 border-black p-4 text-xs font-mono text-silver-bright focus:outline-none focus:ring-2 focus:ring-rag-blue"
+                                        className="w-full bg-black/40 border-4 border-black p-4 text-xs font-mono text-[var(--text-secondary)]-bright focus:outline-none focus:ring-2 focus:ring-rag-blue"
                                     >
-                                        <option value="dark" className="bg-charcoal text-silver-bright">Dark (Obsidian)</option>
-                                        <option value="light" className="bg-charcoal text-silver-bright">Light (Paper)</option>
+                                        <option value="dark" className="bg-charcoal text-[var(--text-secondary)]-bright">Dark (Obsidian)</option>
+                                        <option value="light" className="bg-charcoal text-[var(--text-secondary)]-bright">Light (Paper)</option>
                                     </select>
                                     {isSystemControlled && (
                                         <p className="text-[9px] text-rag-blue/70 italic">↳ Following system preference: {getSystemThemeForSettings()}</p>
@@ -778,7 +778,7 @@ export default function Settings() {
                                     <button
                                         onClick={resetToSystem}
                                         disabled={isSystemControlled}
-                                        className="w-full py-2 text-[9px] font-bold text-silver-bright uppercase tracking-widest bg-black/30 hover:bg-black/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all border border-silver/20"
+                                        className="w-full py-2 text-[9px] font-bold text-[var(--text-secondary)]-bright uppercase tracking-widest bg-black/30 hover:bg-black/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all border border-silver/20"
                                     >
                                         Reset to System Default
                                     </button>
@@ -788,7 +788,7 @@ export default function Settings() {
                     </section>
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
-                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Intelligence_API_Link</h3>
+                            <h3 className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.4em] italic">Intelligence_API_Link</h3>
                             <div className="h-0.5 flex-1 bg-black/10"></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -812,13 +812,13 @@ export default function Settings() {
                     </section>
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
-                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Access_Perimeters</h3>
+                            <h3 className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.4em] italic">Access_Perimeters</h3>
                             <div className="h-0.5 flex-1 bg-black/10"></div>
                         </div>
                         <div className="bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
                             <div className="space-y-2">
-                                <label className="text-[10px] font-black text-silver-bright uppercase tracking-widest block italic">Authorized_Ingress_Vectors</label>
-                                <p className="text-[10px] text-silver/40 uppercase font-bold italic mb-6 leading-relaxed">Line-delimited IP/CIDR whitelist for high-privilege access</p>
+                                <label className="text-[10px] font-black text-[var(--text-secondary)]-bright uppercase tracking-widest block italic">Authorized_Ingress_Vectors</label>
+                                <p className="text-[10px] text-[var(--text-secondary)]/40 uppercase font-bold italic mb-6 leading-relaxed">Line-delimited IP/CIDR whitelist for high-privilege access</p>
                             </div>
                             <textarea
                                 value={config.ipWhitelist}
@@ -830,7 +830,7 @@ export default function Settings() {
                     </section>
                     <section className="space-y-8">
                         <div className="flex items-center gap-4">
-                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Audit_Logic_Toggles</h3>
+                            <h3 className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.4em] italic">Audit_Logic_Toggles</h3>
                             <div className="h-0.5 flex-1 bg-black/10"></div>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -866,11 +866,11 @@ export default function Settings() {
                 </main>
                 <aside className="xl:col-span-1 space-y-12">
                     <section className="bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
-                        <h3 className="text-[11px] font-black text-silver-bright uppercase tracking-[0.5em] italic mb-8">Management_Tools</h3>
+                        <h3 className="text-[11px] font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.5em] italic mb-8">Management_Tools</h3>
                         <div className="space-y-4">
                             <button
                                 onClick={handleExport}
-                                className="w-full py-4 bg-charcoal-dark border-4 border-black text-[10px] font-black text-silver/40 uppercase tracking-[0.3em] hover:bg-black hover:text-white transition-all italic"
+                                className="w-full py-4 bg-[var(--bg-primary)] border-4 border-black text-[10px] font-black text-[var(--text-secondary)]/40 uppercase tracking-[0.3em] hover:bg-black hover:text-[var(--text-primary)] transition-all italic"
                             >
                                 TELEMETRY_EXPORT
                             </button>
@@ -888,21 +888,21 @@ export default function Settings() {
                             </button>
                         </div>
                     </section>
-                    <section className="bg-charcoal-dark border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
+                    <section className="bg-[var(--bg-primary)] border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
                         <div className="space-y-4">
-                            <h3 className="text-[11px] font-black text-silver-bright uppercase tracking-[0.5em] italic border-b-4 border-black pb-4">Engine_Status</h3>
+                            <h3 className="text-[11px] font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.5em] italic border-b-4 border-black pb-4">Engine_Status</h3>
                             <div className="space-y-4 font-mono">
                                 <div className="flex justify-between text-[10px]">
-                                    <span className="text-silver/30 uppercase tracking-tighter">Engine Version</span>
+                                    <span className="text-[var(--text-secondary)]/30 uppercase tracking-tighter">Engine Version</span>
                                     <span className="text-rag-blue font-bold">4.5.3-BETA</span>
                                 </div>
                                 <div className="flex justify-between text-[10px]">
-                                    <span className="text-silver/30 uppercase tracking-tighter">Stack Health</span>
+                                    <span className="text-[var(--text-secondary)]/30 uppercase tracking-tighter">Stack Health</span>
                                     <span className="text-rag-green font-bold">NOMINAL</span>
                                 </div>
                                 <div className="flex justify-between text-[10px]">
-                                    <span className="text-silver/30 uppercase tracking-tighter">Core Sync</span>
-                                    <span className="text-silver-bright font-bold">STABLE</span>
+                                    <span className="text-[var(--text-secondary)]/30 uppercase tracking-tighter">Core Sync</span>
+                                    <span className="text-[var(--text-secondary)]-bright font-bold">STABLE</span>
                                 </div>
                             </div>
                         </div>

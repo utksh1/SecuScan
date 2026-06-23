@@ -302,30 +302,30 @@ export default function Scanner() {
   }
 
   return (
-    <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12 flex gap-0">
+    <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-secondary)] p-6 md:p-12 space-y-12 flex gap-0">
       <div className="flex-1 space-y-12">
       <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10 font-black">
         <div className="space-y-4">
           <div className="bg-rag-red text-black px-4 py-1 text-xs uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
             Strike_Toolkit v12
           </div>
-          <h1 className="text-6xl md:text-8xl text-silver-bright uppercase tracking-tighter leading-none italic whitespace-nowrap">
+          <h1 className="text-6xl md:text-8xl text-[var(--text-secondary)]-bright uppercase tracking-tighter leading-none italic whitespace-nowrap">
             Tactical <span className="text-transparent stroke-white" style={{ WebkitTextStroke: '2px var(--accent-silver-bright)' }}>Catalog</span>
           </h1>
-          <p className="text-sm font-mono text-silver/40 uppercase tracking-widest italic leading-relaxed">
+          <p className="text-sm font-mono text-[var(--text-secondary)]/40 uppercase tracking-widest italic leading-relaxed">
             SELECT_TOOL_PROTOCOL // DEPLOY_PAYLOAD // MONITOR_FEED
           </p>
         </div>
 
         <div className="flex items-center gap-6 flex-wrap">
           <div className="relative group">
-            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-silver/20 group-focus-within:text-rag-red transition-colors text-sm"
+            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]/20 group-focus-within:text-rag-red transition-colors text-sm"
             aria-hidden="true">search</span>
             <input
               type="text"
               aria-label="Search scanner catalog"
               placeholder="SEARCH_PROTOCOLS..."
-              className="bg-charcoal border-4 border-black pl-12 pr-4 py-4 text-xs font-black uppercase tracking-widest text-silver-bright focus:outline-none focus:border-rag-red transition-all w-80 placeholder:text-silver/10 italic shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+              className="bg-charcoal border-4 border-black pl-12 pr-4 py-4 text-xs font-black uppercase tracking-widest text-[var(--text-secondary)]-bright focus:outline-none focus:border-rag-red transition-all w-80 placeholder:text-[var(--text-secondary)]/10 italic shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
             />
@@ -336,7 +336,7 @@ export default function Scanner() {
       {loadError && (
         <section className="bg-charcoal border-4 border-rag-red p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
           <p className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-red">Catalog load failed</p>
-          <p className="text-[10px] text-silver/60 uppercase tracking-widest mt-3">{loadError}</p>
+          <p className="text-[10px] text-[var(--text-secondary)]/60 uppercase tracking-widest mt-3">{loadError}</p>
           <button
             type="button"
             onClick={() => setCatalogLoadAttempt((value) => value + 1)}
@@ -361,7 +361,7 @@ export default function Scanner() {
             className={`px-8 py-4 text-[10px] font-black uppercase tracking-[0.3em] transition-all border-4 flex items-center gap-3 ${
               activeTab === category
                 ? 'bg-rag-red text-black border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] -translate-x-1 -translate-y-1'
-                : 'bg-charcoal text-silver/40 border-black hover:border-silver-bright/20'
+                : 'bg-charcoal text-[var(--text-secondary)]/40 border-black hover:border-silver-bright/20'
             }`}
           >
             {formatCategoryLabel(category)}
@@ -426,19 +426,19 @@ export default function Scanner() {
                             PROFESSIONAL
                           </div>
                         )}
-                        <span className="material-symbols-outlined text-silver/10 group-hover:text-silver-bright transition-colors duration-500" aria-hidden="true">
+                        <span className="material-symbols-outlined text-[var(--text-secondary)]/10 group-hover:text-[var(--text-secondary)]-bright transition-colors duration-500" aria-hidden="true">
                           {tool.presetCompatibility === 'quick-recon' ? 'bolt' : 'psychology'}
                         </span>
                       </div>
 
                       <div>
-                        <h3 className="text-3xl font-black text-silver-bright uppercase tracking-tighter italic leading-none group-hover:text-rag-red transition-colors">
+                        <h3 className="text-3xl font-black text-[var(--text-secondary)]-bright uppercase tracking-tighter italic leading-none group-hover:text-rag-red transition-colors">
                           {tool.name}
                         </h3>
                         <div className="w-12 h-1 bg-silver-bright/10 mt-4 group-hover:w-full group-hover:bg-rag-red/30 transition-all duration-700" />
                       </div>
 
-                      <p id={descriptionId} className="text-[10px] text-silver/40 uppercase tracking-widest leading-relaxed line-clamp-3 font-bold italic">
+                      <p id={descriptionId} className="text-[10px] text-[var(--text-secondary)]/40 uppercase tracking-widest leading-relaxed line-clamp-3 font-bold italic">
                         {tool.purpose}
                       </p>
 
@@ -451,10 +451,10 @@ export default function Scanner() {
                     </div>
 
                     <div className="pt-6 border-t-2 border-black border-dashed flex justify-between items-end">
-                      <span className="text-[9px] font-black text-silver-bright/20 uppercase tracking-[0.4em] group-hover:text-silver-bright transition-colors">
+                      <span className="text-[9px] font-black text-[var(--text-secondary)]-bright/20 uppercase tracking-[0.4em] group-hover:text-[var(--text-secondary)]-bright transition-colors">
                         INIT_DEPLOYMENT
                       </span>
-                      <span className="material-symbols-outlined text-silver/20 group-hover:text-rag-red group-hover:translate-x-1 transition-all duration-300" aria-hidden="true">
+                      <span className="material-symbols-outlined text-[var(--text-secondary)]/20 group-hover:text-rag-red group-hover:translate-x-1 transition-all duration-300" aria-hidden="true">
                         double_arrow
                       </span>
                     </div>
@@ -478,7 +478,7 @@ export default function Scanner() {
                   {searchQuery.trim().length > 0 ? (
                     <>
                       <div className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-amber">No tools match search</div>
-                      <p className="text-[10px] text-silver/60 uppercase tracking-widest leading-relaxed">
+                      <p className="text-[10px] text-[var(--text-secondary)]/60 uppercase tracking-widest leading-relaxed">
                         No tools in this category match the current query.
                       </p>
                       <button
@@ -491,7 +491,7 @@ export default function Scanner() {
                   ) : categoryToolsCount === 0 ? (
                     <>
                       <div className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-amber">No tools available in this category</div>
-                      <p className="text-[10px] text-silver/60 uppercase tracking-widest leading-relaxed">
+                      <p className="text-[10px] text-[var(--text-secondary)]/60 uppercase tracking-widest leading-relaxed">
                         This category currently has no active tools. Use the first available category to continue.
                       </p>
                       <button
@@ -526,7 +526,7 @@ export default function Scanner() {
             <p className="text-xs font-black text-rag-amber uppercase tracking-[0.4em] italic leading-relaxed">
               UNAUTHORIZED_DEPLOYMENT_IS_MONITORED
             </p>
-            <p className="text-[10px] text-silver/40 uppercase tracking-widest font-bold leading-loose max-w-4xl">
+            <p className="text-[10px] text-[var(--text-secondary)]/40 uppercase tracking-widest font-bold leading-loose max-w-4xl">
               Operation engagement rules strictly apply. By initializing any protocol, you acknowledge the jurisdiction of the Secure Enclave and provide full consent for activity recording and auditing. Escalate only under valid mission authorization.
             </p>
           </div>

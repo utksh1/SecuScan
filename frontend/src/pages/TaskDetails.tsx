@@ -189,7 +189,7 @@ function PhaseLabel({ phase }: { phase?: string }) {
     const label = phase ? PHASE_LABELS[phase] : null
     const message = phase ? PHASE_MESSAGES[phase] : 'Decrypting_Briefing...'
     return (
-        <p className="text-xs font-black text-silver-bright uppercase tracking-[0.5em] italic">
+        <p className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.5em] italic">
             {label || 'DECRYPTING_BRIEFING...'}
         </p>
     )
@@ -206,7 +206,7 @@ function PhaseProgress({ phase }: { phase?: string }) {
             <div className="flex items-center gap-2">
                 {phases.map((p, i) => (
                     <React.Fragment key={p}>
-                        <div className={`w-3 h-3 border-2 ${i <= currentIdx ? 'bg-rag-blue border-rag-blue shadow-[0_0_8px_rgba(0,112,243,0.5)]' : 'bg-charcoal-dark border-silver/20'} transition-all duration-500`} />
+                        <div className={`w-3 h-3 border-2 ${i <= currentIdx ? 'bg-rag-blue border-rag-blue shadow-[0_0_8px_rgba(0,112,243,0.5)]' : 'bg-[var(--bg-primary)] border-silver/20'} transition-all duration-500`} />
                         {i < phases.length - 1 && (
                             <div className={`h-0.5 flex-1 ${i < currentIdx ? 'bg-rag-blue' : 'bg-silver/10'} transition-all duration-500`} />
                         )}
@@ -260,7 +260,7 @@ function CollapsiblePane({
     return (
         <div className="space-y-2">
             <div className="border border-white/6 bg-black/30 p-4 font-mono text-[11px] text-rag-blue/80 break-all leading-6 whitespace-pre-wrap">
-                {prefix && <span className="text-silver/20 mr-2">{prefix}</span>}
+                {prefix && <span className="text-[var(--text-secondary)]/20 mr-2">{prefix}</span>}
                 {display}
             </div>
             {isLong && (
@@ -361,20 +361,20 @@ export default function TaskDetails() {
                 animate={{ x: 0 }}
                 exit={{ x: '100%' }}
                 transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className="fixed top-0 right-0 h-full w-[100%] md:w-[600px] bg-charcoal-dark border-l border-white/10 shadow-[-10px_0px_30px_rgba(0,0,0,0.5)] z-[100] overflow-y-auto"
+                className="fixed top-0 right-0 h-full w-[100%] md:w-[600px] bg-[var(--bg-primary)] border-l border-white/10 shadow-[-10px_0px_30px_rgba(0,0,0,0.5)] z-[100] overflow-y-auto"
             >
-                <div className="sticky top-0 bg-charcoal-dark/95 backdrop-blur border-b border-white/10 px-8 py-6 flex items-center justify-between z-10">
+                <div className="sticky top-0 bg-[var(--bg-primary)]/95 backdrop-blur border-b border-white/10 px-8 py-6 flex items-center justify-between z-10">
                     <div className="space-y-1">
                         <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-2 py-0.5 border ${severityTone(finding.severity)}`}>
                             {finding.severity}
                         </span>
-                        <h2 id={drawerTitleId} className="text-xl font-black text-silver-bright italic uppercase tracking-tight">{finding.title}</h2>
+                        <h2 id={drawerTitleId} className="text-xl font-black text-[var(--text-secondary)]-bright italic uppercase tracking-tight">{finding.title}</h2>
                     </div>
                     <button
                         type="button"
                         onClick={onClose}
                         aria-label="Close finding details"
-                        className="p-2 hover:bg-white/5 transition-colors text-silver/40 hover:text-silver-bright"
+                        className="p-2 hover:bg-white/5 transition-colors text-[var(--text-secondary)]/40 hover:text-[var(--text-secondary)]-bright"
                     >
                         <DetailIcon icon={Cancel02Icon} className="pointer-events-none" />
                     </button>
@@ -382,10 +382,10 @@ export default function TaskDetails() {
 
                 <div className="p-8 space-y-10">
                     <div className="space-y-4">
-                        <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Description</h3>
-                        <p className="text-sm leading-8 text-silver/85 whitespace-pre-wrap">{finding.description}</p>
+                        <h3 className="text-[10px] font-black text-[var(--text-secondary)]/30 uppercase tracking-[0.3em] pb-2 border-b border-[color:var(--accent-silver)]/20">Description</h3>
+                        <p className="text-sm leading-8 text-[var(--text-secondary)]/85 whitespace-pre-wrap">{finding.description}</p>
                         {finding.confidence_reason && (
-                            <p className="text-[11px] font-mono uppercase tracking-[0.12em] text-silver/45">
+                            <p className="text-[11px] font-mono uppercase tracking-[0.12em] text-[var(--text-secondary)]/45">
                                 {finding.confidence_reason}
                             </p>
                         )}
@@ -393,8 +393,8 @@ export default function TaskDetails() {
 
                     {finding.proof && (
                         <div className="space-y-4">
-                            <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Evidence / Proof</h3>
-                            <pre className="bg-black/40 border border-white/5 p-5 text-[11px] font-mono text-rag-blue/90 whitespace-pre-wrap break-words leading-6">
+                            <h3 className="text-[10px] font-black text-[var(--text-secondary)]/30 uppercase tracking-[0.3em] pb-2 border-b border-[color:var(--accent-silver)]/20">Evidence / Proof</h3>
+                            <pre className="bg-black/40 border border-[color:var(--accent-silver)]/20 p-5 text-[11px] font-mono text-rag-blue/90 whitespace-pre-wrap break-words leading-6">
                                 {finding.proof}
                             </pre>
                         </div>
@@ -402,7 +402,7 @@ export default function TaskDetails() {
 
                     {finding.remediation && (
                         <div className="space-y-4">
-                            <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Remediation Guidance</h3>
+                            <h3 className="text-[10px] font-black text-[var(--text-secondary)]/30 uppercase tracking-[0.3em] pb-2 border-b border-[color:var(--accent-silver)]/20">Remediation Guidance</h3>
                             <div className="bg-rag-green/5 border border-rag-green/20 p-5">
                                 <p className="text-sm leading-8 text-rag-green/90">{finding.remediation}</p>
                             </div>
@@ -411,12 +411,12 @@ export default function TaskDetails() {
 
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-4">
-                            <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Category</h3>
-                            <p className="text-sm font-black text-silver-bright uppercase italic">{finding.category}</p>
+                            <h3 className="text-[10px] font-black text-[var(--text-secondary)]/30 uppercase tracking-[0.3em] pb-2 border-b border-[color:var(--accent-silver)]/20">Category</h3>
+                            <p className="text-sm font-black text-[var(--text-secondary)]-bright uppercase italic">{finding.category}</p>
                         </div>
                         {finding.cvss && (
                             <div className="space-y-4">
-                                <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">CVSS Score</h3>
+                                <h3 className="text-[10px] font-black text-[var(--text-secondary)]/30 uppercase tracking-[0.3em] pb-2 border-b border-[color:var(--accent-silver)]/20">CVSS Score</h3>
                                 <p className={`text-sm font-black italic ${finding.cvss >= 7 ? 'text-rag-red' : finding.cvss >= 4 ? 'text-rag-amber' : 'text-rag-blue'}`}>
                                     {finding.cvss.toFixed(1)}
                                 </p>
@@ -424,7 +424,7 @@ export default function TaskDetails() {
                         )}
                         {finding.risk_score !== undefined && finding.risk_score !== null && (
                             <div className="space-y-4">
-                                <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Risk Score</h3>
+                                <h3 className="text-[10px] font-black text-[var(--text-secondary)]/30 uppercase tracking-[0.3em] pb-2 border-b border-[color:var(--accent-silver)]/20">Risk Score</h3>
                                 <p className={`text-sm font-black italic ${finding.risk_score >= 7 ? 'text-rag-red' : finding.risk_score >= 4 ? 'text-rag-amber' : 'text-rag-blue'}`}>
                                     {finding.risk_score.toFixed(1)}
                                 </p>
@@ -432,27 +432,27 @@ export default function TaskDetails() {
                         )}
                         {finding.cve && (
                             <div className="space-y-4">
-                                <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">CVE Identifiers</h3>
+                                <h3 className="text-[10px] font-black text-[var(--text-secondary)]/30 uppercase tracking-[0.3em] pb-2 border-b border-[color:var(--accent-silver)]/20">CVE Identifiers</h3>
                                 <p className="text-sm font-mono text-rag-blue/80 underline cursor-pointer">{finding.cve}</p>
                             </div>
                         )}
                         {(finding.validated !== undefined || finding.validation_method) && (
                             <div className="space-y-4">
-                                <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Validation</h3>
-                                <p className="text-sm font-mono text-silver-bright uppercase">
+                                <h3 className="text-[10px] font-black text-[var(--text-secondary)]/30 uppercase tracking-[0.3em] pb-2 border-b border-[color:var(--accent-silver)]/20">Validation</h3>
+                                <p className="text-sm font-mono text-[var(--text-secondary)]-bright uppercase">
                                     {finding.validated ? 'Validated' : finding.validation_method || 'Unvalidated'}
                                 </p>
                             </div>
                         )}
                         {finding.cpe && (
                             <div className="space-y-4">
-                                <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">CPE</h3>
-                                <p className="text-[11px] font-mono text-silver-bright break-all">{finding.cpe}</p>
+                                <h3 className="text-[10px] font-black text-[var(--text-secondary)]/30 uppercase tracking-[0.3em] pb-2 border-b border-[color:var(--accent-silver)]/20">CPE</h3>
+                                <p className="text-[11px] font-mono text-[var(--text-secondary)]-bright break-all">{finding.cpe}</p>
                             </div>
                         )}
                         <div className="space-y-4">
-                            <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.36em] pb-2 border-b border-white/5">Detected At</h3>
-                            <p className="text-xs text-silver/60 font-mono italic">
+                            <h3 className="text-[10px] font-black text-[var(--text-secondary)]/30 uppercase tracking-[0.36em] pb-2 border-b border-[color:var(--accent-silver)]/20">Detected At</h3>
+                            <p className="text-xs text-[var(--text-secondary)]/60 font-mono italic">
                                 {finding.discovered_at ? formatDateLong(finding.discovered_at) : formatDateLong(task?.completed_at || '')}
                             </p>
                         </div>
@@ -460,10 +460,10 @@ export default function TaskDetails() {
 
                     {finding.evidence && finding.evidence.length > 0 && (
                         <div className="space-y-4">
-                            <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Structured Evidence</h3>
+                            <h3 className="text-[10px] font-black text-[var(--text-secondary)]/30 uppercase tracking-[0.3em] pb-2 border-b border-[color:var(--accent-silver)]/20">Structured Evidence</h3>
                             <div className="space-y-2">
                                 {finding.evidence.slice(0, 6).map((item, index) => (
-                                    <div key={`${finding.id ?? finding.title}-evidence-${index}`} className="bg-black/25 border border-white/5 p-4 text-[11px] font-mono text-silver/80 break-words">
+                                    <div key={`${finding.id ?? finding.title}-evidence-${index}`} className="bg-black/25 border border-[color:var(--accent-silver)]/20 p-4 text-[11px] font-mono text-[var(--text-secondary)]/80 break-words">
                                         {String(item.type || 'evidence').toUpperCase()}: {String(item.value ?? '')}
                                     </div>
                                 ))}
@@ -473,17 +473,17 @@ export default function TaskDetails() {
 
                     {finding.risk_factors && finding.risk_factors.length > 0 && (
                         <div className="space-y-4">
-                            <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Risk Factor Breakdown</h3>
+                            <h3 className="text-[10px] font-black text-[var(--text-secondary)]/30 uppercase tracking-[0.3em] pb-2 border-b border-[color:var(--accent-silver)]/20">Risk Factor Breakdown</h3>
                             <div className="space-y-2">
                                 {finding.risk_factors.map((rf) => (
                                     <div key={rf.factor} className="flex items-center justify-between text-[11px] border-b border-white/[0.03] pb-2">
                                         <div className="flex items-center gap-2">
-                                            <span className="text-silver/40 uppercase tracking-wider">{rf.label}</span>
-                                            <span className="text-silver/25 text-[9px]">({(rf.weight * 100).toFixed(0)}%)</span>
+                                            <span className="text-[var(--text-secondary)]/40 uppercase tracking-wider">{rf.label}</span>
+                                            <span className="text-[var(--text-secondary)]/25 text-[9px]">({(rf.weight * 100).toFixed(0)}%)</span>
                                         </div>
                                         <div className="flex items-center gap-3">
-                                            <span className="text-silver/70 font-mono">{rf.score.toFixed(1)}</span>
-                                            <span className={`text-[10px] font-mono ${rf.contribution >= 2 ? 'text-rag-red' : rf.contribution >= 1 ? 'text-rag-amber' : 'text-silver/40'}`}>
+                                            <span className="text-[var(--text-secondary)]/70 font-mono">{rf.score.toFixed(1)}</span>
+                                            <span className={`text-[10px] font-mono ${rf.contribution >= 2 ? 'text-rag-red' : rf.contribution >= 1 ? 'text-rag-amber' : 'text-[var(--text-secondary)]/40'}`}>
                                                 +{rf.contribution.toFixed(1)}
                                             </span>
                                         </div>
@@ -495,12 +495,12 @@ export default function TaskDetails() {
 
                     {Object.keys(finding.metadata || {}).length > 0 && (
                         <div className="space-y-4">
-                            <h3 className="text-[10px] font-black text-silver/30 uppercase tracking-[0.3em] pb-2 border-b border-white/5">Technical Attributes</h3>
+                            <h3 className="text-[10px] font-black text-[var(--text-secondary)]/30 uppercase tracking-[0.3em] pb-2 border-b border-[color:var(--accent-silver)]/20">Technical Attributes</h3>
                             <div className="grid grid-cols-1 gap-3">
                                 {Object.entries(finding.metadata || {}).map(([key, val]) => (
                                     <div key={key} className="flex justify-between items-start text-[11px] border-b border-white/[0.03] pb-2">
-                                        <span className="text-silver/40 uppercase tracking-wider">{formatKeyLabel(key)}</span>
-                                        <span className="text-silver/70 font-mono break-all text-right max-w-[240px]">{formatValue(val)}</span>
+                                        <span className="text-[var(--text-secondary)]/40 uppercase tracking-wider">{formatKeyLabel(key)}</span>
+                                        <span className="text-[var(--text-secondary)]/70 font-mono break-all text-right max-w-[240px]">{formatValue(val)}</span>
                                     </div>
                                 ))}
                             </div>
@@ -601,10 +601,10 @@ export default function TaskDetails() {
     if (loading || !task) {
         if (error) {
             return (
-                <div className="min-h-screen bg-charcoal-dark flex items-center justify-center p-12">
+                <div className="min-h-screen bg-[var(--bg-primary)] flex items-center justify-center p-12">
                     <div className="max-w-xl w-full bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-4 text-center">
                         <p className="text-xs font-black text-rag-red uppercase tracking-[0.4em] italic">Task_Load_Failed</p>
-                        <p className="text-sm text-silver-bright font-mono break-words">{error}</p>
+                        <p className="text-sm text-[var(--text-secondary)]-bright font-mono break-words">{error}</p>
                         <button
                             onClick={() => {
                                 setLoading(true)
@@ -620,7 +620,7 @@ export default function TaskDetails() {
         }
 
         return (
-            <div className="min-h-screen bg-charcoal-dark flex items-center justify-center p-12">
+            <div className="min-h-screen bg-[var(--bg-primary)] flex items-center justify-center p-12">
                 <div className="space-y-4 text-center">
                     <div className="w-20 h-20 border-8 border-silver-bright/10 border-t-rag-blue animate-spin mx-auto shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"></div>
                     <PhaseLabel phase={scanPhase || undefined} />
@@ -694,7 +694,7 @@ export default function TaskDetails() {
         : task.status === 'failed'
             ? 'bg-rag-red/15 text-rag-red border-rag-red/30'
             : task.status === 'cancelled'
-                ? 'bg-silver/10 text-silver/70 border-silver/15'
+                ? 'bg-silver/10 text-[var(--text-secondary)]/70 border-silver/15'
                 : 'bg-rag-amber/15 text-rag-amber border-rag-amber/30'
 
     const severityTone = (severity?: string) => {
@@ -703,7 +703,7 @@ export default function TaskDetails() {
         if (normalized === 'high') return 'text-rag-amber border-rag-amber/30 bg-rag-amber/10'
         if (normalized === 'medium') return 'text-rag-blue border-rag-blue/30 bg-rag-blue/10'
         if (normalized === 'low') return 'text-rag-green border-rag-green/30 bg-rag-green/10'
-        return 'text-silver/65 border-white/10 bg-white/[0.02]'
+        return 'text-[var(--text-secondary)]/65 border-white/10 bg-white/[0.02]'
     }
     const primaryDetail = findInputValue('source_ip', 'ip', 'host', 'hostname') || task.target
     const primaryDetailLabel = task.inputs?.source_ip || task.inputs?.ip ? 'Source IP' : 'Target'
@@ -806,10 +806,10 @@ export default function TaskDetails() {
     }
 
     const DetailCard = ({ label, value, subValue }: { label: string, value: string, subValue?: string }) => (
-        <div className="bg-charcoal border border-white/5 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] min-h-[118px] flex flex-col justify-between">
+        <div className="bg-charcoal border border-[color:var(--accent-silver)]/20 p-5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] min-h-[118px] flex flex-col justify-between">
             <div className="space-y-3">
-                <span className="text-[10px] font-black text-silver/35 uppercase tracking-[0.28em] italic block">{label}</span>
-                <div className="text-xl md:text-2xl font-black text-silver-bright italic tracking-tight break-words">{value}</div>
+                <span className="text-[10px] font-black text-[var(--text-secondary)]/35 uppercase tracking-[0.28em] italic block">{label}</span>
+                <div className="text-xl md:text-2xl font-black text-[var(--text-secondary)]-bright italic tracking-tight break-words">{value}</div>
             </div>
             {subValue && <div className="pt-4 text-[9px] font-mono text-rag-blue/90 font-black uppercase tracking-[0.22em]">{subValue}</div>}
         </div>
@@ -823,13 +823,13 @@ export default function TaskDetails() {
     ] as const
 
     return (
-        <div className="min-h-screen bg-charcoal-dark text-silver px-3 py-6 md:px-4 xl:px-5 md:py-8 space-y-8">
+        <div className="min-h-screen bg-[var(--bg-primary)] text-[var(--text-secondary)] px-3 py-6 md:px-4 xl:px-5 md:py-8 space-y-8">
             <header className="border-b border-white/8 pb-6">
                 <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
                     <div className="flex items-start gap-5">
                         <button
                             onClick={() => navigate(routes.scans)}
-                            className="bg-charcoal border border-white/10 p-3 text-silver-bright transition-colors hover:bg-white/[0.04]"
+                            className="bg-charcoal border border-white/10 p-3 text-[var(--text-secondary)]-bright transition-colors hover:bg-white/[0.04]"
                         >
                             <DetailIcon icon={ArrowLeft01Icon} />
                         </button>
@@ -844,7 +844,7 @@ export default function TaskDetails() {
                                     aria-label="Copy task ID"
                                     title="Copy Task ID"
                                     disabled={!taskId}
-                                    className="flex items-center gap-1 border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-black text-silver-bright hover:bg-white/[0.04] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                    className="flex items-center gap-1 border border-white/10 px-3 py-1 text-[10px] uppercase tracking-[0.2em] font-black text-[var(--text-secondary)]-bright hover:bg-white/[0.04] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                                 >
                                     <span className="material-symbols-outlined text-sm">
                                         content_copy
@@ -855,11 +855,11 @@ export default function TaskDetails() {
                                     {task.status}
                                 </span>
                             </div>
-                            <h1 className="text-4xl md:text-6xl text-silver-bright uppercase tracking-tight leading-none italic font-black">
+                            <h1 className="text-4xl md:text-6xl text-[var(--text-secondary)]-bright uppercase tracking-tight leading-none italic font-black">
                                 Intel <span className="text-transparent" style={{ WebkitTextStroke: '1.5px var(--accent-silver-bright)' }}>Briefing</span>
                             </h1>
                             <div className="space-y-1">
-                                <p className="text-lg md:text-3xl font-black italic uppercase tracking-tight text-silver-bright break-all">
+                                <p className="text-lg md:text-3xl font-black italic uppercase tracking-tight text-[var(--text-secondary)]-bright break-all">
                                     {task.target}
                                 </p>
                             </div>
@@ -949,7 +949,7 @@ export default function TaskDetails() {
                         </div>
                         <CollapsiblePane content={task.error_message} maxCollapsedLength={400} label="error output" />
                         <div className="pt-2">
-                            <span className="text-[9px] font-black text-silver/30 uppercase tracking-[0.2em] italic">Diagnostic_Code::EXEC_FAIL_{task.exit_code || 'ERR'}</span>
+                            <span className="text-[9px] font-black text-[var(--text-secondary)]/30 uppercase tracking-[0.2em] italic">Diagnostic_Code::EXEC_FAIL_{task.exit_code || 'ERR'}</span>
                         </div>
                     </motion.div>
                 )}
@@ -962,8 +962,8 @@ export default function TaskDetails() {
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
                             className={`px-4 py-3 text-[10px] uppercase tracking-[0.28em] font-black transition-colors border-b-2 ${activeTab === tab.id
-                                ? 'text-silver-bright border-rag-blue'
-                                : 'text-silver/40 border-transparent hover:text-silver/75'
+                                ? 'text-[var(--text-secondary)]-bright border-rag-blue'
+                                : 'text-[var(--text-secondary)]/40 border-transparent hover:text-[var(--text-secondary)]/75'
                                 }`}
                         >
                             {tab.label}
@@ -987,7 +987,7 @@ export default function TaskDetails() {
                                 <motion.div variants={itemVariants} className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.5fr)_420px] gap-6">
                                     <section className="border border-white/8 bg-charcoal p-6">
                                         <div className="flex items-center gap-4 mb-5">
-                                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Risk Distribution</h3>
+                                            <h3 className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.36em] italic">Risk Distribution</h3>
                                             <div className="h-px flex-1 bg-white/8" />
                                         </div>
                                         <div className="h-[300px] w-full mt-4">
@@ -1029,7 +1029,7 @@ export default function TaskDetails() {
 
                                     <section className="border border-white/8 bg-charcoal p-6">
                                         <div className="flex items-center gap-4 mb-5">
-                                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Severity Ratio</h3>
+                                            <h3 className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.36em] italic">Severity Ratio</h3>
                                             <div className="h-px flex-1 bg-white/8" />
                                         </div>
                                         <div className="h-[300px] w-full flex items-center justify-center">
@@ -1060,9 +1060,9 @@ export default function TaskDetails() {
 
                                 <motion.div variants={itemVariants} className="border border-white/8 bg-charcoal p-6">
                                     <div className="flex items-center gap-4 mb-5">
-                                        <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Priority Findings</h3>
+                                        <h3 className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.36em] italic">Priority Findings</h3>
                                         <div className="h-px flex-1 bg-white/8" />
-                                        <span className="text-[10px] uppercase tracking-[0.24em] text-silver/40">{previewFindings.length} Top Hits</span>
+                                        <span className="text-[10px] uppercase tracking-[0.24em] text-[var(--text-secondary)]/40">{previewFindings.length} Top Hits</span>
                                     </div>
                                     {previewFindings.length > 0 ? (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1078,24 +1078,24 @@ export default function TaskDetails() {
                                                         <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 border ${severityTone(f.severity)}`}>
                                                             {f.severity}
                                                         </span>
-                                                        <span className="text-[10px] font-mono text-silver/20 group-hover:text-rag-blue transition-colors">#{idx.toString().padStart(3, '0')}</span>
+                                                        <span className="text-[10px] font-mono text-[var(--text-secondary)]/20 group-hover:text-rag-blue transition-colors">#{idx.toString().padStart(3, '0')}</span>
                                                     </div>
-                                                    <h4 className="text-sm font-black text-silver-bright uppercase italic mb-2 line-clamp-1">{stripAnsi(f.title)}</h4>
-                                                    <p className="text-xs text-silver/50 line-clamp-2 leading-relaxed">{stripAnsi(f.description)}</p>
+                                                    <h4 className="text-sm font-black text-[var(--text-secondary)]-bright uppercase italic mb-2 line-clamp-1">{stripAnsi(f.title)}</h4>
+                                                    <p className="text-xs text-[var(--text-secondary)]/50 line-clamp-2 leading-relaxed">{stripAnsi(f.description)}</p>
                                                 </div>
                                             ))}
                                         </div>
                                     ) : (
-                                        <p className="text-sm text-silver/55 italic">No findings identified for this target profile.</p>
+                                        <p className="text-sm text-[var(--text-secondary)]/55 italic">No findings identified for this target profile.</p>
                                     )}
                                 </motion.div>
 
                                 <motion.div variants={itemVariants} className="grid grid-cols-1 xl:grid-cols-2 gap-6">
                                     <section className="border border-white/8 bg-charcoal p-6">
                                         <div className="flex items-center gap-4 mb-5">
-                                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Attack Surface Summary</h3>
+                                            <h3 className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.36em] italic">Attack Surface Summary</h3>
                                             <div className="h-px flex-1 bg-white/8" />
-                                            <span className="text-[10px] uppercase tracking-[0.24em] text-silver/40">{assetSummary.length} Assets</span>
+                                            <span className="text-[10px] uppercase tracking-[0.24em] text-[var(--text-secondary)]/40">{assetSummary.length} Assets</span>
                                         </div>
                                         {assetSummary.length > 0 ? (
                                             <div className="space-y-3">
@@ -1103,10 +1103,10 @@ export default function TaskDetails() {
                                                     <div key={asset.asset_id} className="border border-white/6 bg-black/20 p-4">
                                                         <div className="flex items-center justify-between gap-4">
                                                             <div>
-                                                                <p className="text-xs font-black uppercase tracking-[0.18em] text-silver-bright break-all">
+                                                                <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--text-secondary)]-bright break-all">
                                                                     {asset.label || asset.target || asset.asset_id}
                                                                 </p>
-                                                                <p className="mt-1 text-[10px] font-mono uppercase tracking-[0.16em] text-silver/35">
+                                                                <p className="mt-1 text-[10px] font-mono uppercase tracking-[0.16em] text-[var(--text-secondary)]/35">
                                                                     {asset.services?.length || 0} services // {asset.finding_count || 0} findings // {asset.validated_count || 0} validated
                                                                 </p>
                                                             </div>
@@ -1118,15 +1118,15 @@ export default function TaskDetails() {
                                                 ))}
                                             </div>
                                         ) : (
-                                            <p className="text-sm text-silver/55 italic">No normalized asset summary is available for this scan.</p>
+                                            <p className="text-sm text-[var(--text-secondary)]/55 italic">No normalized asset summary is available for this scan.</p>
                                         )}
                                     </section>
 
                                     <section className="border border-white/8 bg-charcoal p-6">
                                         <div className="flex items-center gap-4 mb-5">
-                                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Scan Delta</h3>
+                                            <h3 className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.36em] italic">Scan Delta</h3>
                                             <div className="h-px flex-1 bg-white/8" />
-                                            <span className="text-[10px] uppercase tracking-[0.24em] text-silver/40">Previous vs Current</span>
+                                            <span className="text-[10px] uppercase tracking-[0.24em] text-[var(--text-secondary)]/40">Previous vs Current</span>
                                         </div>
                                         <div className="grid grid-cols-3 gap-3 mb-4">
                                             {[
@@ -1135,7 +1135,7 @@ export default function TaskDetails() {
                                                 ['Changed', scanDiff.summary?.changed_count || 0, 'text-rag-blue'],
                                             ].map(([label, value, tone]) => (
                                                 <div key={String(label)} className="border border-white/6 bg-black/20 p-4 text-center">
-                                                    <p className="text-[9px] font-black uppercase tracking-[0.18em] text-silver/35">{label}</p>
+                                                    <p className="text-[9px] font-black uppercase tracking-[0.18em] text-[var(--text-secondary)]/35">{label}</p>
                                                     <p className={`mt-2 text-3xl font-black italic ${tone}`}>{value}</p>
                                                 </div>
                                             ))}
@@ -1144,15 +1144,15 @@ export default function TaskDetails() {
                                             <div className="space-y-2">
                                                 {scanDiff.new!.slice(0, 4).map((group) => (
                                                     <div key={group.id} className="border border-white/6 bg-black/20 p-3">
-                                                        <p className="text-xs font-black uppercase tracking-[0.16em] text-silver-bright">{group.title}</p>
-                                                        <p className="mt-1 text-[10px] font-mono uppercase tracking-[0.16em] text-silver/35">
+                                                        <p className="text-xs font-black uppercase tracking-[0.16em] text-[var(--text-secondary)]-bright">{group.title}</p>
+                                                        <p className="mt-1 text-[10px] font-mono uppercase tracking-[0.16em] text-[var(--text-secondary)]/35">
                                                             {group.severity} // {group.finding_kind || 'observation'} // {(group.confidence || 0).toFixed(2)} confidence
                                                         </p>
                                                     </div>
                                                 ))}
                                             </div>
                                         ) : (
-                                            <p className="text-sm text-silver/55 italic">No previous scan baseline is available yet for this target and scanner pairing.</p>
+                                            <p className="text-sm text-[var(--text-secondary)]/55 italic">No previous scan baseline is available yet for this target and scanner pairing.</p>
                                         )}
                                     </section>
                                 </motion.div>
@@ -1170,9 +1170,9 @@ export default function TaskDetails() {
                             >
                                 <motion.div variants={itemVariants} className="border border-white/8 bg-charcoal p-6">
                                     <div className="flex items-center gap-4 mb-5">
-                                        <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Finding Queue</h3>
+                                        <h3 className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.36em] italic">Finding Queue</h3>
                                         <div className="h-px flex-1 bg-white/8" />
-                                        <span className="text-[10px] uppercase tracking-[0.24em] text-silver/40">{findingGroups.length} Groups</span>
+                                        <span className="text-[10px] uppercase tracking-[0.24em] text-[var(--text-secondary)]/40">{findingGroups.length} Groups</span>
                                     </div>
                                     {findingGroups.length > 0 ? (
                                         <div className="space-y-3">
@@ -1190,10 +1190,10 @@ export default function TaskDetails() {
                                                         <span className={`px-2 py-1 text-[9px] font-black uppercase tracking-[0.16em] border ${severityTone(group.severity)}`}>
                                                             {group.severity}
                                                         </span>
-                                                        <span className="border border-silver-bright/10 bg-charcoal-dark px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-silver/70">
+                                                        <span className="border border-silver-bright/10 bg-[var(--bg-primary)] px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-[var(--text-secondary)]/70">
                                                             {group.finding_kind || 'observation'}
                                                         </span>
-                                                        <span className="border border-silver-bright/10 bg-charcoal-dark px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-silver/70">
+                                                        <span className="border border-silver-bright/10 bg-[var(--bg-primary)] px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-[var(--text-secondary)]/70">
                                                             {group.occurrence_count || 1} seen
                                                         </span>
                                                         {group.validated ? (
@@ -1202,23 +1202,23 @@ export default function TaskDetails() {
                                                             </span>
                                                         ) : null}
                                                     </div>
-                                                    <p className="mt-3 text-sm font-black uppercase tracking-[0.14em] text-silver-bright">{group.title}</p>
-                                                    <p className="mt-1 text-[10px] font-mono uppercase tracking-[0.16em] text-silver/35">
+                                                    <p className="mt-3 text-sm font-black uppercase tracking-[0.14em] text-[var(--text-secondary)]-bright">{group.title}</p>
+                                                    <p className="mt-1 text-[10px] font-mono uppercase tracking-[0.16em] text-[var(--text-secondary)]/35">
                                                         {(group.confidence || 0).toFixed(2)} confidence // {group.evidence_count || 0} evidence // {group.analyst_status || 'new'}
                                                     </p>
                                                 </button>
                                             ))}
                                         </div>
                                     ) : (
-                                        <p className="text-sm text-silver/55 italic">No grouped findings are available for this task.</p>
+                                        <p className="text-sm text-[var(--text-secondary)]/55 italic">No grouped findings are available for this task.</p>
                                     )}
                                 </motion.div>
 
                                 <motion.div variants={itemVariants} className="border border-white/8 bg-charcoal p-6">
                                     <div className="flex items-center gap-4 mb-5">
-                                        <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Discovery Results</h3>
+                                        <h3 className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.36em] italic">Discovery Results</h3>
                                         <div className="h-px flex-1 bg-white/8" />
-                                        <span className="text-[10px] uppercase tracking-[0.24em] text-silver/40">
+                                        <span className="text-[10px] uppercase tracking-[0.24em] text-[var(--text-secondary)]/40">
                                             {resultEntryCount} {resultEntryCount === 1 ? 'Entry' : 'Entries'}
                                         </span>
                                     </div>
@@ -1226,7 +1226,7 @@ export default function TaskDetails() {
                                         <div className="relative overflow-x-auto overflow-y-auto max-h-[72vh] border border-white/6 bg-black/20 custom-scrollbar rounded-sm">
                                             <table className="w-full text-left text-[11px] font-mono border-collapse table-fixed">
                                                 <thead>
-                                                    <tr className="sticky top-0 z-20 border-b border-white/10 text-silver/40 uppercase tracking-[0.22em] bg-[#0c0c0f] shadow-[0_1px_0_0_rgba(255,255,255,0.05)]">
+                                                    <tr className="sticky top-0 z-20 border-b border-white/10 text-[var(--text-secondary)]/40 uppercase tracking-[0.22em] bg-[#0c0c0f] shadow-[0_1px_0_0_rgba(255,255,255,0.05)]">
                                                         {Object.keys(tableRows[0]).map((key, kIdx) => (
                                                             <th key={key} className={`px-4 py-4 font-black ${kIdx === 0 ? 'w-[120px]' : ''}`}>{formatKeyLabel(key)}</th>
                                                         ))}
@@ -1236,12 +1236,12 @@ export default function TaskDetails() {
                                                     {tableRows.map((row: any, idx: number) => {
                                                         const isExpanded = expandedDiscoveryRows[idx];
                                                         return (
-                                                            <tr key={idx} className="border-b border-white/5 last:border-0 hover:bg-white/[0.03] transition-colors group">
+                                                            <tr key={idx} className="border-b border-[color:var(--accent-silver)]/20 last:border-0 hover:bg-white/[0.03] transition-colors group">
                                                                 {Object.entries(row).map(([key, val], vIdx) => {
                                                                     const strVal = stripAnsi(val) || '-';
                                                                     const isLong = strVal.length > 120;
                                                                     return (
-                                                                        <td key={vIdx} className={`px-4 py-4 align-top ${vIdx === 0 ? 'text-rag-blue font-bold' : 'text-silver/75'}`}>
+                                                                        <td key={vIdx} className={`px-4 py-4 align-top ${vIdx === 0 ? 'text-rag-blue font-bold' : 'text-[var(--text-secondary)]/75'}`}>
                                                                             <div className="space-y-2">
                                                                                 <div className={`${!isExpanded && isLong ? 'line-clamp-2' : ''} break-words whitespace-pre-wrap`}>
                                                                                     {strVal}
@@ -1268,7 +1268,7 @@ export default function TaskDetails() {
                                         <div className="relative overflow-x-auto overflow-y-auto max-h-[72vh] border border-white/6 bg-black/20 custom-scrollbar rounded-sm">
                                             <table className="w-full text-left border-collapse table-fixed">
                                                 <thead>
-                                                    <tr className="sticky top-0 z-20 border-b border-white/10 bg-[#0c0c0f] text-[10px] uppercase tracking-[0.2em] text-silver/35 font-black shadow-[0_1px_0_0_rgba(255,255,255,0.05)]">
+                                                    <tr className="sticky top-0 z-20 border-b border-white/10 bg-[#0c0c0f] text-[10px] uppercase tracking-[0.2em] text-[var(--text-secondary)]/35 font-black shadow-[0_1px_0_0_rgba(255,255,255,0.05)]">
                                                         <th className="px-4 py-4 w-[100px]">Entry</th>
                                                         <th className="px-4 py-4 w-[280px]">Finding</th>
                                                         <th className="px-4 py-4 w-[130px]">Severity</th>
@@ -1283,13 +1283,13 @@ export default function TaskDetails() {
                                                             <tr
                                                                 key={idx}
                                                                 onClick={() => setSelectedFinding(f)}
-                                                                className="border-b border-white/5 last:border-0 hover:bg-white/[0.03] transition-colors group cursor-pointer"
+                                                                className="border-b border-[color:var(--accent-silver)]/20 last:border-0 hover:bg-white/[0.03] transition-colors group cursor-pointer"
                                                             >
                                                                 <td className="px-4 py-6 align-top text-[10px] font-mono uppercase tracking-[0.24em] text-rag-blue/80 font-bold">
                                                                     #{idx.toString().padStart(3, '0')}
                                                                 </td>
                                                                 <td className="px-4 py-6 align-top">
-                                                                    <div className="text-sm md:text-[15px] font-black text-silver-bright uppercase tracking-tight italic break-words leading-tight">
+                                                                    <div className="text-sm md:text-[15px] font-black text-[var(--text-secondary)]-bright uppercase tracking-tight italic break-words leading-tight">
                                                                         {stripAnsi(f.title)}
                                                                     </div>
                                                                 </td>
@@ -1298,7 +1298,7 @@ export default function TaskDetails() {
                                                                         {f.severity || 'info'}
                                                                     </span>
                                                                 </td>
-                                                                <td className="px-4 py-6 align-top text-xs md:text-sm text-silver/70 leading-relaxed">
+                                                                <td className="px-4 py-6 align-top text-xs md:text-sm text-[var(--text-secondary)]/70 leading-relaxed">
                                                                     <div className="line-clamp-2 break-words whitespace-pre-wrap">
                                                                         {description}
                                                                     </div>
@@ -1310,7 +1310,7 @@ export default function TaskDetails() {
                                             </table>
                                         </div>
                                     ) : (
-                                        <p className="text-sm text-silver/55 italic">No tabular result set is available for this task.</p>
+                                        <p className="text-sm text-[var(--text-secondary)]/55 italic">No tabular result set is available for this task.</p>
                                     )}
                                 </motion.div>
                             </motion.section>
@@ -1328,7 +1328,7 @@ export default function TaskDetails() {
                                 {result?.command_used && (
                                     <motion.div variants={itemVariants} className="border border-rag-blue/20 bg-charcoal p-6">
                                         <div className="flex items-center gap-4 mb-5">
-                                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Final Command</h3>
+                                            <h3 className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.36em] italic">Final Command</h3>
                                             <div className="h-px flex-1 bg-white/8" />
                                         </div>
                                         <CollapsiblePane content={result.command_used} maxCollapsedLength={200} label="command" prefix="$ " />
@@ -1336,17 +1336,17 @@ export default function TaskDetails() {
                                 )}
                                 <motion.div variants={itemVariants} className="border border-white/8 bg-charcoal p-6">
                                     <div className="flex items-center gap-4 mb-5">
-                                        <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Effective Parameters</h3>
+                                        <h3 className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.36em] italic">Effective Parameters</h3>
                                         <div className="h-px flex-1 bg-white/8" />
                                     </div>
-                                    <p className="text-[10px] text-silver/40 uppercase tracking-[0.2em] mb-5">
+                                    <p className="text-[10px] text-[var(--text-secondary)]/40 uppercase tracking-[0.2em] mb-5">
                                         Shows the final scan configuration, including defaults and preset values applied at runtime.
                                     </p>
                                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                                         {effectiveParameterEntries.map((entry) => (
                                             <div key={entry.key} className="border border-white/6 bg-black/20 px-4 py-4 min-h-[130px]">
                                                 <div className="flex items-start justify-between gap-3 mb-3">
-                                                    <p className="text-[10px] font-black text-silver/30 uppercase tracking-[0.22em]">
+                                                    <p className="text-[10px] font-black text-[var(--text-secondary)]/30 uppercase tracking-[0.22em]">
                                                         {entry.label}
                                                     </p>
                                                     <span className={`text-[9px] font-black uppercase tracking-[0.18em] ${entry.source === 'INPUT'
@@ -1362,12 +1362,12 @@ export default function TaskDetails() {
                                                     ? 'text-rag-green'
                                                     : entry.value === 'OFF' || entry.value === 'FALSE'
                                                         ? 'text-rag-red'
-                                                        : 'text-silver-bright'
+                                                        : 'text-[var(--text-secondary)]-bright'
                                                     }`}>
                                                     {entry.value}
                                                 </p>
                                                 {entry.help && (
-                                                    <p className="mt-3 text-[10px] text-silver/35 leading-5">
+                                                    <p className="mt-3 text-[10px] text-[var(--text-secondary)]/35 leading-5">
                                                         {entry.help}
                                                     </p>
                                                 )}
@@ -1390,7 +1390,7 @@ export default function TaskDetails() {
                                 <motion.div variants={itemVariants} className="border border-white/8 bg-charcoal p-6">
                                     <div className="flex flex-col gap-4 mb-5">
                                         <div className="flex items-center gap-4">
-                                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Raw Output</h3>
+                                            <h3 className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.36em] italic">Raw Output</h3>
                                             <div className="h-px flex-1 bg-white/8" />
                                         </div>
                                         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -1399,16 +1399,16 @@ export default function TaskDetails() {
                                                     value={rawSearch}
                                                     onChange={(e) => setRawSearch(e.target.value)}
                                                     placeholder="Filter raw output"
-                                                    className="bg-black/30 border border-white/10 px-3 py-2 text-sm text-silver-bright outline-none min-w-[240px]"
+                                                    className="bg-black/30 border border-white/10 px-3 py-2 text-sm text-[var(--text-secondary)]-bright outline-none min-w-[240px]"
                                                 />
-                                                <span className="text-[10px] uppercase tracking-[0.2em] text-silver/40">
+                                                <span className="text-[10px] uppercase tracking-[0.2em] text-[var(--text-secondary)]/40">
                                                     {filteredRawLines.length} lines
                                                 </span>
                                             </div>
                                             <div className="flex gap-3">
                                                 <button
                                                     onClick={() => setWrapRawOutput(prev => !prev)}
-                                                    className="border border-white/10 px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-silver/75 font-black"
+                                                    className="border border-white/10 px-3 py-2 text-[10px] uppercase tracking-[0.2em] text-[var(--text-secondary)]/75 font-black"
                                                 >
                                                     {wrapRawOutput ? 'Disable Wrap' : 'Enable Wrap'}
                                                 </button>
@@ -1417,7 +1417,7 @@ export default function TaskDetails() {
                                         </div>
                                     </div>
                                     <div className="border border-white/6 bg-black/30 p-4 max-h-[720px] overflow-auto">
-                                        <pre className={`${wrapRawOutput ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'} text-[11px] leading-6 font-mono text-silver/75`}>
+                                        <pre className={`${wrapRawOutput ? 'whitespace-pre-wrap break-words' : 'whitespace-pre'} text-[11px] leading-6 font-mono text-[var(--text-secondary)]/75`}>
                                             {filteredRawLines.length > 0
                                                 ? filteredRawLines.join('\n')
                                                 : 'No matching raw output lines.'}
@@ -1432,7 +1432,7 @@ export default function TaskDetails() {
                 <aside className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                     <section className="border border-white/8 bg-charcoal p-5 space-y-5">
                         <div className="flex items-center gap-4">
-                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Scan Manifest</h3>
+                            <h3 className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.36em] italic">Scan Manifest</h3>
                             <div className="h-px flex-1 bg-white/8" />
                         </div>
                         <div className="space-y-4">
@@ -1445,8 +1445,8 @@ export default function TaskDetails() {
                                 ['Completed', task.completed_at ? formatDateLong(task.completed_at) : 'ACTIVE'],
                             ].map(([label, value]) => (
                                 <div key={label} className="border-b border-white/6 pb-3 last:border-0 last:pb-0">
-                                    <p className="text-[10px] uppercase tracking-[0.24em] text-silver/30 font-black mb-1">{label}</p>
-                                    <p className="text-sm text-silver-bright font-mono break-words">{value}</p>
+                                    <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--text-secondary)]/30 font-black mb-1">{label}</p>
+                                    <p className="text-sm text-[var(--text-secondary)]-bright font-mono break-words">{value}</p>
                                 </div>
                             ))}
                         </div>
@@ -1454,16 +1454,16 @@ export default function TaskDetails() {
 
                     <section className="border border-white/8 bg-charcoal p-5 space-y-5">
                         <div className="flex items-center gap-4">
-                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Quick Parameters</h3>
+                            <h3 className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.36em] italic">Quick Parameters</h3>
                             <div className="h-px flex-1 bg-white/8" />
                         </div>
                         <div className="space-y-3">
                             {effectiveParameterEntries.slice(0, 6).map((entry) => (
                                 <div key={entry.key} className="flex items-start justify-between gap-4 border-b border-white/6 pb-3 last:border-0 last:pb-0">
-                                    <span className="text-[10px] font-black text-silver/30 uppercase tracking-[0.18em]">
+                                    <span className="text-[10px] font-black text-[var(--text-secondary)]/30 uppercase tracking-[0.18em]">
                                         {entry.label}
                                     </span>
-                                    <span className="text-[11px] font-black uppercase text-right text-silver-bright break-all">
+                                    <span className="text-[11px] font-black uppercase text-right text-[var(--text-secondary)]-bright break-all">
                                         {entry.value}
                                     </span>
                                 </div>
@@ -1474,7 +1474,7 @@ export default function TaskDetails() {
                     {result?.command_used && (
                         <section className="border border-white/8 bg-charcoal p-5 space-y-5">
                             <div className="flex items-center gap-4">
-                                <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Operational Command</h3>
+                                <h3 className="text-xs font-black text-[var(--text-secondary)]-bright uppercase tracking-[0.36em] italic">Operational Command</h3>
                                 <div className="h-px flex-1 bg-white/8" />
                             </div>
                             <CollapsiblePane content={result.command_used} maxCollapsedLength={150} label="command" prefix="$ " />
