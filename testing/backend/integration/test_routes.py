@@ -10,6 +10,12 @@ def test_health_check(test_client):
     data = response.json()
     assert data["status"] == "operational"
     assert "version" in data
+    assert "plugin_check_latency_ms" in data
+    assert isinstance(
+        data["plugin_check_latency_ms"],
+        (int, float),
+    )
+    assert data["plugin_check_latency_ms"] >= 0
 
 def test_list_plugins(test_client):
     """Test plugins list endpoint."""
