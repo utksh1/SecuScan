@@ -3855,3 +3855,117 @@ button,
     white-space: nowrap;
   }
 }
+
+/* ============================================
+   Print / PDF Export Styling
+   ============================================ */
+@media print {
+  /* Hide navigation, button toolbars, and dynamic status bars */
+  aside,
+  header .no-print,
+  .no-print,
+  footer,
+  button,
+  .btn,
+  .topbar,
+  .sidebar,
+  nav,
+  .app-shell > aside,
+  .app-shell > div:first-child,
+  .material-symbols-outlined {
+    display: none !important;
+  }
+
+  /* Reset layout for print */
+  body,
+  .app-shell,
+  .app-main,
+  main,
+  #root,
+  .min-h-screen,
+  .flex.flex-col {
+    background: #ffffff !important;
+    color: #000000 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: block !important;
+    overflow: visible !important;
+  }
+
+  /* Reset typography colors, text shadow, and borders */
+  h1, h2, h3, h4, h5, h6, p, span, div, td, th {
+    color: #000000 !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Change grid layout to normal blocks to prevent weird clipping in print pages */
+  .grid {
+    display: block !important;
+  }
+  
+  .grid > * {
+    margin-bottom: 2rem !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Convert charcoal components to clean white panels with basic borders */
+  .bg-charcoal,
+  .bg-charcoal\/30,
+  .bg-charcoal-dark,
+  .bg-charcoal\/80,
+  .charcoal-gradient,
+  div[class*="bg-charcoal"] {
+    background: #ffffff !important;
+    border: 1px solid #000000 !important;
+    color: #000000 !important;
+  }
+
+  /* Adjust border line colors for layout elements */
+  .border,
+  .border-b,
+  .border-t,
+  .border-l,
+  .border-r,
+  .border-accent-silver\/5,
+  .border-silver-bright\/10,
+  div[class*="border-"] {
+    border-color: #cccccc !important;
+  }
+
+  /* Ensure text colors for threats and statuses are readable and bold */
+  .text-rag-red {
+    color: #c00000 !important;
+    font-weight: bold !important;
+  }
+  .text-rag-amber {
+    color: #d97706 !important;
+    font-weight: bold !important;
+  }
+  .text-rag-green {
+    color: #16a34a !important;
+    font-weight: bold !important;
+  }
+  .text-rag-blue {
+    color: #1e40af !important;
+    font-weight: bold !important;
+  }
+
+  /* Enable color printing for background progress bars or fills */
+  .bg-rag-red,
+  .bg-rag-amber,
+  .bg-rag-green,
+  .bg-rag-blue {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  
+  /* Prevent print elements from clipping across pages */
+  section,
+  .card,
+  .bg-charcoal {
+    page-break-inside: avoid !important;
+  }
+}
+

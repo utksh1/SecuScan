@@ -5,6 +5,7 @@ import { getDashboardSummary, getHealth, cancelTask } from '../api'
 import { ExecutiveStatsBar } from '../components/ExecutiveStatsBar'
 import { routePath, routes } from '../routes'
 import { formatBriefingDate, formatTaskInit, formatLocaleDate, formatLocaleTime } from '../utils/date'
+import { generateMarkdownReport } from '../utils/reportBuilder'
 
 type Finding = {
   id: string
@@ -176,6 +177,7 @@ const itemVariants = {
 }
 
 export default function Dashboard() {
+  const [showExportDropdown, setShowExportDropdown] = useState(false)
   const [summary, setSummary] = useState<Summary>(emptySummary)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -239,6 +241,30 @@ export default function Dashboard() {
     }
   }
 
+  const handleDownloadMarkdown = () => {
+    try {
+      const markdown = generateMarkdownReport(summary, risk.label)
+      const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `secuscan_report_${new Date().toISOString().split('T')[0]}.md`)
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    } catch (err) {
+      console.error('Failed to generate or download Markdown report:', err)
+    }
+    setShowExportDropdown(false)
+  }
+
+  const handlePrintPDF = () => {
+    setShowExportDropdown(false)
+    setTimeout(() => {
+      window.print()
+    }, 150)
+  }
+
   const risk = getRiskProfile(summary)
   const criticalHigh = summary.critical_findings + summary.high_findings
 
@@ -281,8 +307,58 @@ export default function Dashboard() {
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.2, duration: 0.8, ease: [0.19, 1, 0.22, 1] }}
-          className="flex flex-col md:flex-row items-start md:items-center gap-8 md:gap-10"
+          className="flex flex-col md:flex-row items-start md:items-center gap-6 md:gap-8 no-print"
         >
+          {/* Export Report Dropdown Button */}
+          <div className="relative">
+            <button
+              onClick={() => setShowExportDropdown(!showExportDropdown)}
+              className="flex items-center gap-3 px-6 py-4 bg-rag-amber border-2 border-black text-black text-xs font-black uppercase tracking-wider shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-x-0.5 active:translate-y-0.5 transition-all hover:bg-rag-amber/90"
+            >
+              <span className="material-symbols-outlined text-lg font-black">download</span>
+              Export Report
+              <span 
+                className="material-symbols-outlined text-sm font-black transition-transform duration-200" 
+                style={{ transform: showExportDropdown ? 'rotate(180deg)' : 'rotate(0deg)' }}
+              >
+                keyboard_arrow_down
+              </span>
+            </button>
+            
+            <AnimatePresence>
+              {showExportDropdown && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-10" 
+                    onClick={() => setShowExportDropdown(false)} 
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 mt-2 w-56 bg-charcoal border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] z-20 divide-y divide-black"
+                  >
+                    <button
+                      onClick={handleDownloadMarkdown}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-silver-bright hover:bg-silver-bright/5 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-sm font-black">download</span>
+                      Download Markdown (.md)
+                    </button>
+                    <button
+                      onClick={handlePrintPDF}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-silver-bright hover:bg-silver-bright/5 transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-sm font-black">picture_as_pdf</span>
+                      Print / Save PDF
+                    </button>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
+
           {/* Integrity Metric - Live Status Panel */}
           <div className="relative flex items-center gap-5 px-6 py-4 bg-charcoal/80 border border-rag-blue/20 backdrop-blur-sm rounded-sm group transition-all hover:border-rag-blue/40 hover:bg-charcoal/90">
             {/* Subtle top glow */}
