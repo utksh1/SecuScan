@@ -235,6 +235,9 @@ export default function Settings() {
         return DEFAULT_CONFIG
     })
 
+    const [lastSavedConfig, setLastSavedConfig] = useState(config)
+    const isDirty = JSON.stringify(config) !== JSON.stringify(lastSavedConfig)
+
     const [systemTimezone, setSystemTimezone] = useState('Detecting...')
 
     // Modal state for confirm dialogs
@@ -264,8 +267,19 @@ export default function Settings() {
         refreshNotificationRules()
     }, [])
 
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (!isDirty) return
+            e.preventDefault()
+            e.returnValue = ''
+        }
+        window.addEventListener('beforeunload', handleBeforeUnload)
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+    }, [isDirty])
+
     const handleSave = () => {
         localStorage.setItem('secuscan-config', JSON.stringify(config))
+        setLastSavedConfig(config)
         addToast("Operational parameters synchronized", "success")
         setTheme(config.theme as 'dark' | 'light')
     }
@@ -278,6 +292,7 @@ export default function Settings() {
             type: "warning",
             onConfirm: () => {
                 setConfig(DEFAULT_CONFIG)
+                setLastSavedConfig(DEFAULT_CONFIG)
                 localStorage.setItem('secuscan-config', JSON.stringify(DEFAULT_CONFIG))
                 addToast("Engine parameters reset to factory defaults", "info")
                 setModalState(prev => ({ ...prev, isOpen: false }))
@@ -854,7 +869,12 @@ export default function Settings() {
                             />
                         </div>
                     </section>
-                    <section className="pt-12">
+                    <section className="pt-12 space-y-3">
+                        {isDirty && (
+                            <p role="status" className="text-[10px] font-black text-rag-amber uppercase tracking-[0.3em] italic">
+                                ● UNSAVED_CHANGES_PENDING
+                            </p>
+                        )}
                         <button
                             onClick={handleSave}
                             className="bg-rag-blue text-black px-12 py-6 text-xs font-black uppercase tracking-[0.3em] shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-4 italic group"
@@ -870,20 +890,19 @@ export default function Settings() {
                         <div className="space-y-4">
                             <button
                                 onClick={handleExport}
-                                className="w-full py-4 bg-charcoal-dark border-4 border-black text-[10px] font-black text-silver/40 uppercase tracking-[0.3em] hover:bg-black hover:text-white transition-all italic"
+                                className="w-full py-4 bg-charcoal-dark border-4 border-black text-[10px] font-black text-silver/40 uppercase tracking-[0.08em] whitespace-nowrap overflow-hidden hover:bg-black hover:text-white transition-all italic"
                             >
                                 TELEMETRY_EXPORT
                             </button>
                             <button
                                 onClick={handleReset}
-                                className="w-full py-4 bg-rag-amber border-4 border-black text-[10px] font-black text-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all italic"
+                                className="w-full py-4 bg-rag-amber border-4 border-black text-[10px] font-black text-black uppercase tracking-[0.08em] whitespace-nowrap overflow-hidden hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all italic"
                             >
                                 ENGINE_RESET
                             </button>
                             <button
                                 onClick={handleNuclearPurge}
-                                className="w-full py-4 bg-rag-red border-4 border-black text-[10px] font-black text-black uppercase tracking-[0.3em] hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all italic"
-                            >
+                                className="w-full py-4 bg-rag-red border-4 border-black text-[10px] font-black text-black uppercase tracking-[0.08em] whitespace-nowrap overflow-hidden hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1 transition-all italic"                            >
                                 NUCLEAR_PURGE
                             </button>
                         </div>

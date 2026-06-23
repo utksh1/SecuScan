@@ -24,6 +24,8 @@ jobs:
       - name: Fetch base branch for diff
         if: github.event_name == 'pull_request'
         run: git fetch origin "${{ github.base_ref }}" --depth=1
+      # Test-selection policy (which suites run for which changes, plus the
+      # full-suite fallbacks) is documented in docs/ci-test-selection.md
       - name: Determine test selection
         id: filter
         env:

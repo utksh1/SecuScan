@@ -38,6 +38,7 @@ class Database:
         conn = await aiosqlite.connect(self.db_path)
         self._connection = conn
         conn.row_factory = aiosqlite.Row
+        await conn.execute("PRAGMA foreign_keys = ON")
         await self._create_schema()
         await self._run_migrations()
 
@@ -266,11 +267,18 @@ class Database:
 
             CREATE TABLE IF NOT EXISTS credential_vault (
                 id TEXT PRIMARY KEY,
-                name TEXT NOT NULL UNIQUE,
+                owner_id TEXT NOT NULL DEFAULT 'default',
+                name TEXT NOT NULL,
                 encrypted_value TEXT NOT NULL,
                 created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-                updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
-            );
+                updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(owner_id, name)
+                );
+
+
+
+CREATE INDEX IF NOT EXISTS idx_credential_vault_owner
+ON credential_vault(owner_id);
 
             CREATE TABLE IF NOT EXISTS workflows (
                 id TEXT PRIMARY KEY,
@@ -391,7 +399,7 @@ class Database:
         # Migration logic: ensure latest columns exist in 'tasks' table
         tasks_columns = await self.fetchall("PRAGMA table_info(tasks)")
         existing_cols = {col["name"] for col in tasks_columns}
-        
+
         needed_cols = {
             # Per-user ownership for BOLA prevention (issue #401). NOT NULL with a
             # constant default backfills every existing row to the shared default
@@ -496,6 +504,66 @@ class Database:
             except Exception as e:
                 print(f"Failed to add 'owner_id' to reports: {e}")
 
+        # Vault table migration: ensure owner_id exists
+        vault_columns = await self.fetchall(
+            "PRAGMA table_info(credential_vault)"
+            )
+        existing_vault_cols = {col["name"] for col in vault_columns}
+        vault_schema = await self.fetchone(
+            "SELECT sql FROM sqlite_master "
+            "WHERE type='table' AND name='credential_vault'"
+            )
+
+        if "owner_id" not in existing_vault_cols:
+            try:
+                await self.execute(
+                    "ALTER TABLE credential_vault "
+                    "ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'default'"
+                    )
+                print("Added missing column 'owner_id' to credential_vault table.")
+            except Exception as e:
+                print(f"Failed to add 'owner_id' to credential_vault: {e}")
+
+        if vault_schema:
+            ddl = vault_schema["sql"]
+            has_composite = "UNIQUE(owner_id, name)" in ddl
+            if not has_composite:
+                await self.connection.executescript(
+                    """CREATE TABLE credential_vault_new (
+                        id TEXT PRIMARY KEY,
+                        owner_id TEXT NOT NULL DEFAULT 'default',
+                        name TEXT NOT NULL,
+                        encrypted_value TEXT NOT NULL,
+                        created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                        updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                        UNIQUE(owner_id, name)
+                        );
+
+
+            INSERT INTO credential_vault_new
+            (
+                id,
+                owner_id,
+                name,
+                encrypted_value,
+                created_at,
+                updated_at
+            )
+            SELECT
+                id,
+                COALESCE(owner_id, 'default'),
+                name,
+                encrypted_value,
+                created_at,
+                updated_at
+            FROM credential_vault;
+
+            DROP TABLE credential_vault;
+            ALTER TABLE credential_vault_new
+            RENAME TO credential_vault;
+        """)
+                await self.connection.commit()
+
         # Workflows table migration: ensure owner_id and composite unique exist
         workflows_columns = await self.fetchall("PRAGMA table_info(workflows)")
         existing_wf_cols = {col["name"] for col in workflows_columns}
@@ -570,10 +638,12 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_tasks_owner ON tasks(owner_id);
             CREATE INDEX IF NOT EXISTS idx_findings_owner ON findings(owner_id);
             CREATE INDEX IF NOT EXISTS idx_reports_owner ON reports(owner_id);
+            CREATE INDEX IF NOT EXISTS idx_credential_vault_owner ON credential_vault(owner_id);
             CREATE INDEX IF NOT EXISTS idx_workflows_owner ON workflows(owner_id);
             CREATE INDEX IF NOT EXISTS idx_notification_rules_owner ON notification_rules(owner_id);
             """
-        )
+            )
+
 
     async def _run_migrations(self):
         migrations_dir = Path(__file__).parent / "migrations"

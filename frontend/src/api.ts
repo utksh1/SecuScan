@@ -183,6 +183,9 @@ export interface ScanDiff {
 export interface FindingsResponse {
   findings?: FindingRecord[]
   finding_groups?: FindingGroup[]
+  total?: number
+  page?: number
+  per_page?: number
 }
 
 export interface TaskResultResponse {
@@ -394,10 +397,13 @@ export function getDashboardSummary() {
 
 export function getFindings() {
   return request<FindingsResponse>('/findings')
+
+export function getFindings(page: number = 1, perPage: number = 50) {
+  return request<FindingsResponse>(`/findings?page=${page}&per_page=${perPage}`)
 }
 
-export function getFindingGroups() {
-  return request<{ groups: FindingGroup[]; total: number }>('/finding-groups')
+export function getFindingGroups(page: number = 1, perPage: number = 50) {
+  return request<{ groups: FindingGroup[]; total: number; page: number; per_page: number }>(`/finding-groups?page=${page}&per_page=${perPage}`)
 }
 
 export function getReports() {
@@ -689,6 +695,61 @@ export function deleteWorkflow(workflowId: string): Promise<{ deleted: boolean }
   return request<{ deleted: boolean }>(`/workflows/${workflowId}`, {
     method: 'DELETE',
   })
+}
+
+export interface WorkflowRun {
+  id: string
+  workflow_id: string
+  version_id: string | null
+  version_number: number | null
+  triggered_by: string
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  task_ids: string[]
+  started_at: string
+  completed_at: string | null
+  error_message: string | null
+}
+
+export interface WorkflowVersion {
+  id: string
+  workflow_id: string
+  version_number: number
+  definition: {
+    name: string
+    schedule_seconds: number | null
+    enabled: boolean
+    steps: WorkflowStep[]
+  }
+  created_at: string
+  created_by: string
+}
+
+export function getWorkflowRuns(workflowId: string, limit = 50, offset = 0): Promise<{ total: number; runs: WorkflowRun[] }> {
+  return request<{ total: number; runs: WorkflowRun[] }>(`/workflows/${workflowId}/runs?limit=${limit}&offset=${offset}`)
+}
+
+export function getWorkflowVersions(workflowId: string): Promise<{ workflow_id: string; versions: WorkflowVersion[]; total: number }> {
+  return request<{ workflow_id: string; versions: WorkflowVersion[]; total: number }>(`/workflows/${workflowId}/versions`)
+}
+
+export async function rollbackWorkflow(workflowId: string, versionNumber: number): Promise<{
+  workflow_id: string
+  rolled_back_to_version: number
+  new_version_number: number
+  workflow: Workflow
+}> {
+  const res = await request<{
+    workflow_id: string
+    rolled_back_to_version: number
+    new_version_number: number
+    workflow: any
+  }>(`/workflows/${workflowId}/rollback/${versionNumber}`, {
+    method: 'POST',
+  })
+  return {
+    ...res,
+    workflow: normalizeWorkflow(res.workflow),
+  }
 }
 
 export function listTargetPolicies() {
