@@ -133,6 +133,26 @@ Request timeout for icmp_seq 0
     assert result["metrics"]["filtered"] is True
 
 
+def test_icmp_ping_parser_handles_packet_loss_only_output(setup_test_environment):
+    manager = _ensure_plugins_loaded()
+    plugin = manager.get_plugin("icmp_ping")
+    assert plugin is not None
+
+    executor = TaskExecutor()
+    output = """PING 8.8.8.8 (8.8.8.8): 56 data bytes
+
+--- 8.8.8.8 ping statistics ---
+4 packets transmitted, 4 packets received, 0.0% packet loss
+"""
+
+    result = executor._parse_results(plugin, output)
+
+    assert result["count"] == 1
+    assert result["findings"][0]["title"] == "Host Reachable: 8.8.8.8"
+    assert result["metrics"]["packet_loss_percent"] == 0.0
+    assert result["metrics"]["reachable"] is True
+
+
 def test_classify_command_result_allows_nonfatal_ping_exit_with_statistics(setup_test_environment):
     manager = _ensure_plugins_loaded()
     plugin = manager.get_plugin("icmp_ping")

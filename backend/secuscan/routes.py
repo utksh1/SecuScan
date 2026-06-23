@@ -20,12 +20,18 @@ from .routes_json_helpers import (
     deserialize_finding_rows,
     parse_json_fields,
 )
+from .routes_report_helpers import (
+    _slugify_filename_part,
+    build_report_filename,
+)
 
 __all__ = [
     "FINDING_JSON_FIELDS",
     "parse_json_fields",
     "deserialize_finding_rows",
     "deserialize_asset_service_rows",
+    "_slugify_filename_part",
+    "build_report_filename",
 ]
 
 def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
@@ -73,24 +79,6 @@ def _json_payload(value: Any, fallback: str) -> str:
 
 
 from .validation import is_filesystem_target  # noqa: E402
-
-def _slugify_filename_part(value: str, fallback: str) -> str:
-    cleaned = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
-    return cleaned or fallback
-
-def build_report_filename(task: Dict[str, Any], extension: str) -> str:
-    tool = _slugify_filename_part(str(task.get("tool_name") or task.get("plugin_id") or "scan"), "scan")
-
-    raw_target = str(task.get("target") or "")
-    parsed = urlparse(raw_target if "://" in raw_target else f"//{raw_target}")
-    target_source = parsed.netloc or parsed.path or raw_target
-    target = _slugify_filename_part(target_source, "target")
-
-    created_at = str(task.get("created_at") or "")
-    date_match = re.search(r"\d{4}-\d{2}-\d{2}", created_at)
-    date_part = date_match.group(0) if date_match else "report"
-
-    return f"secuscan_{tool}_{target}_{date_part}.{extension}"
 
 logger = logging.getLogger(__name__)
 
@@ -481,6 +469,69 @@ async def start_task(
         "status": "queued",
         "created_at": "now",
         "stream_url": f"/api/v1/task/{task_id}/stream"
+    }
+
+@router.post("/task/{task_id}/retry", dependencies=[Depends(task_start_limiter)])
+async def retry_task(
+    task_id: str,
+    background_tasks: BackgroundTasks,
+    raw_request: Request,
+    owner: str = Depends(get_current_owner),
+):
+    """
+    Retry a failed or cancelled scan task.
+    """
+    db = await get_db()
+    task = await require_owned_task(db, task_id, owner, columns="id, owner_id, status, plugin_id")
+
+    if task["status"] in ["queued", "running"]:
+        raise HTTPException(status_code=409, detail="Task is already queued or running")
+    elif task["status"] not in ["failed", "cancelled"]:
+        raise HTTPException(status_code=400, detail="Only failed or cancelled tasks can be retried")
+
+    # Check plugin rate limits
+    plugin_manager = await get_plugin_manager_for_request()
+    plugin = plugin_manager.get_plugin(task["plugin_id"])
+    if not plugin:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {task['plugin_id']}")
+
+    client_id = resolve_client_identity(raw_request)
+    can_execute, error_msg = await rate_limiter.can_execute(
+        task["plugin_id"],
+        plugin.safety.get("rate_limit", {}).get("max_per_hour", settings.max_tasks_per_hour),
+        client_id=client_id,
+    )
+
+    if not can_execute:
+        raise HTTPException(status_code=429, detail=error_msg)
+
+    # Atomic update to prevent duplicate reruns if called rapidly
+    cursor = await db.execute(
+        "UPDATE tasks SET status = 'queued', error_message = NULL, exit_code = NULL, "
+        "started_at = NULL, completed_at = NULL "
+        "WHERE id = ? AND status IN ('failed', 'cancelled')",
+        (task_id,)
+    )
+    if cursor.rowcount == 0:
+        raise HTTPException(status_code=409, detail="Task is already queued or running")
+
+    # Cleanup previous findings and reports for a fresh retry
+    await db.execute("DELETE FROM findings WHERE task_id = ?", (task_id,))
+    await db.execute("DELETE FROM reports WHERE task_id = ?", (task_id,))
+
+    # Re-acquire concurrency slot
+    can_acquire, error_msg = await concurrent_limiter.acquire(task_id)
+    if not can_acquire:
+        await executor.mark_task_failed(task_id, reason="Concurrency limit reached; task was not retried")
+        raise HTTPException(status_code=503, detail=error_msg)
+
+    background_tasks.add_task(executor.execute_task, task_id)
+    await invalidate_view_cache()
+
+    return {
+        "task_id": task_id,
+        "status": "queued",
+        "message": "Task retry initiated"
     }
 
 @router.get("/task/{task_id}/status")
