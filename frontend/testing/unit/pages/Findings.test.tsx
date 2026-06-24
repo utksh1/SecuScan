@@ -10,6 +10,13 @@ vi.mock('../../../src/api', () => ({
   getFindings: vi.fn(),
 }))
 
+vi.mock('../../../src/utils/exportUtils', () => ({
+  exportFindingsAsCSV: vi.fn(),
+  exportFindingsAsJSON: vi.fn(),
+}))
+
+import { exportFindingsAsCSV, exportFindingsAsJSON } from '../../../src/utils/exportUtils'
+
 vi.mock('../../../src/utils/date', async (importOriginal: any) => {
   const actual = await importOriginal() as typeof import('../../../src/utils/date')
   return {
@@ -258,5 +265,76 @@ describe('Findings — virtualized list', () => {
 
     const suppressedChips = screen.queryAllByText('suppressed')
     expect(suppressedChips.length).toBeGreaterThan(0)
+  })
+
+  it('individual checkbox click selects finding for export but doesn\'t change selected finding details', async () => {
+    const findings = [
+      makeFinding({ id: 'f1', title: 'SQL Injection', severity: 'critical' }),
+      makeFinding({ id: 'f2', title: 'CSRF Vulnerability', severity: 'high' }),
+    ]
+    vi.mocked(getFindings).mockResolvedValue({ findings })
+
+    render(<Findings />)
+    await waitFor(() => expect(screen.queryByText('Synchronizing findings feed...')).not.toBeInTheDocument())
+
+    const checkboxF2 = screen.getByLabelText('Select CSRF Vulnerability')
+    expect(checkboxF2).not.toBeChecked()
+
+    await userEvent.click(checkboxF2)
+    expect(checkboxF2).toBeChecked()
+
+    expect(screen.getByRole('button', { name: /Bulk Export/i })).toBeInTheDocument()
+
+    expect(screen.getByRole('heading', { name: /SQL Injection/i, level: 2 })).toBeInTheDocument()
+  })
+
+  it('select all checkbox toggles selection for all visible findings', async () => {
+    const findings = [
+      makeFinding({ id: 'f1', title: 'SQL Injection', severity: 'critical' }),
+      makeFinding({ id: 'f2', title: 'CSRF Vulnerability', severity: 'high' }),
+    ]
+    vi.mocked(getFindings).mockResolvedValue({ findings })
+
+    render(<Findings />)
+    await waitFor(() => expect(screen.queryByText('Synchronizing findings feed...')).not.toBeInTheDocument())
+
+    const selectAllCheckbox = screen.getByLabelText(/Select All Visible/i)
+    await userEvent.click(selectAllCheckbox)
+
+    expect(screen.getByLabelText('Select SQL Injection')).toBeChecked()
+    expect(screen.getByLabelText('Select CSRF Vulnerability')).toBeChecked()
+
+    await userEvent.click(selectAllCheckbox)
+    expect(screen.getByLabelText('Select SQL Injection')).not.toBeChecked()
+    expect(screen.getByLabelText('Select CSRF Vulnerability')).not.toBeChecked()
+  })
+
+  it('trigger CSV and JSON bulk export calls utility function', async () => {
+    const findings = [
+      makeFinding({ id: 'f1', title: 'SQL Injection', severity: 'critical' }),
+    ]
+    vi.mocked(getFindings).mockResolvedValue({ findings })
+
+    render(<Findings />)
+    await waitFor(() => expect(screen.queryByText('Synchronizing findings feed...')).not.toBeInTheDocument())
+
+    await userEvent.click(screen.getByLabelText('Select SQL Injection'))
+
+    const bulkExportBtn = screen.getByRole('button', { name: /Bulk Export/i })
+    await userEvent.click(bulkExportBtn)
+
+    const csvExportBtn = screen.getByRole('button', { name: /Export as CSV/i })
+    const jsonExportBtn = screen.getByRole('button', { name: /Export as JSON/i })
+
+    expect(csvExportBtn).toBeInTheDocument()
+    expect(jsonExportBtn).toBeInTheDocument()
+
+    await userEvent.click(csvExportBtn)
+    expect(exportFindingsAsCSV).toHaveBeenCalled()
+
+    await userEvent.click(bulkExportBtn)
+    const newJsonExportBtn = await screen.findByRole('button', { name: /Export as JSON/i })
+    await userEvent.click(newJsonExportBtn)
+    expect(exportFindingsAsJSON).toHaveBeenCalled()
   })
 })

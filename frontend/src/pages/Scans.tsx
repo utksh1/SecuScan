@@ -82,22 +82,29 @@ export default function Scans() {
     type: "warning",
   });
 
-  // Ref so the visibilitychange handler always sees the current interval id
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Ref so the visibilitychange handler always sees the current timer id
+  const pollingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestSeqRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
 
-  function startPolling() {
-    stopPolling();
-    intervalRef.current = setInterval(() => {
-      loadTasks();
+  function scheduleNextPoll() {
+    pollingTimerRef.current = setTimeout(async () => {
+      await loadTasks();
+      if (!abortRef.current?.signal.aborted) {
+        scheduleNextPoll();
+      }
     }, 5000);
   }
 
+  function startPolling() {
+    stopPolling();
+    scheduleNextPoll();
+  }
+
   function stopPolling() {
-    if (intervalRef.current !== null) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
+    if (pollingTimerRef.current !== null) {
+      clearTimeout(pollingTimerRef.current);
+      pollingTimerRef.current = null;
     }
   }
 
