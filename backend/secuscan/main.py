@@ -23,7 +23,7 @@ from starlette.status import HTTP_429_TOO_MANY_REQUESTS
 from .request_context import get_request_id
 
 from .config import settings
-from .auth import init_api_key
+from .auth import init_api_key, auth_router
 from .cache import init_cache, cache as global_cache
 from .database import init_db, db as global_db
 from .routes import router
@@ -280,6 +280,7 @@ async def custom_unhandled_exception_handler(request: Request, exc: Exception):
     return response
 
 # Include API routes
+app.include_router(auth_router)
 app.include_router(router)
 app.include_router(saved_views_router)
 
