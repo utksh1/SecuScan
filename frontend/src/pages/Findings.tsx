@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { getFindings } from '../api'
 import { formatLocaleDate, parseDateSafe, getCurrentTimeZone } from '../utils/date'
@@ -92,6 +92,16 @@ const severityConfig: Record<string, { label: string; accent: string; chip: stri
   },
 }
 
+// Plain-language blurbs for the severity legend help affordance. Ordering mirrors
+// `severityOrder` (highest → lowest risk). Reuses `severityConfig` for label + colors.
+const severityLegend: { id: (typeof severityOrder)[number]; blurb: string }[] = [
+  { id: 'critical', blurb: 'Confirmed or highly likely exploitation with severe impact — triage first.' },
+  { id: 'high', blurb: 'Serious weakness, likely exploitable. Remediate promptly.' },
+  { id: 'medium', blurb: 'Moderate risk or exploitable only under specific conditions.' },
+  { id: 'low', blurb: 'Minor issue or hardening opportunity with limited impact.' },
+  { id: 'info', blurb: 'Informational signal — context only, or pending manual validation.' },
+]
+
 const sectionVariants = {
   hidden: { opacity: 0, y: 16 },
   visible: {
@@ -166,6 +176,32 @@ export default function Findings() {
   // ── Multi-select export state & handlers ───────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false)
+
+  // ── Severity legend help affordance ────────────────────────────────────────
+  const [legendOpen, setLegendOpen] = useState(false)
+  const legendRef = useRef<HTMLDivElement>(null)
+  const legendButtonRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (!legendOpen) return
+    function onPointerDown(event: MouseEvent) {
+      if (legendRef.current && !legendRef.current.contains(event.target as Node)) {
+        setLegendOpen(false)
+      }
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setLegendOpen(false)
+        legendButtonRef.current?.focus()
+      }
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [legendOpen])
 
   // ── Saved views ────────────────────────────────────────────────────────────
   const { views, loading: viewsLoading, saveView, deleteView, renameView } = useSavedViews()
@@ -645,7 +681,7 @@ export default function Findings() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2 pb-2 sm:pb-0 2xl:max-w-[760px] 2xl:justify-end">
+              <div className="flex flex-wrap items-center gap-2 pb-2 sm:pb-0 2xl:max-w-[760px] 2xl:justify-end">
                 <button
                   type="button"
                   onClick={() => setFilterSeverity('all')}
@@ -667,6 +703,77 @@ export default function Findings() {
                     {severityConfig[severity].label} {countsBySeverity[severity] || 0}
                   </button>
                 ))}
+
+                {/* Severity scale legend — help affordance (issue #835) */}
+                <div className="relative" ref={legendRef}>
+                  <button
+                    ref={legendButtonRef}
+                    type="button"
+                    onClick={() => setLegendOpen((open) => !open)}
+                    aria-label="What do the severity levels mean?"
+                    aria-expanded={legendOpen}
+                    aria-haspopup="dialog"
+                    aria-controls="severity-legend-popover"
+                    className={`flex min-h-10 items-center justify-center border px-2 transition-all ${filterPillClasses(legendOpen)}`}
+                  >
+                    <span className="material-symbols-outlined text-base" aria-hidden="true">help</span>
+                  </button>
+
+                  <AnimatePresence>
+                    {legendOpen && (
+                      <motion.div
+                        id="severity-legend-popover"
+                        role="dialog"
+                        aria-label="Severity scale legend"
+                        initial={{ opacity: 0, y: -8, scaleY: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scaleY: 1, transition: { duration: 0.18, ease: 'easeOut' as const } }}
+                        exit={{ opacity: 0, y: -6, scaleY: 0.97, transition: { duration: 0.12, ease: 'easeOut' as const } }}
+                        style={{ transformOrigin: 'top right' }}
+                        className="absolute right-0 top-full z-[60] mt-2 w-[min(20rem,calc(100vw-2rem))] border-4 border-black bg-charcoal shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]"
+                      >
+                        <div className="flex items-center justify-between border-b-2 border-black px-4 py-3">
+                          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-silver-bright">
+                            Severity_Scale
+                          </p>
+                          <button
+                            type="button"
+                            aria-label="Close severity legend"
+                            onClick={() => {
+                              setLegendOpen(false)
+                              legendButtonRef.current?.focus()
+                            }}
+                            className="text-silver/40 transition-colors hover:text-silver-bright"
+                          >
+                            <span className="material-symbols-outlined text-base" aria-hidden="true">close</span>
+                          </button>
+                        </div>
+
+                        <p className="border-b border-silver-bright/10 px-4 py-2 text-[9px] font-mono uppercase tracking-[0.18em] text-silver/45">
+                          Ordered highest → lowest risk
+                        </p>
+
+                        <ul className="space-y-3 px-4 py-3">
+                          {severityLegend.map(({ id, blurb }) => (
+                            <li key={id} className="flex items-start gap-3">
+                              <span
+                                className={`mt-1 h-3 w-3 shrink-0 rotate-45 ${severityConfig[id].rail}`}
+                                aria-hidden="true"
+                              />
+                              <div className="min-w-0">
+                                <p className={`text-[11px] font-black uppercase tracking-[0.18em] ${severityConfig[id].accent}`}>
+                                  {severityConfig[id].label}
+                                </p>
+                                <p className="mt-0.5 text-[10px] font-mono leading-snug text-silver/55">
+                                  {blurb}
+                                </p>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
             </div>
 
