@@ -12,6 +12,7 @@ vi.mock('../../../src/api', () => ({
   deleteTask: vi.fn().mockResolvedValue({}),
   clearAllTasks: vi.fn().mockResolvedValue({}),
   bulkDeleteTasks: vi.fn().mockResolvedValue({}),
+  startTask: vi.fn().mockResolvedValue({ task_id: 'new-task-123' }),
 }))
 
 vi.mock('../../../src/routes', () => ({
@@ -212,5 +213,29 @@ describe('Scans — task list', () => {
     await userEvent.click(screen.getByText('Delete_Record'))
 
     await waitFor(() => expect(screen.getByText('Delete Scan Record')).toBeInTheDocument())
+  })
+
+  it('renders quick re-run button for completed tasks and triggers handleRescan', async () => {
+    const tasks = [makeTask({ task_id: 'task-123', status: 'completed', tool: 'nmap' })]
+    mockFetch(tasks)
+    renderScans()
+
+    await waitFor(() => expect(screen.getByText('nmap')).toBeInTheDocument())
+
+    const rerunBtn = screen.getByRole('button', { name: /Re-run nmap scan/i })
+    expect(rerunBtn).toBeInTheDocument()
+
+    const { startTask } = await import('../../../src/api')
+    await userEvent.click(rerunBtn)
+
+    await waitFor(() => {
+      expect(startTask).toHaveBeenCalledWith(
+        'nmap',
+        expect.any(Object),
+        true,
+        undefined,
+        undefined
+      )
+    })
   })
 })

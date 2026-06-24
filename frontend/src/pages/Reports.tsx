@@ -445,7 +445,7 @@ export default function Reports() {
                               className="bg-rag-green border-4 border-black px-3 py-2 text-[9px] font-black uppercase tracking-widest text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
                               title="Download PDF Report"
                             >
-                              PDF
+                              Quick PDF
                             </button>
                             {(() => {
                               const ordered = preferredFormat

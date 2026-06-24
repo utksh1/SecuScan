@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import AppShell from './components/AppShell'
 import Dashboard from './pages/Dashboard'
 import Toolkit from './pages/Toolkit'
@@ -11,6 +11,7 @@ import Settings from './pages/Settings'
 import Scans from './pages/Scans'
 import TaskDetails from './pages/TaskDetails'
 import Workflows from './pages/Workflows'
+import NotFound from './pages/NotFound'
 import ApiKeySetupScreen from './components/ApiKeySetupScreen'
 import ErrorBoundary from './components/ErrorBoundary'
 
@@ -34,7 +35,7 @@ export function AppRoutes() {
       <Route path={routes.settings} element={<Settings />} />
       <Route path={routes.task} element={<TaskDetails />} />
 
-      <Route path="*" element={<Navigate to={routes.dashboard} replace />} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   )
 }
