@@ -5,6 +5,7 @@ import { getFindings } from '../api'
 import { formatLocaleDate, parseDateSafe, getCurrentTimeZone } from '../utils/date'
 import SavedViewsPanel from '../components/SavedViewsPanel'
 import { useSavedViews, FilterPreset } from '../hooks/useSavedViews'
+import { exportFindingsAsCSV, exportFindingsAsJSON } from '../utils/exportUtils'
 
 type RiskFactor = {
   factor: string
@@ -161,6 +162,10 @@ export default function Findings() {
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null)
   const [reviewState, setReviewState] = useState<ReviewState>({})
   const [copiedFindingId, setCopiedFindingId] = useState<string | null>(null)
+
+  // ── Multi-select export state & handlers ───────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [exportDropdownOpen, setExportDropdownOpen] = useState(false)
 
   // ── Saved views ────────────────────────────────────────────────────────────
   const { views, loading: viewsLoading, saveView, deleteView, renameView } = useSavedViews()
@@ -323,6 +328,51 @@ export default function Findings() {
     })
   }, [enrichedFindings, filterSeverity, filterTarget, filterScanner, filterAsset, filterKind, filterAnalystStatus, filterValidatedOnly, filterHighConfidence, searchQuery, dateFrom, dateTo])
 
+  // ── Multi-select export state & handlers ───────────────────────────────────
+  const visibleIds = useMemo(() => filteredFindings.map((f) => f.id), [filteredFindings])
+  const isAllSelected = useMemo(() => {
+    if (visibleIds.length === 0) return false
+    return visibleIds.every((id) => selectedIds.has(id))
+  }, [visibleIds, selectedIds])
+
+  const handleSelectAllToggle = () => {
+    if (isAllSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        visibleIds.forEach((id) => next.delete(id))
+        return next
+      })
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        visibleIds.forEach((id) => next.add(id))
+        return next
+      })
+    }
+  }
+
+  const handleCheckboxChange = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (checked) {
+        next.add(id)
+      } else {
+        next.delete(id)
+      }
+      return next
+    })
+  }
+
+  const handleExportCSV = () => {
+    const selectedFindings = findings.filter((f) => selectedIds.has(f.id))
+    exportFindingsAsCSV(selectedFindings)
+  }
+
+  const handleExportJSON = () => {
+    const selectedFindings = findings.filter((f) => selectedIds.has(f.id))
+    exportFindingsAsJSON(selectedFindings)
+  }
+
   const sortedFindings = useMemo(() => {
     const items = [...filteredFindings]
     switch (sortMode) {
@@ -446,6 +496,7 @@ export default function Findings() {
     setDateFrom('')
     setDateTo('')
     setSearchQuery('')
+    setSelectedIds(new Set())
   }
 
   function updateFindingStatus(id: string, status: FindingStatus) {
@@ -801,15 +852,78 @@ export default function Findings() {
                 <p className="mt-3 text-xs font-mono uppercase tracking-[0.2em] text-silver/15">Adjust filters to reopen the queue.</p>
               </div>
             ) : (
-              <div
-                ref={parentRef}
-                role="listbox"
-                aria-label="Findings list"
-                tabIndex={0}
-                onKeyDown={handleListKeyDown}
-                className="border-2 border-black bg-charcoal shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:ring-2 focus:ring-rag-red/40"
-                style={{ height: '72vh', overflowY: 'auto' }}
-              >
+              <>
+                {/* Selection & Export Toolbar */}
+                <div className="flex flex-wrap items-center justify-between gap-4 border-2 border-black bg-charcoal p-4 mb-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="select-all-findings"
+                      checked={isAllSelected}
+                      onChange={handleSelectAllToggle}
+                      className="h-4 w-4 accent-[var(--accent-rag-red)] cursor-pointer"
+                    />
+                    <label
+                      htmlFor="select-all-findings"
+                      className="text-xs font-black uppercase tracking-wider text-silver-bright cursor-pointer select-none"
+                    >
+                      Select All Visible ({filteredFindings.length})
+                    </label>
+                    {selectedIds.size > 0 && (
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-silver/50 bg-charcoal-dark px-2 py-0.5 border border-silver-bright/10 ml-2">
+                        {selectedIds.size} Selected
+                      </span>
+                    )}
+                  </div>
+
+                  {selectedIds.size > 0 && (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        id="bulk-export-btn"
+                        onClick={() => setExportDropdownOpen(!exportDropdownOpen)}
+                        className="bg-rag-blue text-black border-2 border-black px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-rag-blue/90 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center gap-2"
+                      >
+                        Bulk Export
+                        <span className="material-symbols-outlined text-sm">arrow_drop_down</span>
+                      </button>
+                      {exportDropdownOpen && (
+                        <div className="absolute right-0 mt-2 w-48 border-2 border-black bg-charcoal-dark shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] z-30">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleExportCSV()
+                              setExportDropdownOpen(false)
+                            }}
+                            className="w-full text-left px-4 py-3 text-xs font-mono uppercase tracking-wider text-silver-bright hover:bg-silver-bright/10 transition-all border-b border-black"
+                          >
+                            Export as CSV
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleExportJSON()
+                              setExportDropdownOpen(false)
+                            }}
+                            className="w-full text-left px-4 py-3 text-xs font-mono uppercase tracking-wider text-silver-bright hover:bg-silver-bright/10 transition-all"
+                          >
+                            Export as JSON
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  ref={parentRef}
+                  role="listbox"
+                  aria-label="Findings list"
+                  tabIndex={0}
+                  onKeyDown={handleListKeyDown}
+                  className="border-2 border-black bg-charcoal shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:ring-2 focus:ring-rag-red/40"
+                  style={{ height: '72vh', overflowY: 'auto' }}
+                >
                 {/* Virtualizer inner container */}
                 <div
                   style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}
@@ -853,82 +967,98 @@ export default function Findings() {
                             const config = severityConfig[finding.severity]
 
                             return (
-                              <button
+                              <div
                                 key={finding.id}
-                                type="button"
-                                role="option"
-                                aria-selected={isSelected}
-                                onClick={() => setSelectedFindingId(finding.id)}
-                                className={`relative block w-full px-5 py-5 text-left transition-all ${
+                                className={`relative flex items-stretch w-full transition-all ${
                                   !isLastInGroup ? 'border-b border-silver-bright/6' : ''
                                 } ${isSelected ? 'bg-silver-bright/6' : 'hover:bg-silver-bright/3'}`}
                               >
-                                <span className={`absolute inset-y-0 left-0 w-1 ${config.rail}`} />
-                                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                                  <div className="min-w-0 flex-1 space-y-3 pl-3">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <span className={`px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${config.chip}`}>
-                                        {config.label}
-                                      </span>
-                                      <span className={`border px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${getStatusTone(finding.status)}`}>
-                                        {finding.status}
-                                      </span>
-                                      <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-silver/35">
-                                        {finding.category || 'Uncategorized'}
-                                      </span>
-                                      {finding.finding_kind ? (
-                                        <span className="border border-silver-bright/10 bg-charcoal-dark px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-silver/70">
-                                          {finding.finding_kind.replace('_', ' ')}
-                                        </span>
-                                      ) : null}
-                                      {finding.cve ? (
-                                        <span className="border border-rag-blue/20 bg-rag-blue/10 px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-rag-blue">
-                                          {finding.cve}
-                                        </span>
-                                      ) : null}
-                                      {typeof finding.confidence === 'number' ? (
-                                        <span className="border border-silver-bright/10 bg-charcoal-dark px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-silver-bright">
-                                          {(finding.confidence * 100).toFixed(0)}% confidence
-                                        </span>
-                                      ) : null}
-                                    </div>
+                                {/* Checkbox column */}
+                                <div className="pl-4 pr-1 flex items-center justify-center">
+                                  <input
+                                    type="checkbox"
+                                    aria-label={`Select ${finding.title}`}
+                                    checked={selectedIds.has(finding.id)}
+                                    onChange={(e) => handleCheckboxChange(finding.id, e.target.checked)}
+                                    className="h-4 w-4 accent-[var(--accent-rag-red)] cursor-pointer"
+                                  />
+                                </div>
 
-                                    <div>
-                                      <h3 className="text-xl font-black uppercase tracking-tight text-silver-bright">{finding.title}</h3>
-                                      <p className="mt-2 text-[11px] font-mono uppercase tracking-[0.16em] text-silver/45">
-                                        Target // {finding.target || 'Unknown'} // Observed // {formatLocaleDate(finding.discovered_at)}
+                                {/* Details button */}
+                                <button
+                                  type="button"
+                                  role="option"
+                                  aria-selected={isSelected}
+                                  onClick={() => setSelectedFindingId(finding.id)}
+                                  className="relative block flex-1 px-5 py-5 text-left transition-all focus:outline-none"
+                                >
+                                  <span className={`absolute inset-y-0 left-0 w-1 ${config.rail}`} />
+                                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                    <div className="min-w-0 flex-1 space-y-3 pl-3">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <span className={`px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${config.chip}`}>
+                                          {config.label}
+                                        </span>
+                                        <span className={`border px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${getStatusTone(finding.status)}`}>
+                                          {finding.status}
+                                        </span>
+                                        <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-silver/35">
+                                          {finding.category || 'Uncategorized'}
+                                        </span>
+                                        {finding.finding_kind ? (
+                                          <span className="border border-silver-bright/10 bg-charcoal-dark px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-silver/70">
+                                            {finding.finding_kind.replace('_', ' ')}
+                                          </span>
+                                        ) : null}
+                                        {finding.cve ? (
+                                          <span className="border border-rag-blue/20 bg-rag-blue/10 px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-rag-blue">
+                                            {finding.cve}
+                                          </span>
+                                        ) : null}
+                                        {typeof finding.confidence === 'number' ? (
+                                          <span className="border border-silver-bright/10 bg-charcoal-dark px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-silver-bright">
+                                            {(finding.confidence * 100).toFixed(0)}% confidence
+                                          </span>
+                                        ) : null}
+                                      </div>
+
+                                      <div>
+                                        <h3 className="text-xl font-black uppercase tracking-tight text-silver-bright">{finding.title}</h3>
+                                        <p className="mt-2 text-[11px] font-mono uppercase tracking-[0.16em] text-silver/45">
+                                          Target // {finding.target || 'Unknown'} // Observed // {formatLocaleDate(finding.discovered_at)}
+                                        </p>
+                                      </div>
+
+                                      <p className="max-w-4xl text-sm leading-relaxed text-silver/70">
+                                        {finding.description || 'No description provided.'}
                                       </p>
                                     </div>
 
-                                    <p className="max-w-4xl text-sm leading-relaxed text-silver/70">
-                                      {finding.description || 'No description provided.'}
-                                    </p>
-                                  </div>
+                                    <div className="flex flex-row items-end gap-6 lg:min-w-[140px] lg:flex-col lg:items-end">
+                                      {typeof finding.occurrence_count === 'number' && finding.occurrence_count > 1 ? (
+                                        <div className="text-right">
+                                          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Seen</p>
+                                          <p className="text-2xl font-black italic text-silver-bright">
+                                            {finding.occurrence_count}
+                                          </p>
+                                        </div>
+                                      ) : null}
+                                      {typeof finding.cvss === 'number' ? (
+                                        <div className="text-right">
+                                          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">CVSS</p>
+                                          <p className={`text-3xl font-black italic ${finding.cvss >= 9 ? 'text-rag-red' : 'text-silver-bright'}`}>
+                                            {finding.cvss.toFixed(1)}
+                                          </p>
+                                        </div>
+                                      ) : null}
 
-                                  <div className="flex flex-row items-end gap-6 lg:min-w-[140px] lg:flex-col lg:items-end">
-                                    {typeof finding.occurrence_count === 'number' && finding.occurrence_count > 1 ? (
-                                      <div className="text-right">
-                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Seen</p>
-                                        <p className="text-2xl font-black italic text-silver-bright">
-                                          {finding.occurrence_count}
-                                        </p>
-                                      </div>
-                                    ) : null}
-                                    {typeof finding.cvss === 'number' ? (
-                                      <div className="text-right">
-                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">CVSS</p>
-                                        <p className={`text-3xl font-black italic ${finding.cvss >= 9 ? 'text-rag-red' : 'text-silver-bright'}`}>
-                                          {finding.cvss.toFixed(1)}
-                                        </p>
-                                      </div>
-                                    ) : null}
-
-                                    <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-silver-bright' : 'text-silver/30'}`}>
-                                      east
-                                    </span>
+                                      <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-silver-bright' : 'text-silver/30'}`}>
+                                        east
+                                      </span>
+                                    </div>
                                   </div>
-                                </div>
-                              </button>
+                                </button>
+                              </div>
                             )
                           })()
                         )}
@@ -937,19 +1067,20 @@ export default function Findings() {
                   })}
                 </div>
               </div>
-            )}
-            {!loading && findings.length < totalItems && (
-              <div className="flex justify-center py-6">
-                <button
-                  type="button"
-                  onClick={loadMore}
-                  disabled={loadingMore}
-                  className="bg-silver-bright px-6 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-50"
-                >
-                  {loadingMore ? 'Loading...' : `Load More (${findings.length}/${totalItems})`}
-                </button>
-              </div>
-            )}
+              {!loading && findings.length < totalItems && (
+                <div className="flex justify-center py-6">
+                  <button
+                    type="button"
+                    onClick={loadMore}
+                    disabled={loadingMore}
+                    className="bg-silver-bright px-6 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-50"
+                  >
+                    {loadingMore ? 'Loading...' : `Load More (${findings.length}/${totalItems})`}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
           </motion.section>
 
           {/* ── Detail Panel (unchanged) ── */}
