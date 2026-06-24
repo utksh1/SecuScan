@@ -432,9 +432,9 @@ export default function Scanner() {
                       </div>
 
                       <div>
-                        <h3 className="text-3xl font-black text-silver-bright uppercase tracking-tighter italic leading-none group-hover:text-rag-red transition-colors">
-                          {tool.name}
-                        </h3>
+                        <h3 className="text-3xl font-black text-silver-bright uppercase tracking-tighter italic leading-tight break-words min-w-0 group-hover:text-rag-red transition-colors">
+  {tool.name}
+</h3>
                         <div className="w-12 h-1 bg-silver-bright/10 mt-4 group-hover:w-full group-hover:bg-rag-red/30 transition-all duration-700" />
                       </div>
 

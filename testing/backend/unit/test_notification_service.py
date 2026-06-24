@@ -683,3 +683,57 @@ async def test_pinned_ip_network_backend_pins_ip_and_preserves_tls_hostname(
     assert tls_hostname == "hooks.example.com", (
         f"TLS SNI must use original hostname (hooks.example.com), got {tls_hostname!r}"
     )
+
+
+@pytest.mark.asyncio
+async def test_process_slack_notification_success(test_db, monkeypatch):
+    """process_slack_notification compiles task info, counts findings, and sends webhook successfully."""
+    task_id, finding_id = await _seed_finding(test_db, severity="high")
+    
+    monkeypatch.setattr(settings, "slack_webhook_url", "https://slack.example.invalid/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX")
+
+    mock_send = AsyncMock(return_value=(True, None))
+    monkeypatch.setattr("backend.secuscan.notification_service.send_webhook", mock_send)
+
+    from backend.secuscan.notification_service import process_slack_notification
+    await process_slack_notification(test_db, task_id)
+
+    assert mock_send.call_count == 1
+    call_args, _ = mock_send.call_args
+    target_url = call_args[0]
+    payload = call_args[1]
+
+    assert target_url == "https://slack.example.invalid/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
+    assert "blocks" in payload
+    assert len(payload["blocks"]) >= 3
+    assert "High" in payload["blocks"][2]["fields"][1]["text"]
+    assert "Total Findings" in payload["blocks"][2]["fields"][0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_process_slack_notification_failed_task(test_db, monkeypatch):
+    """process_slack_notification sends error details when status is FAILED."""
+    task_id = str(uuid.uuid4())
+    await test_db.execute(
+        """
+        INSERT INTO tasks (
+            id, plugin_id, tool_name, target, status, inputs_json, consent_granted, error_message
+        ) VALUES (?, 'nmap', 'nmap', '127.0.0.1', 'failed', '{}', 1, 'Connection refused')
+        """,
+        (task_id,),
+    )
+    
+    monkeypatch.setattr(settings, "slack_webhook_url", "https://slack.example.invalid/services/test")
+    mock_send = AsyncMock(return_value=(True, None))
+    monkeypatch.setattr("backend.secuscan.notification_service.send_webhook", mock_send)
+
+    from backend.secuscan.notification_service import process_slack_notification
+    await process_slack_notification(test_db, task_id)
+
+    assert mock_send.call_count == 1
+    call_args, _ = mock_send.call_args
+    payload = call_args[1]
+
+    assert "blocks" in payload
+    assert "Error Message" in payload["blocks"][2]["text"]["text"]
+    assert "Connection refused" in payload["blocks"][2]["text"]["text"]

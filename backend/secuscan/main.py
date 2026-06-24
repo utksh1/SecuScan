@@ -9,8 +9,8 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from .request_middleware import RequestIDMiddleware
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi import FastAPI, Request, status
+from fastapi.responses import HTMLResponse, PlainTextResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.exception_handlers import (
@@ -19,16 +19,20 @@ from fastapi.exception_handlers import (
 )
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.status import HTTP_429_TOO_MANY_REQUESTS
 from .request_context import get_request_id
 
 from .config import settings
-from .auth import init_api_key
+from .auth import init_api_key, auth_router
 from .cache import init_cache, cache as global_cache
 from .database import init_db, db as global_db
-from .plugins import init_plugins
 from .routes import router
 from .saved_views import saved_views_router
 from .workflows import scheduler
+from .plugins import init_plugins, get_plugin_check_latency_ms
+
+# Import rate limiter
+from .rate_limiter import make_scan_rate_limiter, RateLimitExceeded
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level),
@@ -68,6 +72,35 @@ async def lifespan(app: FastAPI):
 
     await init_cache()
     logger.info("✓ In-memory cache initialized")
+    
+    # ─── RATE LIMITER SETUP ──────────────────────────────────────────────
+    # Initialize rate limiter with Redis client from cache
+    # The cache client is stored in global_cache (which is a Redis client)
+    logger.info("🔒 Initializing rate limiter...")
+    
+    # Check if rate limiting is enabled
+    if getattr(settings, 'rate_limit_enabled', True):
+        try:
+            # Use the global_cache Redis client for rate limiting storage
+            app.state.scan_rate_limiter = make_scan_rate_limiter(
+                redis_client=global_cache._client if hasattr(global_cache, '_client') else global_cache,
+                rate_limit=getattr(settings, 'scan_rate_limit', '5/minute'),
+                rate_window=getattr(settings, 'scan_rate_window', 60),  # 60 seconds
+                burst_limit=getattr(settings, 'scan_burst_limit', '10/hour'),
+                burst_window=getattr(settings, 'scan_burst_window', 3600),  # 1 hour
+            )
+            logger.info("✓ Rate limiter initialized successfully")
+            logger.info(f"  Rate limit: {getattr(settings, 'scan_rate_limit', '5/minute')}")
+            logger.info(f"  Burst limit: {getattr(settings, 'scan_burst_limit', '10/hour')}")
+        except Exception as e:
+            logger.error(f"Failed to initialize rate limiter: {e}")
+            # Set a dummy limiter that doesn't actually limit
+            app.state.scan_rate_limiter = None
+            logger.warning("⚠️ Rate limiting disabled due to initialization error")
+    else:
+        logger.info("⚠️ Rate limiting disabled by configuration")
+        app.state.scan_rate_limiter = None
+    # ─── END RATE LIMITER SETUP ──────────────────────────────────────────
     
     # Load plugins
     await init_plugins(settings.plugins_dir)
@@ -172,6 +205,53 @@ app.add_middleware(
 )
 app.add_middleware(RequestIDMiddleware)
 
+# ─── CUSTOM 429 RATE LIMIT EXCEPTION HANDLER ──────────────────────────────
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
+    """
+    Custom handler for rate limit exceeded errors.
+    Returns a consistent JSON 429 response matching the API's error schema.
+    """
+    logger.warning(
+        f"Rate limit exceeded for {request.client.host if request.client else 'unknown'} "
+        f"on {request.url.path} - {str(exc)}"
+    )
+    
+    # Get retry-after from exception if available
+    retry_after = getattr(exc, 'retry_after', 60)
+    
+    return JSONResponse(
+        status_code=HTTP_429_TOO_MANY_REQUESTS,
+        content={
+            "error": str(exc.detail) if hasattr(exc, 'detail') else "Too Many Requests",
+            "retry_after": retry_after,
+            "message": "Rate limit exceeded. Please wait before making more requests."
+        },
+        headers={
+            "Retry-After": str(retry_after),
+            "X-Request-ID": getattr(request.state, "request_id", get_request_id()),
+        },
+    )
+
+# Also handle generic 429 exceptions (for compatibility)
+@app.exception_handler(HTTP_429_TOO_MANY_REQUESTS)
+async def generic_rate_limit_handler(request: Request, exc: Exception):
+    """
+    Generic handler for 429 status code exceptions.
+    """
+    return JSONResponse(
+        status_code=HTTP_429_TOO_MANY_REQUESTS,
+        content={
+            "error": "Too Many Requests",
+            "message": "Rate limit exceeded. Please try again later."
+        },
+        headers={
+            "Retry-After": "60",
+            "X-Request-ID": getattr(request.state, "request_id", get_request_id()),
+        },
+    )
+# ─── END CUSTOM 429 HANDLER ──────────────────────────────────────────────────
+
 @app.exception_handler(StarletteHTTPException)
 async def custom_http_exception_handler(request: Request, exc: StarletteHTTPException):
     response = await http_exception_handler(request, exc)
@@ -200,6 +280,7 @@ async def custom_unhandled_exception_handler(request: Request, exc: Exception):
     return response
 
 # Include API routes
+app.include_router(auth_router)
 app.include_router(router)
 app.include_router(saved_views_router)
 
@@ -211,6 +292,9 @@ async def health_check():
     import platform
     import sys
     
+    # Check rate limiter status
+    rate_limiter_status = "enabled" if hasattr(app.state, 'scan_rate_limiter') and app.state.scan_rate_limiter else "disabled"
+    
     logger.info("Health check endpoint accessed")
     return {
         "status": "operational",
@@ -219,7 +303,13 @@ async def health_check():
             "platform": platform.system(),
             "python_version": sys.version.split()[0],
             "docker_available": shutil.which("docker") is not None,
-        }
+        },
+        "rate_limiting": {
+            "status": rate_limiter_status,
+            "rate_limit": getattr(settings, 'scan_rate_limit', '5/minute'),
+            "burst_limit": getattr(settings, 'scan_burst_limit', '10/hour'),
+        },
+        "plugin_check_latency_ms": get_plugin_check_latency_ms(),
     }
 
 # Root endpoint

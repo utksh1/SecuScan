@@ -55,6 +55,34 @@ describe('ThemeToggle', () => {
     expect(button).toHaveAttribute('aria-pressed', 'true')
   })
 
+  it('applies the dark class to document root and removes theme-light', async () => {
+    localStorage.setItem(STORAGE_KEY, 'light')
+    document.documentElement.classList.remove('dark')
+    document.documentElement.classList.add('theme-light')
+    const user = userEvent.setup()
+    renderWithTheme()
+
+    const button = screen.getByRole('button')
+    await user.click(button)
+
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+    expect(document.documentElement.classList.contains('theme-light')).toBe(false)
+  })
+
+  it('applies the theme-light class to document root and removes dark', async () => {
+    localStorage.setItem(STORAGE_KEY, 'dark')
+    document.documentElement.classList.add('dark')
+    document.documentElement.classList.remove('theme-light')
+    const user = userEvent.setup()
+    renderWithTheme()
+
+    const button = screen.getByRole('button')
+    await user.click(button)
+
+    expect(document.documentElement.classList.contains('theme-light')).toBe(true)
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+  })
+
   it('aria-label reflects the target theme, not the current one', () => {
     localStorage.setItem(STORAGE_KEY, 'dark')
     renderWithTheme()

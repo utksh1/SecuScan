@@ -310,6 +310,10 @@ Before opening a plugin PR:
 7. Refresh checksums.
 8. Update `PLUGINS.md` if the catalogue changes.
 
+For a complete plugin creation tutorial:
+
+docs/plugins/plugin-development-walkthrough.md
+
 Start with [PLUGINS.md](PLUGINS.md), [docs/plugin-validation.md](docs/plugin-validation.md), and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Contributing

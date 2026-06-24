@@ -24,6 +24,8 @@ jobs:
       - name: Fetch base branch for diff
         if: github.event_name == 'pull_request'
         run: git fetch origin "${{ github.base_ref }}" --depth=1
+      # Test-selection policy (which suites run for which changes, plus the
+      # full-suite fallbacks) is documented in docs/ci-test-selection.md
       - name: Determine test selection
         id: filter
         env:
@@ -248,7 +250,7 @@ jobs:
         if: steps.run_benchmarks.outcome == 'failure'
         run: |
           echo "::warning::Performance benchmark thresholds exceeded or benchmarks failed to run. Check the job logs for details."
-  frontend-checks:
+  frontend-run-checks:
     needs: [detect-changes, formatting-hygiene]
     if: |
       always() &&
@@ -302,3 +304,18 @@ jobs:
         run: npm run test
       - name: Build frontend
         run: npm run build
+
+  frontend-checks:
+    needs: [frontend-run-checks]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check matrix results
+        run: |
+          if [ "${{ needs.frontend-run-checks.result }}" = "success" ] || [ "${{ needs.frontend-run-checks.result }}" = "skipped" ]; then
+            echo "Frontend checks completed successfully or skipped"
+            exit 0
+          else
+            echo "Frontend checks failed"
+            exit 1
+          fi

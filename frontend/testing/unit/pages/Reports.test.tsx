@@ -103,9 +103,10 @@ describe('Reports — empty state', () => {
     vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
   })
 
-  it('shows Archive Isolated when there are no reports at all', async () => {
+  it('shows onboarding empty state when there are no reports at all', async () => {
     renderReports()
-    expect(await screen.findByText(/Archive Isolated/i)).toBeInTheDocument()
+    expect(await screen.findByText(/No Briefings Yet/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /launch_first_scan/i })).toBeInTheDocument()
   })
 
   it('shows Archive Isolated when filter returns no matching reports', async () => {
@@ -129,15 +130,15 @@ describe('Reports — export buttons on a ready report', () => {
 
   it('shows PDF, HTML and CSV buttons for a ready report', async () => {
     renderReports()
-    expect(await screen.findByRole('button', { name: /^pdf$/i })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /^pdf$/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^html$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^csv$/i })).toBeInTheDocument()
   })
 
   it('export buttons are enabled for a ready report', async () => {
     renderReports()
-    await screen.findByRole('button', { name: /^pdf$/i })
-    expect(screen.getByRole('button', { name: /^pdf$/i })).not.toBeDisabled()
+    await screen.findByRole('button', { name: /^pdf$/ })
+    expect(screen.getByRole('button', { name: /^pdf$/ })).not.toBeDisabled()
     expect(screen.getByRole('button', { name: /^html$/i })).not.toBeDisabled()
     expect(screen.getByRole('button', { name: /^csv$/i })).not.toBeDisabled()
   })
@@ -145,7 +146,7 @@ describe('Reports — export buttons on a ready report', () => {
   it('clicking PDF opens the correct backend URL', async () => {
     const user = userEvent.setup()
     renderReports()
-    await user.click(await screen.findByRole('button', { name: /^pdf$/i }))
+    await user.click(await screen.findByRole('button', { name: /^pdf$/ }))
     expect(openSpy).toHaveBeenCalledWith(
       expect.stringContaining('/task/' + readyReport.task_id + '/report/pdf'), '_blank')
   })
@@ -169,7 +170,7 @@ describe('Reports — export buttons on a ready report', () => {
   it('does not use the old placeholder latest-report route', async () => {
     const user = userEvent.setup()
     renderReports()
-    await user.click(await screen.findByRole('button', { name: /^pdf$/i }))
+    await user.click(await screen.findByRole('button', { name: /^pdf$/ }))
     expect(openSpy).not.toHaveBeenCalledWith(expect.stringContaining('latest'), expect.anything())
   })
 })
@@ -218,8 +219,8 @@ describe('Reports — export buttons on a generating report', () => {
 
   it('export buttons are disabled when report is generating', async () => {
     renderReports()
-    await screen.findByRole('button', { name: /^pdf$/i })
-    expect(screen.getByRole('button', { name: /^pdf$/i })).toBeDisabled()
+    await screen.findByRole('button', { name: /^pdf$/ })
+    expect(screen.getByRole('button', { name: /^pdf$/ })).toBeDisabled()
     expect(screen.getByRole('button', { name: /^html$/i })).toBeDisabled()
     expect(screen.getByRole('button', { name: /^csv$/i })).toBeDisabled()
   })
@@ -227,8 +228,8 @@ describe('Reports — export buttons on a generating report', () => {
   it('clicking a disabled button does not open any URL', async () => {
     const user = userEvent.setup()
     renderReports()
-    await screen.findByRole('button', { name: /^pdf$/i })
-    await user.click(screen.getByRole('button', { name: /^pdf$/i }))
+    await screen.findByRole('button', { name: /^pdf$/ })
+    await user.click(screen.getByRole('button', { name: /^pdf$/ }))
     expect(openSpy).not.toHaveBeenCalled()
   })
 })
@@ -242,8 +243,8 @@ describe('Reports — export buttons on a failed report', () => {
 
   it('export buttons are enabled for a failed report since backend supports it', async () => {
     renderReports()
-    await screen.findByRole('button', { name: /^pdf$/i })
-    expect(screen.getByRole('button', { name: /^pdf$/i })).not.toBeDisabled()
+    await screen.findByRole('button', { name: /^pdf$/ })
+    expect(screen.getByRole('button', { name: /^pdf$/ })).not.toBeDisabled()
     expect(screen.getByRole('button', { name: /^html$/i })).not.toBeDisabled()
     expect(screen.getByRole('button', { name: /^csv$/i })).not.toBeDisabled()
   })

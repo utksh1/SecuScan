@@ -115,7 +115,7 @@ def test_nikto_plugin_supports_expanded_cli_parameters(setup_test_environment):
             "force_ssl": True,
             "display_options": "EPV",
             "tuning": "123b",
-            "request_timeout": 20,
+            "timeout": 20,
             "max_scan_time": 900,
             "dbcheck": True,
             "no_cache": True,
