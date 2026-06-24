@@ -86,6 +86,11 @@ class Settings(BaseSettings):
     max_tasks_per_hour: int = 50
     max_requests_per_minute: int = 100
 
+    scan_rate_limit: int = int(os.environ.get("SCAN_RATE_LIMIT", "5"))
+    scan_rate_window: int = int(os.environ.get("SCAN_RATE_WINDOW_SECONDS", "60"))
+    scan_burst_limit: int = int(os.environ.get("SCAN_BURST_LIMIT", "10"))
+    scan_burst_window: int = int(os.environ.get("SCAN_BURST_WINDOW_SECONDS", "3600"))
+
     # Endpoint rate limiting buckets
     rate_limit_task_start_limit: int = 50
     rate_limit_task_start_window: int = 3600

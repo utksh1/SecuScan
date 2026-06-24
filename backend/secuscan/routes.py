@@ -104,6 +104,7 @@ from .ratelimit import (
     resolve_client_identity, admin_limiter,
     scheduler_tick_limiter,
 )
+from .rate_limiter import check_scan_rate_limit, RateLimitExceeded
 from .validation import validate_target, validate_task_start_payload, validate_url
 from .reporting import reporting
 from .vault import VaultCrypto
@@ -195,6 +196,20 @@ async def get_or_set_cached(key: str, builder):
     return value
 
 
+from fastapi.responses import JSONResponse
+from starlette.status import HTTP_429_TOO_MANY_REQUESTS
+from .rate_limiter import RateLimitExceeded
+
+@router.exception_handler(RateLimitExceeded)
+async def rate_limit_exception_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=HTTP_429_TOO_MANY_REQUESTS,
+        content={
+            "error": str(exc.detail) if hasattr(exc, 'detail') else "Too Many Requests",
+            "retry_after": getattr(exc, 'retry_after', 60),
+        },
+        headers={"Retry-After": str(getattr(exc, 'retry_after', 60))},
+    )
 
 
 async def require_owned_task(db, task_id: str, owner: str, columns: str = "owner_id") -> Dict[str, Any]:
@@ -311,7 +326,7 @@ async def get_all_presets():
     }
 
 
-@router.post("/task/start", dependencies=[Depends(task_start_limiter)])
+@router.post("/task/start", dependencies=[Depends(task_start_limiter), Depends(check_scan_rate_limit)])
 async def start_task(
     request: TaskCreateRequest,
     background_tasks: BackgroundTasks,
@@ -471,7 +486,7 @@ async def start_task(
         "stream_url": f"/api/v1/task/{task_id}/stream"
     }
 
-@router.post("/task/{task_id}/retry", dependencies=[Depends(task_start_limiter)])
+@router.post("/task/{task_id}/retry", dependencies=[Depends(task_start_limiter) , Depends(check_scan_rate_limit)])
 async def retry_task(
     task_id: str,
     background_tasks: BackgroundTasks,
@@ -1844,7 +1859,7 @@ async def _verify_workflow_owner(db, workflow_id: str, owner: str):
     return row
 
 
-@router.post("/workflows/{workflow_id}/run")
+@router.post("/workflows/{workflow_id}/run") , dependencies=[Depends(check_scan_rate_limit)]
 async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_owner)):
     db = await get_db()
     row = await _verify_workflow_owner(db, workflow_id, owner)
@@ -2022,7 +2037,7 @@ async def delete_workflow(workflow_id: str, owner: str = Depends(get_current_own
     return {"workflow_id": workflow_id, "deleted": True}
 
 
-@router.post("/workflows/scheduler/tick", dependencies=[Depends(scheduler_tick_limiter)])
+@router.post("/workflows/scheduler/tick", dependencies=[Depends(scheduler_tick_limiter), Depends(check_scan_rate_limit)])
 async def trigger_workflow_tick():
     await scheduler.tick()
     return {"tick": "ok"}
@@ -2071,6 +2086,21 @@ async def create_notification_rule(payload: NotificationRuleCreate, owner: str =
     if not row:
         raise HTTPException(status_code=500, detail="Failed to create notification rule")
     return _serialize_notification_rule(row)
+
+@router.get("/rate-limit/status")
+async def get_rate_limit_status(request: Request):
+    """Get current rate limit status for the client."""
+    limiter = getattr(request.app.state, 'scan_rate_limiter', None)
+    if limiter and hasattr(limiter, 'get_status'):
+        client_id = request.client.host if request.client else "unknown"
+        status_info = await limiter.get_status(client_id)
+        return {
+            "status": "enabled",
+            "client": client_id,
+            "remaining": status_info.get("remaining", 0),
+            "reset_in": status_info.get("reset_in", 0),
+        }
+    return {"status": "disabled", "message": "Rate limiting is not enabled"}
 
 
 async def _verify_notification_rule_owner(db, rule_id: str, owner: str):
