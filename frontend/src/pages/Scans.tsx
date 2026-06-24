@@ -484,15 +484,34 @@ export default function Scans() {
                               {formatLocaleTime(createDate)}
                             </p>
                           </div>
-                          {task.duration_seconds && (
-                            <div className="bg-charcoal-dark border-2 border-black px-4 py-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-                              <p className="text-[10px] font-black font-mono text-rag-blue leading-none">
-                                {formatDuration(
-                                  task.duration_seconds,
-                                )?.toUpperCase()}
-                              </p>
-                            </div>
-                          )}
+                          <div className="flex items-center gap-3">
+                            {task.duration_seconds && (
+                              <div className="bg-charcoal-dark border-2 border-black px-4 py-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                                <p className="text-[10px] font-black font-mono text-rag-blue leading-none">
+                                  {formatDuration(
+                                    task.duration_seconds,
+                                  )?.toUpperCase()}
+                                </p>
+                              </div>
+                            )}
+                            {(task.status === "completed" ||
+                              task.status === "failed" ||
+                              task.status === "cancelled") && (
+                              <button
+                                type="button"
+                                aria-label={`Re-run ${task.tool} scan`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRescan(task);
+                                }}
+                                className="w-10 h-10 border-4 border-black bg-rag-blue text-black flex items-center justify-center transition-all hover:bg-rag-blue/80 active:translate-x-0.5 active:translate-y-0.5 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:shadow-none"
+                              >
+                                <span className="material-symbols-outlined text-sm font-black">
+                                  replay
+                                </span>
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
 
