@@ -399,6 +399,7 @@ async def test_execute_task_blocked_by_network_policy(setup_test_environment):
     # Policy engine that always denies
     mock_engine = MagicMock()
     mock_engine.check_access.return_value = (False, "Blocked by denylist rule: test", None)
+    mock_engine.resolve_and_pin.return_value = ("10.0.0.1", False, "Blocked by denylist rule: test")
 
     with patch("backend.secuscan.executor.settings") as mock_settings, \
          patch("backend.secuscan.executor.get_policy_engine", return_value=mock_engine), \
@@ -409,6 +410,7 @@ async def test_execute_task_blocked_by_network_policy(setup_test_environment):
         mock_settings.docker_enabled = False
         mock_settings.raw_output_dir = settings.raw_output_dir
         mock_settings.sandbox_timeout = 600
+        mock_settings.dns_resolution_timeout_seconds = "5.0"
 
         mock_limiter.release = AsyncMock()
         mock_pm.return_value.get_plugin.return_value = MagicMock(name="nmap", presets={})
@@ -451,6 +453,7 @@ async def test_execute_task_allowed_by_network_policy(setup_test_environment):
 
     mock_engine = MagicMock()
     mock_engine.check_access.return_value = (True, "Allowed by allowlist rule: test", None)
+    mock_engine.resolve_and_pin.return_value = ("8.8.8.8", True, "Allowed by allowlist rule: test")
 
     async def fake_command(*args, **kwargs):
         return "80/tcp open http", 0
@@ -465,6 +468,7 @@ async def test_execute_task_allowed_by_network_policy(setup_test_environment):
         mock_settings.docker_enabled = False
         mock_settings.raw_output_dir = settings.raw_output_dir
         mock_settings.sandbox_timeout = 600
+        mock_settings.dns_resolution_timeout_seconds = "5.0"
 
         mock_limiter.release = AsyncMock()
 
@@ -490,7 +494,7 @@ async def test_execute_task_allowed_by_network_policy(setup_test_environment):
     assert row["status"] == TaskStatus.COMPLETED.value, (
         f"Expected COMPLETED, got {row['status']}"
     )
-    mock_engine.check_access.assert_called_once()
+    mock_engine.resolve_and_pin.assert_called_once()
     mock_limiter.release.assert_called_once_with(task_id)
     await db.disconnect()
 
@@ -520,6 +524,7 @@ async def test_execute_task_network_policy_log_only(setup_test_environment):
     # Policy denies target
     mock_engine = MagicMock()
     mock_engine.check_access.return_value = (False, "Blocked by denylist rule: test", None)
+    mock_engine.resolve_and_pin.return_value = ("10.0.0.1", False, "Blocked by denylist rule: test")
 
     async def fake_command(*args, **kwargs):
         return "80/tcp open http", 0
@@ -535,6 +540,7 @@ async def test_execute_task_network_policy_log_only(setup_test_environment):
         mock_settings.docker_enabled = False
         mock_settings.raw_output_dir = settings.raw_output_dir
         mock_settings.sandbox_timeout = 600
+        mock_settings.dns_resolution_timeout_seconds = "5.0"
 
         mock_limiter.release = AsyncMock()
 
@@ -584,6 +590,7 @@ async def test_docker_network_autocreated_when_missing(setup_test_environment):
     # Policy allows the target so we reach the Docker block
     mock_engine = MagicMock()
     mock_engine.check_access.return_value = (True, "Allowed", None)
+    mock_engine.resolve_and_pin.return_value = ("8.8.8.8", True, "Allowed")
 
     call_count = 0
     async def fake_subprocess(*args, **kwargs):
@@ -613,6 +620,7 @@ async def test_docker_network_autocreated_when_missing(setup_test_environment):
 
         mock_settings.enforce_network_policy = True
         mock_settings.docker_enabled = True
+        mock_settings.dns_resolution_timeout_seconds = "5.0"
         mock_settings.docker_network = "restricted"
         mock_settings.sandbox_memory_mb = 512
         mock_settings.sandbox_cpu_quota = 0.5
@@ -666,6 +674,7 @@ async def test_docker_network_missing_and_create_fails(setup_test_environment):
     # Policy allows the target so we reach the Docker block
     mock_engine = MagicMock()
     mock_engine.check_access.return_value = (True, "Allowed", None)
+    mock_engine.resolve_and_pin.return_value = ("8.8.8.8", True, "Allowed")
 
     # All subprocess calls (inspect, create isolated, create fallback) return returncode=1
     async def fake_subprocess(*args, **kwargs):
@@ -686,6 +695,7 @@ async def test_docker_network_missing_and_create_fails(setup_test_environment):
 
         mock_settings.enforce_network_policy = True
         mock_settings.docker_enabled = True
+        mock_settings.dns_resolution_timeout_seconds = "5.0"
         mock_settings.docker_network = "restricted"
         mock_settings.sandbox_memory_mb = 512
         mock_settings.sandbox_cpu_quota = 0.5
@@ -770,6 +780,7 @@ async def test_enforce_guardrails_network_policy_failure(setup_test_environment)
 
     mock_engine = MagicMock()
     mock_engine.check_access.return_value = (False, "Blocked by policy", None)
+    mock_engine.resolve_and_pin.return_value = ("10.0.0.1", False, "Blocked by policy")
 
     with patch("backend.secuscan.executor.settings") as mock_settings, \
          patch("backend.secuscan.executor.get_policy_engine", return_value=mock_engine), \
@@ -951,7 +962,8 @@ async def test_execute_standard_scanner(setup_test_environment):
             plugin=mock_plugin,
             plugin_id="mock_cli_plugin",
             target="127.0.0.1",
-            inputs={}
+            inputs={},
+            safe_mode=False,
         )
 
     assert status == TaskStatus.COMPLETED.value
