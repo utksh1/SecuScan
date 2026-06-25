@@ -2,15 +2,15 @@
   "id": "katana",
   "name": "Katana",
   "version": "1.0.0",
-  "description": "Web crawling for endpoint and route discovery.",
-  "long_description": "Web crawling for endpoint and route discovery.",
+  "description": "Baseline Katana URL discovery using the default crawl behavior.",
+  "long_description": "Runs Katana with minimal flags for lightweight endpoint and route discovery. Use this as the baseline Katana wrapper when no custom crawl depth or JavaScript crawling is required.",
   "category": "recon",
   "author": {
     "name": "SecuScan Contributors",
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd0e",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
     "binary": "katana"
@@ -54,5 +54,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "b93432ec2f315aa2afd2943374c00706963984bfc1dbf78c057ffed6f96234ab"
+  "checksum": "539bd64f8c8774c54857bfb826f9748ba487dedcba1482a26a5383c1b022d786"
 }

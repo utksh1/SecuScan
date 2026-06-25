@@ -27,6 +27,39 @@ git --version
 
 ---
 
+## WSL Guidance
+
+Windows contributors can use PowerShell, Windows Terminal, or Git Bash for most
+contribution workflows. Windows Subsystem for Linux (WSL) is not required for
+general development.
+
+### WSL Is Optional
+
+WSL is optional for:
+
+* Documentation updates
+* Frontend development
+* Backend development using the Windows Python installation
+* Running Git commands
+* Opening pull requests
+
+### WSL Is Recommended
+
+WSL may provide a smoother experience when:
+
+* Running Linux-focused shell workflows
+* Using Bash scripts extensively
+* Working with Docker Desktop and WSL2 integration
+* Reproducing issues that occur only in Linux environments
+
+### WSL Is Out Of Scope
+
+This guide focuses on native Windows development tools. WSL-specific setup,
+Linux package management, and Linux distribution configuration are not covered
+here.
+
+---
+
 ## Clone the Repository
 
 ```powershell

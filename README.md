@@ -118,6 +118,14 @@ SecuScan/
 ├── wordlists/        Scanner wordlists
 └── .github/          CI, issue templates, automation
 ```
+## Quick Links
+
+- **Backend**: [`backend/`](backend/) — FastAPI app, scanners, executor. See [Backend Architecture](docs/backend-architecture.md)
+- **Frontend**: [`frontend/`](frontend/) — React + TypeScript UI
+- **Plugins**: [`plugins/`](plugins/) — Plugin metadata and parsers. See [Plugin Validation](docs/plugin-validation.md)
+- **Docs**: [`docs/`](docs/) — Product, deployment, auth, and contributor docs
+- **Scripts**: [`scripts/`](scripts/) — Validation, checksums, signing, benchmarks
+- **Testing**: [`testing/`](testing/) — Backend/shared test utilities
 
 ## Requirements
 
@@ -302,6 +310,10 @@ Before opening a plugin PR:
 7. Refresh checksums.
 8. Update `PLUGINS.md` if the catalogue changes.
 
+For a complete plugin creation tutorial:
+
+docs/plugins/plugin-development-walkthrough.md
+
 Start with [PLUGINS.md](PLUGINS.md), [docs/plugin-validation.md](docs/plugin-validation.md), and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Contributing
@@ -328,6 +340,48 @@ Before a PR, branch from `main`, keep the change focused, add tests for behavior
 - If ports are busy, stop processes on `5173` and `8000`
 - If env vars are missing, run `cp .env.example .env`
 - For Windows setup, see [docs/windows_contributor_guide.md](docs/windows_contributor_guide.md)
+
+### Local Startup Troubleshooting
+
+| Issue | Possible Cause | Resolution |
+|---------|---------------|------------|
+| `./start.sh: Permission denied` | Script is not executable | Run `chmod +x start.sh setup.sh` and retry. |
+| `python3: command not found` | Python is missing or not on PATH | Install Python 3.11+ and verify with `python3 --version`. |
+| Virtual environment creation fails | Python venv support is unavailable | Install Python venv packages and rerun `./start.sh`. |
+| Backend dependency installation fails | Missing or incompatible Python packages | Re-run `pip install -r backend/requirements.txt` inside the virtual environment. |
+| `npm: command not found` | Node.js or npm is not installed | Install Node.js 20+ and npm 10+. |
+| Frontend dependency installation fails | Corrupted or missing dependencies | Run `cd frontend && npm install`. |
+| `lsof: command not found` | Required utility is missing | Install `lsof` using your system package manager. |
+| Backend does not start on port 8000 | Port conflict or existing process | Run `lsof -i :8000`, terminate the conflicting process, and retry. |
+| Frontend does not start on port 5173 | Port conflict or Vite startup failure | Run `lsof -i :5173`, terminate the conflicting process, and retry. |
+| Frontend cannot connect to backend | Backend failed to start or API configuration issue | Verify backend is available at `http://127.0.0.1:8000`. |
+| API key not found | Backend has not generated the key yet | Check `backend/data/.api_key` after backend startup. |
+
+> Note: `start.sh` automatically attempts to terminate processes using ports `8000` and `5173` before starting the backend and frontend. Manual cleanup may still be required if the ports remain occupied.
+
+#### Checking Port Conflicts
+
+Backend:
+
+```bash
+lsof -i :8000
+```
+
+Frontend:
+
+```bash
+lsof -i :5173
+```
+
+Terminate a process:
+
+```bash
+kill -9 <PID>
+```
+
+For Windows-specific startup and troubleshooting guidance, see [docs/windows_contributor_guide.md](docs/windows_contributor_guide.md).
+
+If you prefer to start services manually instead of using `start.sh`, see the **Manual Dev Commands** section above.
 
 ## More Docs
 

@@ -68,7 +68,9 @@ class TestSchedulerSecurityControls:
             mock_get_pm.return_value = mock_pm
 
             await scheduler._run_workflow("wf-1", steps)
-            mock_db.record_workflow_run.assert_not_called()
+            mock_db.record_workflow_run.assert_called_once()
+            _, kwargs = mock_db.record_workflow_run.call_args
+            assert kwargs.get("task_ids") == []
 
     @pytest.mark.asyncio
     async def test_skips_step_when_target_validation_fails(self, scheduler):
@@ -203,6 +205,7 @@ class TestTickRateLimiting:
         db_mock.fetchall.return_value = [{
             "id": "wf-1",
             "name": "test",
+            "owner_id": "default",
             "schedule_seconds": 60,
             "last_run_at": None,
             "steps_json": "[]",
@@ -222,6 +225,7 @@ class TestTickRateLimiting:
         db_mock.fetchall.return_value = [{
             "id": "wf-1",
             "name": "test",
+            "owner_id": "default",
             "schedule_seconds": 60,
             "last_run_at": None,
             "steps_json": "[]",

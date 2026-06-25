@@ -348,6 +348,14 @@ class NotificationHistoryResponse(BaseModel):
     sent_at: datetime
 
 
+class NotificationDiagnosticsResponse(BaseModel):
+    """Diagnostic configuration details for notification delivery."""
+    webhook_timeout_seconds: float
+    webhook_connect_timeout_seconds: float
+    max_retries: int
+    backoff_factor_seconds: float
+
+
 class BulkDeleteRequest(RootModel[Annotated[List[str], Field(max_length=MAX_BULK_DELETE)]]):
     """Accepts a JSON array of task IDs directly. Max 500 per request."""
     pass

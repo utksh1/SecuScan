@@ -226,14 +226,24 @@ class TaskExecutor:
             q.put_nowait(event)
         except asyncio.QueueFull:
             logger.warning("Dropping stream event for slow listener on task %s", task_id)
-    
+
     async def _broadcast_phase(self, task_id: str, phase: str):
         """Broadcast a scan phase transition and persist it to the database."""
         await self._broadcast(task_id, "phase", phase)
         db = await get_db()
+        now = datetime.now(timezone.utc).isoformat()
         await db.execute(
-            "UPDATE tasks SET scan_phase = ? WHERE id = ?",
-            (phase, task_id)
+            """
+            UPDATE tasks
+            SET scan_phase = ?,
+                phase_timestamps_json = json_set(
+                    phase_timestamps_json,
+                    '$.' || COALESCE(scan_phase, 'unknown') || '.completed_at', ?,
+                    '$.' || ? || '.started_at', ?
+                )
+            WHERE id = ?
+            """,
+            (phase, now, phase, now, task_id)
         )
 
     async def create_task(
@@ -265,24 +275,24 @@ class TaskExecutor:
         task_id = str(uuid.uuid4())
         plugin_manager = get_plugin_manager()
         plugin = plugin_manager.get_plugin(plugin_id)
-        
+
         if not plugin:
             raise ValueError(f"Plugin not found: {plugin_id}")
-        
+
         # Apply preset if provided
         if preset and preset in plugin.presets:
             preset_values = plugin.presets[preset]
             # Merge preset with user inputs (user inputs take precedence)
             inputs = {**preset_values, **inputs}
-        
+
         # Store task in database
         db = await get_db()
         await db.execute(
             """
             INSERT INTO tasks (
                 id, owner_id, plugin_id, tool_name, target, inputs_json, preset,
-                execution_context_json, status, scan_phase, consent_granted, safe_mode
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                execution_context_json, status, scan_phase, phase_timestamps_json, consent_granted, safe_mode
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 task_id,
@@ -295,11 +305,12 @@ class TaskExecutor:
                 serialize_execution_context(execution_context),
                 TaskStatus.QUEUED.value,
                 ScanPhase.QUEUED.value,
+                json.dumps({ScanPhase.QUEUED.value: {"started_at": datetime.now(timezone.utc).isoformat()}}),
                 consent_granted,
                 bool(safe_mode)
             )
         )
-        
+
         # Log audit event
         await db.log_audit(
             "task_created",
@@ -313,9 +324,9 @@ class TaskExecutor:
             task_id=task_id,
             plugin_id=plugin_id
         )
-        
+
         return task_id
-    
+
     async def mark_task_failed(self, task_id: str, reason: str) -> None:
         """
         Mark a task as failed without running it.
@@ -351,22 +362,311 @@ class TaskExecutor:
             task_id=task_id,
         )
 
-    async def execute_task(self, task_id: str):
+    async def _enforce_guardrails(
+        self,
+        target: str,
+        plugin_id: str,
+        safe_mode: bool,
+        task_id: str,
+    ) -> bool:
+        """Enforce Safe Mode target validation and Network Policy access checks.
+
+        Returns:
+            True if all checks pass or are bypassed. False if any check blocks execution.
+        """
+        if not target:
+            return True
+
+        plugin_manager = get_plugin_manager()
+        plugin = plugin_manager.get_plugin(plugin_id)
+        should_validate = True
+        if plugin and plugin.category == "code":
+            should_validate = False
+
+        # Use shared is_filesystem_target from validation to ensure
+        # consistent filesystem detection across route and executor layers.
+        from .validation import is_filesystem_target
+        is_fs = is_filesystem_target(target)
+
+        if should_validate and not is_fs:
+            from .validation import validate_target
+            try:
+                # Enforce safe mode validation of target address in a thread pool
+                is_valid, error_msg = await asyncio.wait_for(
+                    asyncio.to_thread(validate_target, target, safe_mode),
+                    timeout=float(settings.dns_resolution_timeout_seconds),
+                )
+                if not is_valid:
+                    await self.mark_task_failed(
+                        task_id,
+                        f"Safe mode target validation failed: {error_msg}",
+                    )
+                    await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
+                    return False
+            except asyncio.TimeoutError:
+                await self.mark_task_failed(
+                    task_id,
+                    "Target validation timed out (SecuScan Guardrail)",
+                )
+                await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
+                return False
+
+        # Check before launching any scanner or subprocess. check_access()
+        # writes an audit entry on every path, so no extra logging needed.
+        if settings.enforce_network_policy:
+            engine = get_policy_engine()
+            try:
+                allowed, reason, _ = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        engine.check_access,
+                        dest_ip=target,
+                        plugin_id=plugin_id,
+                        task_id=task_id,
+                    ),
+                    timeout=float(settings.dns_resolution_timeout_seconds),
+                )
+            except asyncio.TimeoutError:
+                allowed, reason = False, "Network policy check timed out (DNS resolution timeout)"
+
+            if not allowed:
+                if settings.network_policy_failure_mode == "log_only":
+                    logger.warning(
+                        f"[Log Only] Network policy violation allowed for {target}: {reason}"
+                    )
+                else:
+                    await self.mark_task_failed(
+                        task_id,
+                        f"Network policy denied access to {target}: {reason}",
+                    )
+                    await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
+                    return False
+
+        return True
+
+    async def _ensure_docker_network(self) -> None:
+        """Validate and automatically create the configured Docker network if missing."""
+        _net_check = await asyncio.create_subprocess_exec(
+            "docker", "network", "inspect", settings.docker_network,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await _net_check.wait()
+        if _net_check.returncode == 0:
+            return
+
+        logger.info(f"Docker network '{settings.docker_network}' not found. Creating isolated bridge network (ICC disabled)...")
+        _net_create = await asyncio.create_subprocess_exec(
+            "docker", "network", "create",
+            "--driver", "bridge",
+            "--opt", "com.docker.network.bridge.enable_icc=false",
+            settings.docker_network,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await _net_create.wait()
+        if _net_create.returncode == 0:
+            logger.info(f"Successfully created Docker network '{settings.docker_network}' with ICC disabled")
+            return
+
+        logger.warning("Failed to create isolated bridge network with ICC disabled. Falling back to standard bridge...")
+        _net_create_fallback = await asyncio.create_subprocess_exec(
+            "docker", "network", "create", "--driver", "bridge", settings.docker_network,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await _net_create_fallback.wait()
+        if _net_create_fallback.returncode != 0:
+            raise RuntimeError(
+                f"Docker network '{settings.docker_network}' does not exist and could not be created automatically."
+            )
+        logger.info(f"Successfully created Docker network '{settings.docker_network}' (fallback)")
+
+    async def _execute_modular_scanner(
+        self,
+        db,
+        task_id: str,
+        owner_id: str,
+        plugin_id: str,
+        target: str,
+        inputs: Dict[str, Any],
+        safe_mode: bool,
+    ) -> tuple[str, float]:
+        """Execute a modular scanner and persist findings/report."""
+        scanner_class = MODULAR_SCANNERS[plugin_id]
+        scanner = scanner_class(task_id, db, safe_mode=safe_mode)
+
+        logger.info(f"Executing modular scanner {plugin_id} for task {task_id}")
+        await self._broadcast(task_id, "status", TaskStatus.RUNNING.value)
+        await self._broadcast_phase(task_id, ScanPhase.RUNNING_COMMAND.value)
+
+        start_time = time.time()
+        result = await scanner.run(target, inputs)
+        duration = time.time() - start_time
+
+        final_status = (
+            TaskStatus.COMPLETED.value
+            if result.get("status") != "failed"
+            else TaskStatus.FAILED.value
+        )
+
+        await db.execute(
+            """
+            UPDATE tasks SET
+                status = ?,
+                completed_at = ?,
+                duration_seconds = ?,
+                structured_json = ?,
+                error_message = ?
+            WHERE id = ?
+            """,
+            (
+                final_status,
+                datetime.now().isoformat(),
+                duration,
+                json.dumps(result),
+                result.get("error_message"),
+                task_id,
+            ),
+        )
+
+        await self._broadcast_phase(task_id, ScanPhase.PARSING.value)
+        await self._upsert_findings_and_report_from_scanner(
+            db=db,
+            task_id=task_id,
+            owner_id=owner_id,
+            scanner=scanner,
+            plugin_id=plugin_id,
+            target=target,
+            status=final_status,
+            result=result,
+        )
+        await self._broadcast_phase(task_id, ScanPhase.REPORTING.value)
+        return final_status, duration
+
+    async def _execute_standard_scanner(
+        self,
+        db,
+        task_id: str,
+        owner_id: str,
+        plugin: Any,
+        plugin_id: str,
+        target: str,
+        inputs: Dict[str, Any],
+    ) -> tuple[str, float, int]:
+        """Execute a standard CLI/Docker plugin and persist findings/report."""
+        plugin_manager = get_plugin_manager()
+        command = plugin_manager.build_command(plugin_id, inputs)
+
+        if not command:
+            raise ValueError("Failed to build command")
+
+        # Apply Docker Sandboxing if enabled
+        if settings.docker_enabled:
+            await self._ensure_docker_network()
+            docker_image = plugin.docker_image or "alpine:latest"
+            docker_cmd = [
+                "docker",
+                "run",
+                "--rm",
+                "--name",
+                f"secuscan_task_{task_id}",
+                "--memory",
+                f"{settings.sandbox_memory_mb}m",
+                "--cpus",
+                str(settings.sandbox_cpu_quota),
+                "--cap-drop", "NET_RAW",
+                "--network", settings.docker_network,
+                docker_image,
+            ]
+            command = docker_cmd + command
+
+        logger.info(f"Executing task {task_id}: {' '.join(command)}")
+        await self._broadcast(task_id, "status", TaskStatus.RUNNING.value)
+        await self._broadcast_phase(task_id, ScanPhase.RUNNING_COMMAND.value)
+
+        # Execute command
+        start_time = time.time()
+        output, exit_code = await self._execute_command(
+            command,
+            task_id,
+            timeout=self._resolve_execution_timeout(inputs),
+        )
+        duration = time.time() - start_time
+
+        # Save raw output
+        raw_path = Path(settings.raw_output_dir) / f"{task_id}.txt"
+        output = redact(output)
+        with open(raw_path, 'w') as f:
+            f.write(output)
+
+        # Classify result
+        final_status, error_message = self._classify_command_result(
+            plugin=plugin,
+            output=output,
+            exit_code=exit_code,
+        )
+
+        await db.execute(
+            """
+            UPDATE tasks SET
+                status = ?,
+                completed_at = ?,
+                duration_seconds = ?,
+                exit_code = ?,
+                raw_output_path = ?,
+                command_used = ?,
+                error_message = ?
+            WHERE id = ?
+            """,
+            (
+                final_status,
+                datetime.now().isoformat(),
+                duration,
+                exit_code,
+                str(raw_path),
+                " ".join(command),
+                error_message,
+                task_id,
+            ),
+        )
+
+        # Upsert findings and report
+        await self._broadcast_phase(task_id, ScanPhase.PARSING.value)
+        await self._upsert_findings_and_report(
+            db=db,
+            task_id=task_id,
+            owner_id=owner_id,
+            plugin=plugin,
+            plugin_id=plugin_id,
+            target=target,
+            status=final_status,
+            output=output,
+        )
+        await self._broadcast_phase(task_id, ScanPhase.REPORTING.value)
+        return final_status, duration, exit_code
+
+    async def execute_task(self, task_id: str) -> None:
         """
         Execute a task asynchronously.
-        
+
         Args:
             task_id: Task identifier
         """
         db = await get_db()
         self.running_tasks[task_id] = asyncio.current_task()
+        start_time = time.time()
 
         try:
-            # Update status to running
-            await db.execute(
-                "UPDATE tasks SET status = ?, started_at = ? WHERE id = ?",
-                (TaskStatus.RUNNING.value, datetime.now().isoformat(), task_id)
+            # Update status to running — use optimistic lock to detect
+            # if the task was deleted or already running before this point.
+            result = await db.execute(
+                "UPDATE tasks SET status = ?, started_at = ? WHERE id = ? AND status = ?",
+                (TaskStatus.RUNNING.value, datetime.now().isoformat(), task_id, TaskStatus.QUEUED.value)
             )
+            if result.rowcount == 0:
+                logger.warning(f"Task {task_id} was deleted or no longer queued before execution started. Aborting.")
+                self.running_tasks.pop(task_id, None)
+                return
             await self._invalidate_cached_views()
 
             # Get task details
@@ -394,72 +694,8 @@ class TaskExecutor:
             )
 
             # ── Safe Mode & Network policy enforcement ───────────────────────
-            # Enforce Safe Mode target validation inside TaskExecutor to guarantee
-            # that all execution paths (manual API, workflows, scheduled tasks) are protected.
-            if target:
-                plugin_manager = get_plugin_manager()
-                plugin = plugin_manager.get_plugin(plugin_id)
-                should_validate = True
-                if plugin and plugin.category == "code":
-                    should_validate = False
-
-                # Check for filesystem targets using the same best-effort detection
-                is_fs = target.startswith(("/", "./", "../", "~")) or \
-                        bool(re.match(r"^[A-Za-z]:[\\/]", target)) or \
-                        ("/" in target and not target.startswith(("http://", "https://")))
-
-                if should_validate and not is_fs:
-                    from .validation import validate_target
-                    try:
-                        # Enforce safe mode validation of target address in a thread pool
-                        is_valid, error_msg = await asyncio.wait_for(
-                            asyncio.to_thread(validate_target, target, safe_mode),
-                            timeout=float(settings.dns_resolution_timeout_seconds),
-                        )
-                        if not is_valid:
-                            await self.mark_task_failed(
-                                task_id,
-                                f"Safe mode target validation failed: {error_msg}",
-                            )
-                            await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
-                            return
-                    except asyncio.TimeoutError:
-                        await self.mark_task_failed(
-                            task_id,
-                            "Target validation timed out (SecuScan Guardrail)",
-                        )
-                        await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
-                        return
-
-            # Check before launching any scanner or subprocess.  check_access()
-            # writes an audit entry on every path, so no extra logging needed.
-            if target and settings.enforce_network_policy:
-                engine = get_policy_engine()
-                try:
-                    allowed, reason, _ = await asyncio.wait_for(
-                        asyncio.to_thread(
-                            engine.check_access,
-                            dest_ip=target,
-                            plugin_id=plugin_id,
-                            task_id=task_id,
-                        ),
-                        timeout=float(settings.dns_resolution_timeout_seconds),
-                    )
-                except asyncio.TimeoutError:
-                    allowed, reason = False, "Network policy check timed out (DNS resolution timeout)"
-
-                if not allowed:
-                    if settings.network_policy_failure_mode == "log_only":
-                        logger.warning(
-                            f"[Log Only] Network policy violation allowed for {target}: {reason}"
-                        )
-                    else:
-                        await self.mark_task_failed(
-                            task_id,
-                            f"Network policy denied access to {target}: {reason}",
-                        )
-                        await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
-                        return  # finally block handles running_tasks cleanup + limiter release
+            if not await self._enforce_guardrails(target, plugin_id, safe_mode, task_id):
+                return
 
             # Check if this is a modular scanner or a standard plugin
             plugin_manager = get_plugin_manager()
@@ -479,180 +715,26 @@ class TaskExecutor:
                 )
 
             if plugin_id in MODULAR_SCANNERS:
-                scanner_class = MODULAR_SCANNERS[plugin_id]
-                scanner = scanner_class(task_id, db, safe_mode=safe_mode)
-                
-                logger.info(f"Executing modular scanner {plugin_id} for task {task_id}")
-                await self._broadcast(task_id, "status", TaskStatus.RUNNING.value)
-                await self._broadcast_phase(task_id, ScanPhase.RUNNING_COMMAND.value)
-                
-                start_time = time.time()
-                # Run the scanner
-                result = await scanner.run(target, inputs)
-                duration = time.time() - start_time
-                
-                # Update task with results
-                final_status = TaskStatus.COMPLETED.value if result.get("status") != "failed" else TaskStatus.FAILED.value
-                
-                await db.execute(
-                    """
-                    UPDATE tasks SET
-                        status = ?,
-                        completed_at = ?,
-                        duration_seconds = ?,
-                        structured_json = ?,
-                        error_message = ?
-                    WHERE id = ?
-                    """,
-                    (
-                        final_status,
-                        datetime.now().isoformat(),
-                        duration,
-                        json.dumps(result),
-                        result.get("error_message"),
-                        task_id
-                    )
-                )
-
-                # Upsert findings and report using the scanner's result
-                await self._broadcast_phase(task_id, ScanPhase.PARSING.value)
-                await self._upsert_findings_and_report_from_scanner(
+                final_status, duration = await self._execute_modular_scanner(
                     db=db,
                     task_id=task_id,
                     owner_id=owner_id,
-                    scanner=scanner,
                     plugin_id=plugin_id,
                     target=target,
-                    status=final_status,
-                    result=result
+                    inputs=inputs,
+                    safe_mode=safe_mode,
                 )
-                await self._broadcast_phase(task_id, ScanPhase.REPORTING.value)
-
+                exit_code = 0
             else:
-                # Standard Plugin Execution
-                command = plugin_manager.build_command(plugin_id, inputs)
-
-                if not command:
-                    raise ValueError("Failed to build command")
-
-                # Apply Docker Sandboxing if enabled
-                if settings.docker_enabled:
-                    # Validate the named Docker network exists before using it.
-                    # If missing, attempt to create it automatically rather than failing.
-                    _net_check = await asyncio.create_subprocess_exec(
-                        "docker", "network", "inspect", settings.docker_network,
-                        stdout=asyncio.subprocess.DEVNULL,
-                        stderr=asyncio.subprocess.DEVNULL,
-                    )
-                    await _net_check.wait()
-                    if _net_check.returncode != 0:
-                        logger.info(f"Docker network '{settings.docker_network}' not found. Creating isolated bridge network (ICC disabled)...")
-                        _net_create = await asyncio.create_subprocess_exec(
-                            "docker", "network", "create",
-                            "--driver", "bridge",
-                            "--opt", "com.docker.network.bridge.enable_icc=false",
-                            settings.docker_network,
-                            stdout=asyncio.subprocess.DEVNULL,
-                            stderr=asyncio.subprocess.DEVNULL,
-                        )
-                        await _net_create.wait()
-                        if _net_create.returncode != 0:
-                            logger.warning("Failed to create isolated bridge network with ICC disabled. Falling back to standard bridge...")
-                            _net_create_fallback = await asyncio.create_subprocess_exec(
-                                "docker", "network", "create", "--driver", "bridge", settings.docker_network,
-                                stdout=asyncio.subprocess.DEVNULL,
-                                stderr=asyncio.subprocess.DEVNULL,
-                            )
-                            await _net_create_fallback.wait()
-                            if _net_create_fallback.returncode != 0:
-                                raise RuntimeError(
-                                    f"Docker network '{settings.docker_network}' does not exist and could not be created automatically."
-                                )
-                            logger.info(f"Successfully created Docker network '{settings.docker_network}' (fallback)")
-                        else:
-                            logger.info(f"Successfully created Docker network '{settings.docker_network}' with ICC disabled")
-
-                    docker_image = plugin.docker_image or "alpine:latest"
-                    docker_cmd = [
-                        "docker",
-                        "run",
-                        "--rm",
-                        "--name",
-                        f"secuscan_task_{task_id}",
-                        "--memory",
-                        f"{settings.sandbox_memory_mb}m",
-                        "--cpus",
-                        str(settings.sandbox_cpu_quota),
-                        "--cap-drop", "NET_RAW",
-                        "--network", settings.docker_network,
-                        docker_image,
-                    ]
-                    command = docker_cmd + command
-
-                logger.info(f"Executing task {task_id}: {' '.join(command)}")
-                await self._broadcast(task_id, "status", TaskStatus.RUNNING.value)
-                await self._broadcast_phase(task_id, ScanPhase.RUNNING_COMMAND.value)
-
-                # Execute command
-                start_time = time.time()
-                output, exit_code = await self._execute_command(
-                    command,
-                    task_id,
-                    timeout=self._resolve_execution_timeout(inputs),
-                )
-                duration = time.time() - start_time
-
-                # Save raw output
-                raw_path = Path(settings.raw_output_dir) / f"{task_id}.txt"
-                output = redact(output)
-                with open(raw_path, 'w') as f:
-                    f.write(output)
-
-                # Some CLI tools use non-zero exit codes for "no result" states while still
-                # producing a complete, parseable report. Let plugin metadata opt into that.
-                final_status, error_message = self._classify_command_result(
-                    plugin=plugin,
-                    output=output,
-                    exit_code=exit_code,
-                )
-
-                await db.execute(
-                    """
-                    UPDATE tasks SET
-                        status = ?,
-                        completed_at = ?,
-                        duration_seconds = ?,
-                        exit_code = ?,
-                        raw_output_path = ?,
-                        command_used = ?,
-                        error_message = ?
-                    WHERE id = ?
-                    """,
-                    (
-                        final_status,
-                        datetime.now().isoformat(),
-                        duration,
-                        exit_code,
-                        str(raw_path),
-                        " ".join(command),
-                        error_message,
-                        task_id
-                    )
-                )
-
-                # Upsert findings and report
-                await self._broadcast_phase(task_id, ScanPhase.PARSING.value)
-                await self._upsert_findings_and_report(
+                final_status, duration, exit_code = await self._execute_standard_scanner(
                     db=db,
                     task_id=task_id,
                     owner_id=owner_id,
                     plugin=plugin,
                     plugin_id=plugin_id,
                     target=target,
-                    status=final_status,
-                    output=output
+                    inputs=inputs,
                 )
-                await self._broadcast_phase(task_id, ScanPhase.REPORTING.value)
 
             await self._dispatch_task_notifications(db, task_id)
 
@@ -664,7 +746,7 @@ class TaskExecutor:
             await db.log_audit(
                 "task_completed",
                 f"Task completed in {duration:.2f}s",
-                context={"task_id": task_id, "exit_code": locals().get('exit_code', 0)},
+                context={"task_id": task_id, "exit_code": exit_code},
                 task_id=task_id,
                 plugin_id=plugin_id
             )
@@ -672,11 +754,6 @@ class TaskExecutor:
             logger.info(f"Task {task_id} completed in {duration:.2f}s")
 
         except asyncio.CancelledError:
-            # CancelledError inherits from BaseException, not Exception —
-            # it bypasses the broad except below, so we handle it explicitly.
-            # Task.cancelled() returns False while the finally block is still
-            # executing, so this is the only reliable place to write the
-            # cancellation status to the DB.
             duration = (time.time() - start_time) if 'start_time' in locals() else 0
             await db.execute(
                 """
@@ -734,8 +811,6 @@ class TaskExecutor:
 
         except Exception as e:
             logger.error(f"Task {task_id} failed: {e}", exc_info=True)
-
-            # Update task as failed
             duration = (time.time() - start_time) if 'start_time' in locals() else 0
             await db.execute(
                 """
@@ -766,12 +841,10 @@ class TaskExecutor:
                 task_id=task_id
             )
         finally:
-            # Always clean up: remove from the in-memory registry and
-            # release the concurrency slot regardless of how the task ended.
             self.running_tasks.pop(task_id, None)
             self._process_pids.pop(task_id, None)
             await concurrent_limiter.release(task_id)
-    
+
     async def _execute_command(
         self,
         command: list,
@@ -941,28 +1014,29 @@ class TaskExecutor:
                 logger.error(f"Failed to kill docker container for {task_id}: {e}")
 
         db = await get_db()
-        await db.execute(
-            "UPDATE tasks SET status = ?, completed_at = ? WHERE id = ?",
-            (TaskStatus.CANCELLED.value, datetime.now().isoformat(), task_id)
-        )
+        async with db.transaction():
+            await db.execute(
+                "UPDATE tasks SET status = ?, completed_at = ? WHERE id = ?",
+                (TaskStatus.CANCELLED.value, datetime.now().isoformat(), task_id)
+            )
+
+            await db.log_audit(
+                "task_cancelled",
+                "Task cancelled by user",
+                task_id=task_id
+            )
 
         await self._broadcast(task_id, "status", TaskStatus.CANCELLED.value)
         await self._invalidate_cached_views()
 
-        await db.log_audit(
-            "task_cancelled",
-            "Task cancelled by user",
-            task_id=task_id
-        )
-
         return True
-    
+
     async def get_task_status(self, task_id: str) -> Optional[Dict]:
         """Get task status and progress"""
         db = await get_db()
         task_row = await db.fetchone(
             """
-            SELECT id, plugin_id, tool_name, target, status, scan_phase, created_at, started_at, completed_at,
+            SELECT id, plugin_id, tool_name, target, status, scan_phase, phase_timestamps_json, created_at, started_at, completed_at,
                    duration_seconds, exit_code, error_message, preset, inputs_json, execution_context_json
             FROM tasks WHERE id = ?
             """,
@@ -983,6 +1057,11 @@ class TaskExecutor:
             pending_count = len(ids)
             queue_position = (ids.index(task_id) + 1) if task_id in ids else None
 
+        try:
+            phase_timestamps = json.loads(_row_value(task_row, "phase_timestamps_json", "{}"))
+        except json.JSONDecodeError:
+            phase_timestamps = {}
+
         return {
             "task_id": task_row["id"],
             "plugin_id": task_row["plugin_id"],
@@ -990,6 +1069,7 @@ class TaskExecutor:
             "target": task_row["target"],
             "status": task_row["status"],
             "scan_phase": task_row.get("scan_phase"),
+            "phase_timestamps": phase_timestamps,
             "created_at": task_row["created_at"],
             "started_at": task_row["started_at"],
             "completed_at": task_row["completed_at"],
@@ -1362,41 +1442,42 @@ class TaskExecutor:
         structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
         structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
 
-        await db.execute(
-            "UPDATE tasks SET structured_json = ? WHERE id = ?",
-            (json.dumps(structured_result), task_id)
-        )
+        async with db.transaction():
+            await db.execute(
+                "UPDATE tasks SET structured_json = ? WHERE id = ?",
+                (json.dumps(structured_result), task_id)
+            )
 
-        await db.execute(
-            """
-            INSERT INTO reports (
-                id, owner_id, task_id, name, type, generated_at, status, findings, pages
-            ) VALUES (?, ?, ?, ?, ?, (datetime('now')), ?, ?, ?)
-            ON CONFLICT (id) DO UPDATE SET
-                status = EXCLUDED.status,
-                findings = EXCLUDED.findings,
-                pages = EXCLUDED.pages
-            """,
-            (
-                f"report:{task_id}",
-                owner_id,
-                task_id,
-                f"{plugin.name} Report",
-                "technical",
-                "ready" if status == TaskStatus.COMPLETED.value else "failed",
-                len(findings_data),
-                1,
-            ),
-        )
+            await db.execute(
+                """
+                INSERT INTO reports (
+                    id, owner_id, task_id, name, type, generated_at, status, findings, pages
+                ) VALUES (?, ?, ?, ?, ?, (datetime('now')), ?, ?, ?)
+                ON CONFLICT (id) DO UPDATE SET
+                    status = EXCLUDED.status,
+                    findings = EXCLUDED.findings,
+                    pages = EXCLUDED.pages
+                """,
+                (
+                    f"report:{task_id}",
+                    owner_id,
+                    task_id,
+                    f"{plugin.name} Report",
+                    "technical",
+                    "ready" if status == TaskStatus.COMPLETED.value else "failed",
+                    len(findings_data),
+                    1,
+                ),
+            )
 
-        await self._persist_result_resources(
-            db,
-            owner_id=owner_id,
-            task_id=task_id,
-            plugin_id=plugin_id,
-            target=target,
-            result=structured_result,
-        )
+            await self._persist_result_resources(
+                db,
+                owner_id=owner_id,
+                task_id=task_id,
+                plugin_id=plugin_id,
+                target=target,
+                result=structured_result,
+            )
 
     async def _upsert_findings_and_report_from_scanner(self, db, task_id: str, owner_id: str, scanner: Any, plugin_id: str, target: str, status: str, result: Dict[str, Any]):
         """Persist modular scanner results into findings, and reports."""
@@ -1427,42 +1508,43 @@ class TaskExecutor:
         structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
         structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
 
-        await db.execute(
-            "UPDATE tasks SET structured_json = ? WHERE id = ?",
-            (json.dumps(structured_result), task_id)
-        )
+        async with db.transaction():
+            await db.execute(
+                "UPDATE tasks SET structured_json = ? WHERE id = ?",
+                (json.dumps(structured_result), task_id)
+            )
 
-        # Create/Update report
-        await db.execute(
-            """
-            INSERT INTO reports (
-                id, owner_id, task_id, name, type, generated_at, status, findings, pages
-            ) VALUES (?, ?, ?, ?, ?, (datetime('now')), ?, ?, ?)
-            ON CONFLICT (id) DO UPDATE SET
-                status = EXCLUDED.status,
-                findings = EXCLUDED.findings,
-                pages = EXCLUDED.pages
-            """,
-            (
-                f"report:{task_id}",
-                owner_id,
-                task_id,
-                f"{scanner.name} Report",
-                "professional" if status == TaskStatus.COMPLETED.value else "failed",
-                "ready" if status == TaskStatus.COMPLETED.value else "failed",
-                len(findings_data),
-                2, # Professional reports are typically multi-page
-            ),
-        )
+            # Create/Update report
+            await db.execute(
+                """
+                INSERT INTO reports (
+                    id, owner_id, task_id, name, type, generated_at, status, findings, pages
+                ) VALUES (?, ?, ?, ?, ?, (datetime('now')), ?, ?, ?)
+                ON CONFLICT (id) DO UPDATE SET
+                    status = EXCLUDED.status,
+                    findings = EXCLUDED.findings,
+                    pages = EXCLUDED.pages
+                """,
+                (
+                    f"report:{task_id}",
+                    owner_id,
+                    task_id,
+                    f"{scanner.name} Report",
+                    "professional" if status == TaskStatus.COMPLETED.value else "failed",
+                    "ready" if status == TaskStatus.COMPLETED.value else "failed",
+                    len(findings_data),
+                    2, # Professional reports are typically multi-page
+                ),
+            )
 
-        await self._persist_result_resources(
-            db,
-            owner_id=owner_id,
-            task_id=task_id,
-            plugin_id=plugin_id,
-            target=target,
-            result=structured_result,
-        )
+            await self._persist_result_resources(
+                db,
+                owner_id=owner_id,
+                task_id=task_id,
+                plugin_id=plugin_id,
+                target=target,
+                result=structured_result,
+            )
 
     async def _persist_result_resources(
         self,
@@ -1500,12 +1582,12 @@ class TaskExecutor:
         """Route to appropriate parser based on plugin metadata."""
         parser_type = plugin.output.get("parser")
         parser_input = self._resolve_parser_input(plugin, output)
-        
+
         # 1. Check for custom parser.py in plugin directory (Recommended)
         plugin_manager = get_plugin_manager()
         plugin_dir = plugin_manager.plugins_dir / plugin.id
         parser_path = plugin_dir / "parser.py"
-        
+
         if parser_path.exists():
             if not plugin_manager.verify_parser_at_exec_time(plugin, plugin_dir):
                 raise ValueError(
@@ -1541,7 +1623,7 @@ class TaskExecutor:
             return self._normalize_parsed_result(plugin, parser_input, self._parse_nmap_output(parser_input))
         elif parser_type == "builtin_http":
             return self._normalize_parsed_result(plugin, parser_input, self._parse_http_output(parser_input))
-        
+
         return self._normalize_parsed_result(plugin, parser_input, {"findings": [], "raw": parser_input})
 
     def _resolve_parser_input(self, plugin, output: str) -> str:
@@ -1714,7 +1796,7 @@ class TaskExecutor:
         findings = []
         ports = []
         services = []
-        
+
         # Regex for open ports: 80/tcp open http
         port_pattern = re.compile(r"(\d+)/(tcp|udp)\s+open\s+([\w-]+)")
         for match in port_pattern.finditer(output):
@@ -1730,7 +1812,7 @@ class TaskExecutor:
                 "remediation": "Close unnecessary ports and use a firewall to restrict access.",
                 "metadata": {"port": port_str, "protocol": proto, "service": service}
             })
-        
+
         return {
             "open_ports": sorted(list(set(ports))),
             "services": sorted(list(set(services))),
@@ -1782,6 +1864,10 @@ class TaskExecutor:
             )
             if sent:
                 logger.info("Task %s: delivered %d notification(s)", task_id, sent)
+
+            # Send Slack Webhook notification for scan completion
+            from .notification_service import process_slack_notification
+            await process_slack_notification(db, task_id)
         except Exception as exc:
             logger.warning(
                 "Task %s: notification dispatch failed: %s",
