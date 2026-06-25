@@ -728,14 +728,21 @@ ON credential_vault(owner_id);
 
         If any statement raises, the entire transaction is rolled back.
         On success the transaction is committed automatically.
+
+        Nested calls are safe: when a transaction is already active the
+        inner context manager becomes a no-op so the outer transaction
+        controls the commit/rollback.
         """
-        await self.begin()
-        try:
+        if self._in_transaction:
             yield self
-            await self.commit()
-        except Exception:
-            await self.rollback()
-            raise
+        else:
+            await self.begin()
+            try:
+                yield self
+                await self.commit()
+            except Exception:
+                await self.rollback()
+                raise
 
     async def execute(self, query: str, params: tuple = ()):
         """Execute a write query and return the cursor (so callers can inspect rowcount)."""
@@ -750,17 +757,23 @@ ON credential_vault(owner_id);
         return cursor
 
     async def begin(self):
-        """Begin a transaction."""
+        """Begin a transaction. No-op if already in a transaction."""
+        if self._in_transaction:
+            return
         await self.connection.execute("BEGIN")
         self._in_transaction = True
 
     async def commit(self):
-        """Commit the current transaction."""
+        """Commit the current transaction. No-op if not in a transaction."""
+        if not self._in_transaction:
+            return
         await self.connection.commit()
         self._in_transaction = False
 
     async def rollback(self):
-        """Roll back the current transaction."""
+        """Roll back the current transaction. No-op if not in a transaction."""
+        if not self._in_transaction:
+            return
         await self.connection.rollback()
         self._in_transaction = False
 
