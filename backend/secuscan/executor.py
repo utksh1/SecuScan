@@ -552,6 +552,7 @@ class TaskExecutor:
         plugin_id: str,
         target: str,
         inputs: Dict[str, Any],
+        safe_mode: bool,
     ) -> tuple[str, float, int]:
         """Execute a standard CLI/Docker plugin and persist findings/report."""
         plugin_manager = get_plugin_manager()
@@ -734,6 +735,7 @@ class TaskExecutor:
                     plugin_id=plugin_id,
                     target=target,
                     inputs=inputs,
+                    safe_mode=safe_mode,
                 )
 
             await self._dispatch_task_notifications(db, task_id)
@@ -1016,8 +1018,8 @@ class TaskExecutor:
         db = await get_db()
         async with db.transaction():
             await db.execute(
-                "UPDATE tasks SET status = ?, completed_at = ? WHERE id = ?",
-                (TaskStatus.CANCELLED.value, datetime.now().isoformat(), task_id)
+                "UPDATE tasks SET status = ?, completed_at = ? WHERE id = ? AND status = ?",
+                (TaskStatus.CANCELLED.value, datetime.now().isoformat(), task_id, TaskStatus.RUNNING.value)
             )
 
             await db.log_audit(
