@@ -24,6 +24,8 @@ jobs:
       - name: Fetch base branch for diff
         if: github.event_name == 'pull_request'
         run: git fetch origin "${{ github.base_ref }}" --depth=1
+      # Test-selection policy (which suites run for which changes, plus the
+      # full-suite fallbacks) is documented in docs/ci-test-selection.md
       - name: Determine test selection
         id: filter
         env:
@@ -53,6 +55,17 @@ jobs:
       - name: Validate issue template labels
         run: python scripts/validate_issue_template_labels.py
 
+  doc-anchor-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Validate documentation anchors
+        run: python scripts/validate_doc_anchors.py
+
   backend-lint:
     needs: detect-changes
     if: needs.detect-changes.outputs.run_backend == 'true'
@@ -71,7 +84,7 @@ jobs:
       - name: Run backend lint baseline
         run: ruff check backend testing/backend
 
-  backend-tests:
+  backend-unit:
     needs: [detect-changes, backend-lint, formatting-hygiene]
     if: |
       always() &&
@@ -90,9 +103,75 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt -r backend/requirements-dev.txt
-      - name: Run backend tests
-        run: pytest testing/backend -q -m "not benchmark"
+      - name: Run unit tests
+        run: pytest testing/backend/unit -q -m "not benchmark"
 
+  backend-integration:
+    needs: [detect-changes, backend-lint, formatting-hygiene]
+    if: |
+      always() &&
+      needs.detect-changes.outputs.run_backend == 'true' &&
+      (needs.backend-lint.result == 'success' || needs.backend-lint.result == 'skipped') &&
+      (needs.formatting-hygiene.result == 'success' || needs.formatting-hygiene.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+      - name: Run integration tests
+        run: pytest testing/backend/integration -q -m "not benchmark"
+
+  parser-contracts:
+    needs: [detect-changes, backend-lint, formatting-hygiene]
+    if: |
+      always() &&
+      needs.detect-changes.outputs.run_backend == 'true' &&
+      (needs.backend-lint.result == 'success' || needs.backend-lint.result == 'skipped') &&
+      (needs.formatting-hygiene.result == 'success' || needs.formatting-hygiene.result == 'skipped')
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        capability_group:
+          - network
+          - intrusive
+          - credentials
+          - exploit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+      - name: Run parser contract tests for capability group ${{ matrix.capability_group }}
+        run: |
+          echo "Running parser contract tests for capability group: ${{ matrix.capability_group }}"
+          PARSER_CAPABILITY_GROUP=${{ matrix.capability_group }} pytest testing/backend/integration/test_parser_output_contract.py -q
+  backend-tests:
+    needs:
+      - backend-unit
+      - backend-integration
+      - parser-contracts
+    runs-on: ubuntu-latest
+    if: |
+      always() &&
+      (needs.backend-unit.result == 'success' || needs.backend-unit.result == 'skipped') &&
+      (needs.backend-integration.result == 'success' || needs.backend-integration.result == 'skipped') &&
+      (needs.parser-contracts.result == 'success' || needs.parser-contracts.result == 'skipped')
+    steps:
+      - name: Backend test suites completed
+        run: echo "backend-unit, backend-integration, and parser-contracts completed"
   backend-audit:
     runs-on: ubuntu-latest
     steps:
@@ -159,23 +238,29 @@ jobs:
         id: run_benchmarks
         run: python3 scripts/run_benchmarks.py
         continue-on-error: true
-      - name: Upload benchmark results artifact
+      - name: Upload benchmark comparison artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: benchmark-results
-          path: benchmark_results.json
+          name: benchmark-threshold-comparison
+          path: |
+            benchmark_results.json
+            benchmark_threshold_comparison.json
       - name: Add warning annotation on failure
         if: steps.run_benchmarks.outcome == 'failure'
         run: |
           echo "::warning::Performance benchmark thresholds exceeded or benchmarks failed to run. Check the job logs for details."
-
-  frontend-checks:
+  frontend-run-checks:
     needs: [detect-changes, formatting-hygiene]
     if: |
       always() &&
       needs.detect-changes.outputs.run_frontend == 'true' &&
       (needs.formatting-hygiene.result == 'success' || needs.formatting-hygiene.result == 'skipped')
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20, 22]
+
     defaults:
       run:
         working-directory: frontend
@@ -183,7 +268,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: ${{ matrix.node-version }}
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
       - name: Install frontend dependencies
@@ -219,3 +304,18 @@ jobs:
         run: npm run test
       - name: Build frontend
         run: npm run build
+
+  frontend-checks:
+    needs: [frontend-run-checks]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check matrix results
+        run: |
+          if [ "${{ needs.frontend-run-checks.result }}" = "success" ] || [ "${{ needs.frontend-run-checks.result }}" = "skipped" ]; then
+            echo "Frontend checks completed successfully or skipped"
+            exit 0
+          else
+            echo "Frontend checks failed"
+            exit 1
+          fi

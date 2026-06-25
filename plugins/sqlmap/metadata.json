@@ -2,8 +2,8 @@
   "id": "sqlmap",
   "name": "SQL Injection Testing",
   "version": "1.0.0",
-  "description": "Automatic SQL injection and database takeover tool",
-  "long_description": "SQLMap is an open source penetration testing tool that automates the process of detecting and exploiting SQL injection flaws and taking over of database servers.",
+  "description": "SQL injection detection and database enumeration tool.",
+  "long_description": "SQLMap detects SQL injection vulnerabilities against parameterized URLs such as http://testphp.vulnweb.com/listproducts.php?cat=1. Standard scans confirm injectable parameters, while advanced scans can enumerate databases and schema information. Database enumeration output lists discovered DBMS names and should only be performed against systems you own or are explicitly authorized to assess. Intrusive options may alter application behavior, so use with caution.",
   "category": "web",
   "author": {
     "name": "SecuScan Contributors",
@@ -38,7 +38,7 @@
         "pattern": "^https?://",
         "message": "Must be a valid HTTP/HTTPS URL"
       },
-      "help": "The vulnerable URL parameter to test"
+      "help": "Full URL containing the parameter to test (for example http://testphp.vulnweb.com/listproducts.php?cat=1). Include http:// or https:// and only test systems you own or are authorized to assess."
     },
     {
       "id": "preset",
@@ -56,7 +56,7 @@
           "label": "Aggressive (Level 5, Risk 3)"
         }
       ],
-      "help": "Predefined scan configuration profiles"
+      "help": "Quick performs low-risk checks. Aggressive increases level and risk values and enables database enumeration."
     },
     {
       "id": "level",
@@ -64,7 +64,7 @@
       "type": "integer",
       "required": false,
       "default": 1,
-      "help": "Level of tests to perform (1-5, default 1)"
+      "help": "Level of tests to perform (1-5). Higher levels send more payloads and take longer."
     },
     {
       "id": "risk",
@@ -72,7 +72,7 @@
       "type": "integer",
       "required": false,
       "default": 1,
-      "help": "Risk of tests to perform (1-3, default 1)"
+      "help": "Risk of payloads (1-3). Higher values are more intrusive and may affect application behavior."
     },
     {
       "id": "dbs",
@@ -80,7 +80,7 @@
       "type": "boolean",
       "required": false,
       "default": false,
-      "help": "Attempt to enumerate the DBMS databases"
+      "help": "List database names discovered on the target. Enumeration is intrusive and should only be used in authorized environments."
     }
   ],
   "presets": {
@@ -120,9 +120,11 @@
     "tutorial_url": "https://docs.secuscan.local/plugins/sqlmap"
   },
   "dependencies": {
-    "binaries": [],
+    "binaries": [
+      "sqlmap"
+    ],
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "7312d73eb00289dfe5bc1c2cdb6491054a3a348f198a65b36f69f125c9ae3d50"
+  "checksum": "3c7f16ed91fa3623540e42f1b4a3d79c29708e26cb1d130ab9bd2ec40a7d6c0e"
 }

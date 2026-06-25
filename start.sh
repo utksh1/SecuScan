@@ -23,6 +23,8 @@ echo "  ╚═══════════════════════
 echo ""
 
 # Pre-flight checks: kill existing servers on 8000 and 5173
+# If ports remain occupied after startup fails, see README.md
+# Troubleshooting → Local Startup Troubleshooting.
 echo "🧹 Cleaning up existing processes on port 8000 and 5173..."
 lsof -ti :8000 | xargs kill -9 2>/dev/null || true
 lsof -ti :5173 | xargs kill -9 2>/dev/null || true
@@ -31,6 +33,17 @@ sleep 1
 # ── Backend ────────────────────────────────────
 echo "⚙  Setting up backend..."
 cd "$ROOT_DIR"
+
+# Validate project structure before any expensive setup
+if [ ! -f "$ROOT_DIR/backend/requirements.txt" ]; then
+  echo "ERROR: backend/requirements.txt not found."
+  exit 1
+fi
+
+if [ ! -d "$ROOT_DIR/frontend" ]; then
+  echo "ERROR: frontend directory not found."
+  exit 1
+fi
 
 if [ -d "venv" ]; then
   source venv/bin/activate

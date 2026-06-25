@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { setStoredApiKey } from '../api'
+import { authenticateWithApiKey } from '../api'
 
 interface Props {
   onSaved: () => void
@@ -10,24 +10,29 @@ interface Props {
  *
  * Shown when the app receives HTTP 401 or detects no stored API key.
  * The operator reads the key from `backend/data/.api_key`, pastes it here,
- * and clicks Save. The key is written only to localStorage (secuscan_api_key);
- * it is never sent to any server other than as the X-Api-Key request header.
+ * and clicks Save. The key is sent to the backend which validates it and
+ * sets an HttpOnly session cookie; the raw key is never persisted in the
+ * browser.
  */
 export default function ApiKeySetupModal({ onSaved }: Props) {
   const [key, setKey] = useState('')
   const [visible, setVisible] = useState(false)
   const [error, setError] = useState('')
 
-  function handleSave() {
+  async function handleSave() {
     const trimmed = key.trim()
     if (!trimmed) {
       setError('Please enter the API key.')
       return
     }
-    setStoredApiKey(trimmed)
-    setKey('')
-    setError('')
-    onSaved()
+    try {
+      await authenticateWithApiKey(trimmed)
+      setKey('')
+      setError('')
+      onSaved()
+    } catch (err: any) {
+      setError(err?.message || 'Authentication failed. Check the API key.')
+    }
   }
 
   return (
@@ -116,8 +121,8 @@ export default function ApiKeySetupModal({ onSaved }: Props) {
           Save and connect
         </button>
         <p style={{ marginTop: '1rem', color: '#64748b', fontSize: 12 }}>
-          The key is stored only in your browser's localStorage and sent exclusively
-          as the <code>X-Api-Key</code> request header — it is never stored server-side.
+          The key is sent to the backend which validates it and sets an HttpOnly
+          session cookie. The raw key is never persisted in the browser.
         </p>
       </div>
     </div>

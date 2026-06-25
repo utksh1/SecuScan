@@ -82,15 +82,14 @@ def test_api_scanner_has_required_target_field():
     assert fields["target"]["required"] is True
 
 
-def test_api_scanner_target_field_requires_http_url():
-    """The 'target' field must have a validation pattern requiring http(s)://."""
+def test_api_scanner_target_field_uses_url_validation_preset():
+    """The 'target' field must use the named url validation preset (issue #537)."""
     data = json.loads((PLUGIN_DIR / "metadata.json").read_text(encoding="utf-8"))
     fields = {f["id"]: f for f in data["fields"]}
     target_validation = fields["target"].get("validation", {})
-    pattern = target_validation.get("pattern", "")
-    assert "https?" in pattern or "http" in pattern, (
-        "target field must validate for HTTP(S) URL format"
-    )
+    assert target_validation.get("validation_type") == "url"
+    assert target_validation.get("message") == "Must be a valid HTTP(S) URL"
+    assert "pattern" not in target_validation
 
 
 def test_api_scanner_output_parser_is_custom():
@@ -244,3 +243,45 @@ def test_api_scanner_parser_preserves_raw_line_in_metadata():
     result = parse(single_line)
     assert result["findings"]
     assert result["findings"][0]["metadata"]["raw"] == "https://api.example.com/v1/tokens [GET] [exposed]"
+
+def test_api_scanner_parser_handles_paginated_fixture():
+    """
+    Simulate paginated scanner output arriving in multiple chunks.
+    The parser should process all lines across pages.
+    """
+    page_1 = (
+        "https://api.example.com/v1/users [GET] [found]\n"
+        "https://api.example.com/v1/admin [GET] [warning]\n"
+    )
+
+    page_2 = (
+        "https://api.example.com/v1/health [GET] [200 OK]\n"
+        "https://api.example.com/graphql [POST] [detected]\n"
+    )
+
+    combined_output = page_1 + page_2
+
+    result = parse(combined_output)
+
+    assert result["count"] == 4
+    assert len(result["findings"]) == 4
+    assert len(result["items"]) == 4
+
+def test_api_scanner_parser_handles_chunked_response_fixture():
+    """
+    Simulate chunked scanner output that is concatenated before parsing.
+    """
+    chunks = [
+        "https://api.example.com/a [GET] [found]\n",
+        "https://api.example.com/b [GET] [warning]\n",
+        "https://api.example.com/c [GET] [critical]\n",
+    ]
+
+    result = parse("".join(chunks))
+
+    assert result["count"] == 3
+
+    severities = {f["severity"] for f in result["findings"]}
+
+    assert "low" in severities
+    assert "high" in severities

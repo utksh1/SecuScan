@@ -14,57 +14,25 @@ import asyncio
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
-def parse_json_fields(rows: List[Dict], fields: List[str]) -> List[Dict]:
-    """Helper to parse stringified JSON fields from SQLite."""
-    parsed = []
-    for row in rows:
-        item = dict(row)
-        for field in fields:
-            if item.get(field) and isinstance(item[field], str):
-                try:
-                    item[field] = json.loads(item[field])
-                except json.JSONDecodeError:
-                    pass
-        parsed.append(item)
-    return parsed
+from .routes_json_helpers import (
+    FINDING_JSON_FIELDS,
+    deserialize_asset_service_rows,
+    deserialize_finding_rows,
+    parse_json_fields,
+)
+from .routes_report_helpers import (
+    _slugify_filename_part,
+    build_report_filename,
+)
 
-
-FINDING_JSON_FIELDS = [
-    "metadata_json",
-    "risk_factors_json",
-    "evidence_json",
-    "asset_refs_json",
-    "references_json",
-    "corroborating_sources_json",
+__all__ = [
+    "FINDING_JSON_FIELDS",
+    "parse_json_fields",
+    "deserialize_finding_rows",
+    "deserialize_asset_service_rows",
+    "_slugify_filename_part",
+    "build_report_filename",
 ]
-
-
-def deserialize_finding_rows(rows: List[Dict]) -> List[Dict[str, Any]]:
-    findings = parse_json_fields(rows, FINDING_JSON_FIELDS)
-    for finding in findings:
-        if "metadata_json" in finding:
-            finding["metadata"] = finding.pop("metadata_json")
-        if "risk_factors_json" in finding:
-            finding["risk_factors"] = finding.pop("risk_factors_json")
-        if "evidence_json" in finding:
-            finding["evidence"] = finding.pop("evidence_json")
-        if "asset_refs_json" in finding:
-            finding["asset_refs"] = finding.pop("asset_refs_json")
-        if "references_json" in finding:
-            finding["references"] = finding.pop("references_json")
-        if "corroborating_sources_json" in finding:
-            finding["corroborating_sources"] = finding.pop("corroborating_sources_json")
-    return findings
-
-
-def deserialize_asset_service_rows(rows: List[Dict]) -> List[Dict[str, Any]]:
-    items = parse_json_fields(rows, ["metadata_json", "cert_san_json"])
-    for item in items:
-        if "metadata_json" in item:
-            item["metadata"] = item.pop("metadata_json")
-        if "cert_san_json" in item:
-            item["cert_san"] = item.pop("cert_san_json")
-    return items
 
 def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
     if isinstance(raw_steps, list):
@@ -110,80 +78,37 @@ def _json_payload(value: Any, fallback: str) -> str:
     return json.dumps(value if value is not None else json.loads(fallback))
 
 
-def is_filesystem_target(target: str) -> bool:
-    """Best-effort detection for path-based targets that should bypass host validation."""
-    # Absolute or relative filesystem roots only — not CIDR notation (e.g. 8.8.8.8/32)
-    if target.startswith(("/", "./", "../", "~/")):
-        return True
-    # Windows drive paths (C:\ or C:/)
-    """
-    Return True only for genuine local filesystem paths.
-
-    Explicit roots accepted:
-      - Unix absolute paths:   /home/user/repo
-      - Unix relative paths:   ./src, ../lib
-      - Home-relative paths:   ~/projects
-      - Windows paths:         C:\\Users\\repo, D:/work
-
-    Anything else — including CIDR notation (8.8.8.8/32, 192.168.1.0/24),
-    bare hostnames, URLs, and domain paths — returns False and will be
-    subject to the full validate_target() check including safe-mode enforcement.
-
-    CIDR notation is handled correctly by ipaddress.ip_network() inside
-    validate_target() and does NOT need special-casing here.
-    """
-    # Unix absolute, relative, and home-relative paths
-    if target.startswith(("/", "./", "../", "~/")):
-        return True
-    # Windows paths: C:\ or C:/
-    if re.match(r"^[A-Za-z]:[\\/]", target):
-        return True
-    return False
-
-def _slugify_filename_part(value: str, fallback: str) -> str:
-    cleaned = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
-    return cleaned or fallback
-
-def build_report_filename(task: Dict[str, Any], extension: str) -> str:
-    tool = _slugify_filename_part(str(task.get("tool_name") or task.get("plugin_id") or "scan"), "scan")
-
-    raw_target = str(task.get("target") or "")
-    parsed = urlparse(raw_target if "://" in raw_target else f"//{raw_target}")
-    target_source = parsed.netloc or parsed.path or raw_target
-    target = _slugify_filename_part(target_source, "target")
-
-    created_at = str(task.get("created_at") or "")
-    date_match = re.search(r"\d{4}-\d{2}-\d{2}", created_at)
-    date_part = date_match.group(0) if date_match else "report"
-
-    return f"secuscan_{tool}_{target}_{date_part}.{extension}"
+from .validation import is_filesystem_target  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
-from .cache import get_cache
+from .cache import get_cache, invalidate_view_cache
 from .models import (
     TaskCreateRequest, TaskResponse, TaskResult,
     PluginListResponse, ErrorResponse, BulkDeleteRequest,
     NotificationRuleCreate, NotificationRuleUpdate,
     NotificationChannelType, TaskStatus,
     ExecutionContext, WorkflowStep, ValidationMode, EvidenceLevel,
+    NotificationDiagnosticsResponse,
 )
 from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager, init_plugins
+from . import notification_service
 from .executor import executor
 from .redaction import redact_inputs
 from .ratelimit import (
-    rate_limiter, concurrent_limiter,
+    rate_limiter, concurrent_limiter, workflow_rate_limiter,
     task_start_limiter, vault_limiter,
     report_download_limiter, read_heavy_limiter,
     resolve_client_identity, admin_limiter,
     scheduler_tick_limiter,
 )
+from .rate_limiter import check_scan_rate_limit
 from .validation import validate_target, validate_task_start_payload, validate_url
 from .reporting import reporting
 from .vault import VaultCrypto
-from .workflows import scheduler
+from .workflows import scheduler, _finalize_workflow_run
 from .auth import require_api_key, get_current_owner
 from .execution_context import is_offensive_validation, normalize_execution_context
 from .finding_intelligence import build_asset_summary, build_finding_groups
@@ -212,6 +137,22 @@ def _validate_notification_target(channel_type: NotificationChannelType, target:
         is_valid, error = validate_url(cleaned)
         if not is_valid:
             raise HTTPException(status_code=400, detail=error or "Invalid webhook URL")
+
+        if settings.notification_ssrf_enabled:
+            from .validation import resolve_and_validate_target, validate_webhook_target
+            ssrf_ok, ssrf_err = resolve_and_validate_target(cleaned)
+            if not ssrf_ok:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Webhook target blocked by SSRF protection: {ssrf_err}"
+                )
+            # Additional independent check against notification_blocked_ip_ranges
+            target_ok, target_err = validate_webhook_target(cleaned)
+            if not target_ok:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Webhook target blocked by SSRF protection: {target_err}"
+                )
         return cleaned
 
     if not _EMAIL_PATTERN.match(cleaned):
@@ -253,12 +194,6 @@ async def get_or_set_cached(key: str, builder):
     value = await builder()
     await cache.set_json(key, value)
     return value
-
-async def invalidate_view_cache():
-    """Clear aggregate caches after writes."""
-    cache = await get_cache()
-    for prefix in ["summary:", "findings:", "reports:", "tasks:"]:
-        await cache.delete_prefix(prefix)
 
 
 async def require_owned_task(db, task_id: str, owner: str, columns: str = "owner_id") -> Dict[str, Any]:
@@ -375,7 +310,7 @@ async def get_all_presets():
     }
 
 
-@router.post("/task/start", dependencies=[Depends(task_start_limiter)])
+@router.post("/task/start", dependencies=[Depends(task_start_limiter), Depends(check_scan_rate_limit)])
 async def start_task(
     request: TaskCreateRequest,
     background_tasks: BackgroundTasks,
@@ -533,6 +468,69 @@ async def start_task(
         "status": "queued",
         "created_at": "now",
         "stream_url": f"/api/v1/task/{task_id}/stream"
+    }
+
+@router.post("/task/{task_id}/retry", dependencies=[Depends(task_start_limiter) , Depends(check_scan_rate_limit)])
+async def retry_task(
+    task_id: str,
+    background_tasks: BackgroundTasks,
+    raw_request: Request,
+    owner: str = Depends(get_current_owner),
+):
+    """
+    Retry a failed or cancelled scan task.
+    """
+    db = await get_db()
+    task = await require_owned_task(db, task_id, owner, columns="id, owner_id, status, plugin_id")
+
+    if task["status"] in ["queued", "running"]:
+        raise HTTPException(status_code=409, detail="Task is already queued or running")
+    elif task["status"] not in ["failed", "cancelled"]:
+        raise HTTPException(status_code=400, detail="Only failed or cancelled tasks can be retried")
+
+    # Check plugin rate limits
+    plugin_manager = await get_plugin_manager_for_request()
+    plugin = plugin_manager.get_plugin(task["plugin_id"])
+    if not plugin:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {task['plugin_id']}")
+
+    client_id = resolve_client_identity(raw_request)
+    can_execute, error_msg = await rate_limiter.can_execute(
+        task["plugin_id"],
+        plugin.safety.get("rate_limit", {}).get("max_per_hour", settings.max_tasks_per_hour),
+        client_id=client_id,
+    )
+
+    if not can_execute:
+        raise HTTPException(status_code=429, detail=error_msg)
+
+    # Atomic update to prevent duplicate reruns if called rapidly
+    cursor = await db.execute(
+        "UPDATE tasks SET status = 'queued', error_message = NULL, exit_code = NULL, "
+        "started_at = NULL, completed_at = NULL "
+        "WHERE id = ? AND status IN ('failed', 'cancelled')",
+        (task_id,)
+    )
+    if cursor.rowcount == 0:
+        raise HTTPException(status_code=409, detail="Task is already queued or running")
+
+    # Cleanup previous findings and reports for a fresh retry
+    await db.execute("DELETE FROM findings WHERE task_id = ?", (task_id,))
+    await db.execute("DELETE FROM reports WHERE task_id = ?", (task_id,))
+
+    # Re-acquire concurrency slot
+    can_acquire, error_msg = await concurrent_limiter.acquire(task_id)
+    if not can_acquire:
+        await executor.mark_task_failed(task_id, reason="Concurrency limit reached; task was not retried")
+        raise HTTPException(status_code=503, detail=error_msg)
+
+    background_tasks.add_task(executor.execute_task, task_id)
+    await invalidate_view_cache()
+
+    return {
+        "task_id": task_id,
+        "status": "queued",
+        "message": "Task retry initiated"
     }
 
 @router.get("/task/{task_id}/status")
@@ -1026,25 +1024,51 @@ async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
 
 
 @router.get("/findings", dependencies=[Depends(read_heavy_limiter)])
-async def get_findings(owner: str = Depends(get_current_owner)):
-    """Return the caller's vulnerability findings."""
+async def get_findings(
+    owner: str = Depends(get_current_owner),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
+):
+    """Return the caller's vulnerability findings with pagination."""
 
     async def build():
         db = await get_db()
+        offset = (page - 1) * per_page
         rows = await db.fetchall(
+            "SELECT * FROM findings WHERE owner_id = ? ORDER BY discovered_at DESC LIMIT ? OFFSET ?",
+            (owner, per_page, offset),
+        )
+        total_row = await db.fetchone(
+            "SELECT COUNT(*) as count FROM findings WHERE owner_id = ?",
+            (owner,),
+        )
+        total = total_row["count"] if total_row else 0
+        findings = deserialize_finding_rows(rows)
+        # Build finding_groups from *all* findings so group counts remain accurate
+        # regardless of which page is being viewed.
+        all_rows = await db.fetchall(
             "SELECT * FROM findings WHERE owner_id = ? ORDER BY discovered_at DESC",
             (owner,),
         )
-        findings = deserialize_finding_rows(rows)
-        return {"findings": findings, "finding_groups": build_finding_groups(findings)}
+        all_findings = deserialize_finding_rows(all_rows)
+        return {
+            "findings": findings,
+            "finding_groups": build_finding_groups(all_findings),
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+        }
 
-    # Cache key is namespaced by owner so one user's list is never served to
-    # another (issue #401).
-    return await get_or_set_cached(f"findings:list:{owner}", build)
+    # Cache key includes pagination params so different pages do not collide.
+    return await get_or_set_cached(f"findings:list:{owner}:page={page}:per_page={per_page}", build)
 
 
 @router.get("/finding-groups", dependencies=[Depends(read_heavy_limiter)])
-async def get_finding_groups(owner: str = Depends(get_current_owner)):
+async def get_finding_groups(
+    owner: str = Depends(get_current_owner),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(50, ge=1, le=200),
+):
     async def build():
         db = await get_db()
         rows = await db.fetchall(
@@ -1052,9 +1076,16 @@ async def get_finding_groups(owner: str = Depends(get_current_owner)):
             (owner,),
         )
         findings = deserialize_finding_rows(rows)
-        return {"groups": build_finding_groups(findings), "total": len(findings)}
+        # Groups are always computed from *all* findings so the returned
+        # groups represent the full picture, not a subset.
+        return {
+            "groups": build_finding_groups(findings),
+            "total": len(findings),
+            "page": page,
+            "per_page": per_page,
+        }
 
-    return await get_or_set_cached(f"findings:groups:{owner}", build)
+    return await get_or_set_cached(f"findings:groups:{owner}:page={page}:per_page={per_page}", build)
 
 
 @router.get("/task/{task_id}/diff", dependencies=[Depends(read_heavy_limiter)])
@@ -1211,8 +1242,7 @@ async def delete_task_records(task_ids: List[str]):
         all_task_rows.extend(rows)
 
     # Delete associated records in chunks, atomic within a transaction
-    await db.begin()
-    try:
+    async with db.transaction():
         # Re-check running status inside the transaction to prevent the
         # race where a task starts running between the check and the delete.
         for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
@@ -1231,25 +1261,28 @@ async def delete_task_records(task_ids: List[str]):
         for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
             chunk = task_ids[i : i + SQLITE_CHUNK_SIZE]
             placeholders = ",".join(["?"] * len(chunk))
+            # Delete notification_history first (depends on findings via finding_id)
             await db.execute_no_commit(
-                f"DELETE FROM findings   WHERE task_id IN ({placeholders})", tuple(chunk)
+                f"DELETE FROM notification_history WHERE finding_id IN (SELECT id FROM findings WHERE task_id IN ({placeholders}))", tuple(chunk)
             )
             await db.execute_no_commit(
-                f"DELETE FROM reports    WHERE task_id IN ({placeholders})", tuple(chunk)
+                f"DELETE FROM findings             WHERE task_id IN ({placeholders})", tuple(chunk)
             )
             await db.execute_no_commit(
-                f"DELETE FROM audit_log  WHERE task_id IN ({placeholders})", tuple(chunk)
+                f"DELETE FROM reports              WHERE task_id IN ({placeholders})", tuple(chunk)
             )
             await db.execute_no_commit(
-                f"DELETE FROM tasks      WHERE id       IN ({placeholders})", tuple(chunk)
+                f"DELETE FROM audit_log            WHERE task_id IN ({placeholders})", tuple(chunk)
             )
-        await db.commit()
-    except HTTPException:
-        await db.rollback()
-        raise
-    except Exception:
-        await db.rollback()
-        raise
+            await db.execute_no_commit(
+                f"DELETE FROM crawl_runs           WHERE task_id IN ({placeholders})", tuple(chunk)
+            )
+            await db.execute_no_commit(
+                f"DELETE FROM asset_services       WHERE task_id IN ({placeholders})", tuple(chunk)
+            )
+            await db.execute_no_commit(
+                f"DELETE FROM tasks                WHERE id         IN ({placeholders})", tuple(chunk)
+            )
 
     # Cleanup files on disk (outside the transaction — file deletion is not
     # transactional; a failure here does not leave the DB in an inconsistent
@@ -1278,6 +1311,10 @@ async def delete_task(task_id: str, owner: str = Depends(get_current_owner)):
     # Check if task is running
     status = await executor.get_task_status(task_id)
     if status and status.get("status") == "running":
+        raise HTTPException(status_code=400, detail="Cannot delete a running task. Abort it first.")
+
+    # If the task is currently executing but the DB hasn't been updated yet, fail closed.
+    if task_id in executor.running_tasks:
         raise HTTPException(status_code=400, detail="Cannot delete a running task. Abort it first.")
 
     await delete_task_records([task_id])
@@ -1398,16 +1435,28 @@ async def get_settings():
 
 
 @router.get("/vault", dependencies=[Depends(vault_limiter)])
-async def list_vault_secrets():
+async def list_vault_secrets(
+    owner: str = Depends(get_current_owner),
+):
     db = await get_db()
     rows = await db.fetchall(
-        "SELECT id, name, created_at, updated_at FROM credential_vault ORDER BY name ASC"
+        """
+        SELECT id, name, created_at, updated_at
+        FROM credential_vault
+        WHERE owner_id = ?
+        ORDER BY name ASC
+        """,
+        (owner,),
     )
     return {"items": rows, "total": len(rows)}
 
 
 @router.put("/vault/{name}", dependencies=[Depends(vault_limiter)])
-async def upsert_vault_secret(name: str, payload: Dict[str, str]):
+async def upsert_vault_secret(
+    name: str,
+    payload: Dict[str, str],
+    owner: str = Depends(get_current_owner),
+):
     value = str(payload.get("value", ""))
     if not value:
         raise HTTPException(status_code=400, detail="Secret value is required")
@@ -1417,36 +1466,68 @@ async def upsert_vault_secret(name: str, payload: Dict[str, str]):
     encrypted = crypto.encrypt(value)
     secret_id = str(uuid.uuid4())
 
-    existing = await db.fetchone("SELECT id FROM credential_vault WHERE name = ?", (name,))
-    if existing:
-        await db.execute(
-            "UPDATE credential_vault SET encrypted_value = ?, updated_at = datetime('now') WHERE name = ?",
-            (encrypted, name),
+    async with db.transaction():
+        existing = await db.fetchone(
+            "SELECT id FROM credential_vault WHERE owner_id = ? AND name = ?",
+            (owner, name),
         )
-    else:
-        await db.execute(
-            "INSERT INTO credential_vault (id, name, encrypted_value) VALUES (?, ?, ?)",
-            (secret_id, name, encrypted),
-        )
+        if existing:
+            await db.execute(
+                "UPDATE credential_vault SET encrypted_value = ?, updated_at = datetime('now') WHERE owner_id = ? AND name = ?",
+                (encrypted, owner, name),
+            )
+        else:
+            await db.execute(
+                "INSERT INTO credential_vault (id, owner_id, name, encrypted_value) VALUES (?, ?, ?, ?)",
+                (secret_id, owner, name, encrypted),
+            )
     return {"name": name, "stored": True}
 
-
 @router.get("/vault/{name}", dependencies=[Depends(vault_limiter)])
-async def get_vault_secret(name: str):
+async def get_vault_secret(
+    name: str,
+    owner: str = Depends(get_current_owner),
+):
     db = await get_db()
-    row = await db.fetchone("SELECT encrypted_value FROM credential_vault WHERE name = ?", (name,))
+
+    row = await db.fetchone(
+        """
+        SELECT encrypted_value
+        FROM credential_vault
+        WHERE owner_id = ? AND name = ?
+        """,
+        (owner, name),
+    )
+
     if not row:
         raise HTTPException(status_code=404, detail="Secret not found")
-    crypto = VaultCrypto(settings.resolved_vault_key)
-    return {"name": name, "value": crypto.decrypt(row["encrypted_value"])}
 
+    crypto = VaultCrypto(settings.resolved_vault_key)
+
+    return {
+        "name": name,
+        "value": crypto.decrypt(row["encrypted_value"]),
+    }
 
 @router.delete("/vault/{name}", dependencies=[Depends(vault_limiter)])
-async def delete_vault_secret(name: str):
+async def delete_vault_secret(
+    name: str,
+    owner: str = Depends(get_current_owner),
+):
     db = await get_db()
-    await db.execute("DELETE FROM credential_vault WHERE name = ?", (name,))
-    return {"name": name, "deleted": True}
 
+    await db.execute(
+        """
+        DELETE FROM credential_vault
+        WHERE owner_id = ? AND name = ?
+        """,
+        (owner, name),
+    )
+
+    return {
+        "name": name,
+        "deleted": True,
+    }
 
 @router.get("/target-policies")
 async def list_target_policies(owner: str = Depends(get_current_owner)):
@@ -1687,15 +1768,18 @@ async def get_knowledgebase_status():
 
 
 @router.get("/workflows")
-async def list_workflows():
+async def list_workflows(owner: str = Depends(get_current_owner)):
     db = await get_db()
-    rows = await db.fetchall("SELECT * FROM workflows ORDER BY created_at DESC")
+    rows = await db.fetchall(
+        "SELECT * FROM workflows WHERE owner_id = ? ORDER BY created_at DESC",
+        (owner,),
+    )
     workflows = [_serialize_workflow(row) for row in rows]
     return {"workflows": workflows, "total": len(workflows)}
 
 
 @router.post("/workflows")
-async def create_workflow(payload: Dict[str, Any]):
+async def create_workflow(payload: Dict[str, Any], owner: str = Depends(get_current_owner)):
     name = str(payload.get("name", "")).strip()
     if not name:
         raise HTTPException(status_code=400, detail="Workflow name is required")
@@ -1710,12 +1794,13 @@ async def create_workflow(payload: Dict[str, Any]):
     db = await get_db()
     await db.execute(
         """
-        INSERT INTO workflows (id, name, schedule_seconds, enabled, steps_json)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO workflows (id, name, owner_id, schedule_seconds, enabled, steps_json)
+        VALUES (?, ?, ?, ?, ?, ?)
         """,
         (
             workflow_id,
             name,
+            owner,
             int(schedule_seconds) if schedule_seconds else None,
             1 if enabled else 0,
             json.dumps(steps),
@@ -1725,20 +1810,44 @@ async def create_workflow(payload: Dict[str, Any]):
     return _serialize_workflow(row) if row else {"id": workflow_id, "created": True}
 
 
-@router.post("/workflows/{workflow_id}/run")
-async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_owner)):
-    db = await get_db()
-    row = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
+async def _verify_workflow_owner(db, workflow_id: str, owner: str):
+    """Check the workflow exists and belongs to the caller. Returns the row or raises 404/403."""
+    row = await db.fetchone(
+        "SELECT * FROM workflows WHERE id = ?", (workflow_id,)
+    )
     if not row:
         raise HTTPException(status_code=404, detail="Workflow not found")
+    if row["owner_id"] != owner:
+        raise HTTPException(status_code=403, detail="You do not have access to this workflow")
+    return row
+
+
+@router.post("/workflows/{workflow_id}/run", dependencies=[Depends(check_scan_rate_limit)])
+async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_owner)):
+    db = await get_db()
+    row = await _verify_workflow_owner(db, workflow_id, owner)
+    wf_rate_ok, wf_rate_msg = await workflow_rate_limiter.check_workflow_rate_limit(
+        workflow_id, settings.workflow_min_interval_seconds
+    )
+    if not wf_rate_ok:
+        raise HTTPException(status_code=429, detail=wf_rate_msg)
     steps = _parse_workflow_steps(row["steps_json"] or "[]")
     active_version = await db.fetchone(
         "SELECT id, version_number FROM workflow_versions "
         "WHERE workflow_id = ? ORDER BY version_number DESC LIMIT 1",
         (workflow_id,),
     )
-    version_id = active_version["id"] if active_version else None
-    version_number = active_version["version_number"] if active_version else None
+    if not active_version:
+        active_version = await db.snapshot_workflow_version(
+            workflow_id=workflow_id,
+            name=row["name"],
+            schedule_seconds=row["schedule_seconds"],
+            enabled=bool(row["enabled"]),
+            steps=steps,
+            created_by="system",
+        )
+    version_id = active_version["id"]
+    version_number = active_version["version_number"]
     created_task_ids: List[str] = []
     for step in steps:
         execution_context = normalize_execution_context(step.get("execution_context") or {})
@@ -1779,62 +1888,30 @@ async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_o
     }
 
 
-async def _finalize_workflow_run(run_id: str, poll_interval: float = 5.0, max_polls: int = 720) -> None:
-    """Background task that polls task statuses and marks the run terminal.
-
-    Polls every *poll_interval* seconds for up to *max_polls* iterations
-    (default: 5 s × 720 = 1 hour). If tasks are still running after the
-    limit, the run is marked failed with a timeout message so it never stays
-    permanently in the 'queued' state.
-    """
-    from .database import get_db as _get_db
-    for _ in range(max_polls):
-        await asyncio.sleep(poll_interval)
-        try:
-            db = await _get_db()
-            terminal_status = await db.check_workflow_run_tasks(run_id)
-            if terminal_status is not None:
-                await db.finalize_workflow_run(run_id, terminal_status)
-                return
-        except Exception as exc:
-            logger.warning("workflow run finalization error for %s: %s", run_id, exc)
-            return
-    try:
-        db = await _get_db()
-        await db.finalize_workflow_run(
-            run_id, "failed", "Run finalization timed out — check individual task statuses"
-        )
-    except Exception as exc:
-        logger.warning("workflow run timeout finalization failed for %s: %s", run_id, exc)
-
 
 @router.get("/workflows/{workflow_id}/runs")
-async def list_workflow_runs(workflow_id: str, limit: int = 50, offset: int = 0):
+async def list_workflow_runs(workflow_id: str, owner: str = Depends(get_current_owner), limit: int = 50, offset: int = 0):
     """Return paginated run history for a workflow."""
     if limit < 1 or limit > 500:
         raise HTTPException(status_code=400, detail="limit must be between 1 and 500")
     if offset < 0:
         raise HTTPException(status_code=400, detail="offset must be non-negative")
     db = await get_db()
-    wf = await db.fetchone("SELECT id FROM workflows WHERE id = ?", (workflow_id,))
-    if not wf:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    await _verify_workflow_owner(db, workflow_id, owner)
     return await db.get_workflow_runs(workflow_id=workflow_id, limit=limit, offset=offset)
 
 
 @router.get("/workflows/{workflow_id}/versions")
-async def list_workflow_versions(workflow_id: str):
+async def list_workflow_versions(workflow_id: str, owner: str = Depends(get_current_owner)):
     """Return all saved version snapshots for a workflow, newest first."""
     db = await get_db()
-    wf = await db.fetchone("SELECT id FROM workflows WHERE id = ?", (workflow_id,))
-    if not wf:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    await _verify_workflow_owner(db, workflow_id, owner)
     versions = await db.get_workflow_versions(workflow_id=workflow_id)
     return {"workflow_id": workflow_id, "versions": versions, "total": len(versions)}
 
 
 @router.post("/workflows/{workflow_id}/rollback/{version_number}")
-async def rollback_workflow(workflow_id: str, version_number: int):
+async def rollback_workflow(workflow_id: str, version_number: int, owner: str = Depends(get_current_owner)):
     """Restore a workflow to a previously saved version.
 
     The target version's full definition replaces the live workflow fields.
@@ -1842,9 +1919,7 @@ async def rollback_workflow(workflow_id: str, version_number: int):
     and can be rolled back in turn.
     """
     db = await get_db()
-    wf = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
-    if not wf:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    wf = await _verify_workflow_owner(db, workflow_id, owner)
     target = await db.get_workflow_version(workflow_id, version_number)
     if target is None:
         raise HTTPException(
@@ -1878,11 +1953,13 @@ async def rollback_workflow(workflow_id: str, version_number: int):
 
 
 @router.patch("/workflows/{workflow_id}")
-async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
+async def update_workflow(workflow_id: str, payload: Dict[str, Any], owner: str = Depends(get_current_owner)):
     db = await get_db()
-    row = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
-    if not row:
-        raise HTTPException(status_code=404, detail="Workflow not found")
+    row = await _verify_workflow_owner(db, workflow_id, owner)
+
+    old_enabled = bool(row["enabled"])
+    new_enabled = old_enabled
+    enabled_changed = False
 
     updates = []
     params: List[Any] = []
@@ -1897,12 +1974,12 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
         updates.append("schedule_seconds = ?")
         params.append(int(val) if val else None)
     if "enabled" in payload:
+        new_enabled = bool(payload["enabled"])
+
         updates.append("enabled = ?")
-        params.append(1 if payload["enabled"] else 0)
+        params.append(1 if new_enabled else 0)
 
-    if not updates:
-        raise HTTPException(status_code=400, detail="No update fields provided")
-
+        enabled_changed = (new_enabled != old_enabled)
     params.append(workflow_id)
     await db.execute(f"UPDATE workflows SET {', '.join(updates)} WHERE id = ?", tuple(params))
     updated = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
@@ -1916,34 +1993,55 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any]):
         steps=json.loads(updated["steps_json"] or "[]"),
         created_by="patch",
     )
+
+    if enabled_changed:
+        await db.log_audit(
+            event_type=(
+                "workflow_enabled"
+                if new_enabled
+                else "workflow_disabled"
+            ),
+            message=(
+                f"Workflow {workflow_id} "
+                f"{'enabled' if new_enabled else 'disabled'}"
+            ),
+            context={
+                "workflow_id": workflow_id,
+                "actor": owner,
+                "previous_state": old_enabled,
+                "new_state": new_enabled,
+            },
+        )
     return _serialize_workflow(updated)
 
 
 @router.delete("/workflows/{workflow_id}")
-async def delete_workflow(workflow_id: str):
+async def delete_workflow(workflow_id: str, owner: str = Depends(get_current_owner)):
     db = await get_db()
+    await _verify_workflow_owner(db, workflow_id, owner)
     await db.execute("DELETE FROM workflows WHERE id = ?", (workflow_id,))
     return {"workflow_id": workflow_id, "deleted": True}
 
 
-@router.post("/workflows/scheduler/tick", dependencies=[Depends(scheduler_tick_limiter)])
+@router.post("/workflows/scheduler/tick", dependencies=[Depends(scheduler_tick_limiter), Depends(check_scan_rate_limit)])
 async def trigger_workflow_tick():
     await scheduler.tick()
     return {"tick": "ok"}
 
 
 @router.get("/notifications/rules")
-async def list_notification_rules():
+async def list_notification_rules(owner: str = Depends(get_current_owner)):
     db = await get_db()
     rows = await db.fetchall(
-        "SELECT * FROM notification_rules ORDER BY created_at DESC"
+        "SELECT * FROM notification_rules WHERE owner_id = ? ORDER BY created_at DESC",
+        (owner,),
     )
     rules = [_serialize_notification_rule(row) for row in rows]
     return {"rules": rules, "total": len(rules)}
 
 
 @router.post("/notifications/rules")
-async def create_notification_rule(payload: NotificationRuleCreate):
+async def create_notification_rule(payload: NotificationRuleCreate, owner: str = Depends(get_current_owner)):
     name = payload.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="Rule name is required")
@@ -1954,12 +2052,13 @@ async def create_notification_rule(payload: NotificationRuleCreate):
     await db.execute(
         """
         INSERT INTO notification_rules (
-            id, name, severity_threshold, channel_type, target_url_or_email, is_active
-        ) VALUES (?, ?, ?, ?, ?, ?)
+            id, name, owner_id, severity_threshold, channel_type, target_url_or_email, is_active
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         (
             rule_id,
             name,
+            owner,
             payload.severity_threshold.value,
             payload.channel_type.value,
             target,
@@ -1974,28 +2073,46 @@ async def create_notification_rule(payload: NotificationRuleCreate):
         raise HTTPException(status_code=500, detail="Failed to create notification rule")
     return _serialize_notification_rule(row)
 
+@router.get("/rate-limit/status")
+async def get_rate_limit_status(request: Request):
+    """Get current rate limit status for the client."""
+    limiter = getattr(request.app.state, 'scan_rate_limiter', None)
+    if limiter and hasattr(limiter, 'get_status'):
+        client_id = request.client.host if request.client else "unknown"
+        status_info = await limiter.get_status(client_id)
+        return {
+            "status": "enabled",
+            "client": client_id,
+            "remaining": status_info.get("remaining", 0),
+            "reset_in": status_info.get("reset_in", 0),
+        }
+    return {"status": "disabled", "message": "Rate limiting is not enabled"}
 
-@router.get("/notifications/rules/{rule_id}")
-async def get_notification_rule(rule_id: str):
-    db = await get_db()
+
+async def _verify_notification_rule_owner(db, rule_id: str, owner: str):
+    """Check the notification rule exists and belongs to the caller."""
     row = await db.fetchone(
         "SELECT * FROM notification_rules WHERE id = ?",
         (rule_id,),
     )
     if not row:
         raise HTTPException(status_code=404, detail="Notification rule not found")
+    if row["owner_id"] != owner:
+        raise HTTPException(status_code=403, detail="You do not have access to this notification rule")
+    return row
+
+
+@router.get("/notifications/rules/{rule_id}")
+async def get_notification_rule(rule_id: str, owner: str = Depends(get_current_owner)):
+    db = await get_db()
+    row = await _verify_notification_rule_owner(db, rule_id, owner)
     return _serialize_notification_rule(row)
 
 
 @router.patch("/notifications/rules/{rule_id}")
-async def update_notification_rule(rule_id: str, payload: NotificationRuleUpdate):
+async def update_notification_rule(rule_id: str, payload: NotificationRuleUpdate, owner: str = Depends(get_current_owner)):
     db = await get_db()
-    row = await db.fetchone(
-        "SELECT * FROM notification_rules WHERE id = ?",
-        (rule_id,),
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Notification rule not found")
+    row = await _verify_notification_rule_owner(db, rule_id, owner)
 
     updates: List[str] = []
     params: List[Any] = []
@@ -2058,14 +2175,9 @@ async def update_notification_rule(rule_id: str, payload: NotificationRuleUpdate
 
 
 @router.delete("/notifications/rules/{rule_id}")
-async def delete_notification_rule(rule_id: str):
+async def delete_notification_rule(rule_id: str, owner: str = Depends(get_current_owner)):
     db = await get_db()
-    row = await db.fetchone(
-        "SELECT id FROM notification_rules WHERE id = ?",
-        (rule_id,),
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Notification rule not found")
+    await _verify_notification_rule_owner(db, rule_id, owner)
     await db.execute("DELETE FROM notification_rules WHERE id = ?", (rule_id,))
     return {"rule_id": rule_id, "deleted": True}
 
@@ -2282,6 +2394,15 @@ def verify_admin_access(
         )
     return candidate
 
+@router.get(
+    "/admin/diagnostics/notifications",
+    response_model=NotificationDiagnosticsResponse,
+    dependencies=[Depends(verify_admin_access), Depends(admin_limiter)]
+)
+async def get_notification_diagnostics():
+    """Get active notification delivery configuration and retry policy"""
+    return notification_service.get_delivery_configuration()
+
 @router.get("/admin/network-policy", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
 async def get_network_policy():
     """Get current network policy configuration"""
@@ -2361,3 +2482,40 @@ async def export_audit_log(format: str = "json"):
         media_type=mime_type,
         headers={"Content-Disposition": f"attachment; filename=network-audit.{format}"}
     )
+
+
+@router.get("/admin/vault/diagnostics", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
+async def get_vault_diagnostics():
+    """Report non-secret diagnostics for the credential vault key.
+    Surfaces a one-way fingerprint of the active vault key so operators can confirm key-rotation state without the key material ever leaving the server.
+    Applies across deployments or before/after a rotation.
+    The endpoint never fails on configuration state: when no key is configured it reports ``configured: false`` with a null fingerprint.
+    So it can double as a health probe for vault configuration.
+    The route is admin-gated: while the fingerprint is non-secret, the key source and configuration status are operational details that belong behind the same boundary as the rest of the ``/admin`` surface.
+    """
+    if settings.vault_key:
+        key_source = "vault_key"
+    elif settings.plugin_signature_key:
+        key_source = "plugin_signature_key"
+    else:
+        key_source = None
+
+    try:
+        crypto = VaultCrypto(settings.resolved_vault_key)
+    except RuntimeError:
+        # No SECUSCAN_VAULT_KEY / plugin signature key configured.
+        return {
+            "configured": False,
+            "key_source": None,
+            "algorithm": "AES-256-GCM",
+            "key_fingerprint": None,
+            "fingerprint_algorithm": "sha256-trunc64",
+        }
+
+    return {
+        "configured": True,
+        "key_source": key_source,
+        "algorithm": "AES-256-GCM",
+        "key_fingerprint": crypto.key_fingerprint,
+        "fingerprint_algorithm": "sha256-trunc64",
+    }

@@ -34,11 +34,12 @@ export function useTaskSubscription({
   const onPhaseRef = useRef(onPhase)
   const onOutputRef = useRef(onOutput)
   const esRef = useRef<EventSource | null>(null)
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reconnectAttemptRef = useRef(0)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastStatusRef = useRef<string | null>(null)
   const cleanupRef = useRef(false)
+  const versionRef = useRef(0)
 
   onStatusRef.current = onStatus
   onPhaseRef.current = onPhase
@@ -46,13 +47,14 @@ export function useTaskSubscription({
 
   const cleanupAll = useCallback(() => {
     cleanupRef.current = true
+    versionRef.current += 1
     if (esRef.current) {
       esRef.current.close()
       esRef.current = null
     }
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current)
-      pollIntervalRef.current = null
+    if (pollTimerRef.current) {
+      clearTimeout(pollTimerRef.current)
+      pollTimerRef.current = null
     }
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current)
@@ -62,13 +64,16 @@ export function useTaskSubscription({
 
   const startPolling = useCallback(() => {
     if (cleanupRef.current) return
+    const version = versionRef.current + 1
+    versionRef.current = version
     setIsPolling(true)
     setIsConnected(false)
-    pollIntervalRef.current = setInterval(async () => {
-      if (cleanupRef.current) return
+
+    const poll = async () => {
+      if (cleanupRef.current || versionRef.current !== version) return
       try {
         const data = await getTaskStatus(taskId) as { status?: string }
-        if (cleanupRef.current) return
+        if (cleanupRef.current || versionRef.current !== version) return
         if (data.status && data.status !== lastStatusRef.current) {
           lastStatusRef.current = data.status
           onStatusRef.current?.(data.status)
@@ -76,14 +81,22 @@ export function useTaskSubscription({
         if (data.status && ['completed', 'failed', 'cancelled'].includes(data.status)) {
           cleanupAll()
           setIsPolling(false)
+          return
         }
       } catch {
       }
-    }, pollingInterval)
+      if (!cleanupRef.current && versionRef.current === version) {
+        pollTimerRef.current = setTimeout(poll, pollingInterval)
+      }
+    }
+
+    poll()
   }, [taskId, pollingInterval, cleanupAll])
 
   const connectSSE = useCallback(() => {
     if (cleanupRef.current) return
+    const version = versionRef.current + 1
+    versionRef.current = version
     if (esRef.current) {
       esRef.current.close()
       esRef.current = null
@@ -94,7 +107,7 @@ export function useTaskSubscription({
     esRef.current = es
 
     es.addEventListener('status', (e: MessageEvent) => {
-      if (cleanupRef.current) return
+      if (cleanupRef.current || versionRef.current !== version) return
       try {
         const data = JSON.parse(e.data) as { status: string; scan_phase?: string }
         if (data.scan_phase) {
@@ -114,7 +127,7 @@ export function useTaskSubscription({
     })
 
     es.addEventListener('phase', (e: MessageEvent) => {
-      if (cleanupRef.current) return
+      if (cleanupRef.current || versionRef.current !== version) return
       try {
         const data = JSON.parse(e.data) as { scan_phase: string }
         if (data.scan_phase) {
@@ -125,7 +138,7 @@ export function useTaskSubscription({
     })
 
     es.addEventListener('output', (e: MessageEvent) => {
-      if (cleanupRef.current) return
+      if (cleanupRef.current || versionRef.current !== version) return
       try {
         const data = JSON.parse(e.data) as { chunk: string }
         if (data.chunk) {
@@ -136,7 +149,7 @@ export function useTaskSubscription({
     })
 
     es.onerror = () => {
-      if (cleanupRef.current) return
+      if (cleanupRef.current || versionRef.current !== version) return
       es.close()
       esRef.current = null
       setIsConnected(false)
@@ -154,7 +167,7 @@ export function useTaskSubscription({
     }
 
     es.onopen = () => {
-      if (cleanupRef.current) return
+      if (cleanupRef.current || versionRef.current !== version) return
       reconnectAttemptRef.current = 0
       setIsConnected(true)
       setIsPolling(false)

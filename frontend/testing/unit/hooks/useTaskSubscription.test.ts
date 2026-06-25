@@ -136,12 +136,13 @@ describe('useTaskSubscription', () => {
 
     const es = getES()!
     await act(() => { es.triggerError() })
+    // startPolling calls poll() immediately (chained setTimeout), so one call
+    // happens synchronously before the first interval elapses.
+    await tickTime(50)
+    expect(getTaskStatus).toHaveBeenCalledTimes(2) // initial (direct) + first timer
 
     await tickTime(50)
-    expect(getTaskStatus).toHaveBeenCalledTimes(1)
-
-    await tickTime(50)
-    expect(getTaskStatus).toHaveBeenCalledTimes(2)
+    expect(getTaskStatus).toHaveBeenCalledTimes(3) // initial + first + second timer
   })
 
   it('stops polling on terminal status', async () => {
