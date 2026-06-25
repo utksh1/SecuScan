@@ -30,6 +30,13 @@ from backend.secuscan.models import (
     FindingKind,
     AnalystStatus,
     RetestStatus,
+    NotificationChannelType,
+    NotificationSeverityThreshold,
+    NotificationRuleCreate,
+    NotificationRuleUpdate,
+    ErrorResponse,
+    HealthResponse,
+    SafetyLevel,
 )
 
 
@@ -261,3 +268,163 @@ class TestExecutionContext:
         assert ctx.target_policy_id is None
         assert ctx.credential_profile_id is None
         assert ctx.session_profile_id is None
+
+
+# ---------------------------------------------------------------------------
+# NotificationChannelType enum
+# ---------------------------------------------------------------------------
+
+def test_notification_channel_type_valid_values():
+    assert NotificationChannelType.WEBHOOK.value == "webhook"
+    assert NotificationChannelType.EMAIL.value == "email"
+
+
+def test_notification_channel_type_from_string():
+    assert NotificationChannelType("webhook") == NotificationChannelType.WEBHOOK
+    assert NotificationChannelType("email") == NotificationChannelType.EMAIL
+
+
+def test_notification_channel_type_invalid_raises():
+    with pytest.raises(ValueError):
+        NotificationChannelType("sms")
+
+
+# ---------------------------------------------------------------------------
+# NotificationSeverityThreshold enum
+# ---------------------------------------------------------------------------
+
+def test_notification_severity_threshold_valid_values():
+    for name in ["critical", "high", "medium", "low", "info"]:
+        assert NotificationSeverityThreshold(name).value == name
+
+
+def test_notification_severity_threshold_invalid_raises():
+    with pytest.raises(ValueError):
+        NotificationSeverityThreshold("urgent")
+
+
+# ---------------------------------------------------------------------------
+# NotificationRuleCreate
+# ---------------------------------------------------------------------------
+
+def test_notification_rule_create_valid():
+    rule = NotificationRuleCreate(
+        name="my-hook",
+        severity_threshold=NotificationSeverityThreshold.HIGH,
+        channel_type=NotificationChannelType.WEBHOOK,
+        target_url_or_email="https://example.com/hook",
+    )
+    assert rule.name == "my-hook"
+    assert rule.severity_threshold == NotificationSeverityThreshold.HIGH
+    assert rule.is_active is True
+
+
+def test_notification_rule_create_invalid_channel_type():
+    with pytest.raises(ValidationError):
+        NotificationRuleCreate(
+            name="bad-hook",
+            severity_threshold=NotificationSeverityThreshold.HIGH,
+            channel_type="sms",
+            target_url_or_email="https://example.com/hook",
+        )
+
+
+def test_notification_rule_create_invalid_severity():
+    with pytest.raises(ValidationError):
+        NotificationRuleCreate(
+            name="bad-hook",
+            severity_threshold="not_a_severity",
+            channel_type=NotificationChannelType.WEBHOOK,
+            target_url_or_email="https://example.com/hook",
+        )
+
+
+def test_notification_rule_create_missing_name():
+    with pytest.raises(ValidationError):
+        NotificationRuleCreate(
+            severity_threshold=NotificationSeverityThreshold.HIGH,
+            channel_type=NotificationChannelType.EMAIL,
+            target_url_or_email="test@example.com",
+        )
+
+
+# ---------------------------------------------------------------------------
+# NotificationRuleUpdate
+# ---------------------------------------------------------------------------
+
+def test_notification_rule_update_all_optional():
+    rule = NotificationRuleUpdate()
+    assert rule.name is None
+    assert rule.severity_threshold is None
+    assert rule.channel_type is None
+
+
+def test_notification_rule_update_partial():
+    rule = NotificationRuleUpdate(name="updated-hook")
+    assert rule.name == "updated-hook"
+    assert rule.severity_threshold is None
+
+
+# ---------------------------------------------------------------------------
+# ErrorResponse
+# ---------------------------------------------------------------------------
+
+def test_error_response_required_fields():
+    err = ErrorResponse(error="not_found", message="Resource not found")
+    assert err.error == "not_found"
+    assert err.message == "Resource not found"
+    assert err.field is None
+    assert err.details is None
+
+
+def test_error_response_with_optional_fields():
+    err = ErrorResponse(
+        error="validation_error",
+        message="Invalid input",
+        field="target",
+        details={"reason": "invalid_url"},
+    )
+    assert err.field == "target"
+    assert err.details["reason"] == "invalid_url"
+
+
+# ---------------------------------------------------------------------------
+# HealthResponse
+# ---------------------------------------------------------------------------
+
+def test_health_response_required_fields():
+    health = HealthResponse(
+        status="healthy",
+        version="1.0.0",
+        system={"cpu": "ok"},
+    )
+    assert health.status == "healthy"
+    assert health.version == "1.0.0"
+    assert health.uptime_seconds is None
+    assert health.limits is None
+
+
+def test_health_response_all_fields():
+    health = HealthResponse(
+        status="degraded",
+        version="1.0.0",
+        uptime_seconds=3600,
+        system={"cpu": "high"},
+        limits={"max_tasks": 100},
+    )
+    assert health.uptime_seconds == 3600
+    assert health.limits["max_tasks"] == 100
+
+
+# ---------------------------------------------------------------------------
+# SafetyLevel enum
+# ---------------------------------------------------------------------------
+
+def test_safety_level_valid_values():
+    for name in ["safe", "intrusive", "exploit"]:
+        assert SafetyLevel(name).value == name
+
+
+def test_safety_level_invalid_raises():
+    with pytest.raises(ValueError):
+        SafetyLevel("unknown")
