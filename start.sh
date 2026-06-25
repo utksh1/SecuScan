@@ -59,12 +59,22 @@ pip install -q -r backend/requirements.txt
 mkdir -p "$ROOT_DIR/data" "$ROOT_DIR/logs"
 
 echo "🚀 Starting backend on http://127.0.0.1:8000"
+LOG_DIR="$ROOT_DIR/logs"
+mkdir -p "$LOG_DIR"
+BACKEND_LOG="$LOG_DIR/backend.log"
 python3 -m uvicorn backend.secuscan.main:app \
   --host 127.0.0.1 \
   --port 8000 \
-  --reload \
-  --log-level info &
+  --log-level info > "$BACKEND_LOG" 2>&1 &
 BACKEND_PID=$!
+# Brief settle period so uvicorn can parse config and bind cleanly
+sleep 2
+# Double-check that the port is actually listening; emit a clear message if not
+if ! lsof -iTCP:8000 -sTCP:LISTEN -t >/dev/null 2>&1; then
+  echo "WARNING: uvicorn did not bind to :8000 within ${SETTLE_SECONDS:-2}s start-up delay; showing $BACKEND_LOG tail:"
+  tail -n 80 "$BACKEND_LOG" || true
+  # Do NOT exit here on start.sh because the smoke-test itself waits separately
+fi
 
 # ── Frontend ───────────────────────────────────
 echo "🚀 Starting frontend on http://127.0.0.1:5173"
