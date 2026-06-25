@@ -166,7 +166,7 @@ def test_base_url_property():
     assert s.base_url == "http://0.0.0.0:8080"
 
 
-# ── allowed_networks field ─────────────────────────────────────────────────────
+# ?? allowed_networks field ?????????????????????????????????????????????????????
 
 
 def test_allowed_networks_accepts_wildcard_cidr_patterns():
@@ -199,7 +199,7 @@ def test_allowed_networks_empty_list():
     assert s.allowed_networks == []
 
 
-# ── cors_allowed_origins field ────────────────────────────────────────────────
+# ?? cors_allowed_origins field ????????????????????????????????????????????????
 
 
 def test_cors_allowed_origins_multiple_origins():
@@ -229,7 +229,7 @@ def test_cors_allowed_origins_empty_list():
     assert s.cors_allowed_origins == []
 
 
-# ── file path defaults ────────────────────────────────────────────────────────
+# ?? file path defaults ????????????????????????????????????????????????????????
 
 
 def test_database_path_defaults_relative_to_project_root():
@@ -254,7 +254,7 @@ def test_reports_dir_defaults_relative_to_project_root():
     assert str(PROJECT_ROOT) in s.reports_dir
 
 
-# ── no-env-vars instantiation ─────────────────────────────────────────────────
+# ?? no-env-vars instantiation ?????????????????????????????????????????????????
 
 
 def test_settings_instantiable_with_no_env_vars():
@@ -268,7 +268,7 @@ def test_settings_instantiable_with_no_env_vars():
     assert isinstance(s.dns_resolution_timeout_seconds, float)
 
 
-# ── sandbox settings ──────────────────────────────────────────────────────────
+# ?? sandbox settings ??????????????????????????????????????????????????????????
 
 
 def test_sandbox_settings_have_defaults():
@@ -286,3 +286,30 @@ def test_sandbox_settings_env_override():
     assert s.sandbox_timeout == 30
     assert s.sandbox_memory_mb == 128
     assert s.sandbox_allow_network is False
+
+
+# ---------------------------------------------------------------------------
+# Additional vault_key and base_url tests (from issue #1322)
+# ---------------------------------------------------------------------------
+
+def test_resolved_vault_key_is_deterministic():
+    """resolved_vault_key returns the same value for the same seed."""
+    s1 = Settings(vault_key=" deterministic-seed ")
+    s2 = Settings(vault_key=" deterministic-seed ")
+    assert s1.resolved_vault_key == s2.resolved_vault_key
+
+
+def test_resolved_vault_key_different_seeds_different_keys():
+    """Different seeds produce different keys."""
+    s1 = Settings(vault_key="seed-one")
+    s2 = Settings(vault_key="seed-two")
+    assert s1.resolved_vault_key != s2.resolved_vault_key
+
+
+def test_resolved_vault_key_is_base64url_encoded():
+    """resolved_vault_key is valid base64url (no + or /)."""
+    s = Settings(vault_key="any-seed-value")
+    key = s.resolved_vault_key
+    assert isinstance(key, bytes)
+    assert b"+" not in key
+    assert b"/" not in key
