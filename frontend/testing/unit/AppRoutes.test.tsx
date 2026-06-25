@@ -1,7 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { AppRoutes } from '../../src/App'
-import { ThemeProvider } from '../../src/components/ThemeContext'
 
 vi.mock('../../src/api', () => ({
   getHealth: vi.fn().mockResolvedValue({ status: 'operational' }),
@@ -42,29 +41,24 @@ function PathProbe() {
 }
 
 describe('App route fallback', () => {
-  it('renders NotFound page for unknown routes', async () => {
+  it('redirects unknown routes to dashboard', async () => {
     render(
-      <ThemeProvider>
-        <MemoryRouter initialEntries={['/not-a-real-route']}>
-          <AppRoutes />
-          <PathProbe />
-        </MemoryRouter>
-      </ThemeProvider>,
+      <MemoryRouter initialEntries={['/not-a-real-route']}>
+        <AppRoutes />
+        <PathProbe />
+      </MemoryRouter>,
     )
 
     await waitFor(() => {
-      expect(screen.getByTestId('path-probe')).toHaveTextContent('/not-a-real-route')
+      expect(screen.getByTestId('path-probe')).toHaveTextContent('/')
     })
-    expect(screen.getByText(/Perimeter Breach/i)).toBeInTheDocument()
   })
 
   it('renders the loaded dashboard summary', async () => {
     render(
-      <ThemeProvider>
-        <MemoryRouter initialEntries={['/']}>
-          <AppRoutes />
-        </MemoryRouter>
-      </ThemeProvider>,
+      <MemoryRouter initialEntries={['/']}>
+        <AppRoutes />
+      </MemoryRouter>,
     )
 
     expect(await screen.findByText(/Total Findings/i)).toBeInTheDocument()
@@ -73,11 +67,9 @@ describe('App route fallback', () => {
 
   it('renders the findings workspace', async () => {
     render(
-      <ThemeProvider>
-        <MemoryRouter initialEntries={['/findings']}>
-          <AppRoutes />
-        </MemoryRouter>
-      </ThemeProvider>,
+      <MemoryRouter initialEntries={['/findings']}>
+        <AppRoutes />
+      </MemoryRouter>,
     )
 
     expect(await screen.findByRole('heading', { name: /Findings/i })).toBeInTheDocument()

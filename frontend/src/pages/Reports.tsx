@@ -488,24 +488,7 @@ export default function Reports() {
                     </motion.div>
                   ))}
 
-                  {filteredReports.length === 0 && reports.length === 0 && (
-                    <div className="col-span-2 py-40 border-4 border-dashed border-rag-blue/10 text-center flex flex-col items-center gap-8 bg-charcoal/30">
-                      <ReportIcon icon={Archive02Icon} size={120} className="text-rag-blue/15" aria-hidden="true" />
-                      <div className="space-y-3 max-w-md">
-                        <p className="text-xl font-black text-silver-bright uppercase tracking-[0.3em] italic">No Briefings Yet</p>
-                        <p className="text-xs font-mono text-silver/30 uppercase tracking-widest leading-relaxed">
-                            Run a scan from the Toolkit to generate your first report. Completed scans appear here automatically.
-                        </p>
-                      </div>
-                      <Link
-                        to={routes.toolkit}
-                        className="bg-rag-blue border-4 border-black px-8 py-4 text-[10px] font-black uppercase tracking-[0.3em] text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
-                      >
-                        Launch_First_Scan
-                      </Link>
-                    </div>
-                  )}
-                  {filteredReports.length === 0 && reports.length > 0 && (
+                  {filteredReports.length === 0 && (
                     <div className="col-span-2 py-40 border-4 border-dashed border-black/5 text-center flex flex-col items-center gap-8 bg-charcoal/30">
                       <ReportIcon icon={Archive02Icon} size={120} className="text-silver/5" aria-hidden="true" />
                       <div className="space-y-2">

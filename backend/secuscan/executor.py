@@ -1844,10 +1844,6 @@ class TaskExecutor:
             )
             if sent:
                 logger.info("Task %s: delivered %d notification(s)", task_id, sent)
-
-            # Send Slack Webhook notification for scan completion
-            from .notification_service import process_slack_notification
-            await process_slack_notification(db, task_id)
         except Exception as exc:
             logger.warning(
                 "Task %s: notification dispatch failed: %s",

@@ -1,9 +1,9 @@
 /**
- * Frontend auth tests.
+ * Frontend auth tests for PR #278.
  *
  * Covers:
- * - getStoredApiKey returns null when no key is stored
- * - setStoredApiKey stores the key in memory (not localStorage)
+ * - getStoredApiKey returns null when localStorage is empty
+ * - setStoredApiKey persists the key to localStorage
  * - request() includes X-Api-Key header when a key is stored
  * - request() omits X-Api-Key when no key is stored
  * - request() fires AUTH_REQUIRED_EVENT on HTTP 401
@@ -16,7 +16,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   AUTH_REQUIRED_EVENT,
-  clearStoredApiKey,
   getStoredApiKey,
   setStoredApiKey,
   listPlugins,
@@ -40,12 +39,7 @@ function mockResponse(status: number, body: unknown = {}) {
 
 describe('getStoredApiKey / setStoredApiKey', () => {
   beforeEach(() => {
-    clearStoredApiKey()
     localStorage.clear()
-  })
-
-  afterEach(() => {
-    clearStoredApiKey()
   })
 
   it('returns null when no key is stored', () => {
@@ -63,9 +57,11 @@ describe('getStoredApiKey / setStoredApiKey', () => {
     expect(getStoredApiKey()).toBe('new-key')
   })
 
-  it('does not write the key to localStorage', () => {
+  it('stores the key only under secuscan_api_key', () => {
     setStoredApiKey('abc123')
-    expect(localStorage.getItem('secuscan_api_key')).toBeNull()
+    expect(localStorage.getItem('secuscan_api_key')).toBe('abc123')
+    // No other localStorage entry should be written by setStoredApiKey.
+    expect(localStorage.length).toBe(1)
   })
 })
 
@@ -76,7 +72,6 @@ describe('getStoredApiKey / setStoredApiKey', () => {
 describe('request() X-Api-Key header', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
-    clearStoredApiKey()
     localStorage.clear()
   })
 
@@ -112,7 +107,6 @@ describe('request() X-Api-Key header', () => {
 describe('request() 401 handling', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
-    clearStoredApiKey()
     localStorage.clear()
   })
 
@@ -209,7 +203,6 @@ vi.spyOn(window, 'setTimeout').mockImplementation(() => timeoutId)
 describe('request() successful authenticated request', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
-    clearStoredApiKey()
     localStorage.clear()
   })
 
@@ -231,7 +224,6 @@ describe('API key is never logged', () => {
   afterEach(() => {
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
-    clearStoredApiKey()
     localStorage.clear()
   })
 

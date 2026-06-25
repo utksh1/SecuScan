@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { authenticateWithApiKey } from '../api'
+import { setStoredApiKey } from '../api'
 
 interface Props {
   onSaved: () => void
@@ -13,27 +13,24 @@ interface Props {
  * component mounts and no protected API call fires before the key is saved.
  *
  * The operator reads the key from the server key file and pastes it here.
- * The key is sent to the backend which validates it and sets an HttpOnly
- * session cookie; the raw key is never persisted in the browser.
+ * The key is stored only in localStorage under `secuscan_api_key` and sent
+ * exclusively as the `X-Api-Key` request header — never logged or stored
+ * server-side.
  */
 export default function ApiKeySetupScreen({ onSaved }: Props) {
   const [key, setKey] = useState('')
   const [error, setError] = useState('')
 
-  async function handleSave() {
+  function handleSave() {
     const trimmed = key.trim()
     if (!trimmed) {
       setError('Please enter the API key.')
       return
     }
-    try {
-      await authenticateWithApiKey(trimmed)
-      setKey('')
-      setError('')
-      onSaved()
-    } catch (err: any) {
-      setError(err?.message || 'Authentication failed. Check the API key.')
-    }
+    setStoredApiKey(trimmed)
+    setKey('')
+    setError('')
+    onSaved()
   }
 
   return (
@@ -130,9 +127,10 @@ export default function ApiKeySetupScreen({ onSaved }: Props) {
           Save and connect
         </button>
         <p style={{ marginTop: '1.25rem', color: '#475569', fontSize: 12, lineHeight: 1.5 }}>
-          The key is sent to the backend which validates it and sets an HttpOnly
-          session cookie. The raw key is never persisted in the browser and is held
-          only in memory for the duration of the page session.
+          The key is stored only in your browser's <code>localStorage</code> under{' '}
+          <code>secuscan_api_key</code> and sent as the{' '}
+          <code>X-Api-Key</code> header on every API request. It is never transmitted
+          to any third party or stored on the server beyond the key file.
         </p>
       </div>
     </div>

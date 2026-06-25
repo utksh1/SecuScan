@@ -288,59 +288,26 @@ export interface TaskStartResponse {
   stream_url: string
 }
 
-let _apiKey: string | null = null
+const API_KEY_STORAGE_KEY = 'secuscan_api_key'
 
 export function getStoredApiKey(): string | null {
-  return _apiKey
+  try {
+    return localStorage.getItem(API_KEY_STORAGE_KEY) || null
+  } catch {
+    return null
+  }
 }
 
 export function setStoredApiKey(key: string): void {
-  _apiKey = key
-}
-
-export function clearStoredApiKey(): void {
-  _apiKey = null
-}
-
-export async function authenticateWithApiKey(apiKey: string): Promise<void> {
-  const response = await fetch(`${API_BASE}/auth/session`, {
-    method: 'POST',
-    headers: { 'X-Api-Key': apiKey },
-    credentials: 'include',
-  })
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}))
-    throw new Error(body?.detail || 'Authentication failed')
-  }
-  _apiKey = apiKey
-}
-
-export async function checkAuthSession(): Promise<boolean> {
   try {
-    const response = await fetch(`${API_BASE}/auth/session/check`, {
-      credentials: 'include',
-    })
-    const data = await response.json()
-    return !!data.authenticated
+    localStorage.setItem(API_KEY_STORAGE_KEY, key)
   } catch {
-    return false
+    // ignore storage errors
   }
-}
-
-export async function logoutSession(): Promise<void> {
-  try {
-    await fetch(`${API_BASE}/auth/session/logout`, {
-      method: 'POST',
-      credentials: 'include',
-    })
-  } catch {
-    // ignore
-  }
-  _apiKey = null
 }
 
 function getApiKey(): string | null {
-  return _apiKey
+  return getStoredApiKey()
 }
 
 /** Fired on the window when any API request receives HTTP 401. */
@@ -360,12 +327,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         ...authHeaders,
         ...(init?.headers as Record<string, string> | undefined),
       },
-      credentials: 'include',
       signal: controller.signal,
     })
 
     if (response.status === 401) {
-      _apiKey = null
+      // Notify the app so it can show the API-key setup UI without every
+      // caller needing to handle auth independently.
       window.dispatchEvent(new CustomEvent(AUTH_REQUIRED_EVENT))
       throw new Error('AUTH_REQUIRED')
     }
