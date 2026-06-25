@@ -1,4 +1,6 @@
 """
+from __future__ import annotations
+from __future__ import annotations
 Notification delivery service for high-severity findings.
 
 Evaluates active rules, deduplicates deliveries, redacts alert payloads,

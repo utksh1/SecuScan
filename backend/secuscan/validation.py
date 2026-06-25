@@ -1,4 +1,5 @@
 """
+from __future__ import annotations
 Input validation and security checks
 """
 

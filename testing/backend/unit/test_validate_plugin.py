@@ -1,4 +1,5 @@
 """
+from __future__ import annotations
 Tests for scripts/validate_plugin.py
 
 What we're testing:

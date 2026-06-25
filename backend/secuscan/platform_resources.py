@@ -1,4 +1,5 @@
 """Helpers for target policies, profiles, crawl runs, and asset persistence."""
+from __future__ import annotations
 
 from __future__ import annotations
 
