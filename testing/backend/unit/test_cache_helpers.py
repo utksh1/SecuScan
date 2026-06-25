@@ -213,8 +213,7 @@ def test_expired_entry_get_returns_none_and_cleans_access_order():
 
 
 def test_opportunistic_sweep_triggers_on_write_interval():
-    cache = CacheClient()
-    cache.max_entries = 1000
+    cache = CacheClient(max_entries=1000)
 
     async def run():
         for i in range(51):
