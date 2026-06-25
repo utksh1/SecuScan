@@ -296,12 +296,6 @@ class TestBackfillRiskScores:
         await init_db(settings.database_path)
         db = await get_db()
 
-        # Insert referenced task first to satisfy foreign key constraint
-        await db.execute(
-            "INSERT INTO tasks (id, plugin_id, tool_name, target) VALUES (?, ?, ?, ?)",
-            ("task-1", "test", "test", "example.com")
-        )
-
         finding_id = "test-finding-001"
         await db.execute(
             """
@@ -340,12 +334,6 @@ class TestBackfillRiskScores:
 
         await init_db(settings.database_path)
         db = await get_db()
-
-        # Insert referenced task first to satisfy foreign key constraint
-        await db.execute(
-            "INSERT INTO tasks (id, plugin_id, tool_name, target) VALUES (?, ?, ?, ?)",
-            ("task-2", "test", "test", "example.com")
-        )
 
         finding_id = "test-finding-002"
         await db.execute(
