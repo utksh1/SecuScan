@@ -565,7 +565,7 @@ async def test_execute_task_network_policy_log_only(setup_test_environment):
     row = await db.fetchone("SELECT status FROM tasks WHERE id = ?", (task_id,))
     # Task should successfully complete because network violation is ignored in log_only mode!
     assert row["status"] == TaskStatus.COMPLETED.value
-    mock_engine.check_access.assert_called_once()
+    mock_engine.resolve_and_pin.assert_called_once()
     await db.disconnect()
 
 @pytest.mark.asyncio
@@ -727,9 +727,9 @@ async def test_docker_network_missing_and_create_fails(setup_test_environment):
 @pytest.mark.asyncio
 async def test_enforce_guardrails_empty_target():
     executor = TaskExecutor()
-    # If target is empty, enforce_guardrails should immediately return True
+    # If target is empty, enforce_guardrails should immediately return (True, None)
     res = await executor._enforce_guardrails("", "nmap", False, "task-1")
-    assert res is True
+    assert res == (True, None)
 
 
 @pytest.mark.asyncio
@@ -757,7 +757,7 @@ async def test_enforce_guardrails_validation_failure(setup_test_environment):
         mock_to_thread.return_value = (False, "invalid target")
 
         res = await executor._enforce_guardrails("127.0.0.1", "nmap", True, task_id)
-        assert res is False
+        assert res == (False, None)
 
     row = await db.fetchone("SELECT status, error_message FROM tasks WHERE id = ?", (task_id,))
     assert row["status"] == TaskStatus.FAILED.value
@@ -795,7 +795,7 @@ async def test_enforce_guardrails_network_policy_failure(setup_test_environment)
         mock_pm.return_value.get_plugin.return_value = mock_plugin
 
         res = await executor._enforce_guardrails("10.0.0.1", "nmap", False, task_id)
-        assert res is False
+        assert res == (False, None)
 
     row = await db.fetchone("SELECT status, error_message FROM tasks WHERE id = ?", (task_id,))
     assert row["status"] == TaskStatus.FAILED.value
@@ -962,8 +962,7 @@ async def test_execute_standard_scanner(setup_test_environment):
             plugin=mock_plugin,
             plugin_id="mock_cli_plugin",
             target="127.0.0.1",
-            inputs={},
-            safe_mode=False,
+            inputs={}
         )
 
     assert status == TaskStatus.COMPLETED.value
