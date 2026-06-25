@@ -6,7 +6,6 @@ and exits non-zero if any regressions are detected.
 """
 
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -24,6 +23,7 @@ def main():
         root_dir / "testing" / "backend" / "benchmarks" / "thresholds.json"
     )
     results_path = root_dir / "benchmark_results.json"
+    comparison_path = root_dir / "benchmark_threshold_comparison.json"
 
     # 1. Load thresholds
     if not thresholds_path.exists():
@@ -56,6 +56,9 @@ def main():
     # Run the tests. We capture output/errors normally.
     result = subprocess.run(cmd, cwd=str(root_dir))
 
+    if result.returncode != 0 and not results_path.exists():
+        sys.exit(result.returncode)
+
     # 3. Read results
     if not results_path.exists():
         print(f"\n{RED}Error: Benchmark run did not produce {results_path}{RESET}")
@@ -72,9 +75,18 @@ def main():
     print("-" * 82)
 
     has_regression = False
+    comparison_report = []
     for metric, threshold in thresholds.items():
         if metric not in results:
             print(f"{metric:<45} | {'N/A':<12} | {threshold:<12} | {RED}MISSING{RESET}")
+            comparison_report.append(
+                {
+                    "metric": metric,
+                    "measured": None,
+                    "threshold": threshold,
+                    "status": "MISSING",
+                }
+            )
             has_regression = True
             continue
 
@@ -98,9 +110,27 @@ def main():
             has_regression = True
 
         print(f"{metric:<45} | {val_fmt:<12} | {thresh_fmt:<12} | {status_str:<6}")
+        comparison_report.append(
+            {
+                "metric": metric,
+                "measured": value,
+                "threshold": threshold,
+                "status": "PASS" if passed else "FAIL",
+            }
+        )
 
     print("\n" + "=" * 82 + "\n")
 
+    with open(comparison_path, "w") as f:
+        json.dump(
+            {
+                "benchmarks": comparison_report,
+                "regression_detected": has_regression,
+            },
+            f,
+            indent=2,
+        )
+    print(f"Benchmark comparison saved to {comparison_path}")
     if has_regression:
         print(
             f"{RED}{BOLD}Performance regression detected! One or more metrics exceeded thresholds.{RESET}"

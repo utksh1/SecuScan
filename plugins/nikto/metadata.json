@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd0e",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
     "binary": "nikto"
@@ -45,7 +45,7 @@
     "-Tuning",
     "{tuning:123b}",
     "-timeout",
-    "{request_timeout:10}",
+    "{timeout:10}",
     "-maxtime",
     "{max_scan_time:600}",
     "-Format",
@@ -116,8 +116,8 @@
       "help": "Optional Nikto -until value. Use a relative duration or an absolute stop time supported by your Nikto install."
     },
     {
-      "id": "request_timeout",
-      "label": "Request Timeout (seconds)",
+      "id": "timeout",
+      "label": "Timeout (seconds)",
       "type": "integer",
       "required": false,
       "default": 10,
@@ -250,7 +250,7 @@
     "passive": {
       "tuning": "123b",
       "max_scan_time": 300,
-      "request_timeout": 10,
+      "timeout": 10,
       "display_options": "EP",
       "safe_mode": true,
       "port": "",
@@ -268,7 +268,7 @@
     "standard": {
       "tuning": "1234567b",
       "max_scan_time": 600,
-      "request_timeout": 10,
+      "timeout": 10,
       "display_options": "EPV",
       "safe_mode": true,
       "port": "",
@@ -286,7 +286,7 @@
     "active": {
       "tuning": "1234567890abc",
       "max_scan_time": 1800,
-      "request_timeout": 15,
+      "timeout": 15,
       "display_options": "1234DEPV",
       "safe_mode": false,
       "port": "",
@@ -333,5 +333,5 @@
     ]
   },
   "docker_image": "sullo/nikto",
-  "checksum": "0fb0bf4aa20a24934291e650701373b2501b2d44a1d1b0e9445ff9bf84857315"
+  "checksum": "31c89129a6242562db4d08cfe17d12abbc5f8b1450980db309f361fa2892fb74"
 }

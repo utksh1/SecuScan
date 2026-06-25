@@ -151,3 +151,31 @@ Existing plugins using a raw `pattern` continue to work without changes:
 ## Backwards compatibility
 
 Plugins that already define `validation.pattern` (without `validation_type`) continue to work exactly as before. No migration is required.
+
+---
+
+## Common Validation Mistakes & Troubleshooting Matrix
+
+When writing or updating plugin schemas, authors frequently run into predictable validation edge cases. Use this matrix to identify and resolve common schema parsing issues.
+
+### Troubleshooting Matrix
+
+| Issue Symptoms | Root Cause | How to Fix |
+| :--- | :--- | :--- |
+| **`pattern` regex is being completely ignored** by the frontend form validation loop. | Both `validation_type` and `pattern` are defined in the object. `validation_type` takes strict structural priority over custom regex patterns. | Remove the `validation_type` key if you require custom regex behavior, or adapt your constraint to use an existing preset. |
+| **`min` or `max` rules have no effect**; users can input any number they want. | The parent field configuration specifies `"type": "string"`. Range limits only evaluate when `"type": "integer"`. | Update the field configuration line to explicitly use `"type": "integer"`. |
+| **Frontend crashes or hangs** when attempting to evaluate a custom input pattern. | The regex string defined inside `pattern` contains an unescaped or invalid syntax constraint. | Validate your regex block independently. Remember that JSON strings require backslashes to be double-escaped (e.g., use `\\d` instead of `\d`). |
+| **An optional input field blocks form submission** even when left entirely blank by the user. | The field schema definition contains `"required": true`, overriding the empty string exception check. | Set `"required": false` so the validation engine skips evaluation on blank strings or null elements. |
+
+### Rule Evaluation Reference
+
+To keep schemas stable, the validation engine processes properties using this explicit order of execution:
+```mermaid
+graph TD
+    A[User Input] --> B{Is field blank?}
+    B -- Yes --> C{Is field 'required'? : true}
+    C -- Yes --> D[Blocks Form Submission]
+    C -- No --> E[Skip Checks: Valid]
+    B -- No --> F{Has 'validation_type'?}
+    F -- Yes --> G[Run Named Preset Rules<br>Ignores 'pattern']
+    F -- No --> H[Run Custom 'pattern' Regex]

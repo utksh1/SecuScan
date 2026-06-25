@@ -241,6 +241,42 @@ const itemVariants = {
     visible: { opacity: 1, y: 0 }
 }
 
+function CollapsiblePane({
+    content,
+    maxCollapsedLength = 300,
+    label = 'content',
+    prefix = '',
+}: {
+    content?: string
+    maxCollapsedLength?: number
+    label?: string
+    prefix?: string
+}) {
+    const [expanded, setExpanded] = useState(false)
+    const text = content || ''
+    const isLong = text.length > maxCollapsedLength
+    const display = !isLong || expanded ? text : text.slice(0, maxCollapsedLength) + '…'
+
+    return (
+        <div className="space-y-2">
+            <div className="border border-white/6 bg-black/30 p-4 font-mono text-[11px] text-rag-blue/80 break-all leading-6 whitespace-pre-wrap">
+                {prefix && <span className="text-silver/20 mr-2">{prefix}</span>}
+                {display}
+            </div>
+            {isLong && (
+                <button
+                    type="button"
+                    onClick={() => setExpanded((prev) => !prev)}
+                    aria-expanded={expanded}
+                    className="text-[9px] uppercase tracking-[0.15em] text-rag-blue/70 hover:text-rag-blue font-black transition-colors"
+                >
+                    {expanded ? `[ COLLAPSE ${label.toUpperCase()} ]` : `[ EXPAND ${label.toUpperCase()} ]`}
+                </button>
+            )}
+        </div>
+    )
+}
+
 function DetailIcon({
     icon,
     size = 18,
@@ -907,13 +943,18 @@ export default function TaskDetails() {
                         animate={{ opacity: 1, height: 'auto' }}
                         className="bg-rag-red/10 border-l-4 border-rag-red p-6 space-y-3"
                     >
-                        <div className="flex items-center gap-3 text-rag-red">
-                            <DetailIcon icon={AlertCircleIcon} />
-                            <h3 className="text-xs font-black uppercase tracking-[0.3em] italic">Critical_Execution_Fault</h3>
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3 text-rag-red">
+                                <DetailIcon icon={AlertCircleIcon} />
+                                <h3 className="text-xs font-black uppercase tracking-[0.3em] italic">Critical_Execution_Fault</h3>
+                            </div>
+                            <CopyToClipboard
+                                textToCopy={task.error_message}
+                                label="Copy Trace"
+                                title="Copy error trace to clipboard"
+                            />
                         </div>
-                        <p className="text-sm font-mono text-silver/80 leading-relaxed max-w-4xl">
-                            {task.error_message}
-                        </p>
+                        <CollapsiblePane content={task.error_message} maxCollapsedLength={400} label="error output" />
                         <div className="pt-2">
                             <span className="text-[9px] font-black text-silver/30 uppercase tracking-[0.2em] italic">Diagnostic_Code::EXEC_FAIL_{task.exit_code || 'ERR'}</span>
                         </div>
@@ -1297,10 +1338,7 @@ export default function TaskDetails() {
                                             <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Final Command</h3>
                                             <div className="h-px flex-1 bg-white/8" />
                                         </div>
-                                        <div className="border border-white/6 bg-black/30 p-4 font-mono text-[11px] text-rag-blue/80 break-all leading-6">
-                                            <span className="text-silver/20 mr-2">$</span>
-                                            {result.command_used}
-                                        </div>
+                                        <CollapsiblePane content={result.command_used} maxCollapsedLength={200} label="command" prefix="$ " />
                                     </motion.div>
                                 )}
                                 <motion.div variants={itemVariants} className="border border-white/8 bg-charcoal p-6">
@@ -1446,10 +1484,7 @@ export default function TaskDetails() {
                                 <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.36em] italic">Operational Command</h3>
                                 <div className="h-px flex-1 bg-white/8" />
                             </div>
-                            <div className="border border-white/6 bg-black/30 p-4 font-mono text-[10px] text-rag-blue/70 break-all italic leading-6">
-                                <span className="text-silver/20 mr-2">$</span>
-                                {result.command_used}
-                            </div>
+                            <CollapsiblePane content={result.command_used} maxCollapsedLength={150} label="command" prefix="$ " />
                         </section>
                     )}
                 </aside>

@@ -1,5 +1,5 @@
 import React from 'react'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import Findings from '../../../src/pages/Findings'
@@ -9,6 +9,13 @@ import Findings from '../../../src/pages/Findings'
 vi.mock('../../../src/api', () => ({
   getFindings: vi.fn(),
 }))
+
+vi.mock('../../../src/utils/exportUtils', () => ({
+  exportFindingsAsCSV: vi.fn(),
+  exportFindingsAsJSON: vi.fn(),
+}))
+
+import { exportFindingsAsCSV, exportFindingsAsJSON } from '../../../src/utils/exportUtils'
 
 vi.mock('../../../src/utils/date', async (importOriginal: any) => {
   const actual = await importOriginal() as typeof import('../../../src/utils/date')
@@ -258,5 +265,137 @@ describe('Findings — virtualized list', () => {
 
     const suppressedChips = screen.queryAllByText('suppressed')
     expect(suppressedChips.length).toBeGreaterThan(0)
+  })
+
+  it('individual checkbox click selects finding for export but doesn\'t change selected finding details', async () => {
+    const findings = [
+      makeFinding({ id: 'f1', title: 'SQL Injection', severity: 'critical' }),
+      makeFinding({ id: 'f2', title: 'CSRF Vulnerability', severity: 'high' }),
+    ]
+    vi.mocked(getFindings).mockResolvedValue({ findings })
+
+    render(<Findings />)
+    await waitFor(() => expect(screen.queryByText('Synchronizing findings feed...')).not.toBeInTheDocument())
+
+    const checkboxF2 = screen.getByLabelText('Select CSRF Vulnerability')
+    expect(checkboxF2).not.toBeChecked()
+
+    await userEvent.click(checkboxF2)
+    expect(checkboxF2).toBeChecked()
+
+    expect(screen.getByRole('button', { name: /Bulk Export/i })).toBeInTheDocument()
+
+    expect(screen.getByRole('heading', { name: /SQL Injection/i, level: 2 })).toBeInTheDocument()
+  })
+
+  it('select all checkbox toggles selection for all visible findings', async () => {
+    const findings = [
+      makeFinding({ id: 'f1', title: 'SQL Injection', severity: 'critical' }),
+      makeFinding({ id: 'f2', title: 'CSRF Vulnerability', severity: 'high' }),
+    ]
+    vi.mocked(getFindings).mockResolvedValue({ findings })
+
+    render(<Findings />)
+    await waitFor(() => expect(screen.queryByText('Synchronizing findings feed...')).not.toBeInTheDocument())
+
+    const selectAllCheckbox = screen.getByLabelText(/Select All Visible/i)
+    await userEvent.click(selectAllCheckbox)
+
+    expect(screen.getByLabelText('Select SQL Injection')).toBeChecked()
+    expect(screen.getByLabelText('Select CSRF Vulnerability')).toBeChecked()
+
+    await userEvent.click(selectAllCheckbox)
+    expect(screen.getByLabelText('Select SQL Injection')).not.toBeChecked()
+    expect(screen.getByLabelText('Select CSRF Vulnerability')).not.toBeChecked()
+  })
+
+  it('trigger CSV and JSON bulk export calls utility function', async () => {
+    const findings = [
+      makeFinding({ id: 'f1', title: 'SQL Injection', severity: 'critical' }),
+    ]
+    vi.mocked(getFindings).mockResolvedValue({ findings })
+
+    render(<Findings />)
+    await waitFor(() => expect(screen.queryByText('Synchronizing findings feed...')).not.toBeInTheDocument())
+
+    await userEvent.click(screen.getByLabelText('Select SQL Injection'))
+
+    const bulkExportBtn = screen.getByRole('button', { name: /Bulk Export/i })
+    await userEvent.click(bulkExportBtn)
+
+    const csvExportBtn = screen.getByRole('button', { name: /Export as CSV/i })
+    const jsonExportBtn = screen.getByRole('button', { name: /Export as JSON/i })
+
+    expect(csvExportBtn).toBeInTheDocument()
+    expect(jsonExportBtn).toBeInTheDocument()
+
+    await userEvent.click(csvExportBtn)
+    expect(exportFindingsAsCSV).toHaveBeenCalled()
+
+    await userEvent.click(bulkExportBtn)
+    const newJsonExportBtn = await screen.findByRole('button', { name: /Export as JSON/i })
+    await userEvent.click(newJsonExportBtn)
+    expect(exportFindingsAsJSON).toHaveBeenCalled()
+  })
+})
+
+describe('Findings — severity legend help affordance', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+  })
+
+  async function renderReady() {
+    vi.mocked(getFindings).mockResolvedValue({ findings: [] })
+    render(<Findings />)
+    await waitFor(() =>
+      expect(screen.queryByText('Synchronizing findings feed...')).not.toBeInTheDocument(),
+    )
+  }
+
+  const triggerName = /what do the severity levels mean/i
+  const dialogName = /severity scale legend/i
+
+  it('legend is collapsed by default', async () => {
+    await renderReady()
+    expect(screen.getByRole('button', { name: triggerName })).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('dialog', { name: dialogName })).not.toBeInTheDocument()
+  })
+
+  it('opens the legend and lists every severity with a description and ordering note', async () => {
+    await renderReady()
+    const trigger = screen.getByRole('button', { name: triggerName })
+    await userEvent.click(trigger)
+
+    const dialog = screen.getByRole('dialog', { name: dialogName })
+    expect(trigger).toHaveAttribute('aria-expanded', 'true')
+    expect(within(dialog).getByText(/ordered highest/i)).toBeInTheDocument()
+    for (const label of ['Critical', 'High', 'Medium', 'Low', 'Info']) {
+      expect(within(dialog).getByText(label)).toBeInTheDocument()
+    }
+    // A representative plain-language blurb is present
+    expect(within(dialog).getByText(/triage first/i)).toBeInTheDocument()
+  })
+
+  it('closes the legend on Escape and restores focus to the trigger', async () => {
+    await renderReady()
+    const trigger = screen.getByRole('button', { name: triggerName })
+    await userEvent.click(trigger)
+    expect(screen.getByRole('dialog', { name: dialogName })).toBeInTheDocument()
+
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: dialogName })).not.toBeInTheDocument(),
+    )
+    expect(trigger).toHaveFocus()
+  })
+
+  it('closes the legend via the close button', async () => {
+    await renderReady()
+    await userEvent.click(screen.getByRole('button', { name: triggerName }))
+    await userEvent.click(screen.getByRole('button', { name: /close severity legend/i }))
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: dialogName })).not.toBeInTheDocument(),
+    )
   })
 })

@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { getFindings } from '../api'
 import { formatLocaleDate, parseDateSafe, getCurrentTimeZone } from '../utils/date'
 import SavedViewsPanel from '../components/SavedViewsPanel'
 import { useSavedViews, FilterPreset } from '../hooks/useSavedViews'
+import { exportFindingsAsCSV, exportFindingsAsJSON } from '../utils/exportUtils'
 
 type RiskFactor = {
   factor: string
@@ -91,6 +92,16 @@ const severityConfig: Record<string, { label: string; accent: string; chip: stri
   },
 }
 
+// Plain-language blurbs for the severity legend help affordance. Ordering mirrors
+// `severityOrder` (highest → lowest risk). Reuses `severityConfig` for label + colors.
+const severityLegend: { id: (typeof severityOrder)[number]; blurb: string }[] = [
+  { id: 'critical', blurb: 'Confirmed or highly likely exploitation with severe impact — triage first.' },
+  { id: 'high', blurb: 'Serious weakness, likely exploitable. Remediate promptly.' },
+  { id: 'medium', blurb: 'Moderate risk or exploitable only under specific conditions.' },
+  { id: 'low', blurb: 'Minor issue or hardening opportunity with limited impact.' },
+  { id: 'info', blurb: 'Informational signal — context only, or pending manual validation.' },
+]
+
 const sectionVariants = {
   hidden: { opacity: 0, y: 16 },
   visible: {
@@ -121,7 +132,7 @@ function filterPillClasses(isActive: boolean) {
     : 'border-silver-bright/10 bg-charcoal-dark text-silver/65 hover:border-silver-bright/30 hover:text-silver-bright'
 }
 
-const filterLabelClass = 'text-[10px] font-black uppercase tracking-[0.2em] text-silver-bright'
+const filterLabelClass ='block text-[10px] font-black uppercase tracking-[0.2em] text-silver-bright'
 const filterControlClass =
   'h-11 w-full border-2 border-silver-bright/10 bg-charcoal-dark px-3 text-xs font-mono text-silver-bright focus:border-rag-red focus:outline-none'
 
@@ -142,6 +153,10 @@ const ROW_HEIGHTS: Record<VirtualRow['kind'], number> = {
 export default function Findings() {
   const [findings, setFindings] = useState<Finding[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [page, setPage] = useState(1)
+  const [totalItems, setTotalItems] = useState(0)
+  const perPage = 50
   const [searchQuery, setSearchQuery] = useState('')
   const [filterSeverity, setFilterSeverity] = useState('all')
   const [filterTarget, setFilterTarget] = useState('all')
@@ -157,6 +172,56 @@ export default function Findings() {
   const [selectedFindingId, setSelectedFindingId] = useState<string | null>(null)
   const [reviewState, setReviewState] = useState<ReviewState>({})
   const [copiedFindingId, setCopiedFindingId] = useState<string | null>(null)
+
+  // ── Multi-select export state & handlers ───────────────────────────────────
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [exportDropdownOpen, setExportDropdownOpen] = useState(false)
+
+  const [columnVisibility, setColumnVisibility] = useState({
+    category: true,
+    findingKind: true,
+    cve: true,
+    confidence: true,
+    occurrenceCount: true,
+    cvss: true,
+  })
+
+  const [showColumnChooser, setShowColumnChooser] = useState(false)
+
+  const columnLabels = {
+    category: 'Category',
+    findingKind: 'Finding Kind',
+    cve: 'CVE',
+    confidence: 'Confidence',
+    occurrenceCount: 'Occurrence Count',
+    cvss: 'CVSS',
+  }
+
+  // ── Severity legend help affordance ────────────────────────────────────────
+  const [legendOpen, setLegendOpen] = useState(false)
+  const legendRef = useRef<HTMLDivElement>(null)
+  const legendButtonRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (!legendOpen) return
+    function onPointerDown(event: MouseEvent) {
+      if (legendRef.current && !legendRef.current.contains(event.target as Node)) {
+        setLegendOpen(false)
+      }
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setLegendOpen(false)
+        legendButtonRef.current?.focus()
+      }
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [legendOpen])
 
   // ── Saved views ────────────────────────────────────────────────────────────
   const { views, loading: viewsLoading, saveView, deleteView, renameView } = useSavedViews()
@@ -183,10 +248,12 @@ export default function Findings() {
 
   useEffect(() => {
     setLoading(true)
-    getFindings()
+    getFindings(1, perPage)
       .then((data: any) => {
         const nextFindings = data.findings || []
         setFindings(nextFindings)
+        setTotalItems(data.total ?? nextFindings.length)
+        setPage(1)
         setSelectedFindingId((current) => current ?? nextFindings[0]?.id ?? null)
       })
       .finally(() => setLoading(false))
@@ -317,6 +384,51 @@ export default function Findings() {
     })
   }, [enrichedFindings, filterSeverity, filterTarget, filterScanner, filterAsset, filterKind, filterAnalystStatus, filterValidatedOnly, filterHighConfidence, searchQuery, dateFrom, dateTo])
 
+  // ── Multi-select export state & handlers ───────────────────────────────────
+  const visibleIds = useMemo(() => filteredFindings.map((f) => f.id), [filteredFindings])
+  const isAllSelected = useMemo(() => {
+    if (visibleIds.length === 0) return false
+    return visibleIds.every((id) => selectedIds.has(id))
+  }, [visibleIds, selectedIds])
+
+  const handleSelectAllToggle = () => {
+    if (isAllSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        visibleIds.forEach((id) => next.delete(id))
+        return next
+      })
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        visibleIds.forEach((id) => next.add(id))
+        return next
+      })
+    }
+  }
+
+  const handleCheckboxChange = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (checked) {
+        next.add(id)
+      } else {
+        next.delete(id)
+      }
+      return next
+    })
+  }
+
+  const handleExportCSV = () => {
+    const selectedFindings = findings.filter((f) => selectedIds.has(f.id))
+    exportFindingsAsCSV(selectedFindings)
+  }
+
+  const handleExportJSON = () => {
+    const selectedFindings = findings.filter((f) => selectedIds.has(f.id))
+    exportFindingsAsJSON(selectedFindings)
+  }
+
   const sortedFindings = useMemo(() => {
     const items = [...filteredFindings]
     switch (sortMode) {
@@ -440,6 +552,7 @@ export default function Findings() {
     setDateFrom('')
     setDateTo('')
     setSearchQuery('')
+    setSelectedIds(new Set())
   }
 
   function updateFindingStatus(id: string, status: FindingStatus) {
@@ -469,8 +582,23 @@ export default function Findings() {
     }
   }
 
+  async function loadMore() {
+    if (loadingMore) return
+    setLoadingMore(true)
+    const nextPage = page + 1
+    try {
+      const data = await getFindings(nextPage, perPage)
+      const moreFindings = (data.findings || []) as Finding[]
+      if (moreFindings.length > 0) {
+        setFindings((prev) => [...prev, ...moreFindings])
+        setPage(nextPage)
+      }
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
   // ─── Keyboard navigation ────────────────────────────────────────────────────
-  const listRef = useRef<HTMLDivElement>(null)
 
   function handleListKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (!sortedFindings.length) return
@@ -573,7 +701,7 @@ export default function Findings() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap gap-2 pb-2 sm:pb-0 2xl:max-w-[760px] 2xl:justify-end">
+              <div className="flex flex-wrap items-center gap-2 pb-2 sm:pb-0 2xl:max-w-[760px] 2xl:justify-end">
                 <button
                   type="button"
                   onClick={() => setFilterSeverity('all')}
@@ -595,11 +723,82 @@ export default function Findings() {
                     {severityConfig[severity].label} {countsBySeverity[severity] || 0}
                   </button>
                 ))}
+
+                {/* Severity scale legend — help affordance (issue #835) */}
+                <div className="relative" ref={legendRef}>
+                  <button
+                    ref={legendButtonRef}
+                    type="button"
+                    onClick={() => setLegendOpen((open) => !open)}
+                    aria-label="What do the severity levels mean?"
+                    aria-expanded={legendOpen}
+                    aria-haspopup="dialog"
+                    aria-controls="severity-legend-popover"
+                    className={`flex min-h-10 items-center justify-center border px-2 transition-all ${filterPillClasses(legendOpen)}`}
+                  >
+                    <span className="material-symbols-outlined text-base" aria-hidden="true">help</span>
+                  </button>
+
+                  <AnimatePresence>
+                    {legendOpen && (
+                      <motion.div
+                        id="severity-legend-popover"
+                        role="dialog"
+                        aria-label="Severity scale legend"
+                        initial={{ opacity: 0, y: -8, scaleY: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scaleY: 1, transition: { duration: 0.18, ease: 'easeOut' as const } }}
+                        exit={{ opacity: 0, y: -6, scaleY: 0.97, transition: { duration: 0.12, ease: 'easeOut' as const } }}
+                        style={{ transformOrigin: 'top right' }}
+                        className="absolute right-0 top-full z-[60] mt-2 w-[min(20rem,calc(100vw-2rem))] border-4 border-black bg-charcoal shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]"
+                      >
+                        <div className="flex items-center justify-between border-b-2 border-black px-4 py-3">
+                          <p className="text-[10px] font-black uppercase tracking-[0.3em] text-silver-bright">
+                            Severity_Scale
+                          </p>
+                          <button
+                            type="button"
+                            aria-label="Close severity legend"
+                            onClick={() => {
+                              setLegendOpen(false)
+                              legendButtonRef.current?.focus()
+                            }}
+                            className="text-silver/40 transition-colors hover:text-silver-bright"
+                          >
+                            <span className="material-symbols-outlined text-base" aria-hidden="true">close</span>
+                          </button>
+                        </div>
+
+                        <p className="border-b border-silver-bright/10 px-4 py-2 text-[9px] font-mono uppercase tracking-[0.18em] text-silver/45">
+                          Ordered highest → lowest risk
+                        </p>
+
+                        <ul className="space-y-3 px-4 py-3">
+                          {severityLegend.map(({ id, blurb }) => (
+                            <li key={id} className="flex items-start gap-3">
+                              <span
+                                className={`mt-1 h-3 w-3 shrink-0 rotate-45 ${severityConfig[id].rail}`}
+                                aria-hidden="true"
+                              />
+                              <div className="min-w-0">
+                                <p className={`text-[11px] font-black uppercase tracking-[0.18em] ${severityConfig[id].accent}`}>
+                                  {severityConfig[id].label}
+                                </p>
+                                <p className="mt-0.5 text-[10px] font-mono leading-snug text-silver/55">
+                                  {blurb}
+                                </p>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
             </div>
 
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-8">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-8">
                 <div className="space-y-2">
                   <label className={filterLabelClass}>Target</label>
                   <select
@@ -734,6 +933,38 @@ export default function Findings() {
                   currentPreset={currentPreset}
                   onApply={applyPreset}
                 />
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowColumnChooser(!showColumnChooser)}
+                    className="h-11 border border-silver-bright/20 bg-charcoal-dark px-4 text-[10px] font-black uppercase tracking-[0.18em] text-silver/75"
+                  >
+                    Columns
+                  </button>
+
+                  {showColumnChooser && (
+                    <div className="absolute right-0 top-12 z-50 w-56 border border-black bg-charcoal-dark p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                      {Object.entries(columnVisibility).map(([key, value]) => (
+                        <label
+                          key={key}
+                          className="mb-2 flex items-center gap-2 text-xs text-silver-bright"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={value}
+                            onChange={() =>
+                              setColumnVisibility((prev) => ({
+                                ...prev,
+                                [key]: !prev[key as keyof typeof prev],
+                              }))
+                            }
+                          />
+                          {columnLabels[key as keyof typeof columnLabels]}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={resetAllFilters}
@@ -780,15 +1011,78 @@ export default function Findings() {
                 <p className="mt-3 text-xs font-mono uppercase tracking-[0.2em] text-silver/15">Adjust filters to reopen the queue.</p>
               </div>
             ) : (
-              <div
-                ref={parentRef}
-                role="listbox"
-                aria-label="Findings list"
-                tabIndex={0}
-                onKeyDown={handleListKeyDown}
-                className="border-2 border-black bg-charcoal shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:ring-2 focus:ring-rag-red/40"
-                style={{ height: '72vh', overflowY: 'auto' }}
-              >
+              <>
+                {/* Selection & Export Toolbar */}
+                <div className="flex flex-wrap items-center justify-between gap-4 border-2 border-black bg-charcoal p-4 mb-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="select-all-findings"
+                      checked={isAllSelected}
+                      onChange={handleSelectAllToggle}
+                      className="h-4 w-4 accent-[var(--accent-rag-red)] cursor-pointer"
+                    />
+                    <label
+                      htmlFor="select-all-findings"
+                      className="text-xs font-black uppercase tracking-wider text-silver-bright cursor-pointer select-none"
+                    >
+                      Select All Visible ({filteredFindings.length})
+                    </label>
+                    {selectedIds.size > 0 && (
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-silver/50 bg-charcoal-dark px-2 py-0.5 border border-silver-bright/10 ml-2">
+                        {selectedIds.size} Selected
+                      </span>
+                    )}
+                  </div>
+
+                  {selectedIds.size > 0 && (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        id="bulk-export-btn"
+                        onClick={() => setExportDropdownOpen(!exportDropdownOpen)}
+                        className="bg-rag-blue text-black border-2 border-black px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-rag-blue/90 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center gap-2"
+                      >
+                        Bulk Export
+                        <span className="material-symbols-outlined text-sm">arrow_drop_down</span>
+                      </button>
+                      {exportDropdownOpen && (
+                        <div className="absolute right-0 mt-2 w-48 border-2 border-black bg-charcoal-dark shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] z-30">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleExportCSV()
+                              setExportDropdownOpen(false)
+                            }}
+                            className="w-full text-left px-4 py-3 text-xs font-mono uppercase tracking-wider text-silver-bright hover:bg-silver-bright/10 transition-all border-b border-black"
+                          >
+                            Export as CSV
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleExportJSON()
+                              setExportDropdownOpen(false)
+                            }}
+                            className="w-full text-left px-4 py-3 text-xs font-mono uppercase tracking-wider text-silver-bright hover:bg-silver-bright/10 transition-all"
+                          >
+                            Export as JSON
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div
+                  ref={parentRef}
+                  role="listbox"
+                  aria-label="Findings list"
+                  tabIndex={0}
+                  onKeyDown={handleListKeyDown}
+                  className="border-2 border-black bg-charcoal shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:ring-2 focus:ring-rag-red/40"
+                  style={{ height: '72vh', overflowY: 'auto' }}
+                >
                 {/* Virtualizer inner container */}
                 <div
                   style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}
@@ -832,82 +1126,100 @@ export default function Findings() {
                             const config = severityConfig[finding.severity]
 
                             return (
-                              <button
+                              <div
                                 key={finding.id}
-                                type="button"
-                                role="option"
-                                aria-selected={isSelected}
-                                onClick={() => setSelectedFindingId(finding.id)}
-                                className={`relative block w-full px-5 py-5 text-left transition-all ${
+                                className={`relative flex items-stretch w-full transition-all ${
                                   !isLastInGroup ? 'border-b border-silver-bright/6' : ''
                                 } ${isSelected ? 'bg-silver-bright/6' : 'hover:bg-silver-bright/3'}`}
                               >
-                                <span className={`absolute inset-y-0 left-0 w-1 ${config.rail}`} />
-                                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                                  <div className="min-w-0 flex-1 space-y-3 pl-3">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <span className={`px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${config.chip}`}>
-                                        {config.label}
-                                      </span>
-                                      <span className={`border px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${getStatusTone(finding.status)}`}>
-                                        {finding.status}
-                                      </span>
-                                      <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-silver/35">
-                                        {finding.category || 'Uncategorized'}
-                                      </span>
-                                      {finding.finding_kind ? (
-                                        <span className="border border-silver-bright/10 bg-charcoal-dark px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-silver/70">
-                                          {finding.finding_kind.replace('_', ' ')}
-                                        </span>
-                                      ) : null}
-                                      {finding.cve ? (
-                                        <span className="border border-rag-blue/20 bg-rag-blue/10 px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-rag-blue">
-                                          {finding.cve}
-                                        </span>
-                                      ) : null}
-                                      {typeof finding.confidence === 'number' ? (
-                                        <span className="border border-silver-bright/10 bg-charcoal-dark px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-silver-bright">
-                                          {(finding.confidence * 100).toFixed(0)}% confidence
-                                        </span>
-                                      ) : null}
-                                    </div>
+                                {/* Checkbox column */}
+                                <div className="pl-4 pr-1 flex items-center justify-center">
+                                  <input
+                                    type="checkbox"
+                                    aria-label={`Select ${finding.title}`}
+                                    checked={selectedIds.has(finding.id)}
+                                    onChange={(e) => handleCheckboxChange(finding.id, e.target.checked)}
+                                    className="h-4 w-4 accent-[var(--accent-rag-red)] cursor-pointer"
+                                  />
+                                </div>
 
-                                    <div>
-                                      <h3 className="text-xl font-black uppercase tracking-tight text-silver-bright">{finding.title}</h3>
-                                      <p className="mt-2 text-[11px] font-mono uppercase tracking-[0.16em] text-silver/45">
-                                        Target // {finding.target || 'Unknown'} // Observed // {formatLocaleDate(finding.discovered_at)}
+                                {/* Details button */}
+                                <button
+                                  type="button"
+                                  role="option"
+                                  aria-selected={isSelected}
+                                  onClick={() => setSelectedFindingId(finding.id)}
+                                  className="relative block flex-1 px-5 py-5 text-left transition-all focus:outline-none"
+                                >
+                                  <span className={`absolute inset-y-0 left-0 w-1 ${config.rail}`} />
+                                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                                    <div className="min-w-0 flex-1 space-y-3 pl-3">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <span className={`px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${config.chip}`}>
+                                          {config.label}
+                                        </span>
+                                        <span className={`border px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] ${getStatusTone(finding.status)}`}>
+                                          {finding.status}
+                                        </span>
+                                        {columnVisibility.category && (
+                                          <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-silver/35">
+                                            {finding.category || 'Uncategorized'}
+                                          </span>
+                                        )}
+                                        {columnVisibility.findingKind && finding.finding_kind ? (
+                                          <span className="border border-silver-bright/10 bg-charcoal-dark px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-silver/70">
+                                            {finding.finding_kind.replace('_', ' ')}
+                                          </span>
+                                        ) : null}
+                                        {columnVisibility.cve && finding.cve ? (
+                                          <span className="border border-rag-blue/20 bg-rag-blue/10 px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-rag-blue">
+                                            {finding.cve}
+                                          </span>
+                                        ) : null}
+                                        {columnVisibility.confidence && typeof finding.confidence === 'number' ? (
+                                          <span className="border border-silver-bright/10 bg-charcoal-dark px-2 py-1 text-[9px] font-mono uppercase tracking-[0.15em] text-silver-bright">
+                                            {(finding.confidence * 100).toFixed(0)}% confidence
+                                          </span>
+                                        ) : null}
+                                      </div>
+
+                                      <div>
+                                        <h3 className="text-xl font-black uppercase tracking-tight text-silver-bright">{finding.title}</h3>
+                                        <p className="mt-2 text-[11px] font-mono uppercase tracking-[0.16em] text-silver/45">
+                                          Target // {finding.target || 'Unknown'} // Observed // {formatLocaleDate(finding.discovered_at)}
+                                        </p>
+                                      </div>
+
+                                      <p className="max-w-4xl text-sm leading-relaxed text-silver/70">
+                                        {finding.description || 'No description provided.'}
                                       </p>
                                     </div>
 
-                                    <p className="max-w-4xl text-sm leading-relaxed text-silver/70">
-                                      {finding.description || 'No description provided.'}
-                                    </p>
-                                  </div>
+                                    <div className="flex flex-row items-end gap-6 lg:min-w-[140px] lg:flex-col lg:items-end">
+                                      {columnVisibility.occurrenceCount && typeof finding.occurrence_count === 'number' && finding.occurrence_count > 1 ? (
+                                        <div className="text-right">
+                                          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Seen</p>
+                                          <p className="text-2xl font-black italic text-silver-bright">
+                                            {finding.occurrence_count}
+                                          </p>
+                                        </div>
+                                      ) : null}
+                                      {columnVisibility.cvss && typeof finding.cvss === 'number' ? (
+                                        <div className="text-right">
+                                          <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">CVSS</p>
+                                          <p className={`text-3xl font-black italic ${finding.cvss >= 9 ? 'text-rag-red' : 'text-silver-bright'}`}>
+                                            {finding.cvss.toFixed(1)}
+                                          </p>
+                                        </div>
+                                      ) : null}
 
-                                  <div className="flex flex-row items-end gap-6 lg:min-w-[140px] lg:flex-col lg:items-end">
-                                    {typeof finding.occurrence_count === 'number' && finding.occurrence_count > 1 ? (
-                                      <div className="text-right">
-                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">Seen</p>
-                                        <p className="text-2xl font-black italic text-silver-bright">
-                                          {finding.occurrence_count}
-                                        </p>
-                                      </div>
-                                    ) : null}
-                                    {typeof finding.cvss === 'number' ? (
-                                      <div className="text-right">
-                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] text-silver/35">CVSS</p>
-                                        <p className={`text-3xl font-black italic ${finding.cvss >= 9 ? 'text-rag-red' : 'text-silver-bright'}`}>
-                                          {finding.cvss.toFixed(1)}
-                                        </p>
-                                      </div>
-                                    ) : null}
-
-                                    <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-silver-bright' : 'text-silver/30'}`}>
-                                      east
-                                    </span>
+                                      <span className={`material-symbols-outlined text-lg ${isSelected ? 'text-silver-bright' : 'text-silver/30'}`}>
+                                        east
+                                      </span>
+                                    </div>
                                   </div>
-                                </div>
-                              </button>
+                                </button>
+                              </div>
                             )
                           })()
                         )}
@@ -916,7 +1228,20 @@ export default function Findings() {
                   })}
                 </div>
               </div>
-            )}
+              {!loading && findings.length < totalItems && (
+                <div className="flex justify-center py-6">
+                  <button
+                    type="button"
+                    onClick={loadMore}
+                    disabled={loadingMore}
+                    className="bg-silver-bright px-6 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] transition-all active:translate-x-0.5 active:translate-y-0.5 active:shadow-none disabled:opacity-50"
+                  >
+                    {loadingMore ? 'Loading...' : `Load More (${findings.length}/${totalItems})`}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
           </motion.section>
 
           {/* ── Detail Panel (unchanged) ── */}

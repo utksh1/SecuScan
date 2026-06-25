@@ -1,0 +1,4 @@
+Protocol  : TLSv1.2
+Cipher    : ECDHE-RSA-AES256-GCM-SHA384
+
+Verify return code: 18 (self signed certificate)
