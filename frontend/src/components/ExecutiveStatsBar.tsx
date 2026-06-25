@@ -38,13 +38,13 @@ export const ExecutiveStatsBar: React.FC<ExecutiveStatsBarProps> = ({
 
   return (
     <div
-      className="w-full bg-[var(--bg-secondary)] border-y border-white/5 py-16 grid grid-cols-1 md:grid-cols-4 divide-x divide-white/5"
+      className="w-full bg-[var(--bg-secondary)] border-y border-white/5 py-10 md:py-16 grid grid-cols-1 md:grid-cols-4 gap-y-10 md:gap-y-0 divide-y divide-white/5 md:divide-y-0 md:divide-x"
       aria-busy={loading}
     >
       {/* 1. Risk Profile */}
-      <div className="px-6 first:pl-8">
-        <span className="text-xs font-bold text-silver uppercase tracking-[0.3em] block mb-6">Status Profile</span>
-        <div className="space-y-6">
+      <div className="px-6 first:pl-8 pt-6 md:pt-0 first:pt-0">
+        <span className="text-xs font-bold text-silver uppercase tracking-[0.3em] block mb-3">Status Profile</span>
+        <div className="flex flex-col gap-3">
           {loading ? (
             <>
               <SkeletonBlock className="h-[4.5rem] w-3/4" />
@@ -70,9 +70,9 @@ export const ExecutiveStatsBar: React.FC<ExecutiveStatsBarProps> = ({
       </div>
 
       {/* 2. Critical Vulns */}
-      <div className="px-6">
-        <span className="text-xs font-bold text-silver uppercase tracking-[0.3em] block mb-6">Critical Vulns</span>
-        <div className="space-y-8">
+      <div className="px-6 pt-6 md:pt-0">
+        <span className="text-xs font-bold text-silver uppercase tracking-[0.3em] block mb-3">Critical Vulns</span>
+        <div className="flex flex-col gap-1">
           {loading ? (
             <>
               <SkeletonBlock className="h-[5rem] w-1/2" />
@@ -95,9 +95,9 @@ export const ExecutiveStatsBar: React.FC<ExecutiveStatsBarProps> = ({
       </div>
 
       {/* 3. Total Findings */}
-      <div className="px-6">
-        <span className="text-xs font-bold text-silver uppercase tracking-[0.3em] block mb-6">Total Findings</span>
-        <div className="space-y-8">
+      <div className="px-6 pt-6 md:pt-0">
+        <span className="text-xs font-bold text-silver uppercase tracking-[0.3em] block mb-3">Total Findings</span>
+        <div className="flex flex-col gap-1">
           {loading ? (
             <>
               <SkeletonBlock className="h-[5rem] w-1/2" />
@@ -117,9 +117,9 @@ export const ExecutiveStatsBar: React.FC<ExecutiveStatsBarProps> = ({
       </div>
 
       {/* 4. Scan Activity */}
-      <div className="px-6 last:pr-8">
-        <span className="text-xs font-bold text-silver uppercase tracking-[0.3em] block mb-6">Scan Cycles</span>
-        <div className="space-y-8">
+      <div className="px-6 pt-6 md:pt-0 last:pr-8">
+        <span className="text-xs font-bold text-silver uppercase tracking-[0.3em] block mb-3">Scan Cycles</span>
+        <div className="flex flex-col gap-1">
           {loading ? (
             <>
               <SkeletonBlock className="h-[5rem] w-1/2" />

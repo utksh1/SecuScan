@@ -96,7 +96,6 @@ export default function AppShell({ children }: AppShellProps) {
         { to: routes.findings, icon: 'emergency_home', label: 'Findings' },
         { to: routes.reports, icon: 'summarize', label: 'Reports' },
         { to: routes.workflows, icon: 'account_tree', label: 'Workflows' },
-        { to: routes.toolkit, icon: 'add_circle', label: 'Toolkit' },
     ]
     const mobileDrawerNav = [
         { to: routes.dashboard, label: 'Dashboard' },
