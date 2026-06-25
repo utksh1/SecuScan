@@ -148,23 +148,23 @@ def _resolve_host_ips_uncached(hostname: str) -> list[ipaddress._BaseAddress]:
 
 def _validate_resolved_ips_safe_mode(resolved_ips: list[ipaddress._BaseAddress]) -> Tuple[bool, str]:
     if not resolved_ips:
-        return False, "Hostname did not resolve to any IPs in safe mode (SecuScan Guardrail)"
+        return False, "Security block: Hostname did not resolve to any IP addresses in safe mode. Safe mode requires successful DNS resolution to verify private network status."
 
     for ip in resolved_ips:
         ip_net = ipaddress.ip_network(ip, strict=False)
         if any(ip_net.overlaps(blocked) for blocked in BLOCKED_NETWORKS):
-            return False, "Target overlaps with blocked network range"
+            return False, f"Security block: Target IP {ip} belongs to a restricted system range (e.g. broadcast, multicast, or link-local) that is not allowed for scanning."
         if ip.is_loopback and not settings.allow_loopback_scans:
-            return False, "Loopback scans are disabled in global settings"
+            return False, f"Security block: Loopback scanning of {ip} is disabled in the global configuration to protect the local host."
 
         is_private = any(
             (ip_net.version == allowed.version and (ip_net.subnet_of(allowed) or ip_net.overlaps(allowed)))
             for allowed in ALLOWED_PRIVATE
         )
         if not is_private:
-            return False, "Public IPs/networks not allowed in safe mode (SecuScan Guardrail)"
+            return False, f"Security block: Target {ip} is a public IP address. In safe mode, SecuScan only allows scanning private internal networks to prevent unauthorized external scanning. To scan public targets, disable safe mode in the target's scan policy."
         if not _net_within_allowed_networks(ip_net):
-            return False, "Target not within allowed networks in safe mode (SecuScan Guardrail)"
+            return False, f"Security block: Target {ip} is not within the explicitly allowed internal network ranges configured for this server. Contact your administrator to add this range to 'SECUSCAN_ALLOWED_NETWORKS'."
 
     return True, ""
 
@@ -190,11 +190,11 @@ def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
         
         # Check blocked networks (Broadcast, Link-local, Multicast)
         if any(net.overlaps(blocked) for blocked in BLOCKED_NETWORKS):
-            return False, "Target overlaps with blocked network range"
+            return False, f"Security block: Target range {target} overlaps with restricted system addresses (broadcast, multicast, etc.) that cannot be scanned."
 
         # Check for loopback even in non-safe mode if desired (usually allowed for local debugging)
         if net.is_loopback and not settings.allow_loopback_scans:
-            return False, "Loopback scans are disabled in global settings"
+            return False, f"Security block: Loopback scanning of {target} is disabled in the global configuration to protect the local host."
 
         # Safe mode: only allow private IPs
         if safe_mode:
@@ -203,10 +203,10 @@ def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
                 for allowed in ALLOWED_PRIVATE
             )
             if not is_private:
-                return False, "Public IPs/networks not allowed in safe mode (SecuScan Guardrail)"
+                return False, f"Security block: Target {target} includes public IP addresses. In safe mode, SecuScan only allows scanning private internal networks. To scan public targets, disable safe mode in the target's scan policy."
 
             if not _net_within_allowed_networks(net):
-                return False, "Target not within allowed networks in safe mode (SecuScan Guardrail)"
+                return False, f"Security block: Target {target} is not within the explicitly allowed internal network ranges configured for this server. Contact your administrator to add this range to 'SECUSCAN_ALLOWED_NETWORKS'."
 
         return True, ""
 

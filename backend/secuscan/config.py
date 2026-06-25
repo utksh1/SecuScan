@@ -7,6 +7,7 @@ from typing import Any, List, Optional
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
 import base64
+import os
 import hashlib
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
