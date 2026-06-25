@@ -104,7 +104,7 @@ from .ratelimit import (
     resolve_client_identity, admin_limiter,
     scheduler_tick_limiter,
 )
-from .rate_limiter import check_scan_rate_limit, RateLimitExceeded
+from .rate_limiter import check_scan_rate_limit
 from .validation import validate_target, validate_task_start_payload, validate_url
 from .reporting import reporting
 from .vault import VaultCrypto
@@ -194,22 +194,6 @@ async def get_or_set_cached(key: str, builder):
     value = await builder()
     await cache.set_json(key, value)
     return value
-
-
-from fastapi.responses import JSONResponse
-from starlette.status import HTTP_429_TOO_MANY_REQUESTS
-from .rate_limiter import RateLimitExceeded
-
-@router.exception_handler(RateLimitExceeded)
-async def rate_limit_exception_handler(request: Request, exc: RateLimitExceeded):
-    return JSONResponse(
-        status_code=HTTP_429_TOO_MANY_REQUESTS,
-        content={
-            "error": str(exc.detail) if hasattr(exc, 'detail') else "Too Many Requests",
-            "retry_after": getattr(exc, 'retry_after', 60),
-        },
-        headers={"Retry-After": str(getattr(exc, 'retry_after', 60))},
-    )
 
 
 async def require_owned_task(db, task_id: str, owner: str, columns: str = "owner_id") -> Dict[str, Any]:
@@ -1258,8 +1242,7 @@ async def delete_task_records(task_ids: List[str]):
         all_task_rows.extend(rows)
 
     # Delete associated records in chunks, atomic within a transaction
-    await db.begin()
-    try:
+    async with db.transaction():
         # Re-check running status inside the transaction to prevent the
         # race where a task starts running between the check and the delete.
         for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
@@ -1300,13 +1283,6 @@ async def delete_task_records(task_ids: List[str]):
             await db.execute_no_commit(
                 f"DELETE FROM tasks                WHERE id         IN ({placeholders})", tuple(chunk)
             )
-        await db.commit()
-    except HTTPException:
-        await db.rollback()
-        raise
-    except Exception:
-        await db.rollback()
-        raise
 
     # Cleanup files on disk (outside the transaction — file deletion is not
     # transactional; a failure here does not leave the DB in an inconsistent
@@ -1490,34 +1466,21 @@ async def upsert_vault_secret(
     encrypted = crypto.encrypt(value)
     secret_id = str(uuid.uuid4())
 
-    existing = await db.fetchone(
-        """
-        SELECT id
-        FROM credential_vault
-        WHERE owner_id = ? AND name = ?
-        """,
-        (owner, name),
-    )
-
-    if existing:
-        await db.execute(
-            """
-            UPDATE credential_vault
-            SET encrypted_value = ?, updated_at = datetime('now')
-            WHERE owner_id = ? AND name = ?
-            """,
-            (encrypted, owner, name),
+    async with db.transaction():
+        existing = await db.fetchone(
+            "SELECT id FROM credential_vault WHERE owner_id = ? AND name = ?",
+            (owner, name),
         )
-    else:
-        await db.execute(
-            """
-            INSERT INTO credential_vault
-            (id, owner_id, name, encrypted_value)
-            VALUES (?, ?, ?, ?)
-            """,
-            (secret_id, owner, name, encrypted),
-        )
-
+        if existing:
+            await db.execute(
+                "UPDATE credential_vault SET encrypted_value = ?, updated_at = datetime('now') WHERE owner_id = ? AND name = ?",
+                (encrypted, owner, name),
+            )
+        else:
+            await db.execute(
+                "INSERT INTO credential_vault (id, owner_id, name, encrypted_value) VALUES (?, ?, ?, ?)",
+                (secret_id, owner, name, encrypted),
+            )
     return {"name": name, "stored": True}
 
 @router.get("/vault/{name}", dependencies=[Depends(vault_limiter)])
@@ -1859,7 +1822,7 @@ async def _verify_workflow_owner(db, workflow_id: str, owner: str):
     return row
 
 
-@router.post("/workflows/{workflow_id}/run") , dependencies=[Depends(check_scan_rate_limit)]
+@router.post("/workflows/{workflow_id}/run", dependencies=[Depends(check_scan_rate_limit)])
 async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_owner)):
     db = await get_db()
     row = await _verify_workflow_owner(db, workflow_id, owner)

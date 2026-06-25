@@ -238,17 +238,26 @@ async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
 async def generic_rate_limit_handler(request: Request, exc: Exception):
     """
     Generic handler for 429 status code exceptions.
+
+    Merges headers from the original exception (e.g. X-RateLimit-Limit,
+    X-RateLimit-Remaining, Retry-After) with default headers, so
+    callers always receive accurate rate-limit metadata.
     """
+    exc_headers = getattr(exc, "headers", None) or {}
+    headers = {
+        "X-Request-ID": getattr(request.state, "request_id", get_request_id()),
+        **exc_headers,
+    }
+    if "Retry-After" not in headers:
+        headers["Retry-After"] = "60"
+
     return JSONResponse(
         status_code=HTTP_429_TOO_MANY_REQUESTS,
         content={
             "error": "Too Many Requests",
             "message": "Rate limit exceeded. Please try again later."
         },
-        headers={
-            "Retry-After": "60",
-            "X-Request-ID": getattr(request.state, "request_id", get_request_id()),
-        },
+        headers=headers,
     )
 # ─── END CUSTOM 429 HANDLER ──────────────────────────────────────────────────
 

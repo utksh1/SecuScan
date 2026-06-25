@@ -25,6 +25,10 @@ from fastapi import HTTPException, Request, status
 logger = logging.getLogger(__name__)
 
 
+class RateLimitExceeded(HTTPException):
+    """Raised when a rate limit is exceeded. Caught by a global exception handler."""
+
+
 class ScanRateLimiter:
     """
     Sliding window rate limiter for scan execution endpoints.
@@ -183,3 +187,14 @@ def make_scan_rate_limiter(
         burst_limit=burst_limit,
         burst_window=burst_window,
     )
+
+
+async def check_scan_rate_limit(request: Request) -> None:
+    """FastAPI dependency that checks scan rate limits for scan-triggering endpoints.
+
+    Retrieves the ``ScanRateLimiter`` instance from ``request.app.state``
+    (initialized during app startup) and delegates to its ``check`` method.
+    """
+    limiter = getattr(request.app.state, "scan_rate_limiter", None)
+    if limiter:
+        await limiter.check(request)
