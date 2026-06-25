@@ -589,7 +589,7 @@ def validate_command_network_egress(command: list[str], safe_mode: bool, plugin_
             # and are conventionally lowercase in practice.
             if candidate.lower() == "localhost" or re.match(
                 r'^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?)+$',
-                candidate
+                candidate.lower()
             ):
                 is_host = True
 
