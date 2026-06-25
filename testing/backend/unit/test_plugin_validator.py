@@ -600,3 +600,72 @@ class TestMetadataQualityLint:
         cat_errors = [e for e in result.errors if e.path == "category"]
         assert len(cat_errors) == 1
         assert "Required" in cat_errors[0].message
+
+    def test_mutually_exclusive_fields_must_reference_existing_fields(self, tmp_path):
+        data = _minimal_valid()
+        data["fields"] = [
+            {
+                "id": "password",
+                "label": "Password",
+                "type": "text",
+                "help": "Password authentication",
+            },
+            {
+                "id": "private_key",
+                "label": "Private Key",
+                "type": "text",
+                "help": "SSH private key",
+            },
+        ]
+        data["validation"] = {
+            "authentication": {
+                "mutually_exclusive": [
+                    "password",
+                    "private_key",
+                ]
+            }
+        }
+
+        plugin_dir = _write_metadata(tmp_path, data)
+        result = validate_one_plugin(plugin_dir)
+
+        mutually_exclusive_errors = [
+            e
+            for e in result.errors
+            if "mutually_exclusive" in e.path
+        ]
+
+        assert mutually_exclusive_errors == []
+
+    def test_mutually_exclusive_fields_unknown_field_is_rejected(self, tmp_path):
+        data = _minimal_valid()
+        data["fields"] = [
+            {
+                "id": "password",
+                "label": "Password",
+                "type": "text",
+                "help": "Password authentication",
+            },
+        ]
+        data["validation"] = {
+            "authentication": {
+                "mutually_exclusive": [
+                    "password",
+                    "private_key",
+                ]
+            }
+        }
+
+        plugin_dir = _write_metadata(tmp_path, data)
+        result = validate_one_plugin(plugin_dir)
+
+        assert not result.valid
+
+        mutually_exclusive_errors = [
+            e
+            for e in result.errors
+            if "mutually_exclusive" in e.path
+        ]
+
+        assert len(mutually_exclusive_errors) == 1
+        assert "private_key" in mutually_exclusive_errors[0].message
