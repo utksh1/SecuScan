@@ -1957,6 +1957,10 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any], owner: str 
     db = await get_db()
     row = await _verify_workflow_owner(db, workflow_id, owner)
 
+    old_enabled = bool(row["enabled"])
+    new_enabled = old_enabled
+    enabled_changed = False
+
     updates = []
     params: List[Any] = []
     if "name" in payload:
@@ -1970,12 +1974,12 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any], owner: str 
         updates.append("schedule_seconds = ?")
         params.append(int(val) if val else None)
     if "enabled" in payload:
+        new_enabled = bool(payload["enabled"])
+
         updates.append("enabled = ?")
-        params.append(1 if payload["enabled"] else 0)
+        params.append(1 if new_enabled else 0)
 
-    if not updates:
-        raise HTTPException(status_code=400, detail="No update fields provided")
-
+        enabled_changed = (new_enabled != old_enabled)
     params.append(workflow_id)
     await db.execute(f"UPDATE workflows SET {', '.join(updates)} WHERE id = ?", tuple(params))
     updated = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
@@ -1989,6 +1993,25 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any], owner: str 
         steps=json.loads(updated["steps_json"] or "[]"),
         created_by="patch",
     )
+
+    if enabled_changed:
+        await db.log_audit(
+            event_type=(
+                "workflow_enabled"
+                if new_enabled
+                else "workflow_disabled"
+            ),
+            message=(
+                f"Workflow {workflow_id} "
+                f"{'enabled' if new_enabled else 'disabled'}"
+            ),
+            context={
+                "workflow_id": workflow_id,
+                "actor": owner,
+                "previous_state": old_enabled,
+                "new_state": new_enabled,
+            },
+        )
     return _serialize_workflow(updated)
 
 
