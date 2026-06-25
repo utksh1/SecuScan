@@ -1859,7 +1859,7 @@ async def _verify_workflow_owner(db, workflow_id: str, owner: str):
     return row
 
 
-@router.post("/workflows/{workflow_id}/run") , dependencies=[Depends(check_scan_rate_limit)]
+@router.post("/workflows/{workflow_id}/run", dependencies=[Depends(check_scan_rate_limit)])
 async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_owner)):
     db = await get_db()
     row = await _verify_workflow_owner(db, workflow_id, owner)
