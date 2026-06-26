@@ -1,7 +1,9 @@
 import time
+import sqlite3
 from unittest.mock import patch
 
 from backend.secuscan.models import TaskStatus
+from backend.secuscan.config import settings
 
 def test_health_check(test_client):
     """Test health check endpoint."""
@@ -127,6 +129,25 @@ def test_start_task_missing_plugin(test_client):
     assert response.status_code == 404
     detail = response.json().get("detail", "")
     assert missing_id in detail or "plugin" in detail.lower()
+
+
+def test_start_task_rejects_unknown_preset_before_queueing(test_client):
+    """Starting a task with an unknown preset should fail before a task row is created."""
+    payload = {
+        "plugin_id": "http_inspector",
+        "preset": "stale-preset-name",
+        "inputs": {"url": "http://127.0.0.1:8000"},
+        "consent_granted": True,
+    }
+
+    response = test_client.post("/api/v1/task/start", json=payload)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Unknown preset 'stale-preset-name' for plugin 'http_inspector'"
+
+    with sqlite3.connect(settings.database_path) as conn:
+        count = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
+    assert count == 0
 
 class TestSafeModeCIDRBypass:
     """
