@@ -652,3 +652,126 @@ async def process_task_notifications(
     for row in findings:
         results.extend(await process_finding_notifications(db, str(row["id"])))
     return results
+
+
+async def process_slack_notification(db: Database, task_id: str) -> None:
+    """Send a structured JSON payload and a clean block message to the configured Slack Webhook after scan completion."""
+    from .config import settings
+
+    webhook_url = settings.slack_webhook_url
+    if not webhook_url:
+        return
+
+    # Fetch task details
+    task = await db.fetchone("SELECT * FROM tasks WHERE id = ?", (task_id,))
+    if not task:
+        logger.warning("Slack notification: Task %s not found in database", task_id)
+        return
+
+    status = str(task.get("status") or "unknown").upper()
+    tool_name = task.get("tool_name") or task.get("plugin_id") or "Security Scan"
+    target = task.get("target") or "Unknown Target"
+    duration = task.get("duration_seconds")
+    duration_str = f"{duration:.2f}s" if duration is not None else "N/A"
+
+    # Fetch findings to count and build severity breakdown
+    findings = await db.fetchall(
+        "SELECT severity FROM findings WHERE task_id = ?",
+        (task_id,),
+    )
+    total_findings = len(findings)
+    
+    severity_counts: Dict[str, int] = {}
+    for row in findings:
+        sev = str(row.get("severity") or "info").lower()
+        severity_counts[sev] = severity_counts.get(sev, 0) + 1
+
+    # Formulate severity breakdown message
+    severity_lines = []
+    for sev in ["critical", "high", "medium", "low", "info"]:
+        count = severity_counts.get(sev, 0)
+        if count > 0 or sev in ["critical", "high", "medium"]:
+            severity_lines.append(f"• *{sev.capitalize()}:* {count}")
+    severity_text = "\n".join(severity_lines)
+
+    # Status-specific formatting
+    status_icon = "✅" if status == "COMPLETED" else "❌" if status == "FAILED" else "ℹ️"
+    
+    blocks = [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": f"{status_icon} SecuScan: Scan {status.capitalize()}",
+                "emoji": True
+            }
+        },
+        {
+            "type": "section",
+            "fields": [
+                {
+                    "type": "mrkdwn",
+                    "text": f"*Tool:*\n{tool_name}"
+                },
+                {
+                    "type": "mrkdwn",
+                    "text": f"*Target:*\n{target}"
+                },
+                {
+                    "type": "mrkdwn",
+                    "text": f"*Status:*\n{status}"
+                },
+                {
+                    "type": "mrkdwn",
+                    "text": f"*Duration:*\n{duration_str}"
+                }
+            ]
+        }
+    ]
+
+    if status == "FAILED" and task.get("error_message"):
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*Error Message:*\n{task.get('error_message')}"
+            }
+        })
+    else:
+        blocks.append({
+            "type": "section",
+            "fields": [
+                {
+                    "type": "mrkdwn",
+                    "text": f"*Total Findings:*\n{total_findings}"
+                },
+                {
+                    "type": "mrkdwn",
+                    "text": f"*Severity Breakdown:*\n{severity_text}"
+                }
+            ]
+        })
+
+    payload = {
+        "text": f"SecuScan scan of {target} finished with status: {status}",
+        "blocks": blocks,
+        "scan_data": {
+            "task_id": task_id,
+            "tool_name": tool_name,
+            "target": target,
+            "status": status.lower(),
+            "duration_seconds": duration,
+            "total_findings": total_findings,
+            "severity_counts": severity_counts,
+            "error_message": task.get("error_message")
+        }
+    }
+
+    try:
+        ok, error = await send_webhook(webhook_url, payload)
+        if ok:
+            logger.info("Slack notification for task %s sent successfully", task_id)
+        else:
+            logger.warning("Failed to send Slack notification for task %s: %s", task_id, error)
+    except Exception as exc:
+        logger.error("Error sending Slack notification for task %s: %s", task_id, exc, exc_info=True)

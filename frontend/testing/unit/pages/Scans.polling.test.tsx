@@ -135,6 +135,51 @@ describe('Scans — visibility-aware polling', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(3);
   });
 
+  it('updates scan status badges automatically during polling', async () => {
+    const runningResponse = {
+      tasks: [{
+        task_id: 'task-123',
+        plugin_id: 'nmap',
+        tool: 'Automatic Status Scan',
+        target: 'auto.example.com',
+        status: 'running',
+        created_at: '2026-05-29T10:00:00Z',
+        started_at: '2026-05-29T10:01:00Z',
+      }],
+      pagination: { total_items: 1 },
+    };
+
+    const completedResponse = {
+      tasks: [{
+        task_id: 'task-123',
+        plugin_id: 'nmap',
+        tool: 'Automatic Status Scan',
+        target: 'auto.example.com',
+        status: 'completed',
+        created_at: '2026-05-29T10:00:00Z',
+        started_at: '2026-05-29T10:01:00Z',
+        completed_at: '2026-05-29T10:05:00Z',
+      }],
+      pagination: { total_items: 1 },
+    };
+
+    fetchSpy.mockReset();
+    fetchSpy
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(runningResponse) } as Response)
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(completedResponse) } as Response);
+
+    renderScans();
+    await flush();
+
+    expect(screen.getByText('running')).toBeInTheDocument();
+
+    await tickTime(5_000);
+    await flush();
+
+    expect(screen.getByText('completed')).toBeInTheDocument();
+    expect(screen.queryByText('running')).not.toBeInTheDocument();
+  });
+
   it('stops polling entirely when the tab is hidden', async () => {
     renderScans();
     await flush();

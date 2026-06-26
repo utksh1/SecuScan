@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate, Link } from 'react-router-dom'
 import { routes } from '../routes'
@@ -18,6 +18,8 @@ import {
 import { getDashboardSummary, getReports, API_BASE } from '../api'
 import { usePreferredExportFormat } from '../hooks/usePreferredExportFormat'
 import { formatDateLong, isWithinDateRange, type DateRange } from '../utils/date'
+import html2canvas from 'html2canvas'
+import jsPDF from 'jspdf'
 
 type Report = {
   id: string
@@ -97,6 +99,48 @@ export default function Reports() {
   const [selectedDateRange, setSelectedDateRange] = useState<DateRange>('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const reportRefs = useRef<Record<string, HTMLDivElement | null>>({})
+
+  const downloadPdfReport = async (report: Report) => {
+    const element = reportRefs.current[report.id]
+
+    if (!element) return
+
+    try {
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        backgroundColor: '#111111',
+      })
+
+      const imageData = canvas.toDataURL('image/png')
+
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      })
+
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+
+      const imgHeight =
+        (canvas.height * pdfWidth) / canvas.width
+
+      pdf.addImage(
+        imageData,
+        'PNG',
+        0,
+        0,
+        pdfWidth,
+        imgHeight
+      )
+
+      pdf.save(
+        `${report.name.replace(/\s+/g, '_')}.pdf`
+      )
+    } catch (error) {
+      console.error('PDF generation failed', error)
+    }
+  }
   const { preferred: preferredFormat, savePreference } = usePreferredExportFormat()
   const latestReadyReport = [...reports]
     .filter((report) => report.status === 'ready')
@@ -335,6 +379,9 @@ export default function Reports() {
                 >
                   {filteredReports.map((report) => (
                     <motion.div
+                      ref={(el) => {
+                        reportRefs.current[report.id] = el
+                      }}
                       key={report.id}
                       variants={itemVariants}
                       className="group bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[14px_14px_0px_0px_rgba(0,0,0,1)] transition-all relative overflow-hidden"
@@ -390,7 +437,16 @@ export default function Reports() {
                               className="bg-charcoal-dark border-4 border-black p-3 text-silver/20 group-hover:text-silver-bright group-hover:bg-black transition-all"
                               title="View Briefing" aria-label="View briefing"
                             >
-                              <ReportIcon icon={ScanEyeIcon} size={18} aria-hidden="true"/>
+                              <ReportIcon icon={ScanEyeIcon} size={18} aria-hidden="true" />
+                            </button>
+
+                            <button
+                              onClick={() => downloadPdfReport(report)}
+                              aria-label={`Download rendered PDF of ${report.name}`}
+                              className="bg-rag-green border-4 border-black px-3 py-2 text-[9px] font-black uppercase tracking-widest text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
+                              title="Download PDF Report"
+                            >
+                              Quick PDF
                             </button>
                             {(() => {
                               const ordered = preferredFormat
@@ -433,7 +489,24 @@ export default function Reports() {
                     </motion.div>
                   ))}
 
-                  {filteredReports.length === 0 && (
+                  {filteredReports.length === 0 && reports.length === 0 && (
+                    <div className="col-span-2 py-40 border-4 border-dashed border-rag-blue/10 text-center flex flex-col items-center gap-8 bg-charcoal/30">
+                      <ReportIcon icon={Archive02Icon} size={120} className="text-rag-blue/15" aria-hidden="true" />
+                      <div className="space-y-3 max-w-md">
+                        <p className="text-xl font-black text-silver-bright uppercase tracking-[0.3em] italic">No Briefings Yet</p>
+                        <p className="text-xs font-mono text-silver/30 uppercase tracking-widest leading-relaxed">
+                            Run a scan from the Toolkit to generate your first report. Completed scans appear here automatically.
+                        </p>
+                      </div>
+                      <Link
+                        to={routes.toolkit}
+                        className="bg-rag-blue border-4 border-black px-8 py-4 text-[10px] font-black uppercase tracking-[0.3em] text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
+                      >
+                        Launch_First_Scan
+                      </Link>
+                    </div>
+                  )}
+                  {filteredReports.length === 0 && reports.length > 0 && (
                     <div className="col-span-2 py-40 border-4 border-dashed border-black/5 text-center flex flex-col items-center gap-8 bg-charcoal/30">
                       <ReportIcon icon={Archive02Icon} size={120} className="text-silver/5" aria-hidden="true" />
                       <div className="space-y-2">

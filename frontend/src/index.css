@@ -14,6 +14,8 @@
    Design Tokens
    ============================================ */
 :root {
+  color-scheme: dark;
+
   /* Core Palette - Premium SOC */
   --bg-primary: #0a0b0d;
   /* Deep Onyx */
@@ -63,12 +65,33 @@
   --sidebar-expanded: 280px;
 }
 
+/* Light mode keeps the same semantic palette while swapping its surfaces and
+   text values. Tailwind's custom charcoal/silver utilities resolve to these
+   variables, so one root class updates the entire application. */
+:root.theme-light {
+  color-scheme: light;
+
+  --bg-primary: #f4f6f8;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #e8edf2;
+  --bg-elevated: #dce3ea;
+
+  --accent-silver: #64748b;
+  --accent-silver-dim: #64748b;
+  --accent-silver-bright: #111827;
+
+  --text-primary: #111827;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+}
+
 /* Base Overrides */
 body {
   background-color: var(--bg-primary);
   color: var(--accent-silver);
   font-family: var(--font-sans);
   text-rendering: optimizeLegibility;
+  transition: background-color 200ms ease, color 200ms ease;
 }
 
 @layer components {
@@ -3854,4 +3877,20 @@ button,
   .scanner-tab {
     white-space: nowrap;
   }
+}
+
+/* ============================================
+   Light Theme Overrides
+   ============================================ */
+.theme-light {
+  --bg-primary: #f8f9fa;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f1f3f5;
+  --bg-elevated: #e9ecef;
+  --accent-silver: #6c757d;
+  --accent-silver-dim: #adb5bd;
+  --accent-silver-bright: #212529;
+  --text-primary: #212529;
+  --text-secondary: #495057;
+  --text-muted: #6c757d;
 }

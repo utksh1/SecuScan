@@ -20,12 +20,18 @@ from .routes_json_helpers import (
     deserialize_finding_rows,
     parse_json_fields,
 )
+from .routes_report_helpers import (
+    _slugify_filename_part,
+    build_report_filename,
+)
 
 __all__ = [
     "FINDING_JSON_FIELDS",
     "parse_json_fields",
     "deserialize_finding_rows",
     "deserialize_asset_service_rows",
+    "_slugify_filename_part",
+    "build_report_filename",
 ]
 
 def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
@@ -74,24 +80,6 @@ def _json_payload(value: Any, fallback: str) -> str:
 
 from .validation import is_filesystem_target  # noqa: E402
 
-def _slugify_filename_part(value: str, fallback: str) -> str:
-    cleaned = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
-    return cleaned or fallback
-
-def build_report_filename(task: Dict[str, Any], extension: str) -> str:
-    tool = _slugify_filename_part(str(task.get("tool_name") or task.get("plugin_id") or "scan"), "scan")
-
-    raw_target = str(task.get("target") or "")
-    parsed = urlparse(raw_target if "://" in raw_target else f"//{raw_target}")
-    target_source = parsed.netloc or parsed.path or raw_target
-    target = _slugify_filename_part(target_source, "target")
-
-    created_at = str(task.get("created_at") or "")
-    date_match = re.search(r"\d{4}-\d{2}-\d{2}", created_at)
-    date_part = date_match.group(0) if date_match else "report"
-
-    return f"secuscan_{tool}_{target}_{date_part}.{extension}"
-
 logger = logging.getLogger(__name__)
 
 from .cache import get_cache, invalidate_view_cache
@@ -116,10 +104,11 @@ from .ratelimit import (
     resolve_client_identity, admin_limiter,
     scheduler_tick_limiter,
 )
-from .validation import validate_target, validate_task_start_payload, validate_url
+from .rate_limiter import check_scan_rate_limit
+from .validation import validate_target, validate_task_start_payload, validate_url, validate_preset_name
 from .reporting import reporting
 from .vault import VaultCrypto
-from .workflows import scheduler
+from .workflows import scheduler, _finalize_workflow_run
 from .auth import require_api_key, get_current_owner
 from .execution_context import is_offensive_validation, normalize_execution_context
 from .finding_intelligence import build_asset_summary, build_finding_groups
@@ -205,8 +194,6 @@ async def get_or_set_cached(key: str, builder):
     value = await builder()
     await cache.set_json(key, value)
     return value
-
-
 
 
 async def require_owned_task(db, task_id: str, owner: str, columns: str = "owner_id") -> Dict[str, Any]:
@@ -323,7 +310,7 @@ async def get_all_presets():
     }
 
 
-@router.post("/task/start", dependencies=[Depends(task_start_limiter)])
+@router.post("/task/start", dependencies=[Depends(task_start_limiter), Depends(check_scan_rate_limit)])
 async def start_task(
     request: TaskCreateRequest,
     background_tasks: BackgroundTasks,
@@ -355,6 +342,15 @@ async def start_task(
     if not plugin:
         logger.warning(f"Task start failed: Plugin not found: {request.plugin_id}")
         raise HTTPException(status_code=404, detail=f"Plugin not found: {request.plugin_id}")
+
+    preset_ok, preset_error = validate_preset_name(
+        request.plugin_id,
+        request.preset,
+        plugin.presets,
+    )
+    if not preset_ok:
+        logger.warning("Task start failed: %s", preset_error)
+        raise HTTPException(status_code=400, detail=preset_error)
 
     db = await get_db()
     target_policy = await get_target_policy(db, owner, execution_context.get("target_policy_id"))
@@ -481,6 +477,69 @@ async def start_task(
         "status": "queued",
         "created_at": "now",
         "stream_url": f"/api/v1/task/{task_id}/stream"
+    }
+
+@router.post("/task/{task_id}/retry", dependencies=[Depends(task_start_limiter) , Depends(check_scan_rate_limit)])
+async def retry_task(
+    task_id: str,
+    background_tasks: BackgroundTasks,
+    raw_request: Request,
+    owner: str = Depends(get_current_owner),
+):
+    """
+    Retry a failed or cancelled scan task.
+    """
+    db = await get_db()
+    task = await require_owned_task(db, task_id, owner, columns="id, owner_id, status, plugin_id")
+
+    if task["status"] in ["queued", "running"]:
+        raise HTTPException(status_code=409, detail="Task is already queued or running")
+    elif task["status"] not in ["failed", "cancelled"]:
+        raise HTTPException(status_code=400, detail="Only failed or cancelled tasks can be retried")
+
+    # Check plugin rate limits
+    plugin_manager = await get_plugin_manager_for_request()
+    plugin = plugin_manager.get_plugin(task["plugin_id"])
+    if not plugin:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {task['plugin_id']}")
+
+    client_id = resolve_client_identity(raw_request)
+    can_execute, error_msg = await rate_limiter.can_execute(
+        task["plugin_id"],
+        plugin.safety.get("rate_limit", {}).get("max_per_hour", settings.max_tasks_per_hour),
+        client_id=client_id,
+    )
+
+    if not can_execute:
+        raise HTTPException(status_code=429, detail=error_msg)
+
+    # Atomic update to prevent duplicate reruns if called rapidly
+    cursor = await db.execute(
+        "UPDATE tasks SET status = 'queued', error_message = NULL, exit_code = NULL, "
+        "started_at = NULL, completed_at = NULL "
+        "WHERE id = ? AND status IN ('failed', 'cancelled')",
+        (task_id,)
+    )
+    if cursor.rowcount == 0:
+        raise HTTPException(status_code=409, detail="Task is already queued or running")
+
+    # Cleanup previous findings and reports for a fresh retry
+    await db.execute("DELETE FROM findings WHERE task_id = ?", (task_id,))
+    await db.execute("DELETE FROM reports WHERE task_id = ?", (task_id,))
+
+    # Re-acquire concurrency slot
+    can_acquire, error_msg = await concurrent_limiter.acquire(task_id)
+    if not can_acquire:
+        await executor.mark_task_failed(task_id, reason="Concurrency limit reached; task was not retried")
+        raise HTTPException(status_code=503, detail=error_msg)
+
+    background_tasks.add_task(executor.execute_task, task_id)
+    await invalidate_view_cache()
+
+    return {
+        "task_id": task_id,
+        "status": "queued",
+        "message": "Task retry initiated"
     }
 
 @router.get("/task/{task_id}/status")
@@ -866,37 +925,56 @@ async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
     async def build():
         db = await get_db()
 
+        async def query_or_default(label: str, query_fn: Callable[[], Any], default: Any) -> Any:
+            try:
+                return await query_fn()
+            except Exception as exc:
+                logger.warning("Dashboard summary query '%s' failed for owner %s: %s", label, owner, exc)
+                return default
+
         # Get data
         # Push severity aggregation to DB — avoids full table scan in Python.
         # Every aggregate below is scoped to the caller so the dashboard never
         # surfaces another user/workspace's tasks or findings (issue #401).
-        severity_rows = await db.fetchall(
-            """
-            SELECT severity, COUNT(*) AS cnt
-            FROM findings
-            WHERE owner_id = ?
-            GROUP BY severity
-            """,
-            (owner,),
+        severity_rows = await query_or_default(
+            "severity_counts",
+            lambda: db.fetchall(
+                """
+                SELECT severity, COUNT(*) AS cnt
+                FROM findings
+                WHERE owner_id = ?
+                GROUP BY severity
+                """,
+                (owner,),
+            ),
+            [],
         )
         severity_counts = {row["severity"]: row["cnt"] for row in severity_rows}
 
-        task_stats = await db.fetchone(
-            """
-            SELECT
-                COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE status = 'completed') AS completed,
-                COUNT(*) FILTER (WHERE status = 'running') AS running
-            FROM tasks
-            WHERE owner_id = ?
-            """,
-            (owner,),
+        task_stats = await query_or_default(
+            "task_stats",
+            lambda: db.fetchone(
+                """
+                SELECT
+                    COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE status = 'completed') AS completed,
+                    COUNT(*) FILTER (WHERE status = 'running') AS running
+                FROM tasks
+                WHERE owner_id = ?
+                """,
+                (owner,),
+            ),
+            {"total": 0, "completed": 0, "running": 0},
         )
 
-        total_findings_row = await db.fetchone(
-            "SELECT COUNT(*) AS total FROM findings WHERE owner_id = ?", (owner,)
+        total_findings_row = await query_or_default(
+            "total_findings",
+            lambda: db.fetchone(
+                "SELECT COUNT(*) AS total FROM findings WHERE owner_id = ?", (owner,)
+            ),
+            None,
         )
-        total_findings = total_findings_row["total"] if total_findings_row else 0
+        total_findings = total_findings_row["total"] if total_findings_row else sum(severity_counts.values())
 
         critical_findings: int = severity_counts.get("critical", 0)
         high_findings: int = severity_counts.get("high", 0)
@@ -905,19 +983,23 @@ async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
         info_findings: int = severity_counts.get("info", 0)
 
         # Fetch only the 5 most recent findings — not the entire table
-        recent_rows = await db.fetchall(
-            """
-            SELECT id, title, category, severity, target, description,
-                remediation, proof, cvss, cve, discovered_at,
-                validated, validation_method, confidence_reason,
-                service_fingerprint, cpe, risk_score, risk_factors_json,
-                evidence_json, asset_refs_json, references_json, metadata_json
-            FROM findings
-            WHERE owner_id = ?
-            ORDER BY discovered_at DESC
-            LIMIT 5
-            """,
-            (owner,),
+        recent_rows = await query_or_default(
+            "recent_findings",
+            lambda: db.fetchall(
+                """
+                SELECT id, title, category, severity, target, description,
+                    remediation, proof, cvss, cve, discovered_at,
+                    validated, validation_method, confidence_reason,
+                    service_fingerprint, cpe, risk_score, risk_factors_json,
+                    evidence_json, asset_refs_json, references_json, metadata_json
+                FROM findings
+                WHERE owner_id = ?
+                ORDER BY discovered_at DESC
+                LIMIT 5
+                """,
+                (owner,),
+            ),
+            [],
         )
         recent_findings: List[Dict] = parse_json_fields(
             recent_rows,
@@ -955,16 +1037,24 @@ async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
                 "running": int(task_stats["running"]) if task_stats and task_stats.get("running") is not None else 0,
             },
             "running_tasks": parse_json_fields(
-                await db.fetchall(
-                    "SELECT id, plugin_id, tool_name, target, status, created_at FROM tasks WHERE owner_id = ? AND status = 'running' ORDER BY created_at DESC LIMIT 5",
-                    (owner,),
+                await query_or_default(
+                    "running_tasks",
+                    lambda: db.fetchall(
+                        "SELECT id, plugin_id, tool_name, target, status, created_at FROM tasks WHERE owner_id = ? AND status = 'running' ORDER BY created_at DESC LIMIT 5",
+                        (owner,),
+                    ),
+                    [],
                 ),
                 []
             ),
             "recent_tasks": parse_json_fields(
-                await db.fetchall(
-                    "SELECT id, plugin_id, tool_name, target, status, created_at, duration_seconds FROM tasks WHERE owner_id = ? ORDER BY created_at DESC LIMIT 5",
-                    (owner,),
+                await query_or_default(
+                    "recent_tasks",
+                    lambda: db.fetchall(
+                        "SELECT id, plugin_id, tool_name, target, status, created_at, duration_seconds FROM tasks WHERE owner_id = ? ORDER BY created_at DESC LIMIT 5",
+                        (owner,),
+                    ),
+                    [],
                 ),
                 []
             )
@@ -1192,8 +1282,7 @@ async def delete_task_records(task_ids: List[str]):
         all_task_rows.extend(rows)
 
     # Delete associated records in chunks, atomic within a transaction
-    await db.begin()
-    try:
+    async with db.transaction():
         # Re-check running status inside the transaction to prevent the
         # race where a task starts running between the check and the delete.
         for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
@@ -1234,13 +1323,6 @@ async def delete_task_records(task_ids: List[str]):
             await db.execute_no_commit(
                 f"DELETE FROM tasks                WHERE id         IN ({placeholders})", tuple(chunk)
             )
-        await db.commit()
-    except HTTPException:
-        await db.rollback()
-        raise
-    except Exception:
-        await db.rollback()
-        raise
 
     # Cleanup files on disk (outside the transaction — file deletion is not
     # transactional; a failure here does not leave the DB in an inconsistent
@@ -1393,16 +1475,28 @@ async def get_settings():
 
 
 @router.get("/vault", dependencies=[Depends(vault_limiter)])
-async def list_vault_secrets():
+async def list_vault_secrets(
+    owner: str = Depends(get_current_owner),
+):
     db = await get_db()
     rows = await db.fetchall(
-        "SELECT id, name, created_at, updated_at FROM credential_vault ORDER BY name ASC"
+        """
+        SELECT id, name, created_at, updated_at
+        FROM credential_vault
+        WHERE owner_id = ?
+        ORDER BY name ASC
+        """,
+        (owner,),
     )
     return {"items": rows, "total": len(rows)}
 
 
 @router.put("/vault/{name}", dependencies=[Depends(vault_limiter)])
-async def upsert_vault_secret(name: str, payload: Dict[str, str]):
+async def upsert_vault_secret(
+    name: str,
+    payload: Dict[str, str],
+    owner: str = Depends(get_current_owner),
+):
     value = str(payload.get("value", ""))
     if not value:
         raise HTTPException(status_code=400, detail="Secret value is required")
@@ -1412,36 +1506,68 @@ async def upsert_vault_secret(name: str, payload: Dict[str, str]):
     encrypted = crypto.encrypt(value)
     secret_id = str(uuid.uuid4())
 
-    existing = await db.fetchone("SELECT id FROM credential_vault WHERE name = ?", (name,))
-    if existing:
-        await db.execute(
-            "UPDATE credential_vault SET encrypted_value = ?, updated_at = datetime('now') WHERE name = ?",
-            (encrypted, name),
+    async with db.transaction():
+        existing = await db.fetchone(
+            "SELECT id FROM credential_vault WHERE owner_id = ? AND name = ?",
+            (owner, name),
         )
-    else:
-        await db.execute(
-            "INSERT INTO credential_vault (id, name, encrypted_value) VALUES (?, ?, ?)",
-            (secret_id, name, encrypted),
-        )
+        if existing:
+            await db.execute(
+                "UPDATE credential_vault SET encrypted_value = ?, updated_at = datetime('now') WHERE owner_id = ? AND name = ?",
+                (encrypted, owner, name),
+            )
+        else:
+            await db.execute(
+                "INSERT INTO credential_vault (id, owner_id, name, encrypted_value) VALUES (?, ?, ?, ?)",
+                (secret_id, owner, name, encrypted),
+            )
     return {"name": name, "stored": True}
 
-
 @router.get("/vault/{name}", dependencies=[Depends(vault_limiter)])
-async def get_vault_secret(name: str):
+async def get_vault_secret(
+    name: str,
+    owner: str = Depends(get_current_owner),
+):
     db = await get_db()
-    row = await db.fetchone("SELECT encrypted_value FROM credential_vault WHERE name = ?", (name,))
+
+    row = await db.fetchone(
+        """
+        SELECT encrypted_value
+        FROM credential_vault
+        WHERE owner_id = ? AND name = ?
+        """,
+        (owner, name),
+    )
+
     if not row:
         raise HTTPException(status_code=404, detail="Secret not found")
-    crypto = VaultCrypto(settings.resolved_vault_key)
-    return {"name": name, "value": crypto.decrypt(row["encrypted_value"])}
 
+    crypto = VaultCrypto(settings.resolved_vault_key)
+
+    return {
+        "name": name,
+        "value": crypto.decrypt(row["encrypted_value"]),
+    }
 
 @router.delete("/vault/{name}", dependencies=[Depends(vault_limiter)])
-async def delete_vault_secret(name: str):
+async def delete_vault_secret(
+    name: str,
+    owner: str = Depends(get_current_owner),
+):
     db = await get_db()
-    await db.execute("DELETE FROM credential_vault WHERE name = ?", (name,))
-    return {"name": name, "deleted": True}
 
+    await db.execute(
+        """
+        DELETE FROM credential_vault
+        WHERE owner_id = ? AND name = ?
+        """,
+        (owner, name),
+    )
+
+    return {
+        "name": name,
+        "deleted": True,
+    }
 
 @router.get("/target-policies")
 async def list_target_policies(owner: str = Depends(get_current_owner)):
@@ -1736,7 +1862,7 @@ async def _verify_workflow_owner(db, workflow_id: str, owner: str):
     return row
 
 
-@router.post("/workflows/{workflow_id}/run")
+@router.post("/workflows/{workflow_id}/run", dependencies=[Depends(check_scan_rate_limit)])
 async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_owner)):
     db = await get_db()
     row = await _verify_workflow_owner(db, workflow_id, owner)
@@ -1751,8 +1877,17 @@ async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_o
         "WHERE workflow_id = ? ORDER BY version_number DESC LIMIT 1",
         (workflow_id,),
     )
-    version_id = active_version["id"] if active_version else None
-    version_number = active_version["version_number"] if active_version else None
+    if not active_version:
+        active_version = await db.snapshot_workflow_version(
+            workflow_id=workflow_id,
+            name=row["name"],
+            schedule_seconds=row["schedule_seconds"],
+            enabled=bool(row["enabled"]),
+            steps=steps,
+            created_by="system",
+        )
+    version_id = active_version["id"]
+    version_number = active_version["version_number"]
     created_task_ids: List[str] = []
     for step in steps:
         execution_context = normalize_execution_context(step.get("execution_context") or {})
@@ -1792,34 +1927,6 @@ async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_o
         "queued_tasks": created_task_ids,
     }
 
-
-async def _finalize_workflow_run(run_id: str, poll_interval: float = 5.0, max_polls: int = 720) -> None:
-    """Background task that polls task statuses and marks the run terminal.
-
-    Polls every *poll_interval* seconds for up to *max_polls* iterations
-    (default: 5 s × 720 = 1 hour). If tasks are still running after the
-    limit, the run is marked failed with a timeout message so it never stays
-    permanently in the 'queued' state.
-    """
-    from .database import get_db as _get_db
-    for _ in range(max_polls):
-        await asyncio.sleep(poll_interval)
-        try:
-            db = await _get_db()
-            terminal_status = await db.check_workflow_run_tasks(run_id)
-            if terminal_status is not None:
-                await db.finalize_workflow_run(run_id, terminal_status)
-                return
-        except Exception as exc:
-            logger.warning("workflow run finalization error for %s: %s", run_id, exc)
-            return
-    try:
-        db = await _get_db()
-        await db.finalize_workflow_run(
-            run_id, "failed", "Run finalization timed out — check individual task statuses"
-        )
-    except Exception as exc:
-        logger.warning("workflow run timeout finalization failed for %s: %s", run_id, exc)
 
 
 @router.get("/workflows/{workflow_id}/runs")
@@ -1890,6 +1997,10 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any], owner: str 
     db = await get_db()
     row = await _verify_workflow_owner(db, workflow_id, owner)
 
+    old_enabled = bool(row["enabled"])
+    new_enabled = old_enabled
+    enabled_changed = False
+
     updates = []
     params: List[Any] = []
     if "name" in payload:
@@ -1903,12 +2014,12 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any], owner: str 
         updates.append("schedule_seconds = ?")
         params.append(int(val) if val else None)
     if "enabled" in payload:
+        new_enabled = bool(payload["enabled"])
+
         updates.append("enabled = ?")
-        params.append(1 if payload["enabled"] else 0)
+        params.append(1 if new_enabled else 0)
 
-    if not updates:
-        raise HTTPException(status_code=400, detail="No update fields provided")
-
+        enabled_changed = (new_enabled != old_enabled)
     params.append(workflow_id)
     await db.execute(f"UPDATE workflows SET {', '.join(updates)} WHERE id = ?", tuple(params))
     updated = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
@@ -1922,6 +2033,25 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any], owner: str 
         steps=json.loads(updated["steps_json"] or "[]"),
         created_by="patch",
     )
+
+    if enabled_changed:
+        await db.log_audit(
+            event_type=(
+                "workflow_enabled"
+                if new_enabled
+                else "workflow_disabled"
+            ),
+            message=(
+                f"Workflow {workflow_id} "
+                f"{'enabled' if new_enabled else 'disabled'}"
+            ),
+            context={
+                "workflow_id": workflow_id,
+                "actor": owner,
+                "previous_state": old_enabled,
+                "new_state": new_enabled,
+            },
+        )
     return _serialize_workflow(updated)
 
 
@@ -1933,7 +2063,7 @@ async def delete_workflow(workflow_id: str, owner: str = Depends(get_current_own
     return {"workflow_id": workflow_id, "deleted": True}
 
 
-@router.post("/workflows/scheduler/tick", dependencies=[Depends(scheduler_tick_limiter)])
+@router.post("/workflows/scheduler/tick", dependencies=[Depends(scheduler_tick_limiter), Depends(check_scan_rate_limit)])
 async def trigger_workflow_tick():
     await scheduler.tick()
     return {"tick": "ok"}
@@ -1982,6 +2112,21 @@ async def create_notification_rule(payload: NotificationRuleCreate, owner: str =
     if not row:
         raise HTTPException(status_code=500, detail="Failed to create notification rule")
     return _serialize_notification_rule(row)
+
+@router.get("/rate-limit/status")
+async def get_rate_limit_status(request: Request):
+    """Get current rate limit status for the client."""
+    limiter = getattr(request.app.state, 'scan_rate_limiter', None)
+    if limiter and hasattr(limiter, 'get_status'):
+        client_id = request.client.host if request.client else "unknown"
+        status_info = await limiter.get_status(client_id)
+        return {
+            "status": "enabled",
+            "client": client_id,
+            "remaining": status_info.get("remaining", 0),
+            "reset_in": status_info.get("reset_in", 0),
+        }
+    return {"status": "disabled", "message": "Rate limiting is not enabled"}
 
 
 async def _verify_notification_rule_owner(db, rule_id: str, owner: str):

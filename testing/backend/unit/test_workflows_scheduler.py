@@ -99,6 +99,8 @@ def _make_mock_db():
     mock_db = MagicMock()
     mock_db.fetchone = AsyncMock(return_value=None)
     mock_db.fetchall = AsyncMock(return_value=[])
+    mock_db.snapshot_workflow_version = AsyncMock(return_value={"id": "v-1", "version_number": 1})
+    mock_db.record_workflow_run = AsyncMock(return_value="run-1")
     return mock_db
 
 

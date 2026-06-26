@@ -3,10 +3,11 @@ SQLite database access for SecuScan.
 """
 
 import asyncio
+import contextlib
 import json
 import sqlite3
 from pathlib import Path
-from typing import Any, Optional, List, Dict
+from typing import Any, Optional, List, Dict, AsyncIterator
 
 import aiosqlite
 from .config import settings
@@ -27,7 +28,9 @@ class Database:
     def connection(self) -> aiosqlite.Connection:
         """Get the active database connection, raising an error if it's not connected."""
         if self._connection is None:
-            raise RuntimeError("Database not connected. Did you forget to await connect()?")
+            raise RuntimeError(
+                "Database not connected. Did you forget to await connect()?"
+            )
         return self._connection
 
     async def connect(self):
@@ -64,6 +67,7 @@ class Database:
                 preset TEXT,
                 status TEXT NOT NULL DEFAULT 'queued',
                 scan_phase TEXT,
+                phase_timestamps_json TEXT NOT NULL DEFAULT '{}',
                 consent_granted BOOLEAN NOT NULL DEFAULT 0,
                 safe_mode BOOLEAN NOT NULL DEFAULT 1,
                 created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
@@ -267,11 +271,18 @@ class Database:
 
             CREATE TABLE IF NOT EXISTS credential_vault (
                 id TEXT PRIMARY KEY,
-                name TEXT NOT NULL UNIQUE,
+                owner_id TEXT NOT NULL DEFAULT 'default',
+                name TEXT NOT NULL,
                 encrypted_value TEXT NOT NULL,
                 created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-                updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
-            );
+                updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(owner_id, name)
+                );
+
+
+
+CREATE INDEX IF NOT EXISTS idx_credential_vault_owner
+ON credential_vault(owner_id);
 
             CREATE TABLE IF NOT EXISTS workflows (
                 id TEXT PRIMARY KEY,
@@ -392,7 +403,7 @@ class Database:
         # Migration logic: ensure latest columns exist in 'tasks' table
         tasks_columns = await self.fetchall("PRAGMA table_info(tasks)")
         existing_cols = {col["name"] for col in tasks_columns}
-        
+
         needed_cols = {
             # Per-user ownership for BOLA prevention (issue #401). NOT NULL with a
             # constant default backfills every existing row to the shared default
@@ -410,13 +421,16 @@ class Database:
             "inputs_json": "TEXT NOT NULL DEFAULT '{}'",
             "execution_context_json": "TEXT NOT NULL DEFAULT '{}'",
             "preset": "TEXT",
-            "safe_mode": "BOOLEAN NOT NULL DEFAULT 1"
+            "safe_mode": "BOOLEAN NOT NULL DEFAULT 1",
+            "phase_timestamps_json": "TEXT NOT NULL DEFAULT '{}'"
         }
 
         for col_name, col_type in needed_cols.items():
             if col_name not in existing_cols:
                 try:
-                    await self.execute(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_type}")
+                    await self.execute(
+                        f"ALTER TABLE tasks ADD COLUMN {col_name} {col_type}"
+                    )
                     print(f"Added missing column {col_name} to tasks table.")
                 except Exception as e:
                     print(f"Failed to add column {col_name}: {e}")
@@ -460,7 +474,9 @@ class Database:
         for col_name, col_type in risk_cols.items():
             if col_name not in existing_finding_cols:
                 try:
-                    await self.execute(f"ALTER TABLE findings ADD COLUMN {col_name} {col_type}")
+                    await self.execute(
+                        f"ALTER TABLE findings ADD COLUMN {col_name} {col_type}"
+                    )
                     print(f"Added missing column {col_name} to findings table.")
                 except Exception as e:
                     print(f"Failed to add column {col_name}: {e}")
@@ -480,7 +496,9 @@ class Database:
         for col_name, col_type in asset_service_needed.items():
             if col_name not in existing_asset_service_cols:
                 try:
-                    await self.execute(f"ALTER TABLE asset_services ADD COLUMN {col_name} {col_type}")
+                    await self.execute(
+                        f"ALTER TABLE asset_services ADD COLUMN {col_name} {col_type}"
+                    )
                     print(f"Added missing column {col_name} to asset_services table.")
                 except Exception as e:
                     print(f"Failed to add column {col_name} to asset_services: {e}")
@@ -496,6 +514,66 @@ class Database:
                 print("Added missing column 'owner_id' to reports table.")
             except Exception as e:
                 print(f"Failed to add 'owner_id' to reports: {e}")
+
+        # Vault table migration: ensure owner_id exists
+        vault_columns = await self.fetchall(
+            "PRAGMA table_info(credential_vault)"
+            )
+        existing_vault_cols = {col["name"] for col in vault_columns}
+        vault_schema = await self.fetchone(
+            "SELECT sql FROM sqlite_master "
+            "WHERE type='table' AND name='credential_vault'"
+            )
+
+        if "owner_id" not in existing_vault_cols:
+            try:
+                await self.execute(
+                    "ALTER TABLE credential_vault "
+                    "ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'default'"
+                    )
+                print("Added missing column 'owner_id' to credential_vault table.")
+            except Exception as e:
+                print(f"Failed to add 'owner_id' to credential_vault: {e}")
+
+        if vault_schema:
+            ddl = vault_schema["sql"]
+            has_composite = "UNIQUE(owner_id, name)" in ddl
+            if not has_composite:
+                await self.connection.executescript(
+                    """CREATE TABLE credential_vault_new (
+                        id TEXT PRIMARY KEY,
+                        owner_id TEXT NOT NULL DEFAULT 'default',
+                        name TEXT NOT NULL,
+                        encrypted_value TEXT NOT NULL,
+                        created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                        updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                        UNIQUE(owner_id, name)
+                        );
+
+
+            INSERT INTO credential_vault_new
+            (
+                id,
+                owner_id,
+                name,
+                encrypted_value,
+                created_at,
+                updated_at
+            )
+            SELECT
+                id,
+                COALESCE(owner_id, 'default'),
+                name,
+                encrypted_value,
+                created_at,
+                updated_at
+            FROM credential_vault;
+
+            DROP TABLE credential_vault;
+            ALTER TABLE credential_vault_new
+            RENAME TO credential_vault;
+        """)
+                await self.connection.commit()
 
         # Workflows table migration: ensure owner_id and composite unique exist
         workflows_columns = await self.fetchall("PRAGMA table_info(workflows)")
@@ -548,7 +626,9 @@ class Database:
                         ALTER TABLE workflows_new RENAME TO workflows;
                     """)
                     await self.connection.commit()
-                    print("Replaced workflows UNIQUE(name) constraint with UNIQUE(owner_id, name).")
+                    print(
+                        "Replaced workflows UNIQUE(name) constraint with UNIQUE(owner_id, name)."
+                    )
                 finally:
                     if old_fk:
                         await self.execute("PRAGMA foreign_keys = ON")
@@ -571,19 +651,21 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_tasks_owner ON tasks(owner_id);
             CREATE INDEX IF NOT EXISTS idx_findings_owner ON findings(owner_id);
             CREATE INDEX IF NOT EXISTS idx_reports_owner ON reports(owner_id);
+            CREATE INDEX IF NOT EXISTS idx_credential_vault_owner ON credential_vault(owner_id);
             CREATE INDEX IF NOT EXISTS idx_workflows_owner ON workflows(owner_id);
             CREATE INDEX IF NOT EXISTS idx_notification_rules_owner ON notification_rules(owner_id);
             """
-        )
+            )
+
 
     async def _run_migrations(self):
         migrations_dir = Path(__file__).parent / "migrations"
 
         if not migrations_dir.exists():
             raise RuntimeError(
-            f"Migrations directory not found at {migrations_dir} — "
-            "ensure the backend package is installed correctly."
-        )
+                f"Migrations directory not found at {migrations_dir} — "
+                "ensure the backend package is installed correctly."
+            )
 
         for migration_file in sorted(migrations_dir.glob("*.sql")):
             sql = migration_file.read_text(encoding="utf-8")
@@ -599,6 +681,7 @@ class Database:
     async def _backfill_risk_scores(self):
         """Compute risk scores for existing findings that have none."""
         from datetime import datetime, timezone
+
         rows = await self.fetchall(
             "SELECT id, severity, exploitability, confidence, asset_exposure, discovered_at, risk_score FROM findings WHERE risk_score IS NULL"
         )
@@ -631,6 +714,27 @@ class Database:
                 (score, json.dumps(factors), row["id"]),
             )
         print(f"Backfilled risk scores for {len(rows)} existing finding(s).")
+
+    @contextlib.asynccontextmanager
+    async def transaction(self) -> AsyncIterator["Database"]:
+        """Context manager for atomic transactions.
+
+        Usage::
+
+            async with db.transaction():
+                await db.execute("INSERT INTO ...")
+                await db.execute("UPDATE ...")
+
+        If any statement raises, the entire transaction is rolled back.
+        On success the transaction is committed automatically.
+        """
+        await self.begin()
+        try:
+            yield self
+            await self.commit()
+        except Exception:
+            await self.rollback()
+            raise
 
     async def execute(self, query: str, params: tuple = ()):
         """Execute a write query and return the cursor (so callers can inspect rowcount)."""
@@ -713,7 +817,6 @@ class Database:
             ),
         )
 
-
     async def snapshot_workflow_version(
         self,
         workflow_id: str,
@@ -767,17 +870,21 @@ class Database:
                 defn = json.loads(row["definition_json"])
             except (json.JSONDecodeError, TypeError):
                 defn = {}
-            result.append({
-                "id": row["id"],
-                "workflow_id": row["workflow_id"],
-                "version_number": row["version_number"],
-                "definition": defn,
-                "created_at": row["created_at"],
-                "created_by": row["created_by"],
-            })
+            result.append(
+                {
+                    "id": row["id"],
+                    "workflow_id": row["workflow_id"],
+                    "version_number": row["version_number"],
+                    "definition": defn,
+                    "created_at": row["created_at"],
+                    "created_by": row["created_by"],
+                }
+            )
         return result
 
-    async def get_workflow_version(self, workflow_id: str, version_number: int) -> Optional[Dict]:
+    async def get_workflow_version(
+        self, workflow_id: str, version_number: int
+    ) -> Optional[Dict]:
         """Return a specific version record or None if it does not exist."""
         row = await self.fetchone(
             "SELECT id, workflow_id, version_number, definition_json, created_at, created_by "
@@ -813,11 +920,20 @@ class Database:
             "INSERT INTO workflow_runs "
             "(id, workflow_id, version_id, version_number, triggered_by, status, task_ids_json) "
             "VALUES (?, ?, ?, ?, ?, 'queued', ?)",
-            (run_id, workflow_id, version_id, version_number, triggered_by, json.dumps(task_ids)),
+            (
+                run_id,
+                workflow_id,
+                version_id,
+                version_number,
+                triggered_by,
+                json.dumps(task_ids),
+            ),
         )
         return run_id
 
-    async def finalize_workflow_run(self, run_id: str, status: str, error_message: Optional[str] = None) -> None:
+    async def finalize_workflow_run(
+        self, run_id: str, status: str, error_message: Optional[str] = None
+    ) -> None:
         """Mark a workflow run as completed, failed, or cancelled with a timestamp.
 
         status must be one of: completed | failed | cancelled.
@@ -838,7 +954,9 @@ class Database:
           'cancelled' if any task was cancelled and none are still running/queued.
           None        if tasks are still in progress.
         """
-        run_row = await self.fetchone("SELECT task_ids_json FROM workflow_runs WHERE id = ?", (run_id,))
+        run_row = await self.fetchone(
+            "SELECT task_ids_json FROM workflow_runs WHERE id = ?", (run_id,)
+        )
         if run_row is None:
             return None
         try:
@@ -863,10 +981,13 @@ class Database:
             return "cancelled"
         return "failed"
 
-    async def get_workflow_runs(self, workflow_id: str, limit: int = 50, offset: int = 0) -> Dict:
+    async def get_workflow_runs(
+        self, workflow_id: str, limit: int = 50, offset: int = 0
+    ) -> Dict:
         """Return paginated run history for a workflow."""
         count_row = await self.fetchone(
-            "SELECT COUNT(*) AS total FROM workflow_runs WHERE workflow_id = ?", (workflow_id,)
+            "SELECT COUNT(*) AS total FROM workflow_runs WHERE workflow_id = ?",
+            (workflow_id,),
         )
         total = count_row["total"] if count_row else 0
         rows = await self.fetchall(
@@ -880,18 +1001,20 @@ class Database:
                 task_ids = json.loads(row["task_ids_json"] or "[]")
             except (json.JSONDecodeError, TypeError):
                 task_ids = []
-            entries.append({
-                "id": row["id"],
-                "workflow_id": row["workflow_id"],
-                "version_id": row["version_id"],
-                "version_number": row["version_number"],
-                "triggered_by": row["triggered_by"],
-                "status": row["status"],
-                "task_ids": task_ids,
-                "started_at": row["started_at"],
-                "completed_at": row["completed_at"],
-                "error_message": row["error_message"],
-            })
+            entries.append(
+                {
+                    "id": row["id"],
+                    "workflow_id": row["workflow_id"],
+                    "version_id": row["version_id"],
+                    "version_number": row["version_number"],
+                    "triggered_by": row["triggered_by"],
+                    "status": row["status"],
+                    "task_ids": task_ids,
+                    "started_at": row["started_at"],
+                    "completed_at": row["completed_at"],
+                    "error_message": row["error_message"],
+                }
+            )
         return {"total": total, "runs": entries}
 
 

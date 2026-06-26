@@ -250,6 +250,7 @@ class TestCancelTaskProcessGroup:
             mock_get_db.return_value = mock_db
             mock_db.execute = AsyncMock()
             mock_db.log_audit = AsyncMock()
+            mock_db.transaction = MagicMock(return_value=AsyncMock())
 
             await executor.cancel_task("task-pg")
         mock_term.assert_awaited_once_with(7001, "task-pg")
@@ -273,6 +274,7 @@ class TestCancelTaskProcessGroup:
             mock_get_db.return_value = mock_db
             mock_db.execute = AsyncMock()
             mock_db.log_audit = AsyncMock()
+            mock_db.transaction = MagicMock(return_value=AsyncMock())
 
             await executor.cancel_task("task-nopid")
         mock_term.assert_not_awaited()

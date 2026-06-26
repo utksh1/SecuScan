@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import AppShell from './components/AppShell'
 import Dashboard from './pages/Dashboard'
 import Toolkit from './pages/Toolkit'
@@ -11,6 +11,7 @@ import Settings from './pages/Settings'
 import Scans from './pages/Scans'
 import TaskDetails from './pages/TaskDetails'
 import Workflows from './pages/Workflows'
+import NotFound from './pages/NotFound'
 import ApiKeySetupScreen from './components/ApiKeySetupScreen'
 import ErrorBoundary from './components/ErrorBoundary'
 
@@ -18,7 +19,7 @@ import { ThemeProvider } from './components/ThemeContext'
 import { ToastProvider } from './components/ToastContext'
 import { I18nProvider } from './components/I18nContext'
 import { routes } from './routes'
-import { AUTH_REQUIRED_EVENT, getStoredApiKey } from './api'
+import { AUTH_REQUIRED_EVENT, checkAuthSession } from './api'
 
 export function AppRoutes() {
   return (
@@ -34,14 +35,21 @@ export function AppRoutes() {
       <Route path={routes.settings} element={<Settings />} />
       <Route path={routes.task} element={<TaskDetails />} />
 
-      <Route path="*" element={<Navigate to={routes.dashboard} replace />} />
+      <Route path="*" element={<NotFound />} />
     </Routes>
   )
 }
 
 export default function App() {
-  // True when setup is needed: no key stored, or any request got a 401.
-  const [needsKey, setNeedsKey] = useState(() => !getStoredApiKey())
+  const [needsKey, setNeedsKey] = useState(true)
+  const [checkingSession, setCheckingSession] = useState(true)
+
+  useEffect(() => {
+    checkAuthSession().then((authenticated) => {
+      setNeedsKey(!authenticated)
+      setCheckingSession(false)
+    })
+  }, [])
 
   useEffect(() => {
     function onAuthRequired() {
@@ -51,14 +59,16 @@ export default function App() {
     return () => window.removeEventListener(AUTH_REQUIRED_EVENT, onAuthRequired)
   }, [])
 
+  if (checkingSession) {
+    return null
+  }
+
   return (
     <ThemeProvider>
       <I18nProvider>
         <ToastProvider>
           <ErrorBoundary>
             {needsKey ? (
-              // Render ONLY the setup screen — no page routes are mounted, so no
-              // API calls can fire and spam 401 failures before the key is saved.
               <ApiKeySetupScreen onSaved={() => setNeedsKey(false)} />
             ) : (
               <Router>

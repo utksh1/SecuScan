@@ -27,21 +27,24 @@
       "label": "Remote Host",
       "type": "string",
       "required": true,
-      "placeholder": "10.10.10.10"
+      "placeholder": "10.10.10.10",
+      "help": "Enter the authorized target host or IP address that the selected Metasploit module will operate against."
     },
     {
       "id": "module",
       "label": "Metasploit Module",
       "type": "string",
       "required": true,
-      "default": "exploit/multi/handler"
+      "default": "exploit/multi/handler",
+      "help": "Specify the Metasploit module path to execute, for example exploit/multi/handler."
     },
     {
       "id": "payload",
       "label": "Payload",
       "type": "string",
       "required": false,
-      "default": "generic/shell_reverse_tcp"
+      "default": "generic/shell_reverse_tcp",
+      "help": "Optional payload to use with the selected module. Ensure it is compatible with the chosen Metasploit module."
     }
   ],
   "presets": {
@@ -70,5 +73,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "80a4db676d52e83a27dcb1e51780678f8b8476b5745ff81b2896b35662cf2767"
+  "checksum": "53cab335dc65a9ff39877bb3cf8666c3ae0f196f7c80254ae8a395221de771b7"
 }

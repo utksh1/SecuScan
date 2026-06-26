@@ -1,5 +1,11 @@
 # SecuScan Plugin Catalogue
 
+## Plugin Development
+
+New contributors can follow the complete plugin creation walkthrough:
+
+docs/plugins/plugin-development-walkthrough.md
+
 This file is a human-readable index of the plugins currently present in `plugins/*/metadata.json`.
 
 Last synced: 2026-05-11
