@@ -105,7 +105,7 @@ from .ratelimit import (
     scheduler_tick_limiter,
 )
 from .rate_limiter import check_scan_rate_limit
-from .validation import validate_target, validate_task_start_payload, validate_url
+from .validation import validate_target, validate_task_start_payload, validate_url, validate_preset_name
 from .reporting import reporting
 from .vault import VaultCrypto
 from .workflows import scheduler, _finalize_workflow_run
@@ -342,6 +342,15 @@ async def start_task(
     if not plugin:
         logger.warning(f"Task start failed: Plugin not found: {request.plugin_id}")
         raise HTTPException(status_code=404, detail=f"Plugin not found: {request.plugin_id}")
+
+    preset_ok, preset_error = validate_preset_name(
+        request.plugin_id,
+        request.preset,
+        plugin.presets,
+    )
+    if not preset_ok:
+        logger.warning("Task start failed: %s", preset_error)
+        raise HTTPException(status_code=400, detail=preset_error)
 
     db = await get_db()
     target_policy = await get_target_policy(db, owner, execution_context.get("target_policy_id"))
@@ -916,37 +925,56 @@ async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
     async def build():
         db = await get_db()
 
+        async def query_or_default(label: str, query_fn: Callable[[], Any], default: Any) -> Any:
+            try:
+                return await query_fn()
+            except Exception as exc:
+                logger.warning("Dashboard summary query '%s' failed for owner %s: %s", label, owner, exc)
+                return default
+
         # Get data
         # Push severity aggregation to DB — avoids full table scan in Python.
         # Every aggregate below is scoped to the caller so the dashboard never
         # surfaces another user/workspace's tasks or findings (issue #401).
-        severity_rows = await db.fetchall(
-            """
-            SELECT severity, COUNT(*) AS cnt
-            FROM findings
-            WHERE owner_id = ?
-            GROUP BY severity
-            """,
-            (owner,),
+        severity_rows = await query_or_default(
+            "severity_counts",
+            lambda: db.fetchall(
+                """
+                SELECT severity, COUNT(*) AS cnt
+                FROM findings
+                WHERE owner_id = ?
+                GROUP BY severity
+                """,
+                (owner,),
+            ),
+            [],
         )
         severity_counts = {row["severity"]: row["cnt"] for row in severity_rows}
 
-        task_stats = await db.fetchone(
-            """
-            SELECT
-                COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE status = 'completed') AS completed,
-                COUNT(*) FILTER (WHERE status = 'running') AS running
-            FROM tasks
-            WHERE owner_id = ?
-            """,
-            (owner,),
+        task_stats = await query_or_default(
+            "task_stats",
+            lambda: db.fetchone(
+                """
+                SELECT
+                    COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE status = 'completed') AS completed,
+                    COUNT(*) FILTER (WHERE status = 'running') AS running
+                FROM tasks
+                WHERE owner_id = ?
+                """,
+                (owner,),
+            ),
+            {"total": 0, "completed": 0, "running": 0},
         )
 
-        total_findings_row = await db.fetchone(
-            "SELECT COUNT(*) AS total FROM findings WHERE owner_id = ?", (owner,)
+        total_findings_row = await query_or_default(
+            "total_findings",
+            lambda: db.fetchone(
+                "SELECT COUNT(*) AS total FROM findings WHERE owner_id = ?", (owner,)
+            ),
+            None,
         )
-        total_findings = total_findings_row["total"] if total_findings_row else 0
+        total_findings = total_findings_row["total"] if total_findings_row else sum(severity_counts.values())
 
         critical_findings: int = severity_counts.get("critical", 0)
         high_findings: int = severity_counts.get("high", 0)
@@ -955,19 +983,23 @@ async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
         info_findings: int = severity_counts.get("info", 0)
 
         # Fetch only the 5 most recent findings — not the entire table
-        recent_rows = await db.fetchall(
-            """
-            SELECT id, title, category, severity, target, description,
-                remediation, proof, cvss, cve, discovered_at,
-                validated, validation_method, confidence_reason,
-                service_fingerprint, cpe, risk_score, risk_factors_json,
-                evidence_json, asset_refs_json, references_json, metadata_json
-            FROM findings
-            WHERE owner_id = ?
-            ORDER BY discovered_at DESC
-            LIMIT 5
-            """,
-            (owner,),
+        recent_rows = await query_or_default(
+            "recent_findings",
+            lambda: db.fetchall(
+                """
+                SELECT id, title, category, severity, target, description,
+                    remediation, proof, cvss, cve, discovered_at,
+                    validated, validation_method, confidence_reason,
+                    service_fingerprint, cpe, risk_score, risk_factors_json,
+                    evidence_json, asset_refs_json, references_json, metadata_json
+                FROM findings
+                WHERE owner_id = ?
+                ORDER BY discovered_at DESC
+                LIMIT 5
+                """,
+                (owner,),
+            ),
+            [],
         )
         recent_findings: List[Dict] = parse_json_fields(
             recent_rows,
@@ -1005,16 +1037,24 @@ async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
                 "running": int(task_stats["running"]) if task_stats and task_stats.get("running") is not None else 0,
             },
             "running_tasks": parse_json_fields(
-                await db.fetchall(
-                    "SELECT id, plugin_id, tool_name, target, status, created_at FROM tasks WHERE owner_id = ? AND status = 'running' ORDER BY created_at DESC LIMIT 5",
-                    (owner,),
+                await query_or_default(
+                    "running_tasks",
+                    lambda: db.fetchall(
+                        "SELECT id, plugin_id, tool_name, target, status, created_at FROM tasks WHERE owner_id = ? AND status = 'running' ORDER BY created_at DESC LIMIT 5",
+                        (owner,),
+                    ),
+                    [],
                 ),
                 []
             ),
             "recent_tasks": parse_json_fields(
-                await db.fetchall(
-                    "SELECT id, plugin_id, tool_name, target, status, created_at, duration_seconds FROM tasks WHERE owner_id = ? ORDER BY created_at DESC LIMIT 5",
-                    (owner,),
+                await query_or_default(
+                    "recent_tasks",
+                    lambda: db.fetchall(
+                        "SELECT id, plugin_id, tool_name, target, status, created_at, duration_seconds FROM tasks WHERE owner_id = ? ORDER BY created_at DESC LIMIT 5",
+                        (owner,),
+                    ),
+                    [],
                 ),
                 []
             )
