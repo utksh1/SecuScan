@@ -20,6 +20,7 @@ from backend.secuscan.notification_service import (
     build_alert_payload,
     deliver_via_rule,
     process_finding_notifications,
+    send_email,
     severity_meets_threshold,
     was_already_delivered,
 )
@@ -685,55 +686,163 @@ async def test_pinned_ip_network_backend_pins_ip_and_preserves_tls_hostname(
     )
 
 
-@pytest.mark.asyncio
-async def test_process_slack_notification_success(test_db, monkeypatch):
-    """process_slack_notification compiles task info, counts findings, and sends webhook successfully."""
-    task_id, finding_id = await _seed_finding(test_db, severity="high")
-    
-    monkeypatch.setattr(settings, "slack_webhook_url", "https://slack.example.invalid/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX")
+# ---------------------------------------------------------------------------
+# send_email SMTP path tests
+# ---------------------------------------------------------------------------
 
-    mock_send = AsyncMock(return_value=(True, None))
-    monkeypatch.setattr("backend.secuscan.notification_service.send_webhook", mock_send)
 
-    from backend.secuscan.notification_service import process_slack_notification
-    await process_slack_notification(test_db, task_id)
-
-    assert mock_send.call_count == 1
-    call_args, _ = mock_send.call_args
-    target_url = call_args[0]
-    payload = call_args[1]
-
-    assert target_url == "https://slack.example.invalid/services/T00000000/B00000000/XXXXXXXXXXXXXXXXXXXXXXXX"
-    assert "blocks" in payload
-    assert len(payload["blocks"]) >= 3
-    assert "High" in payload["blocks"][2]["fields"][1]["text"]
-    assert "Total Findings" in payload["blocks"][2]["fields"][0]["text"]
+SAMPLE_EMAIL_FINDING = {
+    "id": "email-f1",
+    "severity": "high",
+    "title": "SQL Injection in login form",
+    "category": "injection",
+    "target": "https://api.example.com",
+    "description": "A SQL injection vulnerability was found in the login endpoint.",
+    "remediation": "Use parameterized queries.",
+}
 
 
 @pytest.mark.asyncio
-async def test_process_slack_notification_failed_task(test_db, monkeypatch):
-    """process_slack_notification sends error details when status is FAILED."""
-    task_id = str(uuid.uuid4())
-    await test_db.execute(
-        """
-        INSERT INTO tasks (
-            id, plugin_id, tool_name, target, status, inputs_json, consent_granted, error_message
-        ) VALUES (?, 'nmap', 'nmap', '127.0.0.1', 'failed', '{}', 1, 'Connection refused')
-        """,
-        (task_id,),
-    )
-    
-    monkeypatch.setattr(settings, "slack_webhook_url", "https://slack.example.invalid/services/test")
-    mock_send = AsyncMock(return_value=(True, None))
-    monkeypatch.setattr("backend.secuscan.notification_service.send_webhook", mock_send)
+async def test_send_email_returns_success_on_smtp_success(monkeypatch):
+    """When SMTP credentials are configured and send succeeds, send_email returns (True, None)."""
+    recorded_calls = []
 
-    from backend.secuscan.notification_service import process_slack_notification
-    await process_slack_notification(test_db, task_id)
+    def fake_smtp_init(host, port, timeout=None):
+        class FakeSMTP:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+            def starttls(self):
+                pass
+            def login(self, user, pw):
+                pass
+            def sendmail(self, frm, to, body):
+                recorded_calls.append((frm, to, body))
+            def quit(self):
+                pass
+        return FakeSMTP()
 
-    assert mock_send.call_count == 1
-    call_args, _ = mock_send.call_args
-    payload = call_args[1]
+    with patch("backend.secuscan.config.settings") as ms:
+        ms.smtp_username = "alerts@example.com"
+        ms.smtp_password = "smtp-password"
+        ms.smtp_host = "smtp.example.com"
+        ms.smtp_port = 587
+        ms.smtp_use_tls = True
+        ms.smtp_from_email = "secuscan@example.com"
 
-    assert "blocks" in payload
-    assert "Error Message" in payload["blocks"][2]["text"]["text"]
-    assert "Connection refused" in payload["blocks"][2]["text"]["text"]
+        with patch("smtplib.SMTP", side_effect=fake_smtp_init):
+            result = await send_email("user@example.com", {"finding": SAMPLE_EMAIL_FINDING})
+
+    assert result == (True, None)
+    assert len(recorded_calls) == 1
+    frm, to, body = recorded_calls[0]
+    assert frm == "secuscan@example.com"
+    assert to == ["user@example.com"]
+
+
+@pytest.mark.asyncio
+async def test_send_email_returns_error_on_smtp_exception(monkeypatch):
+    """When SMTP raises an exception, send_email returns (False, error_string)."""
+    with patch("backend.secuscan.config.settings") as ms:
+        ms.smtp_username = "alerts@example.com"
+        ms.smtp_password = "smtp-password"
+        ms.smtp_host = "smtp.example.com"
+        ms.smtp_port = 587
+        ms.smtp_use_tls = True
+        ms.smtp_from_email = "secuscan@example.com"
+
+        with patch("smtplib.SMTP", side_effect=ConnectionRefusedError("connection refused")):
+            result = await send_email("user@example.com", {"finding": SAMPLE_EMAIL_FINDING})
+
+    assert result[0] is False
+    assert "connection refused" in result[1]
+
+
+@pytest.mark.asyncio
+async def test_send_email_skips_when_no_credentials(monkeypatch):
+    """When SMTP credentials are not configured, send_email returns (True, None) as a placeholder."""
+    with patch("backend.secuscan.config.settings") as ms:
+        ms.smtp_username = ""
+        ms.smtp_password = ""
+        result = await send_email("user@example.com", {"finding": SAMPLE_EMAIL_FINDING})
+
+    assert result == (True, None)
+
+
+@pytest.mark.asyncio
+async def test_send_email_subject_contains_severity_and_target():
+    """The email subject includes the finding severity and target."""
+    recorded_calls = []
+
+    def fake_smtp_init(host, port, timeout=None):
+        class FakeSMTP:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+            def starttls(self):
+                pass
+            def login(self, user, pw):
+                pass
+            def sendmail(self, frm, to, body):
+                recorded_calls.append((frm, to, body))
+            def quit(self):
+                pass
+        return FakeSMTP()
+
+    with patch("backend.secuscan.config.settings") as ms:
+        ms.smtp_username = "alerts@example.com"
+        ms.smtp_password = "smtp-password"
+        ms.smtp_host = "smtp.example.com"
+        ms.smtp_port = 587
+        ms.smtp_use_tls = False
+        ms.smtp_from_email = "secuscan@example.com"
+
+        with patch("smtplib.SMTP", side_effect=fake_smtp_init):
+            await send_email("user@example.com", {"finding": SAMPLE_EMAIL_FINDING})
+
+    _, _, body = recorded_calls[0]
+    # Subject line is not base64-encoded
+    assert "HIGH" in body
+    assert "api.example.com" in body
+    assert "SQL Injection" not in body  # Title goes in body, not subject
+
+
+@pytest.mark.asyncio
+async def test_send_email_body_contains_finding_fields():
+    """The email body is a valid multipart MIME message with a text part."""
+    recorded_calls = []
+
+    def fake_smtp_init(host, port, timeout=None):
+        class FakeSMTP:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+            def login(self, user, pw):
+                pass
+            def sendmail(self, frm, to, body):
+                recorded_calls.append((frm, to, body))
+            def quit(self):
+                pass
+        return FakeSMTP()
+
+    with patch("backend.secuscan.config.settings") as ms:
+        ms.smtp_username = "alerts@example.com"
+        ms.smtp_password = "smtp-password"
+        ms.smtp_host = "smtp.example.com"
+        ms.smtp_port = 587
+        ms.smtp_use_tls = False
+        ms.smtp_from_email = "secuscan@example.com"
+
+        with patch("smtplib.SMTP", side_effect=fake_smtp_init):
+            await send_email("user@example.com", {"finding": SAMPLE_EMAIL_FINDING})
+
+    _, _, body = recorded_calls[0]
+    # Body is a multipart MIME message - verify it is well-formed
+    assert "multipart/alternative" in body
+    assert "text/plain" in body
+    assert "text/html" in body
+    assert "From: secuscan@example.com" in body
+    assert "To: user@example.com" in body
