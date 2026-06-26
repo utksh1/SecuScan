@@ -12,6 +12,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from backend.secuscan.sandbox_executor import (
+    _build_preexec_fn,
     classify_memory_violation,
     resolve_sandbox_config,
 )
@@ -186,3 +187,46 @@ def test_resolve_sandbox_config_full_override():
     assert config.max_memory_mb == 256
     assert config.max_output_bytes == 1_000_000
     assert config.allow_network is False
+
+
+# ---------------------------------------------------------------------------
+# _build_preexec_fn
+# ---------------------------------------------------------------------------
+
+
+class TestBuildPreexecFn:
+    """Tests for _build_preexec_fn."""
+
+    def test_returns_callable(self):
+        """_build_preexec_fn returns a callable."""
+        config = SandboxConfig(max_memory_mb=256)
+        fn = _build_preexec_fn(config)
+        assert callable(fn)
+
+    def test_does_not_raise_with_patched_resource(self):
+        """The returned callable must not raise when resource.setrlimit is patched."""
+        import resource as resource_module
+        import sys
+
+        mock_setrlimit = MagicMock()
+        with patch.dict(sys.modules, {"resource": resource_module}):
+            with patch.object(resource_module, "setrlimit", mock_setrlimit):
+                config = SandboxConfig(max_memory_mb=256)
+                fn = _build_preexec_fn(config)
+                fn()  # Must not raise
+                mock_setrlimit.assert_called_once()
+
+    def test_sets_rlimit_as_to_memory_bytes(self):
+        """The preexec_fn sets RLIMIT_AS to max_memory_mb * 1024 * 1024."""
+        import resource as resource_module
+        import sys
+
+        mock_setrlimit = MagicMock()
+        with patch.dict(sys.modules, {"resource": resource_module}):
+            with patch.object(resource_module, "setrlimit", mock_setrlimit):
+                config = SandboxConfig(max_memory_mb=128)
+                fn = _build_preexec_fn(config)
+                fn()
+                call_args = mock_setrlimit.call_args
+                assert call_args[0][0] == resource_module.RLIMIT_AS
+                assert call_args[0][1] == (128 * 1024 * 1024, 128 * 1024 * 1024)
