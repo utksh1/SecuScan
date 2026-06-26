@@ -527,6 +527,22 @@ def validate_task_start_payload(
     return True, 0, ""
 
 
+def validate_preset_name(
+    plugin_id: str,
+    preset: Optional[str],
+    presets: Optional[Dict[str, Any]],
+) -> Tuple[bool, str]:
+    """Validate that an optional preset name exists for the selected plugin."""
+    if preset in (None, ""):
+        return True, ""
+
+    available_presets = presets or {}
+    if preset not in available_presets:
+        return False, f"Unknown preset '{preset}' for plugin '{plugin_id}'"
+
+    return True, ""
+
+
 def _check_field(key: str, value: Any) -> Tuple[bool, int, str]:
     """Check a single input field value (string or list)."""
     if isinstance(value, str):
