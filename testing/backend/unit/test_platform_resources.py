@@ -92,7 +92,7 @@ class TestStableAssetId:
         assert a == b
 
     def test_numeric_port_stringified_consistently(self):
-        # The function uses str(part).strip().lower() — ints and str(443) match
+        # The function uses str(part).strip().lower() - ints and str(443) match
         a = _stable_asset_id("example.com", "example.com", 443, "tcp")
         b = _stable_asset_id("example.com", "example.com", "443", "tcp")
         assert a == b
@@ -140,7 +140,7 @@ class TestDeserializeResourceRow:
         assert row == snapshot
 
     def test_empty_json_string_unwraps_to_empty_dict_or_list(self):
-        # json.loads("") raises — must not crash, falls back to raw ""
+        # json.loads("") raises - must not crash, falls back to raw ""
         row = {"id": "row-1", "summary_json": ""}
         result = _deserialize_resource_row(row)
         assert result["summary"] == ""
@@ -213,3 +213,35 @@ class TestSerializeExecutionContext:
         # The default ExecutionContext has at least these two fields
         assert "validation_mode" in parsed
         assert "evidence_level" in parsed
+
+
+class TestNowIso:
+    def test_returns_string(self):
+        """_now_iso returns a string."""
+        from backend.secuscan.platform_resources import _now_iso
+        result = _now_iso()
+        assert isinstance(result, str)
+
+    def test_format_is_iso8601(self):
+        """_now_iso returns an ISO 8601 formatted timestamp."""
+        from backend.secuscan.platform_resources import _now_iso
+        import re
+        result = _now_iso()
+        pattern = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$"
+        assert re.match(pattern, result), f"Got: {result}"
+
+    def test_result_parseable_by_fromisoformat(self):
+        """The result of _now_iso is parseable by datetime.fromisoformat."""
+        from backend.secuscan.platform_resources import _now_iso
+        from datetime import datetime
+        result = _now_iso()
+        dt = datetime.fromisoformat(result)
+        assert isinstance(dt, datetime)
+
+    def test_two_calls_within_1ms_are_non_decreasing(self):
+        """Two calls within milliseconds return non-decreasing timestamps."""
+        from backend.secuscan.platform_resources import _now_iso
+        a = _now_iso()
+        b = _now_iso()
+        assert a <= b
+
