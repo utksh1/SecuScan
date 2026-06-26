@@ -105,7 +105,7 @@ from .ratelimit import (
     scheduler_tick_limiter,
 )
 from .rate_limiter import check_scan_rate_limit
-from .validation import validate_target, validate_task_start_payload, validate_url
+from .validation import validate_target, validate_task_start_payload, validate_url, validate_preset_name
 from .reporting import reporting
 from .vault import VaultCrypto
 from .workflows import scheduler, _finalize_workflow_run
@@ -342,6 +342,15 @@ async def start_task(
     if not plugin:
         logger.warning(f"Task start failed: Plugin not found: {request.plugin_id}")
         raise HTTPException(status_code=404, detail=f"Plugin not found: {request.plugin_id}")
+
+    preset_ok, preset_error = validate_preset_name(
+        request.plugin_id,
+        request.preset,
+        plugin.presets,
+    )
+    if not preset_ok:
+        logger.warning("Task start failed: %s", preset_error)
+        raise HTTPException(status_code=400, detail=preset_error)
 
     db = await get_db()
     target_policy = await get_target_policy(db, owner, execution_context.get("target_policy_id"))
