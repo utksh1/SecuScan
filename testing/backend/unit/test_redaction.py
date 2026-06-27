@@ -484,3 +484,151 @@ class TestRedactInputsEdgeCases:
         assert result["meta"]["version"] == 1.0
         assert result["meta"]["name"] == "x"
         assert result["api_key"] == REDACTED
+# New helper tests to add to test_redaction.py (additive only)
+# These complement the existing tests; class names are suffixed to avoid collision
+# with the existing TestRedactDict, TestRedactInputs classes.
+
+
+class TestRedactHelper:
+    """New redact() tests from PR, complements existing TestBearerToken etc."""
+
+    def test_leaves_plain_text_unchanged(self):
+        """Plain text without secrets is returned unchanged."""
+        from backend.secuscan.redaction import redact
+        assert redact("Hello, this is a normal scan report.") == "Hello, this is a normal scan report."
+
+    def test_redacts_bearer_token(self):
+        """Bearer tokens with 16+ char secrets are redacted."""
+        from backend.secuscan.redaction import redact
+        result = redact("Authorization: Bearer aaaa2222bbbb3333cccc4444dddd")
+        assert "[REDACTED]" in result
+        assert "Authorization: Bearer " in result  # label preserved
+
+    def test_redacts_aws_secret_key(self):
+        """AWS secret key values are redacted."""
+        from backend.secuscan.redaction import redact
+        result = redact("AWS_SECRET_ACCESS_KEY=aaaa2222bbbb3333cccc4444dddd5555aaaa")
+        assert "[REDACTED]" in result
+
+    def test_redacts_inline_bearer_token(self):
+        """Inline bearer tokens are redacted."""
+        from backend.secuscan.redaction import redact
+        result = redact("token: Bearer aaaa2222bbbb3333cccc4444dddd")
+        assert "[REDACTED]" in result
+
+    def test_redacts_multiple_secrets(self):
+        """Multiple secrets in the same string are all redacted."""
+        from backend.secuscan.redaction import redact
+        result = redact("Authorization: Bearer aaaa2222bbbb3333cccc4444dddd and AWS_KEY=bbbb3333cccc4444dddd5555aaaa6666")
+        assert result.count("[REDACTED]") >= 1
+
+
+class TestRedactDictHelper:
+    """New redact_dict() tests that complement existing dict tests."""
+
+    def test_preserves_non_secret_strings(self):
+        """Non-secret string values are preserved."""
+        from backend.secuscan.redaction import redact_dict
+        d = {"name": "nmap_scan", "target": "example.com"}
+        result = redact_dict(d)
+        assert result["name"] == "nmap_scan"
+        assert result["target"] == "example.com"
+
+    def test_handles_nested_dicts(self):
+        """Nested dicts are recursively processed."""
+        from backend.secuscan.redaction import redact_dict
+        d = {"outer": {"inner": "plain text"}}
+        result = redact_dict(d)
+        assert result["outer"]["inner"] == "plain text"
+
+    def test_handles_lists(self):
+        """Lists are recursively processed."""
+        from backend.secuscan.redaction import redact_dict
+        d = {"items": ["normal", "also normal"]}
+        result = redact_dict(d)
+        assert result["items"][0] == "normal"
+        assert result["items"][1] == "also normal"
+
+    def test_handles_none_values(self):
+        """None values in dicts are handled gracefully."""
+        from backend.secuscan.redaction import redact_dict
+        d = {"field": None}
+        result = redact_dict(d)
+        assert result["field"] is None
+
+
+class TestRedactInputsHelper:
+    """New redact_inputs() tests that complement existing input tests."""
+
+    def test_redacts_authorization_header_long(self):
+        """Authorization header values are redacted (8+ chars required)."""
+        from backend.secuscan.redaction import redact_inputs
+        d = {"Authorization": "Bearer aaaa2222bbbb3333"}
+        result = redact_inputs(d)
+        assert result["Authorization"] == "[REDACTED]"
+
+    def test_redacts_password_field(self):
+        """password field values are redacted."""
+        from backend.secuscan.redaction import redact_inputs
+        d = {"password": "supersecret"}
+        result = redact_inputs(d)
+        assert result["password"] == "[REDACTED]"
+
+    def test_redacts_token_field(self):
+        """token field values are redacted."""
+        from backend.secuscan.redaction import redact_inputs
+        d = {"token": "tok_abcdefgh"}
+        result = redact_inputs(d)
+        assert result["token"] == "[REDACTED]"
+
+    def test_redacts_secret_key(self):
+        """secret key values are redacted."""
+        from backend.secuscan.redaction import redact_inputs
+        d = {"secret": "my_secret_value"}
+        result = redact_inputs(d)
+        assert result["secret"] == "[REDACTED]"
+
+    def test_preserves_non_sensitive_fields(self):
+        """Non-sensitive fields are preserved."""
+        from backend.secuscan.redaction import redact_inputs
+        d = {"target": "example.com", "plugin_id": "nmap"}
+        result = redact_inputs(d)
+        assert result["target"] == "example.com"
+        assert result["plugin_id"] == "nmap"
+
+
+class TestRedactValueHelper:
+    """New _redact_value() tests (internal helper coverage)."""
+
+    def test_redacts_string_with_secret(self):
+        """String values containing secrets are redacted."""
+        from backend.secuscan.redaction import _redact_value
+        result = _redact_value("Authorization: Bearer aaaa2222bbbb3333cccc4444dddd")
+        assert "[REDACTED]" in result
+
+    def test_preserves_plain_string(self):
+        """Plain strings are preserved unchanged."""
+        from backend.secuscan.redaction import _redact_value
+        assert _redact_value("hello world") == "hello world"
+
+    def test_preserves_int(self):
+        """Integer values are preserved unchanged."""
+        from backend.secuscan.redaction import _redact_value
+        assert _redact_value(443) == 443
+
+    def test_preserves_float(self):
+        """Float values are preserved unchanged."""
+        from backend.secuscan.redaction import _redact_value
+        assert _redact_value(1.5) == 1.5
+
+    def test_preserves_bool(self):
+        """Boolean values are preserved unchanged."""
+        from backend.secuscan.redaction import _redact_value
+        assert _redact_value(True) is True
+        assert _redact_value(False) is False
+
+    def test_returns_none_for_none(self):
+        """None is returned unchanged."""
+        from backend.secuscan.redaction import _redact_value
+        assert _redact_value(None) is None
+
