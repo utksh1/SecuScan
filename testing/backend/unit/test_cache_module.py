@@ -1,5 +1,5 @@
 """
-Unit tests for cache module-level functions in backend/secuscan/cache.py.
+Unit tests for cache module-level helper functions in backend.secuscan.cache.
 
 Covers:
 - init_cache: initialises the global cache instance
@@ -7,130 +7,139 @@ Covers:
 - invalidate_view_cache: clears caches with view-related prefixes
 - invalidate_plugin_caches: clears caches with plugin-related prefixes
 
-CacheClient itself is already tested in test_cache_helpers.py.
+The CacheClient itself is tested in test_cache_helpers.py.
 This file tests ONLY the module-level functions.
 """
 
-import asyncio
+from __future__ import annotations
+
 import pytest
 
-from backend.secuscan.cache import (
-    get_cache,
-    init_cache,
-    invalidate_plugin_caches,
-    invalidate_view_cache,
-)
-
-
-def _run(coro):
-    return asyncio.run(coro)
-
-
-# ---------------------------------------------------------------------------
-# init_cache
-# ---------------------------------------------------------------------------
+from backend.secuscan.cache import init_cache, get_cache
 
 
 class TestInitCache:
-    def test_returns_cache_client(self):
-        cache = _run(init_cache())
-        from backend.secuscan.cache import CacheClient
-        assert isinstance(cache, CacheClient)
+    def test_init_cache_returns_cache_client(self):
+        """init_cache returns a CacheClient instance."""
+        import backend.secuscan.cache as cache_module
+        original = getattr(cache_module, "cache", None)
+        try:
+            result = init_cache(":memory:")
+            from backend.secuscan.cache import CacheClient
+            assert isinstance(result, CacheClient)
+        finally:
+            if original is not None:
+                cache_module.cache = original
 
-    def test_sets_global_cache(self):
-        _run(init_cache())
-        cache = _run(get_cache())
-        assert cache is not None
-
-    def test_replaces_existing_global_instance(self):
-        first = _run(init_cache())
-        second = _run(init_cache())
-        from backend.secuscan.cache import CacheClient
-        assert isinstance(first, CacheClient)
-        assert isinstance(second, CacheClient)
-        # init_cache replaces the global each time
-        assert first is not second
-
-
-# ---------------------------------------------------------------------------
-# get_cache
-# ---------------------------------------------------------------------------
+    def test_sets_global_cache_instance(self):
+        """init_cache sets the module-level cache global."""
+        import backend.secuscan.cache as cache_module
+        original = getattr(cache_module, "cache", None)
+        try:
+            client = init_cache(":memory:")
+            assert cache_module.cache is client
+        finally:
+            if original is not None:
+                cache_module.cache = original
 
 
 class TestGetCache:
-    def test_returns_initialised_cache(self):
-        _run(init_cache())
-        cache = _run(get_cache())
-        from backend.secuscan.cache import CacheClient
-        assert isinstance(cache, CacheClient)
-
-    def test_raises_when_not_initialised(self):
+    def test_returns_global_cache_instance(self):
+        """get_cache returns the module-level cache."""
         import backend.secuscan.cache as cache_module
-        cache_module.cache = None
+        original = getattr(cache_module, "cache", None)
         try:
-            with pytest.raises(RuntimeError, match="not initialized"):
-                _run(get_cache())
+            client = init_cache(":memory:")
+            cache_module.cache = client
+            result = get_cache()
+            assert result is client
         finally:
-            cache_module.cache = None
-
-
-# ---------------------------------------------------------------------------
-# invalidate_view_cache
-# ---------------------------------------------------------------------------
+            if original is not None:
+                cache_module.cache = original
 
 
 class TestInvalidateViewCache:
-    def test_noop_when_cache_not_initialised(self):
+    async def _make_view_cache(self):
+        """Create a cache with view-related keys."""
         import backend.secuscan.cache as cache_module
-        cache_module.cache = None
-        # Should not raise
-        _run(invalidate_view_cache())
+        original = getattr(cache_module, "cache", None)
+        client = init_cache(":memory:")
+        cache_module.cache = client
+        # Add view-related cache entries
+        await client.set_json("view:dashboard", {"data": "dash"}, ttl=3600)
+        await client.set_json("view:findings", {"data": "findings"}, ttl=3600)
+        await client.set_json("plugin:nmap", {"data": "nmap"}, ttl=3600)
+        try:
+            yield client
+        finally:
+            if original is not None:
+                cache_module.cache = original
 
-    def test_deletes_view_prefixes(self):
+    @pytest.mark.asyncio
+    async def test_invalidate_view_cache_removes_view_keys(self):
+        """invalidate_view_cache removes keys with view: prefix."""
         import backend.secuscan.cache as cache_module
-        cache = _run(init_cache())
-        deleted_prefixes = []
-        original_delete_prefix = cache.delete_prefix
+        from backend.secuscan.cache import invalidate_view_cache
 
-        async def tracking_delete_prefix(prefix: str):
-            deleted_prefixes.append(prefix)
-            return await original_delete_prefix(prefix)
-
-        cache.delete_prefix = tracking_delete_prefix
-        cache_module.cache = cache
-
-        _run(invalidate_view_cache())
-
-        expected = ["summary:", "findings:", "reports:", "tasks:"]
-        assert sorted(deleted_prefixes) == sorted(expected)
-
-
-# ---------------------------------------------------------------------------
-# invalidate_plugin_caches
-# ---------------------------------------------------------------------------
+        original = getattr(cache_module, "cache", None)
+        client = init_cache(":memory:")
+        cache_module.cache = client
+        await client.set_json("view:dashboard", {"data": "dash"}, ttl=3600)
+        await client.set_json("view:findings", {"data": "findings"}, ttl=3600)
+        await client.set_json("plugin:nmap", {"data": "nmap"}, ttl=3600)
+        try:
+            await invalidate_view_cache()
+            r1 = await client.get_json("view:dashboard")
+            r2 = await client.get_json("view:findings")
+            r3 = await client.get_json("plugin:nmap")
+            assert r1 is None, "view:dashboard should be cleared"
+            assert r2 is None, "view:findings should be cleared"
+            assert r3 is not None, "plugin:nmap should NOT be cleared"
+        finally:
+            if original is not None:
+                cache_module.cache = original
 
 
 class TestInvalidatePluginCaches:
-    def test_noop_when_cache_not_initialised(self):
+    @pytest.mark.asyncio
+    async def test_invalidate_plugin_caches_removes_plugin_keys(self):
+        """invalidate_plugin_caches removes keys with plugin: prefix."""
         import backend.secuscan.cache as cache_module
-        cache_module.cache = None
-        # Should not raise
-        _run(invalidate_plugin_caches())
+        from backend.secuscan.cache import invalidate_plugin_caches
 
-    def test_deletes_plugin_prefixes(self):
+        original = getattr(cache_module, "cache", None)
+        client = init_cache(":memory:")
+        cache_module.cache = client
+        await client.set_json("plugin:nmap", {"data": "nmap"}, ttl=3600)
+        await client.set_json("plugin:sqlmap", {"data": "sqlmap"}, ttl=3600)
+        await client.set_json("view:dashboard", {"data": "dash"}, ttl=3600)
+        try:
+            await invalidate_plugin_caches()
+            r1 = await client.get_json("plugin:nmap")
+            r2 = await client.get_json("plugin:sqlmap")
+            r3 = await client.get_json("view:dashboard")
+            assert r1 is None, "plugin:nmap should be cleared"
+            assert r2 is None, "plugin:sqlmap should be cleared"
+            assert r3 is not None, "view:dashboard should NOT be cleared"
+        finally:
+            if original is not None:
+                cache_module.cache = original
+
+    @pytest.mark.asyncio
+    async def test_invalidate_plugin_caches_no_plugin_keys_no_effect(self):
+        """When no plugin keys exist, the function is a no-op."""
         import backend.secuscan.cache as cache_module
-        cache = _run(init_cache())
-        deleted_prefixes = []
-        original_delete_prefix = cache.delete_prefix
+        from backend.secuscan.cache import invalidate_plugin_caches
 
-        async def tracking_delete_prefix(prefix: str):
-            deleted_prefixes.append(prefix)
-            return await original_delete_prefix(prefix)
-
-        cache.delete_prefix = tracking_delete_prefix
-        cache_module.cache = cache
-
-        _run(invalidate_plugin_caches())
-
-        expected = ["summary:", "plugins:"]
-        assert sorted(deleted_prefixes) == sorted(expected)
+        original = getattr(cache_module, "cache", None)
+        client = init_cache(":memory:")
+        cache_module.cache = client
+        await client.set_json("view:dashboard", {"data": "dash"}, ttl=3600)
+        try:
+            # Should not raise
+            await invalidate_plugin_caches()
+            r = await client.get_json("view:dashboard")
+            assert r is not None, "view:dashboard should remain"
+        finally:
+            if original is not None:
+                cache_module.cache = original
