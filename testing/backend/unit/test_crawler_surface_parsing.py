@@ -1,84 +1,223 @@
 """
-Genuinely-missing unit tests for crawler.py surface-parsing helpers.
+Unit tests for backend/secuscan/crawler _SurfaceParser HTML parsing.
 
-The bulk of crawler helper coverage lives in testing/backend/unit/test_crawler_helpers.py
-(merged via PR #979). This file only contains cases that are NOT already covered
-there, to avoid duplicate broad helper coverage.
-
-Currently covered here (and only here):
-  - _extract_title on a malformed/unclosed <title> tag
-  - _extract_tech_hints deduplicates identical values across multiple headers
-  - _extract_cms_hints deduplicates identical CMS values from different sources
-  - _classify_path_hint returns 'login' for the '/user/login' variant
-  - _normalize_form with a non-standard method (DELETE) is state_changing
-  - _normalize_form when inputs contain a non-dict entry is tolerated
+Covers the _SurfaceParser HTMLParser subclass in isolation:
+  - link extraction from <a href>
+  - script extraction from <script src>
+  - meta generator extraction from <meta name="generator">
+  - form attribute parsing (action/method/id/name)
+  - input extraction for text/password/hidden/file types
+  - textarea and select treated as inputs
+  - nested form state (no inputs after form closes)
 """
 
-from backend.secuscan.crawler import (
-    _classify_path_hint,
-    _extract_cms_hints,
-    _extract_tech_hints,
-    _extract_title,
-    _normalize_form,
-)
+from __future__ import annotations
+
+from backend.secuscan.crawler import _SurfaceParser
 
 
-# _extract_title — malformed input
+def _parse(html: str) -> _SurfaceParser:
+    parser = _SurfaceParser()
+    parser.feed(html)
+    return parser
 
 
-def test_extract_title_unclosed_tag_returns_empty():
-    # Opening <title> with no closing </title> — the function must not crash
-    # and must return "" rather than matching some later "</title>" in the
-    # document.
-    assert _extract_title("<title>Never closed") == ""
+# ---------------------------------------------------------------------------
+# links
+# ---------------------------------------------------------------------------
+
+def test_anchor_href_extracted():
+    parser = _parse('<a href="https://example.com/page">Link</a>')
+    assert "https://example.com/page" in parser.links
 
 
-# _extract_tech_hints — dedup across multiple header channels
+def test_multiple_anchor_links():
+    parser = _parse(
+        '<a href="/path1">One</a><a href="/path2">Two</a><a>No href</a>'
+    )
+    assert parser.links == ["/path1", "/path2"]
 
 
-def test_extract_tech_hints_dedupes_identical_values():
-    # When the same value appears in both 'server' and 'x-powered-by'
-    # headers, the hint list must contain it only once.
-    headers = {"server": "Apache", "x-powered-by": "Apache"}
-    result = _extract_tech_hints(headers, [], [], "")
-    assert result.count("Apache") == 1
+def test_links_case_insensitive_tag():
+    parser = _parse('<A HREF="/path">Uppercase tag</A>')
+    assert "/path" in parser.links
 
 
-# _extract_cms_hints — dedup across channels
+def test_script_src_extracted():
+    parser = _parse('<script src="/static/app.js"></script>')
+    assert "/static/app.js" in parser.scripts
 
 
-def test_extract_cms_hints_dedupes_across_channels():
-    # 'wordpress' detected from both meta and body should appear once.
-    result = _extract_cms_hints(["WordPress"], "wp-content here", [])
-    assert result.count("wordpress") == 1
+def test_multiple_script_srcs():
+    parser = _parse(
+        '<script src="/a.js"></script><script src="/b.js"></script>'
+    )
+    assert parser.scripts == ["/a.js", "/b.js"]
 
 
-# _classify_path_hint — extra login path
+def test_script_without_src_not_in_scripts():
+    parser = _parse('<script>console.log(1)</script>')
+    assert parser.scripts == []
 
 
-def test_classify_path_hint_user_login():
-    # The 'login' category uses /user/login as a token, which is not the same
-    # as /login alone. Verify the token is matched.
-    assert _classify_path_hint("https://example.com/user/login") == "login"
+# ---------------------------------------------------------------------------
+# meta generators
+# ---------------------------------------------------------------------------
+
+def test_meta_generator_content_extracted():
+    parser = _parse('<meta name="generator" content="WordPress 6.4">')
+    assert "WordPress 6.4" in parser.meta_generators
 
 
-# _normalize_form — DELETE method and non-dict inputs entry
+def test_meta_generator_case_insensitive():
+    parser = _parse('<META NAME="generator" CONTENT="Drupal 9">')
+    assert "Drupal 9" in parser.meta_generators
 
 
-def test_normalize_form_delete_method_is_state_changing():
-    form = {"method": "delete", "action": "/api/resource/1", "inputs": []}
-    result = _normalize_form("https://example.com", form)
-    assert result["state_changing"] is True
+def test_meta_generator_missing_content_not_added():
+    parser = _parse('<meta name="generator">')
+    assert parser.meta_generators == []
 
 
-def test_normalize_form_tolerates_non_dict_input_item():
-    # A non-dict item in the inputs list must not crash the function.
-    form = {
-        "method": "post",
-        "action": "/submit",
-        "inputs": ["not-a-dict", {"name": "user", "type": "text"}],
-    }
-    result = _normalize_form("https://example.com", form)
-    # The valid dict is still counted; the bad entry is skipped without raising.
-    assert result["input_count"] == 2
-    assert result["state_changing"] is True
+def test_non_generator_meta_not_added():
+    parser = _parse('<meta name="description" content="A page">')
+    assert parser.meta_generators == []
+
+
+# ---------------------------------------------------------------------------
+# forms
+# ---------------------------------------------------------------------------
+
+def test_form_action_extracted():
+    parser = _parse('<form action="/submit"></form>')
+    assert len(parser.forms) == 1
+    assert parser.forms[0]["action"] == "/submit"
+
+
+def test_form_method_default_is_get():
+    parser = _parse('<form action="/search"></form>')
+    assert parser.forms[0]["method"] == "get"
+
+
+def test_form_method_preserved():
+    parser = _parse('<form action="/login" method="POST"></form>')
+    assert parser.forms[0]["method"] == "post"
+
+
+def test_form_id_extracted():
+    parser = _parse('<form id="login-form" action="/x"></form>')
+    assert parser.forms[0]["id"] == "login-form"
+
+
+def test_form_name_extracted():
+    parser = _parse('<form name="search" action="/x"></form>')
+    assert parser.forms[0]["name"] == "search"
+
+
+def test_multiple_forms():
+    parser = _parse(
+        '<form action="/a"></form><form action="/b"></form>'
+    )
+    assert len(parser.forms) == 2
+    assert parser.forms[0]["action"] == "/a"
+    assert parser.forms[1]["action"] == "/b"
+
+
+# ---------------------------------------------------------------------------
+# inputs inside forms
+# ---------------------------------------------------------------------------
+
+def test_text_input_extracted():
+    parser = _parse(
+        '<form action="/x"><input type="text" name="q"></form>'
+    )
+    inputs = parser.forms[0]["inputs"]
+    assert len(inputs) == 1
+    assert inputs[0] == {"name": "q", "type": "text", "value": ""}
+
+
+def test_password_input_extracted():
+    parser = _parse(
+        '<form action="/x"><input type="password" name="pwd" value="secret"></form>'
+    )
+    inputs = parser.forms[0]["inputs"]
+    assert inputs[0] == {"name": "pwd", "type": "password", "value": "secret"}
+
+
+def test_hidden_input_extracted():
+    parser = _parse(
+        '<form action="/x"><input type="hidden" name="csrf" value="tok123"></form>'
+    )
+    inputs = parser.forms[0]["inputs"]
+    assert inputs[0] == {"name": "csrf", "type": "hidden", "value": "tok123"}
+
+
+def test_file_input_extracted():
+    parser = _parse(
+        '<form action="/x" method="POST" enctype="multipart/form-data">'
+        '<input type="file" name="upload"></form>'
+    )
+    inputs = parser.forms[0]["inputs"]
+    assert inputs[0] == {"name": "upload", "type": "file", "value": ""}
+
+
+def test_input_type_default_is_text():
+    parser = _parse('<form action="/x"><input name="q"></form>')
+    assert parser.forms[0]["inputs"][0]["type"] == "text"
+
+
+def test_input_value_extracted():
+    parser = _parse(
+        '<form action="/x"><input type="text" name="q" value="search term"></form>'
+    )
+    assert parser.forms[0]["inputs"][0]["value"] == "search term"
+
+
+def test_textarea_as_input():
+    parser = _parse(
+        '<form action="/x"><textarea name="bio">Hello</textarea></form>'
+    )
+    inputs = parser.forms[0]["inputs"]
+    assert {"name": "bio", "type": "textarea", "value": ""} in inputs
+
+
+def test_select_as_input():
+    parser = _parse(
+        '<form action="/x"><select name="country"></select></form>'
+    )
+    inputs = parser.forms[0]["inputs"]
+    assert {"name": "country", "type": "select", "value": ""} in inputs
+
+
+def test_inputs_after_form_close_not_included():
+    parser = _parse(
+        '<form action="/a"></form>'
+        '<form action="/b"><input name="x"></form>'
+    )
+    # First form has no inputs; second form has the input
+    assert parser.forms[0]["inputs"] == []
+    assert parser.forms[1]["inputs"][0]["name"] == "x"
+
+
+def test_input_outside_form_not_in_any_form():
+    parser = _parse(
+        '<form action="/x"></form>'
+        '<input name="orphan">'
+    )
+    # The orphan input is not captured by any form
+    assert parser.forms[0]["inputs"] == []
+
+
+# ---------------------------------------------------------------------------
+# case insensitivity
+# ---------------------------------------------------------------------------
+
+def test_tag_names_case_insensitive():
+    parser = _parse('<FORM ACTION="/x"><INPUT NAME="q" TYPE="TEXT"></FORM>')
+    assert parser.forms[0]["action"] == "/x"
+    assert parser.forms[0]["inputs"][0]["name"] == "q"
+
+
+def test_boolean_attributes_empty_string():
+    parser = _parse('<form action="/x" novalue></form>')
+    assert parser.forms[0]["action"] == "/x"
