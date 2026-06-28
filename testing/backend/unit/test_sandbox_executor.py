@@ -1,71 +1,188 @@
 """
-Unit tests for backend.secuscan.sandbox_executor pure helpers.
+Unit tests for sandbox_executor.py pure helpers.
 
-Covers:
-- resolve_sandbox_config returns global defaults when plugin_sandbox is None
-- resolve_sandbox_config applies plugin overrides correctly
-- classify_memory_violation returns True for SIGSEGV exit codes
-- classify_memory_violation returns True for memory error messages
-- classify_memory_violation returns True when RSS near limit and exit non-zero
-- classify_memory_violation returns False for normal exit
+Covers (separately from testing/backend/test_sandbox_executor.py which tests
+sandbox_execute end-to-end):
+- classify_memory_violation: exit-code, stderr, and RSS threshold heuristics
+- resolve_sandbox_config: global defaults merged with per-plugin overrides
 """
 
-from backend.secuscan.sandbox_executor import resolve_sandbox_config, classify_memory_violation
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from backend.secuscan.sandbox_executor import (
+    classify_memory_violation,
+    resolve_sandbox_config,
+)
 from backend.secuscan.models import SandboxConfig
 
 
-class TestResolveSandboxConfig:
-    def test_returns_defaults_when_no_override(self):
-        """resolve_sandbox_config returns global settings when plugin_sandbox is None."""
-        result = resolve_sandbox_config(None)
-        assert isinstance(result, SandboxConfig)
-        # Verify it is a real SandboxConfig (not None)
-        assert result is not None
+# ---------------------------------------------------------------------------
+# classify_memory_violation
+# ---------------------------------------------------------------------------
 
-    def test_applies_timeout_override(self):
-        """resolve_sandbox_config overrides timeout when plugin_sandbox provides one."""
-        override = SandboxConfig(timeout_seconds=120)
-        result = resolve_sandbox_config(override)
-        assert result.timeout_seconds == 120
+class TestClassifyMemoryViolationExitCode:
+    """Exit-code based memory violation detection."""
 
-    def test_applies_memory_override(self):
-        """resolve_sandbox_config overrides max_memory_mb when plugin_sandbox provides one."""
-        override = SandboxConfig(max_memory_mb=512)
-        result = resolve_sandbox_config(override)
-        assert result.max_memory_mb == 512
+    def test_sigsegv_exit_code_negative_11_returns_true(self):
+        """Exit code -11 (SIGSEGV) always indicates memory corruption."""
+        assert classify_memory_violation(
+            exit_code=-11, stderr_text="", rss_bytes=0, limit_bytes=100_000_000
+        ) is True
 
-    def test_applies_network_override(self):
-        """resolve_sandbox_config overrides allow_network when plugin_sandbox provides one."""
-        override = SandboxConfig(allow_network=False)
-        result = resolve_sandbox_config(override)
-        assert result.allow_network is False
+    def test_sigsegv_exit_code_139_returns_true(self):
+        """Exit code 139 (128+11 = SIGSEGV on Linux) always indicates memory corruption."""
+        assert classify_memory_violation(
+            exit_code=139, stderr_text="", rss_bytes=0, limit_bytes=100_000_000
+        ) is True
+
+    def test_exit_code_0_without_memory_signal_returns_false(self):
+        """Exit code 0 without memory signal in stderr returns False."""
+        assert classify_memory_violation(
+            exit_code=0, stderr_text="", rss_bytes=0, limit_bytes=100_000_000
+        ) is False
+
+    def test_nonzero_exit_without_memory_signals_returns_false(self):
+        """Non-zero exits without memory signals return False."""
+        assert classify_memory_violation(
+            exit_code=1, stderr_text=" segmentation fault", rss_bytes=0, limit_bytes=100_000_000
+        ) is False
 
 
-class TestClassifyMemoryViolation:
-    def test_sigsegv_exit_code_negative_11(self):
-        """classify_memory_violation returns True for exit code -11."""
-        assert classify_memory_violation(-11, "", 0, 0) is True
+class TestClassifyMemoryViolationStderr:
+    """Stderr-based memory violation detection."""
 
-    def test_sigsegv_exit_code_139(self):
-        """classify_memory_violation returns True for exit code 139."""
-        assert classify_memory_violation(139, "", 0, 0) is True
+    def test_memoryerror_in_stderr_returns_true(self):
+        """Python MemoryError in stderr indicates OOM."""
+        assert classify_memory_violation(
+            exit_code=1, stderr_text="MemoryError: cannot allocate", rss_bytes=0, limit_bytes=100_000_000
+        ) is True
 
-    def test_memory_error_in_stderr(self):
-        """classify_memory_violation returns True when stderr contains MemoryError."""
-        assert classify_memory_violation(1, "Python: MemoryError", 0, 0) is True
+    def test_cannot_allocate_in_stderr_returns_true(self):
+        """System 'Cannot allocate memory' message in stderr indicates OOM."""
+        assert classify_memory_violation(
+            exit_code=1, stderr_text="error: Cannot allocate memory", rss_bytes=0, limit_bytes=100_000_000
+        ) is True
 
-    def test_cannot_allocate_in_stderr(self):
-        """classify_memory_violation returns True when stderr contains 'Cannot allocate memory'."""
-        assert classify_memory_violation(1, "error: Cannot allocate memory", 0, 0) is True
+    def test_empty_stderr_with_nonzero_exit_returns_false(self):
+        """Non-zero exit with no memory signal returns False (unless RSS threshold met)."""
+        assert classify_memory_violation(
+            exit_code=42, stderr_text="some unrelated error", rss_bytes=0, limit_bytes=100_000_000
+        ) is False
 
-    def test_rss_near_limit_with_nonzero_exit(self):
-        """classify_memory_violation returns True when RSS >= 95% of limit and exit != 0."""
-        assert classify_memory_violation(1, "", 950, 1000) is True
 
-    def test_rss_near_limit_with_zero_exit(self):
-        """classify_memory_violation returns False when exit code is 0, even if RSS near limit."""
-        assert classify_memory_violation(0, "", 950, 1000) is False
+class TestClassifyMemoryViolationRSS:
+    """RSS-threshold based memory violation detection."""
 
-    def test_normal_exit_returns_false(self):
-        """classify_memory_violation returns False for normal exit with no memory indicators."""
-        assert classify_memory_violation(0, "", 100, 1000) is False
+    def test_rss_at_95_percent_with_nonzero_exit_returns_true(self):
+        """RSS >= 95% of limit with non-zero exit is classified as OOM."""
+        limit = 100_000_000  # 100 MB
+        rss = limit * 95 // 100  # exactly 95%
+        assert classify_memory_violation(
+            exit_code=1, stderr_text="", rss_bytes=rss, limit_bytes=limit
+        ) is True
+
+    def test_rss_at_96_percent_with_nonzero_exit_returns_true(self):
+        """RSS well above 95% threshold with non-zero exit is classified as OOM."""
+        limit = 100_000_000
+        rss = limit  # exactly at limit
+        assert classify_memory_violation(
+            exit_code=1, stderr_text="", rss_bytes=rss, limit_bytes=limit
+        ) is True
+
+    def test_rss_below_95_percent_with_nonzero_exit_returns_false(self):
+        """RSS below 95% threshold with non-zero exit returns False."""
+        limit = 100_000_000
+        rss = limit * 94 // 100  # 94%
+        assert classify_memory_violation(
+            exit_code=1, stderr_text="", rss_bytes=rss, limit_bytes=limit
+        ) is False
+
+    def test_rss_threshold_ignored_on_successful_exit(self):
+        """RSS threshold is only checked when exit_code is non-zero."""
+        limit = 100_000_000
+        rss = limit * 99 // 100  # 99% — but exit is 0
+        assert classify_memory_violation(
+            exit_code=0, stderr_text="", rss_bytes=rss, limit_bytes=limit
+        ) is False
+
+
+# ---------------------------------------------------------------------------
+# resolve_sandbox_config
+# ---------------------------------------------------------------------------
+
+def test_resolve_sandbox_config_with_no_override():
+    """When plugin_sandbox is None, returns a config from global settings."""
+    from backend.secuscan import config as config_module
+
+    mock_settings = MagicMock()
+    mock_settings.sandbox_timeout = 120
+    mock_settings.sandbox_memory_mb = 512
+    mock_settings.sandbox_max_output_bytes = 5_000_000
+    mock_settings.sandbox_allow_network = True
+
+    original = config_module.settings
+    config_module.settings = mock_settings
+    try:
+        config = resolve_sandbox_config(plugin_sandbox=None)
+    finally:
+        config_module.settings = original
+
+    assert config.timeout_seconds == 120
+    assert config.max_memory_mb == 512
+    assert config.allow_network is True
+
+
+def test_resolve_sandbox_config_partial_override():
+    """Partial per-plugin override only changes the specified fields."""
+    from backend.secuscan import config as config_module
+
+    mock_settings = MagicMock()
+    mock_settings.sandbox_timeout = 300
+    mock_settings.sandbox_memory_mb = 512
+    mock_settings.sandbox_max_output_bytes = 5_000_000
+    mock_settings.sandbox_allow_network = True
+
+    plugin_override = SandboxConfig(timeout_seconds=60)
+
+    original = config_module.settings
+    config_module.settings = mock_settings
+    try:
+        config = resolve_sandbox_config(plugin_sandbox=plugin_override)
+    finally:
+        config_module.settings = original
+
+    assert config.timeout_seconds == 60
+    assert config.max_memory_mb == 512
+    assert config.allow_network is True
+
+
+def test_resolve_sandbox_config_full_override():
+    """Full per-plugin override replaces all global defaults."""
+    from backend.secuscan import config as config_module
+
+    mock_settings = MagicMock()
+    mock_settings.sandbox_timeout = 300
+    mock_settings.sandbox_memory_mb = 512
+    mock_settings.sandbox_max_output_bytes = 5_000_000
+    mock_settings.sandbox_allow_network = True
+
+    plugin_override = SandboxConfig(
+        timeout_seconds=30,
+        max_memory_mb=256,
+        max_output_bytes=1_000_000,
+        allow_network=False,
+    )
+
+    original = config_module.settings
+    config_module.settings = mock_settings
+    try:
+        config = resolve_sandbox_config(plugin_sandbox=plugin_override)
+    finally:
+        config_module.settings = original
+
+    assert config.timeout_seconds == 30
+    assert config.max_memory_mb == 256
+    assert config.max_output_bytes == 1_000_000
+    assert config.allow_network is False

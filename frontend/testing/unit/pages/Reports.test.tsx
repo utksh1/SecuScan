@@ -103,9 +103,10 @@ describe('Reports — empty state', () => {
     vi.mocked(getDashboardSummary).mockResolvedValue(emptySummary)
   })
 
-  it('shows Archive Isolated when there are no reports at all', async () => {
+  it('shows onboarding empty state when there are no reports at all', async () => {
     renderReports()
-    expect(await screen.findByText(/Archive Isolated/i)).toBeInTheDocument()
+    expect(await screen.findByText(/No Briefings Yet/i)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /launch_first_scan/i })).toBeInTheDocument()
   })
 
   it('shows Archive Isolated when filter returns no matching reports', async () => {
@@ -132,6 +133,14 @@ describe('Reports — export buttons on a ready report', () => {
     expect(await screen.findByRole('button', { name: /^pdf$/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^html$/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^csv$/i })).toBeInTheDocument()
+  })
+
+  it('keeps the client-side rendered-PDF button distinct from the server export', async () => {
+    renderReports()
+    // The client-side PDF export (#1205) must carry its own accessible name so it
+    // does not collide with the server-side export "pdf" button below it.
+    expect(await screen.findByRole('button', { name: /rendered pdf/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^pdf$/i })).toBeInTheDocument()
   })
 
   it('export buttons are enabled for a ready report', async () => {

@@ -3,12 +3,14 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useTheme } from '../components/ThemeContext'
 import { useToast } from '../components/ToastContext'
 import {
+  authenticateWithApiKey,
+  clearStoredApiKey,
   createNotificationRule,
   deleteNotificationRule,
   getStoredApiKey,
   listNotificationHistory,
   listNotificationRules,
-  setStoredApiKey,
+  logoutSession,
   updateNotificationRule,
   type NotificationChannelType,
   type NotificationHistoryRow,
@@ -205,20 +207,25 @@ export default function Settings() {
         }
     }
 
-    const handleSaveApiKey = () => {
+    const handleSaveApiKey = async () => {
         const trimmed = apiKey.trim()
         if (!trimmed) {
             addToast("API key cannot be empty", "error")
             return
         }
-        setStoredApiKey(trimmed)
-        addToast("API key saved — all future requests will use this key", "success")
+        try {
+            await authenticateWithApiKey(trimmed)
+            addToast("API key saved — all future requests will use this key", "success")
+        } catch (err: any) {
+            addToast(err?.message || "Authentication failed", "error")
+        }
     }
 
-    const handleClearApiKey = () => {
+    const handleClearApiKey = async () => {
         if (window.confirm("Clear the stored API key? The UI will return 401 errors until a valid key is configured.")) {
             setApiKey('')
-            setStoredApiKey('')
+            clearStoredApiKey()
+            await logoutSession()
             addToast("API key cleared", "info")
         }
     }
@@ -413,7 +420,7 @@ export default function Settings() {
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-silver-bright uppercase tracking-widest block italic">Backend_API_Key</label>
                                 <p className="text-[10px] text-silver/40 uppercase font-bold italic mb-4 leading-relaxed">
-                                    Read from <span className="text-rag-blue font-mono">backend/data/.api_key</span> after starting the backend. Stored locally in browser — never sent to any remote server.
+                                    Read from <span className="text-rag-blue font-mono">backend/data/.api_key</span> after starting the backend. Sent to the backend which sets an HttpOnly session cookie — never persisted in browser storage.
                                 </p>
                             </div>
                             <div className="flex gap-4 items-stretch">

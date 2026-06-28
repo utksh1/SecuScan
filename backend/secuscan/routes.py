@@ -104,7 +104,8 @@ from .ratelimit import (
     resolve_client_identity, admin_limiter,
     scheduler_tick_limiter,
 )
-from .validation import validate_target, validate_task_start_payload, validate_url
+from .rate_limiter import check_scan_rate_limit
+from .validation import validate_target, validate_task_start_payload, validate_url, validate_preset_name
 from .reporting import reporting
 from .vault import VaultCrypto
 from .workflows import scheduler, _finalize_workflow_run
@@ -193,8 +194,6 @@ async def get_or_set_cached(key: str, builder):
     value = await builder()
     await cache.set_json(key, value)
     return value
-
-
 
 
 async def require_owned_task(db, task_id: str, owner: str, columns: str = "owner_id") -> Dict[str, Any]:
@@ -311,7 +310,7 @@ async def get_all_presets():
     }
 
 
-@router.post("/task/start", dependencies=[Depends(task_start_limiter)])
+@router.post("/task/start", dependencies=[Depends(task_start_limiter), Depends(check_scan_rate_limit)])
 async def start_task(
     request: TaskCreateRequest,
     background_tasks: BackgroundTasks,
@@ -343,6 +342,15 @@ async def start_task(
     if not plugin:
         logger.warning(f"Task start failed: Plugin not found: {request.plugin_id}")
         raise HTTPException(status_code=404, detail=f"Plugin not found: {request.plugin_id}")
+
+    preset_ok, preset_error = validate_preset_name(
+        request.plugin_id,
+        request.preset,
+        plugin.presets,
+    )
+    if not preset_ok:
+        logger.warning("Task start failed: %s", preset_error)
+        raise HTTPException(status_code=400, detail=preset_error)
 
     db = await get_db()
     target_policy = await get_target_policy(db, owner, execution_context.get("target_policy_id"))
@@ -471,7 +479,7 @@ async def start_task(
         "stream_url": f"/api/v1/task/{task_id}/stream"
     }
 
-@router.post("/task/{task_id}/retry", dependencies=[Depends(task_start_limiter)])
+@router.post("/task/{task_id}/retry", dependencies=[Depends(task_start_limiter) , Depends(check_scan_rate_limit)])
 async def retry_task(
     task_id: str,
     background_tasks: BackgroundTasks,
@@ -917,37 +925,56 @@ async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
     async def build():
         db = await get_db()
 
+        async def query_or_default(label: str, query_fn: Callable[[], Any], default: Any) -> Any:
+            try:
+                return await query_fn()
+            except Exception as exc:
+                logger.warning("Dashboard summary query '%s' failed for owner %s: %s", label, owner, exc)
+                return default
+
         # Get data
         # Push severity aggregation to DB — avoids full table scan in Python.
         # Every aggregate below is scoped to the caller so the dashboard never
         # surfaces another user/workspace's tasks or findings (issue #401).
-        severity_rows = await db.fetchall(
-            """
-            SELECT severity, COUNT(*) AS cnt
-            FROM findings
-            WHERE owner_id = ?
-            GROUP BY severity
-            """,
-            (owner,),
+        severity_rows = await query_or_default(
+            "severity_counts",
+            lambda: db.fetchall(
+                """
+                SELECT severity, COUNT(*) AS cnt
+                FROM findings
+                WHERE owner_id = ?
+                GROUP BY severity
+                """,
+                (owner,),
+            ),
+            [],
         )
         severity_counts = {row["severity"]: row["cnt"] for row in severity_rows}
 
-        task_stats = await db.fetchone(
-            """
-            SELECT
-                COUNT(*) AS total,
-                COUNT(*) FILTER (WHERE status = 'completed') AS completed,
-                COUNT(*) FILTER (WHERE status = 'running') AS running
-            FROM tasks
-            WHERE owner_id = ?
-            """,
-            (owner,),
+        task_stats = await query_or_default(
+            "task_stats",
+            lambda: db.fetchone(
+                """
+                SELECT
+                    COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE status = 'completed') AS completed,
+                    COUNT(*) FILTER (WHERE status = 'running') AS running
+                FROM tasks
+                WHERE owner_id = ?
+                """,
+                (owner,),
+            ),
+            {"total": 0, "completed": 0, "running": 0},
         )
 
-        total_findings_row = await db.fetchone(
-            "SELECT COUNT(*) AS total FROM findings WHERE owner_id = ?", (owner,)
+        total_findings_row = await query_or_default(
+            "total_findings",
+            lambda: db.fetchone(
+                "SELECT COUNT(*) AS total FROM findings WHERE owner_id = ?", (owner,)
+            ),
+            None,
         )
-        total_findings = total_findings_row["total"] if total_findings_row else 0
+        total_findings = total_findings_row["total"] if total_findings_row else sum(severity_counts.values())
 
         critical_findings: int = severity_counts.get("critical", 0)
         high_findings: int = severity_counts.get("high", 0)
@@ -956,19 +983,23 @@ async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
         info_findings: int = severity_counts.get("info", 0)
 
         # Fetch only the 5 most recent findings — not the entire table
-        recent_rows = await db.fetchall(
-            """
-            SELECT id, title, category, severity, target, description,
-                remediation, proof, cvss, cve, discovered_at,
-                validated, validation_method, confidence_reason,
-                service_fingerprint, cpe, risk_score, risk_factors_json,
-                evidence_json, asset_refs_json, references_json, metadata_json
-            FROM findings
-            WHERE owner_id = ?
-            ORDER BY discovered_at DESC
-            LIMIT 5
-            """,
-            (owner,),
+        recent_rows = await query_or_default(
+            "recent_findings",
+            lambda: db.fetchall(
+                """
+                SELECT id, title, category, severity, target, description,
+                    remediation, proof, cvss, cve, discovered_at,
+                    validated, validation_method, confidence_reason,
+                    service_fingerprint, cpe, risk_score, risk_factors_json,
+                    evidence_json, asset_refs_json, references_json, metadata_json
+                FROM findings
+                WHERE owner_id = ?
+                ORDER BY discovered_at DESC
+                LIMIT 5
+                """,
+                (owner,),
+            ),
+            [],
         )
         recent_findings: List[Dict] = parse_json_fields(
             recent_rows,
@@ -1006,16 +1037,24 @@ async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
                 "running": int(task_stats["running"]) if task_stats and task_stats.get("running") is not None else 0,
             },
             "running_tasks": parse_json_fields(
-                await db.fetchall(
-                    "SELECT id, plugin_id, tool_name, target, status, created_at FROM tasks WHERE owner_id = ? AND status = 'running' ORDER BY created_at DESC LIMIT 5",
-                    (owner,),
+                await query_or_default(
+                    "running_tasks",
+                    lambda: db.fetchall(
+                        "SELECT id, plugin_id, tool_name, target, status, created_at FROM tasks WHERE owner_id = ? AND status = 'running' ORDER BY created_at DESC LIMIT 5",
+                        (owner,),
+                    ),
+                    [],
                 ),
                 []
             ),
             "recent_tasks": parse_json_fields(
-                await db.fetchall(
-                    "SELECT id, plugin_id, tool_name, target, status, created_at, duration_seconds FROM tasks WHERE owner_id = ? ORDER BY created_at DESC LIMIT 5",
-                    (owner,),
+                await query_or_default(
+                    "recent_tasks",
+                    lambda: db.fetchall(
+                        "SELECT id, plugin_id, tool_name, target, status, created_at, duration_seconds FROM tasks WHERE owner_id = ? ORDER BY created_at DESC LIMIT 5",
+                        (owner,),
+                    ),
+                    [],
                 ),
                 []
             )
@@ -1243,8 +1282,7 @@ async def delete_task_records(task_ids: List[str]):
         all_task_rows.extend(rows)
 
     # Delete associated records in chunks, atomic within a transaction
-    await db.begin()
-    try:
+    async with db.transaction():
         # Re-check running status inside the transaction to prevent the
         # race where a task starts running between the check and the delete.
         for i in range(0, len(task_ids), SQLITE_CHUNK_SIZE):
@@ -1285,13 +1323,6 @@ async def delete_task_records(task_ids: List[str]):
             await db.execute_no_commit(
                 f"DELETE FROM tasks                WHERE id         IN ({placeholders})", tuple(chunk)
             )
-        await db.commit()
-    except HTTPException:
-        await db.rollback()
-        raise
-    except Exception:
-        await db.rollback()
-        raise
 
     # Cleanup files on disk (outside the transaction — file deletion is not
     # transactional; a failure here does not leave the DB in an inconsistent
@@ -1475,34 +1506,21 @@ async def upsert_vault_secret(
     encrypted = crypto.encrypt(value)
     secret_id = str(uuid.uuid4())
 
-    existing = await db.fetchone(
-        """
-        SELECT id
-        FROM credential_vault
-        WHERE owner_id = ? AND name = ?
-        """,
-        (owner, name),
-    )
-
-    if existing:
-        await db.execute(
-            """
-            UPDATE credential_vault
-            SET encrypted_value = ?, updated_at = datetime('now')
-            WHERE owner_id = ? AND name = ?
-            """,
-            (encrypted, owner, name),
+    async with db.transaction():
+        existing = await db.fetchone(
+            "SELECT id FROM credential_vault WHERE owner_id = ? AND name = ?",
+            (owner, name),
         )
-    else:
-        await db.execute(
-            """
-            INSERT INTO credential_vault
-            (id, owner_id, name, encrypted_value)
-            VALUES (?, ?, ?, ?)
-            """,
-            (secret_id, owner, name, encrypted),
-        )
-
+        if existing:
+            await db.execute(
+                "UPDATE credential_vault SET encrypted_value = ?, updated_at = datetime('now') WHERE owner_id = ? AND name = ?",
+                (encrypted, owner, name),
+            )
+        else:
+            await db.execute(
+                "INSERT INTO credential_vault (id, owner_id, name, encrypted_value) VALUES (?, ?, ?, ?)",
+                (secret_id, owner, name, encrypted),
+            )
     return {"name": name, "stored": True}
 
 @router.get("/vault/{name}", dependencies=[Depends(vault_limiter)])
@@ -1844,7 +1862,7 @@ async def _verify_workflow_owner(db, workflow_id: str, owner: str):
     return row
 
 
-@router.post("/workflows/{workflow_id}/run")
+@router.post("/workflows/{workflow_id}/run", dependencies=[Depends(check_scan_rate_limit)])
 async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_owner)):
     db = await get_db()
     row = await _verify_workflow_owner(db, workflow_id, owner)
@@ -1979,6 +1997,10 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any], owner: str 
     db = await get_db()
     row = await _verify_workflow_owner(db, workflow_id, owner)
 
+    old_enabled = bool(row["enabled"])
+    new_enabled = old_enabled
+    enabled_changed = False
+
     updates = []
     params: List[Any] = []
     if "name" in payload:
@@ -1992,12 +2014,12 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any], owner: str 
         updates.append("schedule_seconds = ?")
         params.append(int(val) if val else None)
     if "enabled" in payload:
+        new_enabled = bool(payload["enabled"])
+
         updates.append("enabled = ?")
-        params.append(1 if payload["enabled"] else 0)
+        params.append(1 if new_enabled else 0)
 
-    if not updates:
-        raise HTTPException(status_code=400, detail="No update fields provided")
-
+        enabled_changed = (new_enabled != old_enabled)
     params.append(workflow_id)
     await db.execute(f"UPDATE workflows SET {', '.join(updates)} WHERE id = ?", tuple(params))
     updated = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
@@ -2011,6 +2033,25 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any], owner: str 
         steps=json.loads(updated["steps_json"] or "[]"),
         created_by="patch",
     )
+
+    if enabled_changed:
+        await db.log_audit(
+            event_type=(
+                "workflow_enabled"
+                if new_enabled
+                else "workflow_disabled"
+            ),
+            message=(
+                f"Workflow {workflow_id} "
+                f"{'enabled' if new_enabled else 'disabled'}"
+            ),
+            context={
+                "workflow_id": workflow_id,
+                "actor": owner,
+                "previous_state": old_enabled,
+                "new_state": new_enabled,
+            },
+        )
     return _serialize_workflow(updated)
 
 
@@ -2022,7 +2063,7 @@ async def delete_workflow(workflow_id: str, owner: str = Depends(get_current_own
     return {"workflow_id": workflow_id, "deleted": True}
 
 
-@router.post("/workflows/scheduler/tick", dependencies=[Depends(scheduler_tick_limiter)])
+@router.post("/workflows/scheduler/tick", dependencies=[Depends(scheduler_tick_limiter), Depends(check_scan_rate_limit)])
 async def trigger_workflow_tick():
     await scheduler.tick()
     return {"tick": "ok"}
@@ -2071,6 +2112,21 @@ async def create_notification_rule(payload: NotificationRuleCreate, owner: str =
     if not row:
         raise HTTPException(status_code=500, detail="Failed to create notification rule")
     return _serialize_notification_rule(row)
+
+@router.get("/rate-limit/status")
+async def get_rate_limit_status(request: Request):
+    """Get current rate limit status for the client."""
+    limiter = getattr(request.app.state, 'scan_rate_limiter', None)
+    if limiter and hasattr(limiter, 'get_status'):
+        client_id = request.client.host if request.client else "unknown"
+        status_info = await limiter.get_status(client_id)
+        return {
+            "status": "enabled",
+            "client": client_id,
+            "remaining": status_info.get("remaining", 0),
+            "reset_in": status_info.get("reset_in", 0),
+        }
+    return {"status": "disabled", "message": "Rate limiting is not enabled"}
 
 
 async def _verify_notification_rule_owner(db, rule_id: str, owner: str):

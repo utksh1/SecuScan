@@ -231,9 +231,19 @@ class TaskExecutor:
         """Broadcast a scan phase transition and persist it to the database."""
         await self._broadcast(task_id, "phase", phase)
         db = await get_db()
+        now = datetime.now(timezone.utc).isoformat()
         await db.execute(
-            "UPDATE tasks SET scan_phase = ? WHERE id = ?",
-            (phase, task_id)
+            """
+            UPDATE tasks
+            SET scan_phase = ?,
+                phase_timestamps_json = json_set(
+                    phase_timestamps_json,
+                    '$.' || COALESCE(scan_phase, 'unknown') || '.completed_at', ?,
+                    '$.' || ? || '.started_at', ?
+                )
+            WHERE id = ?
+            """,
+            (phase, now, phase, now, task_id)
         )
 
     async def create_task(
@@ -281,8 +291,8 @@ class TaskExecutor:
             """
             INSERT INTO tasks (
                 id, owner_id, plugin_id, tool_name, target, inputs_json, preset,
-                execution_context_json, status, scan_phase, consent_granted, safe_mode
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                execution_context_json, status, scan_phase, phase_timestamps_json, consent_granted, safe_mode
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 task_id,
@@ -295,6 +305,7 @@ class TaskExecutor:
                 serialize_execution_context(execution_context),
                 TaskStatus.QUEUED.value,
                 ScanPhase.QUEUED.value,
+                json.dumps({ScanPhase.QUEUED.value: {"started_at": datetime.now(timezone.utc).isoformat()}}),
                 consent_granted,
                 bool(safe_mode)
             )
@@ -541,6 +552,7 @@ class TaskExecutor:
         plugin_id: str,
         target: str,
         inputs: Dict[str, Any],
+        safe_mode: bool,
     ) -> tuple[str, float, int]:
         """Execute a standard CLI/Docker plugin and persist findings/report."""
         plugin_manager = get_plugin_manager()
@@ -723,6 +735,7 @@ class TaskExecutor:
                     plugin_id=plugin_id,
                     target=target,
                     inputs=inputs,
+                    safe_mode=safe_mode,
                 )
 
             await self._dispatch_task_notifications(db, task_id)
@@ -1003,19 +1016,20 @@ class TaskExecutor:
                 logger.error(f"Failed to kill docker container for {task_id}: {e}")
 
         db = await get_db()
-        await db.execute(
-            "UPDATE tasks SET status = ?, completed_at = ? WHERE id = ?",
-            (TaskStatus.CANCELLED.value, datetime.now().isoformat(), task_id)
-        )
+        async with db.transaction():
+            await db.execute(
+                "UPDATE tasks SET status = ?, completed_at = ? WHERE id = ? AND status = ?",
+                (TaskStatus.CANCELLED.value, datetime.now().isoformat(), task_id, TaskStatus.RUNNING.value)
+            )
+
+            await db.log_audit(
+                "task_cancelled",
+                "Task cancelled by user",
+                task_id=task_id
+            )
 
         await self._broadcast(task_id, "status", TaskStatus.CANCELLED.value)
         await self._invalidate_cached_views()
-
-        await db.log_audit(
-            "task_cancelled",
-            "Task cancelled by user",
-            task_id=task_id
-        )
 
         return True
 
@@ -1024,7 +1038,7 @@ class TaskExecutor:
         db = await get_db()
         task_row = await db.fetchone(
             """
-            SELECT id, plugin_id, tool_name, target, status, scan_phase, created_at, started_at, completed_at,
+            SELECT id, plugin_id, tool_name, target, status, scan_phase, phase_timestamps_json, created_at, started_at, completed_at,
                    duration_seconds, exit_code, error_message, preset, inputs_json, execution_context_json
             FROM tasks WHERE id = ?
             """,
@@ -1045,6 +1059,11 @@ class TaskExecutor:
             pending_count = len(ids)
             queue_position = (ids.index(task_id) + 1) if task_id in ids else None
 
+        try:
+            phase_timestamps = json.loads(_row_value(task_row, "phase_timestamps_json", "{}"))
+        except json.JSONDecodeError:
+            phase_timestamps = {}
+
         return {
             "task_id": task_row["id"],
             "plugin_id": task_row["plugin_id"],
@@ -1052,6 +1071,7 @@ class TaskExecutor:
             "target": task_row["target"],
             "status": task_row["status"],
             "scan_phase": task_row.get("scan_phase"),
+            "phase_timestamps": phase_timestamps,
             "created_at": task_row["created_at"],
             "started_at": task_row["started_at"],
             "completed_at": task_row["completed_at"],
@@ -1424,41 +1444,42 @@ class TaskExecutor:
         structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
         structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
 
-        await db.execute(
-            "UPDATE tasks SET structured_json = ? WHERE id = ?",
-            (json.dumps(structured_result), task_id)
-        )
+        async with db.transaction():
+            await db.execute(
+                "UPDATE tasks SET structured_json = ? WHERE id = ?",
+                (json.dumps(structured_result), task_id)
+            )
 
-        await db.execute(
-            """
-            INSERT INTO reports (
-                id, owner_id, task_id, name, type, generated_at, status, findings, pages
-            ) VALUES (?, ?, ?, ?, ?, (datetime('now')), ?, ?, ?)
-            ON CONFLICT (id) DO UPDATE SET
-                status = EXCLUDED.status,
-                findings = EXCLUDED.findings,
-                pages = EXCLUDED.pages
-            """,
-            (
-                f"report:{task_id}",
-                owner_id,
-                task_id,
-                f"{plugin.name} Report",
-                "technical",
-                "ready" if status == TaskStatus.COMPLETED.value else "failed",
-                len(findings_data),
-                1,
-            ),
-        )
+            await db.execute(
+                """
+                INSERT INTO reports (
+                    id, owner_id, task_id, name, type, generated_at, status, findings, pages
+                ) VALUES (?, ?, ?, ?, ?, (datetime('now')), ?, ?, ?)
+                ON CONFLICT (id) DO UPDATE SET
+                    status = EXCLUDED.status,
+                    findings = EXCLUDED.findings,
+                    pages = EXCLUDED.pages
+                """,
+                (
+                    f"report:{task_id}",
+                    owner_id,
+                    task_id,
+                    f"{plugin.name} Report",
+                    "technical",
+                    "ready" if status == TaskStatus.COMPLETED.value else "failed",
+                    len(findings_data),
+                    1,
+                ),
+            )
 
-        await self._persist_result_resources(
-            db,
-            owner_id=owner_id,
-            task_id=task_id,
-            plugin_id=plugin_id,
-            target=target,
-            result=structured_result,
-        )
+            await self._persist_result_resources(
+                db,
+                owner_id=owner_id,
+                task_id=task_id,
+                plugin_id=plugin_id,
+                target=target,
+                result=structured_result,
+            )
 
     async def _upsert_findings_and_report_from_scanner(self, db, task_id: str, owner_id: str, scanner: Any, plugin_id: str, target: str, status: str, result: Dict[str, Any]):
         """Persist modular scanner results into findings, and reports."""
@@ -1489,42 +1510,43 @@ class TaskExecutor:
         structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
         structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
 
-        await db.execute(
-            "UPDATE tasks SET structured_json = ? WHERE id = ?",
-            (json.dumps(structured_result), task_id)
-        )
+        async with db.transaction():
+            await db.execute(
+                "UPDATE tasks SET structured_json = ? WHERE id = ?",
+                (json.dumps(structured_result), task_id)
+            )
 
-        # Create/Update report
-        await db.execute(
-            """
-            INSERT INTO reports (
-                id, owner_id, task_id, name, type, generated_at, status, findings, pages
-            ) VALUES (?, ?, ?, ?, ?, (datetime('now')), ?, ?, ?)
-            ON CONFLICT (id) DO UPDATE SET
-                status = EXCLUDED.status,
-                findings = EXCLUDED.findings,
-                pages = EXCLUDED.pages
-            """,
-            (
-                f"report:{task_id}",
-                owner_id,
-                task_id,
-                f"{scanner.name} Report",
-                "professional" if status == TaskStatus.COMPLETED.value else "failed",
-                "ready" if status == TaskStatus.COMPLETED.value else "failed",
-                len(findings_data),
-                2, # Professional reports are typically multi-page
-            ),
-        )
+            # Create/Update report
+            await db.execute(
+                """
+                INSERT INTO reports (
+                    id, owner_id, task_id, name, type, generated_at, status, findings, pages
+                ) VALUES (?, ?, ?, ?, ?, (datetime('now')), ?, ?, ?)
+                ON CONFLICT (id) DO UPDATE SET
+                    status = EXCLUDED.status,
+                    findings = EXCLUDED.findings,
+                    pages = EXCLUDED.pages
+                """,
+                (
+                    f"report:{task_id}",
+                    owner_id,
+                    task_id,
+                    f"{scanner.name} Report",
+                    "professional" if status == TaskStatus.COMPLETED.value else "failed",
+                    "ready" if status == TaskStatus.COMPLETED.value else "failed",
+                    len(findings_data),
+                    2, # Professional reports are typically multi-page
+                ),
+            )
 
-        await self._persist_result_resources(
-            db,
-            owner_id=owner_id,
-            task_id=task_id,
-            plugin_id=plugin_id,
-            target=target,
-            result=structured_result,
-        )
+            await self._persist_result_resources(
+                db,
+                owner_id=owner_id,
+                task_id=task_id,
+                plugin_id=plugin_id,
+                target=target,
+                result=structured_result,
+            )
 
     async def _persist_result_resources(
         self,
@@ -1844,6 +1866,10 @@ class TaskExecutor:
             )
             if sent:
                 logger.info("Task %s: delivered %d notification(s)", task_id, sent)
+
+            # Send Slack Webhook notification for scan completion
+            from .notification_service import process_slack_notification
+            await process_slack_notification(db, task_id)
         except Exception as exc:
             logger.warning(
                 "Task %s: notification dispatch failed: %s",

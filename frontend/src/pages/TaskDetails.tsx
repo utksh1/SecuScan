@@ -943,9 +943,16 @@ export default function TaskDetails() {
                         animate={{ opacity: 1, height: 'auto' }}
                         className="bg-rag-red/10 border-l-4 border-rag-red p-6 space-y-3"
                     >
-                        <div className="flex items-center gap-3 text-rag-red">
-                            <DetailIcon icon={AlertCircleIcon} />
-                            <h3 className="text-xs font-black uppercase tracking-[0.3em] italic">Critical_Execution_Fault</h3>
+                        <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3 text-rag-red">
+                                <DetailIcon icon={AlertCircleIcon} />
+                                <h3 className="text-xs font-black uppercase tracking-[0.3em] italic">Critical_Execution_Fault</h3>
+                            </div>
+                            <CopyToClipboard
+                                textToCopy={task.error_message}
+                                label="Copy Trace"
+                                title="Copy error trace to clipboard"
+                            />
                         </div>
                         <CollapsiblePane content={task.error_message} maxCollapsedLength={400} label="error output" />
                         <div className="pt-2">

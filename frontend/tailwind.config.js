@@ -8,6 +8,15 @@ export default {
   theme: {
     extend: {
       colors: {
+        'primary': 'var(--bg-primary)',
+        'secondary': 'var(--bg-secondary)',
+        'bg-primary': 'var(--bg-primary)',
+        'bg-secondary': 'var(--bg-secondary)',
+        'bg-tertiary': 'var(--bg-tertiary)',
+        'bg-elevated': 'var(--bg-elevated)',
+        'primary-text': 'var(--text-primary)',
+        'secondary-text': 'var(--text-secondary)',
+        'muted': 'var(--text-muted)',
         'charcoal-dark': 'var(--bg-primary)',
         charcoal: {
           light: 'var(--bg-tertiary)',

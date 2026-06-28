@@ -189,6 +189,16 @@ function CreateSheet({ onClose, onCreated }: CreateSheetProps) {
               inputMode="numeric"
               className="w-full bg-charcoal-dark border-4 border-black px-4 py-3 text-sm text-silver-bright font-mono placeholder:text-silver/30 focus:outline-none focus:border-rag-red transition-colors"
             />
+            <p className="text-[10px] text-silver/50 font-mono">
+              Enter an interval in seconds. Examples: 60 (1 minute), 300 (5 minutes), 3600 (1 hour), 86400 (1 day).
+            </p>
+            {scheduleSeconds.trim() !== '' &&
+              (!Number.isInteger(Number(scheduleSeconds)) ||
+                Number(scheduleSeconds) <= 0) && (
+                <p className="text-[10px] text-rag-red font-black uppercase tracking-widest">
+                  Schedule must be a positive whole number of seconds
+                </p>
+            )}
           </div>
 
           <div className="flex items-center justify-between">
@@ -213,7 +223,11 @@ function CreateSheet({ onClose, onCreated }: CreateSheetProps) {
             {jsonError && <p className="text-[10px] text-rag-red font-black uppercase tracking-widest">{jsonError}</p>}
           </div>
 
-          {error && <p className="text-[10px] text-rag-red font-black uppercase tracking-widest">{error}</p>}
+          {error && error !== 'Schedule must be a positive whole number of seconds' && (
+            <p className="text-[10px] text-rag-red font-black uppercase tracking-widest">
+              {error}
+            </p>
+          )}
 
           <div className="flex gap-4 pt-2">
             <button
