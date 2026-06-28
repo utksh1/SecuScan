@@ -5,7 +5,7 @@ Configuration management for SecuScan backend
 from pathlib import Path
 from typing import Any, List, Optional
 from pydantic import field_validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 import base64
 import hashlib
 import os
@@ -176,9 +176,7 @@ class Settings(BaseSettings):
     # Slack Webhook Configuration
     slack_webhook_url: Optional[str] = None
 
-    class Config:
-        env_prefix = "SECUSCAN_"
-        case_sensitive = False
+    model_config = SettingsConfigDict(env_prefix="SECUSCAN_", case_sensitive=False)
 
     @field_validator(
         "cors_allowed_origins",
