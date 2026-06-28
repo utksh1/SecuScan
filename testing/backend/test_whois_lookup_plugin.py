@@ -16,11 +16,11 @@ def test_whois_lookup_missing_binary_graceful_fallback():
     the plugin catches the failure gracefully and returns an error dictionary instead of crashing.
     """
     mock_error_msg = "Error: whois binary not found on the system host environment."
-    
+
     # Use a standard Exception which plugins/whois_lookup/whois_tool.py line 18 is built to catch
     with patch("whois.whois", side_effect=Exception(mock_error_msg)):
         result = lookup("example.com")
-        
+
         # Verify the tool safely intercepted the crash and returned the message string under the "error" key
         assert isinstance(result, dict)
         assert "error" in result
