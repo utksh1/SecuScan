@@ -2,9 +2,10 @@
 
 ## Plugin Development
 
-New contributors can follow the complete plugin creation walkthrough:
-
-docs/plugins/plugin-development-walkthrough.md
+New contributors should refer to these resources:
+- [Plugin Development Walkthrough](docs/plugins/plugin-development-walkthrough.md)
+- [Plugin Security Checklist & Guidelines](docs/plugins/plugin-security-checklist.md)
+- [Plugin Reviewer Rubric](docs/plugins/plugin-reviewer-rubric.md)
 
 This file is a human-readable index of the plugins currently present in `plugins/*/metadata.json`.
 
