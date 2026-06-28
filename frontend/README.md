@@ -178,11 +178,9 @@ useEffect(() => {
 1. Create component in `src/pages/`:
 ```tsx
 // src/pages/MyPage.tsx
-const MyPage = (): JSX.Element => {
-  return <div>My Page Content</div>;
-};
-
-export default MyPage;
+export default function MyPage() {
+  return <div>My Page Content</div>
+}
 ```
 
 2. Add route in `App.tsx`:
@@ -190,7 +188,7 @@ export default MyPage;
 <Route path="/mypage" element={<MyPage />} />
 ```
 
-3. 3. Add navigation link in your layout component (e.g. `AppShell.tsx`)::
+3. Add navigation link in your layout component (e.g. `AppShell.tsx`):
 ```tsx
 <NavLink to="/mypage">My Page</NavLink>
 ```
@@ -215,7 +213,6 @@ export default MyComponent;
 
 2. Import and use:
 ```tsx
-import { api } from "../services/api";
 import MyComponent from '../components/MyComponent';
 
 <MyComponent prop1="value" prop2={123} />
