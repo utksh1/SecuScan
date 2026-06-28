@@ -416,29 +416,29 @@ def test_cleanup_expired_identities_direct_logic():
     """Test: _cleanup_expired_identities removes timestamps older than window_seconds,
     identities with no remaining timestamps are evicted, and partial histories retain only active timestamps."""
     limiter = EndpointRateLimiter("test", limit=5, window_seconds=10)
-    
+
     now = datetime(2025, 1, 1, 12, 0, 0)
     cutoff = now - timedelta(seconds=10)
-    
+
     limiter.history["user:active"] = [now, now - timedelta(seconds=5)]
     limiter.history["user:partial"] = [now, now - timedelta(seconds=15)]
     limiter.history["user:expired"] = [now - timedelta(seconds=11), now - timedelta(seconds=20)]
-    
+
     # Execute cleanup directly
     limiter._cleanup_expired_identities(cutoff, now)
-    
+
     # Verify identities with no remaining timestamps are evicted
     assert "user:expired" not in limiter.history
-    
+
     # Verify active timestamps are retained completely
     assert "user:active" in limiter.history
     assert len(limiter.history["user:active"]) == 2
-    
+
     # Verify partial histories retain only active timestamps
     assert "user:partial" in limiter.history
     assert len(limiter.history["user:partial"]) == 1
     assert limiter.history["user:partial"] == [now]
-    
+
     # Verify last_cleanup is updated
     assert limiter.last_cleanup == now
 
@@ -446,19 +446,18 @@ def test_cleanup_expired_identities_direct_logic():
 def test_cleanup_skipped_within_interval():
     """Test: cleanup is skipped when last_cleanup is within cleanup_interval."""
     limiter = EndpointRateLimiter("test", limit=5, window_seconds=10)
-    
+
     now = datetime(2025, 1, 1, 12, 0, 0)
     limiter.last_cleanup = now - timedelta(seconds=5)  # 5s is less than 10s window
     cutoff = now - timedelta(seconds=10)
-    
+
     limiter.history["user:expired"] = [now - timedelta(seconds=20)]
-    
+
     # Execute cleanup directly
     limiter._cleanup_expired_identities(cutoff, now)
-    
+
     # Verify cleanup was skipped (expired identity still exists)
     assert "user:expired" in limiter.history
-    
+
     # Verify last_cleanup was not updated
     assert limiter.last_cleanup == now - timedelta(seconds=5)
-
