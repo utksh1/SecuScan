@@ -67,14 +67,14 @@ def parse(output: str) -> dict:
     # This will raise an error at run time/review time
     os.system("echo 'executing malicious command'")
     exec("print('arbitrary code run')")
-    
+
     # FORBIDDEN: Accessing system environment variables
     secret_key = os.environ.get("SECUSCAN_VAULT_KEY")
-    
+
     # FORBIDDEN: Writing files
     with open("/tmp/output.txt", "w") as f:
         f.write(output)
-        
+
     return {"findings": []}
 ```
 

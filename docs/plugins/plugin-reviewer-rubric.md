@@ -8,7 +8,7 @@ This document serves as the guide and checklist for maintainers and reviewers ev
 
 Reviewers must go through the following validation checks for every plugin PR:
 
-- [ ] **Validation Script Execution**: 
+- [ ] **Validation Script Execution**:
   Verify that the single-plugin validation script exits successfully:
   ```bash
   python scripts/validate_plugin.py --plugin <plugin_id>
@@ -89,7 +89,7 @@ import re
 
 def parse(output: str) -> dict:
     findings = []
-    
+
     # Process text deterministically using standard libraries
     for line in output.splitlines():
         if line.startswith("Registrar:"):
@@ -97,7 +97,7 @@ def parse(output: str) -> dict:
                 "registrar": line.split(":", 1)[1].strip(),
                 "type": "info"
             })
-            
+
     return {"findings": findings}
 ```
 
@@ -154,26 +154,26 @@ import socket
 import sys
 
 # REJECTED: Importing forbidden internal packages
-import secuscan.config 
+import secuscan.config
 
 def parse(output: str) -> dict:
     # REJECTED: Forbidden exec() usage runs arbitrary code
-    exec("print('dangerous execution')") 
-    
+    exec("print('dangerous execution')")
+
     # REJECTED: Spawning system shell processes
-    os.system("rm -rf /tmp/data") 
-    
+    os.system("rm -rf /tmp/data")
+
     # REJECTED: Interacting with the network
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.connect(("evil-malicious-site.com", 80)) 
-    
+    s.connect(("evil-malicious-site.com", 80))
+
     # REJECTED: Writing files to filesystem
     with open("results.txt", "w") as f:
         f.write(output)
-        
+
     # REJECTED: Accessing sensitive application environment variables
-    db_password = os.environ.get("DATABASE_URL") 
-    
+    db_password = os.environ.get("DATABASE_URL")
+
     return {"findings": []}
 ```
 

@@ -699,10 +699,10 @@ class TestSecurityNegativeTests:
     def test_sandbox_exec_fails_on_exec_statement(self):
         """Parser sandbox should raise ParserSandboxError when parser execution encounters exec()."""
         from backend.secuscan.parser_sandbox import run_parser_in_sandbox, ParserSandboxError
-        
+
         fixture_dir = Path(__file__).resolve().parent / "fixtures" / "plugins" / "forbidden_parser_plugin"
         parser_path = fixture_dir / "parser.py"
-        
+
         with pytest.raises(ParserSandboxError) as exc_info:
             run_parser_in_sandbox(
                 parser_path=parser_path,
@@ -714,10 +714,10 @@ class TestSecurityNegativeTests:
     def test_sandbox_strips_environ_secrets(self, monkeypatch):
         """Parser sandbox environment variables should be stripped to avoid secret leakage."""
         from backend.secuscan.parser_sandbox import run_parser_in_sandbox
-        
+
         # Set a sensitive secret in the parent process env
         monkeypatch.setenv("SECUSCAN_VAULT_KEY", "super_secret_credentials_xyz")
-        
+
         # We can dynamically write a temp parser that checks the environment
         import tempfile
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -730,13 +730,13 @@ class TestSecurityNegativeTests:
                 "    return {'secret': secret}\n",
                 encoding="utf-8"
             )
-            
+
             result = run_parser_in_sandbox(
                 parser_path=parser_file,
                 plugin_id="env_leak_test_plugin",
                 parser_input="test"
             )
-            
+
             # The result dict should NOT contain the secret
             assert result.get("secret") is None or result.get("secret") == ""
 
@@ -744,7 +744,7 @@ class TestSecurityNegativeTests:
         """Parser sandbox should kill a hanging parser execution via timeout."""
         from backend.secuscan.parser_sandbox import run_parser_in_sandbox, ParserSandboxError
         import tempfile
-        
+
         with tempfile.TemporaryDirectory() as tmp_dir:
             parser_dir = Path(tmp_dir)
             parser_file = parser_dir / "parser.py"
@@ -756,7 +756,7 @@ class TestSecurityNegativeTests:
                 "        time.sleep(0.1)\n",
                 encoding="utf-8"
             )
-            
+
             # Set a very low timeout (e.g., 1 second) to run the test quickly
             with pytest.raises(ParserSandboxError) as exc_info:
                 run_parser_in_sandbox(
@@ -765,6 +765,5 @@ class TestSecurityNegativeTests:
                     parser_input="test",
                     timeout_seconds=1
                 )
-            
-            assert "timed out" in str(exc_info.value)
 
+            assert "timed out" in str(exc_info.value)
