@@ -12,8 +12,8 @@ Last synced: 2026-06-10
 
 ## At a Glance
 
-- Total plugins: 59
-- Safe plugins: 26
+- Total plugins: 60
+- Safe plugins: 27
 - Intrusive plugins: 25
 - Exploit plugins: 8
 - Source of truth: each plugin's `metadata.json`
