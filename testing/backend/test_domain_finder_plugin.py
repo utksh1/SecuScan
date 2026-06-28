@@ -25,7 +25,7 @@ sys.path.insert(0, str(REPO_ROOT))
 from backend.secuscan.plugin_validator import PluginMetadataValidator
 from backend.secuscan.plugins import PluginManager
 
-PLUGIN_DIR = REPO_ROOT / "plugins" / "domain-finder"
+PLUGIN_DIR = REPO_ROOT / "plugins" / "domain_finder"
 PLUGINS_DIR = REPO_ROOT / "plugins"
 
 # Import parser from domain-finder (hyphenated directory name requires importlib)
@@ -65,7 +65,7 @@ def test_domain_finder_passes_validator():
 def test_domain_finder_metadata_id_matches_directory():
     """Plugin id in metadata.json must match the directory name."""
     data = json.loads((PLUGIN_DIR / "metadata.json").read_text(encoding="utf-8"))
-    assert data["id"] == "domain-finder"
+    assert data["id"] == "domain_finder"
 
 
 def test_domain_finder_engine_is_amass():
@@ -106,7 +106,7 @@ def test_domain_finder_command_renders_with_target(setup_test_environment):
     manager = PluginManager(str(PLUGINS_DIR))
     asyncio.run(manager.load_plugins())
 
-    command = manager.build_command("domain-finder", {"target": "secuscan.in"})
+    command = manager.build_command("domain_finder", {"target": "secuscan.in"})
 
     assert command is not None, "build_command returned None for valid inputs"
     assert command[0] == "amass"
@@ -123,7 +123,7 @@ def test_domain_finder_command_full_token_sequence(setup_test_environment):
     manager = PluginManager(str(PLUGINS_DIR))
     asyncio.run(manager.load_plugins())
 
-    command = manager.build_command("domain-finder", {"target": "secuscan.in"})
+    command = manager.build_command("domain_finder", {"target": "secuscan.in"})
 
     assert command == [
         "amass",
@@ -141,9 +141,9 @@ def test_domain_finder_loaded_by_plugin_manager(setup_test_environment):
     manager = PluginManager(str(PLUGINS_DIR))
     asyncio.run(manager.load_plugins())
 
-    plugin = manager.get_plugin("domain-finder")
+    plugin = manager.get_plugin("domain_finder")
     assert plugin is not None
-    assert plugin.id == "domain-finder"
+    assert plugin.id == "domain_finder"
     assert plugin.name == "Domain Finder"
 
 
