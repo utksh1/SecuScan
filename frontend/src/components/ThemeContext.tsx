@@ -42,14 +42,24 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     // Priority 1: manual localStorage override
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved === 'light' || saved === 'dark') return saved
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY)
+      if (saved === 'light' || saved === 'dark') return saved
+    } catch (e) {
+      // Ignore localStorage errors
+    }
     // Priority 2: OS preference
     return getSystemTheme()
   })
 
   const [isSystemControlled, setIsSystemControlled] = useState<boolean>(
-    () => !localStorage.getItem(STORAGE_KEY)
+    () => {
+      try {
+        return !localStorage.getItem(STORAGE_KEY)
+      } catch (e) {
+        return true
+      }
+    }
   )
 
   // Apply theme class on every change
@@ -62,7 +72,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     if (typeof window.matchMedia !== 'function') return
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
     const handler = (e: MediaQueryListEvent) => {
-      if (!localStorage.getItem(STORAGE_KEY)) {
+      let hasManualOverride = false
+      try {
+        hasManualOverride = !!localStorage.getItem(STORAGE_KEY)
+      } catch (err) {
+        // Assume no manual override if error
+      }
+      if (!hasManualOverride) {
         const next: Theme = e.matches ? 'dark' : 'light'
         setThemeState(next)
       }
@@ -72,7 +88,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const setTheme = useCallback((next: Theme) => {
-    localStorage.setItem(STORAGE_KEY, next)
+    try {
+      localStorage.setItem(STORAGE_KEY, next)
+    } catch (e) {
+      // Ignore errors
+    }
     setIsSystemControlled(false)
     setThemeState(next)
   }, [])
@@ -82,7 +102,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [theme, setTheme])
 
   const resetToSystem = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY)
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+    } catch (e) {
+      // Ignore errors
+    }
     setIsSystemControlled(true)
     const sys = getSystemTheme()
     setThemeState(sys)

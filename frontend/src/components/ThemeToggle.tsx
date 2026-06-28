@@ -15,7 +15,9 @@ export default function ThemeToggle({ size = 'md' }: ThemeToggleProps) {
 
   return (
     <button
+      type="button"
       onClick={(e) => {
+        e.preventDefault()
         e.stopPropagation()
         toggleTheme()
       }}
@@ -32,7 +34,7 @@ export default function ThemeToggle({ size = 'md' }: ThemeToggleProps) {
       aria-pressed={theme === 'dark'}
       title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
     >
-      <span className={`material-symbols-outlined ${iconSize}`}>
+      <span className={`material-symbols-outlined ${iconSize} pointer-events-none`}>
         {theme === 'dark' ? 'light_mode' : 'dark_mode'}
       </span>
     </button>

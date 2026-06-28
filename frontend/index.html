@@ -10,17 +10,23 @@
     <script>
       // Prevent flash of wrong theme on initial load
       (function() {
-        const saved = localStorage.getItem('secuscan-theme');
-        const theme = saved === 'light' || saved === 'dark'
-          ? saved
-          : (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
-        const root = document.documentElement;
-        if (theme === 'dark') {
-          root.classList.add('dark');
-          root.classList.remove('theme-light');
-        } else {
-          root.classList.remove('dark');
-          root.classList.add('theme-light');
+        try {
+          const saved = localStorage.getItem('secuscan-theme');
+          const theme = saved === 'light' || saved === 'dark'
+            ? saved
+            : (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+          const root = document.documentElement;
+          if (theme === 'dark') {
+            root.classList.add('dark');
+            root.classList.remove('theme-light');
+          } else {
+            root.classList.remove('dark');
+            root.classList.add('theme-light');
+          }
+        } catch (e) {
+          // Ignore localStorage errors on initial load
+          const root = document.documentElement;
+          root.classList.add('dark'); // Default to dark if error
         }
       })();
     </script>
