@@ -116,6 +116,35 @@ describe('ThemeToggle', () => {
     expect(screen.getByText('light_mode')).toBeTruthy()
   })
 
+  it('does not crash and still toggles when localStorage throws an error', async () => {
+    const user = userEvent.setup()
+
+    // Mock localStorage to throw
+    const originalSetItem = localStorage.setItem
+    localStorage.setItem = vi.fn(() => {
+      throw new Error('QuotaExceededError')
+    })
+
+    renderWithTheme()
+
+    const button = screen.getByRole('button')
+
+    // Click should still work and update the DOM
+    await user.click(button)
+
+    expect(localStorage.setItem).toHaveBeenCalled()
+    expect(document.documentElement).toHaveClass('theme-light')
+
+    // Restore
+    localStorage.setItem = originalSetItem
+  })
+
+  it('has type="button" to prevent default form submission', () => {
+    renderWithTheme()
+    const button = screen.getByRole('button')
+    expect(button).toHaveAttribute('type', 'button')
+  })
+
   it('stops click propagation', async () => {
     localStorage.setItem(STORAGE_KEY, 'dark')
     const user = userEvent.setup()
