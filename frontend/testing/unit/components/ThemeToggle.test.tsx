@@ -120,8 +120,7 @@ describe('ThemeToggle', () => {
     const user = userEvent.setup()
 
     // Mock localStorage to throw
-    const originalSetItem = localStorage.setItem
-    localStorage.setItem = vi.fn(() => {
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
       throw new Error('QuotaExceededError')
     })
 
@@ -132,11 +131,11 @@ describe('ThemeToggle', () => {
     // Click should still work and update the DOM
     await user.click(button)
 
-    expect(localStorage.setItem).toHaveBeenCalled()
+    expect(setItemSpy).toHaveBeenCalled()
     expect(document.documentElement).toHaveClass('theme-light')
 
     // Restore
-    localStorage.setItem = originalSetItem
+    setItemSpy.mockRestore()
   })
 
   it('has type="button" to prevent default form submission', () => {
