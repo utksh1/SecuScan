@@ -28,7 +28,7 @@
       "required": true,
       "placeholder": "https://joomla.secuscan.in",
       "validation": {
-        "pattern": "^https?://",
+        "validation_type": "url",
         "message": "Must be a valid HTTP(S) URL"
       }
     }
@@ -56,5 +56,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "fc1b9feab32f4f65d995b6613ba450d32d0f318cb5209e6144be3e961e38e392"
+  "checksum": "d3ffeb4aaee18cfca0ba2f9ba6958b71e5e5c29a3823a8e1855040c19de09b04"
 }

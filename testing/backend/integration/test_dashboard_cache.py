@@ -139,3 +139,42 @@ def test_dashboard_summary_cache_invalidated_when_task_enters_running(test_clien
     assert r2.json()["scan_activity"]["running"] == 1, (
         "dashboard must show running count after cache invalidation on task start"
     )
+
+
+def test_dashboard_summary_degrades_cleanly_when_one_query_fails(test_client):
+    """A single dashboard subquery failure must not take down the whole response."""
+    async def fake_fetchall(_self, query, params=()):
+        if "GROUP BY severity" in query:
+            raise RuntimeError("severity aggregation failed")
+        if "status = 'running'" in query:
+            return [{"id": "task-running-1", "status": "running", "plugin_id": "http_inspector"}]
+        if "duration_seconds" in query:
+            return [{"id": "task-recent-1", "status": "completed", "plugin_id": "http_inspector"}]
+        return []
+
+    async def fake_fetchone(_self, query, params=()):
+        if "COUNT(*) AS total FROM findings" in query:
+            return {"total": 7}
+        if "FROM tasks" in query:
+            return {"total": 3, "completed": 2, "running": 1}
+        return None
+
+    with (
+        patch("backend.secuscan.database.Database.fetchall", new=fake_fetchall),
+        patch("backend.secuscan.database.Database.fetchone", new=fake_fetchone),
+    ):
+        response = test_client.get("/api/v1/dashboard/summary")
+
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["total_findings"] == 7
+    assert data["critical_findings"] == 0
+    assert data["high_findings"] == 0
+    assert data["medium_findings"] == 0
+    assert data["low_findings"] == 0
+    assert data["info_findings"] == 0
+    assert data["recent_findings"] == []
+    assert data["scan_activity"] == {"total": 3, "completed": 2, "running": 1}
+    assert data["running_tasks"] == [{"id": "task-running-1", "status": "running", "plugin_id": "http_inspector"}]
+    assert data["recent_tasks"] == [{"id": "task-recent-1", "status": "completed", "plugin_id": "http_inspector"}]

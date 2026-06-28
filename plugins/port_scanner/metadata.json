@@ -27,14 +27,16 @@
       "label": "Target Host/IP",
       "type": "string",
       "required": true,
-      "placeholder": "secuscan.in"
+      "placeholder": "192.168.1.1 or secuscan.in",
+      "help": "Target host or IP address to scan. Examples: 192.168.1.1 or secuscan.in."
     },
     {
       "id": "top_ports",
       "label": "Top Ports",
       "type": "integer",
       "required": false,
-      "default": 1000
+      "default": 1000,
+      "help": "Number of most common ports to scan. Examples: 100 or 1000."
     }
   ],
   "presets": {

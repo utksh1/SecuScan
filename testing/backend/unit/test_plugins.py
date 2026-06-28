@@ -115,7 +115,7 @@ def test_nikto_plugin_supports_expanded_cli_parameters(setup_test_environment):
             "force_ssl": True,
             "display_options": "EPV",
             "tuning": "123b",
-            "request_timeout": 20,
+            "timeout": 20,
             "max_scan_time": 900,
             "dbcheck": True,
             "no_cache": True,
@@ -282,9 +282,11 @@ def test_plugin_manager_resolves_repo_local_wordlist_aliases(setup_test_environm
     medium_wordlist = Path(settings.wordlists_dir) / "medium.txt"
     medium_wordlist.write_text("admin\nlogin\n", encoding="utf-8")
 
+    # dir_discovery now defaults to the bundled "small" list, so request the
+    # installed "medium" alias explicitly to exercise repo-local resolution.
     command = manager.build_command(
         "dir_discovery",
-        {"base_url": "https://example.com"},
+        {"base_url": "https://example.com", "wordlist": "medium"},
     )
 
     assert command is not None

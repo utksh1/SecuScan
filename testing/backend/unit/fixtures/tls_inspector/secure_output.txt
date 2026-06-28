@@ -1,0 +1,8 @@
+Protocol  : TLSv1.3
+Cipher    : TLS_AES_256_GCM_SHA384
+
+-----BEGIN CERTIFICATE-----
+dummy certificate
+-----END CERTIFICATE-----
+
+Verify return code: 0 (ok)

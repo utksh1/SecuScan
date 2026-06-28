@@ -302,13 +302,49 @@ class PluginMetadataValidator:
             result.add("validation", "Must be an object if present")
             return
 
+        field_ids = {
+            field.get("id")
+            for field in data.get("fields", [])
+            if isinstance(field, dict)
+        }
+
         for key, rule in validation.items():
             prefix = f"validation.{key}"
+
             if not isinstance(rule, dict):
                 result.add(prefix, "Each validation rule must be an object")
                 continue
+
             if "required" in rule and not isinstance(rule["required"], bool):
-                result.add(f"{prefix}.required", "'required' must be a boolean")
+                result.add(
+                    f"{prefix}.required",
+                    "'required' must be a boolean",
+                )
+
+            mutually_exclusive = rule.get("mutually_exclusive")
+
+            if mutually_exclusive is None:
+                continue
+
+            if not isinstance(mutually_exclusive, list):
+                result.add(
+                    f"{prefix}.mutually_exclusive",
+                    "'mutually_exclusive' must be a list",
+                )
+                continue
+
+            if len(mutually_exclusive) < 2:
+                result.add(
+                    f"{prefix}.mutually_exclusive",
+                    "Must contain at least two field ids",
+                )
+
+            for field_id in mutually_exclusive:
+                if field_id not in field_ids:
+                    result.add(
+                        f"{prefix}.mutually_exclusive",
+                        f"Unknown field '{field_id}'",
+                    )
 
     def _check_checksum(self, data: dict, result: ValidationResult) -> None:
         checksum = data.get("checksum")

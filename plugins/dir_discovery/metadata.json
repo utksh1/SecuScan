@@ -55,22 +55,22 @@
       "label": "Wordlist",
       "type": "select",
       "required": false,
-      "default": "medium",
+      "default": "small",
       "options": [
         {
           "value": "small",
-          "label": "Small (500 entries) - Fast"
+          "label": "Small (~108 entries, bundled) - Fast & polite"
         },
         {
           "value": "medium",
-          "label": "Medium (5,000 entries) - Balanced"
+          "label": "Medium (~5,000 entries, install from SecLists) - Balanced"
         },
         {
           "value": "large",
-          "label": "Large (50,000 entries) - Comprehensive"
+          "label": "Large (~50,000 entries, install from SecLists) - Comprehensive"
         }
       ],
-      "help": "Discovery dictionary size"
+      "help": "Discovery dictionary. Only 'small' ships with SecuScan (wordlists/small.txt); 'medium' and 'large' must be installed into the wordlists/ directory yourself (e.g. from SecLists) or the scan fails - see wordlists/README.md. Defaults to the bundled 'small' list for a fast, low-traffic scan."
     },
     {
       "id": "extensions",
@@ -185,5 +185,5 @@
     "system_packages": []
   },
   "docker_image": "secuscan/ffuf",
-  "checksum": "2c66081a09e2c3a765316987257ce7a46116ccd4c19e18fc66cb6b14b60e0742"
+  "checksum": "72f7b28148a646d9009d48dbf34d1fa89c7088037cd51d3e5fde2790d54b4928"
 }

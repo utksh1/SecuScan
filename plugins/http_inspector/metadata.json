@@ -79,6 +79,9 @@
       "max_concurrent": 5
     }
   },
+  "capabilities": [
+    "network"
+  ],
   "learning": {
     "difficulty": "beginner",
     "estimated_duration": "30 seconds",
@@ -92,5 +95,5 @@
     "system_packages": []
   },
   "docker_image": "curlimages/curl",
-  "checksum": "435436b8dbde27b30f545c3f5701089db880794a8a3f3a47e08cf2e6dbffa447"
+  "checksum": "e62fb9a052a9d10b634541d9c3fc72c2c700bb684272324a66ecf75af070ab77"
 }

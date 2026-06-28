@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import Workflows from '../../../src/pages/Workflows'
 import { getWorkflows, createWorkflow, runWorkflow, updateWorkflow, deleteWorkflow } from '../../../src/api'
+import { ToastProvider } from '../../../src/components/ToastContext'
 
 vi.mock('../../../src/api', () => ({
   getWorkflows: vi.fn(),
@@ -31,9 +32,11 @@ const disabledWorkflow = {
 
 function renderPage() {
   return render(
-    <MemoryRouter>
-      <Workflows />
-    </MemoryRouter>
+    <ToastProvider>
+      <MemoryRouter>
+        <Workflows />
+      </MemoryRouter>
+    </ToastProvider>
   )
 }
 
@@ -413,8 +416,10 @@ describe('Workflows — delete: dialog state machine', () => {
 
     // After the rejection: dialog stays, workflow still visible
     await waitFor(() => {
-      expect(screen.getByText(/Delete Workflow/i)).toBeInTheDocument()
-      expect(screen.getByRole('heading', { name: 'Nightly Scan' })).toBeInTheDocument()
+      expect(screen.getByText('Delete Workflow')).toBeInTheDocument()
+      const headings = screen.getAllByRole('heading')
+      const workflowHeading = headings.find(h => h.textContent?.includes('Nightly Scan'))
+      expect(workflowHeading).toBeInTheDocument()
     })
   })
 })

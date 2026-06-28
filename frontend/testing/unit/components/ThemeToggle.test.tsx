@@ -39,6 +39,8 @@ describe('ThemeToggle', () => {
 
     expect(localStorage.getItem(STORAGE_KEY)).toBe('light')
     expect(button).toHaveAttribute('aria-pressed', 'false')
+    expect(document.documentElement).toHaveClass('theme-light')
+    expect(document.documentElement).not.toHaveClass('dark')
   })
 
   it('toggles from light to dark on click and persists to localStorage', async () => {
@@ -53,6 +55,46 @@ describe('ThemeToggle', () => {
 
     expect(localStorage.getItem(STORAGE_KEY)).toBe('dark')
     expect(button).toHaveAttribute('aria-pressed', 'true')
+    expect(document.documentElement).toHaveClass('dark')
+    expect(document.documentElement).not.toHaveClass('theme-light')
+  })
+
+  it('restores a saved light theme when the provider mounts', () => {
+    localStorage.setItem(STORAGE_KEY, 'light')
+
+    renderWithTheme()
+
+    expect(document.documentElement).toHaveClass('theme-light')
+    expect(document.documentElement).not.toHaveClass('dark')
+    expect(screen.getByRole('button')).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('applies the dark class to document root and removes theme-light', async () => {
+    localStorage.setItem(STORAGE_KEY, 'light')
+    document.documentElement.classList.remove('dark')
+    document.documentElement.classList.add('theme-light')
+    const user = userEvent.setup()
+    renderWithTheme()
+
+    const button = screen.getByRole('button')
+    await user.click(button)
+
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+    expect(document.documentElement.classList.contains('theme-light')).toBe(false)
+  })
+
+  it('applies the theme-light class to document root and removes dark', async () => {
+    localStorage.setItem(STORAGE_KEY, 'dark')
+    document.documentElement.classList.add('dark')
+    document.documentElement.classList.remove('theme-light')
+    const user = userEvent.setup()
+    renderWithTheme()
+
+    const button = screen.getByRole('button')
+    await user.click(button)
+
+    expect(document.documentElement.classList.contains('theme-light')).toBe(true)
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
   })
 
   it('aria-label reflects the target theme, not the current one', () => {

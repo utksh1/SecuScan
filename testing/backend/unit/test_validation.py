@@ -364,3 +364,111 @@ def test_resolve_and_validate_target_allows_public_ip(monkeypatch):
     ok, err = resolve_and_validate_target("http://example.com/hook")
     assert ok is True
     assert err == ""
+
+
+class TestValidateWebhookTarget:
+    """Tests for validate_webhook_target SSRF validation."""
+
+    def test_rejects_no_hostname(self):
+        from backend.secuscan.validation import validate_webhook_target
+        ok, err = validate_webhook_target("not-a-url")
+        assert ok is False
+        assert "hostname" in err.lower()
+
+    def test_rejects_private_ip_resolution(self, monkeypatch):
+        from backend.secuscan.validation import validate_webhook_target
+
+        def fake_getaddrinfo(*args, **kwargs):
+            return [(socket.AF_INET, None, None, None, ("10.0.0.5", 80))]
+
+        monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+        ok, err = validate_webhook_target("http://internal.example.com/hook")
+        assert ok is False
+        assert "blocked" in err.lower()
+
+    def test_rejects_metadata_ip_resolution(self, monkeypatch):
+        from backend.secuscan.validation import validate_webhook_target
+
+        def fake_getaddrinfo(*args, **kwargs):
+            return [(socket.AF_INET, None, None, None, ("169.254.169.254", 80))]
+
+        monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+        ok, err = validate_webhook_target("http://metadata.example.com/hook")
+        assert ok is False
+        assert "blocked" in err.lower()
+
+    def test_allows_public_ip_resolution(self, monkeypatch):
+        from backend.secuscan.validation import validate_webhook_target
+
+        def fake_getaddrinfo(*args, **kwargs):
+            return [(socket.AF_INET, None, None, None, ("93.184.216.34", 80))]
+
+        monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+        ok, err = validate_webhook_target("http://example.com/hook")
+        assert ok is True
+        assert err is None
+
+    def test_rejects_resolution_failure(self, monkeypatch):
+        from backend.secuscan.validation import validate_webhook_target
+
+        def fake_getaddrinfo(*args, **kwargs):
+            raise socket.gaierror("No address")
+
+        monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+        ok, err = validate_webhook_target("http://nonexistent.example.com/hook")
+        assert ok is False
+        assert "could not be resolved" in err.lower()
+
+
+# ---------------------------------------------------------------------------
+# _parse_url_hostname tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_url_hostname_https_url():
+    """Extracts hostname from a standard https URL."""
+    from backend.secuscan.validation import _parse_url_hostname
+    assert _parse_url_hostname("https://example.com") == "example.com"
+
+
+def test_parse_url_hostname_http_url():
+    """Extracts hostname from a standard http URL."""
+    from backend.secuscan.validation import _parse_url_hostname
+    assert _parse_url_hostname("http://example.com") == "example.com"
+
+
+def test_parse_url_hostname_with_port():
+    """Strips port from hostname when present."""
+    from backend.secuscan.validation import _parse_url_hostname
+    assert _parse_url_hostname("https://example.com:8080") == "example.com"
+
+
+def test_parse_url_hostname_with_path():
+    """Strips path from hostname."""
+    from backend.secuscan.validation import _parse_url_hostname
+    assert _parse_url_hostname("https://example.com/api/v1") == "example.com"
+
+
+def test_parse_url_hostname_localhost():
+    """Handles localhost URLs."""
+    from backend.secuscan.validation import _parse_url_hostname
+    assert _parse_url_hostname("http://localhost:8000") == "localhost"
+
+
+def test_parse_url_hostname_ipv4():
+    """Handles IPv4 addresses."""
+    from backend.secuscan.validation import _parse_url_hostname
+    result = _parse_url_hostname("http://127.0.0.1:8000")
+    assert result is not None
+
+
+def test_parse_url_hostname_empty_string():
+    """Returns None for empty string."""
+    from backend.secuscan.validation import _parse_url_hostname
+    assert _parse_url_hostname("") is None
+
+
+def test_parse_url_hostname_none():
+    """Returns None for None input."""
+    from backend.secuscan.validation import _parse_url_hostname
+    assert _parse_url_hostname(None) is None
