@@ -14,7 +14,9 @@ They never mutate their inputs.
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
+
+from .models import WorkflowStep  # noqa: E402
 
 
 def parse_json_fields(rows: List[Dict], fields: List[str]) -> List[Dict]:
@@ -91,3 +93,82 @@ def deserialize_asset_service_rows(rows: List[Dict]) -> List[Dict[str, Any]]:
         if "cert_san_json" in item:
             item["cert_san"] = item.pop("cert_san_json")
     return items
+
+
+# ---------------------------------------------------------------------------
+# Workflow and payload helpers extracted from routes.py
+# ---------------------------------------------------------------------------
+
+from typing import Optional
+
+
+def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
+    """Parse and normalize raw workflow steps from a JSON string or list.
+
+    Handles three input forms:
+    - A list of step dicts (pass-through)
+    - A JSON string (parsed with json.loads)
+    - None or falsy (returns empty list)
+
+    Each step dict is validated against the WorkflowStep model; invalid
+    entries are silently skipped.
+    """
+    if isinstance(raw_steps, list):
+        parsed = raw_steps
+    elif not raw_steps:
+        parsed = []
+    else:
+        try:
+            parsed = json.loads(raw_steps)
+        except (TypeError, json.JSONDecodeError):
+            parsed = []
+    normalized: List[Dict[str, Any]] = []
+    for step in parsed if isinstance(parsed, list) else []:
+        if not isinstance(step, dict):
+            continue
+        try:
+            model = WorkflowStep(
+                plugin_id=str(step.get("plugin_id", "")),
+                inputs=step.get("inputs") or {},
+                preset=step.get("preset"),
+                execution_context=step.get("execution_context") or {},
+            )
+        except Exception:
+            continue
+        normalized.append(model.model_dump())
+    return normalized
+
+
+def _json_payload(value: Any, fallback: str) -> str:
+    """Return JSON-encoded value, or fall back to the parsed fallback string.
+
+    If *value* is not None it is JSON-serialized directly. If it is None,
+    *fallback* is parsed as JSON and that result is JSON-serialized.
+    """
+    return json.dumps(value if value is not None else json.loads(fallback))
+
+
+def _serialize_workflow(
+    row: Dict[str, Any],
+    queued_task_ids: Optional[list[str]] = None,
+) -> Dict[str, Any]:
+    """Return the workflow shape consumed by the frontend.
+
+    Args:
+        row: A database row dict for a workflow record.
+        queued_task_ids: Optional list of currently-queued task IDs.
+
+    Returns:
+        A dict with id, name, schedule_seconds, enabled, steps, created_at,
+        last_run_at, and queued_task_ids fields.
+    """
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "schedule_seconds": row.get("schedule_seconds"),
+        "enabled": bool(row.get("enabled")),
+        "steps": _parse_workflow_steps(row.get("steps_json")),
+        "created_at": row.get("created_at"),
+        "last_run_at": row.get("last_run_at"),
+        "queued_task_ids": queued_task_ids or [],
+    }
