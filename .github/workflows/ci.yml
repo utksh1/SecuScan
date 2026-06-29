@@ -66,6 +66,17 @@ jobs:
       - name: Validate documentation anchors
         run: python scripts/validate_doc_anchors.py
 
+  repository-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Check repository hygiene (Python cache files)
+        run: python scripts/check_hygiene.py
+
   backend-lint:
     needs: detect-changes
     if: needs.detect-changes.outputs.run_backend == 'true'

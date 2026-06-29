@@ -40,6 +40,18 @@ python scripts/validate_issue_template_labels.py
 
 The CI workflow also runs this validation and will fail if an issue template references a label that is not included in the approved label taxonomy.
 
+## Repository Hygiene Maintenance
+
+The repository hygiene check ensures that no generated Python cache files (`__pycache__/` or `*.pyc`) are accidentally tracked or committed in the repository.
+
+Before opening a pull request, you can run the hygiene check locally:
+
+```bash
+python scripts/check_hygiene.py
+```
+
+The CI workflow runs this check on every pull request and commit, and will fail if any Python cache files are committed.
+
 ## Local Setup
 
 ### Prerequisites

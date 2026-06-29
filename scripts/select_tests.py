@@ -75,6 +75,7 @@ def classify_file(filepath):
         or (
             filepath.startswith("scripts/")
             and not filepath.endswith("check-artifacts.sh")
+            and not filepath.endswith("check_hygiene.py")
         )
     ):
         return "BACKEND"

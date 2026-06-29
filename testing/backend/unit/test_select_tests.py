@@ -38,6 +38,7 @@ def test_classify_file_shared_or_config():
     assert classify_file("setup.sh") == "SHARED_OR_CONFIG"
     assert classify_file("docker-compose.yml") == "SHARED_OR_CONFIG"
     assert classify_file("scripts/check-artifacts.sh") == "SHARED_OR_CONFIG"
+    assert classify_file("scripts/check_hygiene.py") == "SHARED_OR_CONFIG"
 
 
 def test_select_tests_empty():
