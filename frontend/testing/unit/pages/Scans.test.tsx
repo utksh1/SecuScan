@@ -238,4 +238,41 @@ describe('Scans — task list', () => {
       )
     })
   })
+
+  it('handles clearAllTasks failure correctly', async () => {
+    const { clearAllTasks } = await import('../../../src/api')
+    vi.mocked(clearAllTasks).mockRejectedValueOnce(new Error('Purge failed'))
+
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+
+    const tasks = [makeTask({ task_id: 'task-1', tool: 'nmap' })]
+    mockFetch(tasks)
+    renderScans()
+
+    await waitFor(() => expect(screen.getByText('nmap')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: /Select_All/i }))
+    await waitFor(() => {
+      expect(screen.getByText('1')).toBeInTheDocument()
+    })
+
+    const purgeBtn = screen.getByRole('button', { name: /Purge_All_Records/i })
+    await userEvent.click(purgeBtn)
+
+    expect(screen.getByText('CRITICAL OPERATION')).toBeInTheDocument()
+
+    const confirmBtn = screen.getByRole('button', { name: /Confirm/i })
+    await userEvent.click(confirmBtn)
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Failed to clear history. Ensure no tasks are currently running.'
+      )
+    })
+
+    expect(screen.getByText('nmap')).toBeInTheDocument()
+    expect(screen.getByText('1')).toBeInTheDocument()
+
+    alertSpy.mockRestore()
+  })
 })
