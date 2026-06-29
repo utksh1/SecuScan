@@ -11,6 +11,8 @@ on:
       - "logs/**"
       - "scripts/check-artifacts.sh"
       - ".github/workflows/check-artifacts.yml"
+      - "**/venv/**"
+      - "**/.venv/**"
 
 jobs:
   artifact-check:

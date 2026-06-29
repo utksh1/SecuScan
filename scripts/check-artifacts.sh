@@ -2,18 +2,20 @@
 set -euo pipefail
 BASE_BRANCH="${1:-origin/main}"
 BLOCKED_PATTERNS=(
-  "frontend/playwright-report/"
-  "frontend/test-results/"
-  "frontend/dist/"
-  "frontend/.vite/"
-  "frontend/node_modules/"
-  ".vite/deps/"
-  "output/"
-  "data/raw/"
-  "data/reports/"
-  "backend/data/raw/"
-  "backend/data/reports/"
-  "logs/"
+  "^frontend/playwright-report/"
+  "^frontend/test-results/"
+  "^frontend/dist/"
+  "^frontend/.vite/"
+  "^frontend/node_modules/"
+  "^.vite/deps/"
+  "^output/"
+  "^data/raw/"
+  "^data/reports/"
+  "^backend/data/raw/"
+  "^backend/data/reports/"
+  "^logs/"
+  # Matches any directory starting with .venv or venv (e.g. .venv/, venv/, .venv-codex/, venv_tests/) anywhere in the path
+  "(^|/)\.?venv[^/]*/"
 )
 
 # ── Check 1: files already tracked in git history ─────────────────────────────
@@ -21,12 +23,13 @@ BLOCKED_PATTERNS=(
 # branch. This check catches those.
 echo "Checking for tracked generated artifacts in git history..."
 TRACKED_FOUND=()
+ALL_TRACKED=$(git ls-files 2>/dev/null || true)
 for pattern in "${BLOCKED_PATTERNS[@]}"; do
   while IFS= read -r match; do
     # Allow .gitkeep placeholder files — they are intentional empty markers
     [[ "$match" == *".gitkeep" ]] && continue
     TRACKED_FOUND+=("$match")
-  done < <(git ls-files "${pattern}" 2>/dev/null || true)
+  done < <(echo "$ALL_TRACKED" | grep -E "${pattern}" 2>/dev/null || true)
 done
 
 if [[ ${#TRACKED_FOUND[@]} -gt 0 ]]; then
@@ -53,7 +56,7 @@ for pattern in "${BLOCKED_PATTERNS[@]}"; do
   while IFS= read -r match; do
     [[ "$match" == *".gitkeep" ]] && continue
     FOUND+=("$match")
-  done < <(echo "$CHANGED_FILES" | grep -E "^${pattern}" 2>/dev/null || true)
+  done < <(echo "$CHANGED_FILES" | grep -E "${pattern}" 2>/dev/null || true)
 done
 
 if [[ ${#FOUND[@]} -gt 0 ]]; then
