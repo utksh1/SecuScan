@@ -43,6 +43,32 @@ def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
         try:
             parsed = json.loads(raw_steps)
         except (TypeError, json.JSONDecodeError):
+            parsed = []
+    normalized: List[Dict[str, Any]] = []
+    for step in parsed if isinstance(parsed, list) else []:
+        if not isinstance(step, dict):
+            continue
+        try:
+            model = WorkflowStep(
+                plugin_id=str(step.get("plugin_id", "")),
+                inputs=step.get("inputs") or {},
+                preset=step.get("preset"),
+                execution_context=step.get("execution_context") or {},
+            )
+        except Exception:
+            continue
+        normalized.append(model.model_dump())
+    return normalized
+
+def _validate_and_parse_workflow_steps_payload(raw_steps: Any) -> List[Dict[str, Any]]:
+    if isinstance(raw_steps, list):
+        parsed = raw_steps
+    elif not raw_steps:
+        parsed = []
+    else:
+        try:
+            parsed = json.loads(raw_steps)
+        except (TypeError, json.JSONDecodeError):
             raise HTTPException(status_code=400, detail="Invalid steps JSON format")
 
     if not isinstance(parsed, list):
@@ -1844,7 +1870,7 @@ async def create_workflow(payload: Dict[str, Any], owner: str = Depends(get_curr
     if not name:
         raise HTTPException(status_code=400, detail="Workflow name is required")
 
-    steps = _parse_workflow_steps(payload.get("steps", []))
+    steps = _validate_and_parse_workflow_steps_payload(payload.get("steps", []))
     if not steps:
         raise HTTPException(status_code=400, detail="Workflow requires at least one step")
 
@@ -2041,7 +2067,7 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any], owner: str 
         params.append(str(payload["name"]).strip())
     if "steps" in payload:
         updates.append("steps_json = ?")
-        params.append(json.dumps(_parse_workflow_steps(payload["steps"])))
+        params.append(json.dumps(_validate_and_parse_workflow_steps_payload(payload["steps"])))
     if "schedule_seconds" in payload:
         val = payload["schedule_seconds"]
         updates.append("schedule_seconds = ?")
