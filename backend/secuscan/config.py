@@ -8,6 +8,7 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings
 import base64
 import hashlib
+import os
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -58,6 +59,8 @@ class Settings(BaseSettings):
     cors_allow_credentials: bool = True
     plugin_signature_key: Optional[str] = None
     enforce_plugin_signatures: bool = False
+    enforce_parser_integrity: bool = True
+    parser_hash_algorithm: str = "sha256"
     vault_key: Optional[str] = None
     denied_capabilities: List[str] = []
     admin_api_key: Optional[str] = None
@@ -86,6 +89,11 @@ class Settings(BaseSettings):
     max_tasks_per_hour: int = 50
     max_requests_per_minute: int = 100
 
+    scan_rate_limit: int = int(os.environ.get("SCAN_RATE_LIMIT", "5"))
+    scan_rate_window: int = int(os.environ.get("SCAN_RATE_WINDOW_SECONDS", "60"))
+    scan_burst_limit: int = int(os.environ.get("SCAN_BURST_LIMIT", "10"))
+    scan_burst_window: int = int(os.environ.get("SCAN_BURST_WINDOW_SECONDS", "3600"))
+
     # Endpoint rate limiting buckets
     rate_limit_task_start_limit: int = 50
     rate_limit_task_start_window: int = 3600
@@ -112,6 +120,8 @@ class Settings(BaseSettings):
     sandbox_timeout: int = 600  # seconds
     sandbox_cpu_quota: float = 0.5
     sandbox_memory_mb: int = 512
+    sandbox_max_output_bytes: int = 5_242_880  # 5 MB
+    sandbox_allow_network: bool = True
     docker_network: str = "restricted"  # Docker network name for sandboxed containers
 
     # Task-start payload limits (tunable via env vars)
@@ -123,9 +133,50 @@ class Settings(BaseSettings):
     parser_sandbox_timeout_seconds: int = 30
     parser_sandbox_max_output_bytes: int = 8 * 1024 * 1024  # 8 MB
 
+    # Workflow Configuration
+    workflow_min_interval_seconds: int = 60
+
+    # Notification SSRF Protection
+    notification_ssrf_enabled: bool = True
+    notification_allowed_ip_ranges: List[str] = []
+    notification_blocked_ip_ranges: List[str] = [
+        "169.254.169.254/32",
+        "169.254.0.0/16",
+        "127.0.0.0/8",
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "100.64.0.0/10",
+        "fc00::/7",
+        "fe80::/10",
+        "::1/128",
+        "224.0.0.0/4",
+        "ff00::/8",
+        "0.0.0.0/8",
+    ]
+    notification_max_redirects: int = 0
+    notification_allowed_ports: List[int] = [80, 443, 8080, 8443]
+
     # Logging
     log_level: str = "INFO"
     log_file: str = str(PROJECT_ROOT / "logs" / "secuscan.log")
+
+    # AI Executive Summary (opt-in — feature off by default)
+    ai_summary_enabled: bool = False
+    ai_summary_api_key: str = ""
+    ai_summary_base_url: str = ""
+    ai_summary_model: str = "gpt-4o-mini"
+
+    # SMTP Configuration for Email Notifications
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_from_email: str = "noreply@secuscan.io"
+    smtp_use_tls: bool = True
+
+    # Slack Webhook Configuration
+    slack_webhook_url: Optional[str] = None
 
     class Config:
         env_prefix = "SECUSCAN_"
@@ -138,6 +189,8 @@ class Settings(BaseSettings):
         "trusted_proxies",
         "network_allowlist",
         "network_denylist",
+        "notification_allowed_ip_ranges",
+        "notification_blocked_ip_ranges",
         mode="before",
     )
     @classmethod

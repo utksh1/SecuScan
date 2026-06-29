@@ -23,6 +23,12 @@ VALID_SAFETY_LEVELS = {"safe", "intrusive", "exploit"}
 VALID_FIELD_TYPES = {"string","integer","text", "number", "boolean", "select", "multiselect", "textarea"}
 VALID_PARSER_TYPES = {"json", "text", "custom", "none"}
 
+VALID_CATEGORIES = {
+    "recon", "vulnerability", "web", "exploit", "network",
+    "expert", "code", "forensics", "utils", "execution",
+    "security", "robots",
+}
+
 REQUIRED_TOP_LEVEL_FIELDS = [
     "id",
     "name",
@@ -58,6 +64,7 @@ class ValidationResult:
     plugin_id: str
     plugin_dir: Path
     errors: list = field(default_factory=list)
+    warnings: list = field(default_factory=list)
 
     @property
     def valid(self) -> bool:
@@ -65,6 +72,9 @@ class ValidationResult:
 
     def add(self, path: str, message: str) -> None:
         self.errors.append(ValidationError(self.plugin_id, path, message))
+
+    def add_warning(self, path: str, message: str) -> None:
+        self.warnings.append(ValidationError(self.plugin_id, path, message))
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +119,7 @@ class PluginMetadataValidator:
         result = ValidationResult(plugin_id=plugin_id, plugin_dir=self.plugin_dir)
 
         self._check_required_fields(data, result)
+        self._check_category(data, result)
         self._check_engine(data, result)
         self._check_command_template(data, result)
         self._check_fields(data, result)
@@ -125,6 +136,17 @@ class PluginMetadataValidator:
         for key in REQUIRED_TOP_LEVEL_FIELDS:
             if key not in data or data[key] in (None, "", [], {}):
                 result.add(key, f"Required field '{key}' is missing or empty")
+
+    def _check_category(self, data: dict, result: ValidationResult) -> None:
+        cat = data.get("category")
+        if not cat:
+            return
+        if cat not in VALID_CATEGORIES:
+            result.add(
+                "category",
+                f"'{cat}' is not a recognized category — "
+                f"must be one of: {sorted(VALID_CATEGORIES)}",
+            )
 
     def _check_engine(self, data: dict, result: ValidationResult) -> None:
         engine = data.get("engine")
@@ -214,6 +236,12 @@ class PluginMetadataValidator:
                         f"Field '{fid}' is type '{ftype}' and must have a non-empty 'options' list",
                     )
 
+            if not f.get("help"):
+                result.add_warning(
+                    f"{prefix}.help",
+                    f"Field '{fid}' is missing 'help' text — add a brief user-facing description",
+                )
+
     def _check_output(self, data: dict, result: ValidationResult) -> None:
         output = data.get("output")
         if not isinstance(output, dict):
@@ -257,13 +285,49 @@ class PluginMetadataValidator:
             result.add("validation", "Must be an object if present")
             return
 
+        field_ids = {
+            field.get("id")
+            for field in data.get("fields", [])
+            if isinstance(field, dict)
+        }
+
         for key, rule in validation.items():
             prefix = f"validation.{key}"
+
             if not isinstance(rule, dict):
                 result.add(prefix, "Each validation rule must be an object")
                 continue
+
             if "required" in rule and not isinstance(rule["required"], bool):
-                result.add(f"{prefix}.required", "'required' must be a boolean")
+                result.add(
+                    f"{prefix}.required",
+                    "'required' must be a boolean",
+                )
+
+            mutually_exclusive = rule.get("mutually_exclusive")
+
+            if mutually_exclusive is None:
+                continue
+
+            if not isinstance(mutually_exclusive, list):
+                result.add(
+                    f"{prefix}.mutually_exclusive",
+                    "'mutually_exclusive' must be a list",
+                )
+                continue
+
+            if len(mutually_exclusive) < 2:
+                result.add(
+                    f"{prefix}.mutually_exclusive",
+                    "Must contain at least two field ids",
+                )
+
+            for field_id in mutually_exclusive:
+                if field_id not in field_ids:
+                    result.add(
+                        f"{prefix}.mutually_exclusive",
+                        f"Unknown field '{field_id}'",
+                    )
 
     def _check_checksum(self, data: dict, result: ValidationResult) -> None:
         checksum = data.get("checksum")

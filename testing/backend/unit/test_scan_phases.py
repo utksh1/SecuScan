@@ -16,6 +16,7 @@ def make_task_row(task_id: str, status: str, scan_phase: str = None):
         "target": "127.0.0.1",
         "status": status,
         "scan_phase": scan_phase,
+        "phase_timestamps_json": "{}",
         "created_at": "2026-01-01T00:00:00",
         "started_at": None,
         "completed_at": None,
@@ -136,10 +137,14 @@ async def test_broadcast_phase_persists_to_db():
         await executor._broadcast_phase("task-1", ScanPhase.PARSING.value)
 
     # Verify the DB was updated
-    mock_db.execute.assert_called_once_with(
-        "UPDATE tasks SET scan_phase = ? WHERE id = ?",
-        (ScanPhase.PARSING.value, "task-1")
-    )
+    assert mock_db.execute.call_count == 1
+    args = mock_db.execute.call_args[0]
+    assert "UPDATE tasks" in args[0]
+    assert "SET scan_phase = ?" in args[0]
+    assert "phase_timestamps_json = json_set(" in args[0]
+    assert args[1][0] == ScanPhase.PARSING.value
+    assert args[1][2] == ScanPhase.PARSING.value
+    assert args[1][4] == "task-1"
 
 
 @pytest.mark.asyncio
@@ -205,6 +210,7 @@ async def test_scan_phase_included_in_status_response():
         "target": "127.0.0.1",
         "status": TaskStatus.RUNNING.value,
         "scan_phase": ScanPhase.RUNNING_COMMAND.value,
+        "phase_timestamps_json": '{"queued": {"started_at": "2026-01-01T00:00:00"}}',
         "created_at": "2026-01-01T00:00:00",
         "started_at": None,
         "completed_at": None,
@@ -219,3 +225,4 @@ async def test_scan_phase_included_in_status_response():
         result = await _call_with_mock_db(executor, "task-sse-1", mock_db)
 
     assert result["scan_phase"] == ScanPhase.RUNNING_COMMAND.value
+    assert "queued" in result["phase_timestamps"]

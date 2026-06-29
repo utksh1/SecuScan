@@ -45,6 +45,35 @@ def test_plugin_manager_build_command(setup_test_environment):
     assert "http://127.0.0.1" in command
 
 
+def test_plugin_interpolation_sanitizes_user_controlled_values():
+    manager = PluginManager("plugins")
+
+    assert manager._interpolate("{templates}", {"templates": "--debug;$(whoami)"}) == "debugwhoami"
+    assert (
+        manager._interpolate("--user-agent={user_agent}", {"user_agent": "--verbose|curl"})
+        == "--user-agent=verbosecurl"
+    )
+
+
+def test_plugin_interpolation_preserves_legitimate_argv_values():
+    manager = PluginManager("plugins")
+
+    assert (
+        manager._interpolate(
+            "--url={target}",
+            {"target": "https://api-v1.example.com:8443/health-check"},
+        )
+        == "--url=https://api-v1.example.com:8443/health-check"
+    )
+    assert (
+        manager._interpolate(
+            "--user-agent={user_agent}",
+            {"user_agent": "SecuScan-CLI/1.0 api-health-check"},
+        )
+        == "--user-agent=SecuScan-CLI/1.0 api-health-check"
+    )
+
+
 def test_plugin_list_exposes_runtime_capabilities(setup_test_environment, monkeypatch):
     """Plugin list payload includes consent and availability details."""
     manager = PluginManager(settings.plugins_dir)
@@ -86,7 +115,7 @@ def test_nikto_plugin_supports_expanded_cli_parameters(setup_test_environment):
             "force_ssl": True,
             "display_options": "EPV",
             "tuning": "123b",
-            "request_timeout": 20,
+            "timeout": 20,
             "max_scan_time": 900,
             "dbcheck": True,
             "no_cache": True,
@@ -253,13 +282,15 @@ def test_plugin_manager_resolves_repo_local_wordlist_aliases(setup_test_environm
     medium_wordlist = Path(settings.wordlists_dir) / "medium.txt"
     medium_wordlist.write_text("admin\nlogin\n", encoding="utf-8")
 
+    # dir_discovery now defaults to the bundled "small" list, so request the
+    # installed "medium" alias explicitly to exercise repo-local resolution.
     command = manager.build_command(
         "dir_discovery",
-        {"base_url": "https://example.com"},
+        {"base_url": "https://example.com", "wordlist": "medium"},
     )
 
     assert command is not None
-    assert str(medium_wordlist) in command
+    assert (str(medium_wordlist) in command) or (medium_wordlist.as_posix() in command)
 
 
 def test_plugin_manager_rejects_linux_wordlist_absolute_default(setup_test_environment):
@@ -272,3 +303,67 @@ def test_plugin_manager_rejects_linux_wordlist_absolute_default(setup_test_envir
             "virtual-host-finder",
             {"target": "example.com"},
         )
+
+def test_plugin_validation_presets(setup_test_environment):
+    """Test validation_type presets on field inputs."""
+    manager = PluginManager(settings.plugins_dir)
+    asyncio.run(manager.load_plugins())
+
+    plugin = manager.get_plugin("http_inspector")
+    assert plugin is not None
+
+    # Let's mock a field's validation properties
+    target_field = plugin.fields[0]
+    orig_validation = target_field.validation
+
+    try:
+        # Test 1: URL validation_type preset
+        target_field.validation = {"validation_type": "url", "message": "Must be valid URL"}
+        # Valid URL
+        manager._validate_inputs_against_schema(plugin, {target_field.id: "https://example.com/api"})
+        # Invalid URL
+        with pytest.raises(ValueError, match="Must be valid URL"):
+            manager._validate_inputs_against_schema(plugin, {target_field.id: "invalid-url"})
+
+        # Test 2: Hostname preset
+        target_field.validation = {"validation_type": "hostname"}
+        # Valid hostname
+        manager._validate_inputs_against_schema(plugin, {target_field.id: "sub.example.com"})
+        # Invalid hostname
+        with pytest.raises(ValueError, match="Must be a valid hostname"):
+            manager._validate_inputs_against_schema(plugin, {target_field.id: "https://example.com"})
+
+        # Test 3: Domain preset
+        target_field.validation = {"validation_type": "domain"}
+        # Valid domain
+        manager._validate_inputs_against_schema(plugin, {target_field.id: "example.com"})
+        # Invalid domain
+        with pytest.raises(ValueError, match="Must be a valid domain name"):
+            manager._validate_inputs_against_schema(plugin, {target_field.id: "https://example.com"})
+
+        # Test 4: IPv4 preset
+        target_field.validation = {"validation_type": "ipv4"}
+        # Valid IP
+        manager._validate_inputs_against_schema(plugin, {target_field.id: "192.168.1.1"})
+        # Invalid IP
+        with pytest.raises(ValueError, match="Must be a valid IPv4 address"):
+            manager._validate_inputs_against_schema(plugin, {target_field.id: "999.999.999.999"})
+
+        # Test 5: Port preset
+        target_field.validation = {"validation_type": "port"}
+        # Valid port
+        manager._validate_inputs_against_schema(plugin, {target_field.id: "8080"})
+        # Invalid port
+        with pytest.raises(ValueError, match="Must be a valid port number"):
+            manager._validate_inputs_against_schema(plugin, {target_field.id: "70000"})
+
+        # Test 6: CIDR preset
+        target_field.validation = {"validation_type": "cidr"}
+        # Valid CIDR
+        manager._validate_inputs_against_schema(plugin, {target_field.id: "192.168.1.0/24"})
+        # Invalid CIDR
+        with pytest.raises(ValueError, match="Must be a valid CIDR block"):
+            manager._validate_inputs_against_schema(plugin, {target_field.id: "192.168.1.1"})
+
+    finally:
+        target_field.validation = orig_validation

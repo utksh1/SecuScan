@@ -322,3 +322,21 @@ class TestWorkflowRunLifecycle:
         run_id = await db.record_workflow_run(wf_id, None, None, ["t3"])
         status = await db.check_workflow_run_tasks(run_id)
         assert status == "failed"
+
+    @pytest.mark.asyncio
+    async def test_workflow_run_history_preserves_triggered_by(self, db):
+        wf_id = await _insert_workflow(db)
+
+        run_id = await db.record_workflow_run(
+            wf_id,
+            None,
+            None,
+            [],
+            triggered_by="scheduler:user:test-owner",
+        )
+
+        history = await db.get_workflow_runs(wf_id)
+
+        assert history["total"] == 1
+        assert history["runs"][0]["id"] == run_id
+        assert history["runs"][0]["triggered_by"] == "scheduler:user:test-owner"

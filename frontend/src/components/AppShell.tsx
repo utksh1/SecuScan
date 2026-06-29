@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Background from './Background'
@@ -15,10 +15,58 @@ export default function AppShell({ children }: AppShellProps) {
     const { isExpanded: sidebarExpanded, toggleSidebar } = useSidebar()
     useShortcuts(toggleSidebar)
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+    const menuButtonRef = useRef<HTMLButtonElement>(null)
+    const drawerRef = useRef<HTMLDivElement>(null)
 
     useEffect(() => {
         setMobileMenuOpen(false)
     }, [pathname])
+
+    useEffect(() => {
+        if (!mobileMenuOpen) return
+        const previousOverflow = document.body.style.overflow
+        document.body.style.overflow = 'hidden'
+        return () => {
+            document.body.style.overflow = previousOverflow
+        }
+    }, [mobileMenuOpen])
+
+    useEffect(() => {
+        if (mobileMenuOpen) {
+            const firstFocusable = drawerRef.current?.querySelector<HTMLElement>(
+                'a, button, [tabindex]:not([tabindex="-1"])'
+            )
+            firstFocusable?.focus()
+        } else {
+            menuButtonRef.current?.focus()
+        }
+    }, [mobileMenuOpen])
+
+    const handleDrawerKeyDown = useCallback(
+        (e: React.KeyboardEvent<HTMLDivElement>) => {
+            if (e.key === 'Escape') {
+                setMobileMenuOpen(false)
+                return
+            }
+            if (e.key !== 'Tab') return
+            const focusable = Array.from(
+                drawerRef.current?.querySelectorAll<HTMLElement>(
+                    'a, button, [tabindex]:not([tabindex="-1"])'
+                ) ?? []
+            )
+            if (focusable.length === 0) return
+            const first = focusable[0]
+            const last = focusable[focusable.length - 1]
+            if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault()
+                last.focus()
+            } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault()
+                first.focus()
+            }
+        },
+        []
+    )
 
     const desktopSidebarWidth = sidebarExpanded ? 220 : 64
     const mobilePrimaryNav = [
@@ -45,11 +93,14 @@ export default function AppShell({ children }: AppShellProps) {
             <Background state="idle" />
             <div className="flex bg-charcoal-dark min-h-screen">
                 <Sidebar />
-                <div className="lg:hidden fixed inset-x-0 top-0 z-40 bg-secondary border-b border-accent-silver/10 h-14 px-4 flex items-center justify-between">
+                <div className="lg:hidden fixed inset-x-0 top-0 z-[60] bg-[var(--bg-secondary)] border-b border-accent-silver/10 h-14 px-4 flex items-center justify-between">
                     <button
+                        ref={menuButtonRef}
                         onClick={() => setMobileMenuOpen((prev) => !prev)}
                         className="w-9 h-9 border border-accent-silver/20 flex items-center justify-center text-silver-bright bg-charcoal-dark"
                         aria-label="Toggle navigation menu"
+                        aria-expanded={mobileMenuOpen}
+                        aria-controls="mobile-nav-drawer"
                     >
                         <span className="material-symbols-outlined text-[20px]">
                             {mobileMenuOpen ? 'close' : 'menu'}
@@ -60,10 +111,21 @@ export default function AppShell({ children }: AppShellProps) {
                 </div>
 
                 {mobileMenuOpen && (
-                    <div className="lg:hidden fixed inset-0 z-40 bg-black/60" onClick={() => setMobileMenuOpen(false)}>
+                    <>
+                        <button
+                            type="button"
+                            className="lg:hidden fixed inset-0 z-50 bg-charcoal-dark/80 backdrop-blur-sm"
+                            onClick={() => setMobileMenuOpen(false)}
+                            aria-label="Close navigation menu"
+                        />
                         <div
-                            className="absolute top-14 left-0 right-0 bg-secondary border-b border-accent-silver/10 p-4"
-                            onClick={(e) => e.stopPropagation()}
+                            id="mobile-nav-drawer"
+                            ref={drawerRef}
+                            role="dialog"
+                            aria-modal="true"
+                            aria-label="Navigation menu"
+                            className="lg:hidden fixed top-14 left-0 right-0 z-50 bg-[var(--bg-secondary)] border-b border-accent-silver/10 p-4 shadow-[0_12px_32px_rgba(0,0,0,0.6)]"
+                            onKeyDown={handleDrawerKeyDown}
                         >
                             <nav className="grid grid-cols-2 gap-2">
                                 {mobileDrawerNav.map((item) => (
@@ -83,7 +145,7 @@ export default function AppShell({ children }: AppShellProps) {
                                 ))}
                             </nav>
                         </div>
-                    </div>
+                    </>
                 )}
 
                 <main
@@ -93,7 +155,7 @@ export default function AppShell({ children }: AppShellProps) {
                     {children}
                 </main>
 
-                <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 h-16 bg-secondary border-t border-accent-silver/10 grid grid-cols-5">
+                <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 h-16 bg-[var(--bg-secondary)] border-t border-accent-silver/10 grid grid-cols-5">
                     {mobilePrimaryNav.map((item) => (
                         <NavLink
                             key={item.to}

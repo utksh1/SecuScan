@@ -8,6 +8,17 @@ interface ExecutiveStatsBarProps {
   scanActivity: number
   compliancePercent: number
   riskNote?: string
+  loading?: boolean
+}
+
+function SkeletonBlock({ className = '' }: { className?: string }) {
+  return (
+    <span
+      role="status"
+      aria-label="Loading"
+      className={`inline-block bg-white/10 rounded animate-pulse ${className}`}
+    />
+  )
 }
 
 export const ExecutiveStatsBar: React.FC<ExecutiveStatsBarProps> = ({
@@ -16,7 +27,8 @@ export const ExecutiveStatsBar: React.FC<ExecutiveStatsBarProps> = ({
   totalFindings = 0,
   scanActivity = 0,
   compliancePercent = 100,
-  riskNote = 'Risk exposure has increased by 12% following recent network expansion.'
+  riskNote = 'Risk exposure has increased by 12% following recent network expansion.',
+  loading = false,
 }) => {
   const criticalCount = Number.isFinite(criticalVulns) ? criticalVulns : 0
   const findingCount = Number.isFinite(totalFindings) ? totalFindings : 0
@@ -25,62 +37,104 @@ export const ExecutiveStatsBar: React.FC<ExecutiveStatsBarProps> = ({
   const hasCritical = criticalCount > 0
 
   return (
-    <div className="w-full bg-[var(--bg-secondary)] border-y border-white/5 py-16 grid grid-cols-1 md:grid-cols-4 divide-x divide-white/5">
+    <div
+      className="w-full bg-[var(--bg-secondary)] border-y border-white/5 py-16 grid grid-cols-1 md:grid-cols-4 divide-x divide-white/5"
+      aria-busy={loading}
+    >
       {/* 1. Risk Profile */}
       <div className="px-6 first:pl-8">
-        <span className="text-xs font-bold text-white/70 uppercase tracking-[0.3em] block mb-6">Status Profile</span>
+        <span className="text-xs font-bold text-silver uppercase tracking-[0.3em] block mb-6">Status Profile</span>
         <div className="space-y-6">
-          <span 
-            className="text-7xl font-light text-[var(--rag-amber)] leading-none block" 
-            style={{ fontFamily: "'Libre Baskerville', Georgia, serif" }}
-          >
-            {riskLabel || 'Moderate'}
-          </span>
-          <p className="text-sm text-white/80 leading-relaxed font-light tracking-wide">
-            {riskNote}
-          </p>
+          {loading ? (
+            <>
+              <SkeletonBlock className="h-[4.5rem] w-3/4" />
+              <div className="space-y-2">
+                <SkeletonBlock className="h-3 w-full" />
+                <SkeletonBlock className="h-3 w-5/6" />
+              </div>
+            </>
+          ) : (
+            <>
+              <span
+                className="text-7xl font-light text-[var(--rag-amber)] leading-none block"
+                style={{ fontFamily: "'Libre Baskerville', Georgia, serif" }}
+              >
+                {riskLabel || 'Moderate'}
+              </span>
+              <p className="text-sm text-silver leading-relaxed font-light tracking-wide">
+                {riskNote}
+              </p>
+            </>
+          )}
         </div>
       </div>
 
       {/* 2. Critical Vulns */}
       <div className="px-6">
-        <span className="text-xs font-bold text-white/70 uppercase tracking-[0.3em] block mb-6">Critical Vulns</span>
+        <span className="text-xs font-bold text-silver uppercase tracking-[0.3em] block mb-6">Critical Vulns</span>
         <div className="space-y-8">
-          <span
-            className={`text-8xl font-normal leading-[0.8] block ${hasCritical ? 'text-[var(--rag-red)]' : 'text-white'}`}
-            style={{ fontFamily: 'var(--font-display)' }}
-          >
-            {criticalCount}
-          </span>
-          <span className={`text-xs font-bold uppercase tracking-[0.25em] block ${hasCritical ? 'text-[var(--rag-red)]' : 'text-[var(--rag-green)]'}`}>
-            {hasCritical ? 'ATTENTION REQUIRED' : 'NO CRITICAL FINDINGS'}
-          </span>
+          {loading ? (
+            <>
+              <SkeletonBlock className="h-[5rem] w-1/2" />
+              <SkeletonBlock className="h-3 w-2/3" />
+            </>
+          ) : (
+            <>
+              <span
+                className={`text-8xl font-normal leading-[0.8] block ${hasCritical ? 'text-[var(--rag-red)]' : 'text-silver-bright'}`}
+                style={{ fontFamily: 'var(--font-display)' }}
+              >
+                {criticalCount}
+              </span>
+              <span className={`text-xs font-bold uppercase tracking-[0.25em] block ${hasCritical ? 'text-[var(--rag-red)]' : 'text-[var(--rag-green)]'}`}>
+                {hasCritical ? 'ATTENTION REQUIRED' : 'NO CRITICAL FINDINGS'}
+              </span>
+            </>
+          )}
         </div>
       </div>
 
       {/* 3. Total Findings */}
       <div className="px-6">
-        <span className="text-xs font-bold text-white/70 uppercase tracking-[0.3em] block mb-6">Total Findings</span>
+        <span className="text-xs font-bold text-silver uppercase tracking-[0.3em] block mb-6">Total Findings</span>
         <div className="space-y-8">
-          <span className="text-8xl font-normal text-white leading-[0.8]" style={{ fontFamily: 'var(--font-display)' }}>
-            {findingCount.toLocaleString()}
-          </span>
-          <span className="text-xs text-[var(--rag-green)] font-bold uppercase tracking-[0.25em] block">
-            {compliance}% COMPLIANT
-          </span>
+          {loading ? (
+            <>
+              <SkeletonBlock className="h-[5rem] w-1/2" />
+              <SkeletonBlock className="h-3 w-2/3" />
+            </>
+          ) : (
+            <>
+              <span className="text-8xl font-normal text-silver-bright leading-[0.8]" style={{ fontFamily: 'var(--font-display)' }}>
+                {findingCount.toLocaleString()}
+              </span>
+              <span className="text-xs text-[var(--rag-green)] font-bold uppercase tracking-[0.25em] block">
+                {compliance}% COMPLIANT
+              </span>
+            </>
+          )}
         </div>
       </div>
 
       {/* 4. Scan Activity */}
       <div className="px-6 last:pr-8">
-        <span className="text-xs font-bold text-white/70 uppercase tracking-[0.3em] block mb-6">Scan Cycles</span>
+        <span className="text-xs font-bold text-silver uppercase tracking-[0.3em] block mb-6">Scan Cycles</span>
         <div className="space-y-8">
-          <span className="text-8xl font-normal text-white leading-[0.8]" style={{ fontFamily: 'var(--font-display)' }}>
-            {scanCount.toLocaleString()}
-          </span>
-          <span className="text-xs text-[var(--rag-blue)] font-bold uppercase tracking-[0.25em] block">
-            MONITORING ACTIVE
-          </span>
+          {loading ? (
+            <>
+              <SkeletonBlock className="h-[5rem] w-1/2" />
+              <SkeletonBlock className="h-3 w-2/3" />
+            </>
+          ) : (
+            <>
+              <span className="text-8xl font-normal text-silver-bright leading-[0.8]" style={{ fontFamily: 'var(--font-display)' }}>
+                {scanCount.toLocaleString()}
+              </span>
+              <span className="text-xs text-[var(--rag-blue)] font-bold uppercase tracking-[0.25em] block">
+                MONITORING ACTIVE
+              </span>
+            </>
+          )}
         </div>
       </div>
     </div>

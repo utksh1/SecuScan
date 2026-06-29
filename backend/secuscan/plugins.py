@@ -2,6 +2,7 @@
 Plugin loader and management system
 """
 
+import time
 import json
 import os
 import re
@@ -15,6 +16,7 @@ import hmac
 from .models import PluginMetadata, PluginFieldType
 from .config import settings
 from .capabilities import validate_capability_list, ALL_CAPABILITIES
+from .validation import sanitize_input
 
 # Port specifications: one or more comma-separated port numbers or port ranges.
 # Valid: "22", "80,443", "1-1000", "22,80,1000-2000"
@@ -47,6 +49,40 @@ _NATIVE_PLUGIN_IDS = frozenset({
     "port_scanner",
 })
 
+_VALIDATION_PRESETS: Dict[str, Dict[str, Any]] = {
+    "url": {
+        "pattern": re.compile(r"^https?://[^\s/$.?#].[^\s]*$", re.IGNORECASE),
+        "message": "Must be a valid URL starting with http:// or https://",
+    },
+    "hostname": {
+        "pattern": re.compile(
+            r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$"
+        ),
+        "message": "Must be a valid hostname (e.g. example.com or sub.example.com)",
+    },
+    "domain": {
+        "pattern": re.compile(r"^(?!https?://)(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$"),
+        "message": "Must be a valid domain name without a scheme (e.g. example.com)",
+    },
+    "ipv4": {
+        "pattern": re.compile(
+            r"^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)$"
+        ),
+        "message": "Must be a valid IPv4 address (e.g. 192.168.1.1)",
+    },
+    "port": {
+        "pattern": re.compile(
+            r"^(6553[0-5]|655[0-2]\d|65[0-4]\d{2}|6[0-4]\d{3}|[1-5]\d{4}|[1-9]\d{0,3}|[1-9])$"
+        ),
+        "message": "Must be a valid port number between 1 and 65535",
+    },
+    "cidr": {
+        "pattern": re.compile(
+            r"^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]\d|\d)){3}/(3[0-2]|[12]\d|[0-9])$"
+        ),
+        "message": "Must be a valid CIDR block (e.g. 192.168.1.0/24)",
+    },
+}
 
 def _is_absolute_path(value: str) -> bool:
     """Check if a path is absolute regardless of the server OS.
@@ -59,7 +95,6 @@ def _is_absolute_path(value: str) -> bool:
     if value.startswith("\\"):
         return True
     return bool(re.match(r'^[a-zA-Z]:[/\\]', value))
-
 
 class PluginManager:
     """Manages plugin loading and validation"""
@@ -107,6 +142,14 @@ class PluginManager:
                 logger.error(f"Failed to load plugin from {plugin_dir}: {e}")
 
         logger.info(f"Loaded {loaded} plugins")
+
+        # Invalidate caches when plugin state changes
+        try:
+            from .cache import invalidate_plugin_caches
+            await invalidate_plugin_caches()
+        except Exception as e:
+            logger.warning(f"Failed to invalidate plugin caches: {e}")
+
         return loaded
 
     async def _load_plugin_metadata(self, metadata_file: Path) -> PluginMetadata:
@@ -241,10 +284,10 @@ class PluginManager:
         parser_file = plugin_dir / "parser.py"
 
         if not plugin.checksum:
-            if settings.enforce_plugin_signatures:
+            if settings.enforce_parser_integrity:
                 logger.error(
                     "Refusing to execute parser for plugin %s: no checksum present "
-                    "and signature enforcement is enabled",
+                    "and parser integrity enforcement is enabled",
                     plugin.id,
                 )
                 return False
@@ -378,7 +421,7 @@ class PluginManager:
                 return None
 
             placeholder = "{" + var_name + (f":{default_value}" if default_value else "") + "}"
-            rendered = rendered.replace(placeholder, str(value))
+            rendered = rendered.replace(placeholder, sanitize_input(str(value)))
 
         return rendered
 
@@ -559,12 +602,19 @@ class PluginManager:
             if field.type in (PluginFieldType.STRING, PluginFieldType.TEXT):
                 value_str = str(raw_value)
 
-                # Pattern validation from field metadata
+                # Pattern / validation_type validation from field metadata
                 validation = field.validation or {}
-                pattern = validation.get("pattern")
-                if pattern and not re.match(pattern, value_str):
-                    msg = validation.get("message", f"Value does not match pattern {pattern!r}")
-                    raise ValueError(f"Field '{field_id}': {msg}")
+                validation_type = validation.get("validation_type")
+                if validation_type and validation_type in _VALIDATION_PRESETS:
+                    preset = _VALIDATION_PRESETS[validation_type]
+                    if not preset["pattern"].match(value_str):
+                        msg = validation.get("message", preset["message"])
+                        raise ValueError(f"Field '{field_id}': {msg}")
+                else:
+                    pattern = validation.get("pattern")
+                    if pattern and not re.match(pattern, value_str):
+                        msg = validation.get("message", f"Value does not match pattern {pattern!r}")
+                        raise ValueError(f"Field '{field_id}': {msg}")
 
                 # Reject argv-level flag injection
                 self._reject_injected_args(field_id, value_str)
@@ -630,10 +680,8 @@ class PluginManager:
 
         return command
 
-
 # Global plugin manager instance
 plugin_manager: Optional[PluginManager] = None
-
 
 async def init_plugins(plugins_dir: str) -> PluginManager:
     """Initialize plugin manager and load plugins"""
@@ -642,9 +690,20 @@ async def init_plugins(plugins_dir: str) -> PluginManager:
     await plugin_manager.load_plugins()
     return plugin_manager
 
-
 def get_plugin_manager() -> PluginManager:
     """Get plugin manager instance"""
     if plugin_manager is None:
         raise RuntimeError("Plugin manager not initialized")
     return plugin_manager
+
+def get_plugin_check_latency_ms() -> float:
+    """Measure plugin enumeration latency in milliseconds."""
+    manager = get_plugin_manager()
+
+    start = time.perf_counter()
+    manager.list_plugins()
+
+    return round(
+        (time.perf_counter() - start) * 1000,
+        2,
+    )

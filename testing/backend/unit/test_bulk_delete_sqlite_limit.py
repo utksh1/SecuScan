@@ -190,6 +190,7 @@ class TestDeleteTaskRecordsChunking:
         mock_db.begin = AsyncMock()
         mock_db.commit = AsyncMock()
         mock_db.rollback = AsyncMock()
+        mock_db.transaction = MagicMock(return_value=AsyncMock())
         async def capture_execute(sql, params=()):
             captured_sql.append(sql)
         mock_db.execute_no_commit = capture_execute
@@ -226,6 +227,7 @@ class TestDeleteTaskRecordsChunking:
         mock_db.begin = AsyncMock()
         mock_db.commit = AsyncMock()
         mock_db.rollback = AsyncMock()
+        mock_db.transaction = MagicMock(return_value=AsyncMock())
         async def capture_execute(sql, params=()):
             captured_sql.append(sql)
             captured_params.append(params)
