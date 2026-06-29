@@ -14,6 +14,10 @@ BLOCKED_PATTERNS=(
   "backend/data/raw/"
   "backend/data/reports/"
   "logs/"
+  # Python virtual environments (local development and automation)
+  "venv/"
+  ".venv/"
+  ".venv-codex/"
 )
 
 # ── Check 1: files already tracked in git history ─────────────────────────────
