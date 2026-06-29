@@ -275,4 +275,37 @@ describe('Scans — task list', () => {
 
     alertSpy.mockRestore()
   })
+
+  it('handles deleteTask failure correctly', async () => {
+    const { deleteTask } = await import('../../../src/api')
+    vi.mocked(deleteTask).mockRejectedValueOnce(new Error('Delete failed'))
+
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+
+    const tasks = [makeTask({ task_id: 'task-1', tool: 'nmap', status: 'completed' })]
+    mockFetch(tasks)
+    renderScans()
+
+    await waitFor(() => expect(screen.getByText('nmap')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByText('nmap').closest('[class*="cursor-pointer"]')!)
+    await waitFor(() => expect(screen.getByText('Delete_Record')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByText('Delete_Record'))
+
+    await waitFor(() => expect(screen.getByText('Delete Scan Record')).toBeInTheDocument())
+
+    const confirmBtn = screen.getByRole('button', { name: /Confirm/i })
+    await userEvent.click(confirmBtn)
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Failed to delete task. It might still be running.'
+      )
+    })
+
+    expect(screen.getAllByText('nmap')[0]).toBeInTheDocument()
+
+    alertSpy.mockRestore()
+  })
 })
