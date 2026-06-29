@@ -308,4 +308,46 @@ describe('Scans — task list', () => {
 
     alertSpy.mockRestore()
   })
+
+  it('handles bulkDeleteTasks failure correctly', async () => {
+    const { bulkDeleteTasks } = await import('../../../src/api')
+    vi.mocked(bulkDeleteTasks).mockRejectedValueOnce(new Error('Bulk delete failed'))
+
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+
+    const tasks = [
+      makeTask({ task_id: 'task-1', tool: 'nmap' }),
+      makeTask({ task_id: 'task-2', tool: 'sqlmap' }),
+    ]
+    mockFetch(tasks)
+    renderScans()
+
+    await waitFor(() => expect(screen.getByText('nmap')).toBeInTheDocument())
+    expect(screen.getByText('sqlmap')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /Select_All/i }))
+    await waitFor(() => {
+      expect(screen.getByText('2')).toBeInTheDocument()
+    })
+
+    const pruneBtn = screen.getByRole('button', { name: /Prune_Selected_Records/i })
+    await userEvent.click(pruneBtn)
+
+    expect(screen.getByText('Bulk Delete Records')).toBeInTheDocument()
+
+    const confirmBtn = screen.getByRole('button', { name: /Confirm/i })
+    await userEvent.click(confirmBtn)
+
+    await waitFor(() => {
+      expect(alertSpy).toHaveBeenCalledWith(
+        'Failed to delete some tasks. Ensure they are not currently running.'
+      )
+    })
+
+    expect(screen.getByText('nmap')).toBeInTheDocument()
+    expect(screen.getByText('sqlmap')).toBeInTheDocument()
+    expect(screen.getByText('2')).toBeInTheDocument()
+
+    alertSpy.mockRestore()
+  })
 })
