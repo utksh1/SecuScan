@@ -6,9 +6,11 @@ import json
 import re
 from .redaction import redact, redact_dict
 from .ai_summary import generate_summary
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any, Dict, List
+
+from backend import __version__
 
 from PIL import Image, ImageDraw
 from xhtml2pdf import pisa
@@ -92,9 +94,12 @@ class ReportGenerator:
             y_offset += bar_height + spacing
 
         output = io.BytesIO()
-        img.save(output, format="PNG")
-        encoded = base64.b64encode(output.getvalue()).decode("ascii")
-        return f"data:image/png;base64,{encoded}"
+        try:
+            img.save(output, format="PNG")
+            encoded = base64.b64encode(output.getvalue()).decode("ascii")
+            return f"data:image/png;base64,{encoded}"
+        finally:
+            output.close()
 
     @classmethod
     def _get_ai_summary(cls, findings):
@@ -157,9 +162,12 @@ class ReportGenerator:
             draw.ellipse((22, 33, 26, 37), fill=fg)
 
         output = io.BytesIO()
-        image.save(output, format="PNG")
-        encoded = base64.b64encode(output.getvalue()).decode("ascii")
-        return f"data:image/png;base64,{encoded}"
+        try:
+            image.save(output, format="PNG")
+            encoded = base64.b64encode(output.getvalue()).decode("ascii")
+            return f"data:image/png;base64,{encoded}"
+        finally:
+            output.close()
 
     @classmethod
     def _clean_text(cls, value: Any) -> str:
@@ -692,13 +700,30 @@ class ReportGenerator:
 
     @classmethod
     def generate_pdf_report(cls, task: Dict[str, Any], result: Dict[str, Any]) -> bytes:
-        """Generate the PDF from the same HTML used by the browser report."""
+        """Generate the PDF from the same HTML used by the browser report.
+
+        Contract:
+            - Returns raw PDF bytes on success.
+            - Raises RuntimeError("Failed to render SecuScan HTML report as PDF")
+              on any render failure (pisa error flag or unexpected exception).
+            - The internal BytesIO buffer is always closed before returning or
+              raising, regardless of the failure mode.
+            - No temporary files are written to disk; if this ever changes, the
+              same try/finally guarantee must be preserved.
+        """
         html_report = cls._generate_pdf_html_report(task, result)
         output = io.BytesIO()
-        pdf = pisa.CreatePDF(src=html_report, dest=output, encoding="utf-8")
-        if pdf.err:
-            raise RuntimeError("Failed to render SecuScan HTML report as PDF")
-        return output.getvalue()
+        try:
+            pdf = pisa.CreatePDF(src=html_report, dest=output, encoding="utf-8")
+            if pdf.err:
+                raise RuntimeError("Failed to render SecuScan HTML report as PDF")
+            return output.getvalue()
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            raise RuntimeError("Failed to render SecuScan HTML report as PDF") from exc
+        finally:
+            output.close()
 
     @classmethod
     def generate_html_report(cls, task: Dict[str, Any], result: Dict[str, Any]) -> str:
@@ -1079,46 +1104,57 @@ class ReportGenerator:
 
     @classmethod
     def generate_csv_report(cls, task: Dict[str, Any], result: Dict[str, Any]) -> str:
-        """Generate a structured CSV export."""
+        """Generate a structured CSV export.
+
+        Contract:
+            - Returns a UTF-8 CSV string on success.
+            - Raises RuntimeError on unexpected generation failure.
+            - The internal StringIO buffer is always closed.
+        """
         payload = cls._build_report_payload(task, result)
         output = io.StringIO()
-        writer = csv.writer(output)
-        writer.writerow(
-            [
-                "Severity",
-                "Title",
-                "Category",
-                "Target",
-                "CVSS",
-                "CVE",
-                "CPE",
-                "Validated",
-                "Validation Method",
-                "Confidence Reason",
-                "Description",
-                "Evidence",
-                "Remediation",
-            ]
-        )
-        for finding in payload["findings"]:
+        try:
+            writer = csv.writer(output)
             writer.writerow(
                 [
-                    finding["severity"],
-                    finding["title"],
-                    finding["category"],
-                    finding["target"] or payload["target"],
-                    finding["cvss"] if finding["cvss"] is not None else "",
-                    finding["cve"],
-                    finding["cpe"],
-                    "yes" if finding["validated"] else "no",
-                    finding["validation_method"],
-                    finding["confidence_reason"],
-                    finding["description"],
-                    finding["proof"],
-                    finding["remediation"],
+                    "Severity",
+                    "Title",
+                    "Category",
+                    "Target",
+                    "CVSS",
+                    "CVE",
+                    "CPE",
+                    "Validated",
+                    "Validation Method",
+                    "Confidence Reason",
+                    "Description",
+                    "Evidence",
+                    "Remediation",
                 ]
             )
-        return output.getvalue()
+            for finding in payload["findings"]:
+                writer.writerow(
+                    [
+                        finding["severity"],
+                        finding["title"],
+                        finding["category"],
+                        finding["target"] or payload["target"],
+                        finding["cvss"] if finding["cvss"] is not None else "",
+                        finding["cve"],
+                        finding["cpe"],
+                        "yes" if finding["validated"] else "no",
+                        finding["validation_method"],
+                        finding["confidence_reason"],
+                        finding["description"],
+                        finding["proof"],
+                        finding["remediation"],
+                    ]
+                )
+            return output.getvalue()
+        except Exception as exc:
+            raise RuntimeError("Failed to generate CSV report") from exc
+        finally:
+            output.close()
 
     @classmethod
     def generate_sarif_report(cls, task: Dict[str, Any], result: Dict[str, Any]) -> str:
@@ -1247,8 +1283,15 @@ class ReportGenerator:
                             "name": tool_name,
                             "version": "1.0.0",
                             "informationUri": "https://github.com/utksh1/SecuScan",
-                            "rules": rules
+                            "rules": rules,
+                            "properties": {
+                                "generatorVersion": __version__,
+                            },
                         }
+                    },
+                    "properties": {
+                        "pluginId": task.get("plugin_id"),
+                        "exportTimestamp": datetime.now(timezone.utc).isoformat(),
                     },
                     "results": results
                 }

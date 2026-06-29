@@ -1,0 +1,36 @@
+{
+  "id": "forbidden_parser_plugin",
+  "name": "Forbidden Parser Plugin",
+  "description": "Fixture plugin with a forbidden parser pattern.",
+  "version": "1.0.0",
+  "category": "utils",
+  "icon": "bug",
+  "engine": {
+    "type": "cli",
+    "binary": "ping"
+  },
+  "command_template": [
+    "ping",
+    "-c",
+    "4",
+    "{target}"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target Host",
+      "type": "text",
+      "required": true,
+      "placeholder": "127.0.0.1",
+      "help": "IP address or hostname to ping"
+    }
+  ],
+  "output": {
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": false
+  },
+  "checksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}
