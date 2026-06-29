@@ -47,6 +47,8 @@ python scripts/refresh_plugin_checksum.py --plugin example_plugin
 - Invalid safety level
 - Incorrect parser output
 
+To avoid common security issues, ensure you check the [Plugin Security Checklist](plugin-security-checklist.md) before submitting.
+
 ## Conclusion
 
 You are now ready to contribute a plugin.
