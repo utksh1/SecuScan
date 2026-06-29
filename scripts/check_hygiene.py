@@ -74,16 +74,16 @@ def is_pycache_or_pyc(relative_path):
 def main():
     git_root = get_git_root()
     tracked_files = get_tracked_files(git_root)
-    
+
     violation_files = []
-    
+
     for f in tracked_files:
         # Normalize to forward slashes for unified parsing
         normalized_path = f.replace("\\", "/")
         if is_pycache_or_pyc(normalized_path):
             if not is_in_virtualenv(normalized_path, git_root):
                 violation_files.append(f)
-                
+
     if violation_files:
         print("ERROR: Tracked Python cache files (__pycache__ or *.pyc) found in repository:")
         for f in violation_files:
@@ -92,7 +92,7 @@ def main():
         print("  git rm --cached <file>")
         print("  Add the pattern to .gitignore to prevent recommitting.")
         sys.exit(1)
-        
+
     print("Repository hygiene check passed: no tracked __pycache__ or pyc files found.")
     sys.exit(0)
 
