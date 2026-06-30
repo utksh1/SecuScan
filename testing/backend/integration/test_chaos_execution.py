@@ -1,4 +1,5 @@
 """
+from __future__ import annotations
 Chaos tests for task execution failure modes.
 Issue #259 — Add chaos tests for task execution failures and partial artifacts.
 

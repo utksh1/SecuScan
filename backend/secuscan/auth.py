@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 API key authentication for SecuScan backend.
 
