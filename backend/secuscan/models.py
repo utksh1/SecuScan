@@ -362,7 +362,7 @@ class BulkDeleteRequest(RootModel[Annotated[List[str], Field(max_length=MAX_BULK
 
 
 class TargetPolicyCreate(BaseModel):
-    name: str
+    name: str = ""
     description: Optional[str] = ""
     allow_public_targets: bool = False
     allow_exploit_validation: bool = False
@@ -384,7 +384,7 @@ class TargetPolicyUpdate(BaseModel):
 
 
 class CredentialProfileCreate(BaseModel):
-    name: str
+    name: str = ""
     username_secret_name: Optional[str] = None
     password_secret_name: Optional[str] = None
     extra_headers: Dict[str, str] = Field(default_factory=dict)
@@ -400,7 +400,7 @@ class CredentialProfileUpdate(BaseModel):
 
 
 class SessionProfileCreate(BaseModel):
-    name: str
+    name: str = ""
     cookie_secret_name: Optional[str] = None
     extra_headers: Dict[str, str] = Field(default_factory=dict)
     notes: Optional[str] = ""
@@ -414,7 +414,7 @@ class SessionProfileUpdate(BaseModel):
 
 
 class WorkflowCreate(BaseModel):
-    name: str
+    name: str = ""
     schedule_seconds: Optional[int] = Field(default=None, ge=60)
     enabled: bool = True
     steps: List[Dict[str, Any]] = Field(default_factory=list)
