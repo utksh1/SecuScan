@@ -38,7 +38,7 @@ def test_httpx_parser_normal_output():
     # "https://exposed.example.com [200] config exposed" -> low (exposed)
     assert result["findings"][2]["severity"] == "low"
 
-    # "https://alive.example.com [200]" -> info (contains no severity keyword; wait, does "https://alive.example.com" trigger "alive"? 
+    # "https://alive.example.com [200]" -> info (contains no severity keyword; wait, does "https://alive.example.com" trigger "alive"?
     # Yes, "alive" is in "https://alive.example.com" because of the domain name!)
     # Let's verify: normalized = "https://alive.example.com [200]". "alive" in normalized is True. So it's low.
     assert result["findings"][3]["severity"] == "low"
