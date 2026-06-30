@@ -5,7 +5,7 @@ Verifies that:
 - verify_parser_at_exec_time() re-checks the digest before exec_module
 - A parser.py modified after load-time validation is rejected
 - A parser.py with no checksum is allowed (with warning) when enforcement is off
-- A parser.py with no checksum is blocked when enforce_plugin_signatures is on
+- A parser.py with no checksum is blocked when enforce_parser_integrity is on
 - A parser.py where the checksum matches is allowed
 - Executor skips exec_module when verify_parser_at_exec_time returns False
 - A crashing or timing-out custom parser raises RuntimeError (not silent fallback)
@@ -96,7 +96,7 @@ def _minimal_plugin_meta(checksum: str = None):
 
 class TestVerifyParserAtExecTime:
     def test_matching_checksum_returns_true(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(settings, "enforce_plugin_signatures", False)
+        monkeypatch.setattr(settings, "enforce_parser_integrity", True)
         parser_src = "def parse(output): return {'findings': []}\n"
         plugin_dir, _ = _write_plugin(tmp_path, parser_src=parser_src, include_checksum=True)
 
@@ -108,7 +108,7 @@ class TestVerifyParserAtExecTime:
         assert mgr.verify_parser_at_exec_time(plugin, plugin_dir) is True
 
     def test_tampered_parser_is_rejected(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(settings, "enforce_plugin_signatures", False)
+        monkeypatch.setattr(settings, "enforce_parser_integrity", True)
         parser_src = "def parse(output): return {'findings': []}\n"
         plugin_dir, _ = _write_plugin(tmp_path, parser_src=parser_src, include_checksum=True)
 
@@ -126,7 +126,7 @@ class TestVerifyParserAtExecTime:
         assert mgr.verify_parser_at_exec_time(plugin, plugin_dir) is False
 
     def test_no_checksum_allowed_when_enforcement_off(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(settings, "enforce_plugin_signatures", False)
+        monkeypatch.setattr(settings, "enforce_parser_integrity", False)
         plugin_dir, _ = _write_plugin(tmp_path, parser_src="", include_checksum=False)
         plugin = _minimal_plugin_meta(checksum=None)
 
@@ -134,7 +134,7 @@ class TestVerifyParserAtExecTime:
         assert mgr.verify_parser_at_exec_time(plugin, plugin_dir) is True
 
     def test_no_checksum_blocked_when_enforcement_on(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(settings, "enforce_plugin_signatures", True)
+        monkeypatch.setattr(settings, "enforce_parser_integrity", True)
         plugin_dir, _ = _write_plugin(tmp_path, parser_src="", include_checksum=False)
         plugin = _minimal_plugin_meta(checksum=None)
 
@@ -143,7 +143,7 @@ class TestVerifyParserAtExecTime:
 
     def test_digest_compute_failure_returns_false(self, tmp_path, monkeypatch):
         """If the digest computation raises (e.g. permissions), reject execution."""
-        monkeypatch.setattr(settings, "enforce_plugin_signatures", False)
+        monkeypatch.setattr(settings, "enforce_parser_integrity", True)
         plugin_dir, _ = _write_plugin(tmp_path, parser_src="", include_checksum=True)
         metadata = json.loads((plugin_dir / "metadata.json").read_text())
         plugin = _minimal_plugin_meta(checksum=metadata.get("checksum", "abc"))
@@ -162,7 +162,7 @@ class TestVerifyParserAtExecTime:
 class TestExecutorParserGate:
     def test_integrity_failure_raises_and_blocks_exec(self, tmp_path, monkeypatch):
         """When verify_parser_at_exec_time returns False the task must fail with a security error."""
-        monkeypatch.setattr(settings, "enforce_plugin_signatures", False)
+        monkeypatch.setattr(settings, "enforce_parser_integrity", False)
 
         parser_src = "def parse(output): return {'findings': []}\n"
         plugin_dir, _ = _write_plugin(tmp_path, parser_src=parser_src, include_checksum=True)
@@ -204,7 +204,7 @@ class TestExecutorParserGate:
 
     def test_sandbox_called_when_integrity_passes(self, tmp_path, monkeypatch):
         """When verify_parser_at_exec_time returns True, run_parser_in_sandbox must be called."""
-        monkeypatch.setattr(settings, "enforce_plugin_signatures", False)
+        monkeypatch.setattr(settings, "enforce_parser_integrity", False)
 
         parser_src = "def parse(output):\n    return {'findings': []}\n"
         plugin_dir, _ = _write_plugin(tmp_path, parser_src=parser_src, include_checksum=True)
@@ -251,7 +251,7 @@ class TestSandboxFailureIsHardError:
 
     def test_sandbox_crash_raises_runtime_error(self, tmp_path, monkeypatch):
         """ParserSandboxError from a crashing parser must surface as RuntimeError."""
-        monkeypatch.setattr(settings, "enforce_plugin_signatures", False)
+        monkeypatch.setattr(settings, "enforce_parser_integrity", False)
 
         parser_src = "def parse(output): raise RuntimeError('boom')\n"
         plugin_dir, _ = _write_plugin(tmp_path, parser_src=parser_src, include_checksum=True)
@@ -267,7 +267,7 @@ class TestSandboxFailureIsHardError:
     def test_sandbox_timeout_raises_runtime_error(self, tmp_path, monkeypatch):
         """ParserSandboxError from a timing-out parser must surface as RuntimeError."""
         from backend.secuscan.parser_sandbox import ParserSandboxError
-        monkeypatch.setattr(settings, "enforce_plugin_signatures", False)
+        monkeypatch.setattr(settings, "enforce_parser_integrity", False)
 
         parser_src = "def parse(output): return {}\n"
         plugin_dir, _ = _write_plugin(tmp_path, parser_src=parser_src, include_checksum=True)
@@ -287,7 +287,7 @@ class TestSandboxFailureIsHardError:
     def test_sandbox_failure_does_not_call_builtin_nmap_parser(self, tmp_path, monkeypatch):
         """Regression: built-in nmap parser must NOT be invoked after sandbox failure."""
         from backend.secuscan.parser_sandbox import ParserSandboxError
-        monkeypatch.setattr(settings, "enforce_plugin_signatures", False)
+        monkeypatch.setattr(settings, "enforce_parser_integrity", False)
 
         parser_src = "def parse(output): return {}\n"
         plugin_dir, _ = _write_plugin(tmp_path, parser_src=parser_src, include_checksum=True)

@@ -190,8 +190,12 @@ class NetworkPolicyEngine:
                 if parsed.scheme in {"http", "https", "ws", "wss"}:
                     if parsed.hostname:
                         target_host = parsed.hostname
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug(
+                    "Failed to parse URL while normalizing network policy target '%s': %s",
+                    original_dest_ip,
+                    exc,
+                )
 
         if ":" in target_host:
             if target_host.startswith("["):
@@ -357,8 +361,12 @@ class NetworkPolicyEngine:
                 parsed = urlparse(target_host)
                 if parsed.hostname:
                     target_host = parsed.hostname
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug(
+                    "Failed to parse egress target '%s' as URL: %s",
+                    host,
+                    exc,
+                )
 
         try:
             ip = ipaddress.ip_address(target_host)

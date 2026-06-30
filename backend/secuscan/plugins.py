@@ -284,10 +284,10 @@ class PluginManager:
         parser_file = plugin_dir / "parser.py"
 
         if not plugin.checksum:
-            if settings.enforce_plugin_signatures:
+            if settings.enforce_parser_integrity:
                 logger.error(
                     "Refusing to execute parser for plugin %s: no checksum present "
-                    "and signature enforcement is enabled",
+                    "and parser integrity enforcement is enabled",
                     plugin.id,
                 )
                 return False

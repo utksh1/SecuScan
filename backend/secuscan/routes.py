@@ -16,6 +16,8 @@ from urllib.parse import urlencode, urlparse
 
 from .routes_json_helpers import (
     FINDING_JSON_FIELDS,
+    _json_payload,
+    _serialize_workflow,
     deserialize_asset_service_rows,
     deserialize_finding_rows,
     parse_json_fields,
@@ -59,23 +61,6 @@ def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
             continue
         normalized.append(model.model_dump())
     return normalized
-
-def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]] = None) -> Dict[str, Any]:
-    """Return the workflow shape consumed by the frontend."""
-    return {
-        "id": row["id"],
-        "name": row["name"],
-        "schedule_seconds": row.get("schedule_seconds"),
-        "enabled": bool(row.get("enabled")),
-        "steps": _parse_workflow_steps(row.get("steps_json")),
-        "created_at": row.get("created_at"),
-        "last_run_at": row.get("last_run_at"),
-        "queued_task_ids": queued_task_ids or [],
-    }
-
-
-def _json_payload(value: Any, fallback: str) -> str:
-    return json.dumps(value if value is not None else json.loads(fallback))
 
 
 from .validation import is_filesystem_target  # noqa: E402
