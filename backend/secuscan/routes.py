@@ -1542,7 +1542,7 @@ async def delete_vault_secret(
     db = await get_db()
 
 
-    cursor =await db.execute(
+    cursor = await db.execute(
         """
         DELETE FROM credential_vault
         WHERE owner_id = ? AND name = ?
