@@ -366,3 +366,25 @@ class TestDefaultDenylistSSRFProtection:
         assert "fc00::/7" in denylist
         assert "fe80::/10" in denylist
         assert "::1/128" in denylist
+
+def test_check_access_logs_url_parse_failure(caplog, tmp_path):
+    engine = NetworkPolicyEngine(audit_log_path=str(tmp_path / "audit.log"))
+
+    with patch("urllib.parse.urlparse", side_effect=RuntimeError("boom")):
+        with caplog.at_level("DEBUG"):
+            engine.check_access(
+                dest_ip="http://example.com",
+                plugin_id="test",
+            )
+
+    assert "Failed to parse URL while normalizing network policy target" in caplog.text
+
+
+def test_validate_egress_target_logs_url_parse_failure(caplog, tmp_path):
+    engine = NetworkPolicyEngine(audit_log_path=str(tmp_path / "audit.log"))
+
+    with patch("backend.secuscan.network_policy.urlparse", side_effect=RuntimeError("boom")):
+        with caplog.at_level("DEBUG"):
+            engine.validate_egress_target("http://example.com")
+
+    assert "Failed to parse egress target" in caplog.text
