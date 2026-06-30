@@ -120,7 +120,7 @@ def test_metasploit_parser_empty_output(plugin_manager):
 
 def test_metasploit_parser_malformed_output(plugin_manager):
     parser = _load_metasploit_parser()
-    
+
     # Random text that doesn't trigger session, vulnerability, or failure matches
     parsed_noise = parser.parse("No fail, no session, no vulnerability. Just status: active.")
     assert parsed_noise["findings"] == []
