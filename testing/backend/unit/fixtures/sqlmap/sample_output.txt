@@ -1,0 +1,6 @@
+sqlmap/1.8.3#stable - running against https://vuln.example.com/search?q=test
+[INFO] testing URL parameter 'q'
+[CRITICAL] Parameter: q (GET) is vulnerable to UNION query SQL injection
+[INFO] back-end DBMS: MySQL 8.0
+[INFO] web application technology: Nginx 1.24, PHP 8.1
+[INFO] test completed in 3.2 seconds
