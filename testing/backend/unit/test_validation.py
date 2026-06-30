@@ -315,6 +315,80 @@ def test_validate_command_network_egress_log_only(monkeypatch):
     assert "network policy" in err.lower()
 
 
+def test_validate_command_network_egress_ignores_malformed_urls():
+    """Malformed URLs without a valid hostname should be ignored."""
+
+    from backend.secuscan.validation import validate_command_network_egress
+
+    malformed_commands = [
+        ["curl", "http://"],
+        ["curl", "http:///abc"],
+        ["curl", "https://"],
+    ]
+
+    for command in malformed_commands:
+        ok, err = validate_command_network_egress(
+            command,
+            safe_mode=False,
+            plugin_id="test",
+            task_id="test-task",
+        )
+
+        assert ok is True
+        assert err == ""
+
+
+def test_validate_command_network_egress_resolver_failure(monkeypatch):
+    from backend.secuscan.validation import validate_command_network_egress
+
+    def fake_validate_target(*_args, **_kwargs):
+        raise socket.gaierror("DNS resolution failed")
+
+    monkeypatch.setattr(validation_module, "validate_target", fake_validate_target)
+
+    with pytest.raises(socket.gaierror):
+        validate_command_network_egress(
+            ["curl", "https://example.com"],
+            safe_mode=False,
+            plugin_id="test",
+            task_id="test-task",
+        )
+
+
+def test_validate_command_network_egress_network_policy_exception(monkeypatch):
+    from backend.secuscan.validation import validate_command_network_egress
+    from backend.secuscan.config import settings
+
+    class FakePolicyEngine:
+        def check_access(self, **_kwargs):
+            raise RuntimeError("policy engine failure")
+
+    monkeypatch.setattr(
+        "backend.secuscan.network_policy.get_policy_engine",
+        lambda: FakePolicyEngine(),
+    )
+
+    monkeypatch.setattr(
+        validation_module,
+        "validate_target",
+        lambda *_args, **_kwargs: (True, ""),
+    )
+
+    old_enforce = settings.enforce_network_policy
+    settings.enforce_network_policy = True
+
+    try:
+        with pytest.raises(RuntimeError, match="policy engine failure"):
+            validate_command_network_egress(
+                ["curl", "https://example.com"],
+                safe_mode=False,
+                plugin_id="test",
+                task_id="test-task",
+            )
+    finally:
+        settings.enforce_network_policy = old_enforce
+
+
 def test_resolve_and_validate_target_rejects_raw_ip():
     from backend.secuscan.validation import resolve_and_validate_target
     ok, err = resolve_and_validate_target("http://10.0.0.1/webhook")

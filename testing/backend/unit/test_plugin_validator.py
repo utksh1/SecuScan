@@ -669,3 +669,101 @@ class TestMetadataQualityLint:
 
         assert len(mutually_exclusive_errors) == 1
         assert "private_key" in mutually_exclusive_errors[0].message
+
+
+# ===========================================================================
+# Security negative tests
+# ===========================================================================
+
+
+class TestSecurityNegativeTests:
+    def test_integrity_check_fails_on_checksum_mismatch(self, tmp_path):
+        """PluginManager._verify_plugin_integrity should return False if checksum mismatches."""
+        from backend.secuscan.plugins import PluginManager
+        from backend.secuscan.models import PluginMetadata
+
+        # 1. Create a valid metadata but with wrong checksum
+        data = _minimal_valid()
+        data["checksum"] = "b" * 64  # wrong checksum
+        data["presets"] = {}
+        for f in data["fields"]:
+            if f["type"] == "number":
+                f["type"] = "integer"
+        plugin_dir = _write_metadata(tmp_path, data)
+
+        plugin = PluginMetadata(**data)
+        mgr = PluginManager(plugins_dir=str(tmp_path))
+
+        assert mgr._verify_plugin_integrity(plugin, plugin_dir) is False
+
+    def test_sandbox_exec_fails_on_exec_statement(self):
+        """Parser sandbox should raise ParserSandboxError when parser execution encounters exec()."""
+        from backend.secuscan.parser_sandbox import run_parser_in_sandbox, ParserSandboxError
+
+        fixture_dir = Path(__file__).resolve().parent / "fixtures" / "plugins" / "forbidden_parser_plugin"
+        parser_path = fixture_dir / "parser.py"
+
+        with pytest.raises(ParserSandboxError) as exc_info:
+            run_parser_in_sandbox(
+                parser_path=parser_path,
+                plugin_id="forbidden_parser_plugin",
+                parser_input="test input"
+            )
+        assert "ValueError" in exc_info.value.stderr_excerpt or "exec" in exc_info.value.stderr_excerpt or "sandbox exec test" in exc_info.value.stderr_excerpt
+
+    def test_sandbox_strips_environ_secrets(self, monkeypatch):
+        """Parser sandbox environment variables should be stripped to avoid secret leakage."""
+        from backend.secuscan.parser_sandbox import run_parser_in_sandbox
+
+        # Set a sensitive secret in the parent process env
+        monkeypatch.setenv("SECUSCAN_VAULT_KEY", "super_secret_credentials_xyz")
+
+        # We can dynamically write a temp parser that checks the environment
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            parser_dir = Path(tmp_dir)
+            parser_file = parser_dir / "parser.py"
+            parser_file.write_text(
+                "import os\n"
+                "def parse(output):\n"
+                "    secret = os.environ.get('SECUSCAN_VAULT_KEY')\n"
+                "    return {'secret': secret}\n",
+                encoding="utf-8"
+            )
+
+            result = run_parser_in_sandbox(
+                parser_path=parser_file,
+                plugin_id="env_leak_test_plugin",
+                parser_input="test"
+            )
+
+            # The result dict should NOT contain the secret
+            assert result.get("secret") is None or result.get("secret") == ""
+
+    def test_sandbox_timeout_terminates_hanging_parser(self):
+        """Parser sandbox should kill a hanging parser execution via timeout."""
+        from backend.secuscan.parser_sandbox import run_parser_in_sandbox, ParserSandboxError
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            parser_dir = Path(tmp_dir)
+            parser_file = parser_dir / "parser.py"
+            parser_file.write_text(
+                "import time\n"
+                "def parse(output):\n"
+                "    # Infinite loop to simulate socket hanging or blocking read\n"
+                "    while True:\n"
+                "        time.sleep(0.1)\n",
+                encoding="utf-8"
+            )
+
+            # Set a very low timeout (e.g., 1 second) to run the test quickly
+            with pytest.raises(ParserSandboxError) as exc_info:
+                run_parser_in_sandbox(
+                    parser_path=parser_file,
+                    plugin_id="timeout_test_plugin",
+                    parser_input="test",
+                    timeout_seconds=1
+                )
+
+            assert "timed out" in str(exc_info.value)

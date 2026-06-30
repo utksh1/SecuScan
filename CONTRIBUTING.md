@@ -17,7 +17,7 @@ SecuScan is built for learning, defensive security workflows, and ethical testin
 - Documentation fixes, setup clarification, and onboarding polish
 - Frontend UX improvements in `frontend/src`
 - Backend validation, test coverage, and API consistency in `backend/secuscan` (see [docs/backend-architecture.md](docs/backend-architecture.md) for a module-by-module reference)
-- Plugin metadata cleanup and parser improvements in `plugins`
+- Plugin metadata cleanup and parser improvements in `plugins` (see [docs/plugins/plugin-security-checklist.md](docs/plugins/plugin-security-checklist.md) for security guidelines and checklist)
 - CI, test reliability, and developer experience
 
 When issue labels are available, look for tags such as `good first issue`, `documentation`, `frontend`, `backend`, `plugin`, `help wanted`, or `gssoc`.
@@ -424,7 +424,29 @@ Never commit these auto-generated paths:
 - `frontend/.vite/`
 - `.vite/deps/`
 
+### Runtime Generated Scan Artifacts
+
+Never commit runtime-generated scan outputs such as:
+
+- `output/`
+- `data/raw/`
+- `data/reports/`
+- `backend/data/raw/`
+- `backend/data/reports/`
+- `logs/`
+
+These directories contain runtime-generated artifacts such as PDF reports, scan results, and other temporary outputs. They should never be committed to the repository. Only intentionally maintained placeholder files such as `.gitkeep` should be tracked.
+
+If you accidentally commit a generated artifact, remove it from Git tracking:
+
+```bash
+git rm --cached <generated-file-or-directory>
+```
+
+Before committing again, verify that the generated artifact path is covered by `.gitignore` so it is not tracked in future commits.
+
 If CI fails, run:
 ```bash
-git rm --cached <file>
-echo 'frontend/dist/' >> .gitignore
+git rm --cached <generated-file-or-directory>
+
+# Ensure the generated artifact path is ignored in .gitignore

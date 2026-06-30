@@ -2,9 +2,10 @@
 
 ## Plugin Development
 
-New contributors can follow the complete plugin creation walkthrough:
-
-docs/plugins/plugin-development-walkthrough.md
+New contributors should refer to these resources:
+- [Plugin Development Walkthrough](docs/plugins/plugin-development-walkthrough.md)
+- [Plugin Security Checklist & Guidelines](docs/plugins/plugin-security-checklist.md)
+- [Plugin Reviewer Rubric](docs/plugins/plugin-reviewer-rubric.md)
 
 This file is a human-readable index of the plugins currently present in `plugins/*/metadata.json`.
 
@@ -278,6 +279,21 @@ After refreshing, run the backend tests to confirm the plugin loads correctly:
 ```bash
 cd backend && python -m pytest
 ```
+
+## Parser Integrity Enforcement
+
+When `enforce_parser_integrity` is enabled (default: `True`), the backend
+re-verifies the parser checksum immediately before executing any plugin's
+`parser.py` at scan time. This closes the TOCTOU window between startup
+validation and code execution by confirming the file has not been tampered
+with since the plugin was loaded.
+
+If the checksum does not match, the scan is aborted with a security error.
+Set `SECUSCAN_ENFORCE_PARSER_INTEGRITY=false` in your environment to disable
+this check (not recommended for production deployments).
+
+The `parser_hash_algorithm` setting (`sha256` by default) is reserved for
+future hash algorithm upgrades and is not used by the current implementation.
 
 ### Example 1 — Refresh a single plugin after editing its files
 
