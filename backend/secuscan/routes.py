@@ -1893,6 +1893,13 @@ async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_o
             consent_granted=True,
             owner_id=owner,
         )
+
+        can_acquire, concurrency_err = await concurrent_limiter.acquire(task_id)
+        if not can_acquire:
+            await executor.mark_task_failed(task_id, reason="Concurrency limit reached; task was not started")
+            logger.warning("Workflow %s: concurrency limit reached for step %s", workflow_id, step.get("plugin_id"))
+            continue
+
         asyncio.create_task(executor.execute_task(task_id))
         created_task_ids.append(task_id)
     await db.execute("UPDATE workflows SET last_run_at = datetime('now') WHERE id = ?", (workflow_id,))
