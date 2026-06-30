@@ -1569,6 +1569,11 @@ async def create_target_policy(payload: Dict[str, Any], owner: str = Depends(get
     name = str(payload.get("name", "")).strip()
     if not name:
         raise HTTPException(status_code=400, detail="Target policy name is required")
+
+    allowed = payload.get("allowed_targets")
+    if allowed is not None and not isinstance(allowed, list):
+        raise HTTPException(status_code=400, detail="allowed_targets must be a list")
+
     policy_id = str(uuid.uuid4())
     db = await get_db()
     await db.execute(
