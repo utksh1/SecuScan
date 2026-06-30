@@ -645,6 +645,25 @@ ON credential_vault(owner_id);
             except Exception as e:
                 print(f"Failed to add 'owner_id' to notification_rules: {e}")
 
+        # Notification history table migration: ensure owner_id exists (BOLA fix, issue #1483)
+        notif_hist_columns = await self.fetchall("PRAGMA table_info(notification_history)")
+        existing_notif_hist_cols = {col["name"] for col in notif_hist_columns}
+        if "owner_id" not in existing_notif_hist_cols:
+            try:
+                await self.execute(
+                    "ALTER TABLE notification_history ADD COLUMN owner_id TEXT"
+                )
+                # Backfill owner_id from notification_rules for existing rows
+                await self.execute(
+                    "UPDATE notification_history SET owner_id = ("
+                    "SELECT nr.owner_id FROM notification_rules nr "
+                    "WHERE nr.id = notification_history.rule_id"
+                    ") WHERE owner_id IS NULL"
+                )
+                print("Added missing column 'owner_id' to notification_history table.")
+            except Exception as e:
+                print(f"Failed to add 'owner_id' to notification_history: {e}")
+
         # Owner indexes must run after ALTER TABLE backfills owner_id on legacy DBs.
         await self.connection.executescript(
             """
@@ -654,6 +673,7 @@ ON credential_vault(owner_id);
             CREATE INDEX IF NOT EXISTS idx_credential_vault_owner ON credential_vault(owner_id);
             CREATE INDEX IF NOT EXISTS idx_workflows_owner ON workflows(owner_id);
             CREATE INDEX IF NOT EXISTS idx_notification_rules_owner ON notification_rules(owner_id);
+            CREATE INDEX IF NOT EXISTS idx_notification_history_owner ON notification_history(owner_id);
             """
             )
 

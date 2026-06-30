@@ -2212,6 +2212,7 @@ async def list_notification_history(
     rule_id: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
+    owner: str = Depends(get_current_owner),
 ):
     if limit < 1 or limit > 200:
         raise HTTPException(status_code=400, detail="Limit must be between 1 and 200")
@@ -2219,21 +2220,29 @@ async def list_notification_history(
         raise HTTPException(status_code=400, detail="Offset must be non-negative")
 
     db = await get_db()
-    query = "SELECT * FROM notification_history"
-    params: List[Any] = []
+    query = (
+        "SELECT nh.* FROM notification_history nh "
+        "JOIN notification_rules nr ON nh.rule_id = nr.id "
+        "WHERE nr.owner_id = ?"
+    )
+    params: List[Any] = [owner]
     if rule_id:
-        query += " WHERE rule_id = ?"
+        query += " AND nh.rule_id = ?"
         params.append(rule_id)
-    query += " ORDER BY sent_at DESC LIMIT ? OFFSET ?"
+    query += " ORDER BY nh.sent_at DESC LIMIT ? OFFSET ?"
     params.extend([limit, offset])
 
     rows = await db.fetchall(query, tuple(params))
     history = [_serialize_notification_history(row) for row in rows]
 
-    count_query = "SELECT COUNT(*) AS total FROM notification_history"
-    count_params: List[Any] = []
+    count_query = (
+        "SELECT COUNT(*) AS total FROM notification_history nh "
+        "JOIN notification_rules nr ON nh.rule_id = nr.id "
+        "WHERE nr.owner_id = ?"
+    )
+    count_params: List[Any] = [owner]
     if rule_id:
-        count_query += " WHERE rule_id = ?"
+        count_query += " AND nh.rule_id = ?"
         count_params.append(rule_id)
     count_row = await db.fetchone(count_query, tuple(count_params))
     total = int(count_row["total"]) if count_row else 0
