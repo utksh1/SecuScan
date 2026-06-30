@@ -16,8 +16,6 @@ from urllib.parse import urlencode, urlparse
 
 from .routes_json_helpers import (
     FINDING_JSON_FIELDS,
-    _json_payload,
-    _serialize_workflow,
     deserialize_asset_service_rows,
     deserialize_finding_rows,
     parse_json_fields,
@@ -62,6 +60,23 @@ def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
         normalized.append(model.model_dump())
     return normalized
 
+def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Return the workflow shape consumed by the frontend."""
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "schedule_seconds": row.get("schedule_seconds"),
+        "enabled": bool(row.get("enabled")),
+        "steps": _parse_workflow_steps(row.get("steps_json")),
+        "created_at": row.get("created_at"),
+        "last_run_at": row.get("last_run_at"),
+        "queued_task_ids": queued_task_ids or [],
+    }
+
+
+def _json_payload(value: Any, fallback: str) -> str:
+    return json.dumps(value if value is not None else json.loads(fallback))
+
 
 from .validation import is_filesystem_target  # noqa: E402
 
@@ -75,6 +90,10 @@ from .models import (
     NotificationChannelType, TaskStatus,
     ExecutionContext, WorkflowStep, ValidationMode, EvidenceLevel,
     NotificationDiagnosticsResponse,
+    TargetPolicyCreate, TargetPolicyUpdate,
+    CredentialProfileCreate, CredentialProfileUpdate,
+    SessionProfileCreate, SessionProfileUpdate,
+    WorkflowCreate, WorkflowUpdate,
 )
 from .config import settings
 from .database import get_db
@@ -90,7 +109,7 @@ from .ratelimit import (
     scheduler_tick_limiter,
 )
 from .rate_limiter import check_scan_rate_limit
-from .validation import validate_target, validate_task_start_payload, validate_url, validate_preset_name
+from .validation import validate_target, validate_task_start_payload, validate_url
 from .reporting import reporting
 from .vault import VaultCrypto
 from .workflows import scheduler, _finalize_workflow_run
@@ -327,15 +346,6 @@ async def start_task(
     if not plugin:
         logger.warning(f"Task start failed: Plugin not found: {request.plugin_id}")
         raise HTTPException(status_code=404, detail=f"Plugin not found: {request.plugin_id}")
-
-    preset_ok, preset_error = validate_preset_name(
-        request.plugin_id,
-        request.preset,
-        plugin.presets,
-    )
-    if not preset_ok:
-        logger.warning("Task start failed: %s", preset_error)
-        raise HTTPException(status_code=400, detail=preset_error)
 
     db = await get_db()
     target_policy = await get_target_policy(db, owner, execution_context.get("target_policy_id"))
@@ -903,63 +913,44 @@ async def cancel_task(task_id: str, owner: str = Depends(get_current_owner)):
     }
 
 
-@router.get("/dashboard/summary", dependencies=[Depends(read_heavy_limiter)])
+@router.get("/dashboard/summary")
 async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
     """Return the caller's aggregate dashboard data, cached per owner."""
 
     async def build():
         db = await get_db()
 
-        async def query_or_default(label: str, query_fn: Callable[[], Any], default: Any) -> Any:
-            try:
-                return await query_fn()
-            except Exception as exc:
-                logger.warning("Dashboard summary query '%s' failed for owner %s: %s", label, owner, exc)
-                return default
-
         # Get data
         # Push severity aggregation to DB — avoids full table scan in Python.
         # Every aggregate below is scoped to the caller so the dashboard never
         # surfaces another user/workspace's tasks or findings (issue #401).
-        severity_rows = await query_or_default(
-            "severity_counts",
-            lambda: db.fetchall(
-                """
-                SELECT severity, COUNT(*) AS cnt
-                FROM findings
-                WHERE owner_id = ?
-                GROUP BY severity
-                """,
-                (owner,),
-            ),
-            [],
+        severity_rows = await db.fetchall(
+            """
+            SELECT severity, COUNT(*) AS cnt
+            FROM findings
+            WHERE owner_id = ?
+            GROUP BY severity
+            """,
+            (owner,),
         )
         severity_counts = {row["severity"]: row["cnt"] for row in severity_rows}
 
-        task_stats = await query_or_default(
-            "task_stats",
-            lambda: db.fetchone(
-                """
-                SELECT
-                    COUNT(*) AS total,
-                    COUNT(*) FILTER (WHERE status = 'completed') AS completed,
-                    COUNT(*) FILTER (WHERE status = 'running') AS running
-                FROM tasks
-                WHERE owner_id = ?
-                """,
-                (owner,),
-            ),
-            {"total": 0, "completed": 0, "running": 0},
+        task_stats = await db.fetchone(
+            """
+            SELECT
+                COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE status = 'completed') AS completed,
+                COUNT(*) FILTER (WHERE status = 'running') AS running
+            FROM tasks
+            WHERE owner_id = ?
+            """,
+            (owner,),
         )
 
-        total_findings_row = await query_or_default(
-            "total_findings",
-            lambda: db.fetchone(
-                "SELECT COUNT(*) AS total FROM findings WHERE owner_id = ?", (owner,)
-            ),
-            None,
+        total_findings_row = await db.fetchone(
+            "SELECT COUNT(*) AS total FROM findings WHERE owner_id = ?", (owner,)
         )
-        total_findings = total_findings_row["total"] if total_findings_row else sum(severity_counts.values())
+        total_findings = total_findings_row["total"] if total_findings_row else 0
 
         critical_findings: int = severity_counts.get("critical", 0)
         high_findings: int = severity_counts.get("high", 0)
@@ -968,23 +959,19 @@ async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
         info_findings: int = severity_counts.get("info", 0)
 
         # Fetch only the 5 most recent findings — not the entire table
-        recent_rows = await query_or_default(
-            "recent_findings",
-            lambda: db.fetchall(
-                """
-                SELECT id, title, category, severity, target, description,
-                    remediation, proof, cvss, cve, discovered_at,
-                    validated, validation_method, confidence_reason,
-                    service_fingerprint, cpe, risk_score, risk_factors_json,
-                    evidence_json, asset_refs_json, references_json, metadata_json
-                FROM findings
-                WHERE owner_id = ?
-                ORDER BY discovered_at DESC
-                LIMIT 5
-                """,
-                (owner,),
-            ),
-            [],
+        recent_rows = await db.fetchall(
+            """
+            SELECT id, title, category, severity, target, description,
+                remediation, proof, cvss, cve, discovered_at,
+                validated, validation_method, confidence_reason,
+                service_fingerprint, cpe, risk_score, risk_factors_json,
+                evidence_json, asset_refs_json, references_json, metadata_json
+            FROM findings
+            WHERE owner_id = ?
+            ORDER BY discovered_at DESC
+            LIMIT 5
+            """,
+            (owner,),
         )
         recent_findings: List[Dict] = parse_json_fields(
             recent_rows,
@@ -1022,24 +1009,16 @@ async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
                 "running": int(task_stats["running"]) if task_stats and task_stats.get("running") is not None else 0,
             },
             "running_tasks": parse_json_fields(
-                await query_or_default(
-                    "running_tasks",
-                    lambda: db.fetchall(
-                        "SELECT id, plugin_id, tool_name, target, status, created_at FROM tasks WHERE owner_id = ? AND status = 'running' ORDER BY created_at DESC LIMIT 5",
-                        (owner,),
-                    ),
-                    [],
+                await db.fetchall(
+                    "SELECT id, plugin_id, tool_name, target, status, created_at FROM tasks WHERE owner_id = ? AND status = 'running' ORDER BY created_at DESC LIMIT 5",
+                    (owner,),
                 ),
                 []
             ),
             "recent_tasks": parse_json_fields(
-                await query_or_default(
-                    "recent_tasks",
-                    lambda: db.fetchall(
-                        "SELECT id, plugin_id, tool_name, target, status, created_at, duration_seconds FROM tasks WHERE owner_id = ? ORDER BY created_at DESC LIMIT 5",
-                        (owner,),
-                    ),
-                    [],
+                await db.fetchall(
+                    "SELECT id, plugin_id, tool_name, target, status, created_at, duration_seconds FROM tasks WHERE owner_id = ? ORDER BY created_at DESC LIMIT 5",
+                    (owner,),
                 ),
                 []
             )
@@ -1048,7 +1027,7 @@ async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
     return await get_or_set_cached(f"summary:dashboard:{owner}", build)
 
 
-@router.get("/findings", dependencies=[Depends(read_heavy_limiter)])
+@router.get("/findings")
 async def get_findings(
     owner: str = Depends(get_current_owner),
     page: int = Query(1, ge=1),
@@ -1088,7 +1067,7 @@ async def get_findings(
     return await get_or_set_cached(f"findings:list:{owner}:page={page}:per_page={per_page}", build)
 
 
-@router.get("/finding-groups", dependencies=[Depends(read_heavy_limiter)])
+@router.get("/finding-groups")
 async def get_finding_groups(
     owner: str = Depends(get_current_owner),
     page: int = Query(1, ge=1),
@@ -1113,7 +1092,7 @@ async def get_finding_groups(
     return await get_or_set_cached(f"findings:groups:{owner}:page={page}:per_page={per_page}", build)
 
 
-@router.get("/task/{task_id}/diff", dependencies=[Depends(read_heavy_limiter)])
+@router.get("/task/{task_id}/diff")
 async def get_task_diff(task_id: str, owner: str = Depends(get_current_owner)):
     db = await get_db()
     task_row = await db.fetchone(
@@ -1137,7 +1116,7 @@ async def get_task_diff(task_id: str, owner: str = Depends(get_current_owner)):
     return diff
 
 
-@router.get("/reports", dependencies=[Depends(read_heavy_limiter)])
+@router.get("/reports")
 async def get_reports(owner: str = Depends(get_current_owner)):
     """Return the caller's generated reports."""
 
@@ -1152,7 +1131,7 @@ async def get_reports(owner: str = Depends(get_current_owner)):
     return await get_or_set_cached(f"reports:list:{owner}", build)
 
 
-@router.get("/tasks", dependencies=[Depends(read_heavy_limiter)])
+@router.get("/tasks")
 async def list_tasks(
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
@@ -1565,8 +1544,9 @@ async def list_target_policies(owner: str = Depends(get_current_owner)):
 
 
 @router.post("/target-policies", dependencies=[Depends(admin_limiter)])
-async def create_target_policy(payload: Dict[str, Any], owner: str = Depends(get_current_owner)):
-    name = str(payload.get("name", "")).strip()
+async def create_target_policy(payload: TargetPolicyCreate, owner: str = Depends(get_current_owner)):
+    payload_dict = payload.model_dump()
+    name = str(payload_dict.get("name", "")).strip()
     if not name:
         raise HTTPException(status_code=400, detail="Target policy name is required")
 
@@ -1588,13 +1568,13 @@ async def create_target_policy(payload: Dict[str, Any], owner: str = Depends(get
             policy_id,
             owner,
             name,
-            str(payload.get("description", "")).strip() or None,
-            1 if payload.get("allow_public_targets") else 0,
-            1 if payload.get("allow_exploit_validation") else 0,
-            1 if payload.get("allow_authenticated_scan") else 0,
-            str(payload.get("default_validation_mode") or ValidationMode.PROOF.value),
-            _json_payload(payload.get("allowed_targets"), "[]"),
-            _json_payload(payload.get("metadata"), "{}"),
+            str(payload_dict.get("description", "")).strip() or None,
+            1 if payload_dict.get("allow_public_targets") else 0,
+            1 if payload_dict.get("allow_exploit_validation") else 0,
+            1 if payload_dict.get("allow_authenticated_scan") else 0,
+            str(payload_dict.get("default_validation_mode", ValidationMode.PROOF).value),
+            json.dumps(payload_dict.get("allowed_targets", [])),
+            json.dumps(payload_dict.get("metadata", {})),
         ),
     )
     row = await db.fetchone("SELECT * FROM target_policies WHERE id = ?", (policy_id,))
@@ -1602,7 +1582,8 @@ async def create_target_policy(payload: Dict[str, Any], owner: str = Depends(get
 
 
 @router.patch("/target-policies/{policy_id}", dependencies=[Depends(admin_limiter)])
-async def update_target_policy(policy_id: str, payload: Dict[str, Any], owner: str = Depends(get_current_owner)):
+async def update_target_policy(policy_id: str, payload: TargetPolicyUpdate, owner: str = Depends(get_current_owner)):
+    payload = payload.model_dump(exclude_unset=True)
     db = await get_db()
     row = await db.fetchone("SELECT id FROM target_policies WHERE id = ? AND owner_id = ?", (policy_id, owner))
     if not row:
@@ -1648,8 +1629,9 @@ async def list_credential_profiles(owner: str = Depends(get_current_owner)):
 
 
 @router.post("/credential-profiles", dependencies=[Depends(admin_limiter)])
-async def create_credential_profile(payload: Dict[str, Any], owner: str = Depends(get_current_owner)):
-    name = str(payload.get("name", "")).strip()
+async def create_credential_profile(payload: CredentialProfileCreate, owner: str = Depends(get_current_owner)):
+    payload_dict = payload.model_dump()
+    name = str(payload_dict.get("name", "")).strip()
     if not name:
         raise HTTPException(status_code=400, detail="Credential profile name is required")
     profile_id = str(uuid.uuid4())
@@ -1665,10 +1647,10 @@ async def create_credential_profile(payload: Dict[str, Any], owner: str = Depend
             profile_id,
             owner,
             name,
-            payload.get("username_secret_name"),
-            payload.get("password_secret_name"),
-            _json_payload(payload.get("extra_headers"), "{}"),
-            _json_payload(payload.get("login_recipe"), "{}"),
+            payload_dict.get("username_secret_name"),
+            payload_dict.get("password_secret_name"),
+            json.dumps(payload_dict.get("extra_headers", {})),
+            json.dumps(payload_dict.get("login_recipe", {})),
         ),
     )
     row = await db.fetchone("SELECT * FROM credential_profiles WHERE id = ?", (profile_id,))
@@ -1676,7 +1658,8 @@ async def create_credential_profile(payload: Dict[str, Any], owner: str = Depend
 
 
 @router.patch("/credential-profiles/{profile_id}", dependencies=[Depends(admin_limiter)])
-async def update_credential_profile(profile_id: str, payload: Dict[str, Any], owner: str = Depends(get_current_owner)):
+async def update_credential_profile(profile_id: str, payload: CredentialProfileUpdate, owner: str = Depends(get_current_owner)):
+    payload = payload.model_dump(exclude_unset=True)
     db = await get_db()
     row = await db.fetchone("SELECT id FROM credential_profiles WHERE id = ? AND owner_id = ?", (profile_id, owner))
     if not row:
@@ -1689,10 +1672,10 @@ async def update_credential_profile(profile_id: str, payload: Dict[str, Any], ow
             params.append(payload[key])
     if "extra_headers" in payload:
         updates.append("extra_headers_json = ?")
-        params.append(_json_payload(payload["extra_headers"], "{}"))
+        params.append(json.dumps(payload["extra_headers"]))
     if "login_recipe" in payload:
         updates.append("login_recipe_json = ?")
-        params.append(_json_payload(payload["login_recipe"], "{}"))
+        params.append(json.dumps(payload["login_recipe"]))
     updates.append("updated_at = datetime('now')")
     params.extend([profile_id, owner])
     await db.execute(f"UPDATE credential_profiles SET {', '.join(updates)} WHERE id = ? AND owner_id = ?", tuple(params))
@@ -1718,8 +1701,9 @@ async def list_session_profiles(owner: str = Depends(get_current_owner)):
 
 
 @router.post("/session-profiles", dependencies=[Depends(admin_limiter)])
-async def create_session_profile(payload: Dict[str, Any], owner: str = Depends(get_current_owner)):
-    name = str(payload.get("name", "")).strip()
+async def create_session_profile(payload: SessionProfileCreate, owner: str = Depends(get_current_owner)):
+    payload_dict = payload.model_dump()
+    name = str(payload_dict.get("name", "")).strip()
     if not name:
         raise HTTPException(status_code=400, detail="Session profile name is required")
     profile_id = str(uuid.uuid4())
@@ -1734,9 +1718,9 @@ async def create_session_profile(payload: Dict[str, Any], owner: str = Depends(g
             profile_id,
             owner,
             name,
-            payload.get("cookie_secret_name"),
-            _json_payload(payload.get("extra_headers"), "{}"),
-            str(payload.get("notes", "")).strip() or None,
+            payload_dict.get("cookie_secret_name"),
+            json.dumps(payload_dict.get("extra_headers", {})),
+            str(payload_dict.get("notes", "")).strip() or None,
         ),
     )
     row = await db.fetchone("SELECT * FROM session_profiles WHERE id = ?", (profile_id,))
@@ -1744,7 +1728,8 @@ async def create_session_profile(payload: Dict[str, Any], owner: str = Depends(g
 
 
 @router.patch("/session-profiles/{profile_id}", dependencies=[Depends(admin_limiter)])
-async def update_session_profile(profile_id: str, payload: Dict[str, Any], owner: str = Depends(get_current_owner)):
+async def update_session_profile(profile_id: str, payload: SessionProfileUpdate, owner: str = Depends(get_current_owner)):
+    payload = payload.model_dump(exclude_unset=True)
     db = await get_db()
     row = await db.fetchone("SELECT id FROM session_profiles WHERE id = ? AND owner_id = ?", (profile_id, owner))
     if not row:
@@ -1757,7 +1742,7 @@ async def update_session_profile(profile_id: str, payload: Dict[str, Any], owner
             params.append(payload[key])
     if "extra_headers" in payload:
         updates.append("extra_headers_json = ?")
-        params.append(_json_payload(payload["extra_headers"], "{}"))
+        params.append(json.dumps(payload["extra_headers"]))
     updates.append("updated_at = datetime('now')")
     params.extend([profile_id, owner])
     await db.execute(f"UPDATE session_profiles SET {', '.join(updates)} WHERE id = ? AND owner_id = ?", tuple(params))
@@ -1809,28 +1794,19 @@ async def list_workflows(owner: str = Depends(get_current_owner)):
 
 
 @router.post("/workflows", dependencies=[Depends(admin_limiter)])
-async def create_workflow(payload: Dict[str, Any], owner: str = Depends(get_current_owner)):
-    name = str(payload.get("name", "")).strip()
+async def create_workflow(payload: WorkflowCreate, owner: str = Depends(get_current_owner)):
+    payload_dict = payload.model_dump()
+    name = str(payload_dict.get("name", "")).strip()
     if not name:
         raise HTTPException(status_code=400, detail="Workflow name is required")
 
-    steps = _parse_workflow_steps(payload.get("steps", []))
+    steps = _parse_workflow_steps(payload_dict.get("steps", []))
     if not steps:
         raise HTTPException(status_code=400, detail="Workflow requires at least one step")
 
     workflow_id = str(uuid.uuid4())
-    schedule_seconds = payload.get("schedule_seconds")
-    if schedule_seconds is not None:
-        try:
-            parsed_schedule = int(schedule_seconds)
-            if parsed_schedule < 60:
-                raise ValueError()
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid schedule_seconds, must be an integer >= 60")
-    else:
-        parsed_schedule = None
-
-    enabled = bool(payload.get("enabled", True))
+    schedule_seconds = payload_dict.get("schedule_seconds")
+    enabled = bool(payload_dict.get("enabled", True))
     db = await get_db()
     await db.execute(
         """
@@ -1841,7 +1817,7 @@ async def create_workflow(payload: Dict[str, Any], owner: str = Depends(get_curr
             workflow_id,
             name,
             owner,
-            parsed_schedule,
+            int(schedule_seconds) if schedule_seconds is not None else None,
             1 if enabled else 0,
             json.dumps(steps),
         ),
@@ -1993,7 +1969,8 @@ async def rollback_workflow(workflow_id: str, version_number: int, owner: str = 
 
 
 @router.patch("/workflows/{workflow_id}", dependencies=[Depends(admin_limiter)])
-async def update_workflow(workflow_id: str, payload: Dict[str, Any], owner: str = Depends(get_current_owner)):
+async def update_workflow(workflow_id: str, payload: WorkflowUpdate, owner: str = Depends(get_current_owner)):
+    payload = payload.model_dump(exclude_unset=True)
     db = await get_db()
     row = await _verify_workflow_owner(db, workflow_id, owner)
 
@@ -2222,7 +2199,7 @@ async def delete_notification_rule(rule_id: str, owner: str = Depends(get_curren
     return {"rule_id": rule_id, "deleted": True}
 
 
-@router.get("/notifications/history", dependencies=[Depends(read_heavy_limiter)])
+@router.get("/notifications/history")
 async def list_notification_history(
     rule_id: Optional[str] = None,
     limit: int = 50,

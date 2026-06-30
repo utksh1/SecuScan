@@ -359,3 +359,69 @@ class NotificationDiagnosticsResponse(BaseModel):
 class BulkDeleteRequest(RootModel[Annotated[List[str], Field(max_length=MAX_BULK_DELETE)]]):
     """Accepts a JSON array of task IDs directly. Max 500 per request."""
     pass
+
+
+class TargetPolicyCreate(BaseModel):
+    name: str
+    description: Optional[str] = ""
+    allow_public_targets: bool = False
+    allow_exploit_validation: bool = False
+    allow_authenticated_scan: bool = False
+    default_validation_mode: ValidationMode = ValidationMode.PROOF
+    allowed_targets: List[str] = Field(default_factory=list)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class TargetPolicyUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    allow_public_targets: Optional[bool] = None
+    allow_exploit_validation: Optional[bool] = None
+    allow_authenticated_scan: Optional[bool] = None
+    default_validation_mode: Optional[ValidationMode] = None
+    allowed_targets: Optional[List[str]] = None
+    metadata: Optional[Dict[str, Any]] = None
+
+
+class CredentialProfileCreate(BaseModel):
+    name: str
+    username_secret_name: Optional[str] = None
+    password_secret_name: Optional[str] = None
+    extra_headers: Dict[str, str] = Field(default_factory=dict)
+    login_recipe: Dict[str, Any] = Field(default_factory=dict)
+
+
+class CredentialProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    username_secret_name: Optional[str] = None
+    password_secret_name: Optional[str] = None
+    extra_headers: Optional[Dict[str, str]] = None
+    login_recipe: Optional[Dict[str, Any]] = None
+
+
+class SessionProfileCreate(BaseModel):
+    name: str
+    cookie_secret_name: Optional[str] = None
+    extra_headers: Dict[str, str] = Field(default_factory=dict)
+    notes: Optional[str] = ""
+
+
+class SessionProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    cookie_secret_name: Optional[str] = None
+    extra_headers: Optional[Dict[str, str]] = None
+    notes: Optional[str] = None
+
+
+class WorkflowCreate(BaseModel):
+    name: str
+    schedule_seconds: Optional[int] = Field(default=None, ge=60)
+    enabled: bool = True
+    steps: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class WorkflowUpdate(BaseModel):
+    name: Optional[str] = None
+    schedule_seconds: Optional[int] = Field(default=None, ge=60)
+    enabled: Optional[bool] = None
+    steps: Optional[List[Dict[str, Any]]] = None
