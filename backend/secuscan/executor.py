@@ -23,6 +23,7 @@ from .redaction import redact
 from .cache import get_cache
 from .config import settings
 from .database import get_db
+from .executor_target_helpers import extract_target
 from .plugins import get_plugin_manager
 from .models import NotificationDeliveryStatus, TaskStatus, ScanPhase
 from .ratelimit import concurrent_limiter
@@ -142,17 +143,6 @@ MODULAR_SCANNERS = {
 
 logger = logging.getLogger(__name__)
 STREAM_LISTENER_QUEUE_MAXSIZE = 100
-
-
-def extract_target(inputs: Dict[str, Any]) -> str:
-    """Best-effort target extraction across plugin shapes."""
-    return (
-        inputs.get("target")
-        or inputs.get("url")
-        or inputs.get("host")
-        or inputs.get("domain")
-        or ""
-    )
 
 
 def _stable_asset_id(target: str, host: Any, port: Any, protocol: Any) -> str:
