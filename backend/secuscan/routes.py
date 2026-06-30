@@ -574,12 +574,40 @@ async def stream_task_output(task_id: str, owner: str = Depends(get_current_owne
                 logger.warning("Failed to replay raw output for task %s: %s", task_id, exc)
             return
 
-        # Otherwise, subscribe to the live task events
+        # Subscribe to live events
         queue = executor.subscribe(task_id)
         try:
+            # Re-check status after subscribe to close the TOCTOU window:
+            # the task may have completed between the initial check and this
+            # subscription, so we'd never receive a terminal event.
+            current_status = await executor.get_task_status(task_id)
+            if current_status and current_status["status"] in ["completed", "failed", "cancelled"]:
+                try:
+                    db = await get_db()
+                    task_row = await db.fetchone("SELECT raw_output_path FROM tasks WHERE id = ?", (task_id,))
+                    if task_row and task_row["raw_output_path"]:
+                        for chunk in iter_raw_output_chunks(task_row["raw_output_path"]):
+                            yield {
+                                "event": "output",
+                                "data": json.dumps({"chunk": chunk})
+                            }
+                except Exception as exc:
+                    logger.warning("Failed to replay raw output for task %s: %s", task_id, exc)
+                yield {
+                    "event": "status",
+                    "data": json.dumps({"status": current_status["status"]})
+                }
+                return
+
             while True:
-                # Wait for the next event from the executor
-                event = await queue.get()
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=30.0)
+                except asyncio.TimeoutError:
+                    # No event in 30s — check if task is still running
+                    ts = await executor.get_task_status(task_id)
+                    if ts and ts["status"] not in ["completed", "failed", "cancelled"]:
+                        continue
+                    break
 
                 if event["type"] == "status":
                     yield {
