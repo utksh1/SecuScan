@@ -7,7 +7,7 @@ import sys
 import shutil
 from pathlib import Path
 from contextlib import asynccontextmanager
-from .request_middleware import RequestIDMiddleware
+from .request_middleware import RequestIDMiddleware, HardenCORSMiddleware
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import HTMLResponse, PlainTextResponse, JSONResponse
@@ -203,6 +203,7 @@ app.add_middleware(
     allow_methods=settings.cors_allowed_methods,
     allow_headers=settings.cors_allowed_headers,
 )
+app.add_middleware(HardenCORSMiddleware)
 app.add_middleware(RequestIDMiddleware)
 
 # ─── CUSTOM 429 RATE LIMIT EXCEPTION HANDLER ──────────────────────────────
