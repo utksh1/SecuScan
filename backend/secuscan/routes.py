@@ -1815,6 +1815,16 @@ async def create_workflow(payload: Dict[str, Any], owner: str = Depends(get_curr
 
     workflow_id = str(uuid.uuid4())
     schedule_seconds = payload.get("schedule_seconds")
+    if schedule_seconds is not None:
+        try:
+            parsed_schedule = int(schedule_seconds)
+            if parsed_schedule < 60:
+                raise ValueError()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid schedule_seconds, must be an integer >= 60")
+    else:
+        parsed_schedule = None
+
     enabled = bool(payload.get("enabled", True))
     db = await get_db()
     await db.execute(
@@ -1826,7 +1836,7 @@ async def create_workflow(payload: Dict[str, Any], owner: str = Depends(get_curr
             workflow_id,
             name,
             owner,
-            int(schedule_seconds) if schedule_seconds else None,
+            parsed_schedule,
             1 if enabled else 0,
             json.dumps(steps),
         ),
