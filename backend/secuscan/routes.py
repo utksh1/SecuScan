@@ -913,7 +913,7 @@ async def cancel_task(task_id: str, owner: str = Depends(get_current_owner)):
     }
 
 
-@router.get("/dashboard/summary")
+@router.get("/dashboard/summary", dependencies=[Depends(read_heavy_limiter)])
 async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
     """Return the caller's aggregate dashboard data, cached per owner."""
 
@@ -1027,7 +1027,7 @@ async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
     return await get_or_set_cached(f"summary:dashboard:{owner}", build)
 
 
-@router.get("/findings")
+@router.get("/findings", dependencies=[Depends(read_heavy_limiter)])
 async def get_findings(
     owner: str = Depends(get_current_owner),
     page: int = Query(1, ge=1),
@@ -1067,7 +1067,7 @@ async def get_findings(
     return await get_or_set_cached(f"findings:list:{owner}:page={page}:per_page={per_page}", build)
 
 
-@router.get("/finding-groups")
+@router.get("/finding-groups", dependencies=[Depends(read_heavy_limiter)])
 async def get_finding_groups(
     owner: str = Depends(get_current_owner),
     page: int = Query(1, ge=1),
@@ -1092,7 +1092,7 @@ async def get_finding_groups(
     return await get_or_set_cached(f"findings:groups:{owner}:page={page}:per_page={per_page}", build)
 
 
-@router.get("/task/{task_id}/diff")
+@router.get("/task/{task_id}/diff", dependencies=[Depends(read_heavy_limiter)])
 async def get_task_diff(task_id: str, owner: str = Depends(get_current_owner)):
     db = await get_db()
     task_row = await db.fetchone(
@@ -1116,7 +1116,7 @@ async def get_task_diff(task_id: str, owner: str = Depends(get_current_owner)):
     return diff
 
 
-@router.get("/reports")
+@router.get("/reports", dependencies=[Depends(read_heavy_limiter)])
 async def get_reports(owner: str = Depends(get_current_owner)):
     """Return the caller's generated reports."""
 
@@ -1131,7 +1131,7 @@ async def get_reports(owner: str = Depends(get_current_owner)):
     return await get_or_set_cached(f"reports:list:{owner}", build)
 
 
-@router.get("/tasks")
+@router.get("/tasks", dependencies=[Depends(read_heavy_limiter)])
 async def list_tasks(
     page: int = Query(1, ge=1),
     per_page: int = Query(25, ge=1, le=100),
@@ -2199,7 +2199,7 @@ async def delete_notification_rule(rule_id: str, owner: str = Depends(get_curren
     return {"rule_id": rule_id, "deleted": True}
 
 
-@router.get("/notifications/history")
+@router.get("/notifications/history", dependencies=[Depends(read_heavy_limiter)])
 async def list_notification_history(
     rule_id: Optional[str] = None,
     limit: int = 50,
