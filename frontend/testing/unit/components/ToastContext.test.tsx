@@ -47,3 +47,46 @@ describe('Toast accessibility', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(/error message/i)
   })
 })
+
+describe('Toast deduplication', () => {
+  it('collapses repeated identical notifications into a single toast with a count', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <ToastProvider>
+        <ToastTrigger type="error" />
+      </ToastProvider>,
+    )
+
+    const trigger = screen.getByRole('button', { name: /show toast/i })
+    await user.click(trigger)
+    await user.click(trigger)
+    await user.click(trigger)
+
+    const alerts = await screen.findAllByRole('alert')
+    expect(alerts).toHaveLength(1)
+    expect(alerts[0]).toHaveTextContent(/error message/i)
+    expect(alerts[0]).toHaveTextContent('×3')
+    expect(screen.getByLabelText(/repeated 3 times/i)).toBeInTheDocument()
+  })
+
+  it('keeps notifications with different message or type separate', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <ToastProvider>
+        <ToastTrigger type="success" />
+        <ToastTrigger type="error" />
+      </ToastProvider>,
+    )
+
+    const [successTrigger, errorTrigger] = screen.getAllByRole('button', { name: /show toast/i })
+    await user.click(successTrigger)
+    await user.click(errorTrigger)
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/success message/i)
+    expect(await screen.findByRole('alert')).toHaveTextContent(/error message/i)
+    // Neither is collapsed, so no count badge appears.
+    expect(screen.queryByText(/^×\d+$/)).not.toBeInTheDocument()
+  })
+})
