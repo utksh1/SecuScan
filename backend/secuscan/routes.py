@@ -62,6 +62,24 @@ def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
         normalized.append(model.model_dump())
     return normalized
 
+def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Return the workflow shape consumed by the frontend."""
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "schedule_seconds": row.get("schedule_seconds"),
+        "schedule_timezone": row.get("schedule_timezone"),
+        "enabled": bool(row.get("enabled")),
+        "steps": _parse_workflow_steps(row.get("steps_json")),
+        "created_at": row.get("created_at"),
+        "last_run_at": row.get("last_run_at"),
+        "queued_task_ids": queued_task_ids or [],
+    }
+
+
+def _json_payload(value: Any, fallback: str) -> str:
+    return json.dumps(value if value is not None else json.loads(fallback))
+
 
 from .validation import is_filesystem_target  # noqa: E402
 
@@ -1813,14 +1831,22 @@ async def create_workflow(payload: Dict[str, Any], owner: str = Depends(get_curr
     if not steps:
         raise HTTPException(status_code=400, detail="Workflow requires at least one step")
 
+    schedule_timezone = payload.get("schedule_timezone")
+    if schedule_timezone is not None:
+        from .workflows import validate_schedule_timezone
+        is_valid, err_msg = validate_schedule_timezone(schedule_timezone)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=err_msg)
+        schedule_timezone = schedule_timezone.strip()
+
     workflow_id = str(uuid.uuid4())
     schedule_seconds = payload.get("schedule_seconds")
     enabled = bool(payload.get("enabled", True))
     db = await get_db()
     await db.execute(
         """
-        INSERT INTO workflows (id, name, owner_id, schedule_seconds, enabled, steps_json)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO workflows (id, name, owner_id, schedule_seconds, enabled, steps_json, schedule_timezone)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         (
             workflow_id,
@@ -1829,6 +1855,7 @@ async def create_workflow(payload: Dict[str, Any], owner: str = Depends(get_curr
             int(schedule_seconds) if schedule_seconds else None,
             1 if enabled else 0,
             json.dumps(steps),
+            schedule_timezone,
         ),
     )
     row = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
@@ -1955,10 +1982,11 @@ async def rollback_workflow(workflow_id: str, version_number: int, owner: str = 
     name = defn.get("name", wf["name"])
     steps = defn.get("steps", [])
     schedule_seconds = defn.get("schedule_seconds")
+    schedule_timezone = defn.get("schedule_timezone")
     enabled = bool(defn.get("enabled", True))
     await db.execute(
-        "UPDATE workflows SET name = ?, steps_json = ?, schedule_seconds = ?, enabled = ? WHERE id = ?",
-        (name, json.dumps(steps), schedule_seconds, 1 if enabled else 0, workflow_id),
+        "UPDATE workflows SET name = ?, steps_json = ?, schedule_seconds = ?, enabled = ?, schedule_timezone = ? WHERE id = ?",
+        (name, json.dumps(steps), schedule_seconds, 1 if enabled else 0, schedule_timezone, workflow_id),
     )
     new_version = await db.snapshot_workflow_version(
         workflow_id=workflow_id,
@@ -1967,6 +1995,7 @@ async def rollback_workflow(workflow_id: str, version_number: int, owner: str = 
         enabled=enabled,
         steps=steps,
         created_by=f"rollback_to_v{version_number}",
+        schedule_timezone=schedule_timezone,
     )
     updated = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
     return {
@@ -1998,6 +2027,18 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any], owner: str 
         val = payload["schedule_seconds"]
         updates.append("schedule_seconds = ?")
         params.append(int(val) if val else None)
+    if "schedule_timezone" in payload:
+        tz_val = payload["schedule_timezone"]
+        if tz_val is not None:
+            from .workflows import validate_schedule_timezone
+            is_valid, err_msg = validate_schedule_timezone(tz_val)
+            if not is_valid:
+                raise HTTPException(status_code=400, detail=err_msg)
+            updates.append("schedule_timezone = ?")
+            params.append(tz_val.strip())
+        else:
+            updates.append("schedule_timezone = ?")
+            params.append(None)
     if "enabled" in payload:
         new_enabled = bool(payload["enabled"])
 
@@ -2017,6 +2058,7 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any], owner: str 
         enabled=bool(updated["enabled"]),
         steps=json.loads(updated["steps_json"] or "[]"),
         created_by="patch",
+        schedule_timezone=updated["schedule_timezone"],
     )
 
     if enabled_changed:

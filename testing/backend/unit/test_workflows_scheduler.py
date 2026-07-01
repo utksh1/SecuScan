@@ -214,3 +214,40 @@ class TestRunWorkflowErrorPaths:
             )
         )
         mock_executor.create_task.assert_called_once()
+
+
+from backend.secuscan.workflows import validate_schedule_timezone
+
+class TestScheduleTimezoneValidation:
+    def test_valid_iana_timezones(self):
+        valid_tzs = ["UTC", "America/New_York", "Europe/London", "Asia/Tokyo", "   UTC   "]
+        for tz in valid_tzs:
+            ok, err = validate_schedule_timezone(tz)
+            assert ok is True, f"Expected {tz} to be valid, got error: {err}"
+            assert err == ""
+
+    def test_invalid_timezone_abbreviations(self):
+        invalid_tzs = ["EDT", "PDT", "BST"]
+        for tz in invalid_tzs:
+            ok, err = validate_schedule_timezone(tz)
+            assert ok is False, f"Expected {tz} to be invalid"
+            assert "Invalid timezone" in err
+
+    def test_invalid_timezone_offsets(self):
+        invalid_tzs = ["GMT+5", "UTC-8", "+05:30"]
+        for tz in invalid_tzs:
+            ok, err = validate_schedule_timezone(tz)
+            assert ok is False, f"Expected {tz} to be invalid"
+            assert "Invalid timezone" in err
+
+    def test_invalid_types_and_empty_values(self):
+        invalid_vals = ["", "   ", None, 123, []]
+        for val in invalid_vals:
+            ok, err = validate_schedule_timezone(val)
+            assert ok is False
+            assert "must be a non-empty string" in err
+
+    def test_nonsense_strings(self):
+        ok, err = validate_schedule_timezone("America/Invalid_Place")
+        assert ok is False
+        assert "Invalid timezone" in err
