@@ -37,6 +37,16 @@ describe('useShortcuts', () => {
     expect(removeSpy).toHaveBeenCalledWith('keydown', expect.any(Function))
   })
 
+  it('toggles sidebar when g + b is pressed', () => {
+    const mockToggle = vi.fn()
+    renderHook(() => useShortcuts(mockToggle))
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'g' }))
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b' }))
+
+    expect(mockToggle).toHaveBeenCalledTimes(1)
+  })
+
   it('ignores shortcuts while typing in an input', () => {
     renderHook(() => useShortcuts())
 
