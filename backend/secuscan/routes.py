@@ -2136,18 +2136,21 @@ async def get_notification_rule(rule_id: str, owner: str = Depends(get_current_o
 
 @router.patch("/notifications/rules/{rule_id}")
 async def update_notification_rule(rule_id: str, payload: NotificationRuleUpdate, owner: str = Depends(get_current_owner)):
+    """Patch a notification rule.
+
+    Returns ``409 Conflict`` with the latest persisted rule when an optimistic
+    update loses a concurrent edit race so clients can refresh and retry.
+    """
     db = await get_db()
     row = await _verify_notification_rule_owner(db, rule_id, owner)
 
-    updates: List[str] = []
-    params: List[Any] = []
+    updates: Dict[str, Any] = {}
 
     if payload.name is not None:
         name = payload.name.strip()
         if not name:
             raise HTTPException(status_code=400, detail="Rule name is required")
-        updates.append("name = ?")
-        params.append(name)
+        updates["name"] = name
 
     effective_channel = (
         payload.channel_type
@@ -2159,42 +2162,45 @@ async def update_notification_rule(rule_id: str, payload: NotificationRuleUpdate
             effective_channel,
             payload.target_url_or_email,
         )
-        updates.append("target_url_or_email = ?")
-        params.append(target)
+        updates["target_url_or_email"] = target
     elif payload.channel_type is not None:
         target = _validate_notification_target(
             effective_channel,
             row["target_url_or_email"],
         )
-        updates.append("target_url_or_email = ?")
-        params.append(target)
+        updates["target_url_or_email"] = target
 
     if payload.severity_threshold is not None:
-        updates.append("severity_threshold = ?")
-        params.append(payload.severity_threshold.value)
+        updates["severity_threshold"] = payload.severity_threshold.value
 
     if payload.channel_type is not None:
-        updates.append("channel_type = ?")
-        params.append(payload.channel_type.value)
+        updates["channel_type"] = payload.channel_type.value
 
     if payload.is_active is not None:
-        updates.append("is_active = ?")
-        params.append(1 if payload.is_active else 0)
+        updates["is_active"] = 1 if payload.is_active else 0
 
     if not updates:
         raise HTTPException(status_code=400, detail="No update fields provided")
 
-    updates.append("updated_at = datetime('now')")
-    params.append(rule_id)
-    await db.execute(
-        f"UPDATE notification_rules SET {', '.join(updates)} WHERE id = ?",
-        tuple(params),
-    )
-    updated = await db.fetchone(
-        "SELECT * FROM notification_rules WHERE id = ?",
-        (rule_id,),
-    )
-    if not updated:
+    try:
+        updated = await notification_service.update_notification_rule(
+            db,
+            current_rule=row,
+            updates=updates,
+        )
+    except notification_service.NotificationRuleConflictError as exc:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": "notification_rule_conflict",
+                "message": (
+                    "Notification rule was updated by another request. "
+                    "Refresh the rule and retry your changes."
+                ),
+                "current_rule": _serialize_notification_rule(exc.current_rule),
+            },
+        )
+    except KeyError:
         raise HTTPException(status_code=404, detail="Notification rule not found")
     return _serialize_notification_rule(updated)
 

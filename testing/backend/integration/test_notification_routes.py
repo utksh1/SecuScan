@@ -1,6 +1,18 @@
+import asyncio
 import uuid
 
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from backend.secuscan import auth as auth_module
+from backend.secuscan import database as database_module
+from backend.secuscan import notification_service
+from backend.secuscan.config import settings
+from backend.secuscan.database import init_db
+from backend.secuscan.main import app
 from backend.secuscan.models import NotificationDeliveryStatus
+from backend.secuscan.plugins import init_plugins
+from backend.secuscan.ratelimit import concurrent_limiter, rate_limiter
 
 
 def _rule_payload(
@@ -85,9 +97,89 @@ def test_notification_rule_accepts_email_target(test_client):
     assert response.json()["target_url_or_email"] == "alerts@example.com"
 
 
-def test_notification_history_list_contract(test_client):
-    import asyncio
+@pytest.mark.asyncio
+async def test_notification_rule_update_returns_409_on_concurrent_conflict(
+    setup_test_environment, monkeypatch
+):
+    # API contract: concurrent PATCH requests use optimistic locking. The loser
+    # gets 409 plus the current persisted rule so the client can refresh before
+    # retrying local edits.
+    await rate_limiter.reset()
+    async with concurrent_limiter.lock:
+        concurrent_limiter.running_tasks.clear()
+    await init_db(settings.database_path)
+    await init_plugins(settings.plugins_dir)
+    api_key = auth_module.init_api_key(settings.data_dir)
 
+    gate = asyncio.Event()
+    reached = 0
+    reached_lock = asyncio.Lock()
+    real_update_rule = notification_service.update_notification_rule
+
+    async def gated_update_rule(db, *, current_rule, updates):
+        nonlocal reached
+        async with reached_lock:
+            reached += 1
+            if reached == 2:
+                gate.set()
+        await gate.wait()
+        return await real_update_rule(
+            db,
+            current_rule=current_rule,
+            updates=updates,
+        )
+
+    monkeypatch.setattr(
+        notification_service,
+        "update_notification_rule",
+        gated_update_rule,
+    )
+
+    transport = ASGITransport(app=app)
+    headers = {"X-Api-Key": api_key}
+
+    try:
+        async with AsyncClient(
+            transport=transport,
+            base_url="http://test",
+            headers=headers,
+        ) as client:
+            create_response = await client.post(
+                "/api/v1/notifications/rules",
+                json=_rule_payload(),
+            )
+            assert create_response.status_code == 200
+            rule_id = create_response.json()["id"]
+
+            responses = await asyncio.gather(
+                client.patch(
+                    f"/api/v1/notifications/rules/{rule_id}",
+                    json={"name": "Concurrent rename"},
+                ),
+                client.patch(
+                    f"/api/v1/notifications/rules/{rule_id}",
+                    json={"severity_threshold": "high"},
+                ),
+            )
+    finally:
+        if database_module.db is not None:
+            await database_module.db.disconnect()
+            database_module.db = None
+
+    status_codes = sorted(response.status_code for response in responses)
+    assert status_codes == [200, 409]
+
+    conflict_response = next(
+        response for response in responses if response.status_code == 409
+    )
+    body = conflict_response.json()
+    assert body["error"] == "notification_rule_conflict"
+    assert "Refresh the rule and retry your changes." in body["message"]
+    assert body["current_rule"]["id"] == rule_id
+    assert body["current_rule"]["updated_at"]
+
+
+def test_notification_history_list_contract(test_client):
     from backend.secuscan.database import get_db
 
     create_response = test_client.post(
