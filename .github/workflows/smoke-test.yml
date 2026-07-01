@@ -50,6 +50,27 @@ jobs:
 
           grep -q "ERROR: frontend directory not found." output.log \
             || { echo "Expected frontend error message not found"; cat output.log; exit 1; }
+  port-collision:
+    name: Port-collision regression (start.sh pre-flight)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install lsof
+        run: sudo apt-get install -y lsof
+
+      - name: Install pytest
+        run: pip install pytest
+
+      - name: Run port-collision tests
+        run: pytest testing/test_port_collision.py -v
+
   smoke-test:
     name: Fresh-clone smoke test (Ubuntu)
     runs-on: ubuntu-latest
