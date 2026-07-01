@@ -583,6 +583,7 @@ ON credential_vault(owner_id);
                 await self.execute(
                     "ALTER TABLE workflows ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'default'"
                 )
+                existing_wf_cols.add("owner_id")
                 print("Added missing column 'owner_id' to workflows table.")
             except Exception as e:
                 print(f"Failed to add 'owner_id' to workflows: {e}")
