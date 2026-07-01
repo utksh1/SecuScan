@@ -177,7 +177,7 @@ describe('SavedViewsPanel', () => {
       const renameInput = screen.getByRole('textbox', { name: 'Rename saved view' })
       await user.clear(renameInput)
       await user.type(renameInput, 'Blurred View Name')
-      
+
       // Blur by clicking outside on the header text
       await user.click(screen.getByText('Filter_Presets'))
 
