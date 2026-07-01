@@ -22,10 +22,11 @@ wheels/
 MANIFEST
 
 # Virtual Environment
+.venv/
+.venv-codex/
 venv/
 env/
 ENV/
-.venv
 venv_tests/
 test_env/
 

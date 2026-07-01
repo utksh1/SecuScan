@@ -1,0 +1,15 @@
+- Nikto v2.5.0
+---------------------------------------------------------------------------
++ Target IP:          192.168.1.1
++ Target Hostname:    example.com
++ Target Port:        80
++ Server:             Apache/2.4.41
+---------------------------------------------------------------------------
++ /admin.php: Admin login page found.
++ robots.txt contains 1 entry which should be manually viewed.
++ /index.php: Powered by header disclosed. See Reference: http://cve.mitre.org
++ /login.php: Apache/2.4.41 appears to be outdated.
++ 371 requests: 0 error(s) and 4 item(s) reported on remote host
++ End Time: 2026-06-30 09:40:00 (GMT0) (100 seconds)
+---------------------------------------------------------------------------
++ 1 host(s) tested

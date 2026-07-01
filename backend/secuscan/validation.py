@@ -10,7 +10,11 @@ from urllib.parse import urlparse
 from typing import Any, Dict, Tuple, Optional
 from fnmatch import fnmatch
 
+import logging
+
 from .config import settings
+
+logger = logging.getLogger(__name__)
 
 
 # Blocked network ranges
@@ -451,7 +455,8 @@ def is_safe_path(path: str, base_dir: str) -> bool:
         real_base = os.path.realpath(base_dir)
         real_path = os.path.realpath(os.path.join(base_dir, path))
         return real_path.startswith(real_base)
-    except Exception:
+    except Exception as exc:
+        logger.debug("path safety check failed (returning False): %s", exc)
         return False
 
 
