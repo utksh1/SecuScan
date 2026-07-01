@@ -1,0 +1,20 @@
+name: Plugin Checksum Verification
+on:
+  pull_request:
+    paths:
+      - 'plugins/**'
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/**'
+jobs:
+  verify-checksums:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify plugin checksums are up to date
+        run: python scripts/refresh_plugin_checksum.py --all --check
