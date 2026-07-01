@@ -60,19 +60,29 @@ def port_in_use(port: int) -> bool:
         return s.connect_ex(("127.0.0.1", port)) == 0
 
 
-def bind_port(port: int) -> socket.socket:
+def bind_port(port: int) -> subprocess.Popen:
     """
-    Bind and return a listening socket on 127.0.0.1:*port*.
-    Caller is responsible for closing it.
-    SO_REUSEADDR is intentionally NOT set so the kernel truly owns the port
-    until we release it (or lsof kill -9 releases it for us).
+    Start a separate child process that binds and holds *port* on 127.0.0.1.
+    Must run in its own process (not the pytest process) so that pre-flight's
+    `lsof -ti :PORT | xargs kill -9` kills the occupant, not the test runner.
     """
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    s.bind(("127.0.0.1", port))
-    s.listen(1)
-    return s
-
+    proc = subprocess.Popen(
+        [
+            "python3", "-c",
+            f"import socket,time;"
+            f"s=socket.socket(socket.AF_INET, socket.SOCK_STREAM);"
+            f"s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1);"
+            f"s.bind(('127.0.0.1', {port}));"
+            f"s.listen(1);"
+            f"time.sleep(30)"
+        ]
+    )
+    for _ in range(50):
+        if port_in_use(port):
+            return proc
+        time.sleep(0.1)
+    proc.kill()
+    raise RuntimeError(f"Helper process failed to bind port {port}")
 
 def run_preflight_only(tmp_path: pathlib.Path) -> subprocess.CompletedProcess:
     """
@@ -204,8 +214,9 @@ def test_preflight_releases_occupied_port_8000(tmp_path):
     finally:
         # Best-effort: socket may already be dead after kill -9
         try:
-            sock.close()
-        except OSError:
+            sock.terminate()
+            sock.wait(timeout=2)
+        except Exception:
             pass
 
 
@@ -230,8 +241,9 @@ def test_preflight_releases_occupied_port_5173(tmp_path):
         )
     finally:
         try:
-            sock.close()
-        except OSError:
+            sock.terminate()
+            sock.wait(timeout=2)
+        except Exception:
             pass
 
 
