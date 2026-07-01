@@ -413,6 +413,32 @@ export function getReports() {
   return request('/reports')
 }
 
+export type VulnerabilityTrendPoint = {
+  date: string
+  total: number
+  critical: number
+  high: number
+  medium: number
+  low: number
+  info: number
+  avg_risk_score: number | null
+}
+
+export type VulnerabilityTrendForecast = {
+  next_7_days_total: number
+  daily_average: number
+  trend: 'increasing' | 'decreasing' | 'stable' | 'insufficient_data'
+}
+
+export type VulnerabilityTrendResponse = {
+  daily: VulnerabilityTrendPoint[]
+  forecast: VulnerabilityTrendForecast
+}
+
+export function getVulnerabilityTrends() {
+  return request<VulnerabilityTrendResponse>('/analytics/vulnerability-trends')
+}
+
 export type NotificationChannelType = 'webhook' | 'email'
 export type NotificationSeverityThreshold = 'critical' | 'high' | 'medium' | 'low' | 'info'
 
