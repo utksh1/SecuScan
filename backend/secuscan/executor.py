@@ -188,8 +188,6 @@ class TaskExecutor:
         # PubSub: Map of task_id to list of active async queues listening for output/status updates
         self._listeners: Dict[str, List[asyncio.Queue]] = {}
         self._capability_enforcer: CapabilityEnforcer = build_enforcer_from_settings()
-        # Track terminal state for each task to close TOCTOU window in SSE streaming
-        self._task_terminal: Dict[str, bool] = {}
 
     def subscribe(self, task_id: str) -> asyncio.Queue:
         """Subscribe to a task's real-time events."""
@@ -674,7 +672,6 @@ class TaskExecutor:
             if result.rowcount == 0:
                 logger.warning(f"Task {task_id} was deleted or no longer queued before execution started. Aborting.")
                 self.running_tasks.pop(task_id, None)
-                self._task_terminal[task_id] = True
                 return
             await self._invalidate_cached_views()
 
@@ -783,7 +780,6 @@ class TaskExecutor:
             )
             await self._broadcast(task_id, "status", TaskStatus.CANCELLED.value)
             await self._invalidate_cached_views()
-            self._task_terminal[task_id] = True
             raise  # let asyncio complete the cancellation
 
         except CapabilityDeniedError as e:
@@ -808,7 +804,6 @@ class TaskExecutor:
             )
             await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
             await self._invalidate_cached_views()
-            self._task_terminal[task_id] = True
             await db.log_audit(
                 "task_capability_denied",
                 f"Task blocked by capability policy: {str(e)}",
@@ -844,7 +839,6 @@ class TaskExecutor:
 
             await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
             await self._invalidate_cached_views()
-            self._task_terminal[task_id] = True
 
             await db.log_audit(
                 "task_failed",
@@ -856,7 +850,6 @@ class TaskExecutor:
         finally:
             self.running_tasks.pop(task_id, None)
             self._process_pids.pop(task_id, None)
-            self._task_terminal[task_id] = True
             await concurrent_limiter.release(task_id)
             self._cleanup_listeners(task_id)
 
