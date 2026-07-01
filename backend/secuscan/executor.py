@@ -74,7 +74,8 @@ async def _terminate_process_group(pid: int, task_id: str, grace_seconds: int = 
         await asyncio.sleep(0.1)
         try:
             os.killpg(pgid, 0)
-        except (ProcessLookupError, PermissionError):
+        except (ProcessLookupError, PermissionError) as exc:
+            logger.debug("pgid %d already exited during grace poll: %s", pgid, exc)
             return
 
     try:
