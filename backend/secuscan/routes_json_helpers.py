@@ -91,3 +91,45 @@ def deserialize_asset_service_rows(rows: List[Dict]) -> List[Dict[str, Any]]:
         if "cert_san_json" in item:
             item["cert_san"] = item.pop("cert_san_json")
     return items
+
+
+def _json_payload(value: Any, fallback: str) -> str:
+    """Serialize a Python value to a JSON string.
+
+    If *value* is None the *fallback* string is parsed as JSON and returned.
+    This allows callers to provide a default JSON structure when no value is set.
+    """
+    return json.dumps(value if value is not None else json.loads(fallback))
+
+
+def _serialize_notification_rule(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Transform a notification-rule DB row into a clean API response dict.
+
+    Optional fields are returned as-is (may be None). The ``is_active`` field
+    is coerced to bool to normalise raw DB values.
+    """
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "severity_threshold": row["severity_threshold"],
+        "channel_type": row["channel_type"],
+        "target_url_or_email": row["target_url_or_email"],
+        "is_active": bool(row.get("is_active")),
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+    }
+
+
+def _serialize_notification_history(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Transform a notification-delivery-history DB row into a clean API response dict.
+
+    Optional fields (``error_message``, ``sent_at``) are returned as-is.
+    """
+    return {
+        "id": row["id"],
+        "rule_id": row["rule_id"],
+        "finding_id": row["finding_id"],
+        "status": row["status"],
+        "error_message": row.get("error_message"),
+        "sent_at": row.get("sent_at"),
+    }
