@@ -16,6 +16,9 @@ from urllib.parse import urlencode, urlparse
 
 from .routes_json_helpers import (
     FINDING_JSON_FIELDS,
+    _json_payload,
+    _serialize_notification_history,
+    _serialize_notification_rule,
     deserialize_asset_service_rows,
     deserialize_finding_rows,
     parse_json_fields,
@@ -73,9 +76,6 @@ def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]
         "queued_task_ids": queued_task_ids or [],
     }
 
-
-def _json_payload(value: Any, fallback: str) -> str:
-    return json.dumps(value if value is not None else json.loads(fallback))
 
 
 from .validation import is_filesystem_target  # noqa: E402
@@ -159,29 +159,6 @@ def _validate_notification_target(channel_type: NotificationChannelType, target:
         raise HTTPException(status_code=400, detail="Invalid email address")
     return cleaned
 
-
-def _serialize_notification_rule(row: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        "id": row["id"],
-        "name": row["name"],
-        "severity_threshold": row["severity_threshold"],
-        "channel_type": row["channel_type"],
-        "target_url_or_email": row["target_url_or_email"],
-        "is_active": bool(row.get("is_active")),
-        "created_at": row.get("created_at"),
-        "updated_at": row.get("updated_at"),
-    }
-
-
-def _serialize_notification_history(row: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        "id": row["id"],
-        "rule_id": row["rule_id"],
-        "finding_id": row["finding_id"],
-        "status": row["status"],
-        "error_message": row.get("error_message"),
-        "sent_at": row.get("sent_at"),
-    }
 
 
 async def get_or_set_cached(key: str, builder):
