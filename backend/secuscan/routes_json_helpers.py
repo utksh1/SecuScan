@@ -172,3 +172,26 @@ def _serialize_workflow(
         "last_run_at": row.get("last_run_at"),
         "queued_task_ids": queued_task_ids or [],
     }
+
+
+# ---------------------------------------------------------------------------
+# SSE output helpers extracted from routes.py
+# ---------------------------------------------------------------------------
+
+# Default chunk size for SSE output streaming (64 KB)
+_SSE_CHUNK_SIZE = 64 * 1024
+
+
+def iter_raw_output_chunks(path: str, chunk_size: int = _SSE_CHUNK_SIZE):
+    """Yield raw output from *path* in bounded chunks.
+
+    Each yielded value is a string of at most *chunk_size* bytes.
+    An empty or short file produces fewer chunks. Unicode is decoded
+    with errors='replace' to avoid crashing on malformed bytes.
+    """
+    with open(path, "r", encoding="utf-8", errors="replace") as output_file:
+        while True:
+            chunk = output_file.read(chunk_size)
+            if not chunk:
+                break
+            yield chunk

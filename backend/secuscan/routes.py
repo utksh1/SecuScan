@@ -20,8 +20,12 @@ from .routes_json_helpers import (
     _serialize_workflow,
     deserialize_asset_service_rows,
     deserialize_finding_rows,
+    iter_raw_output_chunks,
     parse_json_fields,
 )
+
+# Re-exported for backward compatibility with integration tests
+SSE_RAW_OUTPUT_CHUNK_SIZE = 64 * 1024
 from .routes_report_helpers import (
     _slugify_filename_part,
     build_report_filename,
@@ -108,7 +112,6 @@ from .platform_resources import (
 from sse_starlette.sse import EventSourceResponse
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
-SSE_RAW_OUTPUT_CHUNK_SIZE = 64 * 1024
 
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -194,16 +197,6 @@ async def require_owned_task(db, task_id: str, owner: str, columns: str = "owner
     if row.get("owner_id") != owner:
         raise HTTPException(status_code=403, detail="You do not have access to this task")
     return row
-
-
-def iter_raw_output_chunks(path: str, chunk_size: int = SSE_RAW_OUTPUT_CHUNK_SIZE):
-    """Yield raw output in bounded chunks for completed-task SSE replay."""
-    with open(path, "r", encoding="utf-8", errors="replace") as output_file:
-        while True:
-            chunk = output_file.read(chunk_size)
-            if not chunk:
-                break
-            yield chunk
 
 
 def _report_generation_error_response(task_id: str, report_format: str) -> JSONResponse:
