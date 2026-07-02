@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { routes } from '../routes'
+import { useAuth } from './AuthContext'
 import ThemeToggle from './ThemeToggle'
 
 interface NavItemProps {
@@ -101,6 +102,7 @@ const NavSection = ({ label, isExpanded }: { label: string, isExpanded: boolean 
 )
 
 export default function Sidebar() {
+    const { isAuthenticated, signOut } = useAuth()
     const [isExpanded, setIsExpanded] = useState(() => {
         const saved = localStorage.getItem('sidebar-expanded')
         return saved !== null ? JSON.parse(saved) : true
@@ -175,6 +177,23 @@ export default function Sidebar() {
             {/* Bottom Actions */}
             <div className="p-4 mt-auto border-t border-accent-silver/5 bg-bg-primary/30 backdrop-blur-md space-y-3">
                 <NavItem to={routes.settings} icon="settings" label="Settings" isExpanded={isExpanded} />
+                {isAuthenticated && (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            signOut()
+                        }}
+                        aria-label="Sign out"
+                        className="w-full flex items-center gap-3 px-3 py-2 text-muted hover:text-rag-red transition-colors"
+                    >
+                        <span className="material-symbols-outlined text-[20px]">logout</span>
+                        {isExpanded && (
+                            <span className="text-[11px] font-black uppercase tracking-widest whitespace-nowrap">
+                                Sign Out
+                            </span>
+                        )}
+                    </button>
+                )}
                 <div className="flex items-center gap-2">
                     <ThemeToggle size="sm" />
                     <button

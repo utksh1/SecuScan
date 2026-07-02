@@ -9,6 +9,7 @@ export const routes = {
   workflows: '/workflows',
   settings: '/settings',
   task: '/task/:taskId',
+  signIn: '/signin',
 } as const
 
 export const routePath = {
