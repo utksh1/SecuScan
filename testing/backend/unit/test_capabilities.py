@@ -251,3 +251,14 @@ class TestBuildEnforcerFromSettings:
             enforcer = build_enforcer_from_settings()
             with pytest.raises(CapabilityDeniedError):
                 enforcer.check("sqlmap", ["network", "exploit"], "exploit")
+
+    def test_build_enforcer_from_settings_ignores_extra_keys(self):
+        """Extra/unexpected keys in the settings object should be ignored."""
+        with patch("backend.secuscan.config.settings") as mock_settings:
+            mock_settings.denied_capabilities = ["docker"]
+            mock_settings.extra_unknown_key = "should_be_ignored"
+            mock_settings.another_extra = ["not", "used"]
+            enforcer = build_enforcer_from_settings()
+            # Only denied_capabilities should affect the enforcer
+            assert enforcer.denied == frozenset({"docker"})
+            assert "exploit" not in enforcer.denied
