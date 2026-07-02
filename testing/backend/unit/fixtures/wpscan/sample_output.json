@@ -1,0 +1,34 @@
+{
+  "target_url": "http://example.wordpress.com",
+  "interesting_findings": [
+    {
+      "to_s": "WordPress version 5.8.2 identified",
+      "references": {"url": "https://example.com/changelog"}
+    }
+  ],
+  "plugins": {
+    "akismet": {
+      "vulnerabilities": [
+        {
+          "title": "Akismet 4.1.5 - Unauthenticated Spam View",
+          "fixed_in": "4.1.6",
+          "references": {}
+        }
+      ]
+    },
+    "contact-form-7": {
+      "vulnerabilities": []
+    }
+  },
+  "themes": {
+    "twentytwenty": {
+      "vulnerabilities": [
+        {
+          "title": "Twenty Twenty Theme XSS",
+          "fixed_in": "1.5",
+          "references": {}
+        }
+      ]
+    }
+  }
+}

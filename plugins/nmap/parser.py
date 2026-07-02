@@ -16,7 +16,7 @@ def parse(output: str) -> Dict[str, Any]:
         os_info = os_match.group(1).strip()
     
     # Regex for open ports: 80/tcp open http [version]
-    port_pattern = re.compile(r"(\d+)/(tcp|udp)\s+open\s+([\w-]+)(?:\s+(.*))?")
+    port_pattern = re.compile(r"(\d+)/(tcp|udp)[ \t]+open[ \t]+([\w-]+)(?:[ \t]+([^\r\n]*))?")
     
     for match in port_pattern.finditer(output):
         port_str, proto, service, version = match.groups()

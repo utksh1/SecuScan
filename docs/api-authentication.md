@@ -33,10 +33,18 @@ manually once after starting the backend:
 2. Open the SecuScan UI → **Settings** → **API Key** section.
 3. Paste the key into the **Backend API Key** field and click **Save**.
 
-The key is stored in the browser's `localStorage` under `secuscan_api_key` and
-sent automatically on every subsequent API request via the `X-Api-Key` header.
-No server-side session or cookie is involved — only the operator's browser retains
-the key.
+The UI validates the key by calling `POST /api/v1/auth/session`. On success, the
+backend sets a signed `secuscan_session` cookie with the `HttpOnly` flag. The raw
+API key is kept only in frontend memory while the page is open; it is **not**
+persisted to `localStorage`.
+
+After a successful login, normal browser requests authenticate with the session
+cookie. Direct API clients and scripts should continue to send `X-Api-Key` or
+`Authorization: Bearer` headers as shown below.
+
+The browser session currently expires after one hour. Logging out or clearing the
+API key in Settings calls `POST /api/v1/auth/session/logout`, clears the cookie,
+and drops the in-memory key.
 
 ## External / scripted access
 
@@ -198,6 +206,8 @@ pytest testing/backend/integration/test_owner_authorization.py \
 - There is no unauthenticated endpoint that exposes the key over the network.
   The only way to retrieve the key is to read the file from the filesystem where
   the backend is running — which requires local access to that machine.
+- The web UI uses an HttpOnly signed session cookie after the first successful
+  API-key validation so the raw key does not need to persist in browser storage.
 - If the backend is not yet initialised (key file missing and startup not complete),
   protected routes return `HTTP 503` rather than `401` to distinguish between
   an uninitialised service and a bad credential.

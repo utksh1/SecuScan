@@ -1,0 +1,5 @@
+Hostname: prod-server-01
+Kernel: Linux 5.15.0-generic
+Uptime: 45 days 3 hours 12 minutes
+Memory: 8192MB used / 16384MB total
+Disk: 75% used
