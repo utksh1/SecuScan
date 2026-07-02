@@ -45,3 +45,35 @@ class TestParseUrlHostname:
         from backend.secuscan.validation import _parse_url_hostname
         result = _parse_url_hostname("https://sub.domain.example.com/path")
         assert result == "sub.domain.example.com"
+
+    def test_ipv6_address_returns_ip(self):
+        """IPv6 addresses are handled correctly."""
+        from backend.secuscan.validation import _parse_url_hostname
+        result = _parse_url_hostname("http://[::1]/")
+        assert result == "::1"
+        result2 = _parse_url_hostname("https://[2001:db8::1]:8080/scan")
+        assert result2 == "2001:db8::1"
+
+    def test_url_with_username_password(self):
+        """URLs with embedded credentials should strip to just the hostname."""
+        from backend.secuscan.validation import _parse_url_hostname
+        result = _parse_url_hostname("http://user:pass@example.com/scan")
+        assert result == "example.com"
+        result2 = _parse_url_hostname("https://admin:secret@api.example.com/v1/ping")
+        assert result2 == "api.example.com"
+
+    def test_url_with_fragment_and_query(self):
+        """Fragments and query strings should be stripped from hostname extraction."""
+        from backend.secuscan.validation import _parse_url_hostname
+        result = _parse_url_hostname("http://example.com/path?query=val#frag")
+        assert result == "example.com"
+        result2 = _parse_url_hostname("https://api.example.com/#section")
+        assert result2 == "api.example.com"
+
+    def test_url_with_encoded_characters(self):
+        """Percent-encoded characters in the URL should not break hostname extraction."""
+        from backend.secuscan.validation import _parse_url_hostname
+        # Encoded dot in hostname should be preserved as-is by urlparse
+        result = _parse_url_hostname("http://example%2Ecom/scan")
+        # urlparse preserves the encoded form in hostname
+        assert result is not None
