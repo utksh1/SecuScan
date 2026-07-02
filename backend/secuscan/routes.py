@@ -792,6 +792,15 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
     """Get task execution result"""
     db = await get_db()
 
+    # Enforce ownership and existence check first
+    await require_owned_task(db, task_id, owner)
+
+    cache_key = f"tasks:result:{task_id}:{owner}"
+    cache = await get_cache()
+    cached = await cache.get_json(cache_key)
+    if cached is not None:
+        return cached
+
     task_row = await db.fetchone(
         """
         SELECT id, owner_id, plugin_id, tool_name, target, status,
@@ -804,9 +813,6 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
 
     if not task_row:
         raise HTTPException(status_code=404, detail="Task not found")
-
-    if task_row["owner_id"] != owner:
-        raise HTTPException(status_code=403, detail="You do not have access to this task")
 
     structured = {}
     if task_row["structured_json"]:
@@ -884,7 +890,7 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
         except Exception:
             pass
 
-    return {
+    result = {
         "task_id": task_row["id"],
         "plugin_id": task_row["plugin_id"],
         "tool": task_row["tool_name"],
@@ -911,6 +917,11 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
         "exit_code": task_row["exit_code"],
         "metadata": {}
     }
+
+    if task_row["status"] in ["completed", "failed", "cancelled"]:
+        await cache.set_json(cache_key, result)
+
+    return result
 
 
 @router.post("/task/{task_id}/cancel")
