@@ -12,10 +12,9 @@ from backend.secuscan.main import app
 # Shared test client
 # ---------------------------------------------------------------------------
 
-@pytest.fixture(scope="module")
-def client():
-    with TestClient(app) as c:
-        yield c
+@pytest.fixture
+def client(test_client):
+    return test_client
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +104,7 @@ def _patch_get_db(fake_row):
     # with an async generator factory so both generator and non-generator
     # call-sites receive the same mock_db object.
     async def _get_db_override():
-        yield mock_db
+        return mock_db
 
     return patch(
         "backend.secuscan.routes.get_db",

@@ -1,5 +1,5 @@
 {
-  "id": "website-recon-2",
+  "id": "website_recon",
   "name": "Website Recon",
   "version": "1.0.0",
   "description": "Perform website reconnaissance focused on identifying web technologies, frameworks, and application stack details.",
@@ -60,5 +60,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "4f8cf37fc9c3de4cdab5d4cb140c619f11bbf76ca6926aa6c41288168e8637f4"
+  "checksum": "825b4388ea96b666a35a4c5d9a11c9c9346754878c5146806992dde67999225b"
 }

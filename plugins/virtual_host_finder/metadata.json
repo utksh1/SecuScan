@@ -1,5 +1,5 @@
 {
-  "id": "virtual-host-finder",
+  "id": "virtual_host_finder",
   "name": "Virtual Hosts Finder",
   "version": "1.0.0",
   "description": "Find multiple websites hosted on the same server.",
@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd0e",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
     "binary": "ffuf"
@@ -68,5 +68,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "fb787f5f51da9f62c7a87d04694d5fa8624b0cf656f0d464436c7a8de45a58df"
+  "checksum": "07e98a178e6619427d7ac08cc3e3c0b717a202c0bf241ca37f8de0774645b006"
 }

@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "GPLv2",
-  "icon": "\ud83d\udc89",
+  "icon": "💉",
   "engine": {
     "type": "cli",
     "binary": "sqlmap"

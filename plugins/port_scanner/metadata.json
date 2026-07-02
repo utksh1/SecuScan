@@ -1,5 +1,5 @@
 {
-  "id": "port-scanner",
+  "id": "port_scanner",
   "name": "Port Scanner",
   "version": "1.0.0",
   "description": "Detect open ports and fingerprint services.",
@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd0e",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
     "binary": "nmap"
@@ -67,5 +67,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "1fe95f15404deaa261d64f891dcac4e87bc4dc4c3d4ca4fb7c526bdcdcf2c762"
+  "checksum": "77e6ec0d78b0f89e645a297f4765eb6ed0b99da6004508458478b8e31535f12e"
 }

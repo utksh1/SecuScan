@@ -1,33 +1,32 @@
 {
-  "id": "domain-finder",
-  "name": "Domain Finder",
+  "id": "people_email_discovery",
+  "name": "People Hunter",
   "version": "1.0.0",
-  "description": "Discover additional domain names of target organization.",
-  "long_description": "Discover additional domain names of target organization.",
+  "description": "Discover email addresses and social media profiles.",
+  "long_description": "Discover email addresses and social media profiles.",
   "category": "recon",
   "author": {
     "name": "SecuScan Contributors",
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd0e",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
-    "binary": "amass"
+    "binary": "theHarvester"
   },
   "command_template": [
-    "amass",
-    "enum",
+    "theHarvester",
     "-d",
     "{target}",
-    "-dir",
-    "/tmp/amass",
-    "-silent"
+    "-b",
+    "all"
   ],
   "fields": [
     {
       "id": "target",
-      "label": "Root Domain",
+      "label": "Target Domain",
+      "help": "Enter the domain name to search for associated email addresses and public profiles.",
       "type": "string",
       "required": true,
       "placeholder": "secuscan.in"
@@ -50,10 +49,10 @@
   },
   "dependencies": {
     "binaries": [
-      "amass"
+      "theHarvester"
     ],
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "b8bc0ebc7ba6b739c3f81be706c98cc354e9ffdad1468d62ef00600a3e8907d6"
+  "checksum": "0d095166c27f22e7aef301284dd3f55baef28e0b67bf0550f3f4b64a46278293"
 }

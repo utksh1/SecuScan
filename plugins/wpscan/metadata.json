@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udcdd",
+  "icon": "📝",
   "engine": {
     "type": "cli",
     "binary": "wpscan"

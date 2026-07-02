@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83e\uddea",
+  "icon": "🧪",
   "engine": {
     "type": "cli",
     "binary": "ghauri"

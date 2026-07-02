@@ -1,5 +1,5 @@
 {
-  "id": "url-fuzzer-2",
+  "id": "url_fuzzer",
   "name": "URL Fuzzer",
   "version": "1.0.0",
   "description": "Discover hidden files and directories.",
@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd0e",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
     "binary": "ffuf"
@@ -74,5 +74,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "4fada9f7e171899e44ddccdb66be22500f086a7afe1c69b46a01c16e5803e66c"
+  "checksum": "fbe8df1febf08a7280a74abeccc4fff1c845134110aecf7b345c580b032ad5b1"
 }

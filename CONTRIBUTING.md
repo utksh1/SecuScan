@@ -377,6 +377,9 @@ Please match the conventions already used in the repo instead of introducing a n
   - Use type hints where they improve clarity
   - Keep validation close to request and model boundaries
   - Prefer small functions over large, multi-purpose blocks
+- Plugins:
+  - Plugin IDs must use `snake_case` (only lowercase letters, numbers, and underscores). Do not use hyphens.
+  - The `"id"` field in the plugin's `metadata.json` file must exactly match its directory name (e.g. `plugins/domain_finder/metadata.json` must have `"id": "domain_finder"`).
 - Frontend:
   - Use TypeScript and functional React components
   - Keep component logic readable and avoid unnecessary abstraction

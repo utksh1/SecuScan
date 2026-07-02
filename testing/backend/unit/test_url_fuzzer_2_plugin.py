@@ -5,7 +5,7 @@ from pathlib import Path
 from backend.secuscan.config import settings
 from backend.secuscan.plugins import PluginManager
 
-PLUGIN_ID = "url-fuzzer-2"
+PLUGIN_ID = "url_fuzzer"
 PLUGIN_DIR = Path(settings.plugins_dir) / PLUGIN_ID
 
 

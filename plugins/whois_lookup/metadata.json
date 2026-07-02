@@ -10,7 +10,7 @@
     "email": "dev@secuscan.in"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd0e",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
     "binary": "python3"

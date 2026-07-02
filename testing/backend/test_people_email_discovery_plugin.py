@@ -25,7 +25,7 @@ from backend.secuscan.plugin_validator import PluginMetadataValidator
 from backend.secuscan.plugins import PluginManager
 from plugins.people_email_discovery.parser import parse
 
-PLUGIN_DIR = REPO_ROOT / "plugins" / "people-email-discovery"
+PLUGIN_DIR = REPO_ROOT / "plugins" / "people_email_discovery"
 PLUGINS_DIR = REPO_ROOT / "plugins"
 
 
@@ -64,7 +64,7 @@ def test_people_email_discovery_passes_validator():
 def test_people_email_discovery_metadata_id_matches_directory():
     """Plugin id in metadata.json must match the directory name."""
     data = json.loads((PLUGIN_DIR / "metadata.json").read_text(encoding="utf-8"))
-    assert data["id"] == "people-email-discovery"
+    assert data["id"] == "people_email_discovery"
 
 
 def test_people_email_discovery_engine_is_theHarvester():
@@ -108,7 +108,7 @@ def test_people_email_discovery_command_renders_with_target(setup_test_environme
     manager = PluginManager(str(PLUGINS_DIR))
     asyncio.run(manager.load_plugins())
 
-    command = manager.build_command("people-email-discovery", {"target": "example.com"})
+    command = manager.build_command("people_email_discovery", {"target": "example.com"})
 
     assert command is not None, "build_command returned None for valid inputs"
     assert "theHarvester" in command
@@ -123,7 +123,7 @@ def test_people_email_discovery_command_full_token_sequence(setup_test_environme
     manager = PluginManager(str(PLUGINS_DIR))
     asyncio.run(manager.load_plugins())
 
-    command = manager.build_command("people-email-discovery", {"target": "secuscan.in"})
+    command = manager.build_command("people_email_discovery", {"target": "secuscan.in"})
 
     assert command == ["theHarvester", "-d", "secuscan.in", "-b", "all"], (
         f"Command template drift detected. Got: {command}"
@@ -135,9 +135,9 @@ def test_people_email_discovery_loaded_by_plugin_manager(setup_test_environment)
     manager = PluginManager(str(PLUGINS_DIR))
     asyncio.run(manager.load_plugins())
 
-    plugin = manager.get_plugin("people-email-discovery")
+    plugin = manager.get_plugin("people_email_discovery")
     assert plugin is not None
-    assert plugin.id == "people-email-discovery"
+    assert plugin.id == "people_email_discovery"
     assert plugin.name == "People Hunter"
 
 
@@ -198,4 +198,4 @@ def test_people_email_discovery_parser_preserves_raw_line_in_metadata():
     single_line = "admin@example.com\n"
     result = parse(single_line)
     assert result["findings"]
-    assert result["findings"][0]["metadata"]["raw"] == "admin@example.com"
+    assert result["findings"][0]["metadata"]["raw_line"] == "admin@example.com"
