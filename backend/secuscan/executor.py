@@ -1423,25 +1423,25 @@ class TaskExecutor:
             result=parsed,
         )
         findings_data: List[Dict[str, Any]] = []
-        for finding in structured_result.get("findings", []):
-            findings_data.append(
-                await self._persist_finding(
-                    db,
-                    owner_id=owner_id,
-                    task_id=task_id,
-                    plugin_id=plugin_id,
-                    target=target,
-                    finding=finding,
-                )
-            )
-
-        structured_result["findings"] = findings_data
-        structured_result["severity_counts"] = self._build_severity_counts(findings_data)
-        structured_result["finding_groups"] = build_finding_groups(findings_data)
-        structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
-        structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
-
         async with db.transaction():
+            for finding in structured_result.get("findings", []):
+                findings_data.append(
+                    await self._persist_finding(
+                        db,
+                        owner_id=owner_id,
+                        task_id=task_id,
+                        plugin_id=plugin_id,
+                        target=target,
+                        finding=finding,
+                    )
+                )
+
+            structured_result["findings"] = findings_data
+            structured_result["severity_counts"] = self._build_severity_counts(findings_data)
+            structured_result["finding_groups"] = build_finding_groups(findings_data)
+            structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
+            structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
+
             await db.execute(
                 "UPDATE tasks SET structured_json = ? WHERE id = ?",
                 (json.dumps(structured_result), task_id)
@@ -1489,25 +1489,25 @@ class TaskExecutor:
             result=result,
         )
         findings_data: List[Dict[str, Any]] = []
-        for finding in structured_result.get("findings", []):
-            findings_data.append(
-                await self._persist_finding(
-                    db,
-                    owner_id=owner_id,
-                    task_id=task_id,
-                    plugin_id=plugin_id,
-                    target=target,
-                    finding=finding,
-                )
-            )
-
-        structured_result["findings"] = findings_data
-        structured_result["severity_counts"] = self._build_severity_counts(findings_data)
-        structured_result["finding_groups"] = build_finding_groups(findings_data)
-        structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
-        structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
-
         async with db.transaction():
+            for finding in structured_result.get("findings", []):
+                findings_data.append(
+                    await self._persist_finding(
+                        db,
+                        owner_id=owner_id,
+                        task_id=task_id,
+                        plugin_id=plugin_id,
+                        target=target,
+                        finding=finding,
+                    )
+                )
+
+            structured_result["findings"] = findings_data
+            structured_result["severity_counts"] = self._build_severity_counts(findings_data)
+            structured_result["finding_groups"] = build_finding_groups(findings_data)
+            structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
+            structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
+
             await db.execute(
                 "UPDATE tasks SET structured_json = ? WHERE id = ?",
                 (json.dumps(structured_result), task_id)
