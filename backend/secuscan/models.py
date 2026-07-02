@@ -109,6 +109,13 @@ class RetestStatus(str, Enum):
     FAILED = "failed"
 
 
+class StderrTruncationMode(str, Enum):
+    """How task execution stderr payloads are truncated"""
+    HEAD = "head"
+    TAIL = "tail"
+    NONE = "none"
+
+
 class ExecutionContext(BaseModel):
     """Task/workflow execution policy selected by the operator."""
     target_policy_id: Optional[str] = None
@@ -117,6 +124,8 @@ class ExecutionContext(BaseModel):
     session_profile_id: Optional[str] = None
     validation_mode: ValidationMode = ValidationMode.PROOF
     evidence_level: EvidenceLevel = EvidenceLevel.STANDARD
+    stderr_truncation_mode: StderrTruncationMode = StderrTruncationMode.TAIL
+    max_stderr_bytes: int = Field(default=102400, description="Max bytes captured from stderr before truncation")
 
 
 class WorkflowStep(BaseModel):

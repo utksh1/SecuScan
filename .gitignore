@@ -110,3 +110,4 @@ backend/data/reports/*
 frontend/playwright-report/
 frontend/test-results/
 frontend/.vite/
+.opencode

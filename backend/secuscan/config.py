@@ -124,6 +124,10 @@ class Settings(BaseSettings):
     sandbox_allow_network: bool = True
     docker_network: str = "restricted"  # Docker network name for sandboxed containers
 
+    # Stderr Truncation Policy (for task execution logs)
+    stderr_truncation_mode: str = "tail"
+    max_stderr_bytes: int = 102400  # 100 KB
+
     # Task-start payload limits (tunable via env vars)
     task_start_max_body_bytes: int = 64_000       # 64 KB total JSON body
     task_start_max_field_length: int = 1_000      # max chars per string input value

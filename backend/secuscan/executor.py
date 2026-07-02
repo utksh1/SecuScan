@@ -170,6 +170,45 @@ def _row_value(row: Any, key: str, default: Any = None) -> Any:
         return default
 
 
+class RollingBuffer:
+    def __init__(self, limit: int):
+        self.limit = limit
+        self.data = bytearray()
+        self.total_written = 0
+
+    def write(self, chunk: bytes):
+        self.data.extend(chunk)
+        self.total_written += len(chunk)
+        if len(self.data) > self.limit:
+            del self.data[:len(self.data) - self.limit]
+
+
+class HeadBuffer:
+    def __init__(self, limit: int):
+        self.limit = limit
+        self.data = bytearray()
+        self.total_written = 0
+        self.truncated = False
+
+    def write(self, chunk: bytes):
+        self.total_written += len(chunk)
+        if len(self.data) < self.limit:
+            remaining = self.limit - len(self.data)
+            self.data.extend(chunk[:remaining])
+        if self.total_written > self.limit:
+            self.truncated = True
+
+
+class UnboundedBuffer:
+    def __init__(self):
+        self.data = bytearray()
+        self.total_written = 0
+
+    def write(self, chunk: bytes):
+        self.data.extend(chunk)
+        self.total_written += len(chunk)
+
+
 class TaskExecutor:
     """Executes security scanning tasks in isolated environments"""
 
@@ -549,6 +588,7 @@ class TaskExecutor:
         target: str,
         inputs: Dict[str, Any],
         safe_mode: bool,
+        execution_context: Optional[Dict[str, Any]] = None,
     ) -> tuple[str, float, int]:
         """Execute a standard CLI/Docker plugin and persist findings/report."""
         plugin_manager = get_plugin_manager()
@@ -581,12 +621,21 @@ class TaskExecutor:
         await self._broadcast(task_id, "status", TaskStatus.RUNNING.value)
         await self._broadcast_phase(task_id, ScanPhase.RUNNING_COMMAND.value)
 
+        # Resolve truncation policy
+        truncation_mode = settings.stderr_truncation_mode
+        max_stderr = settings.max_stderr_bytes
+        if execution_context:
+            truncation_mode = execution_context.get("stderr_truncation_mode") or truncation_mode
+            max_stderr = execution_context.get("max_stderr_bytes") if execution_context.get("max_stderr_bytes") is not None else max_stderr
+
         # Execute command
         start_time = time.time()
         output, exit_code = await self._execute_command(
             command,
             task_id,
             timeout=self._resolve_execution_timeout(inputs),
+            stderr_truncation_mode=truncation_mode,
+            max_stderr_bytes=max_stderr,
         )
         duration = time.time() - start_time
 
@@ -732,6 +781,7 @@ class TaskExecutor:
                     target=target,
                     inputs=inputs,
                     safe_mode=safe_mode,
+                    execution_context=execution_context,
                 )
 
             await self._dispatch_task_notifications(db, task_id)
@@ -848,7 +898,9 @@ class TaskExecutor:
         self,
         command: list,
         task_id: str,
-        timeout: int = 600
+        timeout: int = 600,
+        stderr_truncation_mode: str = "tail",
+        max_stderr_bytes: int = 102400,
     ) -> tuple:
         """
         Execute command in subprocess and stream output.
@@ -857,6 +909,8 @@ class TaskExecutor:
             command: Command as list
             task_id: Task identifier for logging
             timeout: Execution timeout in seconds
+            stderr_truncation_mode: Policy mode ('head', 'tail', 'none')
+            max_stderr_bytes: Truncation threshold
 
         Returns:
             Tuple of (output, exit_code)
@@ -865,29 +919,66 @@ class TaskExecutor:
             process = await asyncio.create_subprocess_exec(
                 *command,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
+                stderr=subprocess.PIPE,
                 start_new_session=True,
             )
             self._process_pids[task_id] = process.pid
 
-            output_lines = []
+            stdout_lines = []
+            
+            if stderr_truncation_mode == "tail":
+                stderr_buffer = RollingBuffer(max_stderr_bytes)
+            elif stderr_truncation_mode == "head":
+                stderr_buffer = HeadBuffer(max_stderr_bytes)
+            else:
+                stderr_buffer = UnboundedBuffer()
 
-            async def read_stream():
+            async def read_stdout():
                 stdout = process.stdout
                 if stdout is None:
                     return
-                while not stdout.at_eof():
+                while True:
                     line = await stdout.readline()
-                    if line:
-                        decoded_line = line.decode("utf-8", errors="replace")
-                        output_lines.append(decoded_line)
-                        await self._broadcast(task_id, "output", decoded_line)
+                    if not line:
+                        break
+                    decoded_line = line.decode("utf-8", errors="replace")
+                    stdout_lines.append(decoded_line)
+                    await self._broadcast(task_id, "output", decoded_line)
+
+            async def read_stderr():
+                stderr = process.stderr
+                if stderr is None:
+                    return
+                while True:
+                    line = await stderr.readline()
+                    if not line:
+                        break
+                    stderr_buffer.write(line)
+                    decoded_line = line.decode("utf-8", errors="replace")
+                    await self._broadcast(task_id, "output", decoded_line)
+
+            def build_combined_output():
+                stdout_str = "".join(stdout_lines)
+                stderr_str = ""
+                if stderr_buffer.total_written > 0:
+                    stderr_data = stderr_buffer.data.decode("utf-8", errors="replace")
+                    if stderr_truncation_mode == "tail" and stderr_buffer.total_written > stderr_buffer.limit:
+                        stderr_str = f"\n--- STDERR (truncated, showing last {stderr_buffer.limit} bytes) ---\n{stderr_data}"
+                    elif stderr_truncation_mode == "head" and getattr(stderr_buffer, "truncated", False):
+                        stderr_str = f"\n--- STDERR (truncated, showing first {stderr_buffer.limit} bytes) ---\n{stderr_data}"
+                    else:
+                        stderr_str = f"\n--- STDERR ---\n{stderr_data}"
+                
+                return stdout_str + stderr_str
 
             try:
-                await asyncio.wait_for(read_stream(), timeout=timeout)
+                await asyncio.wait_for(
+                    asyncio.gather(read_stdout(), read_stderr()),
+                    timeout=timeout
+                )
                 await process.wait()
                 self._process_pids.pop(task_id, None)
-                return "".join(output_lines), process.returncode if process.returncode is not None else -1
+                return build_combined_output(), process.returncode if process.returncode is not None else -1
 
             except asyncio.TimeoutError:
                 logger.warning(
@@ -900,7 +991,7 @@ class TaskExecutor:
                 except asyncio.TimeoutError:
                     pass
                 self._process_pids.pop(task_id, None)
-                return "".join(output_lines) + "\nTask timed out", -1
+                return build_combined_output() + "\nTask timed out", -1
 
             except asyncio.CancelledError:
                 logger.warning(
