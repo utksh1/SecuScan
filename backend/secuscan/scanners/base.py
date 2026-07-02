@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import logging
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -34,17 +35,32 @@ class BaseScanner(ABC):
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT
         )
-        try:
-            stdout, _ = await process.communicate()
-            return stdout.decode('utf-8', errors='replace'), process.returncode
-        except asyncio.CancelledError:
+      try:
+    stdout, _ = await process.communicate()
+
+    logger.info(
+        "Command completed | scanner=%s | task_id=%s | return_code=%s",
+        self.name,
+        self.task_id,
+        process.returncode,
+    )
+
+    return stdout.decode('utf-8', errors='replace'), process.returncode
+
+            except asyncio.CancelledError:
+                logger.warning(
+                    "Command cancelled | scanner=%s | task_id=%s",
+                    self.name,
+                    self.task_id,
+            )
+
             try:
                 process.kill()
                 await process.wait()
             except Exception:
                 pass
             raise
-
+    
     @property
     @abstractmethod
     def name(self) -> str:
