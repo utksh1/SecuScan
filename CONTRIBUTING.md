@@ -141,7 +141,19 @@ live under `testing/backend/unit/` and integration tests live under
 > **Note:** Run `./testing/test_python.sh` at least once before using this
 > shortcut so that `venv_tests/` exists and dependencies are installed.
 
-### 4. Where Requirements Files Live
+### 4. Run the Artifact Guard
+
+Before opening a pull request, verify that no generated artifacts or Python
+cache files are staged:
+
+```bash
+bash scripts/check-artifacts.sh origin/main
+```
+
+This script checks for blocked generated artifacts, `__pycache__/` directories,
+and `.pyc` files before changes are submitted.
+
+### 5. Where Requirements Files Live
 
 | File | Purpose |
 |---|---|

@@ -40,6 +40,19 @@ if [[ ${#TRACKED_FOUND[@]} -gt 0 ]]; then
   exit 1
 fi
 
+echo "Checking for tracked Python cache files..."
+
+PY_CACHE_TRACKED=$(git ls-files | grep -E '(^|/)(__pycache__/|.*\.pyc$)' || true)
+
+if [[ -n "$PY_CACHE_TRACKED" ]]; then
+  echo "ERROR: Python cache files are tracked:"
+  echo "$PY_CACHE_TRACKED"
+  echo ""
+  echo "Fix:"
+  echo "  git rm --cached <file>"
+  exit 1
+fi
+
 # ── Check 2: files newly added in this PR/branch ──────────────────────────────
 echo "Checking for generated artifacts in PR diff..."
 if git rev-parse --verify "${BASE_BRANCH}" >/dev/null 2>&1; then
@@ -59,6 +72,18 @@ done
 if [[ ${#FOUND[@]} -gt 0 ]]; then
   echo "ERROR: Artifact files found in this branch:"
   for f in "${FOUND[@]}"; do echo "  - $f"; done
+  echo ""
+  echo "Fix: git rm --cached <file>"
+  exit 1
+fi
+
+echo "Checking for Python cache files in PR diff..."
+
+PY_CACHE_DIFF=$(echo "$CHANGED_FILES" | grep -E '(^|/)(__pycache__/|.*\.pyc$)' || true)
+
+if [[ -n "$PY_CACHE_DIFF" ]]; then
+  echo "ERROR: Python cache files found in this branch:"
+  echo "$PY_CACHE_DIFF"
   echo ""
   echo "Fix: git rm --cached <file>"
   exit 1
