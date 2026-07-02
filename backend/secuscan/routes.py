@@ -709,6 +709,60 @@ async def download_html_report(task_id: str, owner: str = Depends(get_current_ow
         headers={"Content-Disposition": f'attachment; filename="{build_report_filename(dict(task_row), "html")}"'}
     )
 
+@router.get("/task/{task_id}/report/md", dependencies=[Depends(report_download_limiter)])
+async def download_markdown_report(task_id: str, owner: str = Depends(get_current_owner)):
+    """Download task results as a Markdown report."""
+    db = await get_db()
+    task_row = await db.fetchone(
+        "SELECT id, owner_id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
+        (task_id,)
+    )
+
+    if not task_row:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if task_row["owner_id"] != owner:
+        raise HTTPException(status_code=403, detail="You do not have access to this task")
+
+    if task_row["status"] not in ["completed", "failed"]:
+        raise HTTPException(status_code=400, detail="Task is not finished yet")
+
+    try:
+        structured_data = (
+            json.loads(task_row["structured_json"])
+            if task_row["structured_json"]
+            else {}
+        )
+
+        markdown_content = reporting.generate_markdown_report(
+            dict(task_row),
+            {"structured": structured_data}
+        )
+
+    except Exception:
+        return _report_generation_error_response(task_id, "md")
+
+    await db.log_audit(
+        "report_downloaded",
+        f"Markdown report downloaded for task {task_id}",
+        context={
+            "format": "md",
+            "task_id": task_id,
+            "plugin_id": task_row["plugin_id"],
+        },
+        task_id=task_id,
+        plugin_id=task_row["plugin_id"],
+    )
+
+    return Response(
+        content=markdown_content,
+        media_type="text/markdown",
+        headers={
+            "Content-Disposition":
+            f'attachment; filename="{build_report_filename(dict(task_row), "md")}"'
+        },
+    )
+
 @router.get("/task/{task_id}/report/pdf", dependencies=[Depends(report_download_limiter)])
 async def download_pdf_report(task_id: str, owner: str = Depends(get_current_owner)):
     """Download task results as a PDF report."""
