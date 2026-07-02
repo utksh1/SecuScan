@@ -16,8 +16,6 @@ from urllib.parse import urlencode, urlparse
 
 from .routes_json_helpers import (
     FINDING_JSON_FIELDS,
-    _json_payload,
-    _serialize_workflow,
     deserialize_asset_service_rows,
     deserialize_finding_rows,
     parse_json_fields,
@@ -62,6 +60,23 @@ def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
         normalized.append(model.model_dump())
     return normalized
 
+def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Return the workflow shape consumed by the frontend."""
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "schedule_seconds": row.get("schedule_seconds"),
+        "enabled": bool(row.get("enabled")),
+        "steps": _parse_workflow_steps(row.get("steps_json")),
+        "created_at": row.get("created_at"),
+        "last_run_at": row.get("last_run_at"),
+        "queued_task_ids": queued_task_ids or [],
+    }
+
+
+def _json_payload(value: Any, fallback: str) -> str:
+    return json.dumps(value if value is not None else json.loads(fallback))
+
 
 from .validation import is_filesystem_target  # noqa: E402
 
@@ -75,6 +90,10 @@ from .models import (
     NotificationChannelType, TaskStatus,
     ExecutionContext, WorkflowStep, ValidationMode, EvidenceLevel,
     NotificationDiagnosticsResponse,
+    TargetPolicyCreate, TargetPolicyUpdate,
+    CredentialProfileCreate, CredentialProfileUpdate,
+    SessionProfileCreate, SessionProfileUpdate,
+    WorkflowCreate, WorkflowUpdate,
 )
 from .config import settings
 from .database import get_db
@@ -918,7 +937,7 @@ async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
                 return default
 
         # Get data
-        # Push severity aggregation to DB — avoids full table scan in Python.
+        # Push severity aggregation to DB ΓÇö avoids full table scan in Python.
         # Every aggregate below is scoped to the caller so the dashboard never
         # surfaces another user/workspace's tasks or findings (issue #401).
         severity_rows = await query_or_default(
@@ -967,7 +986,7 @@ async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
         low_findings: int = severity_counts.get("low", 0)
         info_findings: int = severity_counts.get("info", 0)
 
-        # Fetch only the 5 most recent findings — not the entire table
+        # Fetch only the 5 most recent findings ΓÇö not the entire table
         recent_rows = await query_or_default(
             "recent_findings",
             lambda: db.fetchall(
@@ -1565,8 +1584,9 @@ async def list_target_policies(owner: str = Depends(get_current_owner)):
 
 
 @router.post("/target-policies", dependencies=[Depends(admin_limiter)])
-async def create_target_policy(payload: Dict[str, Any], owner: str = Depends(get_current_owner)):
-    name = str(payload.get("name", "")).strip()
+async def create_target_policy(payload: TargetPolicyCreate, owner: str = Depends(get_current_owner)):
+    payload_dict = payload.model_dump()
+    name = str(payload_dict.get("name", "")).strip()
     if not name:
         raise HTTPException(status_code=400, detail="Target policy name is required")
 
@@ -1588,13 +1608,13 @@ async def create_target_policy(payload: Dict[str, Any], owner: str = Depends(get
             policy_id,
             owner,
             name,
-            str(payload.get("description", "")).strip() or None,
-            1 if payload.get("allow_public_targets") else 0,
-            1 if payload.get("allow_exploit_validation") else 0,
-            1 if payload.get("allow_authenticated_scan") else 0,
-            str(payload.get("default_validation_mode") or ValidationMode.PROOF.value),
-            _json_payload(payload.get("allowed_targets"), "[]"),
-            _json_payload(payload.get("metadata"), "{}"),
+            str(payload_dict.get("description", "")).strip() or None,
+            1 if payload_dict.get("allow_public_targets") else 0,
+            1 if payload_dict.get("allow_exploit_validation") else 0,
+            1 if payload_dict.get("allow_authenticated_scan") else 0,
+            str(payload_dict.get("default_validation_mode", ValidationMode.PROOF).value),
+            json.dumps(payload_dict.get("allowed_targets", [])),
+            json.dumps(payload_dict.get("metadata", {})),
         ),
     )
     row = await db.fetchone("SELECT * FROM target_policies WHERE id = ?", (policy_id,))
@@ -1602,7 +1622,8 @@ async def create_target_policy(payload: Dict[str, Any], owner: str = Depends(get
 
 
 @router.patch("/target-policies/{policy_id}", dependencies=[Depends(admin_limiter)])
-async def update_target_policy(policy_id: str, payload: Dict[str, Any], owner: str = Depends(get_current_owner)):
+async def update_target_policy(policy_id: str, payload: TargetPolicyUpdate, owner: str = Depends(get_current_owner)):
+    payload = payload.model_dump(exclude_unset=True)
     db = await get_db()
     row = await db.fetchone("SELECT id FROM target_policies WHERE id = ? AND owner_id = ?", (policy_id, owner))
     if not row:
@@ -1648,8 +1669,9 @@ async def list_credential_profiles(owner: str = Depends(get_current_owner)):
 
 
 @router.post("/credential-profiles", dependencies=[Depends(admin_limiter)])
-async def create_credential_profile(payload: Dict[str, Any], owner: str = Depends(get_current_owner)):
-    name = str(payload.get("name", "")).strip()
+async def create_credential_profile(payload: CredentialProfileCreate, owner: str = Depends(get_current_owner)):
+    payload_dict = payload.model_dump()
+    name = str(payload_dict.get("name", "")).strip()
     if not name:
         raise HTTPException(status_code=400, detail="Credential profile name is required")
     profile_id = str(uuid.uuid4())
@@ -1665,10 +1687,10 @@ async def create_credential_profile(payload: Dict[str, Any], owner: str = Depend
             profile_id,
             owner,
             name,
-            payload.get("username_secret_name"),
-            payload.get("password_secret_name"),
-            _json_payload(payload.get("extra_headers"), "{}"),
-            _json_payload(payload.get("login_recipe"), "{}"),
+            payload_dict.get("username_secret_name"),
+            payload_dict.get("password_secret_name"),
+            json.dumps(payload_dict.get("extra_headers", {})),
+            json.dumps(payload_dict.get("login_recipe", {})),
         ),
     )
     row = await db.fetchone("SELECT * FROM credential_profiles WHERE id = ?", (profile_id,))
@@ -1676,7 +1698,8 @@ async def create_credential_profile(payload: Dict[str, Any], owner: str = Depend
 
 
 @router.patch("/credential-profiles/{profile_id}", dependencies=[Depends(admin_limiter)])
-async def update_credential_profile(profile_id: str, payload: Dict[str, Any], owner: str = Depends(get_current_owner)):
+async def update_credential_profile(profile_id: str, payload: CredentialProfileUpdate, owner: str = Depends(get_current_owner)):
+    payload = payload.model_dump(exclude_unset=True)
     db = await get_db()
     row = await db.fetchone("SELECT id FROM credential_profiles WHERE id = ? AND owner_id = ?", (profile_id, owner))
     if not row:
@@ -1689,10 +1712,10 @@ async def update_credential_profile(profile_id: str, payload: Dict[str, Any], ow
             params.append(payload[key])
     if "extra_headers" in payload:
         updates.append("extra_headers_json = ?")
-        params.append(_json_payload(payload["extra_headers"], "{}"))
+        params.append(json.dumps(payload["extra_headers"]))
     if "login_recipe" in payload:
         updates.append("login_recipe_json = ?")
-        params.append(_json_payload(payload["login_recipe"], "{}"))
+        params.append(json.dumps(payload["login_recipe"]))
     updates.append("updated_at = datetime('now')")
     params.extend([profile_id, owner])
     await db.execute(f"UPDATE credential_profiles SET {', '.join(updates)} WHERE id = ? AND owner_id = ?", tuple(params))
@@ -1718,8 +1741,9 @@ async def list_session_profiles(owner: str = Depends(get_current_owner)):
 
 
 @router.post("/session-profiles", dependencies=[Depends(admin_limiter)])
-async def create_session_profile(payload: Dict[str, Any], owner: str = Depends(get_current_owner)):
-    name = str(payload.get("name", "")).strip()
+async def create_session_profile(payload: SessionProfileCreate, owner: str = Depends(get_current_owner)):
+    payload_dict = payload.model_dump()
+    name = str(payload_dict.get("name", "")).strip()
     if not name:
         raise HTTPException(status_code=400, detail="Session profile name is required")
     profile_id = str(uuid.uuid4())
@@ -1734,9 +1758,9 @@ async def create_session_profile(payload: Dict[str, Any], owner: str = Depends(g
             profile_id,
             owner,
             name,
-            payload.get("cookie_secret_name"),
-            _json_payload(payload.get("extra_headers"), "{}"),
-            str(payload.get("notes", "")).strip() or None,
+            payload_dict.get("cookie_secret_name"),
+            json.dumps(payload_dict.get("extra_headers", {})),
+            str(payload_dict.get("notes", "")).strip() or None,
         ),
     )
     row = await db.fetchone("SELECT * FROM session_profiles WHERE id = ?", (profile_id,))
@@ -1744,7 +1768,8 @@ async def create_session_profile(payload: Dict[str, Any], owner: str = Depends(g
 
 
 @router.patch("/session-profiles/{profile_id}", dependencies=[Depends(admin_limiter)])
-async def update_session_profile(profile_id: str, payload: Dict[str, Any], owner: str = Depends(get_current_owner)):
+async def update_session_profile(profile_id: str, payload: SessionProfileUpdate, owner: str = Depends(get_current_owner)):
+    payload = payload.model_dump(exclude_unset=True)
     db = await get_db()
     row = await db.fetchone("SELECT id FROM session_profiles WHERE id = ? AND owner_id = ?", (profile_id, owner))
     if not row:
@@ -1757,7 +1782,7 @@ async def update_session_profile(profile_id: str, payload: Dict[str, Any], owner
             params.append(payload[key])
     if "extra_headers" in payload:
         updates.append("extra_headers_json = ?")
-        params.append(_json_payload(payload["extra_headers"], "{}"))
+        params.append(json.dumps(payload["extra_headers"]))
     updates.append("updated_at = datetime('now')")
     params.extend([profile_id, owner])
     await db.execute(f"UPDATE session_profiles SET {', '.join(updates)} WHERE id = ? AND owner_id = ?", tuple(params))
@@ -1809,28 +1834,19 @@ async def list_workflows(owner: str = Depends(get_current_owner)):
 
 
 @router.post("/workflows", dependencies=[Depends(admin_limiter)])
-async def create_workflow(payload: Dict[str, Any], owner: str = Depends(get_current_owner)):
-    name = str(payload.get("name", "")).strip()
+async def create_workflow(payload: WorkflowCreate, owner: str = Depends(get_current_owner)):
+    payload_dict = payload.model_dump()
+    name = str(payload_dict.get("name", "")).strip()
     if not name:
         raise HTTPException(status_code=400, detail="Workflow name is required")
 
-    steps = _parse_workflow_steps(payload.get("steps", []))
+    steps = _parse_workflow_steps(payload_dict.get("steps", []))
     if not steps:
         raise HTTPException(status_code=400, detail="Workflow requires at least one step")
 
     workflow_id = str(uuid.uuid4())
-    schedule_seconds = payload.get("schedule_seconds")
-    if schedule_seconds is not None:
-        try:
-            parsed_schedule = int(schedule_seconds)
-            if parsed_schedule < 60:
-                raise ValueError()
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid schedule_seconds, must be an integer >= 60")
-    else:
-        parsed_schedule = None
-
-    enabled = bool(payload.get("enabled", True))
+    schedule_seconds = payload_dict.get("schedule_seconds")
+    enabled = bool(payload_dict.get("enabled", True))
     db = await get_db()
     await db.execute(
         """
@@ -1841,7 +1857,7 @@ async def create_workflow(payload: Dict[str, Any], owner: str = Depends(get_curr
             workflow_id,
             name,
             owner,
-            parsed_schedule,
+            int(schedule_seconds) if schedule_seconds is not None else None,
             1 if enabled else 0,
             json.dumps(steps),
         ),
@@ -1993,7 +2009,8 @@ async def rollback_workflow(workflow_id: str, version_number: int, owner: str = 
 
 
 @router.patch("/workflows/{workflow_id}", dependencies=[Depends(admin_limiter)])
-async def update_workflow(workflow_id: str, payload: Dict[str, Any], owner: str = Depends(get_current_owner)):
+async def update_workflow(workflow_id: str, payload: WorkflowUpdate, owner: str = Depends(get_current_owner)):
+    payload = payload.model_dump(exclude_unset=True)
     db = await get_db()
     row = await _verify_workflow_owner(db, workflow_id, owner)
 
