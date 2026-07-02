@@ -62,28 +62,43 @@ const MOCK_TASK_RESULT = {
 };
 
 async function setupMocks(page) {
-  await page.route(`${BASE}/api/v1/health`, (route) =>
+  await page.route(`**/api/v1/auth/session/check`, (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ authenticated: true }) })
+  );
+  await page.route(`**/api/v1/health`, (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "ok" }) })
   );
-  await page.route(`${BASE}/api/v1/dashboard/summary`, (route) =>
+  await page.route(`**/api/v1/dashboard/summary`, (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({}) })
   );
-  await page.route(`${BASE}/api/v1/plugins`, (route) =>
+  await page.route(`**/api/v1/settings`, (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({}) })
+  );
+  await page.route(`**/api/v1/target-policies`, (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [], total: 0 }) })
+  );
+  await page.route(`**/api/v1/credential-profiles`, (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [], total: 0 }) })
+  );
+  await page.route(`**/api/v1/session-profiles`, (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [], total: 0 }) })
+  );
+  await page.route(`**/api/v1/plugins`, (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_PLUGINS_RESPONSE) })
   );
-  await page.route(`${BASE}/api/v1/plugin/dns_recon/schema`, (route) =>
+  await page.route(`**/api/v1/plugin/dns_recon/schema`, (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_PLUGIN_SCHEMA) })
   );
-  await page.route(`${BASE}/api/v1/task/start`, (route) =>
+  await page.route(`**/api/v1/task/start`, (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_START_TASK_RESPONSE) })
   );
-  await page.route(`${BASE}/api/v1/task/abcd1234-0000-0000-0000-000000000001/status`, (route) =>
+  await page.route(`**/api/v1/task/abcd1234-0000-0000-0000-000000000001/status`, (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_TASK_STATUS) })
   );
-  await page.route(`${BASE}/api/v1/task/abcd1234-0000-0000-0000-000000000001/result`, (route) =>
+  await page.route(`**/api/v1/task/abcd1234-0000-0000-0000-000000000001/result`, (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_TASK_RESULT) })
   );
-  await page.route(`${BASE}/api/v1/task/abcd1234-0000-0000-0000-000000000001/stream`, (route) =>
+  await page.route(`**/api/v1/task/abcd1234-0000-0000-0000-000000000001/stream`, (route) =>
     route.fulfill({ status: 200, headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" }, body: "" })
   );
 }
@@ -93,14 +108,14 @@ test.describe("Full scan workflow", () => {
     await setupMocks(page);
     await page.goto("/toolkit");
     await expect(page.getByRole("heading", { name: /tactical/i })).toBeVisible({ timeout: 10000 });
-    await page.getByRole("button", { name: /recon tools/i }).click();
+    await page.getByRole("tab", { name: /recon tools/i }).click();
     await expect(page.getByRole("button", { name: /dns recon/i })).toBeVisible({ timeout: 10000 });
   });
 
   test("Step 2 - Select a scanner and see its config page", async ({ page }) => {
     await setupMocks(page);
     await page.goto("/toolkit");
-    await page.getByRole("button", { name: /recon tools/i }).click();
+    await page.getByRole("tab", { name: /recon tools/i }).click();
     await page.getByRole("button", { name: /dns recon/i }).click();
     await expect(page).toHaveURL(/\/toolkit\/dns_recon/);
     await expect(page.getByRole("heading", { name: /dns recon/i })).toBeVisible();
@@ -119,6 +134,7 @@ test.describe("Full scan workflow", () => {
     await setupMocks(page);
     await page.goto("/toolkit/dns_recon");
     await expect(page.getByRole("checkbox")).not.toBeVisible();
+    await page.getByPlaceholder("example.com").fill("example.com");
     const startButton = page.getByRole("button", { name: /initiate_scan/i });
     await expect(startButton).toBeVisible();
     await expect(startButton).not.toBeDisabled();
@@ -151,7 +167,7 @@ test.describe("Full scan workflow", () => {
     await setupMocks(page);
     await page.goto("/toolkit");
     await expect(page.getByRole("heading", { name: /tactical/i })).toBeVisible({ timeout: 10000 });
-    await page.getByRole("button", { name: /recon tools/i }).click();
+    await page.getByRole("tab", { name: /recon tools/i }).click();
     await page.getByRole("button", { name: /dns recon/i }).click();
     await expect(page).toHaveURL(/\/toolkit\/dns_recon/);
     await page.getByPlaceholder("example.com").fill("example.com");
@@ -164,13 +180,28 @@ test.describe("Full scan workflow", () => {
 
 test.describe("Scan workflow - consent required", () => {
   test("Consent checkbox is shown and blocks scan until checked", async ({ page }) => {
-    await page.route(`${BASE}/api/v1/health`, (route) =>
+    await page.route(`**/api/v1/auth/session/check`, (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ authenticated: true }) })
+    );
+    await page.route(`**/api/v1/health`, (route) =>
       route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "ok" }) })
     );
-    await page.route(`${BASE}/api/v1/dashboard/summary`, (route) =>
+    await page.route(`**/api/v1/dashboard/summary`, (route) =>
       route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({}) })
     );
-    await page.route(`${BASE}/api/v1/plugins`, (route) =>
+    await page.route(`**/api/v1/settings`, (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({}) })
+    );
+    await page.route(`**/api/v1/target-policies`, (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [], total: 0 }) })
+    );
+    await page.route(`**/api/v1/credential-profiles`, (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [], total: 0 }) })
+    );
+    await page.route(`**/api/v1/session-profiles`, (route) =>
+      route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [], total: 0 }) })
+    );
+    await page.route(`**/api/v1/plugins`, (route) =>
       route.fulfill({
         status: 200, contentType: "application/json",
         body: JSON.stringify({
@@ -186,7 +217,7 @@ test.describe("Scan workflow - consent required", () => {
         }),
       })
     );
-    await page.route(`${BASE}/api/v1/plugin/port_scanner/schema`, (route) =>
+    await page.route(`**/api/v1/plugin/port_scanner/schema`, (route) =>
       route.fulfill({
         status: 200, contentType: "application/json",
         body: JSON.stringify({
