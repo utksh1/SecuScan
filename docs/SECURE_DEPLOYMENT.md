@@ -291,6 +291,7 @@ one place rather than tracing it across modules.
 | `SECUSCAN_BIND_PORT` | `8000` | API listen port. |
 | `SECUSCAN_DEBUG` | `true` | Debug mode. **Set `false` in production** — debug output can leak internal details. |
 | `SECUSCAN_CORS_ALLOWED_ORIGINS` | localhost dev origins | Browser origins allowed to call the API. Tighten to your real frontend origin in production; avoid wildcards. |
+| `SECUSCAN_CORS_ALLOWED_HEADERS` | `Content-Type,Authorization,X-Api-Key,Accept,Origin` | Browser request headers allowed during CORS preflight. Keep `X-Api-Key` when overriding this value so the web UI can establish an authenticated session. |
 
 ## Secrets & Authentication
 

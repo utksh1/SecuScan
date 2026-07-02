@@ -55,7 +55,7 @@ class Settings(BaseSettings):
         "http://127.0.0.1:4173",
     ]
     cors_allowed_methods: List[str] = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
-    cors_allowed_headers: List[str] = ["Content-Type", "Authorization", "Accept", "Origin"]
+    cors_allowed_headers: List[str] = ["Content-Type", "Authorization", "X-Api-Key", "Accept", "Origin"]
     cors_allow_credentials: bool = True
     plugin_signature_key: Optional[str] = None
     enforce_plugin_signatures: bool = False
