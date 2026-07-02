@@ -634,10 +634,11 @@ class PluginManager:
         if not plugin:
             return None
 
+        field_ids = {f.id for f in plugin.fields}
         inputs = {
             key: value
             for key, value in inputs.items()
-            if key not in _INTERNAL_CONTROL_FIELDS and not str(key).startswith("__")
+            if (key not in _INTERNAL_CONTROL_FIELDS or key in field_ids) and not str(key).startswith("__")
         }
 
         # Validate before normalisation so SELECT checks run against raw user values

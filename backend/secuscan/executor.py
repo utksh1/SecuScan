@@ -23,6 +23,7 @@ from .redaction import redact
 from .cache import get_cache
 from .config import settings
 from .database import get_db
+from .executor_target_helpers import extract_target
 from .plugins import get_plugin_manager
 from .models import NotificationDeliveryStatus, TaskStatus, ScanPhase
 from .ratelimit import concurrent_limiter
@@ -74,7 +75,8 @@ async def _terminate_process_group(pid: int, task_id: str, grace_seconds: int = 
         await asyncio.sleep(0.1)
         try:
             os.killpg(pgid, 0)
-        except (ProcessLookupError, PermissionError):
+        except (ProcessLookupError, PermissionError) as exc:
+            logger.debug("pgid %d already exited during grace poll: %s", pgid, exc)
             return
 
     try:
@@ -142,17 +144,6 @@ MODULAR_SCANNERS = {
 
 logger = logging.getLogger(__name__)
 STREAM_LISTENER_QUEUE_MAXSIZE = 100
-
-
-def extract_target(inputs: Dict[str, Any]) -> str:
-    """Best-effort target extraction across plugin shapes."""
-    return (
-        inputs.get("target")
-        or inputs.get("url")
-        or inputs.get("host")
-        or inputs.get("domain")
-        or ""
-    )
 
 
 def _stable_asset_id(target: str, host: Any, port: Any, protocol: Any) -> str:
@@ -226,6 +217,11 @@ class TaskExecutor:
             q.put_nowait(event)
         except asyncio.QueueFull:
             logger.warning("Dropping stream event for slow listener on task %s", task_id)
+
+    def _cleanup_listeners(self, task_id: str):
+        """Remove all listener queues for a completed task to prevent memory leaks."""
+        if task_id in self._listeners:
+            self._listeners.pop(task_id, None)
 
     async def _broadcast_phase(self, task_id: str, phase: str):
         """Broadcast a scan phase transition and persist it to the database."""
@@ -846,6 +842,7 @@ class TaskExecutor:
             self.running_tasks.pop(task_id, None)
             self._process_pids.pop(task_id, None)
             await concurrent_limiter.release(task_id)
+            self._cleanup_listeners(task_id)
 
     async def _execute_command(
         self,

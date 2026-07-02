@@ -1,0 +1,5 @@
+[+] URL: http://example.wordpress.com
+[+] Powerful: so many opportunities...
+[+] Detecting plugin versions ... done [11 plugins]
+[+] Enumerating plugins from readme files ... done [1 found]
+[+] Finished: Tue Jun 30 20:00:00 2026

@@ -187,13 +187,14 @@ class WorkflowScheduler:
                 consent_granted=True,
                 owner_id=owner_id,
             )
-            created_task_ids.append(task_id)
 
             can_acquire, concurrency_err = await concurrent_limiter.acquire(task_id)
             if not can_acquire:
                 await executor.mark_task_failed(task_id, reason="Concurrency limit reached")
                 logger.warning("Workflow %s: concurrency limit reached for %s", workflow_id, plugin_id)
                 continue
+
+            created_task_ids.append(task_id)
 
             async def run_task(task_id: str) -> None:
                 set_request_id(request_id)

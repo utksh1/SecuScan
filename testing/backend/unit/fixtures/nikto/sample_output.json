@@ -1,0 +1,27 @@
+{
+  "host": "example.com",
+  "ip": "203.0.113.37",
+  "port": "443",
+  "banner": "",
+  "vulnerabilities": [
+    {
+      "id": "999986",
+      "method": "GET",
+      "url": "/",
+      "msg": "Retrieved via header: 1.1 google."
+    },
+    {
+      "id": "999103",
+      "references": "https://example.com/reference",
+      "method": "GET",
+      "url": "/robots.txt",
+      "msg": "The X-Content-Type-Options header is not set. See http://cve.mitre.org"
+    },
+    {
+      "id": "500000",
+      "method": "POST",
+      "url": "/login",
+      "msg": "Default credential admin/admin found."
+    }
+  ]
+}
