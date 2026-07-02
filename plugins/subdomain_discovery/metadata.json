@@ -88,5 +88,5 @@
     "system_packages": []
   },
   "docker_image": "projectdiscovery/subfinder:latest",
-  "checksum": "36a62951d26ba2da37b777b21fc117f81b4125e88144688f43cc1beb0989cc0c"
+  "checksum": "11c9b9517e288518d4eefa78aff3a3efdfb9d2023dacf5ddfe95e2b3808eac72"
 }

@@ -92,7 +92,14 @@ def test_subdomain_discovery_parser_fixture_produces_stable_findings(plugin_mana
     assert first["title"] == "Subdomain Discovered: api.secuscan.in"
     assert first["category"] == "Subdomain"
     assert first["severity"] == "info"
-    assert first["metadata"]["subdomain"] == "api.secuscan.in"
+
+    metadata = first["metadata"]
+
+    assert metadata["subdomain"] == "api.secuscan.in"
+    assert metadata["source"] == "subfinder"
+    assert metadata["confidence"] == "high"
+    assert "evidence" in metadata
+    assert "api.secuscan.in" in metadata["evidence"]
 
 
 def test_subdomain_discovery_parser_empty_output_is_deterministic(plugin_manager):
