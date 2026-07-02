@@ -5,6 +5,11 @@ import Scans from '../../../src/pages/Scans';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
+vi.mock('../../../src/components/ToastContext', () => ({
+  useToast: () => ({ addToast: vi.fn(), removeToast: vi.fn() }),
+  ToastProvider: ({ children }: any) => children,
+}));
+
 vi.mock('../../../src/api', () => ({
   API_BASE: 'http://localhost',
   deleteTask: vi.fn(),
