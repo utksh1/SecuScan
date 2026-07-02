@@ -98,7 +98,9 @@ def test_secret_scanner_parser_uses_default_rule_id_when_missing(plugin_manager)
     parsed = parser.parse(raw)
 
     assert len(parsed["findings"]) == 1
-    assert parsed["findings"][0]["title"] == "Secret Leak: Secret Detected in src/main.py"
+    assert (
+        parsed["findings"][0]["title"] == "Secret Leak: Secret Detected in src/main.py"
+    )
 
 
 def test_secret_scanner_executor_normalizes_parser_fixture(plugin_manager):
@@ -115,3 +117,62 @@ def test_secret_scanner_executor_normalizes_parser_fixture(plugin_manager):
     assert len(normalized["findings"]) == 2
     assert normalized["findings"][0]["severity"] == "critical"
     assert all(f["title"] for f in normalized["findings"])
+
+
+def test_secret_scanner_parser_defaults_file_line_and_offender(plugin_manager):
+    parser = _load_secret_scanner_parser()
+
+    raw = '[{"RuleID": "generic-secret"}]'
+    parsed = parser.parse(raw)
+
+    assert parsed["count"] == 1
+
+    finding = parsed["findings"][0]
+    assert finding["title"] == "Secret Leak: generic-secret in Unknown"
+    assert finding["metadata"]["file"] == "Unknown"
+    assert finding["metadata"]["line"] == 0
+    assert finding["metadata"]["offender"] == "****"
+
+
+def test_secret_scanner_parser_defaults_rule_when_missing_allows_metadata(
+    plugin_manager,
+):
+    parser = _load_secret_scanner_parser()
+
+    raw = '[{"File":"config.env","StartLine":8,"Offender":"SECRET_VALUE"}]'
+    parsed = parser.parse(raw)
+
+    assert parsed["count"] == 1
+
+    finding = parsed["findings"][0]
+    assert finding["title"] == "Secret Leak: Secret Detected in config.env"
+    assert finding["metadata"]["rule"] == "Secret Detected"
+    assert finding["metadata"]["offender"] == "SECRET_VALUE"
+
+
+def test_secret_scanner_parser_mixed_complete_and_partial_entries(plugin_manager):
+    parser = _load_secret_scanner_parser()
+
+    raw = """
+    [
+      {
+        "RuleID":"github-pat",
+        "File":"src/app.py",
+        "StartLine":10,
+        "Offender":"ghp_test"
+      },
+      {
+        "RuleID":"generic-secret"
+      }
+    ]
+    """
+
+    parsed = parser.parse(raw)
+
+    assert parsed["count"] == 2
+
+    assert parsed["findings"][0]["metadata"]["file"] == "src/app.py"
+
+    assert parsed["findings"][1]["metadata"]["file"] == "Unknown"
+    assert parsed["findings"][1]["metadata"]["line"] == 0
+    assert parsed["findings"][1]["metadata"]["offender"] == "****"
