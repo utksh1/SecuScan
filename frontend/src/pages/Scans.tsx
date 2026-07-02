@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, type Variants } from "framer-motion";
 import { API_BASE, deleteTask, clearAllTasks, bulkDeleteTasks, startTask, ExecutionContext } from "../api";
 import { routePath } from "../routes";
 import {
@@ -38,23 +38,23 @@ const statusFilters = [
   { value: "cancelled", label: "MANUAL_ABORT" },
 ];
 
-const containerVariants = {
+const containerVariants: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
     transition: { staggerChildren: 0.1 },
   },
-} as const;
+};
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { opacity: 0, scale: 0.95, y: 20 },
   visible: {
     opacity: 1,
     scale: 1,
     y: 0,
-    transition: { type: "spring", stiffness: 200, damping: 20 } as any,
+    transition: { type: "spring", stiffness: 200, damping: 20 },
   },
-} as const;
+};
 
 export default function Scans() {
   const navigate = useNavigate();
