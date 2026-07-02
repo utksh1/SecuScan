@@ -1,16 +1,27 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+
+async function mockAuthenticatedSession(page: Page) {
+  await page.route("**/api/v1/auth/session/check", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ authenticated: true }),
+    })
+  );
+
+  await page.route("**/api/v1/notifications/rules", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ rules: [], total: 0 }),
+    })
+  );
+}
 
 test.describe("Settings persistence", () => {
 
   test("theme persists after reload", async ({ page }) => {
-    await page.goto("/");
-
-    await page.evaluate(() => {
-      localStorage.setItem(
-        "secuscan_api_key",
-        "6abeafd82cdb0eebea98dc3817b0bb5f9f8773f60402bccad9eaad7870ae8f58"
-      );
-    });
+    await mockAuthenticatedSession(page);
 
     await page.goto("/settings");
 
@@ -32,11 +43,7 @@ test.describe("Settings persistence", () => {
   });
 
   test("theme reset path is available", async ({ page }) => {
-    await page.goto("/");
-
-    await page.evaluate(() => {
-      localStorage.setItem("secuscan_api_key",  "6abeafd82cdb0eebea98dc3817b0bb5f9f8773f60402bccad9eaad7870ae8f58");
-    });
+    await mockAuthenticatedSession(page);
 
     await page.goto("/settings");
 
