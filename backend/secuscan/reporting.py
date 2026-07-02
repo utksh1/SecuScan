@@ -1256,6 +1256,118 @@ class ReportGenerator:
         }
 
         return json.dumps(sarif_output, indent=2)
+    @classmethod
+    def generate_markdown_report(cls, task: Dict[str, Any], result: Dict[str, Any]) -> str:
+        """Generate a Markdown report."""
+
+        payload = cls._build_report_payload(task, result)
+
+        findings = payload["findings"]
+        severity_counts = payload["severity_counts"]
+        ai_summary = cls._get_ai_summary(findings)
+
+        md = []
+
+        md.append("# SecuScan Security Report\n")
+
+        md.append(f"**Target:** {payload['target']}")
+        md.append(f"**Tool:** {payload['tool_name']}")
+        md.append(f"**Status:** {payload['status'].upper()}")
+        md.append(f"**Generated:** {payload['generated_at']}")
+        md.append("")
+
+        md.append("## Executive Summary\n")
+
+        if ai_summary:
+            md.append("### AI Executive Summary\n")
+            md.append(ai_summary)
+            md.append("")
+
+        for line in payload["summary"]:
+            md.append(f"- {line}")
+
+        md.append("")
+
+        md.append("## Severity Summary\n")
+
+        md.append("| Severity | Count |")
+        md.append("|----------|------:|")
+
+        for severity in cls.SEVERITY_ORDER:
+            md.append(f"| {severity} | {severity_counts.get(severity,0)} |")
+
+        md.append("")
+
+        md.append("## Scan Parameters\n")
+
+        for item in payload["scan_parameters"]:
+            md.append(f"- **{item['label']}**: {item['value']}")
+
+        md.append("")
+
+        md.append("## Technical Findings\n")
+
+        if not findings:
+            md.append("No structured findings were available.\n")
+        else:
+
+            for i, finding in enumerate(findings, start=1):
+
+                md.append(f"### {i}. {finding['title']}\n")
+
+                md.append(f"- **Severity:** {finding['severity']}")
+                md.append(f"- **Category:** {finding['category']}")
+                md.append(f"- **Target:** {finding['target'] or payload['target']}")
+
+                if finding["cvss"] is not None:
+                    md.append(f"- **CVSS:** {finding['cvss']}")
+
+                if finding["cve"]:
+                    md.append(f"- **CVE:** {finding['cve']}")
+
+                if finding["cwe"]:
+                    md.append(f"- **CWE:** {finding['cwe']}")
+
+                if finding["cpe"]:
+                    md.append(f"- **CPE:** {finding['cpe']}")
+
+                md.append(f"- **Validated:** {'Yes' if finding['validated'] else 'No'}")
+
+                if finding["validation_method"]:
+                    md.append(f"- **Validation Method:** {finding['validation_method']}")
+
+                if finding["confidence_reason"]:
+                    md.append(f"- **Confidence Reason:** {finding['confidence_reason']}")
+
+                md.append("")
+
+                md.append("#### Description")
+
+                md.append(finding["description"])
+                md.append("")
+
+                if finding["proof"]:
+                    md.append("#### Evidence")
+                    md.append("```text")
+                    md.append(finding["proof"])
+                    md.append("```")
+                    md.append("")
+
+                if finding["remediation"]:
+                    md.append("#### Recommended Action")
+                    md.append(finding["remediation"])
+                    md.append("")
+
+                if finding["references"]:
+                    md.append("#### References")
+                    for ref in finding["references"]:
+                        md.append(f"- {ref}")
+                    md.append("")
+
+                md.append("---")
+                md.append("")
+
+        return "\n".join(md)
 
 
 reporting = ReportGenerator()
