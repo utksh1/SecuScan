@@ -166,6 +166,72 @@ def test_unknown_task_returns_404_not_403(test_client):
 
 
 # ---------------------------------------------------------------------------
+# Vault secrets must stay owner-scoped across CRUD operations
+# ---------------------------------------------------------------------------
+
+def test_cross_owner_vault_read_returns_404(test_client):
+    """A non-owner should not be able to read another owner's vault secret."""
+    secret_name = "cross-owner-read"
+    create_resp = test_client.put(
+        f"/api/v1/vault/{secret_name}",
+        json={"value": "alice-secret"},
+        headers=ALICE,
+    )
+    assert create_resp.status_code == 200
+
+    read_resp = test_client.get(f"/api/v1/vault/{secret_name}", headers=BOB)
+
+    assert read_resp.status_code == 404
+    assert read_resp.json()["detail"] == "Secret not found"
+
+
+def test_cross_owner_vault_update_does_not_overwrite_owner_secret(test_client):
+    """A non-owner update should create a separate secret for the caller, not overwrite the owner."""
+    secret_name = "cross-owner-update"
+    create_resp = test_client.put(
+        f"/api/v1/vault/{secret_name}",
+        json={"value": "alice-secret"},
+        headers=ALICE,
+    )
+    assert create_resp.status_code == 200
+
+    update_resp = test_client.put(
+        f"/api/v1/vault/{secret_name}",
+        json={"value": "bob-secret"},
+        headers=BOB,
+    )
+    assert update_resp.status_code == 200
+
+    alice_read = test_client.get(f"/api/v1/vault/{secret_name}", headers=ALICE)
+    bob_read = test_client.get(f"/api/v1/vault/{secret_name}", headers=BOB)
+
+    assert alice_read.status_code == 200
+    assert alice_read.json()["value"] == "alice-secret"
+    assert bob_read.status_code == 200
+    assert bob_read.json()["value"] == "bob-secret"
+
+
+def test_cross_owner_vault_delete_returns_404_and_preserves_owner_secret(test_client):
+    """A non-owner delete should not remove the owner's secret and should behave as not found."""
+    secret_name = "cross-owner-delete"
+    create_resp = test_client.put(
+        f"/api/v1/vault/{secret_name}",
+        json={"value": "alice-secret"},
+        headers=ALICE,
+    )
+    assert create_resp.status_code == 200
+
+    delete_resp = test_client.delete(f"/api/v1/vault/{secret_name}", headers=BOB)
+
+    assert delete_resp.status_code == 404
+    assert delete_resp.json()["detail"] == "Secret not found"
+
+    alice_read = test_client.get(f"/api/v1/vault/{secret_name}", headers=ALICE)
+    assert alice_read.status_code == 200
+    assert alice_read.json()["value"] == "alice-secret"
+
+
+# ---------------------------------------------------------------------------
 # Listing endpoints must not leak another user's resources
 # ---------------------------------------------------------------------------
 

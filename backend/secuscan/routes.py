@@ -1569,13 +1569,17 @@ async def delete_vault_secret(
 ):
     db = await get_db()
 
-    await db.execute(
+
+    cursor = await db.execute(
         """
         DELETE FROM credential_vault
         WHERE owner_id = ? AND name = ?
         """,
         (owner, name),
     )
+
+    if cursor.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Secret not found")
 
     return {
         "name": name,
