@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 # Import the parser module directly from the file without requiring __init__.py
-_parser_path = Path(__file__).resolve().parents[3] / "plugins" / "port-scanner" / "parser.py"
+_parser_path = Path(__file__).resolve().parents[3] / "plugins" / "port_scanner" / "parser.py"
 _spec = importlib.util.spec_from_file_location("plugins.port_scanner.parser", str(_parser_path))
 _parser_module = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_parser_module)

@@ -289,6 +289,7 @@ ON credential_vault(owner_id);
                 name TEXT NOT NULL,
                 owner_id TEXT NOT NULL DEFAULT 'default',
                 schedule_seconds INTEGER,
+                schedule_timezone TEXT,
                 enabled BOOLEAN NOT NULL DEFAULT 1,
                 steps_json TEXT NOT NULL DEFAULT '[]',
                 created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
@@ -583,6 +584,7 @@ ON credential_vault(owner_id);
                 await self.execute(
                     "ALTER TABLE workflows ADD COLUMN owner_id TEXT NOT NULL DEFAULT 'default'"
                 )
+                existing_wf_cols.add("owner_id")
                 print("Added missing column 'owner_id' to workflows table.")
             except Exception as e:
                 print(f"Failed to add 'owner_id' to workflows: {e}")
@@ -632,6 +634,16 @@ ON credential_vault(owner_id);
                 finally:
                     if old_fk:
                         await self.execute("PRAGMA foreign_keys = ON")
+
+        # Workflows table migration: ensure schedule_timezone exists
+        if "schedule_timezone" not in existing_wf_cols:
+            try:
+                await self.execute(
+                    "ALTER TABLE workflows ADD COLUMN schedule_timezone TEXT"
+                )
+                print("Added missing column 'schedule_timezone' to workflows table.")
+            except Exception as e:
+                print(f"Failed to add 'schedule_timezone' to workflows: {e}")
 
         # Notification rules table migration: ensure owner_id exists
         notif_columns = await self.fetchall("PRAGMA table_info(notification_rules)")
@@ -845,6 +857,7 @@ ON credential_vault(owner_id);
         enabled: bool,
         steps: List[Dict],
         created_by: str = "system",
+        schedule_timezone: Optional[str] = None,
     ) -> Dict:
         """Snapshot the current workflow definition as a new version row.
 
@@ -861,6 +874,7 @@ ON credential_vault(owner_id);
         definition = {
             "name": name,
             "schedule_seconds": schedule_seconds,
+            "schedule_timezone": schedule_timezone,
             "enabled": enabled,
             "steps": steps,
         }
