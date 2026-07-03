@@ -38,6 +38,7 @@ from backend.secuscan.models import (
     HealthResponse,
     SafetyLevel,
     PluginListResponse,
+    NotificationRuleResponse,
 )
 
 
@@ -431,7 +432,6 @@ def test_safety_level_invalid_raises():
         SafetyLevel("unknown")
 
 # ---------------------------------------------------------------------------
-# PluginListResponse model
 # ---------------------------------------------------------------------------
 
 
@@ -482,3 +482,96 @@ class TestPluginListResponse:
         """total accepts any non-negative integer."""
         resp = PluginListResponse(plugins=[], total=999)
         assert resp.total == 999
+# NotificationRuleResponse model
+# ---------------------------------------------------------------------------
+
+
+class TestNotificationRuleResponse:
+    def test_required_fields(self):
+        """All required fields must be provided."""
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        resp = NotificationRuleResponse(
+            id="rule-1",
+            name="My Hook",
+            severity_threshold="high",
+            channel_type="webhook",
+            target_url_or_email="https://example.com/hook",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+        assert resp.id == "rule-1"
+        assert resp.name == "My Hook"
+        assert resp.severity_threshold == "high"
+        assert resp.channel_type == "webhook"
+        assert resp.is_active is True
+
+    def test_is_active_false(self):
+        """is_active can be set to False."""
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        resp = NotificationRuleResponse(
+            id="rule-1",
+            name="Inactive Rule",
+            severity_threshold="medium",
+            channel_type="email",
+            target_url_or_email="test@example.com",
+            is_active=False,
+            created_at=now,
+            updated_at=now,
+        )
+        assert resp.is_active is False
+
+    def test_severity_threshold_accepts_notification_severity_value(self):
+        """severity_threshold accepts NotificationSeverityThreshold values."""
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        from backend.secuscan.models import NotificationSeverityThreshold
+        resp = NotificationRuleResponse(
+            id="rule-1",
+            name="Hook",
+            severity_threshold=NotificationSeverityThreshold.CRITICAL.value,
+            channel_type="webhook",
+            target_url_or_email="https://example.com/hook",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+        assert resp.severity_threshold == "critical"
+
+    def test_channel_type_accepts_notification_channel_value(self):
+        """channel_type accepts NotificationChannelType values."""
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        from backend.secuscan.models import NotificationChannelType
+        resp = NotificationRuleResponse(
+            id="rule-1",
+            name="Email Alert",
+            severity_threshold="high",
+            channel_type=NotificationChannelType.EMAIL.value,
+            target_url_or_email="test@example.com",
+            is_active=True,
+            created_at=now,
+            updated_at=now,
+        )
+        assert resp.channel_type == "email"
+
+    def test_created_at_and_updated_at_are_required(self):
+        """created_at and updated_at are required datetime fields."""
+        from datetime import datetime, timezone
+        import pytest
+        from pydantic import ValidationError
+        now = datetime.now(timezone.utc)
+        # Both must be present
+        with pytest.raises(ValidationError):
+            NotificationRuleResponse(
+                id="rule-1",
+                name="Rule",
+                severity_threshold="high",
+                channel_type="webhook",
+                target_url_or_email="https://example.com",
+                is_active=True,
+                created_at=now,
+                # missing updated_at
+            )
