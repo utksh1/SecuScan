@@ -38,6 +38,8 @@ from backend.secuscan.models import (
     HealthResponse,
     SafetyLevel,
     PluginListResponse,
+    NotificationDeliveryStatus,
+    NotificationHistoryResponse,
 )
 
 
@@ -482,3 +484,166 @@ class TestPluginListResponse:
         """total accepts any non-negative integer."""
         resp = PluginListResponse(plugins=[], total=999)
         assert resp.total == 999
+# NotificationDeliveryStatus enum
+# ---------------------------------------------------------------------------
+
+
+def test_notification_delivery_status_all_values():
+    """Both NotificationDeliveryStatus values are accepted."""
+    assert NotificationDeliveryStatus.SUCCESS.value == "success"
+    assert NotificationDeliveryStatus.FAILED.value == "failed"
+
+
+def test_notification_delivery_status_from_string():
+    """NotificationDeliveryStatus can be constructed from a string value."""
+    assert NotificationDeliveryStatus("success") == NotificationDeliveryStatus.SUCCESS
+    assert NotificationDeliveryStatus("failed") == NotificationDeliveryStatus.FAILED
+
+
+def test_notification_delivery_status_invalid_raises():
+    """An invalid NotificationDeliveryStatus value raises ValueError."""
+    import pytest
+    with pytest.raises(ValueError):
+        NotificationDeliveryStatus("pending")
+
+
+# ---------------------------------------------------------------------------
+# NotificationHistoryResponse model
+# ---------------------------------------------------------------------------
+
+
+class TestNotificationHistoryResponse:
+    def test_required_fields(self):
+        """All required fields must be provided."""
+        from datetime import datetime, timezone
+        resp = NotificationHistoryResponse(
+            id="h1",
+            rule_id="r1",
+            finding_id="f1",
+            status="success",
+            sent_at=datetime.now(timezone.utc),
+        )
+        assert resp.id == "h1"
+        assert resp.rule_id == "r1"
+        assert resp.finding_id == "f1"
+        assert resp.status == "success"
+
+    def test_error_message_optional(self):
+        """error_message is optional and defaults to None."""
+        from datetime import datetime, timezone
+        resp = NotificationHistoryResponse(
+            id="h1",
+            rule_id="r1",
+            finding_id="f1",
+            status="failed",
+            sent_at=datetime.now(timezone.utc),
+        )
+        assert resp.error_message is None
+
+    def test_error_message_set(self):
+        """error_message can be set to a string value."""
+        from datetime import datetime, timezone
+        resp = NotificationHistoryResponse(
+            id="h1",
+            rule_id="r1",
+            finding_id="f1",
+            status="failed",
+            error_message="connection refused",
+            sent_at=datetime.now(timezone.utc),
+        )
+        assert resp.error_message == "connection refused"
+
+    def test_status_accepts_delivery_status_value(self):
+        """status field accepts NotificationDeliveryStatus values."""
+        from datetime import datetime, timezone
+        resp = NotificationHistoryResponse(
+            id="h1",
+            rule_id="r1",
+            finding_id="f1",
+            status=NotificationDeliveryStatus.SUCCESS,
+            sent_at=datetime.now(timezone.utc),
+        )
+        assert resp.status == "success"
+
+# ---------------------------------------------------------------------------
+# NotificationDeliveryStatus enum
+# ---------------------------------------------------------------------------
+
+
+def test_notification_delivery_status_all_values():
+    """Both NotificationDeliveryStatus values are accepted."""
+    assert NotificationDeliveryStatus.SUCCESS.value == "success"
+    assert NotificationDeliveryStatus.FAILED.value == "failed"
+
+
+def test_notification_delivery_status_from_string():
+    """NotificationDeliveryStatus can be constructed from a string value."""
+    assert NotificationDeliveryStatus("success") == NotificationDeliveryStatus.SUCCESS
+    assert NotificationDeliveryStatus("failed") == NotificationDeliveryStatus.FAILED
+
+
+def test_notification_delivery_status_invalid_raises():
+    """An invalid NotificationDeliveryStatus value raises ValueError."""
+    import pytest
+    with pytest.raises(ValueError):
+        NotificationDeliveryStatus("pending")
+
+
+# ---------------------------------------------------------------------------
+# NotificationHistoryResponse model
+# ---------------------------------------------------------------------------
+
+
+class TestNotificationHistoryResponse:
+    def test_required_fields(self):
+        """All required fields must be provided."""
+        from datetime import datetime, timezone
+        resp = NotificationHistoryResponse(
+            id="h1",
+            rule_id="r1",
+            finding_id="f1",
+            status="success",
+            sent_at=datetime.now(timezone.utc),
+        )
+        assert resp.id == "h1"
+        assert resp.rule_id == "r1"
+        assert resp.finding_id == "f1"
+        assert resp.status == "success"
+
+    def test_error_message_optional(self):
+        """error_message is optional and defaults to None."""
+        from datetime import datetime, timezone
+        resp = NotificationHistoryResponse(
+            id="h1",
+            rule_id="r1",
+            finding_id="f1",
+            status="failed",
+            sent_at=datetime.now(timezone.utc),
+        )
+        assert resp.error_message is None
+
+    def test_error_message_set(self):
+        """error_message can be set to a string value."""
+        from datetime import datetime, timezone
+        resp = NotificationHistoryResponse(
+            id="h1",
+            rule_id="r1",
+            finding_id="f1",
+            status="failed",
+            error_message="connection refused",
+            sent_at=datetime.now(timezone.utc),
+        )
+        assert resp.error_message == "connection refused"
+
+    def test_status_accepts_delivery_status_value(self):
+        """status field accepts NotificationDeliveryStatus values."""
+        from datetime import datetime, timezone
+        resp = NotificationHistoryResponse(
+            id="h1",
+            rule_id="r1",
+            finding_id="f1",
+            status=NotificationDeliveryStatus.SUCCESS,
+            sent_at=datetime.now(timezone.utc),
+        )
+        assert resp.status == "success"
+caa3e6aa (test: add unit tests for NotificationDeliveryStatus and NotificationHistoryResponse)
