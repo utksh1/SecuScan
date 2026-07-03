@@ -313,10 +313,12 @@ export default function Settings() {
             title: "NUCLEAR PURGE",
             message: "CRITICAL: THIS WILL PURGE ALL HISTORY AND ASSETS. PROCEED?",
             type: "danger",
-            onConfirm: () => {
+            onConfirm: async () => {
                 Object.keys(localStorage)
                     .filter(key => key.startsWith('secuscan') || key === 'sidebar-expanded')
                     .forEach(key => localStorage.removeItem(key))
+                clearStoredApiKey()
+                await logoutSession()
                 window.location.reload()
                 setModalState(prev => ({ ...prev, isOpen: false }))
             }

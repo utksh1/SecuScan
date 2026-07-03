@@ -218,6 +218,11 @@ class TaskExecutor:
         except asyncio.QueueFull:
             logger.warning("Dropping stream event for slow listener on task %s", task_id)
 
+    def _cleanup_listeners(self, task_id: str):
+        """Remove all listener queues for a completed task to prevent memory leaks."""
+        if task_id in self._listeners:
+            self._listeners.pop(task_id, None)
+
     async def _broadcast_phase(self, task_id: str, phase: str):
         """Broadcast a scan phase transition and persist it to the database."""
         await self._broadcast(task_id, "phase", phase)
@@ -838,6 +843,7 @@ class TaskExecutor:
             self.running_tasks.pop(task_id, None)
             self._process_pids.pop(task_id, None)
             await concurrent_limiter.release(task_id)
+            self._cleanup_listeners(task_id)
 
     async def _execute_command(
         self,

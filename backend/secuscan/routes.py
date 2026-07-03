@@ -20,8 +20,12 @@ from .routes_json_helpers import (
     _serialize_workflow,
     deserialize_asset_service_rows,
     deserialize_finding_rows,
+    iter_raw_output_chunks,
     parse_json_fields,
 )
+
+# Re-exported for backward compatibility with integration tests
+SSE_RAW_OUTPUT_CHUNK_SIZE = 64 * 1024
 from .routes_report_helpers import (
     _slugify_filename_part,
     build_report_filename,
@@ -108,7 +112,6 @@ from .platform_resources import (
 from sse_starlette.sse import EventSourceResponse
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
-SSE_RAW_OUTPUT_CHUNK_SIZE = 64 * 1024
 
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -194,16 +197,6 @@ async def require_owned_task(db, task_id: str, owner: str, columns: str = "owner
     if row.get("owner_id") != owner:
         raise HTTPException(status_code=403, detail="You do not have access to this task")
     return row
-
-
-def iter_raw_output_chunks(path: str, chunk_size: int = SSE_RAW_OUTPUT_CHUNK_SIZE):
-    """Yield raw output in bounded chunks for completed-task SSE replay."""
-    with open(path, "r", encoding="utf-8", errors="replace") as output_file:
-        while True:
-            chunk = output_file.read(chunk_size)
-            if not chunk:
-                break
-            yield chunk
 
 
 def _report_generation_error_response(task_id: str, report_format: str) -> JSONResponse:
@@ -574,12 +567,40 @@ async def stream_task_output(task_id: str, owner: str = Depends(get_current_owne
                 logger.warning("Failed to replay raw output for task %s: %s", task_id, exc)
             return
 
-        # Otherwise, subscribe to the live task events
+        # Subscribe to live events
         queue = executor.subscribe(task_id)
         try:
+            # Re-check status after subscribe to close the TOCTOU window:
+            # the task may have completed between the initial check and this
+            # subscription, so we'd never receive a terminal event.
+            current_status = await executor.get_task_status(task_id)
+            if current_status and current_status["status"] in ["completed", "failed", "cancelled"]:
+                try:
+                    db = await get_db()
+                    task_row = await db.fetchone("SELECT raw_output_path FROM tasks WHERE id = ?", (task_id,))
+                    if task_row and task_row["raw_output_path"]:
+                        for chunk in iter_raw_output_chunks(task_row["raw_output_path"]):
+                            yield {
+                                "event": "output",
+                                "data": json.dumps({"chunk": chunk})
+                            }
+                except Exception as exc:
+                    logger.warning("Failed to replay raw output for task %s: %s", task_id, exc)
+                yield {
+                    "event": "status",
+                    "data": json.dumps({"status": current_status["status"]})
+                }
+                return
+
             while True:
-                # Wait for the next event from the executor
-                event = await queue.get()
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=30.0)
+                except asyncio.TimeoutError:
+                    # No event in 30s — check if task is still running
+                    ts = await executor.get_task_status(task_id)
+                    if ts and ts["status"] not in ["completed", "failed", "cancelled"]:
+                        continue
+                    break
 
                 if event["type"] == "status":
                     yield {
@@ -1959,6 +1980,13 @@ async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_o
             consent_granted=True,
             owner_id=owner,
         )
+
+        can_acquire, concurrency_err = await concurrent_limiter.acquire(task_id)
+        if not can_acquire:
+            await executor.mark_task_failed(task_id, reason="Concurrency limit reached; task was not started")
+            logger.warning("Workflow %s: concurrency limit reached for step %s", workflow_id, step.get("plugin_id"))
+            continue
+
         asyncio.create_task(executor.execute_task(task_id))
         created_task_ids.append(task_id)
     await db.execute("UPDATE workflows SET last_run_at = datetime('now') WHERE id = ?", (workflow_id,))
@@ -2281,6 +2309,7 @@ async def list_notification_history(
     rule_id: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
+    owner: str = Depends(get_current_owner),
 ):
     if limit < 1 or limit > 200:
         raise HTTPException(status_code=400, detail="Limit must be between 1 and 200")
@@ -2288,21 +2317,29 @@ async def list_notification_history(
         raise HTTPException(status_code=400, detail="Offset must be non-negative")
 
     db = await get_db()
-    query = "SELECT * FROM notification_history"
-    params: List[Any] = []
+    query = (
+        "SELECT nh.* FROM notification_history nh "
+        "JOIN notification_rules nr ON nh.rule_id = nr.id "
+        "WHERE nr.owner_id = ?"
+    )
+    params: List[Any] = [owner]
     if rule_id:
-        query += " WHERE rule_id = ?"
+        query += " AND nh.rule_id = ?"
         params.append(rule_id)
-    query += " ORDER BY sent_at DESC LIMIT ? OFFSET ?"
+    query += " ORDER BY nh.sent_at DESC LIMIT ? OFFSET ?"
     params.extend([limit, offset])
 
     rows = await db.fetchall(query, tuple(params))
     history = [_serialize_notification_history(row) for row in rows]
 
-    count_query = "SELECT COUNT(*) AS total FROM notification_history"
-    count_params: List[Any] = []
+    count_query = (
+        "SELECT COUNT(*) AS total FROM notification_history nh "
+        "JOIN notification_rules nr ON nh.rule_id = nr.id "
+        "WHERE nr.owner_id = ?"
+    )
+    count_params: List[Any] = [owner]
     if rule_id:
-        count_query += " WHERE rule_id = ?"
+        count_query += " AND nh.rule_id = ?"
         count_params.append(rule_id)
     count_row = await db.fetchone(count_query, tuple(count_params))
     total = int(count_row["total"]) if count_row else 0
