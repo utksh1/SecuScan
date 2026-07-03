@@ -315,6 +315,80 @@ def test_validate_command_network_egress_log_only(monkeypatch):
     assert "network policy" in err.lower()
 
 
+def test_validate_command_network_egress_ignores_malformed_urls():
+    """Malformed URLs without a valid hostname should be ignored."""
+
+    from backend.secuscan.validation import validate_command_network_egress
+
+    malformed_commands = [
+        ["curl", "http://"],
+        ["curl", "http:///abc"],
+        ["curl", "https://"],
+    ]
+
+    for command in malformed_commands:
+        ok, err = validate_command_network_egress(
+            command,
+            safe_mode=False,
+            plugin_id="test",
+            task_id="test-task",
+        )
+
+        assert ok is True
+        assert err == ""
+
+
+def test_validate_command_network_egress_resolver_failure(monkeypatch):
+    from backend.secuscan.validation import validate_command_network_egress
+
+    def fake_validate_target(*_args, **_kwargs):
+        raise socket.gaierror("DNS resolution failed")
+
+    monkeypatch.setattr(validation_module, "validate_target", fake_validate_target)
+
+    with pytest.raises(socket.gaierror):
+        validate_command_network_egress(
+            ["curl", "https://example.com"],
+            safe_mode=False,
+            plugin_id="test",
+            task_id="test-task",
+        )
+
+
+def test_validate_command_network_egress_network_policy_exception(monkeypatch):
+    from backend.secuscan.validation import validate_command_network_egress
+    from backend.secuscan.config import settings
+
+    class FakePolicyEngine:
+        def check_access(self, **_kwargs):
+            raise RuntimeError("policy engine failure")
+
+    monkeypatch.setattr(
+        "backend.secuscan.network_policy.get_policy_engine",
+        lambda: FakePolicyEngine(),
+    )
+
+    monkeypatch.setattr(
+        validation_module,
+        "validate_target",
+        lambda *_args, **_kwargs: (True, ""),
+    )
+
+    old_enforce = settings.enforce_network_policy
+    settings.enforce_network_policy = True
+
+    try:
+        with pytest.raises(RuntimeError, match="policy engine failure"):
+            validate_command_network_egress(
+                ["curl", "https://example.com"],
+                safe_mode=False,
+                plugin_id="test",
+                task_id="test-task",
+            )
+    finally:
+        settings.enforce_network_policy = old_enforce
+
+
 def test_resolve_and_validate_target_rejects_raw_ip():
     from backend.secuscan.validation import resolve_and_validate_target
     ok, err = resolve_and_validate_target("http://10.0.0.1/webhook")
@@ -340,17 +414,24 @@ def test_resolve_and_validate_target_rejects_blocked_port(monkeypatch):
 
 def test_resolve_and_validate_target_rejects_private_ip(monkeypatch):
     from backend.secuscan.validation import resolve_and_validate_target
-    from backend.secuscan.config import settings
-    monkeypatch.setattr(settings, "notification_blocked_ip_ranges", ["10.0.0.0/8"])
+
+    monkeypatch.setattr(
+        settings,
+        "notification_blocked_ip_ranges",
+        ["10.0.0.0/8"],
+    )
 
     def fake_getaddrinfo(*args, **kwargs):
         return [(socket.AF_INET, None, None, None, ("10.0.0.5", 80))]
 
-    import socket
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
-    ok, err = resolve_and_validate_target("http://internal.example.com/hook")
+
+    ok, err = resolve_and_validate_target(
+        "http://internal.example.com/hook"
+    )
+
     assert ok is False
-    assert "blocked" in err
+    assert "blocked" in err.lower()
 
 
 def test_resolve_and_validate_target_allows_public_ip(monkeypatch):
@@ -359,9 +440,12 @@ def test_resolve_and_validate_target_allows_public_ip(monkeypatch):
     def fake_getaddrinfo(*args, **kwargs):
         return [(socket.AF_INET, None, None, None, ("93.184.216.34", 80))]
 
-    import socket
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
-    ok, err = resolve_and_validate_target("http://example.com/hook")
+
+    ok, err = resolve_and_validate_target(
+        "http://example.com/hook"
+    )
+
     assert ok is True
     assert err == ""
 
@@ -418,3 +502,57 @@ class TestValidateWebhookTarget:
         ok, err = validate_webhook_target("http://nonexistent.example.com/hook")
         assert ok is False
         assert "could not be resolved" in err.lower()
+
+
+# ---------------------------------------------------------------------------
+# _parse_url_hostname tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_url_hostname_https_url():
+    """Extracts hostname from a standard https URL."""
+    from backend.secuscan.validation import _parse_url_hostname
+    assert _parse_url_hostname("https://example.com") == "example.com"
+
+
+def test_parse_url_hostname_http_url():
+    """Extracts hostname from a standard http URL."""
+    from backend.secuscan.validation import _parse_url_hostname
+    assert _parse_url_hostname("http://example.com") == "example.com"
+
+
+def test_parse_url_hostname_with_port():
+    """Strips port from hostname when present."""
+    from backend.secuscan.validation import _parse_url_hostname
+    assert _parse_url_hostname("https://example.com:8080") == "example.com"
+
+
+def test_parse_url_hostname_with_path():
+    """Strips path from hostname."""
+    from backend.secuscan.validation import _parse_url_hostname
+    assert _parse_url_hostname("https://example.com/api/v1") == "example.com"
+
+
+def test_parse_url_hostname_localhost():
+    """Handles localhost URLs."""
+    from backend.secuscan.validation import _parse_url_hostname
+    assert _parse_url_hostname("http://localhost:8000") == "localhost"
+
+
+def test_parse_url_hostname_ipv4():
+    """Handles IPv4 addresses."""
+    from backend.secuscan.validation import _parse_url_hostname
+    result = _parse_url_hostname("http://127.0.0.1:8000")
+    assert result is not None
+
+
+def test_parse_url_hostname_empty_string():
+    """Returns None for empty string."""
+    from backend.secuscan.validation import _parse_url_hostname
+    assert _parse_url_hostname("") is None
+
+
+def test_parse_url_hostname_none():
+    """Returns None for None input."""
+    from backend.secuscan.validation import _parse_url_hostname
+    assert _parse_url_hostname(None) is None

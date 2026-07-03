@@ -207,6 +207,14 @@ class DeliveryResult:
     error_message: Optional[str] = None
 
 
+class NotificationRuleConflictError(Exception):
+    """Raised when a notification rule update loses an optimistic lock race."""
+
+    def __init__(self, current_rule: Dict[str, Any]) -> None:
+        super().__init__("Notification rule was updated by another request")
+        self.current_rule = current_rule
+
+
 def severity_meets_threshold(finding_severity: str, rule_threshold: str) -> bool:
     """Return True when finding severity is at or above the rule threshold."""
     finding_rank = _SEVERITY_RANK.get(str(finding_severity).lower())
@@ -652,6 +660,44 @@ async def process_task_notifications(
     for row in findings:
         results.extend(await process_finding_notifications(db, str(row["id"])))
     return results
+
+
+async def update_notification_rule(
+    db: Database,
+    *,
+    current_rule: Dict[str, Any],
+    updates: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Apply an optimistic-lock update to a notification rule row."""
+    assignments = [f"{column} = ?" for column in updates]
+    params = list(updates.values())
+    assignments.append("updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now')")
+    params.extend((current_rule["id"], current_rule["updated_at"]))
+
+    cursor = await db.execute(
+        f"""
+        UPDATE notification_rules
+        SET {', '.join(assignments)}
+        WHERE id = ? AND updated_at = ?
+        """,
+        tuple(params),
+    )
+    if cursor.rowcount == 0:
+        latest = await db.fetchone(
+            "SELECT * FROM notification_rules WHERE id = ?",
+            (current_rule["id"],),
+        )
+        if latest is None:
+            raise KeyError(current_rule["id"])
+        raise NotificationRuleConflictError(latest)
+
+    updated = await db.fetchone(
+        "SELECT * FROM notification_rules WHERE id = ?",
+        (current_rule["id"],),
+    )
+    if updated is None:
+        raise KeyError(current_rule["id"])
+    return updated
 
 
 async def process_slack_notification(db: Database, task_id: str) -> None:

@@ -364,3 +364,117 @@ class TestBackfillRiskScores:
 
         row = await db.fetchone("SELECT risk_score FROM findings WHERE id = ?", (finding_id,))
         assert row["risk_score"] == 5.0
+
+
+class TestContextAwareSeverity:
+    """Tests for context-aware severity calculation (issue #707)."""
+
+    def test_public_system_increases_severity(self):
+        """Public-facing systems should have higher severity multiplier."""
+        # Private system
+        score_private = compute_risk_score(
+            "high", exposure_context="private"
+        )
+        # Public system
+        score_public = compute_risk_score(
+            "high", exposure_context="public"
+        )
+        assert score_public > score_private, "Public system should have higher score"
+
+    def test_internal_system_reduces_severity(self):
+        """Internal systems should have lower severity multiplier."""
+        # Public system
+        score_public = compute_risk_score(
+            "high", exposure_context="public"
+        )
+        # Internal system
+        score_internal = compute_risk_score(
+            "high", exposure_context="internal"
+        )
+        assert score_internal < score_public, "Internal system should have lower score"
+
+    def test_business_criticality_multiplier(self):
+        """Critical business functions should increase severity."""
+        # Low criticality
+        score_low = compute_risk_score(
+            "high", business_criticality="low"
+        )
+        # Critical business function
+        score_critical = compute_risk_score(
+            "high", business_criticality="critical"
+        )
+        assert score_critical > score_low, "Critical function should have higher score"
+
+    def test_combined_context_factors(self):
+        """System exposure + business criticality should multiply together."""
+        # Public + critical
+        score_public_critical = compute_risk_score(
+            "high",
+            exposure_context="public",
+            business_criticality="critical"
+        )
+        # Private + low
+        score_private_low = compute_risk_score(
+            "high",
+            exposure_context="private",
+            business_criticality="low"
+        )
+        assert score_public_critical > score_private_low, "Public+critical should have highest score"
+
+    def test_severity_override_bypasses_context(self):
+        """Custom severity override should bypass context calculation."""
+        score_with_context = compute_risk_score(
+            "low",
+            exposure_context="public",
+            business_criticality="critical"
+        )
+        score_with_override = compute_risk_score(
+            "low",
+            exposure_context="public",
+            business_criticality="critical",
+            severity_override=8.0
+        )
+        assert score_with_override > score_with_context, "Override should set fixed severity"
+        # The override bypasses context multipliers. With 8.0 severity (30% weight),
+        # the contribution is 8.0 × 0.30 = 2.4. With other defaults, total ~5.9.
+        assert score_with_override > 5.0, "Override of 8.0 should produce elevated score"
+
+    def test_risk_factors_include_context(self):
+        """Risk factors should include exposure context and criticality info."""
+        factors = compute_risk_factors(
+            "high",
+            exposure_context="public",
+            business_criticality="critical"
+        )
+        severity_factor = next(f for f in factors if f["factor"] == "severity")
+        assert "exposure_context" in severity_factor, "Should include exposure context"
+        assert "business_criticality" in severity_factor, "Should include business criticality"
+        assert "context_multiplier" in severity_factor, "Should include context multiplier"
+        assert severity_factor["exposure_context"] == "public"
+        assert severity_factor["business_criticality"] == "critical"
+
+    def test_all_exposure_contexts_valid(self):
+        """All exposure context types should produce valid scores."""
+        contexts = ["public", "internet_facing", "internal", "private"]
+        for context in contexts:
+            score = compute_risk_score("high", exposure_context=context)
+            assert 0.0 <= score <= 10.0, f"Score {score} invalid for context {context}"
+
+    def test_all_criticality_levels_valid(self):
+        """All business criticality levels should produce valid scores."""
+        criticalities = ["critical", "high", "medium", "low"]
+        for criticality in criticalities:
+            score = compute_risk_score("high", business_criticality=criticality)
+            assert 0.0 <= score <= 10.0, f"Score {score} invalid for criticality {criticality}"
+
+    def test_context_details_in_explanation(self):
+        """Factor detail should mention context adjustments."""
+        factors = compute_risk_factors(
+            "medium",
+            exposure_context="public",
+            business_criticality="high"
+        )
+        severity_factor = next(f for f in factors if f["factor"] == "severity")
+        detail = severity_factor["detail"]
+        assert "exposure" in detail.lower() or "adjusted" in detail.lower(), \
+            "Detail should explain context adjustment"

@@ -17,10 +17,12 @@ from backend.secuscan.models import (
     NotificationSeverityThreshold,
 )
 from backend.secuscan.notification_service import (
+    NotificationRuleConflictError,
     build_alert_payload,
     deliver_via_rule,
     process_finding_notifications,
     severity_meets_threshold,
+    update_notification_rule,
     was_already_delivered,
 )
 from backend.secuscan.redaction import REDACTED
@@ -229,6 +231,35 @@ async def test_email_placeholder_records_success(test_db):
     assert len(results) == 1
     assert results[0].status == NotificationDeliveryStatus.SUCCESS
     assert results[0].skipped is False
+
+
+@pytest.mark.asyncio
+async def test_update_notification_rule_detects_stale_snapshot(test_db):
+    rule_id = await _seed_rule(test_db)
+    current_rule = await test_db.fetchone(
+        "SELECT * FROM notification_rules WHERE id = ?",
+        (rule_id,),
+    )
+    assert current_rule is not None
+
+    await test_db.execute(
+        """
+        UPDATE notification_rules
+        SET name = ?, updated_at = datetime('now', '+1 second')
+        WHERE id = ?
+        """,
+        ("Updated elsewhere", rule_id),
+    )
+
+    with pytest.raises(NotificationRuleConflictError) as exc_info:
+        await update_notification_rule(
+            test_db,
+            current_rule=current_rule,
+            updates={"name": "My stale update"},
+        )
+
+    assert exc_info.value.current_rule["id"] == rule_id
+    assert exc_info.value.current_rule["name"] == "Updated elsewhere"
 
 
 def _mock_async_client(mock_post):

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, type Variants } from 'framer-motion'
 import { listPlugins, PluginListItem } from '../api'
 import { scanTools } from '../data/scanTools'
 import { routePath } from '../routes'
@@ -40,7 +40,7 @@ const LEGACY_TAB_LABELS: Record<string, string> = {
   robots: 'Robots',
 }
 
-const containerVariants = {
+const containerVariants: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -48,13 +48,13 @@ const containerVariants = {
   },
 }
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { opacity: 0, scale: 0.95, y: 20 },
   visible: {
     opacity: 1,
     scale: 1,
     y: 0,
-    transition: { type: 'spring', stiffness: 200, damping: 20 } as any,
+    transition: { type: 'spring', stiffness: 200, damping: 20 },
   },
 }
 
@@ -96,7 +96,7 @@ function getToolAccessibilityLabel(tool: CatalogTool): string {
 
 function mapPluginCategoryToLegacyTab(category: string, pluginId?: string): UITab {
   const pinnedTool = scanTools.find(t => t.id === pluginId);
-  
+
   if (pinnedTool) {
     return pinnedTool.category as UITab;
   }
@@ -124,7 +124,7 @@ function mapPluginCategoryToLegacyTab(category: string, pluginId?: string): UITa
 function mapPluginToCatalogTool(plugin: PluginListItem): CatalogTool {
   const normalizedCategory = normalizeCategoryId(plugin.category)
   const pinnedTool = scanTools.find(t => t.id === plugin.id);
-  
+
   return {
     id: plugin.id,
     name: pinnedTool ? pinnedTool.name : plugin.name,

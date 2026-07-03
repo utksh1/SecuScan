@@ -581,6 +581,19 @@ export default function Findings() {
       setCopiedFindingId(null)
     }
   }
+  async function copyFindingId(findingId: string) {
+    try {
+      await navigator.clipboard.writeText(findingId)
+      setCopiedFindingId(findingId)
+      window.setTimeout(() => {
+        setCopiedFindingId((current) =>
+          current === findingId ? null : current
+        )
+      }, 1600)
+    } catch {
+      setCopiedFindingId(null)
+    }
+  }
 
   async function loadMore() {
     if (loadingMore) return
@@ -597,7 +610,6 @@ export default function Findings() {
       setLoadingMore(false)
     }
   }
-
   // ─── Keyboard navigation ────────────────────────────────────────────────────
 
   function handleListKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
@@ -797,9 +809,9 @@ export default function Findings() {
               </div>
             </div>
 
-            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-8">
-                <div className="space-y-2">
+            <div className="flex flex-col gap-6">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                <div className="space-y-2 min-w-0">
                   <label className={filterLabelClass}>Target</label>
                   <select
                     value={filterTarget}
@@ -813,7 +825,7 @@ export default function Findings() {
                   </select>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 min-w-0">
                   <label className={filterLabelClass}>Scanner / Tool</label>
                   <select
                     value={filterScanner}
@@ -827,7 +839,7 @@ export default function Findings() {
                   </select>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 min-w-0">
                   <label className={filterLabelClass}>Asset</label>
                   <select
                     value={filterAsset}
@@ -841,7 +853,7 @@ export default function Findings() {
                   </select>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 min-w-0">
                   <label className={filterLabelClass}>Finding Kind</label>
                   <select
                     value={filterKind}
@@ -855,7 +867,7 @@ export default function Findings() {
                   </select>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 min-w-0">
                   <label className={filterLabelClass}>Analyst State</label>
                   <select
                     value={filterAnalystStatus}
@@ -869,7 +881,7 @@ export default function Findings() {
                   </select>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 min-w-0">
                   <label className={filterLabelClass}>Sort By</label>
                   <select
                     value={sortMode}
@@ -884,7 +896,7 @@ export default function Findings() {
                   </select>
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 min-w-0">
                   <label className={filterLabelClass}>From Date</label>
                   <input
                     type="date"
@@ -894,7 +906,7 @@ export default function Findings() {
                   />
                 </div>
 
-                <div className="space-y-2">
+                <div className="space-y-2 min-w-0">
                   <label className={filterLabelClass}>To Date</label>
                   <input
                     type="date"
@@ -905,7 +917,7 @@ export default function Findings() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 lg:justify-end border-t border-silver-bright/10 pt-4">
                 <label className="inline-flex h-11 items-center gap-3 border border-silver-bright/10 bg-charcoal-dark px-4 text-[10px] font-black uppercase tracking-[0.18em] text-silver/75">
                   <input
                     type="checkbox"
@@ -1265,9 +1277,20 @@ export default function Findings() {
                     </div>
 
                     <div>
-                      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-silver/35">Selected Finding</p>
-                      <h2 className="text-3xl font-black uppercase italic tracking-tight text-silver-bright">{selectedFinding.title}</h2>
-                    </div>
+  <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-silver/35">
+    Selected Finding
+  </p>
+
+  <h2 className="text-3xl font-black uppercase italic tracking-tight text-silver-bright">
+    {selectedFinding.title}
+  </h2>
+
+  <div className="mt-3 flex items-center gap-2">
+    <span className="text-xs font-mono text-silver/60">
+      ID: {selectedFinding.id}
+    </span>
+  </div>
+</div>
 
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="border border-silver-bright/8 bg-charcoal-dark p-3">
@@ -1457,6 +1480,13 @@ export default function Findings() {
                         className="border border-rag-blue/25 bg-rag-blue/10 px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-rag-blue"
                       >
                         {copiedFindingId === selectedFinding.id ? 'Copied' : 'Copy Brief'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => copyFindingId(selectedFinding.id)}
+                        className="border border-rag-green/25 bg-rag-green/10 px-4 py-3 text-[10px] font-black uppercase tracking-[0.18em] text-rag-green"
+                      >
+                        {copiedFindingId === selectedFinding.id ? 'Copied' : 'Copy ID'}
                       </button>
                     </div>
                   </div>

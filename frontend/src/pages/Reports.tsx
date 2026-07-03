@@ -20,6 +20,7 @@ import { usePreferredExportFormat } from '../hooks/usePreferredExportFormat'
 import { formatDateLong, isWithinDateRange, type DateRange } from '../utils/date'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
+import ReportTemplatePicker from '../components/ReportTemplatePicker'
 
 type Report = {
   id: string
@@ -99,6 +100,7 @@ export default function Reports() {
   const [selectedDateRange, setSelectedDateRange] = useState<DateRange>('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [templateReport, setTemplateReport] = useState<Report | null>(null)
   const reportRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   const downloadPdfReport = async (report: Report) => {
@@ -441,6 +443,14 @@ export default function Reports() {
                             </button>
 
                             <button
+                              onClick={() => setTemplateReport(report)}
+                              aria-label={`Open templates for ${report.name}`}
+                              className="bg-charcoal-dark border-4 border-black px-3 py-2 text-[9px] font-black uppercase tracking-widest text-silver/70 hover:text-silver-bright hover:bg-black transition-all"
+                              title="Multi-format templates"
+                            >
+                              Templates
+                            </button>
+                            <button
                               onClick={() => downloadPdfReport(report)}
                               aria-label={`Download rendered PDF of ${report.name}`}
                               className="bg-rag-green border-4 border-black px-3 py-2 text-[9px] font-black uppercase tracking-widest text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
@@ -520,6 +530,20 @@ export default function Reports() {
             </main>
           </div>
         </>
+      )}
+
+      {templateReport && (
+        <ReportTemplatePicker
+          reportName={templateReport.name}
+          reportType={templateReport.type}
+          generatedAt={templateReport.generated_at}
+          findings={templateReport.findings}
+          assets={templateReport.assets}
+          pages={templateReport.pages}
+          summary={summary}
+          isOpen={!!templateReport}
+          onClose={() => setTemplateReport(null)}
+        />
       )}
 
       {/* Tactical Footer */}

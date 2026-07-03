@@ -310,19 +310,19 @@ class NotificationDeliveryStatus(str, Enum):
 
 class NotificationRuleCreate(BaseModel):
     """Request payload for creating or updating a notification rule."""
-    name: str
+    name: str = Field(..., max_length=255)
     severity_threshold: NotificationSeverityThreshold
     channel_type: NotificationChannelType
-    target_url_or_email: str
+    target_url_or_email: str = Field(..., max_length=2000)
     is_active: bool = True
 
 
 class NotificationRuleUpdate(BaseModel):
     """Partial update payload for a notification rule."""
-    name: Optional[str] = None
+    name: Optional[str] = Field(default=None, max_length=255)
     severity_threshold: Optional[NotificationSeverityThreshold] = None
     channel_type: Optional[NotificationChannelType] = None
-    target_url_or_email: Optional[str] = None
+    target_url_or_email: Optional[str] = Field(default=None, max_length=2000)
     is_active: Optional[bool] = None
 
 
