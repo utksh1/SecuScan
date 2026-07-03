@@ -38,6 +38,11 @@ from backend.secuscan.models import (
     HealthResponse,
     SafetyLevel,
     PluginListResponse,
+    NotificationRuleResponse,
+    NotificationDeliveryStatus,
+    NotificationHistoryResponse,
+    ScanPhase,
+    PluginImplementationStatus,
 )
 
 
@@ -431,7 +436,7 @@ def test_safety_level_invalid_raises():
         SafetyLevel("unknown")
 
 # ---------------------------------------------------------------------------
-# PluginListResponse model
+
 # ---------------------------------------------------------------------------
 
 
@@ -482,3 +487,49 @@ class TestPluginListResponse:
         """total accepts any non-negative integer."""
         resp = PluginListResponse(plugins=[], total=999)
         assert resp.total == 999
+
+
+# ---------------------------------------------------------------------------
+# ScanPhase enum
+# ---------------------------------------------------------------------------
+
+
+def test_scan_phase_all_values():
+    """All five ScanPhase values are accepted."""
+    for name in ["queued", "running_command", "parsing", "reporting", "finished"]:
+        phase = ScanPhase(name)
+        assert phase.value == name
+
+
+def test_scan_phase_invalid_raises():
+    """An invalid ScanPhase value raises ValueError."""
+    with pytest.raises(ValueError):
+        ScanPhase("unknown_phase")
+
+
+def test_scan_phase_from_value():
+    """ScanPhase can be constructed from a known value."""
+    assert ScanPhase("parsing") == ScanPhase.PARSING
+
+
+# ---------------------------------------------------------------------------
+# PluginImplementationStatus enum
+# ---------------------------------------------------------------------------
+
+
+def test_plugin_implementation_status_all_values():
+    """All three PluginImplementationStatus values are accepted."""
+    for name in ["native", "integrated", "placeholder"]:
+        status = PluginImplementationStatus(name)
+        assert status.value == name
+
+
+def test_plugin_implementation_status_invalid_raises():
+    """An invalid PluginImplementationStatus value raises ValueError."""
+    with pytest.raises(ValueError):
+        PluginImplementationStatus("experimental")
+
+
+def test_plugin_implementation_status_from_value():
+    """PluginImplementationStatus can be constructed from a known value."""
+    assert PluginImplementationStatus("native") == PluginImplementationStatus.NATIVE
