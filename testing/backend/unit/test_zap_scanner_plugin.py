@@ -58,10 +58,13 @@ def test_zap_scanner_build_command_renders_representative_target(plugin_manager)
     )
 
     assert command is not None
-    assert command[0] == "python3"
-    assert command[1] == "-c"
+    assert command[0] == "docker"
+    assert command[1] == "run"
+    assert "--rm" in command
+    assert "ghcr.io/zaproxy/zaproxy:stable" in command
+    assert "zap-baseline.py" in command
+    assert "-t" in command
     assert target in command
-    assert "ZAP connector placeholder scan" in command[2]
 
 
 def test_zap_scanner_parser_fixture_produces_stable_findings(plugin_manager):
@@ -73,18 +76,17 @@ def test_zap_scanner_parser_fixture_produces_stable_findings(plugin_manager):
     assert parsed["count"] == 3
     assert len(parsed["findings"]) == 3
 
-    assert parsed["items"] == [
-        "ZAP connector placeholder scan",
-        "target=https://secuscan.in",
-        "mode=dast",
-    ]
-
     first = parsed["findings"][0]
-
     assert first["title"] == "Recon/Scan Observation"
-    assert first["category"] == "Security Scan"
-    assert first["severity"] == "info"
-    assert first["metadata"]["raw"] == "ZAP connector placeholder scan"
+    assert first["severity"] == "low"
+    assert "X-Frame-Options" in first["description"]
+
+    second = parsed["findings"][1]
+    assert second["severity"] == "high"
+    assert "SQL Injection" in second["description"]
+
+    third = parsed["findings"][2]
+    assert third["severity"] == "low"
 
 
 def test_zap_scanner_parser_empty_output_is_deterministic(plugin_manager):

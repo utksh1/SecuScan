@@ -6,6 +6,8 @@ precedence, and legacy plugins without declarations get implied capabilities
 based on their safety level.
 """
 
+import pytest
+
 from backend.secuscan.capabilities import effective_capabilities
 
 
@@ -61,3 +63,22 @@ class TestEffectiveCapabilities:
         """Duplicate entries in declared list are deduplicated."""
         result = effective_capabilities(["network", "network", "network"], "safe", "plugin")
         assert result == {"network"}
+
+    def test_declared_capabilities_with_empty_plugin_id(self):
+        """Empty string plugin_id should not affect the declared capabilities result."""
+        result = effective_capabilities(["network", "filesystem"], "safe", "")
+        assert result == {"network", "filesystem"}
+
+    def test_declared_capabilities_with_whitespace_plugin_id(self):
+        """Whitespace-only plugin_id should not affect the declared capabilities result."""
+        result = effective_capabilities(["network", "docker"], "safe", "   ")
+        assert result == {"network", "docker"}
+
+    def test_validate_capability_list_non_string_entry_raises(self):
+        """Non-string entries in the capabilities list should raise AttributeError."""
+        from backend.secuscan.capabilities import validate_capability_list
+        import pytest
+        with pytest.raises(AttributeError):
+            validate_capability_list(["network", None], "test-plugin")
+        with pytest.raises(AttributeError):
+            validate_capability_list([123, "network"], "test-plugin")

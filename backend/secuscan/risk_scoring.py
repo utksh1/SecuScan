@@ -33,6 +33,22 @@ ASSET_EXPOSURE_MAP: Dict[str, float] = {
     "low": 2.5,
 }
 
+# System exposure context factors (multiplicative)
+EXPOSURE_CONTEXT_MAP: Dict[str, float] = {
+    "public": 1.5,          # Public-facing systems: higher multiplier
+    "internet_facing": 1.3, # Internet-accessible but not primary public interface
+    "internal": 0.8,        # Internal only: lower multiplier
+    "private": 0.6,         # Development/private systems: minimal context
+}
+
+# Business criticality factors (multiplicative)
+CRITICALITY_MAP: Dict[str, float] = {
+    "critical": 1.5,     # Critical business function
+    "high": 1.25,        # Important business function
+    "medium": 1.0,       # Standard business function (no multiplier)
+    "low": 0.8,          # Non-critical function
+}
+
 # Weights used in the composite score (must sum to 1.0)
 WEIGHTS = {
     "severity": 0.30,
@@ -81,6 +97,59 @@ def _clamp(value: float, lo: float = 0.0, hi: float = 10.0) -> float:
     return max(lo, min(hi, value))
 
 
+def _system_exposure_factor(exposure_context: Optional[str]) -> float:
+    """Get the exposure context multiplier for severity adjustment."""
+    if exposure_context is None:
+        return 1.0
+    return EXPOSURE_CONTEXT_MAP.get(exposure_context.lower(), 1.0)
+
+
+def _business_criticality_factor(criticality: Optional[str]) -> float:
+    """Get the business criticality multiplier for severity adjustment."""
+    if criticality is None:
+        return 1.0
+    return CRITICALITY_MAP.get(criticality.lower(), 1.0)
+
+
+def _contextual_severity_score(
+    base_severity: float,
+    exposure_context: Optional[str] = None,
+    business_criticality: Optional[str] = None,
+    custom_override: Optional[float] = None,
+) -> float:
+    """
+    Calculate context-aware severity score.
+
+    Accounts for system exposure (public/private/internal) and business
+    criticality (data sensitivity, user count) to provide more accurate
+    prioritization beyond raw CVSS score.
+
+    Parameters
+    ----------
+    base_severity : float
+        Base severity score 0-10 (from CVSS)
+    exposure_context : str or None
+        System exposure: 'public', 'internet_facing', 'internal', 'private'
+    business_criticality : str or None
+        Business impact: 'critical', 'high', 'medium', 'low'
+    custom_override : float or None
+        Manual override (0-10). If set, bypasses calculated score.
+
+    Returns
+    -------
+    float
+        Context-adjusted severity score (0-10)
+    """
+    if custom_override is not None:
+        return _clamp(custom_override)
+
+    exposure_mult = _system_exposure_factor(exposure_context)
+    criticality_mult = _business_criticality_factor(business_criticality)
+
+    contextual_score = base_severity * exposure_mult * criticality_mult
+    return _clamp(contextual_score)
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -92,6 +161,9 @@ def compute_risk_score(
     asset_exposure: Optional[str] = None,
     discovered_at: Optional[datetime] = None,
     confidence: Optional[float] = None,
+    exposure_context: Optional[str] = None,
+    business_criticality: Optional[str] = None,
+    severity_override: Optional[float] = None,
 ) -> float:
     """
     Compute a weighted composite risk score in [0, 10].
@@ -108,8 +180,22 @@ def compute_risk_score(
         When the finding was discovered. Defaults to 90-day-old equivalent.
     confidence : float or None
         0–1. Defaults to 0.5 when None.
+    exposure_context : str or None
+        System exposure: 'public', 'internet_facing', 'internal', 'private'.
+        Adjusts severity by system context.
+    business_criticality : str or None
+        Business impact: 'critical', 'high', 'medium', 'low'.
+        Adjusts severity by business function importance.
+    severity_override : float or None
+        Manual override for severity (0-10). Bypasses context calculation.
     """
-    sv = _severity_score(severity)
+    base_severity = _severity_score(severity)
+    sv = _contextual_severity_score(
+        base_severity,
+        exposure_context=exposure_context,
+        business_criticality=business_criticality,
+        custom_override=severity_override,
+    )
     ev = _clamp(exploitability if exploitability is not None else 5.0)
     av = ASSET_EXPOSURE_MAP.get(asset_exposure.lower() if asset_exposure else None, 5.0)
     rv = _recency_score(discovered_at)
@@ -131,6 +217,9 @@ def compute_risk_factors(
     asset_exposure: Optional[str] = None,
     discovered_at: Optional[datetime] = None,
     confidence: Optional[float] = None,
+    exposure_context: Optional[str] = None,
+    business_criticality: Optional[str] = None,
+    severity_override: Optional[float] = None,
     risk_score: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     """
@@ -144,13 +233,32 @@ def compute_risk_factors(
       - detail:   short explanation sentence
     """
     if risk_score is None:
-        risk_score = compute_risk_score(severity, exploitability, asset_exposure, discovered_at, confidence)
+        risk_score = compute_risk_score(
+            severity, exploitability, asset_exposure, discovered_at, confidence,
+            exposure_context=exposure_context,
+            business_criticality=business_criticality,
+            severity_override=severity_override,
+        )
 
-    sv = _severity_score(severity)
+    base_severity = _severity_score(severity)
+    sv = _contextual_severity_score(
+        base_severity,
+        exposure_context=exposure_context,
+        business_criticality=business_criticality,
+        custom_override=severity_override,
+    )
     ev = _clamp(exploitability if exploitability is not None else 5.0)
     av = ASSET_EXPOSURE_MAP.get(asset_exposure.lower() if asset_exposure else None, 5.0)
     rv = _recency_score(discovered_at)
     cv = _confidence_score(confidence)
+
+    # Build context information string
+    context_parts = []
+    if exposure_context:
+        context_parts.append(f"exposure: {exposure_context}")
+    if business_criticality:
+        context_parts.append(f"criticality: {business_criticality}")
+    context_str = " [" + ", ".join(context_parts) + "]" if context_parts else ""
 
     factors = [
         {
@@ -160,7 +268,10 @@ def compute_risk_factors(
             "score": round(sv, 1),
             "weight": WEIGHTS["severity"],
             "contribution": round(sv * WEIGHTS["severity"], 2),
-            "detail": f"Severity is {severity} ({sv:.1f}/10)",
+            "detail": f"Base severity {severity} ({base_severity:.1f}/10) adjusted to {sv:.1f}/10{context_str}",
+            "exposure_context": exposure_context,
+            "business_criticality": business_criticality,
+            "context_multiplier": round((sv / base_severity) if base_severity > 0 else 1.0, 2),
         },
         {
             "factor": "exploitability",

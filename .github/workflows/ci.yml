@@ -271,8 +271,24 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
+      - name: Resolve Playwright version
+        id: playwright-version
+        run: |
+          PLAYWRIGHT_VERSION=$(node -e "const lock = require('./package-lock.json');const packages = lock.packages || {}; const entry = Object.entries(packages).find(([name]) => name === 'node_modules/playwright' || name === 'node_modules/@playwright/test'); if (!entry) { console.error('Unable to resolve Playwright version from package-lock.json'); process.exit(1); } console.log(entry[1].version);")
+          echo "version=$PLAYWRIGHT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Using Playwright version $PLAYWRIGHT_VERSION for browser cache key"
+      - name: Restore Playwright browser cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}-${{ matrix.node-version }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}-
+            ${{ runner.os }}-playwright-
       - name: Install frontend dependencies
         run: npm ci
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
       - name: Run npm audit
         id: npm_audit
         run: |

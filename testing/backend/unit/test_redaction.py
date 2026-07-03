@@ -484,3 +484,84 @@ class TestRedactInputsEdgeCases:
         assert result["meta"]["version"] == 1.0
         assert result["meta"]["name"] == "x"
         assert result["api_key"] == REDACTED
+
+
+class TestRedactionEdgeCases:
+    """Edge case tests for redact() covering Unicode, long strings, and multi-line content."""
+
+    def test_unicode_content_not_over_redacted(self):
+        """Non-ASCII characters should not be treated as secrets or cause crashes."""
+        text = "Found vulnerability in app: SQL Injection on /login endpoint with user input"
+        result = redact(text)
+        assert "SQL Injection" in result
+        assert "login" in result
+
+    def test_unicode_accents_preserved(self):
+        """Accented characters should be preserved without over-redaction."""
+        text = "Sensitive data in cafe with password=secret123 and normal data"
+        result = redact(text)
+        assert "caf" in result
+
+    def test_very_long_string_with_embedded_secret(self):
+        """A 50K+ character string with an embedded secret should be redacted correctly."""
+        padding = "x" * 50000
+        secret = "password=supersecretpassword123"
+        text = padding + secret + padding
+        result = redact(text)
+        # The secret should be redacted
+        assert REDACTED in result
+        # The original secret value should not appear in the output
+        assert "supersecretpassword123" not in result
+
+    def test_very_long_string_without_secret(self):
+        """A very long string without any secrets should be returned unchanged."""
+        text = "A" * 100000
+        result = redact(text)
+        assert result == text
+
+    def test_multi_line_content_with_authorization_header(self):
+        """Multi-line content with Authorization header should be redacted correctly."""
+        text = (
+            "HTTP/1.1 200 OK\n"
+            "Content-Type: text/html\n"
+            "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+            "eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4ifQ.foobarbazqux"
+        )
+        result = redact(text)
+        assert REDACTED in result
+        assert "eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4ifQ" not in result
+
+    def test_multi_line_content_with_aws_credentials(self):
+        """Multi-line content with AWS credentials spanning lines should be redacted."""
+        text = (
+            "aws_access_key = AKIAIOSFODNN7EXAMPLE\n"
+            "aws_secret_key = wJalrXUtnFEMI_K7MDENG_bPxRfiCYEXAMPLEKEY"
+        )
+        result = redact(text)
+        assert REDACTED in result
+        assert "wJalrXUtnFEMI_K7MDENG_bPxRfiCYEXAMPLEKEY" not in result
+
+    def test_whitespace_only_with_secret(self):
+        """String with only whitespace and a secret should redact the secret."""
+        text = "   password=hunter2   "
+        result = redact(text)
+        assert REDACTED in result
+        assert "hunter2" not in result
+
+    def test_null_byte_in_text(self):
+        """A string containing null bytes should not crash redact()."""
+        text = "api_key=abcdefgh12345678" + chr(0) + "extra"
+        result = redact(text)
+        # Should not raise and should produce a result
+        assert isinstance(result, str)
+        # The token should still be redacted
+        assert "abcdefgh12345678" not in result
+
+    def test_multiple_secrets_in_long_string(self):
+        """Multiple secrets in a very long string should all be redacted."""
+        padding = "normal content " * 1000
+        text = padding + "api_key=abcdefgh12345678" + padding + "token=ghijklmnopqrstuvwx" + padding
+        result = redact(text)
+        assert REDACTED in result
+        assert "abcdefgh12345678" not in result
+        assert "ghijklmnopqrstuvwx" not in result

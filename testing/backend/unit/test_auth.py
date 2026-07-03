@@ -88,3 +88,57 @@ class TestInitApiKey:
         key = fresh_key(str(tmp_path))
         assert len(key) == 64
         assert all(c in "0123456789abcdef" for c in key)
+
+
+# ---------------------------------------------------------------------------
+# get_api_key tests
+# ---------------------------------------------------------------------------
+
+
+def test_get_api_key_returns_none_when_not_initialised():
+    """When _api_key is None, get_api_key returns None."""
+    import backend.secuscan.auth as auth_module
+    original = getattr(auth_module, "_api_key", None)
+    try:
+        auth_module._api_key = None
+        from backend.secuscan.auth import get_api_key
+        assert get_api_key() is None
+    finally:
+        auth_module._api_key = original
+
+
+def test_get_api_key_returns_set_value():
+    """get_api_key returns the value that was set in _api_key."""
+    import backend.secuscan.auth as auth_module
+    original = getattr(auth_module, "_api_key", None)
+    try:
+        auth_module._api_key = "test-key-1234567890abcdef"
+        from backend.secuscan.auth import get_api_key
+        assert get_api_key() == "test-key-1234567890abcdef"
+    finally:
+        auth_module._api_key = original
+
+
+def test_get_api_key_returns_string_or_none():
+    """get_api_key always returns a string or None."""
+    import backend.secuscan.auth as auth_module
+    original = getattr(auth_module, "_api_key", None)
+    try:
+        auth_module._api_key = "any-valid-api-key"
+        from backend.secuscan.auth import get_api_key
+        result = get_api_key()
+        assert isinstance(result, str) or result is None
+    finally:
+        auth_module._api_key = original
+
+
+def test_get_api_key_preserves_key_across_multiple_calls():
+    """Multiple calls to get_api_key return the same value."""
+    import backend.secuscan.auth as auth_module
+    original = getattr(auth_module, "_api_key", None)
+    try:
+        auth_module._api_key = "stable-key-value"
+        from backend.secuscan.auth import get_api_key
+        assert get_api_key() == get_api_key() == get_api_key()
+    finally:
+        auth_module._api_key = original

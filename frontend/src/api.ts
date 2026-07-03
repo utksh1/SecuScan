@@ -572,7 +572,7 @@ export function cancelTask(taskId: string) {
 
 export function streamTask(taskId: string, onEvent: (ev: MessageEvent) => void) {
   const url = `${API_BASE}/task/${taskId}/stream`
-  const es = new EventSource(url)
+  const es = new EventSource(url, { withCredentials: true })
   es.onmessage = onEvent
   es.onerror = () => {}
   return es

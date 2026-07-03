@@ -1140,10 +1140,18 @@ plugins/
 
 ### 5.1 API Versioning
 
-**Base URL:** `http://127.0.0.1:8080/api/v1`  
-**Protocol:** REST over HTTP  
-**Serialization:** JSON  
-**Authentication:** Token-based (optional, disabled by default)  
+- **Base URL:** `http://127.0.0.1:8000/api/v1`
+- **Protocol:** REST over HTTP
+- **Serialization:** JSON
+- **Authentication:** API key via the `X-API-Key` header (required by default)
+
+> **Authentication note:** Every `/api/v1` request requires an `X-API-Key` header. The
+> backend generates the key on first start and writes it to `backend/data/.api_key`.
+> See [API Authentication](api-authentication.md) for details (including owner scoping).
+>
+> **Endpoint source of truth:** This section summarizes the primary endpoints. For the
+> complete, always-current list, use the live OpenAPI docs the backend serves at
+> `/api/docs` (Swagger), `/api/redoc` (ReDoc), and `/api/openapi.json`.
 
 ### 5.2 Endpoint Reference
 
@@ -1409,7 +1417,7 @@ Returns standardized scan results.
 
 ---
 
-##### POST /task/cancel
+##### POST /task/{id}/cancel
 
 Terminates a running task.
 
@@ -1488,16 +1496,15 @@ Deletes a task and its associated data.
 
 #### 5.2.5 Reports & Export
 
-##### GET /reports/{id}
+##### GET /task/{id}/report/{format}
 
-Downloads task results in specified format.
-
-**Query Parameters:**
-- `format` (enum: `json`|`csv`|`pdf`)
+Downloads a task's results as a generated report. The format is a path segment, one of
+`csv`, `html`, `pdf`, or `sarif` (one route per format).
 
 **Request:**
 ```http
-GET /api/v1/reports/550e8400-e29b-41d4-a716-446655440000?format=pdf HTTP/1.1
+GET /api/v1/task/550e8400-e29b-41d4-a716-446655440000/report/pdf HTTP/1.1
+X-API-Key: <api-key>
 ```
 
 **Response:**
@@ -1509,13 +1516,27 @@ Content-Disposition: attachment; filename="nmap_scan_20251029_142030.pdf"
 [PDF binary data]
 ```
 
+##### GET /reports
+
+Lists reports that have been generated, for the current owner.
+
+**Request:**
+```http
+GET /api/v1/reports HTTP/1.1
+X-API-Key: <api-key>
+```
+
 ---
 
 #### 5.2.6 Settings
 
 ##### GET /settings
 
-Returns current global settings.
+Returns the current effective settings (read-only). The response also includes an
+`execution_context` block describing the available validation modes and evidence levels.
+Settings are **not** writable over the API — configuration is supplied through
+`SECUSCAN_`-prefixed environment variables (see the
+[environment variable matrix](SECURE_DEPLOYMENT.md#environment-variable-matrix)).
 
 **Response:**
 ```json
@@ -1543,42 +1564,25 @@ Returns current global settings.
 
 ---
 
-##### POST /settings
-
-Updates global settings.
-
-**Request:**
-```json
-{
-  "safety": {
-    "safe_mode_default": false
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "updated": true,
-  "settings": {...}
-}
-```
-
----
-
 ### 5.3 Authentication
 
-By default, SecuScan runs without authentication (localhost-only binding is the security boundary). Optional token-based auth can be enabled:
+SecuScan requires an API key on every `/api/v1` request; localhost-only binding is an
+additional boundary, not a replacement for the key. The backend generates the key on
+first start and writes it to `backend/data/.api_key`.
 
 **Header:**
 ```http
-Authorization: Bearer <token>
+X-API-Key: <api-key>
 ```
 
-Tokens generated via:
+Read the generated key locally:
 ```bash
-secuscan auth generate --expires 30d
+cat backend/data/.api_key
 ```
+
+Requests with a missing or invalid key are rejected with `401 Unauthorized`. Resources
+(tasks, findings, reports) are additionally owner-scoped — see
+[API Authentication](api-authentication.md).
 
 ---
 
@@ -4006,10 +4010,13 @@ GET    /task/{id}/result          — Get results
 POST   /task/{id}/cancel          — Cancel task
 GET    /tasks                     — List tasks
 DELETE /task/{id}                 — Delete task
-GET    /reports/{id}?format=pdf   — Export report
-GET    /settings                  — Get settings
-POST   /settings                  — Update settings
+GET    /task/{id}/report/{format} — Download report (csv|html|pdf|sarif)
+GET    /reports                   — List generated reports
+GET    /settings                  — Get settings (read-only)
 ```
+
+> Full, always-current endpoint list: the live OpenAPI docs at `/api/docs`, `/api/redoc`,
+> and `/api/openapi.json`. All `/api/v1` requests require the `X-API-Key` header.
 
 ### 13.4 Environment Variables
 

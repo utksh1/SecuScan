@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 from datetime import datetime, timezone
 
-from backend.secuscan.finding_intelligence import _parse_timestamp, _stable_id
+from backend.secuscan.finding_intelligence import _now_iso, _parse_timestamp, _stable_id
 
 
 # ---------------------------------------------------------------------------
@@ -123,3 +123,33 @@ class TestStableId:
     def test_many_parts(self):
         sig = _stable_id("finding", "a", "b", "c", "d", "e")
         assert sig.startswith("finding:")
+
+
+# ---------------------------------------------------------------------------
+# _now_iso
+# ---------------------------------------------------------------------------
+
+class TestNowIso:
+    def test_returns_string(self):
+        """_now_iso returns a string."""
+        result = _now_iso()
+        assert isinstance(result, str)
+
+    def test_returns_valid_iso8601_format(self):
+        """_now_iso returns a valid ISO 8601 formatted datetime string."""
+        result = _now_iso()
+        parsed = datetime.fromisoformat(result.replace("Z", "+00:00"))
+        assert isinstance(parsed, datetime)
+
+    def test_returns_utc_timezone(self):
+        """_now_iso returns a UTC timezone-aware datetime string."""
+        result = _now_iso()
+        assert result.endswith("+00:00") or result.endswith("Z")
+
+    def test_result_is_reasonable_current_time(self):
+        """_now_iso returns a time within a few seconds of now."""
+        before = datetime.now(timezone.utc)
+        result = _now_iso()
+        after = datetime.now(timezone.utc)
+        parsed = datetime.fromisoformat(result.replace("Z", "+00:00"))
+        assert before <= parsed <= after

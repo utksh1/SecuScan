@@ -103,7 +103,7 @@ export function useTaskSubscription({
     }
 
     const url = `${API_BASE}/task/${taskId}/stream`
-    const es = new EventSource(url)
+    const es = new EventSource(url, { withCredentials: true })
     esRef.current = es
 
     es.addEventListener('status', (e: MessageEvent) => {

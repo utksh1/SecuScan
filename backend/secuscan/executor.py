@@ -12,7 +12,7 @@ import json
 import time
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 import logging
 import re
 
@@ -23,6 +23,7 @@ from .redaction import redact
 from .cache import get_cache
 from .config import settings
 from .database import get_db
+from .executor_target_helpers import extract_target
 from .plugins import get_plugin_manager
 from .models import NotificationDeliveryStatus, TaskStatus, ScanPhase
 from .ratelimit import concurrent_limiter
@@ -74,7 +75,8 @@ async def _terminate_process_group(pid: int, task_id: str, grace_seconds: int = 
         await asyncio.sleep(0.1)
         try:
             os.killpg(pgid, 0)
-        except (ProcessLookupError, PermissionError):
+        except (ProcessLookupError, PermissionError) as exc:
+            logger.debug("pgid %d already exited during grace poll: %s", pgid, exc)
             return
 
     try:
@@ -142,17 +144,6 @@ MODULAR_SCANNERS = {
 
 logger = logging.getLogger(__name__)
 STREAM_LISTENER_QUEUE_MAXSIZE = 100
-
-
-def extract_target(inputs: Dict[str, Any]) -> str:
-    """Best-effort target extraction across plugin shapes."""
-    return (
-        inputs.get("target")
-        or inputs.get("url")
-        or inputs.get("host")
-        or inputs.get("domain")
-        or ""
-    )
 
 
 def _stable_asset_id(target: str, host: Any, port: Any, protocol: Any) -> str:
@@ -265,6 +256,11 @@ class TaskExecutor:
             q.put_nowait(event)
         except asyncio.QueueFull:
             logger.warning("Dropping stream event for slow listener on task %s", task_id)
+
+    def _cleanup_listeners(self, task_id: str):
+        """Remove all listener queues for a completed task to prevent memory leaks."""
+        if task_id in self._listeners:
+            self._listeners.pop(task_id, None)
 
     async def _broadcast_phase(self, task_id: str, phase: str):
         """Broadcast a scan phase transition and persist it to the database."""
@@ -407,14 +403,16 @@ class TaskExecutor:
         plugin_id: str,
         safe_mode: bool,
         task_id: str,
-    ) -> bool:
+    ) -> Tuple[bool, Optional[str]]:
         """Enforce Safe Mode target validation and Network Policy access checks.
 
         Returns:
-            True if all checks pass or are bypassed. False if any check blocks execution.
+            Tuple of (all_checks_pass, pinned_ip).
+            pinned_ip is set when network policy is enforced and the target
+            hostname was resolved to a stable IP, preventing DNS rebinding attacks.
         """
         if not target:
-            return True
+            return (True, None)
 
         plugin_manager = get_plugin_manager()
         plugin = plugin_manager.get_plugin(plugin_id)
@@ -441,31 +439,32 @@ class TaskExecutor:
                         f"Safe mode target validation failed: {error_msg}",
                     )
                     await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
-                    return False
+                    return (False, None)
             except asyncio.TimeoutError:
                 await self.mark_task_failed(
                     task_id,
                     "Target validation timed out (SecuScan Guardrail)",
                 )
                 await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
-                return False
+                return (False, None)
 
-        # Check before launching any scanner or subprocess. check_access()
-        # writes an audit entry on every path, so no extra logging needed.
+        # Check before launching any scanner or subprocess. Uses resolve_and_pin
+        # to resolve the hostname ONCE and pin the IP, preventing DNS rebinding
+        # attacks where the scanner subprocess resolves a different (malicious) IP.
         if settings.enforce_network_policy:
             engine = get_policy_engine()
             try:
-                allowed, reason, _ = await asyncio.wait_for(
+                pinned_ip, allowed, reason = await asyncio.wait_for(
                     asyncio.to_thread(
-                        engine.check_access,
-                        dest_ip=target,
-                        plugin_id=plugin_id,
-                        task_id=task_id,
+                        engine.resolve_and_pin,
+                        target,
+                        plugin_id,
+                        task_id,
                     ),
                     timeout=float(settings.dns_resolution_timeout_seconds),
                 )
             except asyncio.TimeoutError:
-                allowed, reason = False, "Network policy check timed out (DNS resolution timeout)"
+                allowed, reason, pinned_ip = False, "Network policy check timed out (DNS resolution timeout)", None
 
             if not allowed:
                 if settings.network_policy_failure_mode == "log_only":
@@ -478,9 +477,11 @@ class TaskExecutor:
                         f"Network policy denied access to {target}: {reason}",
                     )
                     await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
-                    return False
+                    return (False, None)
 
-        return True
+            return (True, pinned_ip)
+
+        return (True, None)
 
     async def _ensure_docker_network(self) -> None:
         """Validate and automatically create the configured Docker network if missing."""
@@ -744,8 +745,11 @@ class TaskExecutor:
             )
 
             # ── Safe Mode & Network policy enforcement ───────────────────────
-            if not await self._enforce_guardrails(target, plugin_id, safe_mode, task_id):
+            guardrails_ok, pinned_ip = await self._enforce_guardrails(target, plugin_id, safe_mode, task_id)
+            if not guardrails_ok:
                 return
+            if pinned_ip:
+                inputs["__pinned_ip"] = pinned_ip
 
             # Check if this is a modular scanner or a standard plugin
             plugin_manager = get_plugin_manager()
@@ -896,6 +900,7 @@ class TaskExecutor:
             self.running_tasks.pop(task_id, None)
             self._process_pids.pop(task_id, None)
             await concurrent_limiter.release(task_id)
+            self._cleanup_listeners(task_id)
 
     async def _execute_command(
         self,
