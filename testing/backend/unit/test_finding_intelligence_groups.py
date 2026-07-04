@@ -1,12 +1,11 @@
 """
-<<<<<<< HEAD
 Unit tests for finding_intelligence.build_finding_groups.
 
 Tests the grouping and aggregation logic for findings, including group
 merging, severity priority, sorting, and metadata accumulation.
 """
 
-from backend.secuscan.finding_intelligence import build_finding_groups
+from backend.secuscan.finding_intelligence import build_finding_groups, build_scan_diff
 
 
 def _make_finding(overrides=None):
@@ -145,20 +144,8 @@ class TestBuildFindingGroups:
         f2 = _make_finding({"id": "f2", "finding_group_id": "g1"})
         result = build_finding_groups([f1, f2])
         assert result[0]["latest_finding_id"] == "f1"
-=======
-Unit tests for build_finding_groups and build_scan_diff functions.
 
-These two public pipeline functions are currently untested. They form the core
-of the finding grouping and scan-diff APIs.
-"""
-
-from backend.secuscan.finding_intelligence import (
-    build_finding_groups,
-    build_scan_diff,
-)
-
-
-class TestBuildFindingGroups:
+class TestBuildFindingGroupsExtended:
     def test_single_finding_produces_group(self):
         findings = [{
             "id": "f1",
@@ -279,4 +266,4 @@ class TestBuildScanDiff:
         assert diff["resolved"] == []
         assert diff["changed"] == []
         assert diff["summary"]["new_count"] == 0
->>>>>>> d0a24004 (test: add unit tests for build_finding_groups and build_scan_diff)
+
