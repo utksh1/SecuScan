@@ -391,8 +391,34 @@ export function getPluginSchema(id: string) {
   return request<PluginSchemaResponse>(`/plugin/${id}/schema`)
 }
 
+export interface ServerLimits {
+  network: {
+    bind_address: string
+    port: number
+    allow_remote: boolean
+  }
+  sandbox: {
+    engine: string
+    default_timeout: number
+    resource_limits: {
+      cpu_quota: number
+      memory_mb: number
+    }
+  }
+  safety: {
+    require_consent: boolean
+    safe_mode_default: boolean
+    allowed_networks: string[]
+  }
+  execution_context: {
+    validation_modes: string[]
+    evidence_levels: string[]
+    default: ExecutionContext
+  }
+}
+
 export function getSettings() {
-  return request<any>(`/settings`)
+  return request<ServerLimits>(`/settings`)
 }
 
 export function getDashboardSummary() {

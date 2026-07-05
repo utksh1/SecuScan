@@ -9,6 +9,7 @@ import {
   listCredentialProfiles,
   listSessionProfiles,
   ExecutionContext,
+  ServerLimits,
   TargetPolicy,
   CredentialProfile,
   SessionProfile,
@@ -70,7 +71,7 @@ export default function ToolConfig() {
   const [consentGranted, setConsentGranted] = useState(false)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [serverLimits, setServerLimits] = useState<any | null>(null)
+  const [serverLimits, setServerLimits] = useState<ServerLimits | null>(null)
   const [targetPolicies, setTargetPolicies] = useState<TargetPolicy[]>([])
   const [credentialProfiles, setCredentialProfiles] = useState<CredentialProfile[]>([])
   const [sessionProfiles, setSessionProfiles] = useState<SessionProfile[]>([])
