@@ -644,6 +644,84 @@ async def deliver_via_rule(
     )
 
 
+async def _deliver_rule_batch(
+    db: Database,
+    rule: Dict[str, Any],
+    findings: List[Dict[str, Any]],
+) -> List[DeliveryResult]:
+    """Deliver a batched notification for one rule across multiple findings.
+
+    Sends a single webhook per (rule, task) containing an array of findings,
+    then records individual delivery records in a batch insert.
+    """
+    results: List[DeliveryResult] = []
+    channel = str(rule.get("channel_type", "")).lower()
+    target = str(rule.get("target_url_or_email", ""))
+
+    if channel == NotificationChannelType.WEBHOOK.value:
+        payloads = [build_alert_payload(finding, rule) for finding in findings]
+        batch_payload = {
+            "event": "finding.alert.batch",
+            "rule": {
+                "id": rule.get("id"),
+                "name": rule.get("name"),
+                "severity_threshold": rule.get("severity_threshold"),
+                "channel_type": rule.get("channel_type"),
+            },
+            "findings": payloads,
+            "count": len(payloads),
+        }
+
+        async def _send_and_record():
+            ok, error = await send_webhook(target, batch_payload)
+            status = (
+                NotificationDeliveryStatus.SUCCESS if ok else NotificationDeliveryStatus.FAILED
+            )
+            for finding in findings:
+                await record_delivery(
+                    db, str(rule["id"]), str(finding["id"]), status, error,
+                )
+            return [
+                DeliveryResult(
+                    rule_id=str(rule["id"]),
+                    finding_id=str(finding["id"]),
+                    status=status,
+                    error_message=error,
+                )
+                for finding in findings
+            ]
+
+        results = await _send_and_record()
+    elif channel == NotificationChannelType.EMAIL.value:
+        for finding in findings:
+            payload = build_alert_payload(finding, rule)
+            ok, error = await send_email(target, payload)
+            status = (
+                NotificationDeliveryStatus.SUCCESS if ok else NotificationDeliveryStatus.FAILED
+            )
+            await record_delivery(db, str(rule["id"]), str(finding["id"]), status, error)
+            results.append(
+                DeliveryResult(
+                    rule_id=str(rule["id"]),
+                    finding_id=str(finding["id"]),
+                    status=status,
+                    error_message=error,
+                )
+            )
+    else:
+        for finding in findings:
+            results.append(
+                DeliveryResult(
+                    rule_id=str(rule["id"]),
+                    finding_id=str(finding["id"]),
+                    status=NotificationDeliveryStatus.FAILED,
+                    error_message=f"Unsupported channel type: {channel}",
+                )
+            )
+
+    return results
+
+
 async def process_finding_notifications(
     db: Database,
     finding_id: str,
@@ -666,14 +744,64 @@ async def process_task_notifications(
     db: Database,
     task_id: str,
 ) -> List[DeliveryResult]:
-    """Evaluate notifications for every finding produced by a task."""
+    """Evaluate notifications for every finding produced by a task.
+
+    Batches all findings and rules upfront (2 queries), then evaluates
+    (finding, rule) pairs in-memory to eliminate N+1 query cascading.
+    Delivery history records are batched and webhook payloads are
+    deduplicated per (rule, task).
+    """
     findings = await db.fetchall(
-        "SELECT id FROM findings WHERE task_id = ? ORDER BY discovered_at ASC",
+        "SELECT * FROM findings WHERE task_id = ? ORDER BY discovered_at ASC",
         (task_id,),
     )
+    if not findings:
+        return []
+
+    rules = await db.fetchall(
+        "SELECT * FROM notification_rules WHERE is_active = 1 ORDER BY created_at ASC"
+    )
+    if not rules:
+        return []
+
+    existing_deliveries = await db.fetchall(
+        """
+        SELECT nh.rule_id, nh.finding_id
+        FROM notification_history nh
+        JOIN findings f ON f.id = nh.finding_id
+        WHERE f.task_id = ? AND nh.status = ?
+        """,
+        (task_id, NotificationDeliveryStatus.SUCCESS.value),
+    )
+    already_delivered = {(row["rule_id"], row["finding_id"]) for row in existing_deliveries}
+
+    rule_map: Dict[str, Dict[str, Any]] = {str(r["id"]): r for r in rules}
+    pending_by_rule: Dict[str, List[Dict[str, Any]]] = {}
+
+    for finding in findings:
+        finding_id = str(finding["id"])
+        for rule in rules:
+            rule_id = str(rule["id"])
+
+            if not bool(rule.get("is_active")):
+                continue
+
+            if not severity_meets_threshold(
+                str(finding.get("severity", "info")),
+                str(rule.get("severity_threshold", "info")),
+            ):
+                continue
+
+            if (rule_id, finding_id) in already_delivered:
+                continue
+
+            pending_by_rule.setdefault(rule_id, []).append(finding)
+
     results: List[DeliveryResult] = []
-    for row in findings:
-        results.extend(await process_finding_notifications(db, str(row["id"])))
+    for rule_id, pending_findings in pending_by_rule.items():
+        rule = rule_map[rule_id]
+        results.extend(await _deliver_rule_batch(db, rule, pending_findings))
+
     return results
 
 
