@@ -40,32 +40,9 @@ __all__ = [
     "build_report_filename",
 ]
 
-def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
-    if isinstance(raw_steps, list):
-        parsed = raw_steps
-    elif not raw_steps:
-        parsed = []
-    else:
-        try:
-            parsed = json.loads(raw_steps)
-        except (TypeError, json.JSONDecodeError):
-            parsed = []
-    normalized: List[Dict[str, Any]] = []
-    for step in parsed if isinstance(parsed, list) else []:
-        if not isinstance(step, dict):
-            continue
-        try:
-            model = WorkflowStep(
-                plugin_id=str(step.get("plugin_id", "")),
-                inputs=step.get("inputs") or {},
-                preset=step.get("preset"),
-                execution_context=step.get("execution_context") or {},
-            )
-        except Exception:
-            continue
-        normalized.append(model.model_dump())
-    return normalized
 
+from .routes_iter_helpers import iter_raw_output_chunks, SSE_RAW_OUTPUT_CHUNK_SIZE
+from .routes_workflow_helpers import _parse_workflow_steps
 def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]] = None) -> Dict[str, Any]:
     """Return the workflow shape consumed by the frontend."""
     return {
@@ -132,39 +109,19 @@ from sse_starlette.sse import EventSourceResponse
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
 
-_EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+from .routes_email_validation import (
+    _EMAIL_PATTERN,
+    _validate_notification_target as _validate_notification_target_extracted,
+    NotificationValidationError,
+)
 
 
 def _validate_notification_target(channel_type: NotificationChannelType, target: str) -> str:
-    cleaned = target.strip()
-    if not cleaned:
-        raise HTTPException(status_code=400, detail="Notification target is required")
-
-    if channel_type == NotificationChannelType.WEBHOOK:
-        is_valid, error = validate_url(cleaned)
-        if not is_valid:
-            raise HTTPException(status_code=400, detail=error or "Invalid webhook URL")
-
-        if settings.notification_ssrf_enabled:
-            from .validation import resolve_and_validate_target, validate_webhook_target
-            ssrf_ok, ssrf_err = resolve_and_validate_target(cleaned)
-            if not ssrf_ok:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Webhook target blocked by SSRF protection: {ssrf_err}"
-                )
-            # Additional independent check against notification_blocked_ip_ranges
-            target_ok, target_err = validate_webhook_target(cleaned)
-            if not target_ok:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Webhook target blocked by SSRF protection: {target_err}"
-                )
-        return cleaned
-
-    if not _EMAIL_PATTERN.match(cleaned):
-        raise HTTPException(status_code=400, detail="Invalid email address")
-    return cleaned
+    """Validate a notification delivery target. Wraps routes_email_validation helper."""
+    try:
+        return _validate_notification_target_extracted(channel_type, target)
+    except NotificationValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 def _serialize_notification_rule(row: Dict[str, Any]) -> Dict[str, Any]:
