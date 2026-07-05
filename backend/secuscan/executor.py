@@ -898,8 +898,9 @@ class TaskExecutor:
                     line = await stdout.readline()
                     if line:
                         decoded_line = line.decode("utf-8", errors="replace")
-                        output_lines.append(decoded_line)
-                        await self._broadcast(task_id, "output", decoded_line)
+                        safe_line = redact(decoded_line)
+                        output_lines.append(safe_line)
+                        await self._broadcast(task_id, "output", safe_line)
 
             try:
                 await asyncio.wait_for(read_stream(), timeout=timeout)

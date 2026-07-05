@@ -1446,3 +1446,52 @@ async def test_pinned_ip_preserves_host_input_for_host_header_scanners(setup_tes
     assert original_inputs_seen.get("domain") == "example.com"
     assert original_inputs_seen.get("__pinned_ip") == "93.184.216.34"
     await db.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_execute_command_redacts_secrets_before_broadcast():
+    executor = TaskExecutor()
+    task_id = "test-sse-redaction-1624"
+    queue = executor.subscribe(task_id)
+
+    async def mock_readline():
+        for line in [
+            b"Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.secret123\n",
+            b"port 80 is open\n",
+            b"api_key=supersecretkey12345\n",
+            None,
+        ]:
+            yield line
+
+    mock_stdout = AsyncMock()
+    mock_stdout.readline = mock_readline().__anext__
+    mock_stdout.at_eof = AsyncMock(side_effect=[False, False, False, True])
+
+    with patch.object(executor, "_process_pids", {}):
+        process = AsyncMock()
+        process.stdout = mock_stdout
+        process.returncode = 0
+
+        async def fake_create_subprocess(*args, **kwargs):
+            return process
+
+        with patch("asyncio.create_subprocess_exec", side_effect=fake_create_subprocess):
+            output, exit_code = await executor._execute_command(["echo", "test"], task_id, timeout=30)
+
+    events = []
+    while not queue.empty():
+        events.append(queue.get_nowait())
+
+    output_events = [e for e in events if e["type"] == "output"]
+    assert len(output_events) == 2
+
+    assert "[REDACTED]" in output_events[0]["data"]
+    assert "eyJhbGciOiJIUzI1NiJ9.secret123" not in output_events[0]["data"]
+    assert "Authorization: Bearer" in output_events[0]["data"]
+
+    assert "[REDACTED]" in output_events[1]["data"]
+    assert "supersecretkey12345" not in output_events[1]["data"]
+
+    assert "[REDACTED]" in output
+    assert "eyJhbGciOiJIUzI1NiJ9.secret123" not in output
+    assert "supersecretkey12345" not in output
