@@ -23,6 +23,8 @@ from .routes_json_helpers import (
     iter_raw_output_chunks,
     parse_json_fields,
 )
+from .routes_email_validation import validate_notification_target  # noqa: E402
+
 
 # Re-exported for backward compatibility with integration tests
 SSE_RAW_OUTPUT_CHUNK_SIZE = 64 * 1024
@@ -132,39 +134,15 @@ from sse_starlette.sse import EventSourceResponse
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
 
-_EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-
-
+# _validate_notification_target moved to routes_email_validation
 def _validate_notification_target(channel_type: NotificationChannelType, target: str) -> str:
-    cleaned = target.strip()
-    if not cleaned:
-        raise HTTPException(status_code=400, detail="Notification target is required")
-
-    if channel_type == NotificationChannelType.WEBHOOK:
-        is_valid, error = validate_url(cleaned)
-        if not is_valid:
-            raise HTTPException(status_code=400, detail=error or "Invalid webhook URL")
-
-        if settings.notification_ssrf_enabled:
-            from .validation import resolve_and_validate_target, validate_webhook_target
-            ssrf_ok, ssrf_err = resolve_and_validate_target(cleaned)
-            if not ssrf_ok:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Webhook target blocked by SSRF protection: {ssrf_err}"
-                )
-            # Additional independent check against notification_blocked_ip_ranges
-            target_ok, target_err = validate_webhook_target(cleaned)
-            if not target_ok:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Webhook target blocked by SSRF protection: {target_err}"
-                )
-        return cleaned
-
-    if not _EMAIL_PATTERN.match(cleaned):
-        raise HTTPException(status_code=400, detail="Invalid email address")
-    return cleaned
+    """Re-export via NotificationChannelType string sentinel to the validation helper."""
+    from .routes_email_validation import validate_notification_target as _vt
+    _channel_str = channel_type.value if hasattr(channel_type, "value") else str(channel_type)
+    try:
+        return _vt(_channel_str, target, notification_ssrf_enabled=settings.notification_ssrf_enabled)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 def _serialize_notification_rule(row: Dict[str, Any]) -> Dict[str, Any]:
