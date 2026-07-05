@@ -22,6 +22,8 @@ from typing import Optional
 import redis.asyncio as aioredis
 from fastapi import HTTPException, Request, status
 
+from .ratelimit_helpers import RateLimiterKeyBuilder
+
 logger = logging.getLogger(__name__)
 
 
@@ -67,7 +69,7 @@ class ScanRateLimiter:
 
     def _make_key(self, ip: str, window_type: str, window_value: int) -> str:
         """Build a namespaced Redis key for this IP and time window."""
-        return f"rate_limit:scan:{ip}:{window_type}:{window_value}"
+        return RateLimiterKeyBuilder.make_key(ip, window_type, window_value)
 
     async def check(self, request: Request) -> None:
         """
