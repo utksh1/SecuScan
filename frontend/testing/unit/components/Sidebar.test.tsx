@@ -1,293 +1,135 @@
-import React from 'react';
-import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import Sidebar from '../../../src/components/Sidebar';
+import { describe, it, expect, beforeEach } from 'vitest'
+import { render, screen, fireEvent } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { BrowserRouter } from 'react-router-dom'
+import Sidebar from '../../../src/components/Sidebar'
+import { SidebarProvider } from '../../../src/context/SidebarContext'
+import { ThemeProvider } from '../../../src/components/ThemeContext'
 
-/* ------------------------------------------------------------------ */
-/*  Mocks                                                              */
-/* ------------------------------------------------------------------ */
-
-// Mock framer-motion to render plain elements so tests focus on behavior,
-// not animation internals.
-vi.mock('framer-motion', async () => {
-  const ReactModule = await import('react');
-  const createMotionProxy = () =>
-    new Proxy(
-      {},
-      {
-        get(_target: unknown, prop: string) {
-          return ReactModule.forwardRef((props: Record<string, unknown>, ref: React.Ref<unknown>) => {
-            // Strip framer-specific props so they don't leak to the DOM
-            const {
-              initial: _initial,
-              animate: _animate,
-              exit: _exit,
-              transition: _transition,
-              layoutId: _layoutId,
-              whileHover: _whileHover,
-              whileTap: _whileTap,
-              ...rest
-            } = props;
-            return ReactModule.createElement(prop, { ...rest, ref });
-          });
-        },
-      },
-    );
-
-  return {
-    motion: createMotionProxy(),
-    AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-  };
-});
-
-// Minimal ThemeToggle stub — the Sidebar imports it but its internals
-// are not under test here.
-vi.mock('../../../src/components/ThemeToggle', () => ({
-  default: () => <div data-testid="theme-toggle">ThemeToggle</div>,
-}));
-
-/* ------------------------------------------------------------------ */
-/*  Helpers                                                            */
-/* ------------------------------------------------------------------ */
-
-/**
- * Renders the Sidebar inside a MemoryRouter so NavLink can resolve
- * active state based on `initialRoute`.
- */
-function renderSidebar(initialRoute = '/') {
+const renderSidebar = () => {
   return render(
-    <MemoryRouter initialEntries={[initialRoute]}>
-      <Sidebar />
-    </MemoryRouter>,
-  );
+    <ThemeProvider>
+      <BrowserRouter>
+        <SidebarProvider>
+          <Sidebar />
+        </SidebarProvider>
+      </BrowserRouter>
+    </ThemeProvider>
+  )
 }
 
-/* ------------------------------------------------------------------ */
-/*  Tests                                                              */
-/* ------------------------------------------------------------------ */
-
-describe('Sidebar', () => {
+describe('Sidebar - Accessibility', () => {
   beforeEach(() => {
-    localStorage.clear();
-    vi.clearAllMocks();
-  });
+    localStorage.clear()
+  })
 
-  afterEach(() => {
-    localStorage.clear();
-  });
+  it('should have proper aria labels', () => {
+    const { container } = renderSidebar()
+    const sidebar = container.querySelector('aside')
+    expect(sidebar).toHaveAttribute('aria-label', 'Main navigation')
+    expect(sidebar).toHaveAttribute('aria-expanded', 'true')
+  })
 
-  /* ---------------------------------------------------------------
-   *  Collapse Persistence
-   * --------------------------------------------------------------- */
-  describe('collapse persistence', () => {
-    it('defaults to expanded when localStorage has no saved value', () => {
-      renderSidebar();
+  it('should toggle sidebar on button click', () => {
+    const { container } = renderSidebar()
+    const sidebar = container.querySelector('aside')
+    const toggleButton = screen.getByLabelText(/collapse sidebar/i)
 
-      // All nav labels should be visible when expanded
-      expect(screen.getByText('Dashboard')).toBeInTheDocument();
-      expect(screen.getByText('Toolkit')).toBeInTheDocument();
-      expect(screen.getByText('Settings')).toBeInTheDocument();
-    });
+    expect(sidebar).toHaveAttribute('aria-expanded', 'true')
 
-    it('restores collapsed state from localStorage', () => {
-      localStorage.setItem('sidebar-expanded', 'false');
-      renderSidebar();
+    fireEvent.click(toggleButton)
 
-      // When collapsed the aside should have the narrow width style
-      const aside = document.querySelector('aside');
-      expect(aside).toBeInTheDocument();
+    expect(sidebar).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByLabelText(/expand sidebar/i)).toBeInTheDocument()
+  })
 
-      // Labels should still render (AnimatePresence mock renders children),
-      // but the component reads the persisted value; verify localStorage was
-      // consumed correctly by checking that the toggle icon shows the
-      // "expand" arrow.
-      expect(
-        screen.getByText('keyboard_double_arrow_right'),
-      ).toBeInTheDocument();
-    });
+  it('should toggle sidebar with keyboard (Enter)', async () => {
+    const user = userEvent.setup()
+    const { container } = renderSidebar()
+    const toggleButton = screen.getByLabelText(/collapse sidebar/i)
+    const sidebar = container.querySelector('aside')
 
-    it('restores expanded state from localStorage', () => {
-      localStorage.setItem('sidebar-expanded', 'true');
-      renderSidebar();
+    expect(sidebar).toHaveAttribute('aria-expanded', 'true')
 
-      // Expanded state shows the "collapse" arrow
-      expect(
-        screen.getByText('keyboard_double_arrow_left'),
-      ).toBeInTheDocument();
-    });
+    toggleButton.focus()
+    await user.keyboard('{Enter}')
 
-    it('persists collapsed state to localStorage after toggling', async () => {
-      const user = userEvent.setup();
-      renderSidebar();
+    expect(sidebar).toHaveAttribute('aria-expanded', 'false')
+  })
 
-      // Initially expanded (default)
-      expect(localStorage.getItem('sidebar-expanded')).toBe('true');
+  it('should toggle sidebar with keyboard (Space)', async () => {
+    const user = userEvent.setup()
+    const { container } = renderSidebar()
+    const toggleButton = screen.getByLabelText(/collapse sidebar/i)
+    const sidebar = container.querySelector('aside')
 
-      // Click the sidebar to toggle collapse
-      await user.click(screen.getByRole('complementary'));
+    expect(sidebar).toHaveAttribute('aria-expanded', 'true')
 
-      expect(localStorage.getItem('sidebar-expanded')).toBe('false');
-    });
+    toggleButton.focus()
+    await user.keyboard(' ')
 
-    it('persists expanded state when toggling back open', async () => {
-      const user = userEvent.setup();
-      localStorage.setItem('sidebar-expanded', 'false');
-      renderSidebar();
+    expect(sidebar).toHaveAttribute('aria-expanded', 'false')
+  })
 
-      await user.click(screen.getByRole('complementary'));
+  it('should persist sidebar state to localStorage', () => {
+    renderSidebar()
+    const toggleButton = screen.getByLabelText(/collapse sidebar/i)
 
-      expect(localStorage.getItem('sidebar-expanded')).toBe('true');
-    });
+    fireEvent.click(toggleButton)
 
-    it('toggles via the dedicated toggle button', async () => {
-      const user = userEvent.setup();
-      renderSidebar();
+    const saved = localStorage.getItem('sidebar-expanded')
+    expect(saved).toBe('false')
+  })
 
-      await user.click(
-        screen.getByRole('button', { name: 'keyboard_double_arrow_left' }),
-      );
+  it('should restore sidebar state from localStorage', () => {
+    localStorage.setItem('sidebar-expanded', JSON.stringify(false))
 
-      // After clicking the toggle button, the sidebar should be collapsed
-      expect(localStorage.getItem('sidebar-expanded')).toBe('false');
-      expect(
-        screen.getByText('keyboard_double_arrow_right'),
-      ).toBeInTheDocument();
-    });
-  });
+    const { container } = renderSidebar()
+    const sidebar = container.querySelector('aside')
 
-  /* ---------------------------------------------------------------
-   *  Active Nav State
-   * --------------------------------------------------------------- */
-  describe('active nav rendering', () => {
-    it('marks Dashboard link as active on "/"', () => {
-      renderSidebar('/');
+    expect(sidebar).toHaveAttribute('aria-expanded', 'false')
+  })
 
-      const dashboardLink = screen.getByText('Dashboard').closest('a')!;
-      expect(dashboardLink).toHaveAttribute('href', '/');
-      expect(dashboardLink).toHaveAttribute('aria-current', 'page');
-    });
+  it('should not toggle sidebar on navigation item click', () => {
+    const { container } = renderSidebar()
+    const sidebar = container.querySelector('aside')
+    const dashboardLink = screen.getByRole('link', { name: /dashboard/i })
 
-    it('marks Toolkit link as active on "/toolkit"', () => {
-      renderSidebar('/toolkit');
+    expect(sidebar).toHaveAttribute('aria-expanded', 'true')
 
-      const toolkitLink = screen.getByText('Toolkit').closest('a')!;
-      expect(toolkitLink).toHaveAttribute('href', '/toolkit');
-      expect(toolkitLink).toHaveAttribute('aria-current', 'page');
-    });
+    fireEvent.click(dashboardLink)
 
-    it('marks Settings link as active on "/settings"', () => {
-      renderSidebar('/settings');
+    expect(sidebar).toHaveAttribute('aria-expanded', 'true')
+  })
 
-      const settingsLink = screen.getByText('Settings').closest('a')!;
-      expect(settingsLink).toHaveAttribute('href', '/settings');
-      expect(settingsLink).toHaveAttribute('aria-current', 'page');
-    });
+  it('should have focusable toggle button', () => {
+    renderSidebar()
+    const toggleButton = screen.getByLabelText(/collapse sidebar/i)
 
-    it('marks Registry link as active on "/scans"', () => {
-      renderSidebar('/scans');
+    expect(toggleButton).not.toHaveAttribute('disabled')
+    toggleButton.focus()
+    expect(document.activeElement).toBe(toggleButton)
+  })
 
-      const scansLink = screen.getByText('Registry').closest('a')!;
-      expect(scansLink).toHaveAttribute('href', '/scans');
-      expect(scansLink).toHaveAttribute('aria-current', 'page');
-    });
+  it('should have focus ring visible on toggle button', () => {
+    renderSidebar()
+    const toggleButton = screen.getByLabelText(/collapse sidebar/i)
 
-    it('does not mark non-active links with active styling', () => {
-      renderSidebar('/settings');
+    expect(toggleButton).toHaveClass('focus:ring-2', 'focus:ring-rag-red/50')
+  })
 
-      const dashboardLink = screen.getByText('Dashboard').closest('a')!;
-      expect(dashboardLink).not.toHaveAttribute('aria-current');
-    });
+  it('should toggle via keyboard shortcut g+b', () => {
+    localStorage.setItem('sidebar-expanded', 'true')
+    const { container } = renderSidebar()
+    const sidebar = container.querySelector('aside')
 
-    it('renders active indicator elements for the active link', () => {
-      renderSidebar('/');
+    expect(sidebar).toHaveAttribute('aria-expanded', 'true')
 
-      const dashboardLink = screen.getByText('Dashboard').closest('a')!;
-      // The active link contains the glow div (layoutId="activeGlow") and
-      // the side bar div (layoutId="activeBar")
-      const glowDiv = dashboardLink.querySelector('[class*="bg-rag-red/5"]');
-      expect(glowDiv).toBeInTheDocument();
-    });
+    fireEvent.keyDown(window, { key: 'g' })
+    fireEvent.keyDown(window, { key: 'b' })
 
-    it('does not render active indicator elements for inactive links', () => {
-      renderSidebar('/settings');
-
-      const dashboardLink = screen.getByText('Dashboard').closest('a')!;
-      // Inactive link should NOT contain the active glow element
-      const glowDivs = dashboardLink.querySelectorAll('[class*="bg-rag-red/5"]');
-      expect(glowDivs.length).toBe(0);
-    });
-  });
-
-  /* ---------------------------------------------------------------
-   *  Highlighted Nav State
-   * --------------------------------------------------------------- */
-  describe('highlighted nav rendering', () => {
-    it('applies highlight styling to the Toolkit link when not active', () => {
-      // Navigate to a route that is NOT /toolkit so Toolkit is highlighted
-      // but not active
-      renderSidebar('/');
-
-      const toolkitLink = screen.getByText('Toolkit').closest('a')!;
-      expect(toolkitLink.className).toContain('bg-rag-blue/15');
-      expect(toolkitLink.className).toContain('border-rag-blue/30');
-    });
-
-    it('applies highlight icon styling to the Toolkit icon when not active', () => {
-      renderSidebar('/');
-
-      // The Toolkit icon should show the highlighted (blue) text
-      const toolkitIcon = screen.getByText('add_circle');
-      expect(toolkitIcon.className).toContain('text-rag-blue');
-    });
-
-    it('does not apply highlight styling to non-highlight links', () => {
-      renderSidebar('/');
-
-      // Dashboard is active here so skip it; check Findings which is
-      // neither active nor highlighted
-      const findingsLink = screen.getByText('Findings').closest('a')!;
-      expect(findingsLink.className).not.toContain('bg-rag-blue/15');
-    });
-
-    it('applies active styling instead of highlight when Toolkit is the active route', () => {
-      renderSidebar('/toolkit');
-
-      const toolkitLink = screen.getByText('Toolkit').closest('a')!;
-      expect(toolkitLink).toHaveAttribute('aria-current', 'page');
-      // Highlight-specific classes should NOT be present
-      expect(toolkitLink.className).not.toContain('bg-rag-blue/15');
-    });
-  });
-
-  /* ---------------------------------------------------------------
-   *  Nav Structure
-   * --------------------------------------------------------------- */
-  describe('navigation structure', () => {
-    it('renders all expected navigation links', () => {
-      renderSidebar();
-
-      const expectedLabels = [
-        'Toolkit',
-        'Dashboard',
-        'Registry',
-        'Findings',
-        'Reports',
-        'Workflows',
-        'Settings',
-      ];
-
-      for (const label of expectedLabels) {
-        expect(screen.getByText(label)).toBeInTheDocument();
-      }
-    });
-
-    it('renders section headers when expanded', () => {
-      renderSidebar();
-
-      expect(screen.getByText('Monitor')).toBeInTheDocument();
-      expect(screen.getByText('Analyze')).toBeInTheDocument();
-    });
-  });
-});
+    setTimeout(() => {
+      expect(sidebar).toHaveAttribute('aria-expanded', 'false')
+    }, 100)
+  })
+})

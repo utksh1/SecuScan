@@ -3,41 +3,20 @@ import { NavLink, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Background from './Background'
 import { useShortcuts } from '../hooks/useShortcuts'
+import { SidebarProvider, useSidebar } from '../context/SidebarContext'
 import { routes } from '../routes'
 
 interface AppShellProps {
     children: React.ReactNode
 }
 
-export default function AppShell({ children }: AppShellProps) {
+function AppShellInner({ children }: AppShellProps) {
     const { pathname } = useLocation()
-
-    useShortcuts()
+    const { isExpanded: sidebarExpanded, toggleSidebar } = useSidebar()
+    useShortcuts(toggleSidebar)
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
     const menuButtonRef = useRef<HTMLButtonElement>(null)
     const drawerRef = useRef<HTMLDivElement>(null)
-
-    const [sidebarExpanded, setSidebarExpanded] = useState(() => {
-        const saved = localStorage.getItem('sidebar-expanded')
-        return saved !== null ? JSON.parse(saved) : true
-    })
-
-    useEffect(() => {
-        const handleStorage = () => {
-            const saved = localStorage.getItem('sidebar-expanded')
-            if (saved !== null) setSidebarExpanded(JSON.parse(saved))
-        }
-        const handleSidebarChange = (e: Event) => {
-            const detail = (e as CustomEvent).detail
-            if (typeof detail === 'boolean') setSidebarExpanded(detail)
-        }
-        window.addEventListener('storage', handleStorage)
-        window.addEventListener('sidebar-state-changed', handleSidebarChange)
-        return () => {
-            window.removeEventListener('storage', handleStorage)
-            window.removeEventListener('sidebar-state-changed', handleSidebarChange)
-        }
-    }, [])
 
     useEffect(() => {
         setMobileMenuOpen(false)
@@ -107,7 +86,6 @@ export default function AppShell({ children }: AppShellProps) {
         { to: routes.settings, label: 'Settings' },
     ]
 
-
     return (
         <>
             <Background state="idle" />
@@ -168,7 +146,7 @@ export default function AppShell({ children }: AppShellProps) {
                     </>
                 )}
 
-                <main 
+                <main
                     className="flex-1 overflow-auto transition-all duration-300 ease-in-out ml-0 lg:ml-[var(--sidebar-width)] pt-14 lg:pt-0 pb-20 lg:pb-0"
                     style={{ '--sidebar-width': `${desktopSidebarWidth}px` } as React.CSSProperties}
                 >
@@ -193,5 +171,13 @@ export default function AppShell({ children }: AppShellProps) {
                 </nav>
             </div>
         </>
+    )
+}
+
+export default function AppShell({ children }: AppShellProps) {
+    return (
+        <SidebarProvider>
+            <AppShellInner>{children}</AppShellInner>
+        </SidebarProvider>
     )
 }

@@ -417,10 +417,18 @@ def validate_webhook_target(url: str) -> Tuple[bool, Optional[str]]:
 def sanitize_input(value: str) -> str:
     """
     Sanitize user input to prevent command injection.
-    
+
+    Uses an allowlist-adjacent approach: removes shell metacharacters and
+    control characters that would be dangerous in ``argv`` values executed
+    by ``asyncio.create_subprocess_exec``.
+
+    Backslashes are converted to forward slashes to preserve Windows path
+    separators.  Leading dashes are stripped because they can be interpreted
+    as tool options even in argv-passed invocations.
+
     Args:
         value: Input value to sanitize
-    
+
     Returns:
         Sanitized value
     """
@@ -428,7 +436,7 @@ def sanitize_input(value: str) -> str:
     value = value.replace('\\', '/')
 
     # Remove shell metacharacters and non-printable control characters.
-    dangerous_chars = [';', '|', '&', '$', '`', '(', ')', '<', '>', '\n', '\r', "'", '"', '\\', '!', '{', '}', '\t', '\x00']
+    dangerous_chars = [';', '|', '&', '$', '`', '(', ')', '<', '>', '\n', '\r', "'", '"', '!', '\t', '\x00']
     for char in dangerous_chars:
         value = value.replace(char, '')
 

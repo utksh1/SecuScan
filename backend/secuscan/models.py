@@ -235,6 +235,9 @@ class Finding(BaseModel):
     evidence_count: int = 0
     analyst_status: AnalystStatus = AnalystStatus.NEW
     retest_status: RetestStatus = RetestStatus.NOT_REQUESTED
+    safe_to_apply: Optional[bool] = None
+    compatible_range: Optional[str] = None
+    alternatives: Optional[List[str]] = None
 
 
 class TaskResult(BaseModel):
@@ -324,6 +327,19 @@ class NotificationRuleUpdate(BaseModel):
     channel_type: Optional[NotificationChannelType] = None
     target_url_or_email: Optional[str] = Field(default=None, max_length=2000)
     is_active: Optional[bool] = None
+
+
+class ScanWebhookSettingsRequest(BaseModel):
+    """Request payload for setting the scan-completion webhook URL."""
+    webhook_url: str = Field(..., max_length=2000)
+
+
+class ScanWebhookSettingsResponse(BaseModel):
+    """Stored scan-completion webhook setting returned by the API."""
+    webhook_url: Optional[str] = None
+    platform: Optional[str] = None
+    configured: bool = False
+    updated_at: Optional[datetime] = None
 
 
 class NotificationRuleResponse(BaseModel):

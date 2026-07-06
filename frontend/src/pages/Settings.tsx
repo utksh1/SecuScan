@@ -7,15 +7,19 @@ import {
   clearStoredApiKey,
   createNotificationRule,
   deleteNotificationRule,
+  deleteScanWebhookSettings,
+  getScanWebhookSettings,
   getStoredApiKey,
   listNotificationHistory,
   listNotificationRules,
   logoutSession,
+  setScanWebhookSettings,
   updateNotificationRule,
   type NotificationChannelType,
   type NotificationHistoryRow,
   type NotificationRule,
   type NotificationSeverityThreshold,
+  type ScanWebhookSettings,
 } from '../api'
 import { ConfirmModal } from '../components/ConfirmModal'
 
@@ -81,6 +85,57 @@ export default function Settings() {
     })
 
     const [editRules, setEditRules] = useState<Record<string, Partial<NotificationRule>>>({})
+
+    const [scanWebhook, setScanWebhook] = useState<ScanWebhookSettings | null>(null)
+    const [scanWebhookLoading, setScanWebhookLoading] = useState(false)
+    const [scanWebhookInput, setScanWebhookInput] = useState('')
+    const [scanWebhookSaving, setScanWebhookSaving] = useState(false)
+
+    async function refreshScanWebhook() {
+        setScanWebhookLoading(true)
+        try {
+            const data = await getScanWebhookSettings()
+            setScanWebhook(data)
+            setScanWebhookInput(data.webhook_url ?? '')
+        } catch {
+            addToast('Failed to load scan completion webhook', 'error')
+        } finally {
+            setScanWebhookLoading(false)
+        }
+    }
+
+    async function saveScanWebhook() {
+        const trimmed = scanWebhookInput.trim()
+        if (!trimmed) {
+            addToast('Webhook URL is required', 'error')
+            return
+        }
+        setScanWebhookSaving(true)
+        try {
+            const data = await setScanWebhookSettings(trimmed)
+            setScanWebhook(data)
+            setScanWebhookInput(data.webhook_url ?? '')
+            addToast('Scan completion webhook saved', 'success')
+        } catch {
+            addToast('Failed to save scan completion webhook', 'error')
+        } finally {
+            setScanWebhookSaving(false)
+        }
+    }
+
+    async function removeScanWebhook() {
+        setScanWebhookSaving(true)
+        try {
+            await deleteScanWebhookSettings()
+            setScanWebhook({ webhook_url: null, platform: null, configured: false, updated_at: null })
+            setScanWebhookInput('')
+            addToast('Scan completion webhook removed', 'info')
+        } catch {
+            addToast('Failed to remove scan completion webhook', 'error')
+        } finally {
+            setScanWebhookSaving(false)
+        }
+    }
 
     async function refreshNotificationRules() {
         setNotificationRulesLoading(true)
@@ -272,6 +327,7 @@ export default function Settings() {
 
     useEffect(() => {
         refreshNotificationRules()
+        refreshScanWebhook()
     }, [])
 
     useEffect(() => {
@@ -466,6 +522,66 @@ export default function Settings() {
                                     ● NO_KEY_SET — API requests will return 401 until a key is saved
                                 </p>
                             )}
+                        </div>
+                    </section>
+
+                    <section className="space-y-8" aria-label="Scan completion webhook">
+                        <div className="flex items-center gap-4">
+                            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Scan_Completion_Webhook</h3>
+                            <div className="h-0.5 flex-1 bg-black/10"></div>
+                            <button
+                                type="button"
+                                onClick={refreshScanWebhook}
+                                className="px-4 py-2 bg-charcoal border-4 border-black text-[10px] font-black uppercase tracking-widest text-silver/60 hover:text-silver-bright hover:bg-black/40 transition-all"
+                                aria-label="Refresh scan completion webhook"
+                            >
+                                Refresh
+                            </button>
+                        </div>
+
+                        <div className="bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-6">
+                            <div className="space-y-2">
+                                <p className="text-[10px] text-silver/40 uppercase font-bold italic leading-relaxed">
+                                    Fires once per scan when it completes or fails — includes target, status, findings by severity, and a report link.
+                                    Works out of the box with Slack and Discord incoming webhook URLs; any other URL receives a generic JSON payload.
+                                </p>
+                            </div>
+                            <div className="bg-charcoal-dark border-4 border-black p-6 space-y-4">
+                                <label className="text-[10px] font-black text-silver/50 uppercase tracking-widest">Webhook_URL</label>
+                                <input
+                                    value={scanWebhookInput}
+                                    onChange={(e) => setScanWebhookInput(e.target.value)}
+                                    className="w-full bg-black/40 border-4 border-black p-4 text-xs font-mono text-silver-bright font-bold focus:outline-none focus:border-rag-blue/50 transition-colors"
+                                    placeholder="https://hooks.slack.com/services/... or https://discord.com/api/webhooks/..."
+                                    aria-label="Scan completion webhook URL"
+                                    disabled={scanWebhookLoading}
+                                />
+                                {scanWebhook?.configured && (
+                                    <p className="text-[10px] font-mono text-rag-green uppercase tracking-widest">
+                                        ● ACTIVE — detected format: {scanWebhook.platform ?? 'generic'}
+                                    </p>
+                                )}
+                            </div>
+                            <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+                                <button
+                                    type="button"
+                                    onClick={saveScanWebhook}
+                                    disabled={scanWebhookSaving || scanWebhookLoading}
+                                    className="bg-rag-blue text-black px-10 py-4 text-[10px] font-black uppercase tracking-[0.35em] shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 disabled:opacity-50 disabled:cursor-not-allowed transition-all italic"
+                                >
+                                    {scanWebhook?.configured ? 'UPDATE_WEBHOOK' : 'SAVE_WEBHOOK'}
+                                </button>
+                                {scanWebhook?.configured && (
+                                    <button
+                                        type="button"
+                                        onClick={removeScanWebhook}
+                                        disabled={scanWebhookSaving || scanWebhookLoading}
+                                        className="px-10 py-4 bg-charcoal-dark border-4 border-black text-[10px] font-black uppercase tracking-[0.2em] text-silver/60 hover:text-rag-red hover:bg-black/40 disabled:opacity-50 disabled:cursor-not-allowed transition-all italic"
+                                    >
+                                        REMOVE
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </section>
 

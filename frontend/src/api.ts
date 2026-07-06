@@ -499,6 +499,32 @@ export async function listNotificationHistory(params?: {
   }
 }
 
+// Per-owner webhook fired once on scan completion/failure (Slack, Discord, or
+// a generic JSON endpoint — auto-detected from the URL). Distinct from the
+// per-finding notification rules above.
+export interface ScanWebhookSettings {
+  webhook_url: string | null
+  platform: 'slack' | 'discord' | 'generic' | null
+  configured: boolean
+  updated_at: string | null
+}
+
+export async function getScanWebhookSettings(): Promise<ScanWebhookSettings> {
+  return request<ScanWebhookSettings>('/settings/webhook')
+}
+
+export async function setScanWebhookSettings(webhookUrl: string): Promise<ScanWebhookSettings> {
+  return request<ScanWebhookSettings>('/settings/webhook', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ webhook_url: webhookUrl }),
+  })
+}
+
+export async function deleteScanWebhookSettings(): Promise<{ deleted: boolean }> {
+  return request<{ deleted: boolean }>('/settings/webhook', { method: 'DELETE' })
+}
+
 export function getTasks(params?: URLSearchParams) {
   const suffix = params ? `?${params.toString()}` : ''
   return request(`/tasks${suffix}`)
