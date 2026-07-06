@@ -55,6 +55,49 @@ def test_plugin_interpolation_sanitizes_user_controlled_values():
     )
 
 
+def test_plugin_interpolation_single_pass_prevents_sequential_injection():
+    """Single-pass substitution must not resolve placeholders injected by user values.
+
+    This test verifies the fix for CVE-class sequential template injection:
+    if field A's value contains ``{field_B}``, the single-pass approach prevents
+    it from being resolved when field B is substituted.
+    """
+    manager = PluginManager("plugins")
+
+    token = "use {module}; set RHOSTS {target}; set PAYLOAD {payload}; run"
+    inputs = {
+        "module": "exploit/multi/handler",
+        "target": "10.0.0.1",
+        "payload": "generic/shell_reverse_tcp",
+    }
+    result = manager._interpolate(token, inputs)
+    assert "; set TARGET " not in result
+
+    # A value containing brace-delimited text that matches another placeholder
+    # must NOT leak into the second substitution.
+    inputs2 = {
+        "module": "exploit/{target}",
+        "target": "EVIL_INJECTED",
+        "payload": "generic/shell_reverse_tcp",
+    }
+    result2 = manager._interpolate(token, inputs2)
+    assert result2 is not None
+    # EVIL_INJECTED appears only once (from the legitimate {target})
+    assert result2.count("EVIL_INJECTED") == 1
+    # The injected {target} in the module value is preserved literally
+    assert "{target}" in result2
+
+
+def test_plugin_interpolation_preserves_braces_in_values():
+    """Curly braces in user values must be preserved (not stripped by sanitize_input)."""
+    manager = PluginManager("plugins")
+
+    result = manager._interpolate("--json={payload}", {"payload": "{key: value}"})
+    assert result is not None
+    assert "{" in result and "}" in result
+    assert result == "--json={key: value}"
+
+
 def test_plugin_interpolation_preserves_legitimate_argv_values():
     manager = PluginManager("plugins")
 
@@ -367,3 +410,68 @@ def test_plugin_validation_presets(setup_test_environment):
 
     finally:
         target_field.validation = orig_validation
+
+
+def test_validate_inputs_rejects_path_traversal(setup_test_environment):
+    """_validate_inputs_against_schema must reject ``../`` in STRING/TEXT fields."""
+    manager = PluginManager(settings.plugins_dir)
+    asyncio.run(manager.load_plugins())
+
+    # Use secret_scanner — its target field has no validation pattern
+    plugin = manager.get_plugin("secret_scanner")
+    assert plugin is not None
+
+    target_field = next(f for f in plugin.fields if f.id == "target")
+
+    with pytest.raises(ValueError, match="traversal"):
+        manager._validate_inputs_against_schema(
+            plugin,
+            {target_field.id: "../../../etc/passwd"},
+        )
+
+    with pytest.raises(ValueError, match="traversal"):
+        manager._validate_inputs_against_schema(
+            plugin,
+            {target_field.id: "..\\..\\..\\etc\\passwd"},
+        )
+
+    # Legitimate values must still pass
+    manager._validate_inputs_against_schema(
+        plugin,
+        {target_field.id: "/home/user/project"},
+    )
+
+
+def test_plugin_build_command_rejects_path_traversal_in_target(setup_test_environment):
+    """build_command must reject ``../`` in free-form string fields like target."""
+    manager = PluginManager(settings.plugins_dir)
+    asyncio.run(manager.load_plugins())
+
+    # secret_scanner has an unprotected string target field passed to --source
+    for plugin_id, field_id, traversal_value in [
+        ("secret_scanner", "target", "../../../etc/passwd"),
+        ("nikto", "config_file", "../../../etc/nikto.conf"),
+        ("semgrep_scanner", "target", "../../../etc"),
+        ("yara_scan", "target", "../../../etc/passwd"),
+    ]:
+        plugin = manager.get_plugin(plugin_id)
+        assert plugin is not None, f"Plugin {plugin_id} not found"
+
+        with pytest.raises(ValueError, match="traversal"):
+            manager.build_command(
+                plugin_id,
+                {field_id: traversal_value},
+            )
+
+
+def test_plugin_build_command_allows_legitimate_targets(setup_test_environment):
+    """build_command must still allow legitimate hostnames, IPs, and URLs."""
+    manager = PluginManager(settings.plugins_dir)
+    asyncio.run(manager.load_plugins())
+
+    command = manager.build_command(
+        "http_inspector",
+        {"url": "https://example.com", "follow_redirects": True},
+    )
+    assert command is not None
+    assert "https://example.com" in command

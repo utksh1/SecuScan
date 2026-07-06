@@ -562,6 +562,13 @@ class TaskExecutor:
         if not command:
             raise ValueError("Failed to build command")
 
+        from .validation import validate_command_network_egress
+        cmd_valid, cmd_err = validate_command_network_egress(
+            command, safe_mode, plugin_id, task_id
+        )
+        if not cmd_valid:
+            raise ValueError(f"Command network egress validation failed: {cmd_err}")
+
         # Apply Docker Sandboxing if enabled
         if settings.docker_enabled:
             await self._ensure_docker_network()
@@ -814,6 +821,7 @@ class TaskExecutor:
                 },
                 task_id=task_id,
             )
+            await self._dispatch_task_notifications(db, task_id)
 
         except Exception as e:
             logger.error(f"Task {task_id} failed: {e}", exc_info=True)
@@ -847,6 +855,7 @@ class TaskExecutor:
                 context={"task_id": task_id, "error": safe_error},
                 task_id=task_id
             )
+            await self._dispatch_task_notifications(db, task_id)
         finally:
             self.running_tasks.pop(task_id, None)
             self._process_pids.pop(task_id, None)
@@ -1278,6 +1287,33 @@ class TaskExecutor:
             target=target,
             findings=[item for item in result.get("findings", []) if isinstance(item, dict)],
         )
+
+        try:
+            from .remediation import build_dependency_graph, validate_remediation
+            graph = build_dependency_graph(target)
+            validations = {}
+            for f in normalized_findings:
+                remediation_str = f.get("remediation", "")
+                if remediation_str:
+                    val_res = validate_remediation(remediation_str, graph)
+                    validations[id(f)] = val_res
+
+            for f in normalized_findings:
+                if id(f) in validations:
+                    val_res = validations[id(f)]
+                    f_metadata = f.setdefault("metadata", {})
+                    f_metadata["safe_to_apply"] = val_res["safe_to_apply"]
+                    f_metadata["compatible_range"] = val_res["compatible_range"]
+                    f_metadata["alternatives"] = val_res["alternatives"]
+        except Exception as e:
+            logger.warning(
+                "Remediation safety validation failed for task %s (plugin %s): %s. Skipping safety metadata enrichment.",
+                task_id,
+                plugin_id,
+                str(e),
+                exc_info=True,
+            )
+
         previous_findings = await self._load_previous_task_findings(
             db,
             owner_id=owner_id,
@@ -1873,9 +1909,15 @@ class TaskExecutor:
             if sent:
                 logger.info("Task %s: delivered %d notification(s)", task_id, sent)
 
-            # Send Slack Webhook notification for scan completion
+            # Send Slack Webhook notification for scan completion (legacy,
+            # single global webhook configured via env var).
             from .notification_service import process_slack_notification
             await process_slack_notification(db, task_id)
+
+            # Send the per-owner scan-completion webhook (Slack/Discord/
+            # generic JSON), configured from the Settings page (issue #1615).
+            from .notification_service import process_scan_completion_webhook
+            await process_scan_completion_webhook(db, task_id)
         except Exception as exc:
             logger.warning(
                 "Task %s: notification dispatch failed: %s",

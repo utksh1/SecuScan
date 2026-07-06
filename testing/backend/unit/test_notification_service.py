@@ -19,8 +19,14 @@ from backend.secuscan.models import (
 from backend.secuscan.notification_service import (
     NotificationRuleConflictError,
     build_alert_payload,
+    build_scan_completion_payload,
+    delete_scan_webhook_url,
     deliver_via_rule,
+    detect_webhook_platform,
+    get_scan_webhook_url,
     process_finding_notifications,
+    process_scan_completion_webhook,
+    set_scan_webhook_url,
     severity_meets_threshold,
     update_notification_rule,
     was_already_delivered,
@@ -768,3 +774,152 @@ async def test_process_slack_notification_failed_task(test_db, monkeypatch):
     assert "blocks" in payload
     assert "Error Message" in payload["blocks"][2]["text"]["text"]
     assert "Connection refused" in payload["blocks"][2]["text"]["text"]
+
+
+# ---------------------------------------------------------------------------
+# Scan-completion webhook (issue #1615): per-owner webhook settable from the
+# Settings page, fired for both completed and failed scans, with Slack,
+# Discord, and generic JSON payload formats.
+# ---------------------------------------------------------------------------
+
+
+def test_detect_webhook_platform():
+    assert detect_webhook_platform("https://hooks.slack.com/services/T00/B00/xxx") == "slack"
+    assert detect_webhook_platform("https://discord.com/api/webhooks/1/abc") == "discord"
+    assert detect_webhook_platform("https://discordapp.com/api/webhooks/1/abc") == "discord"
+    assert detect_webhook_platform("https://example.com/my-hook") == "generic"
+    assert detect_webhook_platform("not a url") == "generic"
+
+
+def test_build_scan_completion_payload_slack():
+    summary = {
+        "task_id": "t1",
+        "tool_name": "nmap",
+        "target": "127.0.0.1",
+        "status": "completed",
+        "total_findings": 3,
+        "severity_counts": {"critical": 1, "medium": 2},
+        "error_message": None,
+        "report_link": "/task/t1",
+    }
+    payload = build_scan_completion_payload("slack", summary)
+    assert "blocks" in payload
+    assert "text" in payload
+    assert "127.0.0.1" in payload["text"]
+
+
+def test_build_scan_completion_payload_discord():
+    summary = {
+        "task_id": "t1",
+        "tool_name": "nmap",
+        "target": "127.0.0.1",
+        "status": "failed",
+        "total_findings": 0,
+        "severity_counts": {},
+        "error_message": "Connection refused",
+        "report_link": "https://example.com/task/t1",
+    }
+    payload = build_scan_completion_payload("discord", summary)
+    assert "content" in payload
+    assert "Connection refused" in payload["content"]
+    assert payload["embeds"][0]["url"] == "https://example.com/task/t1"
+
+
+def test_build_scan_completion_payload_generic():
+    summary = {
+        "task_id": "t1",
+        "tool_name": "nmap",
+        "target": "127.0.0.1",
+        "status": "completed",
+        "total_findings": 2,
+        "severity_counts": {"high": 2},
+        "error_message": None,
+        "report_link": "/task/t1",
+    }
+    payload = build_scan_completion_payload("generic", summary)
+    assert payload["event"] == "scan.completed"
+    assert payload["target"] == "127.0.0.1"
+    assert payload["severity_counts"] == {"high": 2}
+    assert payload["report_link"] == "/task/t1"
+
+
+@pytest.mark.asyncio
+async def test_set_get_delete_scan_webhook_url(test_db):
+    assert await get_scan_webhook_url(test_db, "owner-1") is None
+
+    row = await set_scan_webhook_url(test_db, "owner-1", "https://hooks.slack.com/services/x")
+    assert row["webhook_url"] == "https://hooks.slack.com/services/x"
+    assert await get_scan_webhook_url(test_db, "owner-1") == "https://hooks.slack.com/services/x"
+
+    # Upsert overwrites the existing value for the same owner.
+    await set_scan_webhook_url(test_db, "owner-1", "https://discord.com/api/webhooks/1/a")
+    assert await get_scan_webhook_url(test_db, "owner-1") == "https://discord.com/api/webhooks/1/a"
+
+    deleted = await delete_scan_webhook_url(test_db, "owner-1")
+    assert deleted is True
+    assert await get_scan_webhook_url(test_db, "owner-1") is None
+
+
+@pytest.mark.asyncio
+async def test_process_scan_completion_webhook_no_url_configured(test_db):
+    """No webhook configured for the owner => nothing is sent, no error raised."""
+    task_id, _ = await _seed_finding(test_db, severity="high")
+
+    mock_send = AsyncMock(return_value=(True, None))
+    with patch("backend.secuscan.notification_service.send_webhook", mock_send):
+        await process_scan_completion_webhook(test_db, task_id)
+
+    mock_send.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_process_scan_completion_webhook_completed(test_db):
+    task_id, _ = await _seed_finding(test_db, severity="critical")
+    await set_scan_webhook_url(test_db, "default", "https://hooks.slack.com/services/x")
+
+    mock_send = AsyncMock(return_value=(True, None))
+    with patch("backend.secuscan.notification_service.send_webhook", mock_send):
+        await process_scan_completion_webhook(test_db, task_id)
+
+    assert mock_send.call_count == 1
+    target_url, payload = mock_send.call_args[0]
+    assert target_url == "https://hooks.slack.com/services/x"
+    assert "blocks" in payload  # Slack format auto-detected from the URL
+
+
+@pytest.mark.asyncio
+async def test_process_scan_completion_webhook_failed_scan_discord(test_db):
+    task_id = str(uuid.uuid4())
+    await test_db.execute(
+        """
+        INSERT INTO tasks (
+            id, plugin_id, tool_name, target, status, inputs_json, consent_granted, error_message
+        ) VALUES (?, 'nmap', 'nmap', '127.0.0.1', 'failed', '{}', 1, 'Connection refused')
+        """,
+        (task_id,),
+    )
+    await set_scan_webhook_url(test_db, "default", "https://discord.com/api/webhooks/1/abc")
+
+    mock_send = AsyncMock(return_value=(True, None))
+    with patch("backend.secuscan.notification_service.send_webhook", mock_send):
+        await process_scan_completion_webhook(test_db, task_id)
+
+    assert mock_send.call_count == 1
+    target_url, payload = mock_send.call_args[0]
+    assert target_url == "https://discord.com/api/webhooks/1/abc"
+    assert "content" in payload
+    assert "Connection refused" in payload["content"]
+
+
+@pytest.mark.asyncio
+async def test_process_scan_completion_webhook_delivery_failure_is_swallowed(test_db):
+    """A failed/unreachable webhook must not raise - it's only logged."""
+    task_id, _ = await _seed_finding(test_db, severity="low")
+    await set_scan_webhook_url(test_db, "default", "https://example.invalid/hook")
+
+    mock_send = AsyncMock(side_effect=Exception("boom"))
+    with patch("backend.secuscan.notification_service.send_webhook", mock_send):
+        # Should not raise.
+        await process_scan_completion_webhook(test_db, task_id)
+
+    assert mock_send.call_count == 1
