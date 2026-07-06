@@ -26,6 +26,17 @@ from .routes_json_helpers import (
 
 # Re-exported for backward compatibility with integration tests
 SSE_RAW_OUTPUT_CHUNK_SIZE = 64 * 1024
+
+# GET /task/{task_id}/result pagination (issue #1621): a wide-range scan can
+# produce tens of thousands of finding rows. Returning them all in one
+# response materialises the entire result set in memory before the first
+# byte is sent, which can OOM-crash the backend process. The findings list
+# is paginated; aggregate views (severity counts, groups, asset summary)
+# are computed from a bounded sample instead of the full table so they stay
+# cheap regardless of how large the underlying scan was.
+TASK_RESULT_FINDINGS_DEFAULT_PER_PAGE = 100
+TASK_RESULT_FINDINGS_MAX_PER_PAGE = 500
+TASK_RESULT_AGGREGATION_SAMPLE_CAP = 5000
 from .routes_report_helpers import (
     _slugify_filename_part,
     build_report_filename,
@@ -800,14 +811,19 @@ async def download_sarif_report(task_id: str, owner: str = Depends(get_current_o
 
 
 @router.get("/task/{task_id}/result")
-async def get_task_result(task_id: str, owner: str = Depends(get_current_owner)):
+async def get_task_result(
+    task_id: str,
+    owner: str = Depends(get_current_owner),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(TASK_RESULT_FINDINGS_DEFAULT_PER_PAGE, ge=1, le=TASK_RESULT_FINDINGS_MAX_PER_PAGE),
+):
     """Get task execution result"""
     db = await get_db()
 
     # Enforce ownership and existence check first
     await require_owned_task(db, task_id, owner)
 
-    cache_key = f"tasks:result:{task_id}:{owner}"
+    cache_key = f"tasks:result:{task_id}:{owner}:page={page}:per_page={per_page}"
     cache = await get_cache()
     cached = await cache.get_json(cache_key)
     if cached is not None:
@@ -833,32 +849,73 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
         except json.JSONDecodeError:
             structured = {}
 
-    finding_rows = await db.fetchall(
-        "SELECT * FROM findings WHERE owner_id = ? AND task_id = ? ORDER BY (risk_score IS NULL) ASC, risk_score DESC, discovered_at DESC",
+    total_findings_row = await db.fetchone(
+        "SELECT COUNT(*) AS count FROM findings WHERE owner_id = ? AND task_id = ?",
         (owner, task_id),
     )
+    total_findings_count = total_findings_row["count"] if total_findings_row else 0
+
+    offset = (page - 1) * per_page
+    finding_rows = await db.fetchall(
+        "SELECT * FROM findings WHERE owner_id = ? AND task_id = ? "
+        "ORDER BY (risk_score IS NULL) ASC, risk_score DESC, discovered_at DESC "
+        "LIMIT ? OFFSET ?",
+        (owner, task_id, per_page, offset),
+    )
     findings = deserialize_finding_rows(finding_rows)
+
+    # Aggregate views (severity breakdown, groups, asset summary) must reflect
+    # the whole scan, not just the current page, but loading every row to get
+    # there would reintroduce the OOM this endpoint is being fixed for. A
+    # bounded sample keeps them accurate for the overwhelming majority of
+    # scans while capping memory use for pathological ones.
+    if total_findings_count > TASK_RESULT_AGGREGATION_SAMPLE_CAP:
+        aggregation_rows = await db.fetchall(
+            "SELECT * FROM findings WHERE owner_id = ? AND task_id = ? "
+            "ORDER BY (risk_score IS NULL) ASC, risk_score DESC, discovered_at DESC "
+            "LIMIT ?",
+            (owner, task_id, TASK_RESULT_AGGREGATION_SAMPLE_CAP),
+        )
+        aggregation_findings = deserialize_finding_rows(aggregation_rows)
+        aggregation_sample_capped = True
+    elif offset == 0 and per_page >= total_findings_count:
+        # Already have every finding in `findings` for the common case
+        # (first page large enough to cover the whole scan).
+        aggregation_findings = findings
+        aggregation_sample_capped = False
+    else:
+        aggregation_rows = await db.fetchall(
+            "SELECT * FROM findings WHERE owner_id = ? AND task_id = ? "
+            "ORDER BY (risk_score IS NULL) ASC, risk_score DESC, discovered_at DESC",
+            (owner, task_id),
+        )
+        aggregation_findings = deserialize_finding_rows(aggregation_rows)
+        aggregation_sample_capped = False
+
     asset_rows = await db.fetchall(
         "SELECT * FROM asset_services WHERE owner_id = ? AND task_id = ? ORDER BY created_at DESC",
         (owner, task_id),
     )
     asset_services = deserialize_asset_service_rows(asset_rows)
 
-    if not findings and isinstance(structured, dict):
-        findings = [item for item in structured.get("findings", []) if isinstance(item, dict)]
+    if not aggregation_findings and isinstance(structured, dict):
+        structured_findings = [item for item in structured.get("findings", []) if isinstance(item, dict)]
+        total_findings_count = len(structured_findings)
+        aggregation_findings = structured_findings
+        findings = structured_findings[offset:offset + per_page]
 
     severity_counts: Dict[str, int] = {}
-    for finding in findings:
+    for finding in aggregation_findings:
         severity = str(finding.get("severity", "info")).lower()
         severity_counts[severity] = severity_counts.get(severity, 0) + 1
 
     finding_groups = structured.get("finding_groups") if isinstance(structured, dict) else None
     if not isinstance(finding_groups, list) or not finding_groups:
-        finding_groups = build_finding_groups(findings)
+        finding_groups = build_finding_groups(aggregation_findings)
 
     asset_summary = structured.get("asset_summary") if isinstance(structured, dict) else None
     if not isinstance(asset_summary, list) or not asset_summary:
-        asset_summary = build_asset_summary(findings, asset_services)
+        asset_summary = build_asset_summary(aggregation_findings, asset_services)
 
     scan_diff = structured.get("scan_diff") if isinstance(structured, dict) else None
     if not isinstance(scan_diff, dict):
@@ -877,7 +934,7 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
         str(item) for item in structured_summary
         if isinstance(item, (str, int, float)) and str(item).strip()
     ] if isinstance(structured_summary, list) else []
-    total_findings = len(findings)
+    total_findings = total_findings_count
     if not summary and total_findings > 0:
         critical_high = severity_counts.get("critical", 0) + severity_counts.get("high", 0)
         if critical_high > 0:
@@ -927,7 +984,11 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
         "errors": [{"message": redact(task_row["error_message"])}] if task_row["error_message"] else [],
         "error_message": redact(task_row["error_message"]) if task_row["error_message"] else None,
         "exit_code": task_row["exit_code"],
-        "metadata": {}
+        "metadata": {},
+        "total_findings": total_findings_count,
+        "page": page,
+        "per_page": per_page,
+        "has_more_findings": offset + len(findings) < total_findings_count,
     }
 
     if task_row["status"] in ["completed", "failed", "cancelled"]:
