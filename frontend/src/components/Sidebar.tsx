@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React from 'react'
 import { NavLink } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { routes } from '../routes'
 import { useAuth } from './AuthContext'
 import ThemeToggle from './ThemeToggle'
+import { useSidebar } from '../context/SidebarContext'
 
 interface NavItemProps {
     to: string;
@@ -102,26 +103,19 @@ const NavSection = ({ label, isExpanded }: { label: string, isExpanded: boolean 
 )
 
 export default function Sidebar() {
+    const { isExpanded, toggleSidebar } = useSidebar()
     const { isAuthenticated, signOut } = useAuth()
-    const [isExpanded, setIsExpanded] = useState(() => {
-        const saved = localStorage.getItem('sidebar-expanded')
-        return saved !== null ? JSON.parse(saved) : true
-    })
-
-    useEffect(() => {
-        localStorage.setItem('sidebar-expanded', JSON.stringify(isExpanded))
-        window.dispatchEvent(new CustomEvent('sidebar-state-changed', { detail: isExpanded }))
-    }, [isExpanded])
 
     return (
         <motion.aside
             initial={false}
             animate={{ width: isExpanded ? 220 : 64 }}
-            onClick={() => setIsExpanded(!isExpanded)}
             className={`
                 hidden lg:flex flex-col h-screen fixed left-0 top-0 bg-secondary border-r border-accent-silver/10 z-50
-                shadow-[4px_0_24px_rgba(0,0,0,0.4)] overflow-hidden cursor-pointer
+                shadow-[4px_0_24px_rgba(0,0,0,0.4)] overflow-hidden
             `}
+            aria-label="Main navigation"
+            aria-expanded={isExpanded}
         >
             {/* Header / Logo */}
             <div className={`flex flex-col pt-8 pb-4 mb-4`}>
@@ -129,14 +123,9 @@ export default function Sidebar() {
                     <motion.div
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            if (!isExpanded) setIsExpanded(true);
-                        }}
                         className={`
                             w-12 h-12 bg-bg-tertiary flex items-center justify-center rounded-xl border border-accent-silver/20
                             shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]
-                            ${!isExpanded && 'cursor-pointer'}
                         `}
                     >
                         <span className="material-symbols-outlined text-rag-red text-[24px] glow-red fill-1">shield</span>
@@ -197,11 +186,16 @@ export default function Sidebar() {
                 <div className="flex items-center gap-2">
                     <ThemeToggle size="sm" />
                     <button
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            setIsExpanded(!isExpanded);
+                        onClick={() => toggleSidebar()}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault()
+                                toggleSidebar()
+                            }
                         }}
-                        className="flex-1 py-2 flex items-center justify-center text-muted hover:text-primary transition-colors"
+                        aria-label={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+                        aria-controls="sidebar-nav"
+                        className="flex-1 py-2 flex items-center justify-center text-muted hover:text-primary transition-colors rounded hover:bg-accent-silver/5 focus:outline-none focus:ring-2 focus:ring-rag-red/50"
                     >
                         <span className="material-symbols-outlined text-[18px]">
                             {isExpanded ? 'keyboard_double_arrow_left' : 'keyboard_double_arrow_right'}

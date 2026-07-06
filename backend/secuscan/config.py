@@ -178,6 +178,10 @@ class Settings(BaseSettings):
     # Slack Webhook Configuration
     slack_webhook_url: Optional[str] = None
 
+    # Public base URL used to build absolute links (e.g. report links) in
+    # outbound notifications. Leave blank to emit relative paths.
+    public_base_url: str = ""
+
     class Config:
         env_prefix = "SECUSCAN_"
         case_sensitive = False

@@ -347,6 +347,16 @@ ON credential_vault(owner_id);
                 sent_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
             );
 
+            -- Per-owner webhook fired on scan completion/failure (issue #1615).
+            -- Distinct from notification_rules, which fires per-finding above a
+            -- severity threshold; this fires once per scan regardless of severity.
+            CREATE TABLE IF NOT EXISTS scan_webhook_settings (
+                owner_id TEXT PRIMARY KEY,
+                webhook_url TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
+                updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+            );
+
             -- Tasks indexes (existing)
             CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at);
             CREATE INDEX IF NOT EXISTS idx_tasks_target ON tasks(target);

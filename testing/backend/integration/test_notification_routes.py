@@ -247,6 +247,55 @@ def test_notification_history_list_contract(test_client):
     assert filtered_data["history"][0]["status"] == "success"
 
 
+def test_scan_webhook_settings_crud_contract(test_client):
+    # Nothing configured initially.
+    get_response = test_client.get("/api/v1/settings/webhook")
+    assert get_response.status_code == 200
+    assert get_response.json() == {
+        "webhook_url": None,
+        "platform": None,
+        "configured": False,
+        "updated_at": None,
+    }
+
+    put_response = test_client.put(
+        "/api/v1/settings/webhook",
+        json={"webhook_url": "https://hooks.slack.com/services/T00/B00/xxx"},
+    )
+    assert put_response.status_code == 200
+    created = put_response.json()
+    assert created["webhook_url"] == "https://hooks.slack.com/services/T00/B00/xxx"
+    assert created["platform"] == "slack"
+    assert created["configured"] is True
+
+    get_after_put = test_client.get("/api/v1/settings/webhook")
+    assert get_after_put.status_code == 200
+    assert get_after_put.json()["webhook_url"] == "https://hooks.slack.com/services/T00/B00/xxx"
+
+    # Updating replaces the existing value (upsert, not append).
+    update_response = test_client.put(
+        "/api/v1/settings/webhook",
+        json={"webhook_url": "https://discord.com/api/webhooks/1/abc"},
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["platform"] == "discord"
+
+    delete_response = test_client.delete("/api/v1/settings/webhook")
+    assert delete_response.status_code == 200
+    assert delete_response.json()["deleted"] is True
+
+    get_after_delete = test_client.get("/api/v1/settings/webhook")
+    assert get_after_delete.json()["configured"] is False
+
+
+def test_scan_webhook_settings_rejects_invalid_url(test_client):
+    response = test_client.put(
+        "/api/v1/settings/webhook",
+        json={"webhook_url": "not-a-url"},
+    )
+    assert response.status_code == 400
+
+
 def test_admin_diagnostics_notifications(test_client, monkeypatch):
     from backend.secuscan.config import settings
 
