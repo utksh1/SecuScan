@@ -154,3 +154,8 @@ class TestNormalizeSeverity:
     def test_non_string_input(self):
         scanner = _ConcreteScanner("task21", None)
         assert scanner.normalize_severity(123) == "info"
+
+    def test_none_input_returns_info(self):
+        """None is a common input in real pipelines — str(None)='None' is not in the mapping, so returns 'info'."""
+        scanner = _ConcreteScanner("task_none", None)
+        assert scanner.normalize_severity(None) == "info"
