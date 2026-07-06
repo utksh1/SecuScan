@@ -307,6 +307,34 @@ async def get_all_presets():
     }
 
 
+async def _log_blocked_scan_attempt(
+    db,
+    owner: str,
+    event_type: str,
+    message: str,
+    context: Optional[Dict] = None,
+    plugin_id: Optional[str] = None,
+) -> None:
+    """
+    Record a scan attempt that was rejected before it ever started executing.
+
+    Issue #1623: the audit log previously only recorded scans that passed
+    every gate and began running (via executor.create_task's "task_created"
+    event). Attempts blocked by safe mode, rejected for missing consent, or
+    otherwise stopped during request validation left no trace at all, so an
+    administrator had no way to tell, post-incident, whether a user had
+    attempted to scan an unauthorised target. Every rejection path in
+    start_task now writes an entry here before raising its HTTPException.
+    """
+    await db.log_audit(
+        event_type,
+        message,
+        severity="warning",
+        context={"owner_id": owner, **(context or {})},
+        plugin_id=plugin_id,
+    )
+
+
 @router.post("/task/start", dependencies=[Depends(task_start_limiter), Depends(check_scan_rate_limit)])
 async def start_task(
     request: TaskCreateRequest,
@@ -317,16 +345,27 @@ async def start_task(
     """
     Start a new scan task.
     """
+    db = await get_db()
+
     # ── Payload size / field-length guard ─────────────────────────────────
     raw_body = await raw_request.body()
     execution_context = normalize_execution_context(request.execution_context)
     ok, status_code, error_msg = validate_task_start_payload(raw_body, request.inputs, execution_context)
     if not ok:
+        await _log_blocked_scan_attempt(
+            db, owner, "task_blocked_invalid_payload", f"Task start rejected: {error_msg}",
+            context={"plugin_id": request.plugin_id}, plugin_id=request.plugin_id,
+        )
         raise HTTPException(status_code=status_code, detail=error_msg)
 
     # Validate consent
     if settings.require_consent and not request.consent_granted:
         logger.warning(f"Task start failed: Consent not granted. Request: {request}")
+        await _log_blocked_scan_attempt(
+            db, owner, "task_blocked_consent", "Task start rejected: consent not granted",
+            context={"plugin_id": request.plugin_id, "target": (request.inputs or {}).get("target")},
+            plugin_id=request.plugin_id,
+        )
         raise HTTPException(
             status_code=400,
             detail="Consent required. You must acknowledge the legal notice."
@@ -338,6 +377,10 @@ async def start_task(
 
     if not plugin:
         logger.warning(f"Task start failed: Plugin not found: {request.plugin_id}")
+        await _log_blocked_scan_attempt(
+            db, owner, "task_blocked_plugin_not_found", f"Task start rejected: plugin not found ({request.plugin_id})",
+            plugin_id=request.plugin_id,
+        )
         raise HTTPException(status_code=404, detail=f"Plugin not found: {request.plugin_id}")
 
     preset_ok, preset_error = validate_preset_name(
@@ -347,21 +390,41 @@ async def start_task(
     )
     if not preset_ok:
         logger.warning("Task start failed: %s", preset_error)
+        await _log_blocked_scan_attempt(
+            db, owner, "task_blocked_invalid_preset", f"Task start rejected: {preset_error}",
+            plugin_id=request.plugin_id,
+        )
         raise HTTPException(status_code=400, detail=preset_error)
 
-    db = await get_db()
     target_policy = await get_target_policy(db, owner, execution_context.get("target_policy_id"))
     credential_profile = await get_credential_profile(db, owner, execution_context.get("credential_profile_id"))
     session_profile = await get_session_profile(db, owner, execution_context.get("session_profile_id"))
 
     if execution_context.get("target_policy_id") and not target_policy:
+        await _log_blocked_scan_attempt(
+            db, owner, "task_blocked_policy", "Task start rejected: target policy not found",
+            plugin_id=request.plugin_id,
+        )
         raise HTTPException(status_code=400, detail="Target policy not found for this workspace")
     if execution_context.get("credential_profile_id") and not credential_profile:
+        await _log_blocked_scan_attempt(
+            db, owner, "task_blocked_policy", "Task start rejected: credential profile not found",
+            plugin_id=request.plugin_id,
+        )
         raise HTTPException(status_code=400, detail="Credential profile not found for this workspace")
     if execution_context.get("session_profile_id") and not session_profile:
+        await _log_blocked_scan_attempt(
+            db, owner, "task_blocked_policy", "Task start rejected: session profile not found",
+            plugin_id=request.plugin_id,
+        )
         raise HTTPException(status_code=400, detail="Session profile not found for this workspace")
 
     if (credential_profile or session_profile) and not (target_policy and target_policy.get("allow_authenticated_scan")):
+        await _log_blocked_scan_attempt(
+            db, owner, "task_blocked_policy",
+            "Task start rejected: authenticated scan not permitted by target policy",
+            plugin_id=request.plugin_id,
+        )
         raise HTTPException(
             status_code=400,
             detail="Authenticated scans require a target policy with authenticated scanning enabled.",
@@ -373,6 +436,11 @@ async def start_task(
     )
 
     if requires_exploit_policy and not (target_policy and target_policy.get("allow_exploit_validation")):
+        await _log_blocked_scan_attempt(
+            db, owner, "task_blocked_policy",
+            "Task start rejected: exploit validation not permitted by target policy",
+            plugin_id=request.plugin_id,
+        )
         raise HTTPException(
             status_code=400,
             detail="Offensive validation requires a target policy that explicitly allows exploit validation.",
@@ -400,8 +468,16 @@ async def start_task(
             try:
                 tval = int(effective_inputs[tkey])
             except (TypeError, ValueError):
+                await _log_blocked_scan_attempt(
+                    db, owner, "task_blocked_invalid_input", f"Task start rejected: invalid value for {tkey}",
+                    plugin_id=request.plugin_id,
+                )
                 raise HTTPException(status_code=400, detail=f"Invalid value for {tkey}: must be an integer")
             if tval <= 0 or tval > settings.sandbox_timeout:
+                await _log_blocked_scan_attempt(
+                    db, owner, "task_blocked_invalid_input", f"Task start rejected: {tkey} out of allowed bounds",
+                    plugin_id=request.plugin_id,
+                )
                 raise HTTPException(status_code=400, detail=f"{tkey} must be between 1 and {settings.sandbox_timeout} seconds")
 
     if target := effective_inputs.get("target"):
@@ -416,6 +492,12 @@ async def start_task(
                 )
             except asyncio.TimeoutError:
                 logger.warning("Task start failed: Target validation timed out for '%s'", target_str)
+                await _log_blocked_scan_attempt(
+                    db, owner, "task_blocked_safe_mode",
+                    "Task start rejected: target validation timed out in safe mode",
+                    context={"target": target_str, "safe_mode": safe_mode},
+                    plugin_id=request.plugin_id,
+                )
                 raise HTTPException(
                     status_code=400,
                     detail="Target validation timed out in safe mode (SecuScan Guardrail)",
@@ -423,6 +505,12 @@ async def start_task(
 
             if not is_valid:
                 logger.warning(f"Task start failed: Target validation failed for '{target}': {error_msg}")
+                await _log_blocked_scan_attempt(
+                    db, owner, "task_blocked_safe_mode",
+                    f"Task start rejected: target validation failed ({error_msg})",
+                    context={"target": target_str, "safe_mode": safe_mode},
+                    plugin_id=request.plugin_id,
+                )
                 raise HTTPException(status_code=400, detail=error_msg)
 
     # Check rate limits per (client, plugin) so one client cannot exhaust
@@ -435,6 +523,10 @@ async def start_task(
     )
 
     if not can_execute:
+        await _log_blocked_scan_attempt(
+            db, owner, "task_blocked_rate_limit", "Task start rejected: rate limit exceeded",
+            plugin_id=request.plugin_id,
+        )
         raise HTTPException(status_code=429, detail=error_msg)
 
     # Create task record first so we have a real task_id for the limiter
