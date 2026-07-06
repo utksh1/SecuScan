@@ -6,6 +6,8 @@ export default defineConfig({
   snapshotPathTemplate:
     "{testDir}/__snapshots__/{testFilePath}/{arg}{ext}",
 
+  reporter: [['html', { outputFolder: 'playwright-report' }]],
+
   use: {
     baseURL: 'http://127.0.0.1:5173',
     headless: true,
