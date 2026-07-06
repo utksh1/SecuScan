@@ -2,6 +2,7 @@
 Plugin loader and management system
 """
 
+import time
 import json
 import os
 import re
@@ -141,6 +142,14 @@ class PluginManager:
                 logger.error(f"Failed to load plugin from {plugin_dir}: {e}")
 
         logger.info(f"Loaded {loaded} plugins")
+
+        # Invalidate caches when plugin state changes
+        try:
+            from .cache import invalidate_plugin_caches
+            await invalidate_plugin_caches()
+        except Exception as e:
+            logger.warning(f"Failed to invalidate plugin caches: {e}")
+
         return loaded
 
     async def _load_plugin_metadata(self, metadata_file: Path) -> PluginMetadata:
@@ -275,10 +284,10 @@ class PluginManager:
         parser_file = plugin_dir / "parser.py"
 
         if not plugin.checksum:
-            if settings.enforce_plugin_signatures:
+            if settings.enforce_parser_integrity:
                 logger.error(
                     "Refusing to execute parser for plugin %s: no checksum present "
-                    "and signature enforcement is enabled",
+                    "and parser integrity enforcement is enabled",
                     plugin.id,
                 )
                 return False
@@ -396,25 +405,36 @@ class PluginManager:
         return "integrated"
 
     def _interpolate(self, token: str, inputs: Dict) -> Optional[str]:
-        """Interpolate variables in a token string."""
+        """Interpolate variables in a token string using single-pass substitution.
+
+        First validates that every required placeholder has a non-empty value,
+        then performs a single ``re.sub`` pass to replace all placeholders at
+        once.  This prevents a user-supplied value for one field from being
+        re-interpreted as a placeholder for another field (sequential template
+        injection).
+        """
         if "{" not in token or "}" not in token:
             return token
 
-        rendered = token
         matches = re.findall(r"\{(\w+)(?::([^}]+))?\}", token)
 
+        # Fail fast: if ANY required variable is missing, return None
+        # (matching the original sequential behaviour).
         for var_name, default_value in matches:
-            # Handle empty default value correctly: "" from regex becomes None
             actual_default = default_value or None
             value = inputs.get(var_name, actual_default)
-
             if value is None or value == "":
                 return None
 
-            placeholder = "{" + var_name + (f":{default_value}" if default_value else "") + "}"
-            rendered = rendered.replace(placeholder, sanitize_input(str(value)))
+        # All variables are present — single-pass substitution is safe.
+        def _replacer(m: re.Match) -> str:
+            var_name = m.group(1)
+            default_value = m.group(2)
+            actual_default = default_value or None
+            value = inputs.get(var_name, actual_default)
+            return sanitize_input(str(value))
 
-        return rendered
+        return re.sub(r"\{(\w+)(?::([^}]+))?\}", _replacer, token)
 
     def _with_field_defaults(self, plugin: PluginMetadata, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Fill omitted inputs from plugin field defaults."""
@@ -426,12 +446,17 @@ class PluginManager:
         return normalized
 
     def _reject_path_traversal(self, value: str) -> None:
-        """Raise ValueError if value contains parent-directory traversal components."""
+        """Raise ValueError if value contains parent-directory traversal components.
+
+        Called for every STRING/TEXT field during schema validation to prevent
+        ``../`` sequences from reaching external tools as file-path arguments,
+        which would enable arbitrary file-read via path traversal.
+        """
         normalized = value.replace("\\", os.sep).replace("/", os.sep)
         parts = normalized.split(os.sep)
         if ".." in parts:
             raise ValueError(
-                f"Wordlist path {value!r} contains parent-directory traversal ('..'), "
+                f"Value {value!r} contains parent-directory traversal ('..'), "
                 f"which is not allowed."
             )
 
@@ -607,8 +632,9 @@ class PluginManager:
                         msg = validation.get("message", f"Value does not match pattern {pattern!r}")
                         raise ValueError(f"Field '{field_id}': {msg}")
 
-                # Reject argv-level flag injection
+                # Reject argv-level flag injection and filesystem path traversal
                 self._reject_injected_args(field_id, value_str)
+                self._reject_path_traversal(value_str)
 
     def build_command(self, plugin_id: str, inputs: Dict) -> Optional[List[str]]:
         """
@@ -625,10 +651,11 @@ class PluginManager:
         if not plugin:
             return None
 
+        field_ids = {f.id for f in plugin.fields}
         inputs = {
             key: value
             for key, value in inputs.items()
-            if key not in _INTERNAL_CONTROL_FIELDS and not str(key).startswith("__")
+            if (key not in _INTERNAL_CONTROL_FIELDS or key in field_ids) and not str(key).startswith("__")
         }
 
         # Validate before normalisation so SELECT checks run against raw user values
@@ -686,3 +713,15 @@ def get_plugin_manager() -> PluginManager:
     if plugin_manager is None:
         raise RuntimeError("Plugin manager not initialized")
     return plugin_manager
+
+def get_plugin_check_latency_ms() -> float:
+    """Measure plugin enumeration latency in milliseconds."""
+    manager = get_plugin_manager()
+
+    start = time.perf_counter()
+    manager.list_plugins()
+
+    return round(
+        (time.perf_counter() - start) * 1000,
+        2,
+    )

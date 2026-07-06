@@ -106,6 +106,97 @@ describe('AppShell', () => {
 })
 
 
+describe('AppShell mobile navigation focus trap', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('exposes the drawer as an accessible dialog when open', async () => {
+    const user = userEvent.setup()
+    renderShell()
+
+    await user.click(screen.getByRole('button', { name: /toggle navigation menu/i }))
+
+    expect(screen.getByRole('dialog', { name: /navigation menu/i })).toBeInTheDocument()
+  })
+
+  it('closes the mobile menu when Escape is pressed', async () => {
+    const user = userEvent.setup()
+    renderShell()
+
+    await user.click(screen.getByRole('button', { name: /toggle navigation menu/i }))
+    expect(screen.getByRole('dialog', { name: /navigation menu/i })).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+
+    expect(screen.queryByRole('dialog', { name: /navigation menu/i })).not.toBeInTheDocument()
+  })
+
+  it('sets aria-expanded on the hamburger button when menu is open', async () => {
+    const user = userEvent.setup()
+    renderShell()
+
+    const button = screen.getByRole('button', { name: /toggle navigation menu/i })
+    expect(button).toHaveAttribute('aria-expanded', 'false')
+
+    await user.click(button)
+    expect(button).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('moves focus into the drawer when menu opens', async () => {
+    const user = userEvent.setup()
+    renderShell()
+
+    await user.click(screen.getByRole('button', { name: /toggle navigation menu/i }))
+
+    await waitFor(() => {
+      const dialog = screen.getByRole('dialog')
+      const firstFocusable = dialog.querySelector('a, button')
+      expect(document.activeElement).toBe(firstFocusable)
+    })
+  })
+
+  it('returns focus to the hamburger button when menu closes via Escape', async () => {
+    const user = userEvent.setup()
+    renderShell()
+
+    const button = screen.getByRole('button', { name: /toggle navigation menu/i })
+    await user.click(button)
+    await user.keyboard('{Escape}')
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(button)
+    })
+  })
+
+  it('traps Tab key focus within the drawer', async () => {
+    const user = userEvent.setup()
+    renderShell()
+
+    await user.click(screen.getByRole('button', { name: /toggle navigation menu/i }))
+
+    const dialog = screen.getByRole('dialog')
+    const links = Array.from(dialog.querySelectorAll('a'))
+    expect(links.length).toBeGreaterThan(1)
+
+    await waitFor(() => {
+      expect(document.activeElement).toBe(links[0])
+    })
+
+    for (let i = 1; i < links.length; i++) {
+      await user.tab()
+      expect(document.activeElement).toBe(links[i])
+    }
+
+    await user.tab()
+    expect(document.activeElement).toBe(links[0])
+
+    await user.tab({ shift: true })
+    expect(document.activeElement).toBe(links[links.length - 1])
+  })
+})
+
+
 describe('sidebar state synchronization', () => {
     beforeEach(() => {
         localStorage.clear()

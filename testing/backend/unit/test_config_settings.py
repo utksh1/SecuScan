@@ -164,3 +164,125 @@ def test_base_url_property():
     """base_url returns the expected http://host:port string."""
     s = Settings(bind_address="0.0.0.0", bind_port=8080)
     assert s.base_url == "http://0.0.0.0:8080"
+
+
+# ── allowed_networks field ─────────────────────────────────────────────────────
+
+
+def test_allowed_networks_accepts_wildcard_cidr_patterns():
+    """Wildcard CIDR-style patterns like 192.168.*.* and 10.*.*.* are stored."""
+    s = Settings(
+        allowed_networks=["192.168.*.*", "10.*.*.*", "172.16.0.0/12"],
+    )
+    assert "192.168.*.*" in s.allowed_networks
+    assert "10.*.*.*" in s.allowed_networks
+    assert "172.16.0.0/12" in s.allowed_networks
+
+
+def test_allowed_networks_default_includes_loopback_and_private():
+    """Default allowed_networks includes common private ranges."""
+    s = Settings()
+    assert "127.0.0.1" in s.allowed_networks
+    assert "192.168.*.*" in s.allowed_networks
+    assert "10.*.*.*" in s.allowed_networks
+
+
+def test_allowed_networks_single_value():
+    """A single network value is stored as a single-element list."""
+    s = Settings(allowed_networks=["8.8.8.8"])
+    assert s.allowed_networks == ["8.8.8.8"]
+
+
+def test_allowed_networks_empty_list():
+    """Empty list is accepted."""
+    s = Settings(allowed_networks=[])
+    assert s.allowed_networks == []
+
+
+# ── cors_allowed_origins field ────────────────────────────────────────────────
+
+
+def test_cors_allowed_origins_multiple_origins():
+    """Multiple CORS origins are stored as a list."""
+    s = Settings(
+        cors_allowed_origins=[
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+            "https://example.com",
+        ],
+    )
+    assert len(s.cors_allowed_origins) == 3
+    assert "http://localhost:5173" in s.cors_allowed_origins
+    assert "https://example.com" in s.cors_allowed_origins
+
+
+def test_cors_allowed_origins_default_includes_localhost():
+    """Default CORS origins include localhost variants."""
+    s = Settings()
+    assert "http://localhost:5173" in s.cors_allowed_origins
+    assert "http://127.0.0.1:5173" in s.cors_allowed_origins
+
+
+def test_cors_allowed_origins_empty_list():
+    """Empty CORS list is accepted."""
+    s = Settings(cors_allowed_origins=[])
+    assert s.cors_allowed_origins == []
+
+
+# ── file path defaults ────────────────────────────────────────────────────────
+
+
+def test_database_path_defaults_relative_to_project_root():
+    """Default database_path resolves to a path inside PROJECT_ROOT."""
+    from backend.secuscan.config import PROJECT_ROOT
+    s = Settings()
+    assert str(PROJECT_ROOT) in s.database_path
+    assert s.database_path.endswith(".db")
+
+
+def test_data_dir_defaults_relative_to_project_root():
+    """Default data_dir resolves inside PROJECT_ROOT."""
+    from backend.secuscan.config import PROJECT_ROOT
+    s = Settings()
+    assert str(PROJECT_ROOT) in s.data_dir
+
+
+def test_reports_dir_defaults_relative_to_project_root():
+    """Default reports_dir resolves inside PROJECT_ROOT."""
+    from backend.secuscan.config import PROJECT_ROOT
+    s = Settings()
+    assert str(PROJECT_ROOT) in s.reports_dir
+
+
+# ── no-env-vars instantiation ─────────────────────────────────────────────────
+
+
+def test_settings_instantiable_with_no_env_vars():
+    """Settings() is constructible with no environment variables or kwargs."""
+    s = Settings()
+    # All fields must have a default; if this raises, the class is not properly initialised
+    assert s.bind_address is not None
+    assert s.database_path is not None
+    assert isinstance(s.cache_ttl_seconds, int)
+    assert isinstance(s.safe_mode_default, bool)
+    assert isinstance(s.dns_resolution_timeout_seconds, float)
+
+
+# ── sandbox settings ──────────────────────────────────────────────────────────
+
+
+def test_sandbox_settings_have_defaults():
+    """Sandbox resource limits have sensible defaults."""
+    s = Settings()
+    assert s.sandbox_timeout > 0
+    assert s.sandbox_memory_mb > 0
+    assert s.sandbox_max_output_bytes > 0
+    assert isinstance(s.sandbox_allow_network, bool)
+
+
+def test_sandbox_settings_env_override():
+    """Sandbox settings can be overridden via constructor kwargs."""
+    s = Settings(sandbox_timeout=30, sandbox_memory_mb=128, sandbox_allow_network=False)
+    assert s.sandbox_timeout == 30
+    assert s.sandbox_memory_mb == 128
+    assert s.sandbox_allow_network is False

@@ -10,7 +10,11 @@ from urllib.parse import urlparse
 from typing import Any, Dict, Tuple, Optional
 from fnmatch import fnmatch
 
+import logging
+
 from .config import settings
+
+logger = logging.getLogger(__name__)
 
 
 # Blocked network ranges
@@ -413,10 +417,18 @@ def validate_webhook_target(url: str) -> Tuple[bool, Optional[str]]:
 def sanitize_input(value: str) -> str:
     """
     Sanitize user input to prevent command injection.
-    
+
+    Uses an allowlist-adjacent approach: removes shell metacharacters and
+    control characters that would be dangerous in ``argv`` values executed
+    by ``asyncio.create_subprocess_exec``.
+
+    Backslashes are converted to forward slashes to preserve Windows path
+    separators.  Leading dashes are stripped because they can be interpreted
+    as tool options even in argv-passed invocations.
+
     Args:
         value: Input value to sanitize
-    
+
     Returns:
         Sanitized value
     """
@@ -424,7 +436,7 @@ def sanitize_input(value: str) -> str:
     value = value.replace('\\', '/')
 
     # Remove shell metacharacters and non-printable control characters.
-    dangerous_chars = [';', '|', '&', '$', '`', '(', ')', '<', '>', '\n', '\r', "'", '"', '\\', '!', '{', '}', '\t', '\x00']
+    dangerous_chars = [';', '|', '&', '$', '`', '(', ')', '<', '>', '\n', '\r', "'", '"', '!', '\t', '\x00']
     for char in dangerous_chars:
         value = value.replace(char, '')
 
@@ -451,7 +463,8 @@ def is_safe_path(path: str, base_dir: str) -> bool:
         real_base = os.path.realpath(base_dir)
         real_path = os.path.realpath(os.path.join(base_dir, path))
         return real_path.startswith(real_base)
-    except Exception:
+    except Exception as exc:
+        logger.debug("path safety check failed (returning False): %s", exc)
         return False
 
 
@@ -525,6 +538,22 @@ def validate_task_start_payload(
                 return ok, status, msg
 
     return True, 0, ""
+
+
+def validate_preset_name(
+    plugin_id: str,
+    preset: Optional[str],
+    presets: Optional[Dict[str, Any]],
+) -> Tuple[bool, str]:
+    """Validate that an optional preset name exists for the selected plugin."""
+    if preset in (None, ""):
+        return True, ""
+
+    available_presets = presets or {}
+    if preset not in available_presets:
+        return False, f"Unknown preset '{preset}' for plugin '{plugin_id}'"
+
+    return True, ""
 
 
 def _check_field(key: str, value: Any) -> Tuple[bool, int, str]:
@@ -655,7 +684,7 @@ def resolve_and_validate_target(url: str) -> Tuple[bool, str]:
     return True, ""
 
 
-def validate_command_network_egress(command: list[str], safe_mode: bool, plugin_id: str, task_id: str) -> Tuple[bool, str]:
+def validate_command_network_egress(command: list[str], safe_mode: bool, plugin_id: str, task_id: str, pinned_ip: Optional[str] = None) -> Tuple[bool, str]:
     """
     Inspect all command arguments. If any argument represents an outbound network
     destination (IP, hostname, URL), validate it against both Safe Mode and Network Policy.
@@ -705,9 +734,23 @@ def validate_command_network_egress(command: list[str], safe_mode: bool, plugin_
         is_host = False
         if not is_ip:
             # Basic hostname check (with dots and valid characters, or 'localhost')
-            if candidate.lower() == "localhost" or re.match(
-                r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)+$',
-                candidate
+            # Normalize candidate to lowercase for matching so uppercase hostnames
+            # (e.g. EXAMPLE.COM) are detected. A lowercase-only regex avoids
+            # misidentifying dotted plugin parameters (e.g. "windows.pslist.PsList")
+            # as network destinations, since real hostnames never contain mixed-case
+            # labels per RFC 952/1123 conventions.
+            lowered = candidate.lower()
+            if lowered == "localhost" or (
+                re.match(
+                    r'^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?)+$',
+                    lowered
+                )
+                # Reject labels with mixed case (e.g. "PsList") — these are module
+                # paths, not hostnames. All-uppercase (EXAMPLE) is fine.
+                and not any(
+                    part != part.lower() and part != part.upper()
+                    for part in candidate.split(".")
+                )
             ):
                 is_host = True
 
@@ -720,8 +763,10 @@ def validate_command_network_egress(command: list[str], safe_mode: bool, plugin_
             # Validate against network policy
             if settings.enforce_network_policy:
                 engine = get_policy_engine()
+                check_ip = pinned_ip if (pinned_ip and is_host) else candidate
                 allowed, reason, _ = engine.check_access(
-                    dest_ip=candidate,
+                    dest_ip=check_ip,
+                    dest_hostname=candidate if is_host else None,
                     plugin_id=plugin_id,
                     task_id=task_id,
                 )

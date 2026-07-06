@@ -1,8 +1,23 @@
 import { render, screen, waitFor } from '@testing-library/react'
+import React from 'react'
+import { beforeEach, describe, it, expect, vi } from 'vitest'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { AppRoutes } from '../../src/App'
+import { ThemeProvider } from '../../src/components/ThemeContext'
+import { AuthProvider } from '../../src/components/AuthContext'
+
+// Keep AppRoutes a focused routing test: stub the shell, mock the network.
+vi.mock('../../src/components/AppShell', () => ({
+  default: ({ children }: { children: React.ReactNode }) =>
+    React.createElement('div', { 'data-testid': 'app-shell' }, children),
+}))
 
 vi.mock('../../src/api', () => ({
+  // Authenticated session so the protected route tree renders.
+  checkAuthSession: vi.fn().mockResolvedValue(true),
+  logoutSession: vi.fn(),
+  authenticateWithApiKey: vi.fn(),
+  AUTH_REQUIRED_EVENT: 'secuscan:auth-required',
   getHealth: vi.fn().mockResolvedValue({ status: 'operational' }),
   getDashboardSummary: vi.fn().mockResolvedValue({
     total_findings: 0,
@@ -40,38 +55,40 @@ function PathProbe() {
   return <div data-testid="path-probe">{pathname}</div>
 }
 
-describe('App route fallback', () => {
-  it('redirects unknown routes to dashboard', async () => {
-    render(
-      <MemoryRouter initialEntries={['/not-a-real-route']}>
-        <AppRoutes />
-        <PathProbe />
-      </MemoryRouter>,
-    )
+function renderAt(path: string, extra?: React.ReactNode) {
+  return render(
+    <ThemeProvider>
+      <AuthProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <AppRoutes />
+          {extra}
+        </MemoryRouter>
+      </AuthProvider>
+    </ThemeProvider>,
+  )
+}
 
+describe('App route fallback (authenticated)', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('renders NotFound page for unknown routes', async () => {
+    renderAt('/not-a-real-route', <PathProbe />)
     await waitFor(() => {
-      expect(screen.getByTestId('path-probe')).toHaveTextContent('/')
+      expect(screen.getByTestId('path-probe')).toHaveTextContent('/not-a-real-route')
     })
+    expect(await screen.findByText(/Perimeter Breach/i)).toBeInTheDocument()
   })
 
   it('renders the loaded dashboard summary', async () => {
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <AppRoutes />
-      </MemoryRouter>,
-    )
-
+    renderAt('/')
     expect(await screen.findByText(/Total Findings/i)).toBeInTheDocument()
     expect(screen.getByText(/Scan Cycles/i)).toBeInTheDocument()
   })
 
   it('renders the findings workspace', async () => {
-    render(
-      <MemoryRouter initialEntries={['/findings']}>
-        <AppRoutes />
-      </MemoryRouter>,
-    )
-
+    renderAt('/findings')
     expect(await screen.findByRole('heading', { name: /Findings/i })).toBeInTheDocument()
   })
 })

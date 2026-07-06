@@ -129,6 +129,47 @@ async def insert_audit_log(db, task_id: str):
     )
 
 
+async def insert_notification_rule(db) -> str:
+    rule_id = str(uuid.uuid4())
+    await db.execute(
+        "INSERT INTO notification_rules (id, name, owner_id, severity_threshold, channel_type, target_url_or_email) "
+        "VALUES (?, 'test-rule', 'default', 'low', 'webhook', 'http://example.com')",
+        (rule_id,),
+    )
+    return rule_id
+
+
+async def insert_notification_history(db, finding_id: str) -> str:
+    history_id = str(uuid.uuid4())
+    rule_id = await insert_notification_rule(db)
+    await db.execute(
+        "INSERT INTO notification_history (id, rule_id, finding_id, status) "
+        "VALUES (?, ?, ?, 'sent')",
+        (history_id, rule_id, finding_id),
+    )
+    return history_id
+
+
+async def insert_crawl_run(db, task_id: str) -> str:
+    run_id = str(uuid.uuid4())
+    await db.execute(
+        "INSERT INTO crawl_runs (id, owner_id, task_id, plugin_id, target, seed_url) "
+        "VALUES (?, 'default', ?, 'crawler', 'http://example.com', 'http://example.com')",
+        (run_id, task_id),
+    )
+    return run_id
+
+
+async def insert_asset_service(db, task_id: str) -> str:
+    service_id = str(uuid.uuid4())
+    await db.execute(
+        "INSERT INTO asset_services (id, owner_id, task_id, plugin_id, target, host) "
+        "VALUES (?, 'default', ?, 'nmap', '127.0.0.1', '127.0.0.1')",
+        (service_id, task_id),
+    )
+    return service_id
+
+
 # ---------------------------------------------------------------------------
 # Tests: POST /api/v1/task/{task_id}/cancel
 # ---------------------------------------------------------------------------
@@ -183,13 +224,16 @@ async def test_delete_task_returns_200_and_removes_row(app_client):
 
 @pytest.mark.asyncio
 async def test_delete_task_also_removes_associated_records(app_client):
-    """Deleting a task cascades to findings, reports, and audit_log."""
+    """Deleting a task cascades to all associated records."""
     db = app_client._db
     db_path = app_client._db_path
     task_id = await insert_task(db, status="completed")
     finding_id = await insert_finding(db, task_id)
     report_id = await insert_report(db, task_id)
     await insert_audit_log(db, task_id)
+    crawl_run_id = await insert_crawl_run(db, task_id)
+    asset_service_id = await insert_asset_service(db, task_id)
+    notification_history_id = await insert_notification_history(db, finding_id)
 
     resp = await app_client.delete(f"/api/v1/task/{task_id}")
     assert resp.status_code == 200, resp.text
@@ -202,6 +246,15 @@ async def test_delete_task_also_removes_associated_records(app_client):
 
     rows = await db_fetchall(db_path, "SELECT id FROM audit_log WHERE task_id = ?", (task_id,))
     assert len(rows) == 0, "Audit log rows should have been deleted"
+
+    rows = await db_fetchall(db_path, "SELECT id FROM crawl_runs WHERE id = ?", (crawl_run_id,))
+    assert len(rows) == 0, "Crawl run should have been deleted"
+
+    rows = await db_fetchall(db_path, "SELECT id FROM asset_services WHERE id = ?", (asset_service_id,))
+    assert len(rows) == 0, "Asset service should have been deleted"
+
+    rows = await db_fetchall(db_path, "SELECT id FROM notification_history WHERE id = ?", (notification_history_id,))
+    assert len(rows) == 0, "Notification history should have been deleted"
 
 
 @pytest.mark.asyncio
@@ -380,6 +433,9 @@ async def test_bulk_delete_atomicity_no_partial_delete_with_running_task(app_cli
     finding_id = await insert_finding(db, task_ok)
     report_id = await insert_report(db, task_ok)
     await insert_audit_log(db, task_ok)
+    crawl_run_id = await insert_crawl_run(db, task_ok)
+    asset_service_id = await insert_asset_service(db, task_ok)
+    notification_history_id = await insert_notification_history(db, finding_id)
 
     task_running = await insert_task(db, status="running")
 
@@ -403,10 +459,19 @@ async def test_bulk_delete_atomicity_no_partial_delete_with_running_task(app_cli
     rows = await db_fetchall(db_path, "SELECT id FROM audit_log WHERE task_id = ?", (task_ok,))
     assert len(rows) >= 1, "Audit log should NOT have been deleted"
 
+    rows = await db_fetchall(db_path, "SELECT id FROM crawl_runs WHERE id = ?", (crawl_run_id,))
+    assert len(rows) == 1, "Crawl run should NOT have been deleted"
+
+    rows = await db_fetchall(db_path, "SELECT id FROM asset_services WHERE id = ?", (asset_service_id,))
+    assert len(rows) == 1, "Asset service should NOT have been deleted"
+
+    rows = await db_fetchall(db_path, "SELECT id FROM notification_history WHERE id = ?", (notification_history_id,))
+    assert len(rows) == 1, "Notification history should NOT have been deleted"
+
 
 @pytest.mark.asyncio
 async def test_bulk_delete_cascades_to_associated_records(app_client):
-    """Bulk delete removes findings, reports, and audit_log for each deleted task."""
+    """Bulk delete removes all associated records for each deleted task."""
     db = app_client._db
     db_path = app_client._db_path
 
@@ -414,6 +479,9 @@ async def test_bulk_delete_cascades_to_associated_records(app_client):
     finding_id = await insert_finding(db, task_id)
     report_id = await insert_report(db, task_id)
     await insert_audit_log(db, task_id)
+    crawl_run_id = await insert_crawl_run(db, task_id)
+    asset_service_id = await insert_asset_service(db, task_id)
+    notification_history_id = await insert_notification_history(db, finding_id)
 
     resp = await app_client.request(
         "DELETE", "/api/v1/tasks/bulk", json=[task_id],
@@ -430,6 +498,15 @@ async def test_bulk_delete_cascades_to_associated_records(app_client):
     rows = await db_fetchall(db_path, "SELECT id FROM audit_log WHERE task_id = ?", (task_id,))
     assert len(rows) == 0, "Audit log should have been deleted"
 
+    rows = await db_fetchall(db_path, "SELECT id FROM crawl_runs WHERE id = ?", (crawl_run_id,))
+    assert len(rows) == 0, "Crawl run should have been deleted"
+
+    rows = await db_fetchall(db_path, "SELECT id FROM asset_services WHERE id = ?", (asset_service_id,))
+    assert len(rows) == 0, "Asset service should have been deleted"
+
+    rows = await db_fetchall(db_path, "SELECT id FROM notification_history WHERE id = ?", (notification_history_id,))
+    assert len(rows) == 0, "Notification history should have been deleted"
+
 
 # ---------------------------------------------------------------------------
 # Tests: DELETE /api/v1/tasks/clear
@@ -437,15 +514,18 @@ async def test_bulk_delete_cascades_to_associated_records(app_client):
 
 @pytest.mark.asyncio
 async def test_clear_all_tasks_removes_everything(app_client):
-    """Clear endpoint deletes all tasks, findings, reports, and audit_log rows."""
+    """Clear endpoint deletes all associated records."""
     db = app_client._db
     db_path = app_client._db_path
 
     for _ in range(3):
         tid = await insert_task(db, status="completed")
-        await insert_finding(db, tid)
+        finding_id = await insert_finding(db, tid)
         await insert_report(db, tid)
         await insert_audit_log(db, tid)
+        await insert_crawl_run(db, tid)
+        await insert_asset_service(db, tid)
+        await insert_notification_history(db, finding_id)
 
     resp = await app_client.delete("/api/v1/tasks/clear")
 
@@ -454,7 +534,7 @@ async def test_clear_all_tasks_removes_everything(app_client):
     assert body["cleared"] is True
     assert "message" in body
 
-    for table in ("tasks", "findings", "reports", "audit_log"):
+    for table in ("tasks", "findings", "reports", "audit_log", "crawl_runs", "asset_services", "notification_history"):
         rows = await db_fetchall(db_path, f"SELECT 1 FROM {table}")
         assert len(rows) == 0, f"Table '{table}' should be empty after /clear"
 

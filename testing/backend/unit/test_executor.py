@@ -133,6 +133,26 @@ Request timeout for icmp_seq 0
     assert result["metrics"]["filtered"] is True
 
 
+def test_icmp_ping_parser_handles_packet_loss_only_output(setup_test_environment):
+    manager = _ensure_plugins_loaded()
+    plugin = manager.get_plugin("icmp_ping")
+    assert plugin is not None
+
+    executor = TaskExecutor()
+    output = """PING 8.8.8.8 (8.8.8.8): 56 data bytes
+
+--- 8.8.8.8 ping statistics ---
+4 packets transmitted, 4 packets received, 0.0% packet loss
+"""
+
+    result = executor._parse_results(plugin, output)
+
+    assert result["count"] == 1
+    assert result["findings"][0]["title"] == "Host Reachable: 8.8.8.8"
+    assert result["metrics"]["packet_loss_percent"] == 0.0
+    assert result["metrics"]["reachable"] is True
+
+
 def test_classify_command_result_allows_nonfatal_ping_exit_with_statistics(setup_test_environment):
     manager = _ensure_plugins_loaded()
     plugin = manager.get_plugin("icmp_ping")
@@ -379,6 +399,7 @@ async def test_execute_task_blocked_by_network_policy(setup_test_environment):
     # Policy engine that always denies
     mock_engine = MagicMock()
     mock_engine.check_access.return_value = (False, "Blocked by denylist rule: test", None)
+    mock_engine.resolve_and_pin.return_value = ("10.0.0.1", False, "Blocked by denylist rule: test")
 
     with patch("backend.secuscan.executor.settings") as mock_settings, \
          patch("backend.secuscan.executor.get_policy_engine", return_value=mock_engine), \
@@ -389,6 +410,7 @@ async def test_execute_task_blocked_by_network_policy(setup_test_environment):
         mock_settings.docker_enabled = False
         mock_settings.raw_output_dir = settings.raw_output_dir
         mock_settings.sandbox_timeout = 600
+        mock_settings.dns_resolution_timeout_seconds = "5.0"
 
         mock_limiter.release = AsyncMock()
         mock_pm.return_value.get_plugin.return_value = MagicMock(name="nmap", presets={})
@@ -431,6 +453,7 @@ async def test_execute_task_allowed_by_network_policy(setup_test_environment):
 
     mock_engine = MagicMock()
     mock_engine.check_access.return_value = (True, "Allowed by allowlist rule: test", None)
+    mock_engine.resolve_and_pin.return_value = ("8.8.8.8", True, "Allowed by allowlist rule: test")
 
     async def fake_command(*args, **kwargs):
         return "80/tcp open http", 0
@@ -445,6 +468,7 @@ async def test_execute_task_allowed_by_network_policy(setup_test_environment):
         mock_settings.docker_enabled = False
         mock_settings.raw_output_dir = settings.raw_output_dir
         mock_settings.sandbox_timeout = 600
+        mock_settings.dns_resolution_timeout_seconds = "5.0"
 
         mock_limiter.release = AsyncMock()
 
@@ -470,7 +494,7 @@ async def test_execute_task_allowed_by_network_policy(setup_test_environment):
     assert row["status"] == TaskStatus.COMPLETED.value, (
         f"Expected COMPLETED, got {row['status']}"
     )
-    mock_engine.check_access.assert_called_once()
+    mock_engine.resolve_and_pin.assert_called_once()
     mock_limiter.release.assert_called_once_with(task_id)
     await db.disconnect()
 
@@ -500,6 +524,7 @@ async def test_execute_task_network_policy_log_only(setup_test_environment):
     # Policy denies target
     mock_engine = MagicMock()
     mock_engine.check_access.return_value = (False, "Blocked by denylist rule: test", None)
+    mock_engine.resolve_and_pin.return_value = ("10.0.0.1", False, "Blocked by denylist rule: test")
 
     async def fake_command(*args, **kwargs):
         return "80/tcp open http", 0
@@ -515,6 +540,7 @@ async def test_execute_task_network_policy_log_only(setup_test_environment):
         mock_settings.docker_enabled = False
         mock_settings.raw_output_dir = settings.raw_output_dir
         mock_settings.sandbox_timeout = 600
+        mock_settings.dns_resolution_timeout_seconds = "5.0"
 
         mock_limiter.release = AsyncMock()
 
@@ -539,7 +565,7 @@ async def test_execute_task_network_policy_log_only(setup_test_environment):
     row = await db.fetchone("SELECT status FROM tasks WHERE id = ?", (task_id,))
     # Task should successfully complete because network violation is ignored in log_only mode!
     assert row["status"] == TaskStatus.COMPLETED.value
-    mock_engine.check_access.assert_called_once()
+    mock_engine.resolve_and_pin.assert_called_once()
     await db.disconnect()
 
 @pytest.mark.asyncio
@@ -564,6 +590,7 @@ async def test_docker_network_autocreated_when_missing(setup_test_environment):
     # Policy allows the target so we reach the Docker block
     mock_engine = MagicMock()
     mock_engine.check_access.return_value = (True, "Allowed", None)
+    mock_engine.resolve_and_pin.return_value = ("8.8.8.8", True, "Allowed")
 
     call_count = 0
     async def fake_subprocess(*args, **kwargs):
@@ -593,6 +620,7 @@ async def test_docker_network_autocreated_when_missing(setup_test_environment):
 
         mock_settings.enforce_network_policy = True
         mock_settings.docker_enabled = True
+        mock_settings.dns_resolution_timeout_seconds = "5.0"
         mock_settings.docker_network = "restricted"
         mock_settings.sandbox_memory_mb = 512
         mock_settings.sandbox_cpu_quota = 0.5
@@ -646,6 +674,7 @@ async def test_docker_network_missing_and_create_fails(setup_test_environment):
     # Policy allows the target so we reach the Docker block
     mock_engine = MagicMock()
     mock_engine.check_access.return_value = (True, "Allowed", None)
+    mock_engine.resolve_and_pin.return_value = ("8.8.8.8", True, "Allowed")
 
     # All subprocess calls (inspect, create isolated, create fallback) return returncode=1
     async def fake_subprocess(*args, **kwargs):
@@ -666,6 +695,7 @@ async def test_docker_network_missing_and_create_fails(setup_test_environment):
 
         mock_settings.enforce_network_policy = True
         mock_settings.docker_enabled = True
+        mock_settings.dns_resolution_timeout_seconds = "5.0"
         mock_settings.docker_network = "restricted"
         mock_settings.sandbox_memory_mb = 512
         mock_settings.sandbox_cpu_quota = 0.5
@@ -687,6 +717,173 @@ async def test_docker_network_missing_and_create_fails(setup_test_environment):
     assert row["status"] == TaskStatus.FAILED.value
     assert "does not exist and could not be created" in (row["error_message"] or "")
     mock_limiter.release.assert_called_once_with(task_id)
+    await db.disconnect()
+
+
+# ---------------------------------------------------------------------------
+# Direct tests for extracted helper methods
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_enforce_guardrails_empty_target():
+    executor = TaskExecutor()
+    # If target is empty, enforce_guardrails should immediately return (True, None)
+    res = await executor._enforce_guardrails("", "nmap", False, "task-1")
+    assert res == (True, None)
+
+
+@pytest.mark.asyncio
+async def test_enforce_guardrails_validation_failure(setup_test_environment):
+    await init_db(settings.database_path)
+    db = await get_db()
+
+    executor = TaskExecutor()
+    task_id = str(uuid.uuid4())
+
+    # Pre-populate task in DB so mark_task_failed works
+    await db.execute(
+        "INSERT INTO tasks (id, plugin_id, tool_name, target, inputs_json, status, consent_granted, safe_mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (task_id, "nmap", "nmap", "127.0.0.1", "{}", TaskStatus.QUEUED.value, 1, 1)
+    )
+
+    with patch("backend.secuscan.executor.get_plugin_manager") as mock_pm, \
+         patch("backend.secuscan.executor.asyncio.to_thread") as mock_to_thread:
+
+        mock_plugin = MagicMock()
+        mock_plugin.category = "Network"
+        mock_pm.return_value.get_plugin.return_value = mock_plugin
+
+        # validate_target returns (False, "invalid target")
+        mock_to_thread.return_value = (False, "invalid target")
+
+        res = await executor._enforce_guardrails("127.0.0.1", "nmap", True, task_id)
+        assert res == (False, None)
+
+    row = await db.fetchone("SELECT status, error_message FROM tasks WHERE id = ?", (task_id,))
+    assert row["status"] == TaskStatus.FAILED.value
+    assert "Safe mode target validation failed" in row["error_message"]
+    await db.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_enforce_guardrails_network_policy_failure(setup_test_environment):
+    await init_db(settings.database_path)
+    db = await get_db()
+
+    executor = TaskExecutor()
+    task_id = str(uuid.uuid4())
+
+    await db.execute(
+        "INSERT INTO tasks (id, plugin_id, tool_name, target, inputs_json, status, consent_granted, safe_mode) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (task_id, "nmap", "nmap", "10.0.0.1", "{}", TaskStatus.QUEUED.value, 1, 0)
+    )
+
+    mock_engine = MagicMock()
+    mock_engine.check_access.return_value = (False, "Blocked by policy", None)
+    mock_engine.resolve_and_pin.return_value = ("10.0.0.1", False, "Blocked by policy")
+
+    with patch("backend.secuscan.executor.settings") as mock_settings, \
+         patch("backend.secuscan.executor.get_policy_engine", return_value=mock_engine), \
+         patch("backend.secuscan.executor.get_plugin_manager") as mock_pm:
+
+        mock_settings.enforce_network_policy = True
+        mock_settings.network_policy_failure_mode = "block"
+        mock_settings.dns_resolution_timeout_seconds = 5
+
+        mock_plugin = MagicMock()
+        mock_plugin.category = "Network"
+        mock_pm.return_value.get_plugin.return_value = mock_plugin
+
+        res = await executor._enforce_guardrails("10.0.0.1", "nmap", False, task_id)
+        assert res == (False, None)
+
+    row = await db.fetchone("SELECT status, error_message FROM tasks WHERE id = ?", (task_id,))
+    assert row["status"] == TaskStatus.FAILED.value
+    assert "Network policy denied access" in row["error_message"]
+    await db.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_ensure_docker_network_exists():
+    executor = TaskExecutor()
+
+    proc = MagicMock()
+    proc.returncode = 0
+    proc.wait = AsyncMock(return_value=0)
+
+    with patch("backend.secuscan.executor.asyncio.create_subprocess_exec", return_value=proc) as mock_create:
+        await executor._ensure_docker_network()
+
+        # Should only call inspect network once
+        mock_create.assert_called_once_with(
+            "docker", "network", "inspect", settings.docker_network,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+
+
+@pytest.mark.asyncio
+async def test_execute_modular_scanner(setup_test_environment):
+    await init_db(settings.database_path)
+    db = await get_db()
+
+    task_id = str(uuid.uuid4())
+    owner_id = str(uuid.uuid4())
+
+    # Insert task in DB
+    await db.execute(
+        """
+        INSERT INTO tasks (id, owner_id, plugin_id, tool_name, target, inputs_json, status, consent_granted, safe_mode)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (task_id, owner_id, "mock_scanner", "mock_scanner", "127.0.0.1", "{}", TaskStatus.QUEUED.value, 1, 0)
+    )
+
+    class MockScanner:
+        name = "MockScanner"
+        def __init__(self, task_id, db, safe_mode=False):
+            self.task_id = task_id
+            self.db = db
+            self.safe_mode = safe_mode
+
+        async def run(self, target, inputs):
+            return {
+                "status": "completed",
+                "findings": [
+                    {
+                        "title": "Mock Finding",
+                        "category": "Mock Category",
+                        "severity": "low",
+                        "description": "Mock description",
+                    }
+                ],
+                "asset_services": []
+            }
+
+    executor = TaskExecutor()
+
+    # We patch the MODULAR_SCANNERS dictionary in backend.secuscan.executor
+    with patch.dict("backend.secuscan.executor.MODULAR_SCANNERS", {"mock_scanner": MockScanner}):
+        status, duration = await executor._execute_modular_scanner(
+            db=db,
+            task_id=task_id,
+            owner_id=owner_id,
+            plugin_id="mock_scanner",
+            target="127.0.0.1",
+            inputs={},
+            safe_mode=False
+        )
+
+    assert status == TaskStatus.COMPLETED.value
+    assert duration >= 0
+
+    # Verify task updated in DB
+    row = await db.fetchone("SELECT status, structured_json FROM tasks WHERE id = ?", (task_id,))
+    assert row["status"] == TaskStatus.COMPLETED.value
+    structured = json.loads(row["structured_json"])
+    assert len(structured["findings"]) == 1
+    assert structured["findings"][0]["title"] == "Mock Finding"
+
     await db.disconnect()
 
 
@@ -728,6 +925,60 @@ async def test_execute_task_aborts_when_task_no_longer_queued(setup_test_environ
 
 
 @pytest.mark.asyncio
+async def test_execute_standard_scanner(setup_test_environment):
+    await init_db(settings.database_path)
+    db = await get_db()
+
+    task_id = str(uuid.uuid4())
+    owner_id = str(uuid.uuid4())
+
+    # Insert task in DB
+    await db.execute(
+        """
+        INSERT INTO tasks (id, owner_id, plugin_id, tool_name, target, inputs_json, status, consent_granted, safe_mode)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (task_id, owner_id, "mock_cli_plugin", "mock_cli_plugin", "127.0.0.1", "{}", TaskStatus.QUEUED.value, 1, 0)
+    )
+
+    executor = TaskExecutor()
+
+    mock_plugin = MagicMock()
+    mock_plugin.id = "mock_cli_plugin"
+    mock_plugin.name = "mock_cli_plugin"
+    mock_plugin.docker_image = None
+
+    with patch("backend.secuscan.executor.get_plugin_manager") as mock_pm, \
+         patch.object(executor, "_execute_command", return_value=("Mock output\n", 0)) as mock_exec, \
+         patch.object(executor, "_classify_command_result", return_value=(TaskStatus.COMPLETED.value, None)) as mock_classify, \
+         patch.object(executor, "_upsert_findings_and_report") as mock_upsert:
+
+        mock_pm.return_value.build_command.return_value = ["ping", "127.0.0.1"]
+
+        status, duration, exit_code = await executor._execute_standard_scanner(
+            db=db,
+            task_id=task_id,
+            owner_id=owner_id,
+            plugin=mock_plugin,
+            plugin_id="mock_cli_plugin",
+            target="127.0.0.1",
+            inputs={},
+            safe_mode=0
+        )
+
+    assert status == TaskStatus.COMPLETED.value
+    assert exit_code == 0
+    assert duration >= 0
+
+    # Verify task updated in DB
+    row = await db.fetchone("SELECT status, exit_code FROM tasks WHERE id = ?", (task_id,))
+    assert row["status"] == TaskStatus.COMPLETED.value
+    assert row["exit_code"] == 0
+
+    await db.disconnect()
+
+
+@pytest.mark.asyncio
 async def test_execute_task_aborts_when_task_deleted_before_running(setup_test_environment):
     """
     When the task row is deleted before execute_task runs the optimistic
@@ -760,4 +1011,150 @@ async def test_execute_task_aborts_when_task_deleted_before_running(setup_test_e
         await executor.execute_task(task_id)
 
     assert task_id not in executor.running_tasks
+    await db.disconnect()
+
+
+# ---------------------------------------------------------------------------
+# Regression: URL inputs must not be replaced with pinned IP
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_pinned_ip_does_not_replace_url_target(setup_test_environment):
+    await init_db(settings.database_path)
+    db = await get_db()
+
+    task_id = str(uuid.uuid4())
+    await db.execute(
+        """
+        INSERT INTO tasks (id, plugin_id, tool_name, target, inputs_json,
+                           status, consent_granted, safe_mode)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (task_id, "nmap", "nmap", "https://example.com/path",
+         '{"url":"https://example.com/path","target":"https://example.com/path"}',
+         TaskStatus.QUEUED.value, 1, 0)
+    )
+
+    executor = TaskExecutor()
+
+    mock_engine = MagicMock()
+    mock_engine.resolve_and_pin.return_value = ("93.184.216.34", True, "Allowed")
+
+    original_inputs_seen = {}
+
+    async def fake_execute_std_scanner(db, **kwargs):
+        original_inputs_seen.update(kwargs.get("inputs", {}))
+        return TaskStatus.COMPLETED.value, 0.5, 0
+
+    async def fake_command(*args, **kwargs):
+        return "80/tcp open http", 0
+
+    with patch("backend.secuscan.executor.settings") as mock_settings, \
+         patch("backend.secuscan.executor.get_policy_engine", return_value=mock_engine), \
+         patch.object(executor, "_execute_command", side_effect=fake_command), \
+         patch.object(executor, "_execute_standard_scanner", side_effect=fake_execute_std_scanner), \
+         patch("backend.secuscan.executor.concurrent_limiter") as mock_limiter, \
+         patch("backend.secuscan.executor.get_plugin_manager") as mock_pm:
+
+        mock_settings.enforce_network_policy = True
+        mock_settings.docker_enabled = False
+        mock_settings.raw_output_dir = settings.raw_output_dir
+        mock_settings.sandbox_timeout = 600
+        mock_settings.dns_resolution_timeout_seconds = "5.0"
+        mock_settings.network_policy_failure_mode = "block"
+
+        mock_limiter.release = AsyncMock()
+
+        mock_plugin = MagicMock()
+        mock_plugin.name = "nmap"
+        mock_plugin.presets = {}
+        mock_plugin.docker_image = None
+        mock_plugin.output = {"parser": "builtin_nmap", "format": "text"}
+        mock_plugin.category = "Network"
+        mock_plugin.id = "nmap"
+        mock_pm.return_value.get_plugin.return_value = mock_plugin
+        mock_pm.return_value.build_command.return_value = ["nmap", "https://example.com/path"]
+        mock_pm.return_value.plugins_dir = MagicMock()
+        mock_pm.return_value.plugins_dir.__truediv__ = MagicMock(
+            return_value=MagicMock(
+                __truediv__=MagicMock(return_value=MagicMock(exists=lambda: False))
+            )
+        )
+
+        await executor.execute_task(task_id)
+
+    assert original_inputs_seen.get("url") == "https://example.com/path"
+    assert original_inputs_seen.get("target") == "https://example.com/path"
+    assert original_inputs_seen.get("__pinned_ip") == "93.184.216.34"
+    mock_engine.resolve_and_pin.assert_called_once()
+    await db.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_pinned_ip_preserves_host_input_for_host_header_scanners(setup_test_environment):
+    await init_db(settings.database_path)
+    db = await get_db()
+
+    task_id = str(uuid.uuid4())
+    await db.execute(
+        """
+        INSERT INTO tasks (id, plugin_id, tool_name, target, inputs_json,
+                           status, consent_granted, safe_mode)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (task_id, "nmap", "nmap", "example.com",
+         '{"host":"example.com","domain":"example.com"}',
+         TaskStatus.QUEUED.value, 1, 0)
+    )
+
+    executor = TaskExecutor()
+    mock_engine = MagicMock()
+    mock_engine.resolve_and_pin.return_value = ("93.184.216.34", True, "Allowed")
+
+    original_inputs_seen = {}
+
+    async def fake_execute_std_scanner(db, **kwargs):
+        original_inputs_seen.update(kwargs.get("inputs", {}))
+        return TaskStatus.COMPLETED.value, 0.5, 0
+
+    async def fake_command(*args, **kwargs):
+        return "80/tcp open http", 0
+
+    with patch("backend.secuscan.executor.settings") as mock_settings, \
+         patch("backend.secuscan.executor.get_policy_engine", return_value=mock_engine), \
+         patch.object(executor, "_execute_command", side_effect=fake_command), \
+         patch.object(executor, "_execute_standard_scanner", side_effect=fake_execute_std_scanner), \
+         patch("backend.secuscan.executor.concurrent_limiter") as mock_limiter, \
+         patch("backend.secuscan.executor.get_plugin_manager") as mock_pm:
+
+        mock_settings.enforce_network_policy = True
+        mock_settings.docker_enabled = False
+        mock_settings.raw_output_dir = settings.raw_output_dir
+        mock_settings.sandbox_timeout = 600
+        mock_settings.dns_resolution_timeout_seconds = "5.0"
+        mock_settings.network_policy_failure_mode = "block"
+
+        mock_limiter.release = AsyncMock()
+
+        mock_plugin = MagicMock()
+        mock_plugin.name = "nmap"
+        mock_plugin.presets = {}
+        mock_plugin.docker_image = None
+        mock_plugin.output = {"parser": "builtin_nmap", "format": "text"}
+        mock_plugin.category = "Network"
+        mock_plugin.id = "nmap"
+        mock_pm.return_value.get_plugin.return_value = mock_plugin
+        mock_pm.return_value.build_command.return_value = ["nmap", "example.com"]
+        mock_pm.return_value.plugins_dir = MagicMock()
+        mock_pm.return_value.plugins_dir.__truediv__ = MagicMock(
+            return_value=MagicMock(
+                __truediv__=MagicMock(return_value=MagicMock(exists=lambda: False))
+            )
+        )
+
+        await executor.execute_task(task_id)
+
+    assert original_inputs_seen.get("host") == "example.com"
+    assert original_inputs_seen.get("domain") == "example.com"
+    assert original_inputs_seen.get("__pinned_ip") == "93.184.216.34"
     await db.disconnect()

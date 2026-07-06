@@ -362,3 +362,83 @@ async def test_migration_failure_raises_runtime_error(tmp_path):
         if db and db._connection:
             await db.disconnect()
         broken.unlink(missing_ok=True)
+
+
+# ─── FilterPreset model validators ─────────────────────────────────────────────
+
+from backend.secuscan.saved_views import FilterPreset, SavedViewCreate
+from pydantic import ValidationError
+
+
+class TestFilterPresetDefaults:
+    def test_default_severity_is_all(self):
+        preset = FilterPreset()
+        assert preset.severity == "all"
+
+    def test_default_sort_mode_is_severity(self):
+        preset = FilterPreset()
+        assert preset.sortMode == "severity"
+
+    def test_default_scanner_is_all(self):
+        preset = FilterPreset()
+        assert preset.scanner == "all"
+
+
+class TestFilterPresetValidateSortMode:
+    def test_valid_sort_modes(self):
+        for mode in ("severity", "newest", "oldest", "target"):
+            preset = FilterPreset(sortMode=mode)
+            assert preset.sortMode == mode
+
+    def test_invalid_sort_mode_raises(self):
+        with pytest.raises(ValidationError) as exc_info:
+            FilterPreset(sortMode="invalid_mode")
+        assert "sortMode must be one of" in str(exc_info.value)
+
+
+class TestFilterPresetValidateSeverity:
+    def test_valid_severities(self):
+        for sev in ("all", "critical", "high", "medium", "low", "info"):
+            preset = FilterPreset(severity=sev)
+            assert preset.severity == sev
+
+    def test_invalid_severity_raises(self):
+        with pytest.raises(ValidationError) as exc_info:
+            FilterPreset(severity="dangerous")
+        assert "severity must be one of" in str(exc_info.value)
+
+
+# ─── SavedViewCreate model validators ──────────────────────────────────────────
+
+class TestSavedViewCreateStripName:
+    def test_valid_name_passes(self):
+        sv = SavedViewCreate(name="My View", filter_json='{"severity":"all"}')
+        assert sv.name == "My View"
+
+    def test_strips_leading_trailing_whitespace(self):
+        sv = SavedViewCreate(name="  trimmed  ", filter_json='{"severity":"all"}')
+        assert sv.name == "trimmed"
+
+    def test_blank_name_raises(self):
+        with pytest.raises(ValidationError) as exc_info:
+            SavedViewCreate(name="   ", filter_json='{"severity":"all"}')
+        assert "name cannot be blank" in str(exc_info.value)
+
+    def test_empty_string_name_raises(self):
+        with pytest.raises(ValidationError) as exc_info:
+            SavedViewCreate(name="", filter_json='{"severity":"all"}')
+        # Pydantic's min_length=1 constraint fires before field_validator,
+        # raising string_too_short.
+        assert "string_too_short" in str(exc_info.value)
+
+
+class TestSavedViewCreateValidateFilterJson:
+    def test_valid_json_passes(self):
+        sv = SavedViewCreate(name="v", filter_json='{"severity":"critical"}')
+        assert sv.filter_json == '{"severity":"critical"}'
+
+    def test_malformed_json_raises(self):
+        with pytest.raises(ValidationError) as exc_info:
+            SavedViewCreate(name="v", filter_json="not json")
+        # pydantic raises an error for invalid JSON in field_validator
+        assert "validation error" in str(exc_info.value).lower()

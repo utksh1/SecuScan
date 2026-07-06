@@ -38,4 +38,5 @@ markers = [
     "benchmark: performance benchmark tests (deselect with '-m not benchmark')",
 ]
 asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
 python_files = ["test_*.py", "bench_*.py"]

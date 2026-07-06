@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, type Variants } from "framer-motion";
 import { API_BASE, deleteTask, clearAllTasks, bulkDeleteTasks, startTask, ExecutionContext } from "../api";
 import { routePath } from "../routes";
 import {
@@ -38,23 +38,23 @@ const statusFilters = [
   { value: "cancelled", label: "MANUAL_ABORT" },
 ];
 
-const containerVariants = {
+const containerVariants: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
     transition: { staggerChildren: 0.1 },
   },
-} as const;
+};
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { opacity: 0, scale: 0.95, y: 20 },
   visible: {
     opacity: 1,
     scale: 1,
     y: 0,
-    transition: { type: "spring", stiffness: 200, damping: 20 } as any,
+    transition: { type: "spring", stiffness: 200, damping: 20 },
   },
-} as const;
+};
 
 export default function Scans() {
   const navigate = useNavigate();
@@ -66,6 +66,7 @@ export default function Scans() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const PAGE_LIMIT = 10;
+  const [error, setError] = useState<string | null>(null);
 
   // Modal state for confirm dialogs
   const [modalState, setModalState] = useState<{
@@ -82,20 +83,29 @@ export default function Scans() {
     type: "warning",
   });
 
-  // Ref so the visibilitychange handler always sees the current interval id
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Ref so the visibilitychange handler always sees the current timer id
+  const pollingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestSeqRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
 
+  function scheduleNextPoll() {
+    pollingTimerRef.current = setTimeout(async () => {
+      await loadTasks();
+      if (!abortRef.current?.signal.aborted) {
+        scheduleNextPoll();
+      }
+    }, 5000);
+  }
+
   function startPolling() {
     stopPolling();
-    intervalRef.current = setInterval(loadTasks, 5000);
+    scheduleNextPoll();
   }
 
   function stopPolling() {
-    if (intervalRef.current !== null) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
+    if (pollingTimerRef.current !== null) {
+      clearTimeout(pollingTimerRef.current);
+      pollingTimerRef.current = null;
     }
   }
 
@@ -148,7 +158,7 @@ export default function Scans() {
       const data = await res.json();
       if (requestSeq !== requestSeqRef.current) return;
 
-      setTasks(data.tasks || []);
+      setTasks([...(data.tasks || [])]);
       if (data.pagination?.total_items !== undefined) {
         setTotal(data.pagination.total_items);
       }
@@ -164,6 +174,7 @@ export default function Scans() {
   }
 
   function handleFilterChange(value: string) {
+    setError(null);
     setFilter(value);
     setPage(1);
   }
@@ -193,13 +204,14 @@ export default function Scans() {
       type: "danger",
       onConfirm: async () => {
         try {
+          setError(null);
           await deleteTask(taskId);
           setTasks((prev) => prev.filter((t) => t.task_id !== taskId));
           if (expandedId === taskId) setExpandedId(null);
           setModalState(prev => ({ ...prev, isOpen: false }));
         } catch (err) {
           console.error("Failed to delete task:", err);
-          alert("Failed to delete task. It might still be running.");
+          setError("Failed to delete task. It might still be running.");
           setModalState(prev => ({ ...prev, isOpen: false }));
         }
       },
@@ -214,6 +226,7 @@ export default function Scans() {
       type: "danger",
       onConfirm: async () => {
         try {
+          setError(null);
           await clearAllTasks();
           setTasks([]);
           setSelectedIds([]);
@@ -221,7 +234,7 @@ export default function Scans() {
           setModalState(prev => ({ ...prev, isOpen: false }));
         } catch (err) {
           console.error("Failed to clear history:", err);
-          alert("Failed to clear history. Ensure no tasks are currently running.");
+          setError("Failed to clear history. Ensure no tasks are currently running.");
           setModalState(prev => ({ ...prev, isOpen: false }));
         }
       },
@@ -237,13 +250,14 @@ export default function Scans() {
       type: "danger",
       onConfirm: async () => {
         try {
+          setError(null);
           await bulkDeleteTasks(selectedIds);
           setTasks((prev) => prev.filter((t) => !selectedIds.includes(t.task_id)));
           setSelectedIds([]);
           setModalState(prev => ({ ...prev, isOpen: false }));
         } catch (err) {
           console.error("Bulk delete failed:", err);
-          alert("Failed to delete some tasks. Ensure they are not currently running.");
+          setError("Failed to delete some tasks. Ensure they are not currently running.");
           setModalState(prev => ({ ...prev, isOpen: false }));
         }
       },
@@ -311,6 +325,28 @@ export default function Scans() {
           </div>
         </div>
       </header>
+
+      {error && (
+        <div
+          role="alert"
+          className="bg-rag-red/10 border-4 border-rag-red text-rag-red p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex items-center justify-between gap-4"
+        >
+          <div className="flex items-center gap-4">
+            <span className="material-symbols-outlined text-2xl shrink-0">error</span>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em]">System_Alert</p>
+              <p className="font-mono text-xs">{error}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setError(null)}
+            className="text-rag-red/60 hover:text-rag-red transition-colors shrink-0"
+            aria-label="Close alert"
+          >
+            <span className="material-symbols-outlined text-lg">close</span>
+          </button>
+        </div>
+      )}
 
       {/* Filtration Block */}
       <section className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col xl:flex-row justify-between items-center gap-12">
@@ -482,15 +518,34 @@ export default function Scans() {
                               {formatLocaleTime(createDate)}
                             </p>
                           </div>
-                          {task.duration_seconds && (
-                            <div className="bg-charcoal-dark border-2 border-black px-4 py-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
-                              <p className="text-[10px] font-black font-mono text-rag-blue leading-none">
-                                {formatDuration(
-                                  task.duration_seconds,
-                                )?.toUpperCase()}
-                              </p>
-                            </div>
-                          )}
+                          <div className="flex items-center gap-3">
+                            {task.duration_seconds && (
+                              <div className="bg-charcoal-dark border-2 border-black px-4 py-2 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]">
+                                <p className="text-[10px] font-black font-mono text-rag-blue leading-none">
+                                  {formatDuration(
+                                    task.duration_seconds,
+                                  )?.toUpperCase()}
+                                </p>
+                              </div>
+                            )}
+                            {(task.status === "completed" ||
+                              task.status === "failed" ||
+                              task.status === "cancelled") && (
+                              <button
+                                type="button"
+                                aria-label={`Re-run ${task.tool} scan`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRescan(task);
+                                }}
+                                className="w-10 h-10 border-4 border-black bg-rag-blue text-black flex items-center justify-center transition-all hover:bg-rag-blue/80 active:translate-x-0.5 active:translate-y-0.5 shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] active:shadow-none"
+                              >
+                                <span className="material-symbols-outlined text-sm font-black">
+                                  replay
+                                </span>
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
 
@@ -681,8 +736,14 @@ export default function Scans() {
             total={total}
             limit={PAGE_LIMIT}
             loading={loading}
-            onPrev={() => setPage((p) => p - 1)}
-            onNext={() => setPage((p) => p + 1)}
+            onPrev={() => {
+              setError(null);
+              setPage((p) => p - 1);
+            }}
+            onNext={() => {
+              setError(null);
+              setPage((p) => p + 1);
+            }}
           />
         )}
       </section>

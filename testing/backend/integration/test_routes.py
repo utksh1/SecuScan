@@ -1,7 +1,9 @@
 import time
+import sqlite3
 from unittest.mock import patch
 
 from backend.secuscan.models import TaskStatus
+from backend.secuscan.config import settings
 
 def test_health_check(test_client):
     """Test health check endpoint."""
@@ -10,6 +12,12 @@ def test_health_check(test_client):
     data = response.json()
     assert data["status"] == "operational"
     assert "version" in data
+    assert "plugin_check_latency_ms" in data
+    assert isinstance(
+        data["plugin_check_latency_ms"],
+        (int, float),
+    )
+    assert data["plugin_check_latency_ms"] >= 0
 
 def test_list_plugins(test_client):
     """Test plugins list endpoint."""
@@ -121,6 +129,25 @@ def test_start_task_missing_plugin(test_client):
     assert response.status_code == 404
     detail = response.json().get("detail", "")
     assert missing_id in detail or "plugin" in detail.lower()
+
+
+def test_start_task_rejects_unknown_preset_before_queueing(test_client):
+    """Starting a task with an unknown preset should fail before a task row is created."""
+    payload = {
+        "plugin_id": "http_inspector",
+        "preset": "stale-preset-name",
+        "inputs": {"url": "http://127.0.0.1:8000"},
+        "consent_granted": True,
+    }
+
+    response = test_client.post("/api/v1/task/start", json=payload)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Unknown preset 'stale-preset-name' for plugin 'http_inspector'"
+
+    with sqlite3.connect(settings.database_path) as conn:
+        count = conn.execute("SELECT COUNT(*) FROM tasks").fetchone()[0]
+    assert count == 0
 
 class TestSafeModeCIDRBypass:
     """
@@ -243,3 +270,110 @@ class TestSafeModeCIDRBypass:
                 assert "safe mode" not in detail.lower() and "Public IP" not in detail, (
                     f"Filesystem path was incorrectly rejected by network validation: {detail!r}"
                 )
+
+def test_task_retry_idempotency(test_client):
+    """Test the /task/{task_id}/retry endpoint is idempotent and rejects non-failed tasks."""
+    # Start a task and wait for it to complete/fail
+    with patch("backend.secuscan.executor.TaskExecutor._execute_command") as mock_exec:
+        mock_exec.return_value = ("Failed", 1)  # Simulate failure
+
+        payload = {
+            "plugin_id": "http_inspector",
+            "inputs": {"url": "http://127.0.0.1:8000"},
+            "consent_granted": True,
+        }
+        start_res = test_client.post("/api/v1/task/start", json=payload)
+        assert start_res.status_code == 200
+        task_id = start_res.json()["task_id"]
+
+        time.sleep(0.5)
+
+        # Verify it is failed
+        status_res = test_client.get(f"/api/v1/task/{task_id}/status")
+        assert status_res.status_code == 200
+        assert status_res.json()["status"] == TaskStatus.FAILED.value
+
+        # Attempt to retry it multiple times concurrently/rapidly
+        mock_exec.return_value = ("Mocked successful output", 0)  # Next run succeeds
+
+        # We must mock execute_task so the TestClient doesn't run it inline
+        # before the second retry request can even be fired.
+        with patch("backend.secuscan.executor.TaskExecutor.execute_task"):
+            retry_res_1 = test_client.post(f"/api/v1/task/{task_id}/retry")
+            retry_res_2 = test_client.post(f"/api/v1/task/{task_id}/retry")
+
+            assert retry_res_1.status_code == 200
+            assert retry_res_1.json()["status"] == "queued"
+
+            # Second immediate retry should hit idempotency check
+            assert retry_res_2.status_code == 409
+
+        # Now let it actually run to completion manually
+        import asyncio
+        from backend.secuscan.executor import executor
+        asyncio.run(executor.execute_task(task_id))
+
+        # Verify it completed successfully this time
+        status_res = test_client.get(f"/api/v1/task/{task_id}/status")
+        assert status_res.status_code == 200
+        assert status_res.json()["status"] == TaskStatus.COMPLETED.value
+
+        # Attempting to retry a completed task should fail
+        retry_res_3 = test_client.post(f"/api/v1/task/{task_id}/retry")
+        assert retry_res_3.status_code == 400
+
+def test_task_retry_authorization(test_client):
+    """Test the /task/{task_id}/retry endpoint properly scopes to owner."""
+    import sqlite3
+    from backend.secuscan.config import settings
+
+    payload = {
+        "plugin_id": "http_inspector",
+        "inputs": {"url": "http://127.0.0.1:8000"},
+        "consent_granted": True,
+    }
+    start_res = test_client.post("/api/v1/task/start", json=payload)
+    assert start_res.status_code == 200
+    task_id = start_res.json()["task_id"]
+
+    # Temporarily change owner in the database to simulate another user's task
+    with sqlite3.connect(settings.database_path) as conn:
+        conn.execute("UPDATE tasks SET owner_id = 'other_owner', status = 'failed' WHERE id = ?", (task_id,))
+        conn.commit()
+
+    # Attempt to retry it with our default test_client (which is not 'other_owner')
+    retry_res = test_client.post(f"/api/v1/task/{task_id}/retry")
+    assert retry_res.status_code == 403
+    assert "access" in retry_res.json()["detail"].lower()
+
+def test_task_retry_terminal_states(test_client):
+    """Test retry behavior explicitly on all terminal vs non-terminal statuses."""
+    import sqlite3
+    from backend.secuscan.config import settings
+
+    payload = {
+        "plugin_id": "http_inspector",
+        "inputs": {"url": "http://127.0.0.1:8000"},
+        "consent_granted": True,
+    }
+    start_res = test_client.post("/api/v1/task/start", json=payload)
+    assert start_res.status_code == 200
+    task_id = start_res.json()["task_id"]
+
+    # Test mapping of status to expected HTTP response codes when hitting /retry
+    status_expectations = [
+        ("completed", 400),
+        ("failed", 200),
+        ("cancelled", 200),
+        ("queued", 409),
+        ("running", 409),
+    ]
+
+    for status, expected_code in status_expectations:
+        with sqlite3.connect(settings.database_path) as conn:
+            conn.execute("UPDATE tasks SET status = ? WHERE id = ?", (status, task_id))
+            conn.commit()
+
+        with patch("backend.secuscan.executor.TaskExecutor.execute_task"):
+            res = test_client.post(f"/api/v1/task/{task_id}/retry")
+            assert res.status_code == expected_code, f"Expected {expected_code} for status '{status}', got {res.status_code}"

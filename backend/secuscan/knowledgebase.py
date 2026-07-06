@@ -55,6 +55,10 @@ _PRODUCT_PATTERNS: List[tuple[re.Pattern[str], str]] = [
 ]
 
 
+_cached_entries: Dict[str, List[Dict[str, Any]]] | None = None
+_cached_mtime: float | None = None
+
+
 class KnowledgeBase:
     """Loads local CPE/CVE intelligence without live network calls."""
 
@@ -157,11 +161,19 @@ class KnowledgeBase:
         return None
 
     def _load_entries(self) -> Dict[str, List[Dict[str, Any]]]:
+        global _cached_entries, _cached_mtime
+
+        feed_files = sorted(self.data_dir.glob("*.json"))
+        newest_mtime = max((path.stat().st_mtime for path in feed_files), default=0.0)
+
+        if _cached_entries is not None and _cached_mtime == newest_mtime:
+            return _cached_entries
+
         entries: Dict[str, List[Dict[str, Any]]] = {
             key: list(value) for key, value in _SEEDED_CPE_INDEX.items()
         }
 
-        for path in sorted(self.data_dir.glob("*.json")):
+        for path in feed_files:
             try:
                 loaded = json.loads(path.read_text(encoding="utf-8"))
             except Exception as exc:
@@ -179,4 +191,6 @@ class KnowledgeBase:
                     if isinstance(item, dict):
                         bucket.append(item)
 
+        _cached_entries = entries
+        _cached_mtime = newest_mtime
         return entries

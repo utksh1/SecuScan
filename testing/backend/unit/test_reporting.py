@@ -1,4 +1,5 @@
 from backend.secuscan.reporting import ReportGenerator
+import pytest
 
 
 def sample_task():
@@ -92,3 +93,118 @@ def test_build_report_payload_includes_parameters_and_command():
     labels = {item["label"] for item in payload["scan_parameters"]}
     assert {"Target", "Plugin", "Preset", "Display Options", "Safe Mode", "Command"} <= labels
     assert payload["command_used"].startswith("nikto -h")
+
+
+def test_generate_pdf_report_closes_buffer_on_pisa_error(monkeypatch):
+    """Buffer must be closed even when pisa reports a render error."""
+    import io as _io
+
+    closed_buffers = []
+    real_BytesIO = _io.BytesIO
+
+    class TrackingBytesIO(real_BytesIO):
+        def close(self):
+            closed_buffers.append(True)
+            super().close()
+
+    monkeypatch.setattr(_io, "BytesIO", TrackingBytesIO)
+
+    class FakePisaResult:
+        err = True
+
+    import xhtml2pdf.pisa as pisa_mod
+    monkeypatch.setattr(pisa_mod, "CreatePDF", lambda **kw: FakePisaResult())
+
+    with pytest.raises(RuntimeError, match="Failed to render"):
+        ReportGenerator.generate_pdf_report(sample_task(), sample_result())
+
+    assert closed_buffers, "BytesIO.close() was never called on render failure"
+
+
+def test_generate_pdf_report_closes_buffer_on_unexpected_exception(monkeypatch):
+    """Buffer must be closed and exception normalized to RuntimeError on crash."""
+    import io as _io
+
+    closed_buffers = []
+    real_BytesIO = _io.BytesIO
+
+    class TrackingBytesIO(real_BytesIO):
+        def close(self):
+            closed_buffers.append(True)
+            super().close()
+
+    monkeypatch.setattr(_io, "BytesIO", TrackingBytesIO)
+
+    import xhtml2pdf.pisa as pisa_mod
+    monkeypatch.setattr(pisa_mod, "CreatePDF", lambda **kw: (_ for _ in ()).throw(OSError("disk full")))
+
+    with pytest.raises(RuntimeError, match="Failed to render"):
+        ReportGenerator.generate_pdf_report(sample_task(), sample_result())
+
+    assert closed_buffers, "BytesIO.close() was never called on unexpected exception"
+
+
+def test_generate_pdf_report_chains_original_exception(monkeypatch):
+    """The original cause must be preserved via exception chaining."""
+    import xhtml2pdf.pisa as pisa_mod
+    original = OSError("disk full")
+    monkeypatch.setattr(pisa_mod, "CreatePDF", lambda **kw: (_ for _ in ()).throw(original))
+
+    with pytest.raises(RuntimeError) as exc_info:
+        ReportGenerator.generate_pdf_report(sample_task(), sample_result())
+
+    assert exc_info.value.__cause__ is original
+
+
+def test_generate_csv_report_closes_buffer_on_success(monkeypatch):
+    """StringIO.close() must be called even on the happy path."""
+    import io as _io
+
+    closed_buffers = []
+    real_StringIO = _io.StringIO
+
+    class TrackingStringIO(real_StringIO):
+        def close(self):
+            closed_buffers.append(True)
+            super().close()
+
+    monkeypatch.setattr(_io, "StringIO", TrackingStringIO)
+
+    result = ReportGenerator.generate_csv_report(sample_task(), sample_result())
+    assert "Severity" in result
+    assert closed_buffers, "StringIO.close() was never called on success"
+
+
+def test_generate_csv_report_closes_buffer_on_failure(monkeypatch):
+    """StringIO.close() must be called even when CSV writing fails."""
+    import io as _io
+    import csv as csv_mod
+
+    closed_buffers = []
+    real_StringIO = _io.StringIO
+
+    class TrackingStringIO(real_StringIO):
+        def close(self):
+            closed_buffers.append(True)
+            super().close()
+
+    monkeypatch.setattr(_io, "StringIO", TrackingStringIO)
+    monkeypatch.setattr(csv_mod, "writer", lambda f: (_ for _ in ()).throw(RuntimeError("bad writer")))
+
+    with pytest.raises(RuntimeError):
+        ReportGenerator.generate_csv_report(sample_task(), sample_result())
+
+    assert closed_buffers, "StringIO.close() was never called on CSV failure"
+
+
+def test_generate_pdf_report_raises_runtime_error_on_pisa_err(monkeypatch):
+    """Route layer depends on RuntimeError; never a raw pisa-internal type."""
+    import xhtml2pdf.pisa as pisa_mod
+
+    class BadResult:
+        err = 1  # truthy
+
+    monkeypatch.setattr(pisa_mod, "CreatePDF", lambda **kw: BadResult())
+
+    with pytest.raises(RuntimeError):
+        ReportGenerator.generate_pdf_report(sample_task(), sample_result())

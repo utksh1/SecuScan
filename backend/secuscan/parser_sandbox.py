@@ -22,15 +22,24 @@ Communication contract
 The child process is a minimal Python bootstrap that imports the plugin's
 parser.py, calls parse(input_data), and writes the result to stdout.  It
 imports nothing from the backend package, so no application state leaks.
+
+Security note on stderr
+-----------------------
+Stderr from the child process may contain stack traces, file paths, partial
+parser-input excerpts, or other diagnostic data. It is intentionally NOT
+included in the user-facing exception message or stored in ``error_message``.
+Full stderr is logged at DEBUG level (internal diagnostics only) so operators
+can investigate failures without leaking sensitive details to API callers.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import subprocess
-import textwrap
+import string
 import logging
 from pathlib import Path
 from typing import Any, Dict
@@ -41,61 +50,83 @@ logger = logging.getLogger(__name__)
 _DEFAULT_TIMEOUT_SECONDS: int = 30
 _DEFAULT_MAX_OUTPUT_BYTES: int = 8 * 1024 * 1024  # 8 MB
 
+# Strip absolute file-system paths and Python line-number references from
+# stderr before any logging so internal topology is not exposed even in logs
+# that might be shipped to external observability platforms.
+_PATH_RE = re.compile(r'(?:[A-Za-z]:[\\/]|/)[^\s"\'<>|:*?\n]{3,}')
+_LINENO_RE = re.compile(r'\bline \d+\b', re.IGNORECASE)
+
+
+def _sanitize_stderr(stderr: str, max_chars: int = 500) -> str:
+    """Strip file paths and line numbers from stderr; truncate to *max_chars*."""
+    sanitized = _PATH_RE.sub("[PATH]", stderr)
+    sanitized = _LINENO_RE.sub("[LINE]", sanitized)
+    return sanitized[:max_chars]
+
 
 class ParserSandboxError(RuntimeError):
-    """Raised when the sandboxed parser fails for any reason."""
+    """Raised when the sandboxed parser fails for any reason.
+
+    The public exception message intentionally contains only the *reason*
+    string (a short, controlled description) and never includes raw stderr
+    content.  Stderr is stored privately on the instance so callers that need
+    it for internal diagnostics can access it, but it must not be forwarded to
+    API responses or stored as a user-facing error message.
+    """
 
     def __init__(self, plugin_id: str, reason: str, stderr: str = "") -> None:
         self.plugin_id = plugin_id
         self.reason = reason
-        self.stderr_excerpt = stderr[:2000] if stderr else ""
-        detail = f": {stderr[:200]}" if stderr.strip() else ""
-        super().__init__(f"Parser sandbox failed for '{plugin_id}' ({reason}){detail}")
+        # Keep stderr private; callers must not surface this to API consumers.
+        self._stderr_diagnostic: str = stderr
+        # User-facing message: reason only — no stderr content.
+        super().__init__(f"Parser sandbox failed for '{plugin_id}' ({reason})")
 
 
 # ---------------------------------------------------------------------------
 # Bootstrap script injected into the child process via -c
 # ---------------------------------------------------------------------------
+# Uses string.Template (${var} syntax) instead of str.format() so that
+# user-controlled values in parser_path (e.g. braces) cannot cause
+# KeyError/ValueError via format-string injection.
 
-_BOOTSTRAP_TEMPLATE = textwrap.dedent(
-    """\
-    import sys, json, os
-
-    # Hard limit: refuse to read more than {max_input_bytes} bytes from stdin.
-    MAX_INPUT = {max_input_bytes}
-    raw = sys.stdin.buffer.read(MAX_INPUT + 1)
-    if len(raw) > MAX_INPUT:
-        sys.stderr.write("Parser input exceeded size limit\\n")
-        sys.exit(2)
-
-    try:
-        envelope = json.loads(raw.decode("utf-8", errors="replace"))
-        parser_input = envelope["input"]
-    except Exception as exc:
-        sys.stderr.write(f"Failed to decode envelope: {{exc}}\\n")
-        sys.exit(3)
-
-    # Load the plugin's parser module from an absolute path.
-    import importlib.util
-    parser_path = {parser_path!r}
-    spec = importlib.util.spec_from_file_location("_plugin_parser", parser_path)
-    if spec is None or spec.loader is None:
-        sys.stderr.write(f"Cannot load parser from {{parser_path}}\\n")
-        sys.exit(4)
-
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-
-    if not hasattr(module, "parse"):
-        sys.stderr.write("Parser module missing 'parse' function\\n")
-        sys.exit(5)
-
-    result = module.parse(parser_input)
-
-    # Write result as a single JSON line.
-    sys.stdout.write(json.dumps(result, default=str))
-    sys.stdout.flush()
-"""
+_BOOTSTRAP_TEMPLATE = string.Template(
+    "import sys, json, os\n"
+    "\n"
+    "# Hard limit: refuse to read more than ${max_input_bytes} bytes from stdin.\n"
+    "MAX_INPUT = ${max_input_bytes}\n"
+    "raw = sys.stdin.buffer.read(MAX_INPUT + 1)\n"
+    "if len(raw) > MAX_INPUT:\n"
+    "    sys.stderr.write('Parser input exceeded size limit\\n')\n"
+    "    sys.exit(2)\n"
+    "\n"
+    "try:\n"
+    "    envelope = json.loads(raw.decode('utf-8', errors='replace'))\n"
+    "    parser_input = envelope['input']\n"
+    "except Exception as exc:\n"
+    "    sys.stderr.write(f'Failed to decode envelope: {exc}\\n')\n"
+    "    sys.exit(3)\n"
+    "\n"
+    "# Load the plugin's parser module from an absolute path.\n"
+    "import importlib.util\n"
+    "parser_path = ${parser_path_repr}\n"
+    "spec = importlib.util.spec_from_file_location('_plugin_parser', parser_path)\n"
+    "if spec is None or spec.loader is None:\n"
+    "    sys.stderr.write(f'Cannot load parser\\n')\n"
+    "    sys.exit(4)\n"
+    "\n"
+    "module = importlib.util.module_from_spec(spec)\n"
+    "spec.loader.exec_module(module)\n"
+    "\n"
+    "if not hasattr(module, 'parse'):\n"
+    "    sys.stderr.write(\"Parser module missing 'parse' function\\n\")\n"
+    "    sys.exit(5)\n"
+    "\n"
+    "result = module.parse(parser_input)\n"
+    "\n"
+    "# Write result as a single JSON line.\n"
+    "sys.stdout.write(json.dumps(result, default=str))\n"
+    "sys.stdout.flush()\n"
 )
 
 
@@ -137,8 +168,10 @@ def run_parser_in_sandbox(
 
     max_input_bytes = max(len(parser_input.encode("utf-8")) + 128, 64 * 1024)
 
-    bootstrap = _BOOTSTRAP_TEMPLATE.format(
-        parser_path=str(parser_path),
+    # Use Template.safe_substitute so that any stray $ in parser_path does not
+    # raise; repr() ensures the path is a valid Python string literal.
+    bootstrap = _BOOTSTRAP_TEMPLATE.safe_substitute(
+        parser_path_repr=repr(str(parser_path)),
         max_input_bytes=max_input_bytes,
     )
 
@@ -223,19 +256,30 @@ def run_parser_in_sandbox(
             timeout_seconds,
             plugin_id,
         )
-        raise ParserSandboxError(plugin_id, f"timed out after {timeout_seconds}s", stderr_text)
+        # Log sanitized stderr for internal diagnostics; do NOT pass to exception.
+        logger.debug(
+            "Parser sandbox stderr (plugin '%s', timed out): %s",
+            plugin_id,
+            _sanitize_stderr(stderr_text),
+        )
+        raise ParserSandboxError(plugin_id, f"timed out after {timeout_seconds}s")
 
     if proc.returncode != 0:
         logger.error(
-            "Parser sandbox exited with code %d for plugin '%s': %s",
+            "Parser sandbox exited with code %d for plugin '%s'",
             proc.returncode,
             plugin_id,
-            stderr_text[:500],
+        )
+        # Log sanitized stderr for internal diagnostics; do NOT pass to exception.
+        logger.debug(
+            "Parser sandbox stderr (plugin '%s', exit %d): %s",
+            plugin_id,
+            proc.returncode,
+            _sanitize_stderr(stderr_text),
         )
         raise ParserSandboxError(
             plugin_id,
             f"subprocess exited with code {proc.returncode}",
-            stderr_text,
         )
 
     stdout_bytes = b"".join(stdout_chunks)
@@ -250,10 +294,14 @@ def run_parser_in_sandbox(
     try:
         parsed = json.loads(stdout_bytes.decode("utf-8", errors="replace"))
     except json.JSONDecodeError as exc:
+        logger.debug(
+            "Parser sandbox non-JSON stdout (plugin '%s'): %s",
+            plugin_id,
+            _sanitize_stderr(stderr_text),
+        )
         raise ParserSandboxError(
             plugin_id,
             f"parser returned non-JSON output: {exc}",
-            stderr_text,
         )
 
     if not isinstance(parsed, (dict, list)):
@@ -261,6 +309,5 @@ def run_parser_in_sandbox(
             plugin_id,
             f"parser returned unexpected type {type(parsed).__name__}; expected dict or list",
         )
-
     logger.info("Parser sandbox completed successfully for plugin '%s'", plugin_id)
     return parsed if isinstance(parsed, dict) else {"findings": parsed}

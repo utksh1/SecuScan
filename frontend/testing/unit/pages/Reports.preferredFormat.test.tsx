@@ -51,7 +51,7 @@ describe('Reports — preferred export format', () => {
         const user = userEvent.setup()
         renderReports()
 
-        await user.click(await screen.findByRole('button', { name: /^pdf$/i }))
+        await user.click(await screen.findByRole('button', { name: /^pdf$/ }))
 
         expect(localStorage.getItem('secuscan:preferred-export-format')).toBe('pdf')
     })
@@ -60,7 +60,7 @@ describe('Reports — preferred export format', () => {
         const user = userEvent.setup()
         renderReports()
 
-        await user.click(await screen.findByRole('button', { name: /^pdf$/i }))
+        await user.click(await screen.findByRole('button', { name: /^pdf$/ }))
         await user.click(screen.getByRole('button', { name: /^csv$/i }))
 
         expect(localStorage.getItem('secuscan:preferred-export-format')).toBe('csv')
@@ -81,7 +81,7 @@ describe('Reports — preferred export format', () => {
 
         await screen.findByRole('button', { name: /^csv$/i })
 
-        const buttons = screen.getAllByRole('button', { name: /^(pdf|html|csv)$/i })
+        const buttons = screen.getAllByRole('button', { name: /^(pdf|html|csv)$/ })
         expect(buttons[0].textContent?.toLowerCase()).toBe('csv')
     })
 

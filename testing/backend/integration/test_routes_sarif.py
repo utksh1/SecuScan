@@ -81,6 +81,13 @@ def test_download_sarif_report_success(test_client):
     assert sarif["version"] == "2.1.0"
     assert sarif["runs"][0]["tool"]["driver"]["name"] == "http_inspector"
 
+    driver = sarif["runs"][0]["tool"]["driver"]
+    assert driver["properties"]["generatorVersion"]
+
+    run_properties = sarif["runs"][0]["properties"]
+    assert run_properties["pluginId"] == "http_inspector"
+    assert run_properties["exportTimestamp"]
+
     results = sarif["runs"][0]["results"]
     assert len(results) == 1
     assert results[0]["ruleId"] == "cve-2026-0001"

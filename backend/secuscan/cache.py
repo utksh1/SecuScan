@@ -128,3 +128,23 @@ async def get_cache() -> CacheClient:
     if cache is None:
         raise RuntimeError("Cache not initialized")
     return cache
+
+
+async def invalidate_view_cache():
+    """Clear aggregate caches after writes."""
+    try:
+        c = await get_cache()
+    except RuntimeError:
+        return
+    for prefix in ["summary:", "findings:", "reports:", "tasks:"]:
+        await c.delete_prefix(prefix)
+
+
+async def invalidate_plugin_caches():
+    """Clear plugin and dashboard summary caches when plugin state changes."""
+    try:
+        c = await get_cache()
+    except RuntimeError:
+        return
+    for prefix in ["summary:", "plugins:"]:
+        await c.delete_prefix(prefix)

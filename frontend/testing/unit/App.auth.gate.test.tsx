@@ -1,31 +1,26 @@
 /**
- * App-level first-run auth gate tests (PR #278).
+ * App-level auth gate tests.
  *
- * The core reviewer requirement: once auth is enabled, the app must NOT let
- * any protected API call fire before the operator has provided the key.
+ * Core security requirement (unchanged): no protected page — and therefore no
+ * protected API call — may mount before the operator has a valid backend
+ * session. Gating is now expressed through the real ProtectedRoute + the real
+ * API-key sign-in (ApiKeySetupScreen → authenticateWithApiKey), so these tests
+ * drive AppRoutes through a real router with only the network boundary mocked.
  *
  * Covers:
- * - No key stored → setup screen is rendered; no fetch() is called.
- * - Saving a valid key → route tree replaces the setup screen.
- * - Saving an empty key → validation error; still on setup screen.
- * - Key already stored → app shell renders immediately; no setup screen.
- * - AUTH_REQUIRED_EVENT fired → setup screen re-appears; app shell hidden.
- * - New key saved after 401 → app shell returns; localStorage updated.
+ * - No session → API-key sign-in shown; no page mounts; no fetch fires.
+ * - Saving a valid key → app shell + page render.
+ * - Saving an empty key → validation error; still on sign-in.
+ * - Session already established → app renders immediately.
+ * - AUTH_REQUIRED_EVENT (401) → sign-in returns; app hidden; no fetch.
+ * - New key after 401 → app returns.
+ * - Enter key submits.
  */
 
 import React from 'react'
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-
-// vi.mock calls are hoisted — all factories must be self-contained.
-vi.mock('react-router-dom', () => ({
-  BrowserRouter: ({ children }: { children: React.ReactNode }) =>
-    React.createElement('div', { 'data-testid': 'router' }, children),
-  Routes: ({ children }: { children: React.ReactNode }) =>
-    React.createElement('div', { 'data-testid': 'routes' }, children),
-  Route: () => React.createElement('div', { 'data-testid': 'route' }),
-  Navigate: () => React.createElement('div', { 'data-testid': 'navigate' }),
-}))
+import { MemoryRouter } from 'react-router-dom'
 
 vi.mock('../../src/components/AppShell', () => ({
   default: ({ children }: { children: React.ReactNode }) =>
@@ -35,178 +30,159 @@ vi.mock('../../src/components/AppShell', () => ({
 vi.mock('../../src/pages/Dashboard', () => ({
   default: () => React.createElement('div', { 'data-testid': 'page-dashboard' }),
 }))
-vi.mock('../../src/pages/Toolkit', () => ({
-  default: () => React.createElement('div', { 'data-testid': 'page-toolkit' }),
-}))
-vi.mock('../../src/pages/ToolConfig', () => ({
-  default: () => React.createElement('div', { 'data-testid': 'page-toolconfig' }),
-}))
-vi.mock('../../src/pages/Findings', () => ({
-  default: () => React.createElement('div', { 'data-testid': 'page-findings' }),
-}))
-vi.mock('../../src/pages/Reports', () => ({
-  default: () => React.createElement('div', { 'data-testid': 'page-reports' }),
-}))
-vi.mock('../../src/pages/Settings', () => ({
-  default: () => React.createElement('div', { 'data-testid': 'page-settings' }),
-}))
-vi.mock('../../src/pages/Scans', () => ({
-  default: () => React.createElement('div', { 'data-testid': 'page-scans' }),
-}))
-vi.mock('../../src/pages/TaskDetails', () => ({
-  default: () => React.createElement('div', { 'data-testid': 'page-taskdetails' }),
-}))
-vi.mock('../../src/pages/Workflows', () => ({
-  default: () => React.createElement('div', { 'data-testid': 'page-workflows' }),
+vi.mock('../../src/pages/Toolkit', () => ({ default: () => React.createElement('div') }))
+vi.mock('../../src/pages/ToolConfig', () => ({ default: () => React.createElement('div') }))
+vi.mock('../../src/pages/Findings', () => ({ default: () => React.createElement('div') }))
+vi.mock('../../src/pages/Reports', () => ({ default: () => React.createElement('div') }))
+vi.mock('../../src/pages/ReportCompare', () => ({ default: () => React.createElement('div') }))
+vi.mock('../../src/pages/Settings', () => ({ default: () => React.createElement('div') }))
+vi.mock('../../src/pages/Scans', () => ({ default: () => React.createElement('div') }))
+vi.mock('../../src/pages/TaskDetails', () => ({ default: () => React.createElement('div') }))
+vi.mock('../../src/pages/Workflows', () => ({ default: () => React.createElement('div') }))
+vi.mock('../../src/pages/NotFound', () => ({ default: () => React.createElement('div') }))
+
+vi.mock('../../src/api', () => ({
+  checkAuthSession: vi.fn(),
+  authenticateWithApiKey: vi.fn(),
+  logoutSession: vi.fn(),
+  AUTH_REQUIRED_EVENT: 'secuscan:auth-required',
 }))
 
-import App from '../../src/App'
-import { AUTH_REQUIRED_EVENT, setStoredApiKey } from '../../src/api'
+import { AppRoutes } from '../../src/App'
+import { AuthProvider } from '../../src/components/AuthContext'
+import { checkAuthSession, authenticateWithApiKey, AUTH_REQUIRED_EVENT } from '../../src/api'
 
-// ---------------------------------------------------------------------------
-// Setup / teardown
-// ---------------------------------------------------------------------------
+function renderApp() {
+  return render(
+    <AuthProvider>
+      <MemoryRouter initialEntries={['/']}>
+        <AppRoutes />
+      </MemoryRouter>
+    </AuthProvider>,
+  )
+}
 
 beforeEach(() => {
-  localStorage.clear()
   vi.unstubAllGlobals()
+  vi.mocked(checkAuthSession).mockReset()
+  vi.mocked(authenticateWithApiKey).mockReset()
 })
 
 afterEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
-  localStorage.clear()
 })
 
-// ---------------------------------------------------------------------------
-// First-run: no key stored
-// ---------------------------------------------------------------------------
-
-describe('first-run gate (no key stored)', () => {
-  it('renders the setup screen instead of the app routes', () => {
-    const { container } = render(React.createElement(App))
-    expect(screen.getByRole('main', { name: /api key setup/i })).toBeTruthy()
-    expect(container.querySelector('[data-testid="app-shell"]')).toBeNull()
+describe('first-run gate (no session)', () => {
+  beforeEach(() => {
+    vi.mocked(checkAuthSession).mockResolvedValue(false)
+    vi.mocked(authenticateWithApiKey).mockResolvedValue(undefined)
   })
 
-  it('does not call fetch() while the setup screen is showing', () => {
+  it('shows the API-key sign-in instead of the app, and no page mounts', async () => {
+    renderApp()
+    await waitFor(() =>
+      expect(screen.getByRole('main', { name: /api key setup/i })).toBeTruthy(),
+    )
+    expect(screen.queryByTestId('app-shell')).toBeNull()
+    expect(screen.queryByTestId('page-dashboard')).toBeNull()
+  })
+
+  it('does not call fetch() while the sign-in screen is showing', async () => {
     const fetchSpy = vi.fn()
     vi.stubGlobal('fetch', fetchSpy)
-    render(React.createElement(App))
+    renderApp()
+    await waitFor(() =>
+      expect(screen.getByRole('main', { name: /api key setup/i })).toBeTruthy(),
+    )
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
-  it('shows the app shell after the operator saves a valid key', async () => {
-    render(React.createElement(App))
+  it('shows the app after the operator saves a valid key', async () => {
+    renderApp()
+    await screen.findByLabelText(/Backend API Key/i)
+
     fireEvent.change(screen.getByLabelText(/Backend API Key/i), {
       target: { value: 'my-operator-key' },
     })
     fireEvent.click(screen.getByText(/Save and connect/i))
 
-    await waitFor(() =>
-      expect(screen.queryByRole('main', { name: /api key setup/i })).toBeNull()
-    )
-    expect(screen.getByTestId('app-shell')).toBeTruthy()
+    await waitFor(() => expect(screen.getByTestId('app-shell')).toBeTruthy())
+    expect(screen.getByTestId('page-dashboard')).toBeTruthy()
+    expect(screen.queryByRole('main', { name: /api key setup/i })).toBeNull()
+    expect(authenticateWithApiKey).toHaveBeenCalledWith('my-operator-key')
   })
 
-  it('persists the key to localStorage after save', async () => {
-    render(React.createElement(App))
-    fireEvent.change(screen.getByLabelText(/Backend API Key/i), {
-      target: { value: 'stored-key-abc' },
-    })
-    fireEvent.click(screen.getByText(/Save and connect/i))
+  it('shows a validation error and stays on sign-in for an empty key', async () => {
+    renderApp()
+    await screen.findByLabelText(/Backend API Key/i)
 
-    await waitFor(() =>
-      expect(localStorage.getItem('secuscan_api_key')).toBe('stored-key-abc')
-    )
-  })
-
-  it('shows a validation error and stays on setup screen for empty key', () => {
-    render(React.createElement(App))
     fireEvent.click(screen.getByText(/Save and connect/i))
     expect(screen.getByRole('alert')).toBeTruthy()
     expect(screen.getByRole('main', { name: /api key setup/i })).toBeTruthy()
+    expect(authenticateWithApiKey).not.toHaveBeenCalled()
   })
 
-  it('saves key on Enter keypress in the input', async () => {
-    render(React.createElement(App))
+  it('submits the key on Enter', async () => {
+    renderApp()
+    await screen.findByLabelText(/Backend API Key/i)
+
     const input = screen.getByLabelText(/Backend API Key/i)
     fireEvent.change(input, { target: { value: 'enter-key-test' } })
     fireEvent.keyDown(input, { key: 'Enter' })
 
-    await waitFor(() =>
-      expect(screen.queryByRole('main', { name: /api key setup/i })).toBeNull()
-    )
-    expect(localStorage.getItem('secuscan_api_key')).toBe('enter-key-test')
+    await waitFor(() => expect(screen.getByTestId('app-shell')).toBeTruthy())
+    expect(authenticateWithApiKey).toHaveBeenCalledWith('enter-key-test')
   })
 })
 
-// ---------------------------------------------------------------------------
-// Key already stored: app renders normally
-// ---------------------------------------------------------------------------
-
-describe('key already stored', () => {
-  it('renders the app shell without the setup screen', () => {
-    setStoredApiKey('pre-seeded-key')
-    render(React.createElement(App))
-    expect(screen.queryByRole('main', { name: /api key setup/i })).toBeNull()
-    expect(screen.getByTestId('app-shell')).toBeTruthy()
+describe('session already established', () => {
+  beforeEach(() => {
+    vi.mocked(checkAuthSession).mockResolvedValue(true)
   })
 
-  it('does not render the setup screen when a whitespace-trimmed key exists', () => {
-    localStorage.setItem('secuscan_api_key', 'some-valid-key')
-    render(React.createElement(App))
+  it('renders the app without the sign-in screen', async () => {
+    renderApp()
+    await waitFor(() => expect(screen.getByTestId('app-shell')).toBeTruthy())
     expect(screen.queryByRole('main', { name: /api key setup/i })).toBeNull()
   })
 })
 
-// ---------------------------------------------------------------------------
-// 401 re-triggers the gate
-// ---------------------------------------------------------------------------
+describe('401 re-triggers the sign-in screen', () => {
+  beforeEach(() => {
+    vi.mocked(checkAuthSession).mockResolvedValue(true)
+    vi.mocked(authenticateWithApiKey).mockResolvedValue(undefined)
+  })
 
-describe('401 re-triggers setup screen', () => {
-  it('shows the setup screen when AUTH_REQUIRED_EVENT fires', async () => {
-    setStoredApiKey('valid-key')
-    render(React.createElement(App))
-    expect(screen.getByTestId('app-shell')).toBeTruthy()
+  it('shows the sign-in screen when AUTH_REQUIRED_EVENT fires', async () => {
+    renderApp()
+    await waitFor(() => expect(screen.getByTestId('app-shell')).toBeTruthy())
 
-    act(() => { window.dispatchEvent(new CustomEvent(AUTH_REQUIRED_EVENT)) })
+    act(() => {
+      window.dispatchEvent(new CustomEvent(AUTH_REQUIRED_EVENT))
+    })
 
     await waitFor(() =>
-      expect(screen.getByRole('main', { name: /api key setup/i })).toBeTruthy()
+      expect(screen.getByRole('main', { name: /api key setup/i })).toBeTruthy(),
     )
     expect(screen.queryByTestId('app-shell')).toBeNull()
   })
 
-  it('hides the setup screen after a new key is saved post-401', async () => {
-    setStoredApiKey('valid-key')
-    render(React.createElement(App))
-    act(() => { window.dispatchEvent(new CustomEvent(AUTH_REQUIRED_EVENT)) })
-    await waitFor(() => screen.getByRole('main', { name: /api key setup/i }))
+  it('returns to the app after a new key is saved post-401', async () => {
+    renderApp()
+    await waitFor(() => expect(screen.getByTestId('app-shell')).toBeTruthy())
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent(AUTH_REQUIRED_EVENT))
+    })
+    await screen.findByLabelText(/Backend API Key/i)
 
     fireEvent.change(screen.getByLabelText(/Backend API Key/i), {
       target: { value: 'new-key-after-401' },
     })
     fireEvent.click(screen.getByText(/Save and connect/i))
 
-    await waitFor(() =>
-      expect(screen.queryByRole('main', { name: /api key setup/i })).toBeNull()
-    )
-    expect(screen.getByTestId('app-shell')).toBeTruthy()
-    expect(localStorage.getItem('secuscan_api_key')).toBe('new-key-after-401')
-  })
-
-  it('does not call fetch() after 401 until the new key is saved', async () => {
-    setStoredApiKey('old-key')
-    render(React.createElement(App))
-
-    const fetchSpy = vi.fn()
-    vi.stubGlobal('fetch', fetchSpy)
-
-    act(() => { window.dispatchEvent(new CustomEvent(AUTH_REQUIRED_EVENT)) })
-    await waitFor(() => screen.getByRole('main', { name: /api key setup/i }))
-
-    // The app shell is gone — no components that would call fetch are mounted.
-    expect(fetchSpy).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.getByTestId('app-shell')).toBeTruthy())
+    expect(authenticateWithApiKey).toHaveBeenCalledWith('new-key-after-401')
   })
 })

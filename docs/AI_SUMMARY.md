@@ -17,9 +17,50 @@ reports generate exactly as before, no exceptions, no extra dependencies needed.
 2. `generate_summary()` in `ai_summary.py` builds a prompt from **metadata only**
    — severity counts, categories, and finding titles. Hostnames, IPs, URLs, and
    credentials are **never** included in the prompt.
-3. The LLM returns a 3–5 sentence plain-text paragraph.
+3. The LLM returns a 3–5 sentence plain-text paragraph (free-form prose — see
+   [Output Format and Structured-Output Caveats](#output-format-and-structured-output-caveats)).
 4. The summary appears as a highlighted block at the top of the Executive Overview
    section in both HTML and PDF reports. SARIF is left untouched.
+
+---
+
+## Output Format and Structured-Output Caveats
+
+The summary is **free-form prose, not structured output.** This matters if you expect
+JSON, a fixed schema, or machine-parseable fields — none of that is produced or
+validated. Keep the following in mind:
+
+- **Plain text only — no schema, no JSON mode.** `generate_summary()` calls the
+  provider's `chat.completions` endpoint with a prose instruction ("3–5 sentences,
+  plain text, no markdown") and **no** `response_format`, JSON / structured-output mode,
+  function / tool calling, or output schema. Don't build tooling that parses the summary
+  as structured data.
+- **The reply is embedded as-is — not parsed or validated.** The model's text is only
+  `.strip()`-ed and HTML-escaped before it is dropped into the Executive Overview block
+  of the HTML/PDF report. There is no shape check. If a model ignores the "no markdown"
+  instruction (smaller or local models often do), bullets or `**bold**` can appear
+  verbatim in the report — they are escaped, not stripped.
+- **Non-deterministic.** Generation runs at `temperature=0.4`, so the same scan can
+  produce a different summary on each report. Treat it as advisory, not a stable
+  artifact to diff or snapshot.
+- **Length is capped and may truncate.** Responses are limited to `max_tokens=300`.
+  The "3–5 sentence" length is a prompt instruction, not a guarantee; a verbose model
+  can be cut off mid-sentence.
+- **Best-effort, with a silent empty fallback.** If the feature is disabled, the API
+  key is missing, the `openai` package is not installed, or the call errors / times out,
+  `generate_summary()` returns an empty string and the report simply **omits** the
+  summary block (no error is surfaced to the reader). Never assume a summary is present.
+- **Advisory, and may be wrong.** The prompt is built from finding *metadata* only
+  (severity counts, categories, sanitized titles — see the **Privacy & Safety** section
+  below), so the model cannot cite specifics and may still hallucinate. As everywhere in
+  SecuScan, this is **automated guidance — manual validation required.**
+
+> **Need structured / machine-readable output?** It is **not supported today.** Producing
+> validated JSON would require code changes in `backend/secuscan/ai_summary.py` (e.g.
+> setting `response_format` or a JSON schema and then parsing + validating the result),
+> and note that many OpenAI-compatible providers (Ollama and others) support JSON /
+> structured modes inconsistently or not at all. The source of truth for current behavior
+> is `backend/secuscan/ai_summary.py`; see also [Configuration](#configuration).
 
 ---
 

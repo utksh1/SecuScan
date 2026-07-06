@@ -16,9 +16,10 @@ class MockEventSource {
   onerror: ((err: Event) => void) | null = null
   listeners: Map<string, (e: MessageEvent) => void> = new Map()
   url: string
+  options?: EventSourceInit
   readyState = 0
   closeCount = 0
-  constructor(url: string) { this.url = url; MockEventSource.instances.push(this) }
+  constructor(url: string, options?: EventSourceInit) { this.url = url; this.options = options; MockEventSource.instances.push(this) }
   addEventListener(event: string, handler: (e: MessageEvent) => void) { this.listeners.set(event, handler) }
   close() { this.closeCount++; const idx = MockEventSource.instances.indexOf(this); if (idx !== -1) MockEventSource.instances.splice(idx, 1) }
   dispatchEvent(event: string, data: string) { const h = this.listeners.get(event); if (h) h(new MessageEvent(event, { data })) }
@@ -57,6 +58,12 @@ describe('useTaskSubscription', () => {
     const es = getES()
     expect(es).toBeTruthy()
     expect(es!.url).toContain('/task/task-1/stream')
+  })
+
+  it('includes credentials on the SSE connection', async () => {
+    renderHook({ taskId: 'task-1' })
+    await flush()
+    expect(getES()!.options).toEqual({ withCredentials: true })
   })
 
   it('calls onStatus on status event', async () => {
@@ -136,12 +143,13 @@ describe('useTaskSubscription', () => {
 
     const es = getES()!
     await act(() => { es.triggerError() })
+    // startPolling calls poll() immediately (chained setTimeout), so one call
+    // happens synchronously before the first interval elapses.
+    await tickTime(50)
+    expect(getTaskStatus).toHaveBeenCalledTimes(2) // initial (direct) + first timer
 
     await tickTime(50)
-    expect(getTaskStatus).toHaveBeenCalledTimes(1)
-
-    await tickTime(50)
-    expect(getTaskStatus).toHaveBeenCalledTimes(2)
+    expect(getTaskStatus).toHaveBeenCalledTimes(3) // initial + first + second timer
   })
 
   it('stops polling on terminal status', async () => {
