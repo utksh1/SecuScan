@@ -9,6 +9,7 @@ import {
   formatLocaleTime,
 } from "../utils/date";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { useToast } from "../components/ToastContext";
 import Pagination from "../components/Pagination";
 
 interface Task {
@@ -58,6 +59,7 @@ const itemVariants: Variants = {
 
 export default function Scans() {
   const navigate = useNavigate();
+  const { addToast } = useToast();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
@@ -66,7 +68,6 @@ export default function Scans() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const PAGE_LIMIT = 10;
-  const [error, setError] = useState<string | null>(null);
 
   // Modal state for confirm dialogs
   const [modalState, setModalState] = useState<{
@@ -174,7 +175,7 @@ export default function Scans() {
   }
 
   function handleFilterChange(value: string) {
-    setError(null);
+   
     setFilter(value);
     setPage(1);
   }
@@ -193,6 +194,7 @@ export default function Scans() {
       }
     } catch (err) {
       console.error("Rescan failed:", err);
+      addToast("Rescan failed. Please try again.", "error");
     }
   }
 
@@ -204,14 +206,14 @@ export default function Scans() {
       type: "danger",
       onConfirm: async () => {
         try {
-          setError(null);
+         
           await deleteTask(taskId);
           setTasks((prev) => prev.filter((t) => t.task_id !== taskId));
           if (expandedId === taskId) setExpandedId(null);
           setModalState(prev => ({ ...prev, isOpen: false }));
         } catch (err) {
           console.error("Failed to delete task:", err);
-          setError("Failed to delete task. It might still be running.");
+          addToast("Failed to delete task. It might still be running.", "error");
           setModalState(prev => ({ ...prev, isOpen: false }));
         }
       },
@@ -226,7 +228,7 @@ export default function Scans() {
       type: "danger",
       onConfirm: async () => {
         try {
-          setError(null);
+         
           await clearAllTasks();
           setTasks([]);
           setSelectedIds([]);
@@ -234,7 +236,7 @@ export default function Scans() {
           setModalState(prev => ({ ...prev, isOpen: false }));
         } catch (err) {
           console.error("Failed to clear history:", err);
-          setError("Failed to clear history. Ensure no tasks are currently running.");
+          addToast("Failed to clear history. Ensure no tasks are currently running.", "error");
           setModalState(prev => ({ ...prev, isOpen: false }));
         }
       },
@@ -250,14 +252,14 @@ export default function Scans() {
       type: "danger",
       onConfirm: async () => {
         try {
-          setError(null);
+          
           await bulkDeleteTasks(selectedIds);
           setTasks((prev) => prev.filter((t) => !selectedIds.includes(t.task_id)));
           setSelectedIds([]);
           setModalState(prev => ({ ...prev, isOpen: false }));
         } catch (err) {
           console.error("Bulk delete failed:", err);
-          setError("Failed to delete some tasks. Ensure they are not currently running.");
+          addToast("Failed to delete some tasks. Ensure they are not currently running.", "error");
           setModalState(prev => ({ ...prev, isOpen: false }));
         }
       },
@@ -326,27 +328,7 @@ export default function Scans() {
         </div>
       </header>
 
-      {error && (
-        <div
-          role="alert"
-          className="bg-rag-red/10 border-4 border-rag-red text-rag-red p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex items-center justify-between gap-4"
-        >
-          <div className="flex items-center gap-4">
-            <span className="material-symbols-outlined text-2xl shrink-0">error</span>
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.2em]">System_Alert</p>
-              <p className="font-mono text-xs">{error}</p>
-            </div>
-          </div>
-          <button
-            onClick={() => setError(null)}
-            className="text-rag-red/60 hover:text-rag-red transition-colors shrink-0"
-            aria-label="Close alert"
-          >
-            <span className="material-symbols-outlined text-lg">close</span>
-          </button>
-        </div>
-      )}
+      
 
       {/* Filtration Block */}
       <section className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col xl:flex-row justify-between items-center gap-12">
@@ -737,11 +719,11 @@ export default function Scans() {
             limit={PAGE_LIMIT}
             loading={loading}
             onPrev={() => {
-              setError(null);
+            
               setPage((p) => p - 1);
             }}
             onNext={() => {
-              setError(null);
+      
               setPage((p) => p + 1);
             }}
           />

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import Scans from '../../../src/pages/Scans'
+import { ToastProvider } from '../../../src/components/ToastContext'
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -83,7 +84,9 @@ function mockFetch(tasks: ReturnType<typeof makeTask>[], total?: number) {
 function renderScans() {
   return render(
     <MemoryRouter>
-      <Scans />
+      <ToastProvider>
+        <Scans />
+      </ToastProvider>
     </MemoryRouter>
   )
 }
@@ -273,12 +276,7 @@ describe('Scans — task list', () => {
     expect(screen.getByText('nmap')).toBeInTheDocument()
     expect(screen.getByText('1')).toBeInTheDocument()
 
-    // Test that the error banner can be closed
-    const closeBtn = screen.getByRole('button', { name: /Close alert/i })
-    await userEvent.click(closeBtn)
-
-    await waitFor(() => {
-      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    })
+    // Error is shown via toast, not the banner — no Close alert button expected
+    expect(screen.queryByRole('button', { name: /Close alert/i })).not.toBeInTheDocument()
   })
 })

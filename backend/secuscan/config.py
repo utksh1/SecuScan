@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     raw_output_dir: str = str(PROJECT_ROOT / "data" / "raw")
     reports_dir: str = str(PROJECT_ROOT / "data" / "reports")
     plugins_dir: str = str(PROJECT_ROOT.parent / "plugins")
+    disabled_plugins: List[str] = []
     wordlists_dir: str = str(PROJECT_ROOT / "wordlists")
     knowledgebase_dir: str = str(PROJECT_ROOT / "data" / "knowledgebase")
 

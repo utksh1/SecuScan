@@ -324,9 +324,18 @@ async def start_task(
     if not ok:
         raise HTTPException(status_code=status_code, detail=error_msg)
 
+    db = await get_db()
+
     # Validate consent
     if settings.require_consent and not request.consent_granted:
         logger.warning(f"Task start failed: Consent not granted. Request: {request}")
+        await db.log_audit(
+            "scan_blocked_consent",
+            f"Scan start blocked: consent not granted for plugin {request.plugin_id}",
+            severity="warning",
+            context={"plugin_id": request.plugin_id},
+            plugin_id=request.plugin_id,
+        )
         raise HTTPException(
             status_code=400,
             detail="Consent required. You must acknowledge the legal notice."
@@ -349,7 +358,6 @@ async def start_task(
         logger.warning("Task start failed: %s", preset_error)
         raise HTTPException(status_code=400, detail=preset_error)
 
-    db = await get_db()
     target_policy = await get_target_policy(db, owner, execution_context.get("target_policy_id"))
     credential_profile = await get_credential_profile(db, owner, execution_context.get("credential_profile_id"))
     session_profile = await get_session_profile(db, owner, execution_context.get("session_profile_id"))
@@ -423,6 +431,18 @@ async def start_task(
 
             if not is_valid:
                 logger.warning(f"Task start failed: Target validation failed for '{target}': {error_msg}")
+                await db.log_audit(
+                    "scan_blocked_target_validation",
+                    f"Scan start blocked: target validation failed for plugin {request.plugin_id}",
+                    severity="warning",
+                    context={
+                        "plugin_id": request.plugin_id,
+                        "target": target_str,
+                        "safe_mode": safe_mode,
+                        "reason": error_msg,
+                    },
+                    plugin_id=request.plugin_id,
+                )
                 raise HTTPException(status_code=400, detail=error_msg)
 
     # Check rate limits per (client, plugin) so one client cannot exhaust
