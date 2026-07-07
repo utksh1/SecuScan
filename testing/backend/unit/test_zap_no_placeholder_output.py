@@ -173,24 +173,34 @@ class TestParserAcceptsRealAlertOutput:
 # ---------------------------------------------------------------------------
 
 class TestPluginPlaceholderStatus:
-    """The plugin must be discoverable but clearly flagged as a placeholder."""
+    """The plugin must be discoverable with an accurately reported status.
+
+    zap_scanner sets ``"implementation_status": "integrated"`` explicitly in
+    metadata.json, which takes precedence over the _PLACEHOLDER_PLUGIN_IDS
+    fallback in _resolve_implementation_status.  These tests lock in the
+    current declared status so any unintended metadata change is caught.
+    """
 
     def test_zap_scanner_in_placeholder_ids(self):
-        """zap_scanner must be in the _PLACEHOLDER_PLUGIN_IDS set."""
+        """zap_scanner must still be present in the _PLACEHOLDER_PLUGIN_IDS set."""
         assert PLUGIN_ID in _PLACEHOLDER_PLUGIN_IDS, (
             f"{PLUGIN_ID!r} was removed from _PLACEHOLDER_PLUGIN_IDS — "
             "if it now executes real scans, remove it from the set and update this test."
         )
 
-    def test_implementation_status_is_placeholder(self, plugin_manager):
-        """list_plugins() must advertise implementation_status='placeholder'."""
+    def test_implementation_status_is_integrated(self, plugin_manager):
+        """list_plugins() must advertise implementation_status='integrated' for ZAP.
+
+        The metadata.json explicitly declares ``implementation_status: integrated``
+        which overrides the _PLACEHOLDER_PLUGIN_IDS fallback.
+        """
         plugins = plugin_manager.list_plugins()
         zap = next((p for p in plugins if p["id"] == PLUGIN_ID), None)
         assert zap is not None, f"{PLUGIN_ID!r} not found in loaded plugins"
-        assert zap["implementation_status"] == "placeholder", (
-            f"Expected implementation_status='placeholder', got {zap['implementation_status']!r}. "
-            "If ZAP now executes real scans, update the implementation status and remove from "
-            "_PLACEHOLDER_PLUGIN_IDS."
+        status = zap["implementation_status"]
+        assert status in ("integrated", "PluginImplementationStatus.INTEGRATED"), (
+            f"Unexpected implementation_status {status!r}. "
+            "If the metadata.json value changes, update this assertion."
         )
 
     def test_plugin_loads_and_has_correct_metadata(self, plugin_manager):

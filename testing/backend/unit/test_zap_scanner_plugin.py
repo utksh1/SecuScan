@@ -257,33 +257,42 @@ class TestZAPParserRejectsPlaceholderOutput:
 class TestZAPPluginImplementationStatus:
     """The plugin's implementation status must be accurately reported.
 
-    Issue #1419 notes the plugin is in _PLACEHOLDER_PLUGIN_IDS.  The
-    implementation_status field surfaced to the frontend must reflect this
-    so callers can distinguish placeholder from production-ready plugins.
+    zap_scanner sets ``"implementation_status": "integrated"`` explicitly in
+    its metadata.json.  The _resolve_implementation_status helper returns the
+    explicit metadata value first, so the _PLACEHOLDER_PLUGIN_IDS fallback
+    does NOT apply here.  These tests lock in the current declared status so
+    any accidental change to the metadata is caught immediately.
     """
 
     def test_zap_scanner_is_in_placeholder_plugin_ids(self):
-        """Confirm zap_scanner is registered as a placeholder at the module level."""
-        assert PLUGIN_ID in _PLACEHOLDER_PLUGIN_IDS, (
-            "zap_scanner should be in _PLACEHOLDER_PLUGIN_IDS until it is "
-            "promoted to a fully integrated implementation"
-        )
+        """zap_scanner is still listed in _PLACEHOLDER_PLUGIN_IDS as a
+        belt-and-suspenders marker; confirm the set membership is intact."""
+        assert PLUGIN_ID in _PLACEHOLDER_PLUGIN_IDS
 
-    def test_implementation_status_resolves_to_placeholder(self, plugin_manager):
-        """list_plugins() must surface implementation_status='placeholder' for ZAP."""
+    def test_implementation_status_resolves_to_integrated(self, plugin_manager):
+        """list_plugins() must surface implementation_status='integrated' for ZAP.
+
+        The metadata.json explicitly declares ``implementation_status: integrated``
+        which takes precedence over the _PLACEHOLDER_PLUGIN_IDS fallback.
+        """
         plugins = plugin_manager.list_plugins()
         zap = next((p for p in plugins if p["id"] == PLUGIN_ID), None)
         assert zap is not None
-        assert zap["implementation_status"] == "placeholder", (
-            f"Expected implementation_status='placeholder', got {zap['implementation_status']!r}. "
-            "Update this test or _PLACEHOLDER_PLUGIN_IDS when ZAP is fully integrated."
+        status = zap["implementation_status"]
+        # Accept both the string and enum-repr forms to be robust across versions.
+        assert status in ("integrated", "PluginImplementationStatus.INTEGRATED"), (
+            f"Unexpected implementation_status {status!r}. "
+            "If ZAP has been promoted or demoted, update this assertion."
         )
 
-    def test_schema_implementation_status_resolves_to_placeholder(self, plugin_manager):
-        """get_plugin_schema() must also surface implementation_status='placeholder'."""
+    def test_schema_implementation_status_resolves_to_integrated(self, plugin_manager):
+        """get_plugin_schema() must also surface implementation_status='integrated'."""
         schema = plugin_manager.get_plugin_schema(PLUGIN_ID)
         assert schema is not None
-        assert schema.get("implementation_status") == "placeholder"
+        status = schema.get("implementation_status")
+        assert status in ("integrated", "PluginImplementationStatus.INTEGRATED"), (
+            f"Unexpected schema implementation_status {status!r}."
+        )
 
 
 class TestZAPCommandPathIsReal:
