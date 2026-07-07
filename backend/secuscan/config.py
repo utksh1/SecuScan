@@ -38,6 +38,7 @@ class Settings(BaseSettings):
 
     # Security
     safe_mode_default: bool = True
+    verify_ssl: bool = True
     dns_resolution_timeout_seconds: float = 1.5
     dns_cache_ttl_seconds: int = 60
     dns_rebind_check: bool = True

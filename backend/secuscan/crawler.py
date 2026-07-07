@@ -9,6 +9,8 @@ from urllib.parse import parse_qsl, urljoin, urlparse
 
 import httpx
 
+from .config import settings
+
 
 class _SurfaceParser(HTMLParser):
     def __init__(self) -> None:
@@ -86,7 +88,7 @@ async def crawl_target(
         timeout=timeout,
         headers=headers,
         cookies=cookies or {},
-        verify=False,
+        verify=settings.verify_ssl,
     ) as client:
         response = await client.get(url)
 
