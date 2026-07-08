@@ -1,10 +1,22 @@
 """
 API key authentication for SecuScan backend.
 
-A random key is generated at startup and written to <data_dir>/.api_key.
+A random key is generated at startup and written to <data_dir>/.api_key as
+JSON (``{"key": ..., "created_at": <epoch seconds>}``), which lets the key
+carry an age/expiry (issue #1619) instead of being valid indefinitely with
+no revocation path short of deleting the file and restarting the process.
+Older deployments with a plaintext key file are migrated in place on next
+boot -- the existing key is kept, wrapped with a fresh created_at.
+
 Clients must supply it via:
   - Authorization: Bearer <key>
   - X-Api-Key: <key>
+
+Rotation and expiry (admin-key-gated, issue #1619):
+  - POST /api/v1/admin/api-key/rotate — generate a new key, invalidate the old one
+  - GET  /api/v1/admin/api-key/status — report key age and (if configured) expiry
+  - SECUSCAN_API_KEY_TTL_SECONDS (default 0 = disabled) rejects requests once the
+    key is older than the configured TTL, forcing rotation.
 
 Session management (signed cookie, no server-side state):
   - POST /api/v1/auth/session — validate API key and set HttpOnly session cookie
@@ -28,6 +40,8 @@ _bearer_scheme = HTTPBearer(auto_error=False)
 _api_key_header = APIKeyHeader(name="X-Api-Key", auto_error=False)
 
 _api_key: str | None = None
+_api_key_created_at: float | None = None
+_api_key_file: Path | None = None
 
 SESSION_TTL_SECONDS = 3600  # 1 hour
 COOKIE_NAME = "secuscan_session"
@@ -108,6 +122,16 @@ async def create_session(request: Request, response: Response):
     if not candidate or not secrets.compare_digest(candidate, _api_key):
         raise HTTPException(status_code=401, detail="Invalid API key")
 
+    from .config import settings
+
+    ttl = settings.api_key_ttl_seconds
+    if ttl > 0 and _api_key_created_at is not None and time.time() - _api_key_created_at > ttl:
+        raise HTTPException(
+            status_code=401,
+            detail="API key has expired. An administrator must rotate it via "
+            "POST /api/v1/admin/api-key/rotate.",
+        )
+
     token = _make_signed_token()
     response.set_cookie(
         key=COOKIE_NAME,
@@ -141,25 +165,103 @@ def is_authenticated_by_session(request: Request) -> bool:
     return bool(token and _verify_signed_token(token))
 
 
+def _resolve_key_file(data_dir: str) -> Path:
+    # Allow operators to redirect the key file via env var (e.g. Docker secrets).
+    custom_path = os.environ.get("SECUSCAN_API_KEY_FILE", "").strip()
+    return Path(custom_path) if custom_path else Path(data_dir) / ".api_key"
+
+
+def _write_key_file(key_file: Path, key: str, created_at: float) -> None:
+    key_file.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps({"key": key, "created_at": created_at})
+    # Write to a temp file in the same directory and atomically rename, so a
+    # crash mid-write can never leave a truncated/corrupt key file behind.
+    tmp_path = key_file.with_suffix(f"{key_file.suffix}.tmp")
+    tmp_path.write_text(payload)
+    tmp_path.chmod(0o600)
+    tmp_path.replace(key_file)
+
+
 def init_api_key(data_dir: str) -> str:
     """
     Load the persisted API key, or generate and persist a new one.
 
     Called once during application startup; the returned key is also stored in
     the module-level ``_api_key`` variable so the FastAPI dependency can reach it.
+
+    The key file is JSON (``{"key": ..., "created_at": ...}``) so the key's age
+    can be checked against ``SECUSCAN_API_KEY_TTL_SECONDS`` and reported via
+    ``GET /api/v1/admin/api-key/status``. A pre-existing plaintext key file
+    (from before issue #1619) is migrated in place: the key is kept, wrapped
+    with a fresh ``created_at`` timestamp.
     """
-    global _api_key
-    # Allow operators to redirect the key file via env var (e.g. Docker secrets).
-    custom_path = os.environ.get("SECUSCAN_API_KEY_FILE", "").strip()
-    key_file = Path(custom_path) if custom_path else Path(data_dir) / ".api_key"
+    global _api_key, _api_key_created_at, _api_key_file
+    key_file = _resolve_key_file(data_dir)
+    _api_key_file = key_file
+
     if key_file.exists():
-        _api_key = key_file.read_text().strip()
+        raw = key_file.read_text().strip()
+        try:
+            data = json.loads(raw)
+            _api_key = str(data["key"])
+            _api_key_created_at = float(data["created_at"])
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+            # Legacy plaintext key file -- keep the existing key, but it has
+            # no known creation time, so treat it as freshly issued and
+            # migrate the file to the new JSON format.
+            _api_key = raw
+            _api_key_created_at = time.time()
+            _write_key_file(key_file, _api_key, _api_key_created_at)
     else:
         _api_key = secrets.token_hex(32)
-        key_file.parent.mkdir(parents=True, exist_ok=True)
-        key_file.write_text(_api_key)
-        key_file.chmod(0o600)
+        _api_key_created_at = time.time()
+        _write_key_file(key_file, _api_key, _api_key_created_at)
+
     return _api_key
+
+
+def rotate_api_key() -> dict:
+    """Generate a new API key, persist it, and invalidate the old one.
+
+    The old key stops working the instant this returns, since ``_api_key``
+    is the single value ``require_api_key`` compares against -- there is no
+    grace period. Returns the new key so the caller (an admin-authenticated
+    request) can retrieve it; there is no other way to read it back out,
+    since the key file is not exposed over the API.
+    """
+    global _api_key, _api_key_created_at
+    if _api_key_file is None:
+        raise RuntimeError("API key not initialised -- call init_api_key() first")
+
+    new_key = secrets.token_hex(32)
+    created_at = time.time()
+    _write_key_file(_api_key_file, new_key, created_at)
+    _api_key = new_key
+    _api_key_created_at = created_at
+    return {"key": new_key, "created_at": created_at}
+
+
+def get_api_key_status() -> dict:
+    """Report the current key's age and, if SECUSCAN_API_KEY_TTL_SECONDS is
+    set, when it expires -- without exposing the key itself."""
+    from .config import settings
+
+    ttl = settings.api_key_ttl_seconds
+    age_seconds = None
+    expires_at = None
+    expired = False
+    if _api_key_created_at is not None:
+        age_seconds = time.time() - _api_key_created_at
+        if ttl > 0:
+            expires_at = _api_key_created_at + ttl
+            expired = age_seconds > ttl
+    return {
+        "created_at": _api_key_created_at,
+        "age_seconds": age_seconds,
+        "ttl_seconds": ttl or None,
+        "expires_at": expires_at,
+        "expired": expired,
+    }
 
 
 async def require_api_key(
@@ -201,6 +303,17 @@ async def require_api_key(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API key",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    from .config import settings
+
+    ttl = settings.api_key_ttl_seconds
+    if ttl > 0 and _api_key_created_at is not None and time.time() - _api_key_created_at > ttl:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key has expired. An administrator must rotate it via "
+            "POST /api/v1/admin/api-key/rotate.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 

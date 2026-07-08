@@ -90,6 +90,13 @@ class Settings(BaseSettings):
     denied_capabilities: List[str] = []
     admin_api_key: Optional[str] = None
 
+    # API key expiry (issue #1619): the client API key stored at
+    # <data_dir>/.api_key is otherwise valid indefinitely with no way to
+    # revoke it short of deleting the file and restarting the process. 0
+    # (default) disables expiry so existing deployments keep working
+    # unchanged until an operator opts in.
+    api_key_ttl_seconds: int = 0
+
     # Network Policy Configuration
     network_allowlist: List[str] = []  # IPs/networks to allow (CIDR); empty = deny all egress
     # Operator-supplied ADDITIONS to the denylist (CIDR). This is on top of,

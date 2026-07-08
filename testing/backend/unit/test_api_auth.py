@@ -49,7 +49,10 @@ class TestApiKeyInit:
         monkeypatch.setenv("SECUSCAN_API_KEY_FILE", str(custom_path))
         key = auth_module.init_api_key(str(tmp_path))
         assert custom_path.exists()
-        assert custom_path.read_text().strip() == key
+        # Key file is JSON ({"key": ..., "created_at": ...}, issue #1619) so
+        # the key's age can be tracked, not a bare plaintext key.
+        import json as _json
+        assert _json.loads(custom_path.read_text())["key"] == key
 
     def test_secuscan_api_key_file_loads_existing(self, tmp_path, monkeypatch):
         custom_path = tmp_path / "my_key"

@@ -117,7 +117,7 @@ from .validation import validate_target, validate_task_start_payload, validate_u
 from .reporting import reporting
 from .vault import VaultCrypto
 from .workflows import scheduler, _finalize_workflow_run
-from .auth import require_api_key, get_current_owner
+from .auth import require_api_key, get_current_owner, rotate_api_key, get_api_key_status
 from .execution_context import is_offensive_validation, normalize_execution_context
 from .finding_intelligence import build_asset_summary, build_finding_groups
 from .knowledgebase import KnowledgeBase
@@ -2770,6 +2770,42 @@ def verify_admin_access(
             detail="Invalid or missing Admin API Key"
         )
     return candidate
+
+# ── Client API key rotation & expiry (issue #1619) ──────────────────────────
+#
+# The client API key (backend/data/.api_key) previously had no TTL, rotation
+# endpoint, or revocation mechanism -- once issued it was valid forever, so a
+# key leaked via a co-located container, path traversal, or leaked backup
+# stayed usable indefinitely. These endpoints are gated by the *admin* API
+# key (a separate, statically-configured secret) rather than the client key
+# itself, since an attacker holding a leaked client key must not be able to
+# use it to mint itself a fresh one.
+
+@router.post(
+    "/admin/api-key/rotate",
+    dependencies=[Depends(verify_admin_access), Depends(admin_limiter)],
+)
+async def rotate_client_api_key():
+    """Generate a new client API key and invalidate the old one immediately.
+
+    Returns the new key -- this is the only way to retrieve it, since it is
+    never exposed anywhere else. Existing sessions established via the old
+    key continue until their own TTL expires (POST /auth/session/logout to
+    revoke immediately); the old key itself can no longer authenticate a new
+    request or a new session as soon as this returns.
+    """
+    return rotate_api_key()
+
+
+@router.get(
+    "/admin/api-key/status",
+    dependencies=[Depends(verify_admin_access), Depends(admin_limiter)],
+)
+async def get_client_api_key_status():
+    """Report the client API key's age and, if SECUSCAN_API_KEY_TTL_SECONDS
+    is configured, its expiry -- without exposing the key itself."""
+    return get_api_key_status()
+
 
 @router.get(
     "/admin/diagnostics/notifications",

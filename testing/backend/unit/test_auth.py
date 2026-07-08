@@ -10,6 +10,7 @@ Covers:
 - init_api_key raises OSError on unwritable directory
 """
 
+import json
 import os
 import stat
 import tempfile
@@ -30,6 +31,11 @@ def fresh_key(data_dir: str) -> str:
     return auth_module.init_api_key(data_dir)
 
 
+def _read_key(key_file: Path) -> str:
+    """Key files are JSON ({"key": ..., "created_at": ...}, issue #1619)."""
+    return json.loads(key_file.read_text())["key"]
+
+
 class TestInitApiKey:
     def test_generates_new_key_when_no_file_exists(self, tmp_path: Path):
         """A new key is generated and written to <data_dir>/.api_key."""
@@ -39,10 +45,24 @@ class TestInitApiKey:
         assert key is not None
         assert len(key) == 64  # secrets.token_hex(32) -> 64 hex chars
         assert key_file.exists()
-        assert key_file.read_text().strip() == key
+        assert _read_key(key_file) == key
 
     def test_loads_existing_key_without_regenerating(self, tmp_path: Path):
-        """An existing key file is not overwritten."""
+        """An existing JSON key file's key is loaded unchanged."""
+        key_file = tmp_path / ".api_key"
+        existing = "deadbeef" * 8  # 64-char hex
+        key_file.write_text(json.dumps({"key": existing, "created_at": 1700000000.0}))
+
+        loaded = fresh_key(str(tmp_path))
+
+        assert loaded == existing
+        # created_at (and therefore the key) must not have been regenerated.
+        data = json.loads(key_file.read_text())
+        assert data["key"] == existing
+        assert data["created_at"] == 1700000000.0
+
+    def test_legacy_plaintext_key_is_migrated_not_replaced(self, tmp_path: Path):
+        """A pre-#1619 plaintext key file keeps its key, wrapped in JSON."""
         key_file = tmp_path / ".api_key"
         existing = "deadbeef" * 8  # 64-char hex
         key_file.write_text(existing + "\n")
@@ -50,8 +70,7 @@ class TestInitApiKey:
         loaded = fresh_key(str(tmp_path))
 
         assert loaded == existing
-        # File must not have been rewritten
-        assert key_file.read_text().strip() == existing
+        assert _read_key(key_file) == existing
 
     def test_respects_env_var_custom_path(self, tmp_path: Path, monkeypatch):
         """SECUSCAN_API_KEY_FILE redirects the key file location."""
@@ -61,7 +80,7 @@ class TestInitApiKey:
         key = fresh_key(str(tmp_path))
 
         assert custom_file.exists()
-        assert custom_file.read_text().strip() == key
+        assert _read_key(custom_file) == key
         # No .api_key in data_dir either
         assert not (tmp_path / ".api_key").exists()
 
@@ -76,7 +95,7 @@ class TestInitApiKey:
     def test_returns_the_loaded_or_generated_key(self, tmp_path: Path):
         """init_api_key returns the same value that is written to the file."""
         key = fresh_key(str(tmp_path))
-        assert key == (tmp_path / ".api_key").read_text().strip()
+        assert key == _read_key(tmp_path / ".api_key")
 
     def test_creates_parent_directories(self, tmp_path: Path):
         """init_api_key creates parent directories if they do not exist."""

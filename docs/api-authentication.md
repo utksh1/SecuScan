@@ -12,14 +12,46 @@ writes it to `<data_dir>/.api_key` (mode `0600`), and prints it to the console:
 ✓ API key authentication ready (key file: backend/data/.api_key)
 ```
 
-On every subsequent start the same key is loaded from the file.
+On every subsequent start the same key is loaded from the file. The key file is
+JSON (`{"key": ..., "created_at": <epoch seconds>}`) so the key's age can be
+tracked; a pre-existing plaintext key file from before this format is migrated
+in place on next startup, keeping the same key.
 
-To rotate the key, delete the file and restart the backend:
+### Rotation and expiry
+
+Rotating the key no longer requires deleting the file and restarting the
+process. `POST /api/v1/admin/api-key/rotate` (gated by the separate admin API
+key, `SECUSCAN_ADMIN_API_KEY`) generates a new key and invalidates the old one
+immediately:
 
 ```bash
-rm backend/data/.api_key
-python -m secuscan   # a new key is generated on startup
+curl -X POST -H "X-API-Key: $ADMIN_API_KEY" \
+     http://localhost:8000/api/v1/admin/api-key/rotate
+# {"key": "<new key>", "created_at": 1783...}
 ```
+
+The response is the only place the new key is returned — it is not exposed
+anywhere else, so save it immediately. `GET /api/v1/admin/api-key/status`
+reports the current key's age (and expiry, if configured) without exposing the
+key itself:
+
+```bash
+curl -H "X-API-Key: $ADMIN_API_KEY" \
+     http://localhost:8000/api/v1/admin/api-key/status
+# {"created_at": 1783..., "age_seconds": 42, "ttl_seconds": null, "expires_at": null, "expired": false}
+```
+
+Set `SECUSCAN_API_KEY_TTL_SECONDS` (default `0`, disabled) to have the backend
+automatically reject the client key once it is older than the configured TTL,
+forcing an operator to rotate it:
+
+```bash
+export SECUSCAN_API_KEY_TTL_SECONDS=2592000  # 30 days
+```
+
+The admin key itself is a separate, statically-configured secret (not subject
+to this rotation flow) specifically so that a leaked *client* key can never be
+used to mint itself a replacement.
 
 ## Frontend / UI
 
