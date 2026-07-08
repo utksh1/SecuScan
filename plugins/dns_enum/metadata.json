@@ -3,7 +3,7 @@
   "name": "DNS Reconnaissance",
   "version": "1.0.0",
   "description": "Enumerate DNS records and configurations",
-  "long_description": "DNSRecon is a powerful DNS reconnaissance tool. It can perform various types of DNS security assessments, including zone transfers, reverse lookups, and brute forcing.",
+  "long_description": "DNSRecon performs DNS reconnaissance against a single registrable domain (for example example.com or scanme.nmap.org). Standard enumeration resolves the domain's A/AAAA, NS, MX and SOA records and groups repeated values into one readable entry per host. Zone Transfer (AXFR) attempts a full zone copy and reports a critical finding when a name server allows it. Brute Force discovers subdomains from a built-in name list. Run it only against domains you own or are explicitly authorized to assess.",
   "category": "recon",
   "author": {
     "name": "SecuScan Contributors",
@@ -28,7 +28,7 @@
       "type": "string",
       "required": true,
       "placeholder": "example.com",
-      "help": "Target domain for DNS enumeration."
+      "help": "Registrable domain to enumerate — no scheme or path (e.g. example.com, scanme.nmap.org, or an internal domain such as corp.example). DNSRecon resolves this domain's A/AAAA, NS, MX and SOA records; subdomains are only discovered when Enum Type is set to Brute Force."
     },
     {
       "id": "type",
@@ -50,7 +50,7 @@
           "label": "Brute Force Subdomains"
         }
       ],
-      "help": "Type of DNS enumeration to perform."
+      "help": "What DNSRecon enumerates. Standard returns the domain's A/AAAA, NS, MX and SOA records grouped per host. Zone Transfer (AXFR) attempts a full zone copy and reports a critical finding if the server allows it. Brute Force discovers subdomains from a built-in name list."
     }
   ],
   "presets": {
@@ -59,6 +59,9 @@
     },
     "zone_transfer": {
       "type": "axfr"
+    },
+    "subdomain_bruteforce": {
+      "type": "brt"
     }
   },
   "output": {
@@ -88,5 +91,5 @@
     ]
   },
   "docker_image": "darkoperator/dnsrecon:latest",
-  "checksum": "a9d9107ad715c542acc252d495337b6f7de790210e3d300971e1aba2e19260f4"
+  "checksum": "12cd4e84e7bf888e9b8d5a21d597ca1487f2ab843be78ab367e486bec9b2b761"
 }

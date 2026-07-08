@@ -1,0 +1,4 @@
+Protocol  : TLSv1.0
+Cipher    : AES128-SHA
+
+Verify return code: 0 (ok)

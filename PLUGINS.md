@@ -1,5 +1,12 @@
 # SecuScan Plugin Catalogue
 
+## Plugin Development
+
+New contributors should refer to these resources:
+- [Plugin Development Walkthrough](docs/plugins/plugin-development-walkthrough.md)
+- [Plugin Security Checklist & Guidelines](docs/plugins/plugin-security-checklist.md)
+- [Plugin Reviewer Rubric](docs/plugins/plugin-reviewer-rubric.md)
+
 This file is a human-readable index of the plugins currently present in `plugins/*/metadata.json`.
 
 Last synced: 2026-05-11
@@ -102,6 +109,14 @@ Only run scans against systems you own or are explicitly authorized to assess.
 | XSS Exploiter | `xss_exploiter` | `exploit` | `exploit` | `python3` | Exploit XSS in real-life attacks to extract cookies and data. |
 | Binary Signature Scan | `yara_scan` | `forensics` | `intrusive` | `yara` | Binary and file-system signature matching with YARA rules. |
 | DAST Web Proxy (ZAP) | `zap_scanner` | `vulnerability` | `exploit` | `python3` | Dynamic proxy spidering and payload injection. |
+
+### Hashcat Output Artifacts
+
+- Session files for resumable runs
+- Potfile entries containing recovered hashes
+- Recovered credential output returned by the parser
+
+Review and remove these artifacts after authorized assessments.
 
 ### SQL Injection Plugin Guidance
 
@@ -265,6 +280,21 @@ After refreshing, run the backend tests to confirm the plugin loads correctly:
 cd backend && python -m pytest
 ```
 
+## Parser Integrity Enforcement
+
+When `enforce_parser_integrity` is enabled (default: `True`), the backend
+re-verifies the parser checksum immediately before executing any plugin's
+`parser.py` at scan time. This closes the TOCTOU window between startup
+validation and code execution by confirming the file has not been tampered
+with since the plugin was loaded.
+
+If the checksum does not match, the scan is aborted with a security error.
+Set `SECUSCAN_ENFORCE_PARSER_INTEGRITY=false` in your environment to disable
+this check (not recommended for production deployments).
+
+The `parser_hash_algorithm` setting (`sha256` by default) is reserved for
+future hash algorithm upgrades and is not used by the current implementation.
+
 ### Example 1 — Refresh a single plugin after editing its files
 
 Run this after editing `plugins/nmap/metadata.json` or `plugins/nmap/parser.py`:
@@ -294,6 +324,8 @@ state means every plugin reports `[OK]` and the final line shows zero failures.
 If any `[UPDATE]` lines appear, run the same command without `--dry-run` to
 apply the changes before committing.
 
+→ Full guide: [docs/plugin-contribution-guide.md](docs/plugin-contribution-guide.md)
+
 ## Plugin Validation
 
 Validate a single plugin without loading all plugins:
@@ -311,6 +343,8 @@ python scripts/validate_plugin.py --plugin plugins/nmap
 
 The validation checks metadata JSON, required fields, checksums, and custom
 parser imports when applicable.
+
+→ Full guide: [docs/plugin-contribution-guide.md](docs/plugin-contribution-guide.md)
 
 ### Metadata quality lint rules
 

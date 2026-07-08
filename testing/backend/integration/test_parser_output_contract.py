@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 import asyncio
 
+from backend.secuscan.capabilities import effective_capabilities
 from backend.secuscan.config import settings
 from backend.secuscan.plugins import init_plugins
 from backend.secuscan.executor import executor
@@ -14,6 +15,15 @@ from backend.secuscan.executor import executor
 # ---------------------------------------------------------------------------
 # Dynamic Discovery of All Bundled Custom Parsers
 # ---------------------------------------------------------------------------
+
+KNOWN_PARSER_CAPABILITY_GROUPS = frozenset({"network", "intrusive", "credentials", "exploit"})
+SELECTED_PARSER_CAPABILITY_GROUP = os.getenv("PARSER_CAPABILITY_GROUP", "").strip().lower()
+if SELECTED_PARSER_CAPABILITY_GROUP and SELECTED_PARSER_CAPABILITY_GROUP not in KNOWN_PARSER_CAPABILITY_GROUPS:
+    raise RuntimeError(
+        f"Unsupported parser capability group '{SELECTED_PARSER_CAPABILITY_GROUP}'."
+        f"Valid groups: {sorted(KNOWN_PARSER_CAPABILITY_GROUPS)}"
+    )
+
 
 def get_all_custom_parsers() -> list[tuple[str, Path, Path]]:
     """
@@ -36,6 +46,57 @@ def get_all_custom_parsers() -> list[tuple[str, Path, Path]]:
     return sorted(parsers, key=lambda x: x[0])
 
 
+
+def get_parser_capability_group(metadata_path: Path) -> str:
+    """Return the highest-consequence capability group for CI grouping."""
+    data = json.loads(metadata_path.read_text(encoding="utf-8"))
+    caps = data.get("capabilities")
+    if caps is None:
+        safety_level = data.get("safety", {}).get("level", "safe")
+        caps = list(effective_capabilities(None, safety_level, data.get("id", "unknown")))
+
+    if "exploit" in caps:
+        return "exploit"
+    # if "docker" in caps:
+    #     return "docker"
+    if "credentials" in caps:
+        return "credentials"
+    if "intrusive" in caps:
+        return "intrusive"
+    return "network"
+
+
+def get_selected_custom_parsers() -> list[tuple[str, Path, Path]]:
+    """Return plugin parsers filtered by the requested capability group."""
+    if not SELECTED_PARSER_CAPABILITY_GROUP:
+        return get_all_custom_parsers()
+
+    selected = [
+        item
+        for item in get_all_custom_parsers()
+        if get_parser_capability_group(item[2]) == SELECTED_PARSER_CAPABILITY_GROUP
+    ]
+
+    if not selected:
+        raise RuntimeError(
+            f"No parser contracts found for capability group '{SELECTED_PARSER_CAPABILITY_GROUP}'. "
+            "Verify that the group name is correct and that plugin metadata declares the expected capabilities."
+        )
+
+    return selected
+
+
+def test_parser_capability_groups_are_populated() -> None:
+    """Ensure known CI capability groups map to at least one parser plugin."""
+    groups = {get_parser_capability_group(metadata_path) for _, _, metadata_path in get_all_custom_parsers()}
+    missing = KNOWN_PARSER_CAPABILITY_GROUPS - groups
+    assert not missing, (
+        "The parser capability matrix contains groups with no matching plugins: "
+        f"{sorted(missing)}. "
+        "Update KNOWN_PARSER_CAPABILITY_GROUPS or plugin metadata capabilities accordingly."
+    )
+
+
 # ---------------------------------------------------------------------------
 # Module Fixtures
 # ---------------------------------------------------------------------------
@@ -50,7 +111,7 @@ def plugin_manager_instance():
 # Parser Contract Tests
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("plugin_id, parser_path, metadata_path", get_all_custom_parsers())
+@pytest.mark.parametrize("plugin_id, parser_path, metadata_path", get_selected_custom_parsers())
 def test_parser_contract_compliance(plugin_id, parser_path, metadata_path, plugin_manager_instance):
     """
     Verifies that every custom parser in the codebase complies with

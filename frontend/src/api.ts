@@ -182,6 +182,9 @@ export interface ScanDiff {
 export interface FindingsResponse {
   findings?: FindingRecord[]
   finding_groups?: FindingGroup[]
+  total?: number
+  page?: number
+  per_page?: number
 }
 
 export interface TaskResultResponse {
@@ -285,26 +288,59 @@ export interface TaskStartResponse {
   stream_url: string
 }
 
-const API_KEY_STORAGE_KEY = 'secuscan_api_key'
+let _apiKey: string | null = null
 
 export function getStoredApiKey(): string | null {
-  try {
-    return localStorage.getItem(API_KEY_STORAGE_KEY) || null
-  } catch {
-    return null
-  }
+  return _apiKey
 }
 
 export function setStoredApiKey(key: string): void {
+  _apiKey = key
+}
+
+export function clearStoredApiKey(): void {
+  _apiKey = null
+}
+
+export async function authenticateWithApiKey(apiKey: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/auth/session`, {
+    method: 'POST',
+    headers: { 'X-Api-Key': apiKey },
+    credentials: 'include',
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}))
+    throw new Error(body?.detail || 'Authentication failed')
+  }
+  _apiKey = apiKey
+}
+
+export async function checkAuthSession(): Promise<boolean> {
   try {
-    localStorage.setItem(API_KEY_STORAGE_KEY, key)
+    const response = await fetch(`${API_BASE}/auth/session/check`, {
+      credentials: 'include',
+    })
+    const data = await response.json()
+    return !!data.authenticated
   } catch {
-    // ignore storage errors
+    return false
   }
 }
 
+export async function logoutSession(): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/auth/session/logout`, {
+      method: 'POST',
+      credentials: 'include',
+    })
+  } catch {
+    // ignore
+  }
+  _apiKey = null
+}
+
 function getApiKey(): string | null {
-  return getStoredApiKey()
+  return _apiKey
 }
 
 /** Fired on the window when any API request receives HTTP 401. */
@@ -324,12 +360,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         ...authHeaders,
         ...(init?.headers as Record<string, string> | undefined),
       },
+      credentials: 'include',
       signal: controller.signal,
     })
 
     if (response.status === 401) {
-      // Notify the app so it can show the API-key setup UI without every
-      // caller needing to handle auth independently.
+      _apiKey = null
       window.dispatchEvent(new CustomEvent(AUTH_REQUIRED_EVENT))
       throw new Error('AUTH_REQUIRED')
     }
@@ -355,8 +391,15 @@ export function getPluginSchema(id: string) {
   return request<PluginSchemaResponse>(`/plugin/${id}/schema`)
 }
 
-export function getSettings() {
-  return request<any>(`/settings`)
+export interface SettingsResponse {
+  execution_context?: {
+    default?: ExecutionContext
+  }
+  [key: string]: unknown
+}
+
+export function getSettings(): Promise<SettingsResponse | null> {
+  return request<SettingsResponse | null>('/settings')
 }
 
 export function getDashboardSummary() {
@@ -364,12 +407,12 @@ export function getDashboardSummary() {
 }
 
 
-export function getFindings() {
-  return request<FindingsResponse>('/findings')
+export function getFindings(page: number = 1, perPage: number = 50) {
+  return request<FindingsResponse>(`/findings?page=${page}&per_page=${perPage}`)
 }
 
-export function getFindingGroups() {
-  return request<{ groups: FindingGroup[]; total: number }>('/finding-groups')
+export function getFindingGroups(page: number = 1, perPage: number = 50) {
+  return request<{ groups: FindingGroup[]; total: number; page: number; per_page: number }>(`/finding-groups?page=${page}&per_page=${perPage}`)
 }
 
 
@@ -417,7 +460,7 @@ export interface NotificationRuleUpdatePayload {
 }
 
 export async function listNotificationRules(): Promise<NotificationRule[]> {
-  const data: any = await request('/notifications/rules')
+  const data = await request<NotificationRule[] | { rules: NotificationRule[] }>('/notifications/rules')
   const rules = Array.isArray(data) ? data : data?.rules
   return Array.isArray(rules) ? (rules as NotificationRule[]) : []
 }
@@ -454,13 +497,44 @@ export async function listNotificationHistory(params?: {
   if (typeof params?.limit === 'number') sp.set('limit', String(params.limit))
   if (typeof params?.offset === 'number') sp.set('offset', String(params.offset))
   const suffix = sp.toString() ? `?${sp.toString()}` : ''
-  const data: any = await request(`/notifications/history${suffix}`)
+  const data = await request<{
+    history?: NotificationHistoryRow[]
+    total?: number
+    limit?: number
+    offset?: number
+  }>(`/notifications/history${suffix}`)
   return {
     history: Array.isArray(data?.history) ? (data.history as NotificationHistoryRow[]) : [],
     total: Number(data?.total ?? 0),
     limit: Number(data?.limit ?? (params?.limit ?? 50)),
     offset: Number(data?.offset ?? (params?.offset ?? 0)),
   }
+}
+
+// Per-owner webhook fired once on scan completion/failure (Slack, Discord, or
+// a generic JSON endpoint — auto-detected from the URL). Distinct from the
+// per-finding notification rules above.
+export interface ScanWebhookSettings {
+  webhook_url: string | null
+  platform: 'slack' | 'discord' | 'generic' | null
+  configured: boolean
+  updated_at: string | null
+}
+
+export async function getScanWebhookSettings(): Promise<ScanWebhookSettings> {
+  return request<ScanWebhookSettings>('/settings/webhook')
+}
+
+export async function setScanWebhookSettings(webhookUrl: string): Promise<ScanWebhookSettings> {
+  return request<ScanWebhookSettings>('/settings/webhook', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ webhook_url: webhookUrl }),
+  })
+}
+
+export async function deleteScanWebhookSettings(): Promise<{ deleted: boolean }> {
+  return request<{ deleted: boolean }>('/settings/webhook', { method: 'DELETE' })
 }
 
 export function getTasks(params?: URLSearchParams) {
@@ -470,12 +544,21 @@ export function getTasks(params?: URLSearchParams) {
 
 export type ScanPhase = 'queued' | 'running_command' | 'parsing' | 'reporting' | 'finished'
 
-export function getTaskStatus(taskId: string): Promise<any> {
-  return request<any>(`/task/${taskId}/status`)
+export interface TaskStatusResponse {
+  task_id?: string
+  status: string
+  phase?: ScanPhase
+  progress?: number
+  message?: string
+  error_message?: string | null
 }
 
-export function getTaskResult(taskId: string): Promise<any> {
-  return request<TaskResultResponse>(`/task/${taskId}/result`)
+export function getTaskStatus(taskId: string): Promise<TaskStatusResponse> {
+  return request<TaskStatusResponse>(`/task/${taskId}/status`)
+}
+
+export function getTaskResult(taskId: string): Promise<TaskResultResponse | null> {
+  return request<TaskResultResponse | null>(`/task/${taskId}/result`)
 }
 
 export function getTaskDiff(taskId: string): Promise<ScanDiff> {
@@ -536,7 +619,7 @@ export function cancelTask(taskId: string) {
 
 export function streamTask(taskId: string, onEvent: (ev: MessageEvent) => void) {
   const url = `${API_BASE}/task/${taskId}/stream`
-  const es = new EventSource(url)
+  const es = new EventSource(url, { withCredentials: true })
   es.onmessage = onEvent
   es.onerror = () => {}
   return es
@@ -574,8 +657,26 @@ export interface WorkflowUpdatePayload {
 }
 
 interface WorkflowListResponse {
-  workflows: unknown[]
+  workflows: RawWorkflow[]
   total: number
+}
+
+interface RawWorkflow {
+  id: unknown
+  name?: unknown
+  schedule_seconds?: unknown
+  enabled?: unknown
+  steps?: unknown
+  steps_json?: unknown
+  last_run_at?: string | null
+  queued_task_ids?: unknown
+  queued_tasks?: unknown
+  created_at?: string
+}
+
+interface WorkflowRunResponse {
+  queued_task_ids?: string[]
+  queued_tasks?: string[]
 }
 
 function parseWorkflowSteps(value: unknown): WorkflowStep[] {
@@ -596,7 +697,7 @@ function parseScheduleSeconds(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-function normalizeWorkflow(raw: any): Workflow {
+function normalizeWorkflow(raw: RawWorkflow): Workflow {
   return {
     id: String(raw.id),
     name: String(raw.name ?? ''),
@@ -614,13 +715,13 @@ function normalizeWorkflow(raw: any): Workflow {
 }
 
 export async function getWorkflows(): Promise<Workflow[]> {
-  const data = await request<WorkflowListResponse | unknown[]>('/workflows')
+  const data = await request<WorkflowListResponse | RawWorkflow[]>('/workflows')
   const workflows = Array.isArray(data) ? data : data.workflows
   return Array.isArray(workflows) ? workflows.map(normalizeWorkflow) : []
 }
 
 export async function createWorkflow(data: WorkflowCreatePayload): Promise<Workflow> {
-  const workflow = await request<unknown>('/workflows', {
+  const workflow = await request<RawWorkflow>('/workflows', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -629,7 +730,7 @@ export async function createWorkflow(data: WorkflowCreatePayload): Promise<Workf
 }
 
 export async function runWorkflow(workflowId: string): Promise<{ queued_task_ids: string[] }> {
-  const result: any = await request(`/workflows/${workflowId}/run`, {
+  const result = await request<WorkflowRunResponse>(`/workflows/${workflowId}/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   })
@@ -643,7 +744,7 @@ export async function runWorkflow(workflowId: string): Promise<{ queued_task_ids
 }
 
 export async function updateWorkflow(workflowId: string, data: WorkflowUpdatePayload): Promise<Workflow> {
-  const workflow = await request<unknown>(`/workflows/${workflowId}`, {
+  const workflow = await request<RawWorkflow>(`/workflows/${workflowId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -655,6 +756,61 @@ export function deleteWorkflow(workflowId: string): Promise<{ deleted: boolean }
   return request<{ deleted: boolean }>(`/workflows/${workflowId}`, {
     method: 'DELETE',
   })
+}
+
+export interface WorkflowRun {
+  id: string
+  workflow_id: string
+  version_id: string | null
+  version_number: number | null
+  triggered_by: string
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  task_ids: string[]
+  started_at: string
+  completed_at: string | null
+  error_message: string | null
+}
+
+export interface WorkflowVersion {
+  id: string
+  workflow_id: string
+  version_number: number
+  definition: {
+    name: string
+    schedule_seconds: number | null
+    enabled: boolean
+    steps: WorkflowStep[]
+  }
+  created_at: string
+  created_by: string
+}
+
+export function getWorkflowRuns(workflowId: string, limit = 50, offset = 0): Promise<{ total: number; runs: WorkflowRun[] }> {
+  return request<{ total: number; runs: WorkflowRun[] }>(`/workflows/${workflowId}/runs?limit=${limit}&offset=${offset}`)
+}
+
+export function getWorkflowVersions(workflowId: string): Promise<{ workflow_id: string; versions: WorkflowVersion[]; total: number }> {
+  return request<{ workflow_id: string; versions: WorkflowVersion[]; total: number }>(`/workflows/${workflowId}/versions`)
+}
+
+export async function rollbackWorkflow(workflowId: string, versionNumber: number): Promise<{
+  workflow_id: string
+  rolled_back_to_version: number
+  new_version_number: number
+  workflow: Workflow
+}> {
+  const res = await request<{
+    workflow_id: string
+    rolled_back_to_version: number
+    new_version_number: number
+    workflow: RawWorkflow
+  }>(`/workflows/${workflowId}/rollback/${versionNumber}`, {
+    method: 'POST',
+  })
+  return {
+    ...res,
+    workflow: normalizeWorkflow(res.workflow),
+  }
 }
 
 export function listTargetPolicies() {

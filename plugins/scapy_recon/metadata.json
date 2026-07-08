@@ -27,7 +27,7 @@
       "type": "string",
       "required": true,
       "placeholder": "192.168.1.0/24",
-      "help": "Target IP address or CIDR range."
+      "help": "Target IPv4 address or CIDR range. Examples: 192.168.1.10 or 192.168.1.0/24. Only scan networks you own or are authorized to assess."
     },
     {
       "id": "type",
@@ -45,7 +45,7 @@
           "label": "ICMP Ping (standard)"
         }
       ],
-      "help": "Method of network discovery."
+      "help": "Choose ARP Ping for local networks and ICMP Ping for standard host discovery. Use only with proper authorization."
     }
   ],
   "presets": {
@@ -86,5 +86,5 @@
     ]
   },
   "docker_image": "secdev/scapy:latest",
-  "checksum": "688f16afba16bcf122728cd46a060717622ffeb96dad29b964593b9025b79682"
+  "checksum": "172b7870ba6be89b46ec2918c2567b9d0e5be70b719e0e0d404d81b39a7fa18d"
 }

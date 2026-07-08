@@ -50,6 +50,20 @@
       "required": true,
       "default": "uptime",
       "help": "Command to execute on the remote host."
+    },
+    {
+      "id": "password",
+      "label": "Password",
+      "type": "string",
+      "required": false,
+      "help": "Password-based SSH authentication."
+    },
+    {
+      "id": "private_key",
+      "label": "Private Key",
+      "type": "string",
+      "required": false,
+      "help": "Path to SSH private key."
     }
   ],
   "presets": {
@@ -58,6 +72,14 @@
     },
     "check_auth_log": {
       "command": "cat /var/log/auth.log | tail -n 20"
+    }
+  },
+  "validation": {
+    "authentication": {
+      "mutually_exclusive": [
+        "password",
+        "private_key"
+      ]
     }
   },
   "output": {
@@ -88,5 +110,5 @@
     ]
   },
   "docker_image": "alpine:latest",
-  "checksum": "6d4495f58635dedb184e763e0e4467adf17dc3754a6b1ed7c2dca0d6b30a88ec"
+  "checksum": "76f62464b0e9fb8e0322b52461dae8029053769f60da9b4ce8f73604b7048aaa"
 }

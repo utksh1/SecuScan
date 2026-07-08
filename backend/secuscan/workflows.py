@@ -5,12 +5,12 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from typing import Any, Dict, List
 from .database import get_db
 from .config import settings
 from .ratelimit import workflow_rate_limiter, rate_limiter, concurrent_limiter
 from .executor import executor
-from .auth import DEFAULT_OWNER_ID
 from .execution_context import normalize_execution_context
 from .platform_resources import get_target_policy
 logger = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ class WorkflowScheduler:
         db = await get_db()
         rows = await db.fetchall(
             """
-            SELECT id, name, schedule_seconds, last_run_at, steps_json
+            SELECT id, name, owner_id, schedule_seconds, last_run_at, steps_json
             FROM workflows
             WHERE enabled = 1 AND schedule_seconds IS NOT NULL AND schedule_seconds > 0
             """
@@ -63,7 +63,8 @@ class WorkflowScheduler:
                 logger.warning("Workflow %s skipped by rate limiter: %s", row["id"], wf_rate_msg)
                 continue
 
-            await self._run_workflow(row["id"], json.loads(row.get("steps_json") or "[]"))
+            owner_id = row["owner_id"]
+            await self._run_workflow(row["id"], json.loads(row.get("steps_json") or "[]"), owner_id=owner_id)
             await db.execute(
                 "UPDATE workflows SET last_run_at = datetime('now') WHERE id = ?",
                 (row["id"],),
@@ -80,9 +81,49 @@ class WorkflowScheduler:
             last = last.replace(tzinfo=timezone.utc)
         elapsed = (now - last).total_seconds()
         return elapsed >= schedule_seconds
-    async def _run_workflow(self, workflow_id: str, steps: List[Dict[str, Any]]):
+    async def _run_workflow(self, workflow_id: str, steps: List[Dict[str, Any]], owner_id: str = "default"):
         logger.info("Running workflow %s with %d step(s)", workflow_id, len(steps))
         db = await get_db()
+
+        # Retrieve the latest version snapshot or create one if it doesn't exist
+        active_version = await db.fetchone(
+            "SELECT id, version_number FROM workflow_versions "
+            "WHERE workflow_id = ? ORDER BY version_number DESC LIMIT 1",
+            (workflow_id,),
+        )
+        if not active_version:
+            # Fetch workflow details from the database
+            row = await db.fetchone(
+                "SELECT name, schedule_seconds, enabled, steps_json, schedule_timezone FROM workflows WHERE id = ?",
+                (workflow_id,),
+            )
+            if row:
+                name = row["name"]
+                schedule_seconds = row["schedule_seconds"]
+                enabled = bool(row["enabled"])
+                steps_from_db = json.loads(row["steps_json"] or "[]")
+                schedule_timezone = row["schedule_timezone"]
+            else:
+                name = f"Workflow {workflow_id}"
+                schedule_seconds = None
+                enabled = True
+                steps_from_db = steps
+                schedule_timezone = None
+
+            active_version = await db.snapshot_workflow_version(
+                workflow_id=workflow_id,
+                name=name,
+                schedule_seconds=schedule_seconds,
+                enabled=enabled,
+                steps=steps_from_db,
+                created_by="system",
+                schedule_timezone=schedule_timezone,
+            )
+
+        version_id = active_version["id"]
+        version_number = active_version["version_number"]
+        created_task_ids: List[str] = []
+
         for step in steps:
             plugin_id = step.get("plugin_id")
             inputs = step.get("inputs") or {}
@@ -90,7 +131,7 @@ class WorkflowScheduler:
                 continue
             request_id = get_request_id()
             execution_context = normalize_execution_context(step.get("execution_context") or {})
-            target_policy = await get_target_policy(db, "default", execution_context.get("target_policy_id"))
+            target_policy = await get_target_policy(db, owner_id, execution_context.get("target_policy_id"))
             safe_mode = bool(
                 settings.safe_mode_default
                 and not (target_policy and target_policy.get("allow_public_targets"))
@@ -134,7 +175,7 @@ class WorkflowScheduler:
                             logger.warning("Workflow %s: network policy denied %s: %s", workflow_id, target_str, reason)
                             continue
 
-            client = f"user:{DEFAULT_OWNER_ID}"
+            client = f"user:{owner_id}"
             max_per_hour = plugin.safety.get("rate_limit", {}).get("max_per_hour", settings.max_tasks_per_hour) if plugin else settings.max_tasks_per_hour
             can_exec, rate_err = await rate_limiter.can_execute(plugin_id, max_per_hour, client_id=client)
             if not can_exec:
@@ -148,7 +189,7 @@ class WorkflowScheduler:
                 preset=step.get("preset"),
                 execution_context=execution_context,
                 consent_granted=True,
-                owner_id=DEFAULT_OWNER_ID,
+                owner_id=owner_id,
             )
 
             can_acquire, concurrency_err = await concurrent_limiter.acquire(task_id)
@@ -157,11 +198,67 @@ class WorkflowScheduler:
                 logger.warning("Workflow %s: concurrency limit reached for %s", workflow_id, plugin_id)
                 continue
 
+            created_task_ids.append(task_id)
+
             async def run_task(task_id: str) -> None:
                 set_request_id(request_id)
                 await executor.execute_task(task_id)
 
             asyncio.create_task(run_task(task_id))
 
+        run_id = await db.record_workflow_run(
+            workflow_id=workflow_id,
+            version_id=version_id,
+            version_number=version_number,
+            task_ids=created_task_ids,
+            triggered_by="scheduler",
+        )
+        asyncio.create_task(_finalize_workflow_run(run_id))
+
+
+async def _finalize_workflow_run(run_id: str, poll_interval: float = 5.0, max_polls: int = 720) -> None:
+    """Background task that polls task statuses and marks the run terminal.
+
+    Polls every *poll_interval* seconds for up to *max_polls* iterations
+    (default: 5 s × 720 = 1 hour). If tasks are still running after the
+    limit, the run is marked failed with a timeout message so it never stays
+    permanently in the 'queued' state.
+    """
+    for _ in range(max_polls):
+        await asyncio.sleep(poll_interval)
+        try:
+            db = await get_db()
+            terminal_status = await db.check_workflow_run_tasks(run_id)
+            if terminal_status is not None:
+                await db.finalize_workflow_run(run_id, terminal_status)
+                return
+        except Exception as exc:
+            logger.warning("workflow run finalization error for %s: %s", run_id, exc)
+            return
+    try:
+        db = await get_db()
+        await db.finalize_workflow_run(
+            run_id, "failed", "Run finalization timed out — check individual task statuses"
+        )
+    except Exception as exc:
+        logger.warning("workflow run timeout finalization failed for %s: %s", run_id, exc)
+
 
 scheduler = WorkflowScheduler()
+
+
+def validate_schedule_timezone(tz: str) -> tuple[bool, str]:
+    if not tz or not isinstance(tz, str):
+        return False, "schedule_timezone must be a non-empty string"
+    stripped = tz.strip()
+    if not stripped:
+        return False, "schedule_timezone must be a non-empty string"
+
+    if "/" not in stripped and stripped.upper() not in {"UTC", "GMT"}:
+        return False, f"Invalid timezone: '{tz}'. Use an IANA name such as 'America/New_York' or 'UTC'."
+
+    try:
+        ZoneInfo(stripped)
+        return True, ""
+    except (ZoneInfoNotFoundError, ValueError):
+        return False, f"Invalid timezone: '{tz}'. Use an IANA name such as 'America/New_York' or 'UTC'."

@@ -283,3 +283,71 @@ def test_cloud_storage_auditor_parser_preserves_raw_line_in_metadata():
     result = parse(single_line)
     assert result["findings"]
     assert result["findings"][0]["metadata"]["raw"] == "found exposed bucket: example-data"
+
+
+# Coverage for multi-bucket / multi-container result sets.
+_MULTI_BUCKET_LINES = [
+    "s3.amazonaws.com bucket:acme-public-assets",
+    "acme-public-assets.s3.amazonaws.com found exposed public-read ACL",
+    "s3.amazonaws.com bucket:acme-logs-prod",
+    "blob.core.windows.net container:acme-backups",
+    "acme-backups.blob.core.windows.net warning: anonymous access detected",
+    "storage.googleapis.com bucket:acme-gcs-archive",
+    "critical: acme-gcs-archive exposed customer PII",
+]
+_MULTI_BUCKET_FIXTURE = "\n".join(_MULTI_BUCKET_LINES) + "\n"
+
+
+def test_cloud_storage_auditor_parser_multi_bucket_count_matches_lines():
+    """Every bucket/container line in a multi-result set yields exactly one finding."""
+    result = parse(_MULTI_BUCKET_FIXTURE)
+    assert result["count"] == len(_MULTI_BUCKET_LINES)
+    assert len(result["findings"]) == len(_MULTI_BUCKET_LINES)
+    assert result["items"] == _MULTI_BUCKET_LINES
+
+
+def test_cloud_storage_auditor_parser_multi_bucket_preserves_each_line_in_order():
+    """Each finding maps to its source line, in order, with the raw line preserved."""
+    result = parse(_MULTI_BUCKET_FIXTURE)
+    for finding, line in zip(result["findings"], _MULTI_BUCKET_LINES):
+        assert finding["description"] == line
+        assert finding["metadata"]["raw"] == line
+
+
+def test_cloud_storage_auditor_parser_multi_bucket_covers_multiple_providers():
+    """The fixture spans the S3, Azure Blob, and GCS host families."""
+    blob = "\n".join(parse(_MULTI_BUCKET_FIXTURE)["items"])
+    assert "s3.amazonaws.com" in blob
+    assert "blob.core.windows.net" in blob
+    assert "storage.googleapis.com" in blob
+
+
+def test_cloud_storage_auditor_parser_multi_bucket_distinct_identifiers_present():
+    """Each distinct bucket/container identifier survives parsing."""
+    blob = "\n".join(parse(_MULTI_BUCKET_FIXTURE)["items"])
+    for identifier in (
+        "acme-public-assets",
+        "acme-logs-prod",
+        "acme-backups",
+        "acme-gcs-archive",
+    ):
+        assert identifier in blob
+
+
+def test_cloud_storage_auditor_parser_multi_bucket_severity_classified_per_line():
+    """
+    Severity is classified independently per bucket — a 'critical' line must not
+    raise the severity of unrelated plain-listing lines (no cross-line bleed).
+    """
+    severities = [f["severity"] for f in parse(_MULTI_BUCKET_FIXTURE)["findings"]]
+    # plain host listings stay info despite later critical/exposed lines
+    assert severities[0] == "info"
+    assert severities[2] == "info"
+    assert severities[3] == "info"
+    # found / exposed / warning -> low
+    assert severities[1] == "low"
+    assert severities[4] == "low"
+    # critical -> high
+    assert severities[6] == "high"
+    # the multi-result set exercises all three severity tiers
+    assert set(severities) == {"info", "low", "high"}

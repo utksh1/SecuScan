@@ -1,3 +1,4 @@
+import socket
 import pytest
 import ipaddress
 import tempfile
@@ -351,6 +352,69 @@ class TestURLTargetHandling:
         )
         assert allowed
 
+class TestResolveAndPin:
+    """Test resolve_and_pin DNS rebinding prevention and audit context"""
+
+    @patch("socket.gethostbyname")
+    def test_resolve_and_pin_passes_audit_context(self, mock_gethostbyname, tmp_path):
+        """plugin_id and task_id must be forwarded to check_access for audit trail"""
+        audit_log = tmp_path / "audit.log"
+        engine = NetworkPolicyEngine(audit_log_path=str(audit_log))
+        engine.add_allow_rule("93.184.216.34/32", reason="Example IP")
+
+        mock_gethostbyname.return_value = "93.184.216.34"
+
+        pinned_ip, allowed, reason = engine.resolve_and_pin(
+            "example.com",
+            plugin_id="test_scanner",
+            task_id="task-42",
+        )
+
+        assert pinned_ip == "93.184.216.34"
+        assert allowed is True
+        entries = engine.get_audit_entries(plugin_id="test_scanner")
+        assert len(entries) == 1
+        assert entries[0].task_id == "task-42"
+        assert entries[0].plugin_id == "test_scanner"
+        assert entries[0].dest_ip == "93.184.216.34"
+        assert entries[0].dest_hostname == "example.com"
+
+    def test_resolve_and_pin_ip_input_retains_plugin_context(self, tmp_path):
+        """When given a raw IP, context must still appear in audit"""
+        audit_log = tmp_path / "audit.log"
+        engine = NetworkPolicyEngine(audit_log_path=str(audit_log))
+        engine.add_allow_rule("8.8.8.8/32", reason="Google DNS")
+
+        pinned_ip, allowed, reason = engine.resolve_and_pin(
+            "8.8.8.8",
+            plugin_id="dns_scanner",
+            task_id="task-99",
+        )
+
+        assert pinned_ip == "8.8.8.8"
+        assert allowed is True
+        entries = engine.get_audit_entries(plugin_id="dns_scanner")
+        assert len(entries) == 1
+        assert entries[0].task_id == "task-99"
+
+    @patch("socket.gethostbyname")
+    def test_resolve_and_pin_returns_none_on_unresolvable(self, mock_gethostbyname, tmp_path):
+        """Unresolvable hostnames should return (None, False, reason)"""
+        mock_gethostbyname.side_effect = socket.gaierror("Name or service not known")
+        audit_log = tmp_path / "audit.log"
+        engine = NetworkPolicyEngine(audit_log_path=str(audit_log))
+
+        pinned_ip, allowed, reason = engine.resolve_and_pin(
+            "nonexistent.invalid",
+            plugin_id="test",
+            task_id="task-1",
+        )
+
+        assert pinned_ip is None
+        assert allowed is False
+        assert "Unresolvable" in reason
+
+
 class TestDefaultDenylistSSRFProtection:
     """Test that private subnets are blocked by default in settings"""
 
@@ -366,3 +430,25 @@ class TestDefaultDenylistSSRFProtection:
         assert "fc00::/7" in denylist
         assert "fe80::/10" in denylist
         assert "::1/128" in denylist
+
+def test_check_access_logs_url_parse_failure(caplog, tmp_path):
+    engine = NetworkPolicyEngine(audit_log_path=str(tmp_path / "audit.log"))
+
+    with patch("urllib.parse.urlparse", side_effect=RuntimeError("boom")):
+        with caplog.at_level("DEBUG"):
+            engine.check_access(
+                dest_ip="http://example.com",
+                plugin_id="test",
+            )
+
+    assert "Failed to parse URL while normalizing network policy target" in caplog.text
+
+
+def test_validate_egress_target_logs_url_parse_failure(caplog, tmp_path):
+    engine = NetworkPolicyEngine(audit_log_path=str(tmp_path / "audit.log"))
+
+    with patch("backend.secuscan.network_policy.urlparse", side_effect=RuntimeError("boom")):
+        with caplog.at_level("DEBUG"):
+            engine.validate_egress_target("http://example.com")
+
+    assert "Failed to parse egress target" in caplog.text

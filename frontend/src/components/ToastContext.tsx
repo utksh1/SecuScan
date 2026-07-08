@@ -1,12 +1,15 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react'
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect, ReactNode } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 type ToastType = 'success' | 'error' | 'info' | 'warning';
+
+const TOAST_TTL_MS = 5000
 
 interface Toast {
     id: string
     message: string
     type: ToastType
+    count: number
 }
 
 interface ToastContextType {
@@ -25,17 +28,47 @@ export const useToast = () => {
 
 export const ToastProvider = ({ children }: { children: ReactNode }) => {
     const [toasts, setToasts] = useState<Toast[]>([])
+    const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
 
-    const addToast = useCallback((message: string, type: ToastType = 'success') => {
-        const id = Math.random().toString(36).substring(2, 9)
-        setToasts((prev) => [...prev, { id, message, type }])
-        setTimeout(() => {
-            setToasts((prev) => prev.filter((t) => t.id !== id))
-        }, 5000)
+    const clearTimer = useCallback((id: string) => {
+        const handle = timers.current[id]
+        if (handle) {
+            clearTimeout(handle)
+            delete timers.current[id]
+        }
     }, [])
 
     const removeToast = useCallback((id: string) => {
+        clearTimer(id)
         setToasts((prev) => prev.filter((t) => t.id !== id))
+    }, [clearTimer])
+
+    const scheduleRemoval = useCallback((id: string) => {
+        clearTimer(id)
+        timers.current[id] = setTimeout(() => removeToast(id), TOAST_TTL_MS)
+    }, [clearTimer, removeToast])
+
+    const addToast = useCallback((message: string, type: ToastType = 'success') => {
+        setToasts((prev) => {
+            // Collapse repeated identical notifications into a single entry instead of
+            // stacking duplicates (e.g. a backend call that keeps failing).
+            const existing = prev.find((t) => t.message === message && t.type === type)
+            if (existing) {
+                scheduleRemoval(existing.id)
+                return prev.map((t) =>
+                    t.id === existing.id ? { ...t, count: t.count + 1 } : t,
+                )
+            }
+            const id = Math.random().toString(36).substring(2, 9)
+            scheduleRemoval(id)
+            return [...prev, { id, message, type, count: 1 }]
+        })
+    }, [scheduleRemoval])
+
+    // Clear any pending dismissal timers on unmount.
+    useEffect(() => () => {
+        Object.values(timers.current).forEach(clearTimeout)
+        timers.current = {}
     }, [])
 
     return (
@@ -81,6 +114,14 @@ export function ToastContainer() {
                             </span>
                             <span className="text-xs font-black uppercase tracking-tight truncate">{toast.message}</span>
                         </div>
+                        {toast.count > 1 && (
+                            <span
+                                className="shrink-0 px-2 py-0.5 bg-black text-white text-[10px] font-black tabular-nums"
+                                aria-label={`Repeated ${toast.count} times`}
+                            >
+                                ×{toast.count}
+                            </span>
+                        )}
                         <button
                             type="button"
                             className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity absolute top-2 right-2"

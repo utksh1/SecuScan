@@ -31,7 +31,7 @@
       "type": "string",
       "required": true,
       "placeholder": "/path/to/python_file_or_dir",
-      "help": "Absolute path to the Python file or directory to scan."
+      "help": "Absolute path to a Python file or directory. Bandit will recursively analyze Python source code at this location and report potential security issues."
     },
     {
       "id": "level",
@@ -53,7 +53,7 @@
           "label": "High"
         }
       ],
-      "help": "Report results at or above this severity level."
+      "help": "Minimum severity threshold to include in results. Low shows all findings, Medium hides low-severity findings, and High shows only high-severity findings."
     }
   ],
   "presets": {
@@ -88,5 +88,5 @@
     "system_packages": []
   },
   "docker_image": "pyfound/bandit:latest",
-  "checksum": "7daaed25ba96309668e1792c653abeec3f6d407324878b08e1d7a607a5f728db"
+  "checksum": "efbcbcdc76325f82a5cee1076bebf565ebcbb4237f7542b05ad52169ba7d1321"
 }

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import Scans from '../../../src/pages/Scans'
+import { ToastProvider } from '../../../src/components/ToastContext'
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -12,6 +13,7 @@ vi.mock('../../../src/api', () => ({
   deleteTask: vi.fn().mockResolvedValue({}),
   clearAllTasks: vi.fn().mockResolvedValue({}),
   bulkDeleteTasks: vi.fn().mockResolvedValue({}),
+  startTask: vi.fn().mockResolvedValue({ task_id: 'new-task-123' }),
 }))
 
 vi.mock('../../../src/routes', () => ({
@@ -82,7 +84,9 @@ function mockFetch(tasks: ReturnType<typeof makeTask>[], total?: number) {
 function renderScans() {
   return render(
     <MemoryRouter>
-      <Scans />
+      <ToastProvider>
+        <Scans />
+      </ToastProvider>
     </MemoryRouter>
   )
 }
@@ -212,5 +216,67 @@ describe('Scans — task list', () => {
     await userEvent.click(screen.getByText('Delete_Record'))
 
     await waitFor(() => expect(screen.getByText('Delete Scan Record')).toBeInTheDocument())
+  })
+
+  it('renders quick re-run button for completed tasks and triggers handleRescan', async () => {
+    const tasks = [makeTask({ task_id: 'task-123', status: 'completed', tool: 'nmap' })]
+    mockFetch(tasks)
+    renderScans()
+
+    await waitFor(() => expect(screen.getByText('nmap')).toBeInTheDocument())
+
+    const rerunBtn = screen.getByRole('button', { name: /Re-run nmap scan/i })
+    expect(rerunBtn).toBeInTheDocument()
+
+    const { startTask } = await import('../../../src/api')
+    await userEvent.click(rerunBtn)
+
+    await waitFor(() => {
+      expect(startTask).toHaveBeenCalledWith(
+        'nmap',
+        expect.any(Object),
+        true,
+        undefined,
+        undefined
+      )
+    })
+  })
+
+  it('handles clearAllTasks failure correctly', async () => {
+    const { clearAllTasks } = await import('../../../src/api')
+    vi.mocked(clearAllTasks).mockRejectedValueOnce(new Error('Purge failed'))
+
+    const tasks = [makeTask({ task_id: 'task-1', tool: 'nmap' })]
+    mockFetch(tasks)
+    renderScans()
+
+    await waitFor(() => expect(screen.getByText('nmap')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: /Select_All/i }))
+    await waitFor(() => {
+      expect(screen.getByText('1')).toBeInTheDocument()
+    })
+
+    const purgeBtn = screen.getByRole('button', { name: /Purge_All_Records/i })
+    await userEvent.click(purgeBtn)
+
+    expect(screen.getByText('CRITICAL OPERATION')).toBeInTheDocument()
+
+    const confirmBtn = screen.getByRole('button', { name: /Confirm/i })
+    await userEvent.click(confirmBtn)
+
+    // Assert error feedback is shown in-app
+    await waitFor(() => {
+      const alertEl = screen.getByRole('alert')
+      expect(alertEl).toBeInTheDocument()
+      expect(alertEl).toHaveTextContent('Failed to clear history. Ensure no tasks are currently running.')
+    })
+
+    // Assert tasks and selection state are not incorrectly cleared
+    expect(screen.getByText('nmap')).toBeInTheDocument()
+    expect(screen.getByText('1')).toBeInTheDocument()
+
+    // Error is shown via toast, not the banner — no Close alert button expected
+    expect(screen.queryByRole('button', { name: /Close alert/i })).not.toBeInTheDocument()
   })
 })

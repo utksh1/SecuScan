@@ -2,9 +2,7 @@ import json
 import pytest
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
-
 from fastapi.testclient import TestClient
-
 from backend.secuscan.main import app
 
 
@@ -12,10 +10,9 @@ from backend.secuscan.main import app
 # Shared test client
 # ---------------------------------------------------------------------------
 
-@pytest.fixture(scope="module")
-def client():
-    with TestClient(app) as c:
-        yield c
+@pytest.fixture
+def client(test_client):
+    return test_client
 
 
 # ---------------------------------------------------------------------------
@@ -58,18 +55,18 @@ def _assert_error_response(response, *, expected_statuses=(400, 422)):
 # Mock-DB factory for valid-creation tests
 # ---------------------------------------------------------------------------
 
-def _make_fake_row(name="edge-case-workflow", schedule_seconds=None):
+def _make_fake_row(name="edge-case-workflow", schedule_seconds=None, schedule_timezone=None):
     """Return a dict that mimics the DB row the route would insert/fetch."""
     return {
         "id": "test-wf-id-001",
         "name": name,
         "enabled": 1,
         "schedule_seconds": schedule_seconds,
+        "schedule_timezone": schedule_timezone,
         "steps_json": json.dumps([_step()]),
         "last_run_at": None,
         "created_at": "2026-01-01T00:00:00",
     }
-
 
 def _make_mock_db(fake_row):
     """
@@ -88,7 +85,6 @@ def _make_mock_db(fake_row):
 
     return mock_db
 
-
 def _patch_get_db(fake_row):
     """
     Return a patch context manager that makes get_db yield/return mock_db.
@@ -105,7 +101,7 @@ def _patch_get_db(fake_row):
     # with an async generator factory so both generator and non-generator
     # call-sites receive the same mock_db object.
     async def _get_db_override():
-        yield mock_db
+        return mock_db
 
     return patch(
         "backend.secuscan.routes.get_db",

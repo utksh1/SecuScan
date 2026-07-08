@@ -8,6 +8,7 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings
 import base64
 import hashlib
+import os
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -32,6 +33,7 @@ class Settings(BaseSettings):
     raw_output_dir: str = str(PROJECT_ROOT / "data" / "raw")
     reports_dir: str = str(PROJECT_ROOT / "data" / "reports")
     plugins_dir: str = str(PROJECT_ROOT.parent / "plugins")
+    disabled_plugins: List[str] = []
     wordlists_dir: str = str(PROJECT_ROOT / "wordlists")
     knowledgebase_dir: str = str(PROJECT_ROOT / "data" / "knowledgebase")
 
@@ -58,6 +60,8 @@ class Settings(BaseSettings):
     cors_allow_credentials: bool = True
     plugin_signature_key: Optional[str] = None
     enforce_plugin_signatures: bool = False
+    enforce_parser_integrity: bool = True
+    parser_hash_algorithm: str = "sha256"
     vault_key: Optional[str] = None
     denied_capabilities: List[str] = []
     admin_api_key: Optional[str] = None
@@ -85,6 +89,11 @@ class Settings(BaseSettings):
     max_concurrent_tasks: int = 3
     max_tasks_per_hour: int = 50
     max_requests_per_minute: int = 100
+
+    scan_rate_limit: int = int(os.environ.get("SCAN_RATE_LIMIT", "5"))
+    scan_rate_window: int = int(os.environ.get("SCAN_RATE_WINDOW_SECONDS", "60"))
+    scan_burst_limit: int = int(os.environ.get("SCAN_BURST_LIMIT", "10"))
+    scan_burst_window: int = int(os.environ.get("SCAN_BURST_WINDOW_SECONDS", "3600"))
 
     # Endpoint rate limiting buckets
     rate_limit_task_start_limit: int = 50
@@ -166,6 +175,13 @@ class Settings(BaseSettings):
     smtp_password: Optional[str] = None
     smtp_from_email: str = "noreply@secuscan.io"
     smtp_use_tls: bool = True
+
+    # Slack Webhook Configuration
+    slack_webhook_url: Optional[str] = None
+
+    # Public base URL used to build absolute links (e.g. report links) in
+    # outbound notifications. Leave blank to emit relative paths.
+    public_base_url: str = ""
 
     class Config:
         env_prefix = "SECUSCAN_"

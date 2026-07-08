@@ -21,7 +21,7 @@ exceptions:
   GHSA-gv7w-rqvm-qjhr:
     package: esbuild
     expires_at: "2026-12-31"
-    reason: "Pre-existing upstream devDependency vulnerability in esbuild used by Vite."
+    reason: "DevDependency esbuild vulnerability has no exploit path in production frontend artifact."
 
 # Packages to exclude from audits (use sparingly!)
 excluded_packages: []

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import Settings from '../../../src/pages/Settings'
 import { ThemeProvider } from '../../../src/components/ThemeContext'
@@ -43,6 +43,7 @@ describe('Settings save/reset behavior', () => {
   beforeEach(() => {
     window.localStorage.removeItem('secuscan-config')
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
   it('saves the current config to localStorage (secuscan-config)', async () => {
     const user = userEvent.setup()
@@ -72,8 +73,12 @@ describe('Settings save/reset behavior', () => {
     expect(concurrentOps.value).toBe('8')
   })
   it('nuclear purge removes only secuscan-owned keys and preserves unrelated keys', async () => {
-  // Set up SecuScan keys
-  // Set up SecuScan keys
+  const fetchSpy = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ status: 'logged_out' }),
+  })
+  vi.stubGlobal('fetch', fetchSpy)
+
   window.localStorage.setItem('secuscan-config', JSON.stringify(DEFAULT_CONFIG))
   window.localStorage.setItem('secuscan_api_key', 'test-api-key')
   window.localStorage.setItem('secuscan-saved-views', JSON.stringify([]))
@@ -105,5 +110,15 @@ describe('Settings save/reset behavior', () => {
 
   // Unrelated key should still be there
   expect(window.localStorage.getItem('some-other-app-key')).toBe('should-not-be-deleted')
+
+  await waitFor(() => {
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining('/auth/session/logout'),
+      expect.objectContaining({
+        method: 'POST',
+        credentials: 'include',
+      }),
+    )
+  })
 })
 })

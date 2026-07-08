@@ -137,3 +137,44 @@ describe('Settings export flow', () => {
     vi.restoreAllMocks()
   })
 })
+
+describe('Management Tools button overflow fix', () => {
+  beforeEach(() => {
+    localStorage.removeItem('secuscan-config')
+    vi.mocked(listNotificationRules).mockResolvedValue([])
+  })
+
+  it('renders all three management tool buttons', () => {
+    renderSettings()
+    expect(screen.getByRole('button', { name: /TELEMETRY_EXPORT/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /ENGINE_RESET/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /NUCLEAR_PURGE/i })).toBeInTheDocument()
+  })
+
+  it('TELEMETRY_EXPORT button does not use overflow-breaking letter-spacing class', () => {
+    renderSettings()
+    const btn = screen.getByRole('button', { name: /TELEMETRY_EXPORT/i })
+    expect(btn.className).not.toContain('tracking-[0.3em]')
+    expect(btn.className).toContain('tracking-[0.08em]')
+    expect(btn.className).toContain('whitespace-nowrap')
+    expect(btn.className).toContain('overflow-hidden')
+  })
+
+  it('ENGINE_RESET button does not use overflow-breaking letter-spacing class', () => {
+    renderSettings()
+    const btn = screen.getByRole('button', { name: /ENGINE_RESET/i })
+    expect(btn.className).not.toContain('tracking-[0.3em]')
+    expect(btn.className).toContain('tracking-[0.08em]')
+    expect(btn.className).toContain('whitespace-nowrap')
+    expect(btn.className).toContain('overflow-hidden')
+  })
+
+  it('NUCLEAR_PURGE button does not use overflow-breaking letter-spacing class', () => {
+    renderSettings()
+    const btn = screen.getByRole('button', { name: /NUCLEAR_PURGE/i })
+    expect(btn.className).not.toContain('tracking-[0.3em]')
+    expect(btn.className).toContain('tracking-[0.08em]')
+    expect(btn.className).toContain('whitespace-nowrap')
+    expect(btn.className).toContain('overflow-hidden')
+  })
+})

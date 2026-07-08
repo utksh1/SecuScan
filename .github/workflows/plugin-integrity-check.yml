@@ -1,0 +1,33 @@
+name: Plugin Parser Integrity Check
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'plugins/**'
+      - 'scripts/refresh_plugin_checksum.py'
+      - 'backend/secuscan/plugins.py'
+
+jobs:
+  parser-integrity:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Verify all plugin parser hashes match metadata
+      run: |
+        echo "Checking that all plugin parser checksums are up to date..."
+        python scripts/refresh_plugin_checksum.py --all --dry-run 2>&1 | tee checksum_output.txt
+        if grep -q '\[UPDATE\]' checksum_output.txt; then
+          echo "❌ One or more plugin checksums are out of date."
+          echo "   Run 'python scripts/refresh_plugin_checksum.py --all' to update them."
+          exit 1
+        fi
+        echo "✅ All plugin checksums are up to date."

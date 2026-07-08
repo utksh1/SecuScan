@@ -3,7 +3,7 @@
   "name": "WordPress Security Scan",
   "version": "1.0.0",
   "description": "WordPress security scanner for plugin, theme, and core risk visibility.",
-  "long_description": "Runs WPScan against a target WordPress instance and extracts interesting findings and known vulnerable components.",
+  "long_description": "Runs WPScan against a target WordPress instance and extracts interesting findings and known vulnerable components. WPScan ships as a Ruby gem rather than a standalone binary: install it with `gem install wpscan`, which requires Ruby (>= 2.6) and RubyGems plus a C toolchain (gcc/make) with the libcurl and zlib development headers. This is the usual reason the plugin reports as unavailable even though `wpscan` is 'installed' from a package manager. After installation, run `wpscan --update` once to populate the local vulnerability database; scans here pass `--no-update`, so an unpopulated database returns component fingerprints without vulnerability matches. Supplying a free WPScan API token enables known-vulnerability enrichment and raises the daily lookup quota; without one, results are limited to passive fingerprinting.",
   "category": "vulnerability",
   "author": {
     "name": "SecuScan Contributors",
@@ -54,7 +54,7 @@
       "label": "WPScan API Token",
       "type": "string",
       "required": false,
-      "help": "Optional token to improve vulnerability enrichment."
+      "help": "Optional free WPScan API token. Enables known-vulnerability enrichment and raises the daily lookup quota; without it, results are limited to passive fingerprinting."
     }
   ],
   "presets": {
@@ -83,7 +83,10 @@
       "wpscan"
     ],
     "python_packages": [],
-    "system_packages": []
+    "system_packages": [
+      "ruby",
+      "rubygems"
+    ]
   },
-  "checksum": "34320c076a9f36b37394d19a010e9f3fddbb9d08df8b50fb016fe8d0c748069e"
+  "checksum": "7f614451043fec61f9ff59bffb749e5a549ce8a8ba9710484532f198ecea3d3a"
 }

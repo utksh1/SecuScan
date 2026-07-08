@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   getWorkflows,
@@ -6,10 +7,16 @@ import {
   runWorkflow,
   updateWorkflow,
   deleteWorkflow,
+  getWorkflowRuns,
+  getWorkflowVersions,
+  rollbackWorkflow,
   type Workflow,
   type WorkflowCreatePayload,
+  type WorkflowRun,
+  type WorkflowVersion,
 } from '../api'
-import { formatDateLong } from '../utils/date'
+import { formatDateLong, parseDateSafe } from '../utils/date'
+import { useToast } from '../components/ToastContext'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -182,6 +189,16 @@ function CreateSheet({ onClose, onCreated }: CreateSheetProps) {
               inputMode="numeric"
               className="w-full bg-charcoal-dark border-4 border-black px-4 py-3 text-sm text-silver-bright font-mono placeholder:text-silver/30 focus:outline-none focus:border-rag-red transition-colors"
             />
+            <p className="text-[10px] text-silver/50 font-mono">
+              Enter an interval in seconds. Examples: 60 (1 minute), 300 (5 minutes), 3600 (1 hour), 86400 (1 day).
+            </p>
+            {scheduleSeconds.trim() !== '' &&
+              (!Number.isInteger(Number(scheduleSeconds)) ||
+                Number(scheduleSeconds) <= 0) && (
+                <p className="text-[10px] text-rag-red font-black uppercase tracking-widest">
+                  Schedule must be a positive whole number of seconds
+                </p>
+            )}
           </div>
 
           <div className="flex items-center justify-between">
@@ -206,7 +223,11 @@ function CreateSheet({ onClose, onCreated }: CreateSheetProps) {
             {jsonError && <p className="text-[10px] text-rag-red font-black uppercase tracking-widest">{jsonError}</p>}
           </div>
 
-          {error && <p className="text-[10px] text-rag-red font-black uppercase tracking-widest">{error}</p>}
+          {error && error !== 'Schedule must be a positive whole number of seconds' && (
+            <p className="text-[10px] text-rag-red font-black uppercase tracking-widest">
+              {error}
+            </p>
+          )}
 
           <div className="flex gap-4 pt-2">
             <button
@@ -235,11 +256,12 @@ interface WorkflowCardProps {
   onToggle: () => void
   onRun: () => void
   onDelete: () => void
+  onOpenHistory: () => void
   running: boolean
   toggling: boolean
 }
 
-function WorkflowCard({ workflow, onToggle, onRun, onDelete, running, toggling }: WorkflowCardProps) {
+function WorkflowCard({ workflow, onToggle, onRun, onDelete, onOpenHistory, running, toggling }: WorkflowCardProps) {
   return (
     <motion.div
       variants={itemVariants}
@@ -302,6 +324,14 @@ function WorkflowCard({ workflow, onToggle, onRun, onDelete, running, toggling }
           </button>
 
           <button
+            onClick={onOpenHistory}
+            title="History & Versions"
+            className="border-4 border-black p-2.5 text-silver/50 hover:text-silver-bright hover:bg-charcoal-dark transition-all"
+          >
+            <span className="material-symbols-outlined text-[18px]">history</span>
+          </button>
+
+          <button
             onClick={onDelete}
             title="Delete"
             className="ml-auto border-4 border-black p-2.5 text-silver/30 hover:text-rag-red hover:bg-rag-red/10 transition-all"
@@ -314,6 +344,309 @@ function WorkflowCard({ workflow, onToggle, onRun, onDelete, running, toggling }
   )
 }
 
+interface HistoryVersionsDrawerProps {
+  workflow: Workflow
+  onClose: () => void
+  onRollbackSuccess: (updatedWorkflow: Workflow) => void
+}
+
+function HistoryVersionsDrawer({ workflow, onClose, onRollbackSuccess }: HistoryVersionsDrawerProps) {
+  const [activeTab, setActiveTab] = useState<'history' | 'versions'>('history')
+  const [runs, setRuns] = useState<WorkflowRun[]>([])
+  const [versions, setVersions] = useState<WorkflowVersion[]>([])
+  const [loadingRuns, setLoadingRuns] = useState(false)
+  const [loadingVersions, setLoadingVersions] = useState(false)
+  const [runsError, setRunsError] = useState<string | null>(null)
+  const [versionsError, setVersionsError] = useState<string | null>(null)
+  const [restoringVersion, setRestoringVersion] = useState<number | null>(null)
+  const [expandedVersionId, setExpandedVersionId] = useState<string | null>(null)
+  const { addToast } = useToast()
+
+  async function fetchRuns() {
+    setLoadingRuns(true)
+    setRunsError(null)
+    try {
+      const data = await getWorkflowRuns(workflow.id)
+      setRuns(data.runs)
+    } catch {
+      setRunsError('Failed to load execution history')
+    } finally {
+      setLoadingRuns(false)
+    }
+  }
+
+  async function fetchVersions() {
+    setLoadingVersions(true)
+    setVersionsError(null)
+    try {
+      const data = await getWorkflowVersions(workflow.id)
+      setVersions(data.versions)
+    } catch {
+      setVersionsError('Failed to load version snapshots')
+    } finally {
+      setLoadingVersions(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab === 'history') {
+      fetchRuns()
+    } else {
+      fetchVersions()
+    }
+  }, [workflow.id, activeTab])
+
+  async function handleRestore(versionNumber: number) {
+    setRestoringVersion(versionNumber)
+    try {
+      const res = await rollbackWorkflow(workflow.id, versionNumber)
+      addToast(`Workflow rolled back to version ${versionNumber} successfully`, 'success')
+      onRollbackSuccess(res.workflow)
+      fetchVersions()
+    } catch {
+      addToast(`Failed to restore version ${versionNumber}`, 'error')
+    } finally {
+      setRestoringVersion(null)
+    }
+  }
+
+  function getDuration(started: string, completed?: string | null): string {
+    const start = parseDateSafe(started)
+    const end = completed ? parseDateSafe(completed) : null
+    if (!start) return '-'
+    if (!end) return 'Running'
+    const seconds = Math.max(0, Math.floor((end.getTime() - start.getTime()) / 1000))
+    if (seconds < 60) return `${seconds}s`
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = seconds % 60
+    return `${minutes}m ${remainingSeconds}s`
+  }
+
+  return (
+    <>
+      {/* Backdrop */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        className="slideover-backdrop"
+        onClick={onClose}
+      />
+
+      {/* Drawer Container */}
+      <motion.div
+        initial={{ x: '100%' }}
+        animate={{ x: 0 }}
+        exit={{ x: '100%' }}
+        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+        className="slideover w-full max-w-lg md:max-w-xl"
+        style={{ animation: 'none' }}
+      >
+        <div className="flex items-center justify-between px-6 py-5 border-b border-black bg-[#0c0c0f]">
+          <div>
+            <h2 className="text-lg font-black text-silver-bright uppercase tracking-tight truncate max-w-[320px]">{workflow.name}</h2>
+            <p className="text-[9px] font-mono text-silver/40 uppercase tracking-widest mt-0.5">Configuration & History</p>
+          </div>
+          <button onClick={onClose} className="text-silver/45 hover:text-silver-bright transition-colors">
+            <span className="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+
+        <div className="flex border-b border-black bg-charcoal/20 px-6">
+          <button
+            onClick={() => setActiveTab('history')}
+            className={`flex-1 py-4 text-[10px] uppercase tracking-[0.2em] font-black transition-all border-b-4 text-center ${
+              activeTab === 'history'
+                ? 'text-silver-bright border-rag-blue bg-white/[0.02]'
+                : 'text-silver/40 border-transparent hover:text-silver/70'
+            }`}
+          >
+            Execution History
+          </button>
+          <button
+            onClick={() => setActiveTab('versions')}
+            className={`flex-1 py-4 text-[10px] uppercase tracking-[0.2em] font-black transition-all border-b-4 text-center ${
+              activeTab === 'versions'
+                ? 'text-silver-bright border-rag-blue bg-white/[0.02]'
+                : 'text-silver/40 border-transparent hover:text-silver/70'
+            }`}
+          >
+            Versions
+          </button>
+        </div>
+
+        <div className="slideover-content p-6 space-y-6 custom-scrollbar overflow-y-auto flex-1">
+          {activeTab === 'history' ? (
+            loadingRuns ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-4">
+                <span className="material-symbols-outlined text-silver/20 text-3xl animate-spin">progress_activity</span>
+                <p className="text-[9px] font-black text-silver/20 uppercase tracking-[0.3em] italic animate-pulse">Loading runs...</p>
+              </div>
+            ) : runsError ? (
+              <div className="border-4 border-rag-red bg-rag-red/10 p-5 text-center space-y-3">
+                <p className="text-[10px] font-black text-rag-red uppercase tracking-widest">Error</p>
+                <p className="text-xs text-silver/60">{runsError}</p>
+                <button onClick={fetchRuns} className="bg-rag-red border-4 border-black px-4 py-2 text-[9px] font-black uppercase text-black hover:translate-x-0.5 hover:translate-y-0.5 transition-all">
+                  Retry
+                </button>
+              </div>
+            ) : runs.length === 0 ? (
+              <div className="py-20 text-center space-y-3 opacity-40">
+                <span className="material-symbols-outlined text-silver/10 text-5xl">history_toggle_off</span>
+                <p className="text-[10px] font-black text-silver-bright uppercase tracking-widest">No runs recorded</p>
+                <p className="text-[9px] font-mono text-silver/60">This workflow hasn't executed yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {runs.map(run => (
+                  <div key={run.id} className="border-4 border-black bg-charcoal p-5 relative overflow-hidden shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                    <div className={`absolute top-0 left-0 h-1.5 w-full ${
+                      run.status === 'completed' ? 'bg-rag-green' :
+                      run.status === 'failed' ? 'bg-rag-red' :
+                      run.status === 'running' ? 'bg-rag-blue animate-pulse' :
+                      run.status === 'cancelled' ? 'bg-rag-amber' : 'bg-silver/20'
+                    }`} />
+
+                    <div className="space-y-4 pt-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`px-2 py-0.5 text-[9px] font-black uppercase tracking-widest border-2 border-black ${
+                          run.status === 'completed' ? 'bg-rag-green text-black' :
+                          run.status === 'failed' ? 'bg-rag-red text-black' :
+                          run.status === 'running' ? 'bg-rag-blue text-black animate-pulse' :
+                          run.status === 'cancelled' ? 'bg-rag-amber text-black' :
+                          'bg-charcoal-dark text-silver/40 border-black/50'
+                        }`}>
+                          {run.status}
+                        </span>
+
+                        <span className="text-[9px] font-mono text-silver/40 uppercase tracking-wider">
+                          {run.version_number ? `Version ${run.version_number}` : 'v1'}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4 text-[9px] font-mono text-silver/60 py-3 border-y border-black border-dashed">
+                        <div>
+                          <span className="text-silver/30 uppercase block">Started</span>
+                          <span className="text-silver-bright">{run.started_at ? formatDateLong(run.started_at) : 'N/A'}</span>
+                        </div>
+                        <div>
+                          <span className="text-silver/30 uppercase block">Duration</span>
+                          <span className="text-silver-bright">{getDuration(run.started_at, run.completed_at)}</span>
+                        </div>
+                      </div>
+
+                      {run.error_message && (
+                        <div className="bg-rag-red/5 border-l-4 border-rag-red p-3 font-mono text-[9px] text-rag-red leading-relaxed break-words">
+                          {run.error_message}
+                        </div>
+                      )}
+
+                      {run.task_ids && run.task_ids.length > 0 && (
+                        <div className="space-y-2">
+                          <span className="text-[9px] font-black text-silver/30 uppercase tracking-widest block">Associated Tasks</span>
+                          <div className="flex flex-wrap gap-2">
+                            {run.task_ids.map(tid => (
+                              <Link
+                                key={tid}
+                                to={`/task/${tid}`}
+                                className="text-[9px] font-mono text-rag-blue hover:text-rag-blue/80 bg-charcoal-dark border-2 border-black px-2 py-1 shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all"
+                              >
+                                {tid.slice(0, 8)} →
+                              </Link>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
+          ) : (
+            loadingVersions ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-4">
+                <span className="material-symbols-outlined text-silver/20 text-3xl animate-spin">progress_activity</span>
+                <p className="text-[9px] font-black text-silver/20 uppercase tracking-[0.3em] italic animate-pulse">Loading versions...</p>
+              </div>
+            ) : versionsError ? (
+              <div className="border-4 border-rag-red bg-rag-red/10 p-5 text-center space-y-3">
+                <p className="text-[10px] font-black text-rag-red uppercase tracking-widest">Error</p>
+                <p className="text-xs text-silver/60">{versionsError}</p>
+                <button onClick={fetchVersions} className="bg-rag-red border-4 border-black px-4 py-2 text-[9px] font-black uppercase text-black hover:translate-x-0.5 hover:translate-y-0.5 transition-all">
+                  Retry
+                </button>
+              </div>
+            ) : versions.length === 0 ? (
+              <div className="py-20 text-center space-y-3 opacity-40">
+                <span className="material-symbols-outlined text-silver/10 text-5xl">history_toggle_off</span>
+                <p className="text-[10px] font-black text-silver-bright uppercase tracking-widest">No versions found</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {versions.map(v => {
+                  const isExpanded = expandedVersionId === v.id
+                  return (
+                    <div key={v.id} className="border-4 border-black bg-charcoal p-5 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] relative">
+                      <div className="space-y-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <h4 className="text-sm font-black text-silver-bright uppercase tracking-tight">Version {v.version_number}</h4>
+                            <p className="text-[9px] font-mono text-silver/40 uppercase tracking-widest mt-0.5">
+                              {v.created_at ? formatDateLong(v.created_at) : 'N/A'}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setExpandedVersionId(isExpanded ? null : v.id)}
+                              className="border-4 border-black hover:bg-charcoal-dark text-silver/70 hover:text-silver-bright font-black uppercase text-[9px] tracking-widest px-3 py-1.5 transition-all"
+                            >
+                              {isExpanded ? 'Hide Steps' : 'View Steps'}
+                            </button>
+                            <button
+                              onClick={() => handleRestore(v.version_number)}
+                              disabled={restoringVersion !== null}
+                              className="bg-silver-bright hover:bg-white text-black border-4 border-black font-black uppercase text-[9px] tracking-widest px-3 py-1.5 shadow-[2px_2px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-0.5 hover:translate-y-0.5 transition-all disabled:opacity-40"
+                            >
+                              {restoringVersion === v.version_number ? 'Restoring...' : 'Restore'}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-2 text-[9px] font-mono text-silver/60 pt-3 border-t border-black border-dashed">
+                          <div>
+                            <span className="text-silver/30 uppercase block">Created By</span>
+                            <span className="text-silver-bright truncate block" title={v.created_by}>{v.created_by}</span>
+                          </div>
+                          <div>
+                            <span className="text-silver/30 uppercase block">Schedule</span>
+                            <span className="text-silver-bright">{formatSchedule(v.definition?.schedule_seconds)}</span>
+                          </div>
+                          <div>
+                            <span className="text-silver/30 uppercase block">Steps</span>
+                            <span className="text-silver-bright">{v.definition?.steps?.length ?? 0}</span>
+                          </div>
+                        </div>
+
+                        {isExpanded && (
+                          <pre className="bg-black/40 border-4 border-black p-3 text-[10px] font-mono text-silver/70 max-h-48 overflow-y-auto whitespace-pre-wrap mt-3 custom-scrollbar">
+                            {JSON.stringify(v.definition?.steps, null, 2)}
+                          </pre>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          )}
+        </div>
+      </motion.div>
+    </>
+  )
+}
+
 export default function Workflows() {
   const [workflows, setWorkflows] = useState<Workflow[]>([])
   const [loading, setLoading] = useState(true)
@@ -323,6 +656,8 @@ export default function Workflows() {
   const [deleting, setDeleting] = useState(false)
   const [runningId, setRunningId] = useState<string | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [historyWorkflow, setHistoryWorkflow] = useState<Workflow | null>(null)
+  const { addToast } = useToast()
 
   async function fetchWorkflows() {
     setLoading(true)
@@ -343,9 +678,10 @@ export default function Workflows() {
     setRunningId(id)
     try {
       await runWorkflow(id)
+      addToast('Workflow execution queued successfully', 'success')
       await fetchWorkflows()
     } catch {
-      // silent — toast can be added later
+      addToast('Failed to queue workflow execution', 'error')
     } finally {
       setRunningId(null)
     }
@@ -356,8 +692,9 @@ export default function Workflows() {
     try {
       const updated = await updateWorkflow(workflow.id, { enabled: !workflow.enabled })
       setWorkflows(prev => prev.map(w => w.id === updated.id ? updated : w))
+      addToast(`Workflow ${!workflow.enabled ? 'enabled' : 'disabled'} successfully`, 'success')
     } catch {
-      // silent
+      addToast('Failed to update workflow status', 'error')
     } finally {
       setTogglingId(null)
     }
@@ -369,9 +706,10 @@ export default function Workflows() {
     try {
       await deleteWorkflow(deleteTarget.id)
       setWorkflows(prev => prev.filter(w => w.id !== deleteTarget.id))
+      addToast('Workflow deleted successfully', 'success')
       setDeleteTarget(null)
     } catch {
-      // silent
+      addToast('Failed to delete workflow', 'error')
     } finally {
       setDeleting(false)
     }
@@ -463,6 +801,7 @@ export default function Workflows() {
                 workflow={workflow}
                 onRun={() => handleRun(workflow.id)}
                 onToggle={() => handleToggle(workflow)}
+                onOpenHistory={() => setHistoryWorkflow(workflow)}
                 onDelete={() => setDeleteTarget(workflow)}
                 running={runningId === workflow.id}
                 toggling={togglingId === workflow.id}
@@ -490,6 +829,19 @@ export default function Workflows() {
           loading={deleting}
         />
       )}
+
+      <AnimatePresence>
+        {historyWorkflow && (
+          <HistoryVersionsDrawer
+            workflow={historyWorkflow}
+            onClose={() => setHistoryWorkflow(null)}
+            onRollbackSuccess={updated => {
+              setWorkflows(prev => prev.map(w => w.id === updated.id ? updated : w))
+              setHistoryWorkflow(updated)
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

@@ -89,3 +89,17 @@ To generate a CycloneDX 1.4 compatible SBOM containing all frontend and backend 
 ```bash
 python scripts/generate_sbom.py --output sbom.json --include-dev
 ```
+
+---
+
+## 3. Vulnerability Triage Decision Table
+
+When an audit surfaces a finding, use the following table to classify it into one of three categories and determine the appropriate operator response. Classification is driven by severity, exploitability, and whether the affected package ships to production.
+
+| Category | Criteria | Operator Action | Example |
+| :--- | :--- | :--- | :--- |
+| **Informational** | `low` severity findings with no exploit path, or findings confined to dev-only dependencies. | Note and monitor; no immediate action required. | A `low` CVE in a build-time dev dependency that is not shipped to production. |
+| **Urgent** | `high` or `critical` findings with a known fix available, or a plausible exploit path in production dependencies. | Schedule a patch within the current sprint and file a tracking ticket. | A `high` CVE in a runtime HTTP library with a patched version released. |
+| **Blocking** | `critical` findings with active exploitation, no available fix, or affecting authentication/secrets handling. | Stop deployment; apply mitigation or a temporary exception with security-team approval immediately. | A `critical` RCE in a core runtime dependency with no patch. |
+
+Blocking findings that require a temporary allowance to unblock deployment must be documented using the exception format described in [Section 1](#1-exception-configuration-format).

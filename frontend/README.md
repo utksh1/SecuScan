@@ -96,7 +96,7 @@ frontend/
 - Centralized data fetching
 
 #### 3. **Service Layer**
-- `api.js` abstracts backend communication
+- `api.ts` abstracts backend communication
 - Consistent error handling
 - Type-safe responses (via Pydantic backend)
 
@@ -176,64 +176,77 @@ useEffect(() => {
 ### Adding a New Page
 
 1. Create component in `src/pages/`:
-```jsx
-// src/pages/MyPage.jsx
+```tsx
+// src/pages/MyPage.tsx
 export default function MyPage() {
   return <div>My Page Content</div>
 }
 ```
 
-2. Add route in `App.jsx`:
-```jsx
+2. Add route in `App.tsx`:
+```tsx
 <Route path="/mypage" element={<MyPage />} />
 ```
 
-3. Add navigation link in `Layout.jsx`:
-```jsx
+3. Add navigation link in your layout component (e.g. `AppShell.tsx`):
+```tsx
 <NavLink to="/mypage">My Page</NavLink>
 ```
 
 ### Adding a New Component
 
 1. Create component in `src/components/`:
-```jsx
-// src/components/MyComponent.jsx
-export default function MyComponent({ prop1, prop2 }) {
-  return <div>{prop1} - {prop2}</div>
-}
+```tsx
+// src/components/MyComponent.tsx
+
+type Props = {
+  prop1: string;
+  prop2: number;
+};
+
+const MyComponent = ({ prop1, prop2 }: Props): JSX.Element => {
+  return <div>{prop1} - {prop2}</div>;
+};
+
+export default MyComponent;
 ```
 
 2. Import and use:
-```jsx
-import MyComponent from '../components/MyComponent'
+```tsx
+import MyComponent from '../components/MyComponent';
 
 <MyComponent prop1="value" prop2={123} />
 ```
 
 ### API Integration
 
-Add new endpoints in `src/services/api.js`:
-```javascript
-export const api = {
-  // ... existing methods
+Add new endpoints in `src/services/api.ts`:
+```ts
+// src/services/api.ts
 
-  myNewEndpoint: (param) => request(`/my-endpoint/${param}`, {
-    method: 'POST',
-    body: JSON.stringify({ data: 'value' })
-  })
-}
+export const api = {
+  myNewEndpoint: (param: string) =>
+    request(`/my-endpoint/${param}`, {
+      method: "POST",
+      body: JSON.stringify({ data: "value" }),
+    }),
+};
 ```
 
 Use in components:
-```jsx
-import { api } from '../services/api'
+```tsx
+import { api } from "../services/api";
 
-async function handleAction() {
+async function handleAction(): Promise<void> {
   try {
-    const result = await api.myNewEndpoint('param')
-    console.log(result)
-  } catch (error) {
-    console.error(error.message)
+    const result = await api.myNewEndpoint("param");
+    console.log(result);
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      console.error(error.message);
+    } else {
+      console.error(error);
+    }
   }
 }
 ```
@@ -504,10 +517,10 @@ frontend/testing/unit
 
 Supported naming patterns include:
 
-- `*.test.js`
-- `*.test.jsx`
-- `*.spec.js`
-- `*.spec.jsx`
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
 
 > Note for Windows users:
 > Some npm scripts using `NODE_OPTIONS=...` may not run directly in PowerShell.
@@ -534,7 +547,7 @@ npx vitest run
 
 **Solution:**
 1. Verify backend is running: `curl http://127.0.0.1:8000/api/v1/health`
-2. Check Vite proxy in `vite.config.js`:
+2. Check Vite proxy in `vite.config.ts`:
 ```js
 server: {
   proxy: {

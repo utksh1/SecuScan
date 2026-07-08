@@ -18,11 +18,26 @@ time can become vulnerable within weeks. Failing to update means:
 
 ---
 
-## 2. Scheduled review cadence
+## 2. Ownership & review cadence
+
+### Ownership
+
+| Responsibility | Owner |
+|---|---|
+| Keeping base images current and approving update PRs | **Project maintainers** (reachable via [§6 Contacts](#6-contacts)) |
+| Automated vulnerability detection — no human trigger needed | **CI** (the Trivy Vulnerability Scan workflow; see Cadence below) |
+| Proposing an update | **Any contributor** may open a PR ([§3](#3-how-to-update-a-base-image)); a maintainer must review and merge it |
+
+> There is currently **no `CODEOWNERS`** file, so review and approval are handled by the
+> maintainer role above rather than an auto-assigned reviewer. Route security-sensitive
+> updates through the private advisory path in [§6 Contacts](#6-contacts).
+
+### Cadence
 
 | Trigger | Who | Action |
 |---|---|---|
-| Weekly (Monday CI cron) | CI bot | Trivy scans run automatically. If new CRITICALs appear, the `docker-image-scan` workflow fails and surfaces alerts in GitHub Actions/Security tab. |
+| **Weekly cron** — Mondays 06:00 UTC (`0 6 * * 1`) | CI (automated) | The [Trivy Vulnerability Scan](../.github/workflows/trivy-scan.yml) workflow builds and scans both images. Its **"Fail on CRITICAL vulnerabilities"** step fails the run on any new CRITICAL and uploads SARIF to the GitHub **Security** tab. |
+| **On change** — push/PR to `main` touching `backend/Dockerfile`, `frontend/Dockerfile`, `backend/requirements*.txt`, or `frontend/package*.json` | CI (automated) | The same [Trivy Vulnerability Scan](../.github/workflows/trivy-scan.yml) runs, so a base-image or dependency change is checked before merge. Can also be triggered on demand (`workflow_dispatch`). |
 | New upstream minor/patch release | Maintainer | Update the `FROM` line within **5 business days** of release. |
 | Zero-day or CRITICAL CVE advisory | Maintainer / any contributor | Update within **24 hours** of public disclosure. |
 | Quarterly | Maintainer | Full review of all pinned versions (OS packages, base tag, and digest). |
@@ -111,8 +126,9 @@ CVE-2024-XXXXX
 ## 5. Non-root user requirement
 
 Both Dockerfiles **must** run application processes as a non-root user.
-The CI hardening check (`hardening-check` job) enforces this automatically
-and will fail if `id -u` inside the container returns `0`.
+The CI hardening check (the `hardening-check` job in
+[`.github/workflows/docker-hardening.yml`](../.github/workflows/docker-hardening.yml))
+enforces this automatically and will fail if `id -u` inside the container returns `0`.
 
 - Backend: user `secuscan` (UID 1001)
 - Frontend: user `nginx` (UID 101, built into `nginx:*-alpine`)
