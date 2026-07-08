@@ -30,13 +30,15 @@ SSE_RAW_OUTPUT_CHUNK_SIZE = 64 * 1024
 # GET /task/{task_id}/result pagination (issue #1621): a wide-range scan can
 # produce tens of thousands of finding rows. Returning them all in one
 # response materialises the entire result set in memory before the first
-# byte is sent, which can OOM-crash the backend process. The findings list
-# is paginated; aggregate views (severity counts, groups, asset summary)
-# are computed from a bounded sample instead of the full table so they stay
-# cheap regardless of how large the underlying scan was.
+# byte is sent, which can OOM-crash the backend process. The `findings` list
+# in the response is paginated via page/per_page; aggregate views
+# (severity_counts, finding_groups, asset_summary) always reflect the whole
+# scan exactly, computed by streaming every finding row through in bounded-
+# size chunks (TASK_RESULT_AGGREGATION_CHUNK_SIZE at a time) rather than
+# loading the full scan into memory at once.
 TASK_RESULT_FINDINGS_DEFAULT_PER_PAGE = 100
 TASK_RESULT_FINDINGS_MAX_PER_PAGE = 500
-TASK_RESULT_AGGREGATION_SAMPLE_CAP = 5000
+TASK_RESULT_AGGREGATION_CHUNK_SIZE = 1000
 from .routes_report_helpers import (
     _slugify_filename_part,
     build_report_filename,
@@ -130,7 +132,7 @@ from .vault import VaultCrypto
 from .workflows import scheduler, _finalize_workflow_run
 from .auth import require_api_key, get_current_owner
 from .execution_context import is_offensive_validation, normalize_execution_context
-from .finding_intelligence import build_asset_summary, build_finding_groups
+from .finding_intelligence import aggregate_findings_streaming, build_finding_groups
 from .knowledgebase import KnowledgeBase
 from .platform_resources import (
     deserialize_resource_rows,
@@ -810,14 +812,51 @@ async def download_sarif_report(task_id: str, owner: str = Depends(get_current_o
     )
 
 
+async def _iter_all_findings_for_aggregation(db, owner: str, task_id: str, chunk_size: int = TASK_RESULT_AGGREGATION_CHUNK_SIZE):
+    """Yield every finding for a task as dicts, chunk_size rows at a time.
+
+    Used to compute exact whole-scan aggregates (severity_counts,
+    finding_groups, asset_summary) without ever holding more than
+    chunk_size raw finding rows in memory at once, regardless of how many
+    findings the scan produced in total.
+    """
+    offset = 0
+    while True:
+        rows = await db.fetchall(
+            "SELECT * FROM findings WHERE owner_id = ? AND task_id = ? "
+            "ORDER BY (risk_score IS NULL) ASC, risk_score DESC, discovered_at DESC "
+            "LIMIT ? OFFSET ?",
+            (owner, task_id, chunk_size, offset),
+        )
+        if not rows:
+            return
+        for finding in deserialize_finding_rows(rows):
+            yield finding
+        if len(rows) < chunk_size:
+            return
+        offset += chunk_size
+
+
 @router.get("/task/{task_id}/result")
 async def get_task_result(
     task_id: str,
     owner: str = Depends(get_current_owner),
-    page: int = Query(1, ge=1),
-    per_page: int = Query(TASK_RESULT_FINDINGS_DEFAULT_PER_PAGE, ge=1, le=TASK_RESULT_FINDINGS_MAX_PER_PAGE),
+    page: int = Query(1, ge=1, description="1-indexed page number for the `findings` list."),
+    per_page: int = Query(
+        TASK_RESULT_FINDINGS_DEFAULT_PER_PAGE,
+        ge=1,
+        le=TASK_RESULT_FINDINGS_MAX_PER_PAGE,
+        description="Findings per page, capped at TASK_RESULT_FINDINGS_MAX_PER_PAGE.",
+    ),
 ):
-    """Get task execution result"""
+    """Get task execution result.
+
+    `page`/`per_page` only paginate the `findings` list in the response;
+    `total_findings`, `page`, `per_page`, and `has_more_findings` describe
+    that pagination so a client can fetch subsequent pages. All aggregate
+    views -- `severity_counts`, `finding_groups`, `asset_summary` -- always
+    reflect the entire scan exactly, independent of the requested page.
+    """
     db = await get_db()
 
     # Enforce ownership and existence check first
@@ -864,58 +903,38 @@ async def get_task_result(
     )
     findings = deserialize_finding_rows(finding_rows)
 
-    # Aggregate views (severity breakdown, groups, asset summary) must reflect
-    # the whole scan, not just the current page, but loading every row to get
-    # there would reintroduce the OOM this endpoint is being fixed for. A
-    # bounded sample keeps them accurate for the overwhelming majority of
-    # scans while capping memory use for pathological ones.
-    if total_findings_count > TASK_RESULT_AGGREGATION_SAMPLE_CAP:
-        aggregation_rows = await db.fetchall(
-            "SELECT * FROM findings WHERE owner_id = ? AND task_id = ? "
-            "ORDER BY (risk_score IS NULL) ASC, risk_score DESC, discovered_at DESC "
-            "LIMIT ?",
-            (owner, task_id, TASK_RESULT_AGGREGATION_SAMPLE_CAP),
-        )
-        aggregation_findings = deserialize_finding_rows(aggregation_rows)
-        aggregation_sample_capped = True
-    elif offset == 0 and per_page >= total_findings_count:
-        # Already have every finding in `findings` for the common case
-        # (first page large enough to cover the whole scan).
-        aggregation_findings = findings
-        aggregation_sample_capped = False
-    else:
-        aggregation_rows = await db.fetchall(
-            "SELECT * FROM findings WHERE owner_id = ? AND task_id = ? "
-            "ORDER BY (risk_score IS NULL) ASC, risk_score DESC, discovered_at DESC",
-            (owner, task_id),
-        )
-        aggregation_findings = deserialize_finding_rows(aggregation_rows)
-        aggregation_sample_capped = False
-
     asset_rows = await db.fetchall(
         "SELECT * FROM asset_services WHERE owner_id = ? AND task_id = ? ORDER BY created_at DESC",
         (owner, task_id),
     )
     asset_services = deserialize_asset_service_rows(asset_rows)
 
-    if not aggregation_findings and isinstance(structured, dict):
+    # Aggregate views (severity breakdown, groups, asset summary) must reflect
+    # the whole scan exactly, not just the current page. Streaming every
+    # finding through in bounded-size chunks keeps this exact regardless of
+    # scan size, without reintroducing the OOM this endpoint was fixed for.
+    if total_findings_count > 0:
+        severity_counts, computed_finding_groups, computed_asset_summary = await aggregate_findings_streaming(
+            _iter_all_findings_for_aggregation(db, owner, task_id), asset_services,
+        )
+    else:
+        severity_counts, computed_finding_groups, computed_asset_summary = {}, [], []
+
+    if total_findings_count == 0 and isinstance(structured, dict):
         structured_findings = [item for item in structured.get("findings", []) if isinstance(item, dict)]
         total_findings_count = len(structured_findings)
-        aggregation_findings = structured_findings
         findings = structured_findings[offset:offset + per_page]
-
-    severity_counts: Dict[str, int] = {}
-    for finding in aggregation_findings:
-        severity = str(finding.get("severity", "info")).lower()
-        severity_counts[severity] = severity_counts.get(severity, 0) + 1
+        severity_counts, computed_finding_groups, computed_asset_summary = await aggregate_findings_streaming(
+            structured_findings, asset_services,
+        )
 
     finding_groups = structured.get("finding_groups") if isinstance(structured, dict) else None
     if not isinstance(finding_groups, list) or not finding_groups:
-        finding_groups = build_finding_groups(aggregation_findings)
+        finding_groups = computed_finding_groups
 
     asset_summary = structured.get("asset_summary") if isinstance(structured, dict) else None
     if not isinstance(asset_summary, list) or not asset_summary:
-        asset_summary = build_asset_summary(aggregation_findings, asset_services)
+        asset_summary = computed_asset_summary
 
     scan_diff = structured.get("scan_diff") if isinstance(structured, dict) else None
     if not isinstance(scan_diff, dict):

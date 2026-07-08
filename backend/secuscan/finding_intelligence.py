@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, AsyncIterable, Dict, Iterable, List, Optional, Union
 from urllib.parse import urlparse
 
 
@@ -528,6 +528,125 @@ def build_asset_summary(
     summary = list(assets.values())
     summary.sort(key=lambda item: (-_severity_rank(item.get("highest_severity", "info")), -int(item.get("finding_count", 0)), str(item.get("label") or "")))
     return summary
+
+
+async def _as_async_iter(source):
+    """Normalize a sync or async iterable into an async iterator."""
+    if hasattr(source, "__anext__"):
+        async for item in source:
+            yield item
+    else:
+        for item in source:
+            yield item
+
+
+async def aggregate_findings_streaming(
+    findings: Union[Iterable[Dict[str, Any]], AsyncIterable[Dict[str, Any]]],
+    asset_services: List[Dict[str, Any]],
+) -> tuple:
+    """Compute severity_counts, finding_groups, and asset_summary in one pass.
+
+    `findings` may be a plain list/generator or an async generator. It is
+    iterated exactly once, so callers can pass an async generator that
+    streams rows from the database in bounded-size chunks -- the full
+    finding set never needs to be materialized in memory at once, and the
+    result is always exact (never a capped sample), regardless of how
+    large the scan is.
+    """
+    severity_counts: Dict[str, int] = {}
+    groups: Dict[str, Dict[str, Any]] = {}
+    assets: Dict[str, Dict[str, Any]] = {}
+
+    for service in asset_services:
+        asset_id = str(service.get("asset_id") or _stable_id("asset", service.get("target"), service.get("host"), service.get("port"), service.get("protocol")))
+        entry = assets.setdefault(
+            asset_id,
+            {
+                "asset_id": asset_id,
+                "label": service.get("host") or service.get("target"),
+                "target": service.get("target"),
+                "services": [],
+                "finding_count": 0,
+                "validated_count": 0,
+                "highest_severity": "info",
+            },
+        )
+        entry["services"].append(service)
+
+    async for finding in _as_async_iter(findings):
+        severity = str(finding.get("severity", "info")).lower()
+        severity_counts[severity] = severity_counts.get(severity, 0) + 1
+
+        group_id = str(finding.get("finding_group_id") or finding.get("id") or _stable_id("group", finding.get("title"), finding.get("target")))
+        current = groups.get(group_id)
+        if current is None:
+            groups[group_id] = {
+                "id": group_id,
+                "title": finding.get("title"),
+                "severity": _normalize_severity(finding.get("severity")),
+                "category": finding.get("category"),
+                "target": finding.get("target"),
+                "asset_id": finding.get("asset_id"),
+                "finding_kind": finding.get("finding_kind", "observation"),
+                "validated": bool(finding.get("validated")),
+                "cve": finding.get("cve"),
+                "cpe": finding.get("cpe"),
+                "confidence": finding.get("confidence"),
+                "confidence_reason": finding.get("confidence_reason"),
+                "first_seen_at": finding.get("first_seen_at") or finding.get("discovered_at"),
+                "last_seen_at": finding.get("last_seen_at") or finding.get("discovered_at"),
+                "occurrence_count": int(finding.get("occurrence_count") or 1),
+                "evidence_count": int(finding.get("evidence_count") or len(finding.get("evidence", []))),
+                "corroborating_sources": list(finding.get("corroborating_sources", [])),
+                "analyst_status": finding.get("analyst_status", "new"),
+                "retest_status": finding.get("retest_status", "not_requested"),
+                "latest_finding_id": finding.get("id"),
+                "findings": [finding],
+            }
+        else:
+            current["validated"] = bool(current.get("validated")) or bool(finding.get("validated"))
+            if _severity_rank(finding.get("severity", "info")) > _severity_rank(current.get("severity", "info")):
+                current["severity"] = _normalize_severity(finding.get("severity"))
+            current["last_seen_at"] = max(str(current.get("last_seen_at") or ""), str(finding.get("last_seen_at") or finding.get("discovered_at") or ""))
+            current["first_seen_at"] = min(str(current.get("first_seen_at") or ""), str(finding.get("first_seen_at") or finding.get("discovered_at") or ""))
+            current["occurrence_count"] = max(int(current.get("occurrence_count") or 1), int(finding.get("occurrence_count") or 1))
+            current["evidence_count"] = max(int(current.get("evidence_count") or 0), int(finding.get("evidence_count") or len(finding.get("evidence", []))))
+            current["corroborating_sources"] = _sort_sources([*current.get("corroborating_sources", []), *finding.get("corroborating_sources", [])])
+            current["confidence"] = max(float(current.get("confidence") or 0.0), float(finding.get("confidence") or 0.0))
+            current["findings"].append(finding)
+
+        asset_id = str(finding.get("asset_id") or _stable_id("asset", finding.get("target"), *(finding.get("asset_refs") or [])))
+        entry = assets.setdefault(
+            asset_id,
+            {
+                "asset_id": asset_id,
+                "label": finding.get("target"),
+                "target": finding.get("target"),
+                "services": [],
+                "finding_count": 0,
+                "validated_count": 0,
+                "highest_severity": "info",
+            },
+        )
+        entry["finding_count"] += 1
+        if finding.get("validated"):
+            entry["validated_count"] += 1
+        if _severity_rank(finding.get("severity", "info")) > _severity_rank(entry.get("highest_severity", "info")):
+            entry["highest_severity"] = _normalize_severity(finding.get("severity"))
+
+    grouped = list(groups.values())
+    grouped.sort(
+        key=lambda item: (
+            -_severity_rank(item.get("severity", "info")),
+            -(float(item.get("confidence") or 0.0)),
+            str(item.get("title") or "").lower(),
+        )
+    )
+
+    asset_summary = list(assets.values())
+    asset_summary.sort(key=lambda item: (-_severity_rank(item.get("highest_severity", "info")), -int(item.get("finding_count", 0)), str(item.get("label") or "")))
+
+    return severity_counts, grouped, asset_summary
 
 
 def build_scan_diff(current_findings: List[Dict[str, Any]], previous_findings: List[Dict[str, Any]]) -> Dict[str, Any]:

@@ -133,12 +133,11 @@ def test_small_scan_returns_everything_on_the_first_page(test_client):
     assert body["has_more_findings"] is False
 
 
-def test_aggregation_sample_is_capped_for_very_large_scans(test_client):
+def test_severity_counts_are_exact_for_very_large_scans(test_client):
     # Simulates the issue's exact scenario: tens of thousands of findings
-    # from a wide-range scan. Severity counts come from the capped
-    # aggregation sample rather than every row, so they won't exactly equal
-    # total_findings once the cap is exceeded -- this test documents that
-    # trade-off rather than asserting exact parity.
+    # from a wide-range scan. severity_counts is computed by streaming every
+    # finding row in bounded-size chunks, so it must equal total_findings
+    # exactly, never a sample -- regardless of how large the scan is.
     task_id = "pagination-test-007"
     _seed_completed_task(task_id)
     _seed_findings(task_id, count=6000)
@@ -150,6 +149,21 @@ def test_aggregation_sample_is_capped_for_very_large_scans(test_client):
     assert len(body["findings"]) == 100
     assert body["total_findings"] == 6000
     assert body["has_more_findings"] is True
-    # Aggregation sample is capped at 5000, so severity_counts is computed
-    # from at most that many rows, never all 6000.
-    assert sum(body["severity_counts"].values()) <= 5000
+    assert sum(body["severity_counts"].values()) == 6000
+
+
+def test_finding_groups_and_asset_summary_cover_the_whole_scan(test_client):
+    # finding_groups and asset_summary must also reflect every finding in
+    # the scan, not just the returned page or a capped sample.
+    task_id = "pagination-test-008"
+    _seed_completed_task(task_id)
+    _seed_findings(task_id, count=1200)
+
+    response = test_client.get(f"/api/v1/task/{task_id}/result?per_page=10")
+    assert response.status_code == 200
+    body = response.json()
+
+    assert len(body["findings"]) == 10
+    total_grouped_findings = sum(len(group["findings"]) for group in body["finding_groups"])
+    assert total_grouped_findings == 1200
+    assert sum(entry["finding_count"] for entry in body["asset_summary"]) == 1200

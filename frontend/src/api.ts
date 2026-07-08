@@ -211,6 +211,10 @@ export interface TaskResultResponse {
   error_message?: string
   exit_code?: number
   metadata?: Record<string, unknown>
+  total_findings?: number
+  page?: number
+  per_page?: number
+  has_more_findings?: boolean
 }
 
 export interface NamedResourceList<T> {
@@ -536,8 +540,15 @@ export function getTaskStatus(taskId: string): Promise<any> {
   return request<any>(`/task/${taskId}/status`)
 }
 
-export function getTaskResult(taskId: string): Promise<any> {
-  return request<TaskResultResponse>(`/task/${taskId}/result`)
+export function getTaskResult(
+  taskId: string,
+  options?: { page?: number; per_page?: number },
+): Promise<any> {
+  const params = new URLSearchParams()
+  if (options?.page) params.set('page', String(options.page))
+  if (options?.per_page) params.set('per_page', String(options.per_page))
+  const suffix = params.toString() ? `?${params.toString()}` : ''
+  return request<TaskResultResponse>(`/task/${taskId}/result${suffix}`)
 }
 
 export function getTaskDiff(taskId: string): Promise<ScanDiff> {

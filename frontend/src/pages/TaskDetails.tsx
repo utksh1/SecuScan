@@ -157,6 +157,10 @@ interface TaskResult {
     raw_output?: string
     command_used?: string
     errors?: Array<{ message: string }>
+    total_findings?: number
+    page?: number
+    per_page?: number
+    has_more_findings?: boolean
 }
 
 function defaultValueForField(field: PluginFieldSchema): unknown {
@@ -306,6 +310,7 @@ export default function TaskDetails() {
     const [activeTab, setActiveTab] = useState<'summary' | 'results' | 'parameters' | 'raw'>('summary')
     const [expandedFindingRows, setExpandedFindingRows] = useState<Record<number, boolean>>({})
     const [expandedDiscoveryRows, setExpandedDiscoveryRows] = useState<Record<number, boolean>>({})
+    const [loadingMoreFindings, setLoadingMoreFindings] = useState(false)
     const [selectedFinding, setSelectedFinding] = useState<Finding | null>(null)
     const [rawSearch, setRawSearch] = useState('')
     const [wrapRawOutput, setWrapRawOutput] = useState(true)
@@ -594,6 +599,32 @@ export default function TaskDetails() {
         } finally {
             if (isMounted.current && seq === loadTaskSeqRef.current) {
                 setLoading(false)
+            }
+        }
+    }
+
+    async function loadMoreFindings() {
+        if (!taskId || !result || loadingMoreFindings) return
+        const nextPage = (result.page || 1) + 1
+        setLoadingMoreFindings(true)
+        try {
+            const nextResult = await getTaskResult(taskId, { page: nextPage, per_page: result.per_page }) as TaskResult
+            if (!isMounted.current) return
+            setResult((prev) => {
+                if (!prev) return prev
+                return {
+                    ...prev,
+                    findings: [...(prev.findings || []), ...(nextResult.findings || [])],
+                    page: nextResult.page,
+                    per_page: nextResult.per_page,
+                    has_more_findings: nextResult.has_more_findings,
+                }
+            })
+        } catch (err) {
+            console.error('Failed to load more findings:', err)
+        } finally {
+            if (isMounted.current) {
+                setLoadingMoreFindings(false)
             }
         }
     }
@@ -1318,6 +1349,20 @@ export default function TaskDetails() {
                                         </div>
                                     ) : (
                                         <p className="text-sm text-silver/55 italic">No tabular result set is available for this task.</p>
+                                    )}
+                                    {!tableRows.length && result?.has_more_findings && (
+                                        <div className="flex items-center justify-between mt-4 px-1">
+                                            <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-silver/40">
+                                                Showing {findings.length} of {result?.total_findings ?? findings.length} findings
+                                            </p>
+                                            <button
+                                                onClick={loadMoreFindings}
+                                                disabled={loadingMoreFindings}
+                                                className="bg-rag-blue px-5 py-2 border-4 border-black text-black text-[10px] font-black uppercase tracking-widest italic shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none transition-all disabled:opacity-50"
+                                            >
+                                                {loadingMoreFindings ? 'Loading...' : 'Load_More_Findings'}
+                                            </button>
+                                        </div>
                                     )}
                                 </motion.div>
                             </motion.section>
