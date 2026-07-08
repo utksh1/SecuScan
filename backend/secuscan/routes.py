@@ -203,6 +203,15 @@ async def get_or_set_cached(key: str, builder):
     return value
 
 
+_TASK_COLUMNS: frozenset = frozenset({
+    "id", "owner_id", "plugin_id", "tool_name", "target", "inputs_json",
+    "execution_context_json", "preset", "status", "scan_phase",
+    "phase_timestamps_json", "consent_granted", "safe_mode", "created_at",
+    "started_at", "completed_at", "duration_seconds", "exit_code",
+    "structured_json", "raw_output_path", "command_used", "error_message",
+    "container_id", "cpu_seconds", "memory_peak_mb",
+})
+
 async def require_owned_task(db, task_id: str, owner: str, columns: str = "owner_id") -> Dict[str, Any]:
     """Fetch a task and enforce that it belongs to ``owner`` (issue #401).
 
@@ -210,6 +219,13 @@ async def require_owned_task(db, task_id: str, owner: str, columns: str = "owner
     exist and 403 when it is owned by a different user/workspace. ``columns``
     must include ``owner_id`` so the ownership comparison can be made.
     """
+    selected = [col.strip() for col in columns.split(",")]
+    unknown = [col for col in selected if col not in _TASK_COLUMNS]
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown column(s) in task query: {', '.join(unknown)}"
+        )
     row = await db.fetchone(f"SELECT {columns} FROM tasks WHERE id = ?", (task_id,))
     if row is None:
         raise HTTPException(status_code=404, detail="Task not found")
