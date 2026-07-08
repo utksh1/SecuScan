@@ -103,6 +103,19 @@ class PluginManager:
         self.plugins_dir = Path(plugins_dir)
         self.plugins: Dict[str, PluginMetadata] = {}
 
+    def _scan_plugin_dirs(self) -> List[Path]:
+        """Scan the plugins directory for plugin directories."""
+        if not self.plugins_dir.exists():
+            logger.warning(f"Plugins directory does not exist: {self.plugins_dir}")
+            self.plugins_dir.mkdir(parents=True, exist_ok=True)
+            return []
+
+        dirs = []
+        for plugin_dir in self.plugins_dir.iterdir():
+            if plugin_dir.is_dir():
+                dirs.append(plugin_dir)
+        return dirs
+
     async def load_plugins(self) -> int:
         """
         Load all plugins from the plugins directory.
@@ -110,18 +123,10 @@ class PluginManager:
         Returns:
             Number of successfully loaded plugins
         """
-        if not self.plugins_dir.exists():
-            logger.warning(f"Plugins directory does not exist: {self.plugins_dir}")
-            self.plugins_dir.mkdir(parents=True, exist_ok=True)
-            return 0
-
+        plugin_dirs = self._scan_plugin_dirs()
         loaded = 0
 
-        # Scan for plugin directories
-        for plugin_dir in self.plugins_dir.iterdir():
-            if not plugin_dir.is_dir():
-                continue
-
+        for plugin_dir in plugin_dirs:
             metadata_file = plugin_dir / "metadata.json"
             if not metadata_file.exists():
                 logger.warning(f"No metadata.json found in {plugin_dir}")
@@ -160,6 +165,37 @@ class PluginManager:
 
         return PluginMetadata(**data)
 
+    def _validate_engine(self, engine: Dict[str, str], plugin_id: str) -> bool:
+        """Validate plugin engine configuration."""
+        engine_type = engine.get("type")
+        if engine_type not in ["cli", "python", "docker"]:
+            logger.error(f"Invalid engine type: {engine_type}")
+            return False
+
+        if engine_type == "cli":
+            binary = engine.get("binary")
+            if binary and not shutil.which(binary):
+                logger.warning(f"Binary not found in PATH: {binary}")
+        return True
+
+    def _validate_safety(self, safety: Dict[str, Any]) -> bool:
+        """Validate plugin safety configuration."""
+        safety_level = safety.get("level")
+        if safety_level not in ["safe", "intrusive", "exploit"]:
+            logger.error(f"Invalid safety level: {safety_level}")
+            return False
+        return True
+
+    def _validate_capabilities(self, capabilities: Optional[List[str]], plugin_id: str) -> bool:
+        """Validate declared capabilities against the known set."""
+        if capabilities is not None:
+            try:
+                validate_capability_list(capabilities, plugin_id)
+            except ValueError as exc:
+                logger.error("Invalid capabilities in plugin %s: %s", plugin_id, exc)
+                return False
+        return True
+
     async def _validate_plugin(self, plugin: PluginMetadata, plugin_dir: Path) -> bool:
         """
         Validate plugin metadata and dependencies.
@@ -176,36 +212,19 @@ class PluginManager:
             logger.error("Plugin missing required fields: id or name")
             return False
 
-        # Validate engine type
-        if plugin.engine.get("type") not in ["cli", "python", "docker"]:
-            logger.error(f"Invalid engine type: {plugin.engine.get('type')}")
+        if not self._validate_engine(plugin.engine, plugin.id):
             return False
-
-        # Check binary exists for CLI plugins
-        if plugin.engine.get("type") == "cli":
-            binary = plugin.engine.get("binary")
-            if binary and not shutil.which(binary):
-                logger.warning(f"Binary not found in PATH: {binary}")
-                # Don't fail - might be in a non-standard location or added later
 
         # Validate parser exists
         parser_file = plugin_dir / "parser.py"
         if plugin.output.get("parser") == "custom" and not parser_file.exists():
             logger.warning("Custom parser specified but parser.py not found")
 
-        # Validate safety level
-        safety_level = plugin.safety.get("level")
-        if safety_level not in ["safe", "intrusive", "exploit"]:
-            logger.error(f"Invalid safety level: {safety_level}")
+        if not self._validate_safety(plugin.safety):
             return False
 
-        # Validate declared capabilities against the known set
-        if plugin.capabilities is not None:
-            try:
-                validate_capability_list(plugin.capabilities, plugin.id)
-            except ValueError as exc:
-                logger.error("Invalid capabilities in plugin %s: %s", plugin.id, exc)
-                return False
+        if not self._validate_capabilities(plugin.capabilities, plugin.id):
+            return False
 
         if not self._verify_plugin_integrity(plugin, plugin_dir):
             return False
@@ -333,7 +352,7 @@ class PluginManager:
                     "description": plugin.description,
                     "category": plugin.category,
                     "safety_level": plugin.safety.get("level"),
-                    "enabled": True,
+                    "enabled": plugin.id not in settings.disabled_plugins,
                     "icon": plugin.icon,
                     "requires_consent": bool(plugin.safety.get("requires_consent", False)),
                     "consent_message": plugin.safety.get("consent_message"),
@@ -560,6 +579,55 @@ class PluginManager:
                 f"Field '{field_id}' value must not begin with '-': {value!r}"
             )
 
+    def _validate_integer_field(self, field_id: str, value: Any) -> None:
+        """Validate integer field value."""
+        try:
+            int(value)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"Field '{field_id}' expects an integer; got {value!r}"
+            )
+
+    def _validate_boolean_field(self, field_id: str, value: Any) -> None:
+        """Validate boolean field value."""
+        if isinstance(value, bool):
+            return
+        if isinstance(value, str) and value.lower() in ("true", "false", "1", "0"):
+            return
+        raise ValueError(
+            f"Field '{field_id}' expects a boolean; got {value!r}"
+        )
+
+    def _validate_select_field(self, field_id: str, value: Any, options: Optional[List[Dict[str, str]]]) -> None:
+        """Validate select field value against options."""
+        allowed = [opt.get("value") for opt in (options or [])]
+        if value not in allowed:
+            raise ValueError(
+                f"Field '{field_id}' value {value!r} is not in allowed "
+                f"values {allowed}"
+            )
+
+    def _validate_string_field(self, field_id: str, value: Any, validation: Dict[str, Any]) -> None:
+        """Validate string/text field value against patterns and presets."""
+        value_str = str(value)
+
+        # Pattern / validation_type validation from field metadata
+        validation_type = validation.get("validation_type")
+        if validation_type and validation_type in _VALIDATION_PRESETS:
+            preset = _VALIDATION_PRESETS[validation_type]
+            if not preset["pattern"].match(value_str):
+                msg = validation.get("message", preset["message"])
+                raise ValueError(f"Field '{field_id}': {msg}")
+        else:
+            pattern = validation.get("pattern")
+            if pattern and not re.match(pattern, value_str):
+                msg = validation.get("message", f"Value does not match pattern {pattern!r}")
+                raise ValueError(f"Field '{field_id}': {msg}")
+
+        # Reject argv-level flag injection and filesystem path traversal
+        self._reject_injected_args(field_id, value_str)
+        self._reject_path_traversal(value_str)
+
     def _validate_inputs_against_schema(
         self, plugin: PluginMetadata, inputs: Dict[str, Any]
     ) -> None:
@@ -589,52 +657,56 @@ class PluginManager:
                 continue
 
             if field.type == PluginFieldType.INTEGER:
-                try:
-                    int(raw_value)
-                except (TypeError, ValueError):
-                    raise ValueError(
-                        f"Field '{field_id}' expects an integer; got {raw_value!r}"
-                    )
-                continue
+                self._validate_integer_field(field_id, raw_value)
 
-            if field.type == PluginFieldType.BOOLEAN:
-                if isinstance(raw_value, bool):
-                    continue
-                if isinstance(raw_value, str) and raw_value.lower() in ("true", "false", "1", "0"):
-                    continue
-                raise ValueError(
-                    f"Field '{field_id}' expects a boolean; got {raw_value!r}"
-                )
+            elif field.type == PluginFieldType.BOOLEAN:
+                self._validate_boolean_field(field_id, raw_value)
 
-            if field.type == PluginFieldType.SELECT:
-                allowed = [opt.get("value") for opt in (field.options or [])]
-                if raw_value not in allowed:
-                    raise ValueError(
-                        f"Field '{field_id}' value {raw_value!r} is not in allowed "
-                        f"values {allowed}"
-                    )
-                continue
+            elif field.type == PluginFieldType.SELECT:
+                self._validate_select_field(field_id, raw_value, field.options)
 
-            if field.type in (PluginFieldType.STRING, PluginFieldType.TEXT):
-                value_str = str(raw_value)
+            elif field.type in (PluginFieldType.STRING, PluginFieldType.TEXT):
+                self._validate_string_field(field_id, raw_value, field.validation or {})
 
-                # Pattern / validation_type validation from field metadata
-                validation = field.validation or {}
-                validation_type = validation.get("validation_type")
-                if validation_type and validation_type in _VALIDATION_PRESETS:
-                    preset = _VALIDATION_PRESETS[validation_type]
-                    if not preset["pattern"].match(value_str):
-                        msg = validation.get("message", preset["message"])
-                        raise ValueError(f"Field '{field_id}': {msg}")
-                else:
-                    pattern = validation.get("pattern")
-                    if pattern and not re.match(pattern, value_str):
-                        msg = validation.get("message", f"Value does not match pattern {pattern!r}")
-                        raise ValueError(f"Field '{field_id}': {msg}")
+    def _evaluate_conditional_token(self, token: str, inputs: Dict[str, Any]) -> List[str]:
+        """Evaluate conditional command template token (--if:)."""
+        parts = token.split(":")
+        if len(parts) < 4 or parts[2] != "then":
+            return []
 
-                # Reject argv-level flag injection and filesystem path traversal
-                self._reject_injected_args(field_id, value_str)
-                self._reject_path_traversal(value_str)
+        condition_var = parts[1]
+
+        # Correctly identify then/else segments
+        try:
+            else_idx = parts.index("else")
+            then_parts = parts[3:else_idx]
+            else_parts = parts[else_idx + 1:]
+        except ValueError:
+            then_parts = parts[3:]
+            else_parts = []
+
+        condition = inputs.get(condition_var, False)
+        # For booleans or non-empty existence
+        if isinstance(condition, str) and condition.lower() == "false":
+            condition = False
+
+        active_parts = then_parts if condition else else_parts
+        rendered = []
+        for part in active_parts:
+            if interpolated := self._interpolate(part, inputs):
+                rendered.append(interpolated)
+        return rendered
+
+    def _render_command_tokens(self, command_template: List[str], inputs: Dict[str, Any]) -> List[str]:
+        """Render all tokens from command template using user inputs."""
+        command = []
+        for token in command_template:
+            if token.startswith("--if:"):
+                command.extend(self._evaluate_conditional_token(token, inputs))
+            else:
+                if interpolated := self._interpolate(token, inputs):
+                    command.append(interpolated)
+        return command
 
     def build_command(self, plugin_id: str, inputs: Dict) -> Optional[List[str]]:
         """
@@ -661,42 +733,7 @@ class PluginManager:
         # Validate before normalisation so SELECT checks run against raw user values
         self._validate_inputs_against_schema(plugin, inputs)
         inputs = self._normalize_inputs(plugin, inputs)
-        command = []
-
-        for token in plugin.command_template:
-            # Handle conditionals:
-            # --if:condition:then:value
-            # --if:condition:then:value:else:fallback
-            if token.startswith("--if:"):
-                parts = token.split(":")
-                if len(parts) >= 4 and parts[2] == "then":
-                    condition_var = parts[1]
-
-                    # Correctly identify then/else segments
-                    try:
-                        else_idx = parts.index("else")
-                        then_parts = parts[3:else_idx]
-                        else_parts = parts[else_idx+1:]
-                    except ValueError:
-                        then_parts = parts[3:]
-                        else_parts = []
-
-                    condition = inputs.get(condition_var, False)
-                    # For booleans or non-empty existence
-                    if isinstance(condition, str) and condition.lower() == "false":
-                        condition = False
-
-                    active_parts = then_parts if condition else else_parts
-
-                    for part in active_parts:
-                        if interpolated := self._interpolate(part, inputs):
-                            command.append(interpolated)
-                continue
-
-            if interpolated := self._interpolate(token, inputs):
-                command.append(interpolated)
-
-        return command
+        return self._render_command_tokens(plugin.command_template, inputs)
 
 # Global plugin manager instance
 plugin_manager: Optional[PluginManager] = None

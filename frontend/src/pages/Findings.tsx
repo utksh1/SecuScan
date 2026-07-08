@@ -639,16 +639,30 @@ export default function Findings() {
     overscan: 6,
   })
 
-  // Scroll selected finding into view when it changes
+  // Keep latest virtualRows/virtualizer available without making them
+  // reactive dependencies — they change on every filter/sort, but we only
+  // want to re-scroll when the *selection* actually changes.
+  const virtualRowsRef = useRef(virtualRows)
   useEffect(() => {
-    if (!selectedFinding) return
-    const rowIdx = virtualRows.findIndex(
-      (row) => row.kind === 'finding' && row.finding.id === selectedFinding.id,
+    virtualRowsRef.current = virtualRows
+  })
+
+  const virtualizerRef = useRef(virtualizer)
+  useEffect(() => {
+    virtualizerRef.current = virtualizer
+  })
+
+  // Scroll selected finding into view when the selection changes
+  useEffect(() => {
+    if (!selectedFindingId) return
+    const rows = virtualRowsRef.current
+    const rowIdx = rows.findIndex(
+      (row) => row.kind === 'finding' && row.finding.id === selectedFindingId,
     )
     if (rowIdx !== -1) {
-      virtualizer.scrollToIndex(rowIdx, { align: 'auto', behavior: 'smooth' })
+      virtualizerRef.current.scrollToIndex(rowIdx, { align: 'auto', behavior: 'smooth' })
     }
-  }, [selectedFindingId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedFindingId])
   return (
     <div className="min-h-screen bg-charcoal-dark text-silver px-4 py-6 md:px-8 md:py-10">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8">

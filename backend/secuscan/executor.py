@@ -1349,6 +1349,7 @@ class TaskExecutor:
     ) -> Dict[str, Any]:
         u_id = str(uuid.uuid4()).replace("-", "")
         finding_id = f"finding:{task_id}:{u_id[:8]}"
+        finding_group_id = finding.get("finding_group_id")
 
         _validate_risk_fields(finding)
         exploitability = finding.get("exploitability")
@@ -1395,6 +1396,41 @@ class TaskExecutor:
                 asset_exposure, risk_score, risk_factors_json
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (owner_id, finding_group_id) DO UPDATE SET
+                task_id = EXCLUDED.task_id,
+                plugin_id = EXCLUDED.plugin_id,
+                title = EXCLUDED.title,
+                category = EXCLUDED.category,
+                severity = EXCLUDED.severity,
+                target = EXCLUDED.target,
+                description = EXCLUDED.description,
+                remediation = EXCLUDED.remediation,
+                proof = EXCLUDED.proof,
+                cvss = EXCLUDED.cvss,
+                cve = EXCLUDED.cve,
+                metadata_json = EXCLUDED.metadata_json,
+                discovered_at = EXCLUDED.discovered_at,
+                exploitability = EXCLUDED.exploitability,
+                confidence = EXCLUDED.confidence,
+                validated = EXCLUDED.validated,
+                validation_method = EXCLUDED.validation_method,
+                confidence_reason = EXCLUDED.confidence_reason,
+                finding_kind = EXCLUDED.finding_kind,
+                asset_id = EXCLUDED.asset_id,
+                last_seen_at = EXCLUDED.last_seen_at,
+                occurrence_count = COALESCE(findings.occurrence_count, 0) + EXCLUDED.occurrence_count,
+                corroborating_sources_json = EXCLUDED.corroborating_sources_json,
+                evidence_count = EXCLUDED.evidence_count,
+                analyst_status = EXCLUDED.analyst_status,
+                retest_status = EXCLUDED.retest_status,
+                evidence_json = EXCLUDED.evidence_json,
+                asset_refs_json = EXCLUDED.asset_refs_json,
+                service_fingerprint = EXCLUDED.service_fingerprint,
+                cpe = EXCLUDED.cpe,
+                references_json = EXCLUDED.references_json,
+                asset_exposure = EXCLUDED.asset_exposure,
+                risk_score = EXCLUDED.risk_score,
+                risk_factors_json = EXCLUDED.risk_factors_json
             """,
             (
                 finding_id,
@@ -1418,7 +1454,7 @@ class TaskExecutor:
                 finding.get("validation_method"),
                 finding.get("confidence_reason"),
                 str(finding.get("finding_kind") or "observation"),
-                finding.get("finding_group_id"),
+                finding_group_id,
                 finding.get("asset_id"),
                 first_seen_at,
                 last_seen_at,
@@ -1437,6 +1473,13 @@ class TaskExecutor:
                 json.dumps(risk_factors),
             ),
         )
+
+        row = await db.fetchone(
+            "SELECT id, occurrence_count FROM findings WHERE owner_id = ? AND finding_group_id = ?",
+            (owner_id, finding_group_id),
+        )
+        finding_id = row["id"] if row else finding_id
+        occurrence_count = int(row["occurrence_count"]) if row else occurrence_count
         return {
             **finding,
             "id": finding_id,
@@ -1468,25 +1511,25 @@ class TaskExecutor:
             result=parsed,
         )
         findings_data: List[Dict[str, Any]] = []
-        for finding in structured_result.get("findings", []):
-            findings_data.append(
-                await self._persist_finding(
-                    db,
-                    owner_id=owner_id,
-                    task_id=task_id,
-                    plugin_id=plugin_id,
-                    target=target,
-                    finding=finding,
-                )
-            )
-
-        structured_result["findings"] = findings_data
-        structured_result["severity_counts"] = self._build_severity_counts(findings_data)
-        structured_result["finding_groups"] = build_finding_groups(findings_data)
-        structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
-        structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
-
         async with db.transaction():
+            for finding in structured_result.get("findings", []):
+                findings_data.append(
+                    await self._persist_finding(
+                        db,
+                        owner_id=owner_id,
+                        task_id=task_id,
+                        plugin_id=plugin_id,
+                        target=target,
+                        finding=finding,
+                    )
+                )
+
+            structured_result["findings"] = findings_data
+            structured_result["severity_counts"] = self._build_severity_counts(findings_data)
+            structured_result["finding_groups"] = build_finding_groups(findings_data)
+            structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
+            structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
+
             await db.execute(
                 "UPDATE tasks SET structured_json = ? WHERE id = ?",
                 (json.dumps(structured_result), task_id)
@@ -1534,25 +1577,25 @@ class TaskExecutor:
             result=result,
         )
         findings_data: List[Dict[str, Any]] = []
-        for finding in structured_result.get("findings", []):
-            findings_data.append(
-                await self._persist_finding(
-                    db,
-                    owner_id=owner_id,
-                    task_id=task_id,
-                    plugin_id=plugin_id,
-                    target=target,
-                    finding=finding,
-                )
-            )
-
-        structured_result["findings"] = findings_data
-        structured_result["severity_counts"] = self._build_severity_counts(findings_data)
-        structured_result["finding_groups"] = build_finding_groups(findings_data)
-        structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
-        structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
-
         async with db.transaction():
+            for finding in structured_result.get("findings", []):
+                findings_data.append(
+                    await self._persist_finding(
+                        db,
+                        owner_id=owner_id,
+                        task_id=task_id,
+                        plugin_id=plugin_id,
+                        target=target,
+                        finding=finding,
+                    )
+                )
+
+            structured_result["findings"] = findings_data
+            structured_result["severity_counts"] = self._build_severity_counts(findings_data)
+            structured_result["finding_groups"] = build_finding_groups(findings_data)
+            structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
+            structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
+
             await db.execute(
                 "UPDATE tasks SET structured_json = ? WHERE id = ?",
                 (json.dumps(structured_result), task_id)

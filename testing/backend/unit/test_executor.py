@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import json
 import uuid
 
@@ -1013,6 +1013,294 @@ async def test_execute_task_aborts_when_task_deleted_before_running(setup_test_e
     assert task_id not in executor.running_tasks
     await db.disconnect()
 
+# ---------------------------------------------------------------------------
+# Upsert atomicity tests (PR #1618)
+# ---------------------------------------------------------------------------
+
+def _make_minimal_finding(finding_group_id, severity="medium", **overrides):
+    base = {
+        "finding_group_id": finding_group_id,
+        "title": "Open SSH Port",
+        "category": "Network",
+        "severity": severity,
+        "description": "SSH port 22 is exposed",
+        "target": "127.0.0.1",
+    }
+    base.update(overrides)
+    return base
+
+
+async def _insert_task(db, owner_id=None):
+    task_id = str(uuid.uuid4())
+    await db.execute(
+        "INSERT INTO tasks (id, owner_id, plugin_id, tool_name, target, inputs_json, status, consent_granted, safe_mode) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (task_id, owner_id or str(uuid.uuid4()), "nmap", "nmap", "127.0.0.1",
+         "{}", TaskStatus.RUNNING.value, 1, 0),
+    )
+    return task_id
+
+
+@pytest.mark.asyncio
+async def test_upsert_same_finding_group_accumulates_occurrence_count(setup_test_environment):
+    await init_db(settings.database_path)
+    db = await get_db()
+    executor = TaskExecutor()
+
+    owner_id = str(uuid.uuid4())
+    group_id = "vuln:openssh-port"
+
+    task_a = await _insert_task(db, owner_id)
+    task_b = await _insert_task(db, owner_id)
+
+    finding_a = _make_minimal_finding(group_id)
+    result_a = await executor._persist_finding(
+        db, owner_id=owner_id, task_id=task_a,
+        plugin_id="nmap", target="127.0.0.1", finding=finding_a,
+    )
+
+    finding_b = _make_minimal_finding(group_id)
+    result_b = await executor._persist_finding(
+        db, owner_id=owner_id, task_id=task_b,
+        plugin_id="nmap", target="127.0.0.1", finding=finding_b,
+    )
+
+    rows = await db.fetchall(
+        "SELECT id, occurrence_count FROM findings WHERE owner_id = ? AND finding_group_id = ?",
+        (owner_id, group_id),
+    )
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["occurrence_count"] == 2
+    assert result_a["occurrence_count"] == 1
+    assert result_b["occurrence_count"] == 2
+
+    await db.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_upsert_different_finding_groups_create_separate_rows(setup_test_environment):
+    await init_db(settings.database_path)
+    db = await get_db()
+    executor = TaskExecutor()
+
+    owner_id = str(uuid.uuid4())
+    task_id = await _insert_task(db, owner_id)
+
+    result_a = await executor._persist_finding(
+        db, owner_id=owner_id, task_id=task_id,
+        plugin_id="nmap", target="10.0.0.1", finding=_make_minimal_finding("vuln:group-a"),
+    )
+    result_b = await executor._persist_finding(
+        db, owner_id=owner_id, task_id=task_id,
+        plugin_id="nmap", target="10.0.0.2", finding=_make_minimal_finding("vuln:group-b"),
+    )
+
+    rows = await db.fetchall(
+        "SELECT id, finding_group_id, occurrence_count FROM findings WHERE owner_id = ? ORDER BY finding_group_id",
+        (owner_id,),
+    )
+    assert len(rows) == 2
+    assert rows[0]["finding_group_id"] == "vuln:group-a"
+    assert rows[0]["occurrence_count"] == 1
+    assert rows[1]["finding_group_id"] == "vuln:group-b"
+    assert rows[1]["occurrence_count"] == 1
+
+    await db.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_upsert_updates_severity_and_last_seen_on_subsequent_discovery(setup_test_environment):
+    await init_db(settings.database_path)
+    db = await get_db()
+    executor = TaskExecutor()
+
+    owner_id = str(uuid.uuid4())
+    task_id = await _insert_task(db, owner_id)
+
+    old_ts = "2024-01-01T00:00:00"
+    result_1 = await executor._persist_finding(
+        db, owner_id=owner_id, task_id=task_id,
+        plugin_id="nmap", target="127.0.0.1",
+        finding=_make_minimal_finding("vuln:openssh-port", severity="low", first_seen_at=old_ts, last_seen_at=old_ts),
+    )
+
+    new_ts = "2024-06-15T12:00:00"
+    result_2 = await executor._persist_finding(
+        db, owner_id=owner_id, task_id=task_id,
+        plugin_id="nmap", target="127.0.0.1",
+        finding=_make_minimal_finding("vuln:openssh-port", severity="critical", first_seen_at=new_ts, last_seen_at=new_ts),
+    )
+
+    rows = await db.fetchall(
+        "SELECT severity, last_seen_at, occurrence_count FROM findings WHERE owner_id = ? AND finding_group_id = ?",
+        (owner_id, "vuln:openssh-port"),
+    )
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["severity"] == "critical"
+    assert row["last_seen_at"] == new_ts
+    assert row["occurrence_count"] == 2
+
+    await db.disconnect()
+
+
+# ---------------------------------------------------------------------------
+# Atomicity regression tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_transaction_rolls_back_findings_on_failure(setup_test_environment):
+    await init_db(settings.database_path)
+    db = await get_db()
+
+    task_id = str(uuid.uuid4())
+    owner_id = str(uuid.uuid4())
+    await db.execute(
+        "INSERT INTO tasks (id, owner_id, plugin_id, tool_name, target, inputs_json, status, consent_granted, safe_mode) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (task_id, owner_id, "nmap", "nmap", "127.0.0.1", "{}", TaskStatus.RUNNING.value, 1, 0)
+    )
+
+    executor = TaskExecutor()
+
+    mock_plugin = MagicMock()
+    mock_plugin.id = "nmap"
+    mock_plugin.name = "Nmap"
+    mock_plugin.output = {"parser": "builtin_nmap", "format": "text"}
+    mock_plugin.category = "Network"
+
+    with patch("backend.secuscan.executor.get_plugin_manager") as mock_pm:
+        mock_pm.return_value.build_command.return_value = ["nmap", "127.0.0.1"]
+        parser = MagicMock(return_value={"findings": [
+            {"title": "F1", "category": "N", "severity": "low", "description": "d1"},
+            {"title": "F2", "category": "N", "severity": "low", "description": "d2"},
+        ]})
+        executor._parse_results = parser
+
+        with patch.object(executor, "_persist_result_resources",
+                          side_effect=ValueError("DB write failed")):
+            findings_before = await db.fetchall(
+                "SELECT id FROM findings WHERE task_id = ?", (task_id,)
+            )
+            row_before = await db.fetchone(
+                "SELECT structured_json FROM tasks WHERE id = ?", (task_id,)
+            )
+
+            try:
+                await executor._upsert_findings_and_report(
+                    db=db, task_id=task_id, owner_id=owner_id,
+                    plugin=mock_plugin, plugin_id="nmap",
+                    target="127.0.0.1", status="failed", output="",
+                )
+            except ValueError:
+                pass
+
+    findings_after = await db.fetchall(
+        "SELECT id FROM findings WHERE task_id = ?", (task_id,)
+    )
+    row_after = await db.fetchone(
+        "SELECT structured_json FROM tasks WHERE id = ?", (task_id,)
+    )
+
+    assert len(findings_before) == 0
+    assert len(findings_after) == 0
+    assert row_before["structured_json"] is None
+    assert row_after["structured_json"] is None
+
+    await db.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_transaction_rolls_back_findings_and_report(setup_test_environment):
+    await init_db(settings.database_path)
+    db = await get_db()
+
+    task_id = str(uuid.uuid4())
+    owner_id = str(uuid.uuid4())
+    await db.execute(
+        "INSERT INTO tasks (id, owner_id, plugin_id, tool_name, target, inputs_json, status, consent_granted, safe_mode) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (task_id, owner_id, "nmap", "nmap", "127.0.0.1", "{}", TaskStatus.RUNNING.value, 1, 0)
+    )
+
+    executor = TaskExecutor()
+
+    mock_plugin = MagicMock()
+    mock_plugin.id = "nmap"
+    mock_plugin.name = "Nmap"
+    mock_plugin.output = {"parser": "builtin_nmap", "format": "text"}
+    mock_plugin.category = "Network"
+
+    with patch("backend.secuscan.executor.get_plugin_manager") as mock_pm:
+        mock_pm.return_value.build_command.return_value = ["nmap", "127.0.0.1"]
+        parser = MagicMock(return_value={"findings": [
+            {"title": "F1", "category": "N", "severity": "low", "description": "d1"},
+        ]})
+        executor._parse_results = parser
+
+        with patch.object(executor, "_persist_result_resources",
+                          side_effect=ValueError("Asset service write failed")):
+            try:
+                await executor._upsert_findings_and_report(
+                    db=db, task_id=task_id, owner_id=owner_id,
+                    plugin=mock_plugin, plugin_id="nmap",
+                    target="127.0.0.1", status="failed", output="",
+                )
+            except ValueError:
+                pass
+
+    findings = await db.fetchall(
+        "SELECT id FROM findings WHERE task_id = ?", (task_id,)
+    )
+    reports = await db.fetchall(
+        "SELECT id FROM reports WHERE task_id = ?", (task_id,)
+    )
+    assert len(findings) == 0
+    assert len(reports) == 0
+
+    await db.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_nested_transaction_rollback_on_exception(setup_test_environment):
+    await init_db(settings.database_path)
+    db = await get_db()
+
+    task_id = str(uuid.uuid4())
+    await db.execute(
+        "INSERT INTO tasks (id, owner_id, plugin_id, tool_name, target, inputs_json, status, consent_granted, safe_mode) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (task_id, "default", "test", "test", "t", "{}", TaskStatus.QUEUED.value, 1, 1)
+    )
+
+    assert db._in_transaction is False
+    await db.begin()
+    assert db._in_transaction is True
+
+    await db.execute(
+        "INSERT INTO findings (id, owner_id, task_id, plugin_id, title, category, severity, target, description) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ("f1", "default", task_id, "test", "Outer", "T", "low", "t", "outer finding")
+    )
+
+    assert db._in_transaction is True
+    async with db.transaction():
+        assert db._in_transaction is True
+        await db.execute(
+            "INSERT INTO findings (id, owner_id, task_id, plugin_id, title, category, severity, target, description) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("f2", "default", task_id, "test", "Nested", "T", "low", "t", "nested finding")
+        )
+    assert db._in_transaction is True
+
+    await db.rollback()
+    assert db._in_transaction is False
+
+    rows = await db.fetchall("SELECT id FROM findings WHERE task_id = ?", (task_id,))
+    assert len(rows) == 0
+
+    await db.disconnect()
 
 # ---------------------------------------------------------------------------
 # Regression: URL inputs must not be replaced with pinned IP

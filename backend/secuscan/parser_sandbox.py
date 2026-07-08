@@ -79,6 +79,7 @@ class ParserSandboxError(RuntimeError):
         self.reason = reason
         # Keep stderr private; callers must not surface this to API consumers.
         self._stderr_diagnostic: str = stderr
+        self.stderr_excerpt = stderr[:2000] if stderr else ""
         # User-facing message: reason only — no stderr content.
         super().__init__(f"Parser sandbox failed for '{plugin_id}' ({reason})")
 
@@ -262,7 +263,7 @@ def run_parser_in_sandbox(
             plugin_id,
             _sanitize_stderr(stderr_text),
         )
-        raise ParserSandboxError(plugin_id, f"timed out after {timeout_seconds}s")
+        raise ParserSandboxError(plugin_id, f"timed out after {timeout_seconds}s", stderr_text)
 
     if proc.returncode != 0:
         logger.error(
@@ -280,6 +281,7 @@ def run_parser_in_sandbox(
         raise ParserSandboxError(
             plugin_id,
             f"subprocess exited with code {proc.returncode}",
+            stderr_text,
         )
 
     stdout_bytes = b"".join(stdout_chunks)
@@ -302,6 +304,7 @@ def run_parser_in_sandbox(
         raise ParserSandboxError(
             plugin_id,
             f"parser returned non-JSON output: {exc}",
+            stderr_text,
         )
 
     if not isinstance(parsed, (dict, list)):

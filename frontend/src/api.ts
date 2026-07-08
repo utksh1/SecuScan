@@ -395,8 +395,15 @@ export function getPluginSchema(id: string) {
   return request<PluginSchemaResponse>(`/plugin/${id}/schema`)
 }
 
-export function getSettings() {
-  return request<any>(`/settings`)
+export interface SettingsResponse {
+  execution_context?: {
+    default?: ExecutionContext
+  }
+  [key: string]: unknown
+}
+
+export function getSettings(): Promise<SettingsResponse | null> {
+  return request<SettingsResponse | null>('/settings')
 }
 
 export function getDashboardSummary() {
@@ -457,7 +464,7 @@ export interface NotificationRuleUpdatePayload {
 }
 
 export async function listNotificationRules(): Promise<NotificationRule[]> {
-  const data: any = await request('/notifications/rules')
+  const data = await request<NotificationRule[] | { rules: NotificationRule[] }>('/notifications/rules')
   const rules = Array.isArray(data) ? data : data?.rules
   return Array.isArray(rules) ? (rules as NotificationRule[]) : []
 }
@@ -494,7 +501,12 @@ export async function listNotificationHistory(params?: {
   if (typeof params?.limit === 'number') sp.set('limit', String(params.limit))
   if (typeof params?.offset === 'number') sp.set('offset', String(params.offset))
   const suffix = sp.toString() ? `?${sp.toString()}` : ''
-  const data: any = await request(`/notifications/history${suffix}`)
+  const data = await request<{
+    history?: NotificationHistoryRow[]
+    total?: number
+    limit?: number
+    offset?: number
+  }>(`/notifications/history${suffix}`)
   return {
     history: Array.isArray(data?.history) ? (data.history as NotificationHistoryRow[]) : [],
     total: Number(data?.total ?? 0),
@@ -536,19 +548,28 @@ export function getTasks(params?: URLSearchParams) {
 
 export type ScanPhase = 'queued' | 'running_command' | 'parsing' | 'reporting' | 'finished'
 
-export function getTaskStatus(taskId: string): Promise<any> {
-  return request<any>(`/task/${taskId}/status`)
+export interface TaskStatusResponse {
+  task_id?: string
+  status: string
+  phase?: ScanPhase
+  progress?: number
+  message?: string
+  error_message?: string | null
+}
+
+export function getTaskStatus(taskId: string): Promise<TaskStatusResponse> {
+  return request<TaskStatusResponse>(`/task/${taskId}/status`)
 }
 
 export function getTaskResult(
   taskId: string,
   options?: { page?: number; per_page?: number },
-): Promise<any> {
+): Promise<TaskResultResponse | null> {
   const params = new URLSearchParams()
   if (options?.page) params.set('page', String(options.page))
   if (options?.per_page) params.set('per_page', String(options.per_page))
   const suffix = params.toString() ? `?${params.toString()}` : ''
-  return request<TaskResultResponse>(`/task/${taskId}/result${suffix}`)
+  return request<TaskResultResponse | null>(`/task/${taskId}/result${suffix}`)
 }
 
 export function getTaskDiff(taskId: string): Promise<ScanDiff> {
@@ -647,8 +668,26 @@ export interface WorkflowUpdatePayload {
 }
 
 interface WorkflowListResponse {
-  workflows: unknown[]
+  workflows: RawWorkflow[]
   total: number
+}
+
+interface RawWorkflow {
+  id: unknown
+  name?: unknown
+  schedule_seconds?: unknown
+  enabled?: unknown
+  steps?: unknown
+  steps_json?: unknown
+  last_run_at?: string | null
+  queued_task_ids?: unknown
+  queued_tasks?: unknown
+  created_at?: string
+}
+
+interface WorkflowRunResponse {
+  queued_task_ids?: string[]
+  queued_tasks?: string[]
 }
 
 function parseWorkflowSteps(value: unknown): WorkflowStep[] {
@@ -669,7 +708,7 @@ function parseScheduleSeconds(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
-function normalizeWorkflow(raw: any): Workflow {
+function normalizeWorkflow(raw: RawWorkflow): Workflow {
   return {
     id: String(raw.id),
     name: String(raw.name ?? ''),
@@ -687,13 +726,13 @@ function normalizeWorkflow(raw: any): Workflow {
 }
 
 export async function getWorkflows(): Promise<Workflow[]> {
-  const data = await request<WorkflowListResponse | unknown[]>('/workflows')
+  const data = await request<WorkflowListResponse | RawWorkflow[]>('/workflows')
   const workflows = Array.isArray(data) ? data : data.workflows
   return Array.isArray(workflows) ? workflows.map(normalizeWorkflow) : []
 }
 
 export async function createWorkflow(data: WorkflowCreatePayload): Promise<Workflow> {
-  const workflow = await request<unknown>('/workflows', {
+  const workflow = await request<RawWorkflow>('/workflows', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -702,7 +741,7 @@ export async function createWorkflow(data: WorkflowCreatePayload): Promise<Workf
 }
 
 export async function runWorkflow(workflowId: string): Promise<{ queued_task_ids: string[] }> {
-  const result: any = await request(`/workflows/${workflowId}/run`, {
+  const result = await request<WorkflowRunResponse>(`/workflows/${workflowId}/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
   })
@@ -716,7 +755,7 @@ export async function runWorkflow(workflowId: string): Promise<{ queued_task_ids
 }
 
 export async function updateWorkflow(workflowId: string, data: WorkflowUpdatePayload): Promise<Workflow> {
-  const workflow = await request<unknown>(`/workflows/${workflowId}`, {
+  const workflow = await request<RawWorkflow>(`/workflows/${workflowId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
@@ -775,7 +814,7 @@ export async function rollbackWorkflow(workflowId: string, versionNumber: number
     workflow_id: string
     rolled_back_to_version: number
     new_version_number: number
-    workflow: any
+    workflow: RawWorkflow
   }>(`/workflows/${workflowId}/rollback/${versionNumber}`, {
     method: 'POST',
   })

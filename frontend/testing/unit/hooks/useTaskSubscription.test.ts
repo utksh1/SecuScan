@@ -153,7 +153,7 @@ describe('useTaskSubscription', () => {
   })
 
   it('stops polling on terminal status', async () => {
-    let resolveGetTaskStatus: (value: unknown) => void
+    let resolveGetTaskStatus: (value: Awaited<ReturnType<typeof getTaskStatus>>) => void
     vi.mocked(getTaskStatus).mockImplementation(() => new Promise(resolve => {
       resolveGetTaskStatus = resolve
     }))
