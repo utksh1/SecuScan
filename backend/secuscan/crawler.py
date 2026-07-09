@@ -78,19 +78,41 @@ async def crawl_target(
     timeout: int = 10,
     cookies: Dict[str, str] | None = None,
     extra_headers: Dict[str, Any] | None = None,
+    max_redirects: int = 10,
+    max_size: int = 5 * 1024 * 1024,
 ) -> Dict[str, Any]:
     """Fetch a target and normalize discovered links/forms/scripts/API hints."""
     headers = _build_headers(extra_headers)
     async with httpx.AsyncClient(
         follow_redirects=True,
+        max_redirects=max_redirects,
         timeout=timeout,
         headers=headers,
         cookies=cookies or {},
         verify=False,
     ) as client:
-        response = await client.get(url)
+        async with client.stream("GET", url) as response:
+            # Check Content-Length header if present
+            content_length = response.headers.get("content-length")
+            if content_length:
+                try:
+                    cl_val = int(content_length)
+                except ValueError:
+                    cl_val = 0
+                if cl_val > max_size:
+                    raise ValueError(f"Response size exceeds limit of {max_size} bytes")
 
-    body = response.text
+            # Read response in chunks to enforce size limit
+            body_chunks = []
+            bytes_read = 0
+            async for chunk in response.aiter_bytes():
+                bytes_read += len(chunk)
+                if bytes_read > max_size:
+                    raise ValueError(f"Response size exceeds limit of {max_size} bytes")
+                body_chunks.append(chunk)
+
+            body_bytes = b"".join(body_chunks)
+            body = body_bytes.decode("utf-8", errors="replace")
     parser = _SurfaceParser()
     parser.feed(body)
 
