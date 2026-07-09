@@ -17,16 +17,16 @@ async def test_crawl_target_max_size_via_content_length():
     mock_response.status_code = 200
     mock_response.url = "http://example.com"
     mock_response.history = []
-    
+
     mock_client = MagicMock()
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=None)
-    
+
     mock_stream_ctx = MagicMock()
     mock_stream_ctx.__aenter__ = AsyncMock(return_value=mock_response)
     mock_stream_ctx.__aexit__ = AsyncMock(return_value=None)
     mock_client.stream.return_value = mock_stream_ctx
-    
+
     with patch("httpx.AsyncClient", return_value=mock_client):
         with pytest.raises(ValueError, match="Response size exceeds limit"):
             await crawl_target("http://example.com", max_size=1000)
@@ -40,22 +40,22 @@ async def test_crawl_target_max_size_via_streaming():
     mock_response.status_code = 200
     mock_response.url = "http://example.com"
     mock_response.history = []
-    
+
     async def mock_aiter_bytes():
         yield b"hello "
         yield b"world of pentesting"
-        
+
     mock_response.aiter_bytes = mock_aiter_bytes
-    
+
     mock_client = MagicMock()
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=None)
-    
+
     mock_stream_ctx = MagicMock()
     mock_stream_ctx.__aenter__ = AsyncMock(return_value=mock_response)
     mock_stream_ctx.__aexit__ = AsyncMock(return_value=None)
     mock_client.stream.return_value = mock_stream_ctx
-    
+
     with patch("httpx.AsyncClient", return_value=mock_client):
         # Setting max_size to 10 bytes:
         # First chunk (b"hello ") is 6 bytes (ok).
@@ -71,12 +71,12 @@ async def test_crawl_target_max_redirects_exceeded():
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=None)
     mock_request = httpx.Request("GET", "http://example.com")
-    
+
     mock_stream_ctx = MagicMock()
     mock_stream_ctx.__aenter__ = AsyncMock(side_effect=httpx.TooManyRedirects("Too many redirects", request=mock_request))
     mock_stream_ctx.__aexit__ = AsyncMock(return_value=None)
     mock_client.stream.return_value = mock_stream_ctx
-    
+
     with patch("httpx.AsyncClient", return_value=mock_client):
         with pytest.raises(httpx.TooManyRedirects):
             await crawl_target("http://example.com", max_redirects=2)
