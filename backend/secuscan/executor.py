@@ -1702,7 +1702,7 @@ class TaskExecutor:
             except Exception as exc:
                 logger.error("Unexpected error running parser sandbox for '%s': %s", plugin.id, exc)
                 raise RuntimeError(
-                    f"Custom parser encountered an unexpected error for plugin '{plugin.id}'"
+                    f"Custom parser encountered an unexpected error for plugin '{plugin.id}': {redact(str(exc))}"
                 ) from exc
 
         # 2. Fallback to legacy built-in parsers (only reached when no parser.py exists)

@@ -51,6 +51,8 @@ import logging
 from pathlib import Path
 from typing import Any, Dict
 
+from .redaction import redact
+
 logger = logging.getLogger(__name__)
 
 # Defaults — overridden by the Settings values passed at call time.
@@ -84,11 +86,11 @@ class ParserSandboxError(RuntimeError):
     def __init__(self, plugin_id: str, reason: str, stderr: str = "") -> None:
         self.plugin_id = plugin_id
         self.reason = reason
-        # Keep stderr private; callers must not surface this to API consumers.
+        sanitized = redact(stderr[:2000]) if stderr else ""
         self._stderr_diagnostic: str = stderr
-        self.stderr_excerpt = stderr[:2000] if stderr else ""
-        # User-facing message: reason only — no stderr content.
-        super().__init__(f"Parser sandbox failed for '{plugin_id}' ({reason})")
+        self.stderr_excerpt = sanitized
+        detail = f": {sanitized[:200]}" if sanitized.strip() else ""
+        super().__init__(f"Parser sandbox failed for '{plugin_id}' ({reason}){detail}")
 
 
 # ---------------------------------------------------------------------------
