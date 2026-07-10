@@ -22,6 +22,8 @@ import pytest
 import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock, patch, call
 
+pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="Process tree cancellation is Unix-only")
+
 from backend.secuscan.executor import _terminate_process_group, _CANCEL_GRACE_SECONDS
 
 

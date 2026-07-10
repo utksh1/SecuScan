@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import ToolConfig from '../../../src/pages/ToolConfig'
-import { getPluginSchema, listPlugins, startTask, getSettings, listTargetPolicies, listCredentialProfiles, listSessionProfiles } from '../../../src/api'
+import { getPluginSchema, listPlugins, startTask, getSettings, listTargetPolicies, listCredentialProfiles, listSessionProfiles, previewCommand } from '../../../src/api'
 import { routes } from '../../../src/routes'
 
 const addToast = vi.fn()
@@ -19,10 +19,12 @@ vi.mock('../../../src/api', () => ({
   listTargetPolicies: vi.fn(),
   listCredentialProfiles: vi.fn(),
   listSessionProfiles: vi.fn(),
+  previewCommand: vi.fn(),
 }))
 
 describe('ToolConfig dynamic schema flow', () => {
   beforeEach(() => {
+    vi.mocked(previewCommand).mockResolvedValue({ command: ['subfinder', '-d', 'example.com'] })
     addToast.mockReset()
     vi.mocked(listPlugins).mockResolvedValue({
       total: 1,
@@ -308,5 +310,46 @@ describe('ToolConfig dynamic schema flow', () => {
     expect(screen.getByText('Enter a fully qualified URL.')).toBeInTheDocument()
     expect(screen.getByText('Must be a valid URL')).toBeInTheDocument()
     expect(targetInput).toHaveAttribute('aria-describedby', 'help-target error-target')
+  })
+
+  it('renders command preview and updates on input changes', async () => {
+    const user = userEvent.setup()
+    vi.mocked(previewCommand).mockResolvedValue({
+      command: ['subfinder', '-d', 'example.com'],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/toolkit/subdomain_discovery']}>
+        <Routes>
+          <Route path={routes.scanTool} element={<ToolConfig />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const targetInput = await screen.findByPlaceholderText('example.com')
+    await user.type(targetInput, 'example.com')
+
+    await waitFor(() => {
+      expect(previewCommand).toHaveBeenCalledWith(
+        'subdomain_discovery',
+        expect.objectContaining({ target: 'example.com' }),
+      )
+    })
+
+    expect(await screen.findByText('subfinder -d example.com')).toBeInTheDocument()
+    expect(screen.getByText(/Note: This preview is generated locally\/sanitized/i)).toBeInTheDocument()
+  })
+
+  it('shows validation error warning in preview panel if inputs are invalid', async () => {
+    render(
+      <MemoryRouter initialEntries={['/toolkit/subdomain_discovery']}>
+        <Routes>
+          <Route path={routes.scanTool} element={<ToolConfig />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByPlaceholderText('example.com')
+    expect(await screen.findByText(/Fix highlighted validation errors to preview command./i)).toBeInTheDocument()
   })
 })

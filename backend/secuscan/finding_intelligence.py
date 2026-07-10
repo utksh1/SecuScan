@@ -42,6 +42,19 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def generate_finding_key(finding: Dict[str, Any], plugin_id: str, target: str, owner_id: str) -> str:
+    """
+    Generate a stable deduplication key for a finding that is consistent
+    across different scan tasks targeting the same asset. Unlike the per-task
+    finding ID, this key intentionally excludes any task identifier so that
+    the same vulnerability discovered by separate tasks produces the same key.
+    """
+    asset_ref = _guess_asset_ref(finding, target)
+    asset_id = _stable_id("asset", target, asset_ref)
+    signature = _issue_signature(finding)
+    return _stable_id("group", plugin_id, asset_id, signature, owner_id)
+
+
 def _parse_timestamp(raw: Any) -> str:
     if isinstance(raw, datetime):
         return raw.astimezone(timezone.utc).isoformat()

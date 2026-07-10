@@ -59,6 +59,7 @@ data/reports/*
 # Backend scan artifacts
 backend/data/raw/*
 !backend/data/raw/.gitkeep
+backend/data/.api_key
 
 # Scanner assets downloaded by scripts/bootstrap_scanner_assets.sh
 wordlists/common.txt

@@ -6,6 +6,7 @@ import pytest
 from backend.secuscan.routes import (
     _json_payload,
     _serialize_workflow,
+    iter_raw_output_chunks,
     parse_json_fields,
     deserialize_finding_rows,
     deserialize_asset_service_rows,
@@ -231,3 +232,47 @@ class TestSerializeWorkflow:
         assert result["enabled"] is False
         assert result["created_at"] is None
         assert result["last_run_at"] is None
+
+
+class TestIterRawOutputChunks:
+    def test_yields_single_chunk_for_small_file(self, tmp_path):
+        """A file smaller than chunk_size yields exactly one chunk."""
+        path = tmp_path / "output.txt"
+        path.write_text("hello world", encoding="utf-8")
+        chunks = list(iter_raw_output_chunks(str(path), chunk_size=1024))
+        assert len(chunks) == 1
+        assert chunks[0] == "hello world"
+
+    def test_yields_multiple_chunks_for_large_file(self, tmp_path):
+        """A file larger than chunk_size yields multiple chunks."""
+        path = tmp_path / "output.txt"
+        content = "x" * 300
+        path.write_text(content, encoding="utf-8")
+        chunks = list(iter_raw_output_chunks(str(path), chunk_size=100))
+        assert len(chunks) == 3
+        assert "".join(chunks) == content
+
+    def test_last_chunk_smaller_than_chunk_size(self, tmp_path):
+        """The final chunk may be smaller than chunk_size."""
+        path = tmp_path / "output.txt"
+        content = "abc"
+        path.write_text(content, encoding="utf-8")
+        chunks = list(iter_raw_output_chunks(str(path), chunk_size=2))
+        assert len(chunks) == 2
+        assert chunks[0] == "ab"
+        assert chunks[1] == "c"
+
+    def test_empty_file_yields_no_chunks(self, tmp_path):
+        """An empty file produces no chunks."""
+        path = tmp_path / "empty.txt"
+        path.write_text("", encoding="utf-8")
+        chunks = list(iter_raw_output_chunks(str(path)))
+        assert chunks == []
+
+    def test_unicode_handled_without_crash(self, tmp_path):
+        """Unicode content is decoded without raising an exception."""
+        path = tmp_path / "unicode.txt"
+        path.write_text("hello world", encoding="utf-8")
+        chunks = list(iter_raw_output_chunks(str(path)))
+        assert len(chunks) == 1
+        assert "hello" in chunks[0]

@@ -141,7 +141,19 @@ live under `testing/backend/unit/` and integration tests live under
 > **Note:** Run `./testing/test_python.sh` at least once before using this
 > shortcut so that `venv_tests/` exists and dependencies are installed.
 
-### 4. Where Requirements Files Live
+### 4. Run the Artifact Guard
+
+Before opening a pull request, verify that no generated artifacts or Python
+cache files are staged:
+
+```bash
+bash scripts/check-artifacts.sh origin/main
+```
+
+This script checks for blocked generated artifacts, `__pycache__/` directories,
+and `.pyc` files before changes are submitted.
+
+### 5. Where Requirements Files Live
 
 | File | Purpose |
 |---|---|
@@ -160,6 +172,14 @@ Both files must be installed for the test suite to run correctly. The
   Use `python3.11` or `python3.12` explicitly if needed.
 - **Permission denied on `./testing/test_python.sh`** — make it executable
   first with `chmod +x testing/test_python.sh`.
+
+## Plugin Contributions
+
+If you are adding a new plugin or editing an existing one, follow the dedicated guide before opening a pull request:
+
+**[docs/plugin-contribution-guide.md](docs/plugin-contribution-guide.md)**
+
+The guide covers the full workflow: editing metadata and parser files, refreshing checksums, validating the plugin, writing fixture-based parser tests, and the pre-PR checklist.
 
 ## Project Layout
 

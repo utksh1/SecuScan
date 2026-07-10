@@ -9,6 +9,9 @@ import {
   listNotificationRules,
   updateNotificationRule,
   listNotificationHistory,
+  getScanWebhookSettings,
+  setScanWebhookSettings,
+  deleteScanWebhookSettings,
 } from '../../../src/api'
 
 vi.mock('../../../src/api', async () => {
@@ -20,6 +23,9 @@ vi.mock('../../../src/api', async () => {
     updateNotificationRule: vi.fn(),
     deleteNotificationRule: vi.fn(),
     listNotificationHistory: vi.fn(),
+    getScanWebhookSettings: vi.fn(),
+    setScanWebhookSettings: vi.fn(),
+    deleteScanWebhookSettings: vi.fn(),
   }
 })
 
@@ -52,6 +58,14 @@ describe('Settings notifications rules panel', () => {
     vi.mocked(updateNotificationRule).mockResolvedValue({} as any)
     vi.mocked(deleteNotificationRule).mockResolvedValue({ rule_id: 'rule-1', deleted: true } as any)
     vi.mocked(listNotificationHistory).mockResolvedValue({ history: [], total: 0, limit: 10, offset: 0 } as any)
+    vi.mocked(getScanWebhookSettings).mockResolvedValue({
+      webhook_url: null,
+      platform: null,
+      configured: false,
+      updated_at: null,
+    } as any)
+    vi.mocked(setScanWebhookSettings).mockResolvedValue({} as any)
+    vi.mocked(deleteScanWebhookSettings).mockResolvedValue({ deleted: true } as any)
   })
 
   it('renders existing rules from API', async () => {
@@ -87,5 +101,43 @@ describe('Settings notifications rules panel', () => {
     await waitFor(() => {
       expect(updateNotificationRule).toHaveBeenCalledWith('rule-1', { is_active: false })
     })
+  })
+})
+
+describe('Settings scan completion webhook panel', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    vi.mocked(listNotificationRules).mockResolvedValue([])
+    vi.mocked(createNotificationRule).mockResolvedValue({} as any)
+    vi.mocked(updateNotificationRule).mockResolvedValue({} as any)
+    vi.mocked(deleteNotificationRule).mockResolvedValue({ rule_id: 'rule-1', deleted: true } as any)
+    vi.mocked(listNotificationHistory).mockResolvedValue({ history: [], total: 0, limit: 10, offset: 0 } as any)
+    vi.mocked(getScanWebhookSettings).mockResolvedValue({
+      webhook_url: null,
+      platform: null,
+      configured: false,
+      updated_at: null,
+    } as any)
+    vi.mocked(setScanWebhookSettings).mockResolvedValue({
+      webhook_url: 'https://hooks.slack.com/services/x',
+      platform: 'slack',
+      configured: true,
+      updated_at: '2026-01-01T00:00:00Z',
+    } as any)
+    vi.mocked(deleteScanWebhookSettings).mockResolvedValue({ deleted: true } as any)
+  })
+
+  it('saves a new scan completion webhook URL', async () => {
+    const user = userEvent.setup()
+    renderSettings()
+
+    const input = await screen.findByLabelText(/Scan completion webhook URL/i)
+    await user.type(input, 'https://hooks.slack.com/services/x')
+    await user.click(screen.getByRole('button', { name: /SAVE_WEBHOOK/i }))
+
+    await waitFor(() => {
+      expect(setScanWebhookSettings).toHaveBeenCalledWith('https://hooks.slack.com/services/x')
+    })
+    expect(await screen.findByText(/detected format: slack/i)).toBeInTheDocument()
   })
 })

@@ -20,8 +20,12 @@ from .routes_json_helpers import (
     _serialize_workflow,
     deserialize_asset_service_rows,
     deserialize_finding_rows,
+    iter_raw_output_chunks,
     parse_json_fields,
 )
+
+# Re-exported for backward compatibility with integration tests
+SSE_RAW_OUTPUT_CHUNK_SIZE = 64 * 1024
 from .routes_report_helpers import (
     _slugify_filename_part,
     build_report_filename,
@@ -62,6 +66,24 @@ def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
         normalized.append(model.model_dump())
     return normalized
 
+def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Return the workflow shape consumed by the frontend."""
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "schedule_seconds": row.get("schedule_seconds"),
+        "schedule_timezone": row.get("schedule_timezone"),
+        "enabled": bool(row.get("enabled")),
+        "steps": _parse_workflow_steps(row.get("steps_json")),
+        "created_at": row.get("created_at"),
+        "last_run_at": row.get("last_run_at"),
+        "queued_task_ids": queued_task_ids or [],
+    }
+
+
+def _json_payload(value: Any, fallback: str) -> str:
+    return json.dumps(value if value is not None else json.loads(fallback))
+
 
 from .validation import is_filesystem_target  # noqa: E402
 
@@ -75,13 +97,14 @@ from .models import (
     NotificationChannelType, TaskStatus,
     ExecutionContext, WorkflowStep, ValidationMode, EvidenceLevel,
     NotificationDiagnosticsResponse,
+    ScanWebhookSettingsRequest, ScanWebhookSettingsResponse,
 )
 from .config import settings
 from .database import get_db
 from .plugins import get_plugin_manager, init_plugins
 from . import notification_service
 from .executor import executor
-from .redaction import redact_inputs
+from .redaction import redact, redact_inputs
 from .ratelimit import (
     rate_limiter, concurrent_limiter, workflow_rate_limiter,
     task_start_limiter, vault_limiter,
@@ -108,7 +131,6 @@ from .platform_resources import (
 from sse_starlette.sse import EventSourceResponse
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
-SSE_RAW_OUTPUT_CHUNK_SIZE = 64 * 1024
 
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -196,16 +218,6 @@ async def require_owned_task(db, task_id: str, owner: str, columns: str = "owner
     return row
 
 
-def iter_raw_output_chunks(path: str, chunk_size: int = SSE_RAW_OUTPUT_CHUNK_SIZE):
-    """Yield raw output in bounded chunks for completed-task SSE replay."""
-    with open(path, "r", encoding="utf-8", errors="replace") as output_file:
-        while True:
-            chunk = output_file.read(chunk_size)
-            if not chunk:
-                break
-            yield chunk
-
-
 def _report_generation_error_response(task_id: str, report_format: str) -> JSONResponse:
     logger.exception("Report generation failed for task_id=%s format=%s", task_id, report_format)
     return JSONResponse(
@@ -285,6 +297,40 @@ async def get_plugin_schema(plugin_id: str):
         raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
 
 
+@router.post("/plugin/{plugin_id}/preview")
+async def get_plugin_preview(plugin_id: str, payload: Dict[str, Any] = Body(...)):
+    """Generate a preview of the command to be executed by a plugin, with sensitive values redacted."""
+    plugin_manager = await get_plugin_manager_for_request()
+    plugin = plugin_manager.get_plugin(plugin_id)
+    if not plugin:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
+
+    inputs = payload.get("inputs", {})
+
+    try:
+        # Check missing required fields
+        missing_fields = []
+        for field in plugin.fields:
+            if field.required:
+                val = inputs.get(field.id)
+                if val is None or val == "":
+                    missing_fields.append(field.label)
+
+        if missing_fields:
+            raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
+
+        command_args = plugin_manager.build_command(plugin_id, inputs)
+        if not command_args:
+            raise ValueError("Failed to build command")
+
+        redacted_args = [redact(arg) for arg in command_args]
+        return {
+            "command": redacted_args
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.get("/presets", dependencies=[Depends(read_heavy_limiter)])
 async def get_all_presets():
     """Get all plugin presets"""
@@ -312,9 +358,18 @@ async def start_task(
     if not ok:
         raise HTTPException(status_code=status_code, detail=error_msg)
 
+    db = await get_db()
+
     # Validate consent
     if settings.require_consent and not request.consent_granted:
         logger.warning(f"Task start failed: Consent not granted. Request: {request}")
+        await db.log_audit(
+            "scan_blocked_consent",
+            f"Scan start blocked: consent not granted for plugin {request.plugin_id}",
+            severity="warning",
+            context={"plugin_id": request.plugin_id},
+            plugin_id=request.plugin_id,
+        )
         raise HTTPException(
             status_code=400,
             detail="Consent required. You must acknowledge the legal notice."
@@ -337,7 +392,6 @@ async def start_task(
         logger.warning("Task start failed: %s", preset_error)
         raise HTTPException(status_code=400, detail=preset_error)
 
-    db = await get_db()
     target_policy = await get_target_policy(db, owner, execution_context.get("target_policy_id"))
     credential_profile = await get_credential_profile(db, owner, execution_context.get("credential_profile_id"))
     session_profile = await get_session_profile(db, owner, execution_context.get("session_profile_id"))
@@ -411,6 +465,18 @@ async def start_task(
 
             if not is_valid:
                 logger.warning(f"Task start failed: Target validation failed for '{target}': {error_msg}")
+                await db.log_audit(
+                    "scan_blocked_target_validation",
+                    f"Scan start blocked: target validation failed for plugin {request.plugin_id}",
+                    severity="warning",
+                    context={
+                        "plugin_id": request.plugin_id,
+                        "target": target_str,
+                        "safe_mode": safe_mode,
+                        "reason": error_msg,
+                    },
+                    plugin_id=request.plugin_id,
+                )
                 raise HTTPException(status_code=400, detail=error_msg)
 
     # Check rate limits per (client, plugin) so one client cannot exhaust
@@ -792,6 +858,15 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
     """Get task execution result"""
     db = await get_db()
 
+    # Enforce ownership and existence check first
+    await require_owned_task(db, task_id, owner)
+
+    cache_key = f"tasks:result:{task_id}:{owner}"
+    cache = await get_cache()
+    cached = await cache.get_json(cache_key)
+    if cached is not None:
+        return cached
+
     task_row = await db.fetchone(
         """
         SELECT id, owner_id, plugin_id, tool_name, target, status,
@@ -804,9 +879,6 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
 
     if not task_row:
         raise HTTPException(status_code=404, detail="Task not found")
-
-    if task_row["owner_id"] != owner:
-        raise HTTPException(status_code=403, detail="You do not have access to this task")
 
     structured = {}
     if task_row["structured_json"]:
@@ -884,7 +956,7 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
         except Exception:
             pass
 
-    return {
+    result = {
         "task_id": task_row["id"],
         "plugin_id": task_row["plugin_id"],
         "tool": task_row["tool_name"],
@@ -906,11 +978,16 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
         "raw_output_excerpt": raw_output,
         "raw_output": raw_output,
         "command_used": task_row["command_used"],
-        "errors": [{"message": task_row["error_message"]}] if task_row["error_message"] else [],
-        "error_message": task_row["error_message"],
+        "errors": [{"message": redact(task_row["error_message"])}] if task_row["error_message"] else [],
+        "error_message": redact(task_row["error_message"]) if task_row["error_message"] else None,
         "exit_code": task_row["exit_code"],
         "metadata": {}
     }
+
+    if task_row["status"] in ["completed", "failed", "cancelled"]:
+        await cache.set_json(cache_key, result)
+
+    return result
 
 
 @router.post("/task/{task_id}/cancel")
@@ -1569,13 +1646,17 @@ async def delete_vault_secret(
 ):
     db = await get_db()
 
-    await db.execute(
+
+    cursor = await db.execute(
         """
         DELETE FROM credential_vault
         WHERE owner_id = ? AND name = ?
         """,
         (owner, name),
     )
+
+    if cursor.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Secret not found")
 
     return {
         "name": name,
@@ -1897,6 +1978,14 @@ async def create_workflow(payload: Dict[str, Any], owner: str = Depends(get_curr
     if not steps:
         raise HTTPException(status_code=400, detail="Workflow requires at least one step")
 
+    schedule_timezone = payload.get("schedule_timezone")
+    if schedule_timezone is not None:
+        from .workflows import validate_schedule_timezone
+        is_valid, err_msg = validate_schedule_timezone(schedule_timezone)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=err_msg)
+        schedule_timezone = schedule_timezone.strip()
+
     workflow_id = str(uuid.uuid4())
     schedule_seconds = payload.get("schedule_seconds")
     if schedule_seconds is not None:
@@ -1913,8 +2002,8 @@ async def create_workflow(payload: Dict[str, Any], owner: str = Depends(get_curr
     db = await get_db()
     await db.execute(
         """
-        INSERT INTO workflows (id, name, owner_id, schedule_seconds, enabled, steps_json)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO workflows (id, name, owner_id, schedule_seconds, enabled, steps_json, schedule_timezone)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
         (
             workflow_id,
@@ -1923,6 +2012,7 @@ async def create_workflow(payload: Dict[str, Any], owner: str = Depends(get_curr
             parsed_schedule,
             1 if enabled else 0,
             json.dumps(steps),
+            schedule_timezone,
         ),
     )
     row = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
@@ -2056,10 +2146,11 @@ async def rollback_workflow(workflow_id: str, version_number: int, owner: str = 
     name = defn.get("name", wf["name"])
     steps = defn.get("steps", [])
     schedule_seconds = defn.get("schedule_seconds")
+    schedule_timezone = defn.get("schedule_timezone")
     enabled = bool(defn.get("enabled", True))
     await db.execute(
-        "UPDATE workflows SET name = ?, steps_json = ?, schedule_seconds = ?, enabled = ? WHERE id = ?",
-        (name, json.dumps(steps), schedule_seconds, 1 if enabled else 0, workflow_id),
+        "UPDATE workflows SET name = ?, steps_json = ?, schedule_seconds = ?, enabled = ?, schedule_timezone = ? WHERE id = ?",
+        (name, json.dumps(steps), schedule_seconds, 1 if enabled else 0, schedule_timezone, workflow_id),
     )
     new_version = await db.snapshot_workflow_version(
         workflow_id=workflow_id,
@@ -2068,6 +2159,7 @@ async def rollback_workflow(workflow_id: str, version_number: int, owner: str = 
         enabled=enabled,
         steps=steps,
         created_by=f"rollback_to_v{version_number}",
+        schedule_timezone=schedule_timezone,
     )
     updated = await db.fetchone("SELECT * FROM workflows WHERE id = ?", (workflow_id,))
     return {
@@ -2102,6 +2194,18 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any], owner: str 
         val = payload["schedule_seconds"]
         updates.append("schedule_seconds = ?")
         params.append(int(val) if val else None)
+    if "schedule_timezone" in payload:
+        tz_val = payload["schedule_timezone"]
+        if tz_val is not None:
+            from .workflows import validate_schedule_timezone
+            is_valid, err_msg = validate_schedule_timezone(tz_val)
+            if not is_valid:
+                raise HTTPException(status_code=400, detail=err_msg)
+            updates.append("schedule_timezone = ?")
+            params.append(tz_val.strip())
+        else:
+            updates.append("schedule_timezone = ?")
+            params.append(None)
     if "enabled" in payload:
         new_enabled = bool(payload["enabled"])
 
@@ -2121,6 +2225,7 @@ async def update_workflow(workflow_id: str, payload: Dict[str, Any], owner: str 
         enabled=bool(updated["enabled"]),
         steps=json.loads(updated["steps_json"] or "[]"),
         created_by="patch",
+        schedule_timezone=updated["schedule_timezone"],
     )
 
     if enabled_changed:
@@ -2240,18 +2345,21 @@ async def get_notification_rule(rule_id: str, owner: str = Depends(get_current_o
 
 @router.patch("/notifications/rules/{rule_id}")
 async def update_notification_rule(rule_id: str, payload: NotificationRuleUpdate, owner: str = Depends(get_current_owner)):
+    """Patch a notification rule.
+
+    Returns ``409 Conflict`` with the latest persisted rule when an optimistic
+    update loses a concurrent edit race so clients can refresh and retry.
+    """
     db = await get_db()
     row = await _verify_notification_rule_owner(db, rule_id, owner)
 
-    updates: List[str] = []
-    params: List[Any] = []
+    updates: Dict[str, Any] = {}
 
     if payload.name is not None:
         name = payload.name.strip()
         if not name:
             raise HTTPException(status_code=400, detail="Rule name is required")
-        updates.append("name = ?")
-        params.append(name)
+        updates["name"] = name
 
     effective_channel = (
         payload.channel_type
@@ -2263,42 +2371,45 @@ async def update_notification_rule(rule_id: str, payload: NotificationRuleUpdate
             effective_channel,
             payload.target_url_or_email,
         )
-        updates.append("target_url_or_email = ?")
-        params.append(target)
+        updates["target_url_or_email"] = target
     elif payload.channel_type is not None:
         target = _validate_notification_target(
             effective_channel,
             row["target_url_or_email"],
         )
-        updates.append("target_url_or_email = ?")
-        params.append(target)
+        updates["target_url_or_email"] = target
 
     if payload.severity_threshold is not None:
-        updates.append("severity_threshold = ?")
-        params.append(payload.severity_threshold.value)
+        updates["severity_threshold"] = payload.severity_threshold.value
 
     if payload.channel_type is not None:
-        updates.append("channel_type = ?")
-        params.append(payload.channel_type.value)
+        updates["channel_type"] = payload.channel_type.value
 
     if payload.is_active is not None:
-        updates.append("is_active = ?")
-        params.append(1 if payload.is_active else 0)
+        updates["is_active"] = 1 if payload.is_active else 0
 
     if not updates:
         raise HTTPException(status_code=400, detail="No update fields provided")
 
-    updates.append("updated_at = datetime('now')")
-    params.append(rule_id)
-    await db.execute(
-        f"UPDATE notification_rules SET {', '.join(updates)} WHERE id = ?",
-        tuple(params),
-    )
-    updated = await db.fetchone(
-        "SELECT * FROM notification_rules WHERE id = ?",
-        (rule_id,),
-    )
-    if not updated:
+    try:
+        updated = await notification_service.update_notification_rule(
+            db,
+            current_rule=row,
+            updates=updates,
+        )
+    except notification_service.NotificationRuleConflictError as exc:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": "notification_rule_conflict",
+                "message": (
+                    "Notification rule was updated by another request. "
+                    "Refresh the rule and retry your changes."
+                ),
+                "current_rule": _serialize_notification_rule(exc.current_rule),
+            },
+        )
+    except KeyError:
         raise HTTPException(status_code=404, detail="Notification rule not found")
     return _serialize_notification_rule(updated)
 
@@ -2309,6 +2420,54 @@ async def delete_notification_rule(rule_id: str, owner: str = Depends(get_curren
     await _verify_notification_rule_owner(db, rule_id, owner)
     await db.execute("DELETE FROM notification_rules WHERE id = ?", (rule_id,))
     return {"rule_id": rule_id, "deleted": True}
+
+
+@router.get("/settings/webhook")
+async def get_scan_webhook_settings(owner: str = Depends(get_current_owner)):
+    """Return the configured scan-completion webhook for the current owner.
+
+    Fires on scan completion/failure (issue #1615) — distinct from the
+    per-finding severity-threshold rules under /notifications/rules.
+    """
+    db = await get_db()
+    row = await db.fetchone(
+        "SELECT * FROM scan_webhook_settings WHERE owner_id = ?",
+        (owner,),
+    )
+    if not row:
+        return {"webhook_url": None, "platform": None, "configured": False, "updated_at": None}
+    webhook_url = row["webhook_url"]
+    return {
+        "webhook_url": webhook_url,
+        "platform": notification_service.detect_webhook_platform(webhook_url),
+        "configured": True,
+        "updated_at": row.get("updated_at"),
+    }
+
+
+@router.put("/settings/webhook")
+async def upsert_scan_webhook_settings(
+    payload: ScanWebhookSettingsRequest,
+    owner: str = Depends(get_current_owner),
+):
+    """Create or update the scan-completion webhook URL for the current owner."""
+    target = _validate_notification_target(NotificationChannelType.WEBHOOK, payload.webhook_url)
+    db = await get_db()
+    row = await notification_service.set_scan_webhook_url(db, owner, target)
+    return {
+        "webhook_url": row["webhook_url"],
+        "platform": notification_service.detect_webhook_platform(row["webhook_url"]),
+        "configured": True,
+        "updated_at": row.get("updated_at"),
+    }
+
+
+@router.delete("/settings/webhook")
+async def delete_scan_webhook_settings(owner: str = Depends(get_current_owner)):
+    """Remove the scan-completion webhook URL for the current owner."""
+    db = await get_db()
+    deleted = await notification_service.delete_scan_webhook_url(db, owner)
+    return {"deleted": deleted}
 
 
 @router.get("/notifications/history", dependencies=[Depends(read_heavy_limiter)])
@@ -2410,6 +2569,9 @@ async def get_finding_details(finding_id: str, owner: str = Depends(get_current_
         "asset_exposure": finding_row.get("asset_exposure"),
         "risk_score": finding_row.get("risk_score"),
         "risk_factors": risk_factors,
+        "safe_to_apply": metadata.get("safe_to_apply"),
+        "compatible_range": metadata.get("compatible_range"),
+        "alternatives": metadata.get("alternatives"),
     }
 
 

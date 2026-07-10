@@ -80,9 +80,9 @@ const severityConfig: Record<string, { label: string; accent: string; chip: stri
   },
   low: {
     label: 'Low',
-    accent: 'text-silver-bright',
-    chip: 'bg-charcoal-dark text-silver-bright border border-silver-bright/15',
-    rail: 'bg-silver/50',
+    accent: 'text-rag-green',
+    chip: 'bg-rag-green text-black',
+    rail: 'bg-rag-green',
   },
   info: {
     label: 'Info',
@@ -128,7 +128,7 @@ function getStatusTone(status: FindingStatus) {
 
 function filterPillClasses(isActive: boolean) {
   return isActive
-    ? 'border-black bg-silver-bright text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+    ? 'border-black bg-white text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
     : 'border-silver-bright/10 bg-charcoal-dark text-silver/65 hover:border-silver-bright/30 hover:text-silver-bright'
 }
 
@@ -639,16 +639,30 @@ export default function Findings() {
     overscan: 6,
   })
 
-  // Scroll selected finding into view when it changes
+  // Keep latest virtualRows/virtualizer available without making them
+  // reactive dependencies — they change on every filter/sort, but we only
+  // want to re-scroll when the *selection* actually changes.
+  const virtualRowsRef = useRef(virtualRows)
   useEffect(() => {
-    if (!selectedFinding) return
-    const rowIdx = virtualRows.findIndex(
-      (row) => row.kind === 'finding' && row.finding.id === selectedFinding.id,
+    virtualRowsRef.current = virtualRows
+  })
+
+  const virtualizerRef = useRef(virtualizer)
+  useEffect(() => {
+    virtualizerRef.current = virtualizer
+  })
+
+  // Scroll selected finding into view when the selection changes
+  useEffect(() => {
+    if (!selectedFindingId) return
+    const rows = virtualRowsRef.current
+    const rowIdx = rows.findIndex(
+      (row) => row.kind === 'finding' && row.finding.id === selectedFindingId,
     )
     if (rowIdx !== -1) {
-      virtualizer.scrollToIndex(rowIdx, { align: 'auto', behavior: 'smooth' })
+      virtualizerRef.current.scrollToIndex(rowIdx, { align: 'auto', behavior: 'smooth' })
     }
-  }, [selectedFindingId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedFindingId])
   return (
     <div className="min-h-screen bg-charcoal-dark text-silver px-4 py-6 md:px-8 md:py-10">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8">
@@ -687,9 +701,9 @@ export default function Findings() {
         </header>
 
         {/* Filter Bar */}
-        <section className="border-2 border-black bg-charcoal/95 p-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] backdrop-blur lg:sticky lg:top-4 lg:z-20">
-          <div className="grid gap-4">
-            <div className="grid gap-4 2xl:grid-cols-[minmax(320px,1fr)_auto] 2xl:items-end">
+        <section className="border-2 border-black bg-charcoal/95 p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] backdrop-blur lg:sticky lg:top-4 lg:z-20">
+          <div className="grid gap-8">
+            <div className="grid gap-6 2xl:grid-cols-[minmax(320px,1fr)_auto] 2xl:items-end">
               <div className="space-y-2">
                 <label className={filterLabelClass}>Search</label>
                 <div className="relative">
@@ -713,7 +727,7 @@ export default function Findings() {
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 pb-2 sm:pb-0 2xl:max-w-[760px] 2xl:justify-end">
+              <div className="flex flex-wrap items-center gap-2 pb-3 2xl:max-w-[760px] 2xl:justify-end">
                 <button
                   type="button"
                   onClick={() => setFilterSeverity('all')}

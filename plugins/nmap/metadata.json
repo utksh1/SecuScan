@@ -202,5 +202,8 @@
     "system_packages": []
   },
   "docker_image": "instrumentisto/nmap",
-  "checksum": "1b9579a663c854d718a5167a8833e9aa4a1e210924104ef2d97cbdaa133c992a"
+  "capabilities": [
+    "network"
+  ],
+  "checksum": "4ae83b8d264f534c4fd5671be973abd4e0282f2e3ec95571b6134986b9257c3e"
 }

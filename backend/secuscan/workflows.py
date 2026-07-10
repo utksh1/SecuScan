@@ -5,6 +5,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from typing import Any, Dict, List
 from .database import get_db
 from .config import settings
@@ -93,7 +94,7 @@ class WorkflowScheduler:
         if not active_version:
             # Fetch workflow details from the database
             row = await db.fetchone(
-                "SELECT name, schedule_seconds, enabled, steps_json FROM workflows WHERE id = ?",
+                "SELECT name, schedule_seconds, enabled, steps_json, schedule_timezone FROM workflows WHERE id = ?",
                 (workflow_id,),
             )
             if row:
@@ -101,11 +102,13 @@ class WorkflowScheduler:
                 schedule_seconds = row["schedule_seconds"]
                 enabled = bool(row["enabled"])
                 steps_from_db = json.loads(row["steps_json"] or "[]")
+                schedule_timezone = row["schedule_timezone"]
             else:
                 name = f"Workflow {workflow_id}"
                 schedule_seconds = None
                 enabled = True
                 steps_from_db = steps
+                schedule_timezone = None
 
             active_version = await db.snapshot_workflow_version(
                 workflow_id=workflow_id,
@@ -114,6 +117,7 @@ class WorkflowScheduler:
                 enabled=enabled,
                 steps=steps_from_db,
                 created_by="system",
+                schedule_timezone=schedule_timezone,
             )
 
         version_id = active_version["id"]
@@ -241,3 +245,20 @@ async def _finalize_workflow_run(run_id: str, poll_interval: float = 5.0, max_po
 
 
 scheduler = WorkflowScheduler()
+
+
+def validate_schedule_timezone(tz: str) -> tuple[bool, str]:
+    if not tz or not isinstance(tz, str):
+        return False, "schedule_timezone must be a non-empty string"
+    stripped = tz.strip()
+    if not stripped:
+        return False, "schedule_timezone must be a non-empty string"
+
+    if "/" not in stripped and stripped.upper() not in {"UTC", "GMT"}:
+        return False, f"Invalid timezone: '{tz}'. Use an IANA name such as 'America/New_York' or 'UTC'."
+
+    try:
+        ZoneInfo(stripped)
+        return True, ""
+    except (ZoneInfoNotFoundError, ValueError):
+        return False, f"Invalid timezone: '{tz}'. Use an IANA name such as 'America/New_York' or 'UTC'."
