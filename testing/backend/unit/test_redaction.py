@@ -565,3 +565,20 @@ class TestRedactionEdgeCases:
         assert REDACTED in result
         assert "abcdefgh12345678" not in result
         assert "ghijklmnopqrstuvwx" not in result
+
+
+class TestVaultReferenceRedaction:
+    def test_vault_reference_colon(self):
+        text = "vault:my_secret_name"
+        result = redact(text)
+        assert result == "vault:[REDACTED]"
+
+    def test_vault_reference_slash(self):
+        text = "vault://my_other_secret"
+        result = redact(text)
+        assert result == "vault://[REDACTED]"
+
+    def test_vault_reference_case_insensitive(self):
+        text = "VAULT:secret-1"
+        result = redact(text)
+        assert result.upper() == "VAULT:[REDACTED]"

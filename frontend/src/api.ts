@@ -58,6 +58,8 @@ export interface ExecutionContext {
   evidence_level: 'minimal' | 'standard' | 'full'
 }
 
+export type ScanInputs = Record<string, unknown>
+
 export interface EvidenceRecord {
   type: string
   label?: string
@@ -565,9 +567,20 @@ export function getTaskDiff(taskId: string): Promise<ScanDiff> {
   return request<ScanDiff>(`/task/${taskId}/diff`)
 }
 
-export function startTask(
+export function previewCommand(
   plugin_id: string,
   inputs: Record<string, unknown>,
+): Promise<{ command: string[] }> {
+  return request<{ command: string[] }>(`/plugin/${plugin_id}/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ inputs }),
+  })
+}
+
+export function startTask(
+  plugin_id: string,
+  inputs: ScanInputs,
   consent_granted: boolean,
   preset?: string,
   execution_context?: Partial<ExecutionContext>,
@@ -626,7 +639,7 @@ export function streamTask(taskId: string, onEvent: (ev: MessageEvent) => void) 
 }
 export interface WorkflowStep {
   plugin_id: string
-  inputs: Record<string, unknown>
+  inputs: ScanInputs
   preset?: string
   execution_context?: ExecutionContext
 }

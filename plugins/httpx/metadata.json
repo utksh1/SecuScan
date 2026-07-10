@@ -55,5 +55,8 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "6570954f2b2cae9ce3a2281445f5c4c46533ada5cd6b5c35859d592523d517e9"
+  "capabilities": [
+    "network"
+  ],
+  "checksum": "dc1b67fd28091d2258a758d01abb692edee19904d50a0ac00820d74cb58759c3"
 }

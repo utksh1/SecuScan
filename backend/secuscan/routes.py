@@ -297,6 +297,40 @@ async def get_plugin_schema(plugin_id: str):
         raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
 
 
+@router.post("/plugin/{plugin_id}/preview")
+async def get_plugin_preview(plugin_id: str, payload: Dict[str, Any] = Body(...)):
+    """Generate a preview of the command to be executed by a plugin, with sensitive values redacted."""
+    plugin_manager = await get_plugin_manager_for_request()
+    plugin = plugin_manager.get_plugin(plugin_id)
+    if not plugin:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
+
+    inputs = payload.get("inputs", {})
+
+    try:
+        # Check missing required fields
+        missing_fields = []
+        for field in plugin.fields:
+            if field.required:
+                val = inputs.get(field.id)
+                if val is None or val == "":
+                    missing_fields.append(field.label)
+
+        if missing_fields:
+            raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
+
+        command_args = plugin_manager.build_command(plugin_id, inputs)
+        if not command_args:
+            raise ValueError("Failed to build command")
+
+        redacted_args = [redact(arg) for arg in command_args]
+        return {
+            "command": redacted_args
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.get("/presets", dependencies=[Depends(read_heavy_limiter)])
 async def get_all_presets():
     """Get all plugin presets"""

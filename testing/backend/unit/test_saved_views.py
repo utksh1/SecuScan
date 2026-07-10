@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from backend.secuscan.saved_views import saved_views_router
 from backend.secuscan.database import Database, get_db
 import backend.secuscan.database as _db_module
+from pathlib import Path
 
 
 # ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -442,3 +443,70 @@ class TestSavedViewCreateValidateFilterJson:
             SavedViewCreate(name="v", filter_json="not json")
         # pydantic raises an error for invalid JSON in field_validator
         assert "validation error" in str(exc_info.value).lower()
+
+@pytest.mark.asyncio
+async def test_migrations_are_idempotent(tmp_path):
+    db_file = tmp_path / "idempotent.db"
+
+    db = Database(str(db_file))
+    await db.connect()
+    await db.disconnect()
+
+    db = Database(str(db_file))
+    await db.connect()
+
+    rows = await db.fetchall(
+        "SELECT COUNT(*) AS count FROM schema_migrations"
+    )
+
+    migration_count = len(
+        list((Path(_db_module.__file__).parent / "migrations").glob("*.sql"))
+    )
+
+    assert rows[0]["count"] == migration_count
+
+    await db.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_schema_version_is_recorded(tmp_path):
+    db_file = tmp_path / "schema.db"
+
+    db = Database(str(db_file))
+    await db.connect()
+
+    rows = await db.fetchall(
+        "SELECT version FROM schema_migrations ORDER BY version"
+    )
+
+    assert rows
+
+    assert any(
+        row["version"] == "001_add_performance_indexes.sql"
+        for row in rows
+    )
+
+    await db.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_database_newer_than_application_fails(tmp_path):
+    db_file = tmp_path / "future.db"
+
+    db = Database(str(db_file))
+    await db.connect()
+
+    await db.execute(
+        """
+        INSERT INTO schema_migrations(version)
+        VALUES (?)
+        """,
+        ("999_future.sql",),
+    )
+
+    await db.disconnect()
+
+    db = Database(str(db_file))
+
+    with pytest.raises(RuntimeError, match="Database schema is newer"):
+        await db.connect()

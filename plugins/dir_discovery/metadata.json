@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udcc2",
+  "icon": "📂",
   "engine": {
     "type": "cli",
     "binary": "ffuf"
@@ -185,5 +185,10 @@
     "system_packages": []
   },
   "docker_image": "secuscan/ffuf",
-  "checksum": "72f7b28148a646d9009d48dbf34d1fa89c7088037cd51d3e5fde2790d54b4928"
+  "capabilities": [
+    "network",
+    "intrusive",
+    "filesystem"
+  ],
+  "checksum": "dcaed043062f3d152139f7aec4a5a8fafa90fc142b52f5d9ac123b0f1686ee8b"
 }

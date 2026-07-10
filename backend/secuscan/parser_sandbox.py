@@ -12,6 +12,11 @@ parser in a fresh, short-lived subprocess so that:
     are stripped from the child process.
   - Execution is bounded by a configurable timeout.
   - Output size is capped so a runaway parser cannot exhaust backend memory.
+  - On Linux with unprivileged user namespaces available, the child runs in
+    a fresh network namespace with no interfaces configured, so it cannot
+    open outbound connections to exfiltrate scan data. See
+    "Network isolation for the parser subprocess" below for the fallback
+    behaviour on hosts where this isn't available.
 
 Communication contract
 ----------------------
@@ -36,7 +41,9 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import re
+import shutil
 import sys
 import subprocess
 import string
@@ -142,6 +149,85 @@ def _sanitised_env() -> Dict[str, str]:
     return {k: v for k, v in os.environ.items() if k in keep_keys}
 
 
+# ---------------------------------------------------------------------------
+# Network isolation for the parser subprocess
+# ---------------------------------------------------------------------------
+# Issue #1620: the parser subprocess previously inherited the parent's full
+# network stack. A malicious parser.py could exfiltrate scan findings
+# (internal host topology, open ports, service versions) to an attacker-
+# controlled server over a plain socket, with no control here to stop it.
+#
+# `unshare --user --net` puts the child in a fresh, unprivileged user
+# namespace together with a fresh network namespace that has no interfaces
+# configured except a loopback that is down by default -- the parser cannot
+# reach any host, including localhost. Parsers only ever transform text
+# already captured from the scanner (see the module docstring); they have no
+# legitimate need for network access at all, so full denial is the correct
+# posture rather than an allowlist.
+#
+# `unshare --net` alone requires CAP_SYS_ADMIN; combining it with `--user`
+# lets an unprivileged caller create both namespaces together and acquire
+# that capability inside its own new user namespace, which is what makes
+# this usable without running the backend as root. This is Linux-only
+# (util-linux); on other platforms, or if the capability probe fails for any
+# reason (restrictive container runtime, disabled user namespaces, etc.), we
+# fail open with a single loud warning rather than refusing to run plugins
+# entirely -- see docs/plugins/plugin-security-checklist.md for the broader
+# threat model this sits within.
+_unshare_capability_checked = False
+_unshare_available = False
+_unshare_warning_logged = False
+
+
+def _unshare_net_supported() -> bool:
+    """Probe once whether `unshare --user --net` works on this host, caching the result."""
+    global _unshare_capability_checked, _unshare_available
+
+    if _unshare_capability_checked:
+        return _unshare_available
+
+    _unshare_capability_checked = True
+
+    if platform.system() != "Linux":
+        return False
+
+    unshare_path = shutil.which("unshare")
+    if not unshare_path:
+        return False
+
+    try:
+        probe = subprocess.run(
+            [unshare_path, "--user", "--net", "--", "true"],
+            capture_output=True,
+            timeout=5,
+        )
+        _unshare_available = probe.returncode == 0
+    except Exception:
+        _unshare_available = False
+
+    return _unshare_available
+
+
+def _sandbox_argv(python_executable: str, bootstrap_code: str) -> list[str]:
+    """Build the argv for the parser subprocess, network-isolated when possible."""
+    base_argv = [python_executable, "-c", bootstrap_code]
+
+    if _unshare_net_supported():
+        return ["unshare", "--user", "--net", "--"] + base_argv
+
+    global _unshare_warning_logged
+    if not _unshare_warning_logged:
+        _unshare_warning_logged = True
+        logger.warning(
+            "[security] Plugin parser network isolation unavailable on this host "
+            "('unshare --user --net' unsupported); parser subprocesses are NOT "
+            "network-isolated. A malicious plugin parser could exfiltrate scan "
+            "data over the network. This is expected on non-Linux hosts; on "
+            "Linux, verify user namespaces are enabled and util-linux is installed."
+        )
+    return base_argv
+
+
 def run_parser_in_sandbox(
     parser_path: Path,
     plugin_id: str,
@@ -189,7 +275,7 @@ def run_parser_in_sandbox(
     _MAX_STDERR_BYTES = 65536
 
     proc = subprocess.Popen(
-        [sys.executable, "-c", bootstrap],
+        _sandbox_argv(sys.executable, bootstrap),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
