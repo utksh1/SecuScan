@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     raw_output_dir: str = str(PROJECT_ROOT / "data" / "raw")
     reports_dir: str = str(PROJECT_ROOT / "data" / "reports")
     plugins_dir: str = str(PROJECT_ROOT.parent / "plugins")
+    disabled_plugins: List[str] = []
     wordlists_dir: str = str(PROJECT_ROOT / "wordlists")
     knowledgebase_dir: str = str(PROJECT_ROOT / "data" / "knowledgebase")
 
@@ -177,6 +178,10 @@ class Settings(BaseSettings):
 
     # Slack Webhook Configuration
     slack_webhook_url: Optional[str] = None
+
+    # Public base URL used to build absolute links (e.g. report links) in
+    # outbound notifications. Leave blank to emit relative paths.
+    public_base_url: str = ""
 
     class Config:
         env_prefix = "SECUSCAN_"

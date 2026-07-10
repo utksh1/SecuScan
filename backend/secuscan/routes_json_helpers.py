@@ -77,6 +77,17 @@ def deserialize_finding_rows(rows: List[Dict]) -> List[Dict[str, Any]]:
             finding["references"] = finding.pop("references_json")
         if "corroborating_sources_json" in finding:
             finding["corroborating_sources"] = finding.pop("corroborating_sources_json")
+
+        # Expose remediation safety fields at the top level
+        metadata = finding.get("metadata")
+        if isinstance(metadata, dict):
+            finding["safe_to_apply"] = metadata.get("safe_to_apply")
+            finding["compatible_range"] = metadata.get("compatible_range")
+            finding["alternatives"] = metadata.get("alternatives")
+        else:
+            finding["safe_to_apply"] = None
+            finding["compatible_range"] = None
+            finding["alternatives"] = None
     return findings
 
 
@@ -172,3 +183,26 @@ def _serialize_workflow(
         "last_run_at": row.get("last_run_at"),
         "queued_task_ids": queued_task_ids or [],
     }
+
+
+# ---------------------------------------------------------------------------
+# SSE output helpers extracted from routes.py
+# ---------------------------------------------------------------------------
+
+# Default chunk size for SSE output streaming (64 KB)
+_SSE_CHUNK_SIZE = 64 * 1024
+
+
+def iter_raw_output_chunks(path: str, chunk_size: int = _SSE_CHUNK_SIZE):
+    """Yield raw output from *path* in bounded chunks.
+
+    Each yielded value is a string of at most *chunk_size* bytes.
+    An empty or short file produces fewer chunks. Unicode is decoded
+    with errors='replace' to avoid crashing on malformed bytes.
+    """
+    with open(path, "r", encoding="utf-8", errors="replace") as output_file:
+        while True:
+            chunk = output_file.read(chunk_size)
+            if not chunk:
+                break
+            yield chunk

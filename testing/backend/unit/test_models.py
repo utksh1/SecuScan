@@ -37,6 +37,7 @@ from backend.secuscan.models import (
     ErrorResponse,
     HealthResponse,
     SafetyLevel,
+    PluginListResponse,
 )
 
 
@@ -428,3 +429,56 @@ def test_safety_level_valid_values():
 def test_safety_level_invalid_raises():
     with pytest.raises(ValueError):
         SafetyLevel("unknown")
+
+# ---------------------------------------------------------------------------
+# PluginListResponse model
+# ---------------------------------------------------------------------------
+
+
+class TestPluginListResponse:
+    def test_required_fields(self):
+        """Both required fields must be provided."""
+        resp = PluginListResponse(
+            plugins=[{"id": "nmap", "name": "Nmap"}],
+            total=1,
+        )
+        assert len(resp.plugins) == 1
+        assert resp.total == 1
+
+    def test_total_reflects_plugins_length(self):
+        """total should reflect the plugins list length."""
+        plugins = [
+            {"id": "nmap", "name": "Nmap"},
+            {"id": "nuclei", "name": "Nuclei"},
+        ]
+        resp = PluginListResponse(plugins=plugins, total=2)
+        assert resp.total == len(resp.plugins) == 2
+
+    def test_empty_plugins_list(self):
+        """Empty plugins list is valid."""
+        resp = PluginListResponse(plugins=[], total=0)
+        assert resp.plugins == []
+        assert resp.total == 0
+
+    def test_plugins_is_list_of_dicts(self):
+        """plugins must be a list of dicts."""
+        resp = PluginListResponse(
+            plugins=[
+                {"id": "nmap", "name": "Nmap", "version": "1.0"},
+                {"id": "nikto", "name": "Nikto"},
+            ],
+            total=2,
+        )
+        assert all(isinstance(p, dict) for p in resp.plugins)
+        assert resp.plugins[0]["id"] == "nmap"
+        assert resp.plugins[1]["name"] == "Nikto"
+
+    def test_total_can_be_zero(self):
+        """total can be explicitly set to 0."""
+        resp = PluginListResponse(plugins=[], total=0)
+        assert resp.total == 0
+
+    def test_total_accepts_any_int(self):
+        """total accepts any non-negative integer."""
+        resp = PluginListResponse(plugins=[], total=999)
+        assert resp.total == 999

@@ -535,3 +535,30 @@ describe('Findings — virtualizer scrolling', () => {
     expect(mockScrollToIndex).not.toHaveBeenCalled()
   })
 })
+
+it('scrolls to the correct fresh index after sort order changes then selection changes', async () => {
+    const findings = [
+      makeFinding({ id: 'f1', title: 'Finding Alpha', severity: 'critical', discovered_at: '2024-01-01T00:00:00Z' }),
+      makeFinding({ id: 'f2', title: 'Finding Beta', severity: 'high', discovered_at: '2024-01-03T00:00:00Z' }),
+      makeFinding({ id: 'f3', title: 'Finding Gamma', severity: 'medium', discovered_at: '2024-01-02T00:00:00Z' }),
+    ]
+    vi.mocked(getFindings).mockResolvedValue({ findings })
+
+    render(<Findings />)
+    await waitFor(() => expect(screen.queryByText('Synchronizing findings feed...')).not.toBeInTheDocument())
+
+    // Switch to "newest" sort — new order is Beta(0), Gamma(1), Alpha(2)
+    const selects = screen.getAllByRole('combobox')
+    const sortSelect = selects.find((s) =>
+      Array.from(s.querySelectorAll('option')).some((o) => /Newest First/i.test(o.textContent || '')),
+    )
+    await userEvent.selectOptions(sortSelect!, 'newest')
+
+    mockScrollToIndex.mockClear()
+
+    // Now select Gamma — should scroll to its *post-sort* index (1), not a stale pre-sort index
+    const gammaOption = await screen.findByRole('option', { name: /Finding Gamma/i })
+    await userEvent.click(gammaOption)
+
+    expect(mockScrollToIndex).toHaveBeenCalledWith(1, { align: 'auto', behavior: 'smooth' })
+  })

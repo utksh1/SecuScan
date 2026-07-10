@@ -2,6 +2,7 @@ import { render, act, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import Scans from '../../../src/pages/Scans';
+import { ToastProvider } from '../../../src/components/ToastContext'
 
 vi.mock('../../../src/api', () => ({
   API_BASE: 'http://localhost',
@@ -64,8 +65,10 @@ async function tickTime(ms: number) {
 function renderScans() {
   return render(
     <MemoryRouter>
-      <Scans />
-    </MemoryRouter>,
+      <ToastProvider>
+        <Scans />
+      </ToastProvider>
+    </MemoryRouter>
   );
 }
 

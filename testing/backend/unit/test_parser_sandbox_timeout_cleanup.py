@@ -15,6 +15,7 @@ from __future__ import annotations
 import subprocess
 import pytest
 import time
+import sys
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -34,8 +35,8 @@ class TestParserSandboxTimeoutCleanup:
 
         with pytest.raises(subprocess.TimeoutExpired):
             proc = subprocess.Popen(
-                ["python3", "-c", _BOOTSTRAP_TEMPLATE.format(
-                    parser_path=str(parser),
+                ["python3", "-c", _BOOTSTRAP_TEMPLATE.safe_substitute(
+                    parser_path_repr=repr(str(parser)),
                     max_input_bytes=1024,
                 )],
                 stdin=subprocess.PIPE,
@@ -93,9 +94,9 @@ class TestParserSandboxTimeoutCleanup:
         with pytest.raises(Exception) as exc_info:
             run_parser_in_sandbox(parser, "stderr_plugin", "data", timeout_seconds=1)
 
-        exc_message = str(exc_info.value)
-        assert "early error" in exc_message
+        assert "early error" in exc_info.value.stderr_excerpt
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="resource module and /proc/pid/fd are not available on Windows")
     def test_multiple_consecutive_timeouts_do_not_leak_resources(self, tmp_path):
         """Running multiple timeouts in sequence must not accumulate open file handles."""
         from backend.secuscan.parser_sandbox import run_parser_in_sandbox

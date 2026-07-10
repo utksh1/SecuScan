@@ -414,17 +414,24 @@ def test_resolve_and_validate_target_rejects_blocked_port(monkeypatch):
 
 def test_resolve_and_validate_target_rejects_private_ip(monkeypatch):
     from backend.secuscan.validation import resolve_and_validate_target
-    from backend.secuscan.config import settings
-    monkeypatch.setattr(settings, "notification_blocked_ip_ranges", ["10.0.0.0/8"])
+
+    monkeypatch.setattr(
+        settings,
+        "notification_blocked_ip_ranges",
+        ["10.0.0.0/8"],
+    )
 
     def fake_getaddrinfo(*args, **kwargs):
         return [(socket.AF_INET, None, None, None, ("10.0.0.5", 80))]
 
-    import socket
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
-    ok, err = resolve_and_validate_target("http://internal.example.com/hook")
+
+    ok, err = resolve_and_validate_target(
+        "http://internal.example.com/hook"
+    )
+
     assert ok is False
-    assert "blocked" in err
+    assert "blocked" in err.lower()
 
 
 def test_resolve_and_validate_target_allows_public_ip(monkeypatch):
@@ -433,9 +440,12 @@ def test_resolve_and_validate_target_allows_public_ip(monkeypatch):
     def fake_getaddrinfo(*args, **kwargs):
         return [(socket.AF_INET, None, None, None, ("93.184.216.34", 80))]
 
-    import socket
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
-    ok, err = resolve_and_validate_target("http://example.com/hook")
+
+    ok, err = resolve_and_validate_target(
+        "http://example.com/hook"
+    )
+
     assert ok is True
     assert err == ""
 

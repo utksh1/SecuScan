@@ -16,13 +16,18 @@
   "supports_session_reuse": true,
   "engine": {
     "type": "cli",
-    "binary": "python3"
+    "binary": "docker"
   },
   "command_template": [
-    "python3",
-    "-c",
-    "import sys;print('ZAP connector placeholder scan');print('target='+sys.argv[1]);print('mode=dast')",
-    "{target}"
+    "docker",
+    "run",
+    "--rm",
+    "ghcr.io/zaproxy/zaproxy:stable",
+    "zap-baseline.py",
+    "-t",
+    "{target}",
+    "-m",
+    "5"
   ],
   "fields": [
     {
@@ -62,10 +67,10 @@
   ],
   "dependencies": {
     "binaries": [
-      "python3"
+      "docker"
     ],
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "6546eca4549d40f188c84e9be46b7e992aa6a025d25a9e7ba1e2420387108819"
+  "checksum": "4d7cd9e4bed793703811204fd22a5e0b511d8880750f07a593301a7eae5732a0"
 }
