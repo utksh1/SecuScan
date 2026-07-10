@@ -1465,7 +1465,7 @@ async def test_execute_command_redacts_secrets_before_broadcast():
 
     mock_stdout = AsyncMock()
     mock_stdout.readline = mock_readline().__anext__
-    mock_stdout.at_eof = AsyncMock(side_effect=[False, False, False, True])
+    mock_stdout.at_eof = MagicMock(side_effect=[False, False, False, True])
 
     with patch.object(executor, "_process_pids", {}):
         process = AsyncMock()
@@ -1483,14 +1483,16 @@ async def test_execute_command_redacts_secrets_before_broadcast():
         events.append(queue.get_nowait())
 
     output_events = [e for e in events if e["type"] == "output"]
-    assert len(output_events) == 2
+    assert len(output_events) == 3
 
     assert "[REDACTED]" in output_events[0]["data"]
     assert "eyJhbGciOiJIUzI1NiJ9.secret123" not in output_events[0]["data"]
     assert "Authorization: Bearer" in output_events[0]["data"]
 
-    assert "[REDACTED]" in output_events[1]["data"]
-    assert "supersecretkey12345" not in output_events[1]["data"]
+    assert "port 80 is open" in output_events[1]["data"]
+
+    assert "[REDACTED]" in output_events[2]["data"]
+    assert "supersecretkey12345" not in output_events[2]["data"]
 
     assert "[REDACTED]" in output
     assert "eyJhbGciOiJIUzI1NiJ9.secret123" not in output
