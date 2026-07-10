@@ -168,6 +168,16 @@ class Settings(BaseSettings):
     ai_summary_base_url: str = ""
     ai_summary_model: str = "gpt-4o-mini"
 
+    # AI Triage Engine — LLM-assisted false positive reduction (opt-in, off by default)
+    triage_engine_enabled: bool = False
+    triage_engine_api_key: str = ""
+    triage_engine_base_url: str = ""
+    triage_engine_model: str = "gpt-4o-mini"
+    # Findings at/above this confidence score already skip LLM triage (already trusted).
+    triage_engine_min_confidence_to_skip: float = 0.9
+    # Only these finding categories are eligible for LLM triage by default (AST/pattern-based SAST).
+    triage_engine_eligible_categories: List[str] = ["code security", "static analysis", "sast"]
+
     # SMTP Configuration for Email Notifications
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587

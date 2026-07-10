@@ -238,6 +238,12 @@ class Finding(BaseModel):
     safe_to_apply: Optional[bool] = None
     compatible_range: Optional[str] = None
     alternatives: Optional[List[str]] = None
+    # AI Triage Engine (opt-in) — set when triage_engine_enabled and the
+    # finding was eligible (see triage_engine.is_eligible_for_triage).
+    triage_verdict: Optional[str] = None
+    triage_confidence: Optional[float] = None
+    triage_reasoning: Optional[str] = None
+    triage_remediation: Optional[str] = None
 
 
 class TaskResult(BaseModel):
