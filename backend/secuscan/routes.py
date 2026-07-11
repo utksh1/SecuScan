@@ -97,6 +97,7 @@ from .models import (
     NotificationChannelType, TaskStatus,
     ExecutionContext, WorkflowStep, ValidationMode, EvidenceLevel,
     NotificationDiagnosticsResponse,
+    ScanWebhookSettingsRequest, ScanWebhookSettingsResponse,
 )
 from .config import settings
 from .database import get_db
@@ -296,6 +297,40 @@ async def get_plugin_schema(plugin_id: str):
         raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
 
 
+@router.post("/plugin/{plugin_id}/preview")
+async def get_plugin_preview(plugin_id: str, payload: Dict[str, Any] = Body(...)):
+    """Generate a preview of the command to be executed by a plugin, with sensitive values redacted."""
+    plugin_manager = await get_plugin_manager_for_request()
+    plugin = plugin_manager.get_plugin(plugin_id)
+    if not plugin:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
+
+    inputs = payload.get("inputs", {})
+
+    try:
+        # Check missing required fields
+        missing_fields = []
+        for field in plugin.fields:
+            if field.required:
+                val = inputs.get(field.id)
+                if val is None or val == "":
+                    missing_fields.append(field.label)
+
+        if missing_fields:
+            raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
+
+        command_args = plugin_manager.build_command(plugin_id, inputs)
+        if not command_args:
+            raise ValueError("Failed to build command")
+
+        redacted_args = [redact(arg) for arg in command_args]
+        return {
+            "command": redacted_args
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.get("/presets", dependencies=[Depends(read_heavy_limiter)])
 async def get_all_presets():
     """Get all plugin presets"""
@@ -323,9 +358,18 @@ async def start_task(
     if not ok:
         raise HTTPException(status_code=status_code, detail=error_msg)
 
+    db = await get_db()
+
     # Validate consent
     if settings.require_consent and not request.consent_granted:
         logger.warning(f"Task start failed: Consent not granted. Request: {request}")
+        await db.log_audit(
+            "scan_blocked_consent",
+            f"Scan start blocked: consent not granted for plugin {request.plugin_id}",
+            severity="warning",
+            context={"plugin_id": request.plugin_id},
+            plugin_id=request.plugin_id,
+        )
         raise HTTPException(
             status_code=400,
             detail="Consent required. You must acknowledge the legal notice."
@@ -348,7 +392,6 @@ async def start_task(
         logger.warning("Task start failed: %s", preset_error)
         raise HTTPException(status_code=400, detail=preset_error)
 
-    db = await get_db()
     target_policy = await get_target_policy(db, owner, execution_context.get("target_policy_id"))
     credential_profile = await get_credential_profile(db, owner, execution_context.get("credential_profile_id"))
     session_profile = await get_session_profile(db, owner, execution_context.get("session_profile_id"))
@@ -422,6 +465,18 @@ async def start_task(
 
             if not is_valid:
                 logger.warning(f"Task start failed: Target validation failed for '{target}': {error_msg}")
+                await db.log_audit(
+                    "scan_blocked_target_validation",
+                    f"Scan start blocked: target validation failed for plugin {request.plugin_id}",
+                    severity="warning",
+                    context={
+                        "plugin_id": request.plugin_id,
+                        "target": target_str,
+                        "safe_mode": safe_mode,
+                        "reason": error_msg,
+                    },
+                    plugin_id=request.plugin_id,
+                )
                 raise HTTPException(status_code=400, detail=error_msg)
 
     # Check rate limits per (client, plugin) so one client cannot exhaust
@@ -2367,6 +2422,54 @@ async def delete_notification_rule(rule_id: str, owner: str = Depends(get_curren
     return {"rule_id": rule_id, "deleted": True}
 
 
+@router.get("/settings/webhook")
+async def get_scan_webhook_settings(owner: str = Depends(get_current_owner)):
+    """Return the configured scan-completion webhook for the current owner.
+
+    Fires on scan completion/failure (issue #1615) — distinct from the
+    per-finding severity-threshold rules under /notifications/rules.
+    """
+    db = await get_db()
+    row = await db.fetchone(
+        "SELECT * FROM scan_webhook_settings WHERE owner_id = ?",
+        (owner,),
+    )
+    if not row:
+        return {"webhook_url": None, "platform": None, "configured": False, "updated_at": None}
+    webhook_url = row["webhook_url"]
+    return {
+        "webhook_url": webhook_url,
+        "platform": notification_service.detect_webhook_platform(webhook_url),
+        "configured": True,
+        "updated_at": row.get("updated_at"),
+    }
+
+
+@router.put("/settings/webhook")
+async def upsert_scan_webhook_settings(
+    payload: ScanWebhookSettingsRequest,
+    owner: str = Depends(get_current_owner),
+):
+    """Create or update the scan-completion webhook URL for the current owner."""
+    target = _validate_notification_target(NotificationChannelType.WEBHOOK, payload.webhook_url)
+    db = await get_db()
+    row = await notification_service.set_scan_webhook_url(db, owner, target)
+    return {
+        "webhook_url": row["webhook_url"],
+        "platform": notification_service.detect_webhook_platform(row["webhook_url"]),
+        "configured": True,
+        "updated_at": row.get("updated_at"),
+    }
+
+
+@router.delete("/settings/webhook")
+async def delete_scan_webhook_settings(owner: str = Depends(get_current_owner)):
+    """Remove the scan-completion webhook URL for the current owner."""
+    db = await get_db()
+    deleted = await notification_service.delete_scan_webhook_url(db, owner)
+    return {"deleted": deleted}
+
+
 @router.get("/notifications/history", dependencies=[Depends(read_heavy_limiter)])
 async def list_notification_history(
     rule_id: Optional[str] = None,
@@ -2466,6 +2569,9 @@ async def get_finding_details(finding_id: str, owner: str = Depends(get_current_
         "asset_exposure": finding_row.get("asset_exposure"),
         "risk_score": finding_row.get("risk_score"),
         "risk_factors": risk_factors,
+        "safe_to_apply": metadata.get("safe_to_apply"),
+        "compatible_range": metadata.get("compatible_range"),
+        "alternatives": metadata.get("alternatives"),
     }
 
 

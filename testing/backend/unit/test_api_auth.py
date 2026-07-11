@@ -6,6 +6,7 @@ import asyncio
 import tempfile
 from pathlib import Path
 
+import sys
 import pytest
 from fastapi.testclient import TestClient
 
@@ -37,6 +38,7 @@ class TestApiKeyInit:
         k2 = auth_module.init_api_key(str(tmp_path))
         assert k1 == k2
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX file permission bits are not supported on Windows")
     def test_key_file_permissions(self, tmp_path):
         auth_module.init_api_key(str(tmp_path))
         mode = (tmp_path / ".api_key").stat().st_mode & 0o777

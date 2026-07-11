@@ -41,9 +41,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Check formatting hygiene on changed files
-        run: |
-          git fetch origin "${{ github.base_ref }}" --depth=1
-          git diff --check "origin/${{ github.base_ref }}"...HEAD
+        run: git diff --check "${{ github.event.pull_request.base.sha }}"...HEAD
 
   issue-template-label-validation:
     runs-on: ubuntu-latest

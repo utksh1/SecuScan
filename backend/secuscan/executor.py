@@ -562,6 +562,13 @@ class TaskExecutor:
         if not command:
             raise ValueError("Failed to build command")
 
+        from .validation import validate_command_network_egress
+        cmd_valid, cmd_err = validate_command_network_egress(
+            command, safe_mode, plugin_id, task_id
+        )
+        if not cmd_valid:
+            raise ValueError(f"Command network egress validation failed: {cmd_err}")
+
         # Apply Docker Sandboxing if enabled
         if settings.docker_enabled:
             await self._ensure_docker_network()
@@ -814,6 +821,7 @@ class TaskExecutor:
                 },
                 task_id=task_id,
             )
+            await self._dispatch_task_notifications(db, task_id)
 
         except Exception as e:
             logger.error(f"Task {task_id} failed: {e}", exc_info=True)
@@ -847,6 +855,7 @@ class TaskExecutor:
                 context={"task_id": task_id, "error": safe_error},
                 task_id=task_id
             )
+            await self._dispatch_task_notifications(db, task_id)
         finally:
             self.running_tasks.pop(task_id, None)
             self._process_pids.pop(task_id, None)
@@ -1278,6 +1287,33 @@ class TaskExecutor:
             target=target,
             findings=[item for item in result.get("findings", []) if isinstance(item, dict)],
         )
+
+        try:
+            from .remediation import build_dependency_graph, validate_remediation
+            graph = build_dependency_graph(target)
+            validations = {}
+            for f in normalized_findings:
+                remediation_str = f.get("remediation", "")
+                if remediation_str:
+                    val_res = validate_remediation(remediation_str, graph)
+                    validations[id(f)] = val_res
+
+            for f in normalized_findings:
+                if id(f) in validations:
+                    val_res = validations[id(f)]
+                    f_metadata = f.setdefault("metadata", {})
+                    f_metadata["safe_to_apply"] = val_res["safe_to_apply"]
+                    f_metadata["compatible_range"] = val_res["compatible_range"]
+                    f_metadata["alternatives"] = val_res["alternatives"]
+        except Exception as e:
+            logger.warning(
+                "Remediation safety validation failed for task %s (plugin %s): %s. Skipping safety metadata enrichment.",
+                task_id,
+                plugin_id,
+                str(e),
+                exc_info=True,
+            )
+
         previous_findings = await self._load_previous_task_findings(
             db,
             owner_id=owner_id,
@@ -1313,6 +1349,7 @@ class TaskExecutor:
     ) -> Dict[str, Any]:
         u_id = str(uuid.uuid4()).replace("-", "")
         finding_id = f"finding:{task_id}:{u_id[:8]}"
+        finding_group_id = finding.get("finding_group_id")
 
         _validate_risk_fields(finding)
         exploitability = finding.get("exploitability")
@@ -1359,6 +1396,41 @@ class TaskExecutor:
                 asset_exposure, risk_score, risk_factors_json
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (owner_id, finding_group_id) DO UPDATE SET
+                task_id = EXCLUDED.task_id,
+                plugin_id = EXCLUDED.plugin_id,
+                title = EXCLUDED.title,
+                category = EXCLUDED.category,
+                severity = EXCLUDED.severity,
+                target = EXCLUDED.target,
+                description = EXCLUDED.description,
+                remediation = EXCLUDED.remediation,
+                proof = EXCLUDED.proof,
+                cvss = EXCLUDED.cvss,
+                cve = EXCLUDED.cve,
+                metadata_json = EXCLUDED.metadata_json,
+                discovered_at = EXCLUDED.discovered_at,
+                exploitability = EXCLUDED.exploitability,
+                confidence = EXCLUDED.confidence,
+                validated = EXCLUDED.validated,
+                validation_method = EXCLUDED.validation_method,
+                confidence_reason = EXCLUDED.confidence_reason,
+                finding_kind = EXCLUDED.finding_kind,
+                asset_id = EXCLUDED.asset_id,
+                last_seen_at = EXCLUDED.last_seen_at,
+                occurrence_count = COALESCE(findings.occurrence_count, 0) + EXCLUDED.occurrence_count,
+                corroborating_sources_json = EXCLUDED.corroborating_sources_json,
+                evidence_count = EXCLUDED.evidence_count,
+                analyst_status = EXCLUDED.analyst_status,
+                retest_status = EXCLUDED.retest_status,
+                evidence_json = EXCLUDED.evidence_json,
+                asset_refs_json = EXCLUDED.asset_refs_json,
+                service_fingerprint = EXCLUDED.service_fingerprint,
+                cpe = EXCLUDED.cpe,
+                references_json = EXCLUDED.references_json,
+                asset_exposure = EXCLUDED.asset_exposure,
+                risk_score = EXCLUDED.risk_score,
+                risk_factors_json = EXCLUDED.risk_factors_json
             """,
             (
                 finding_id,
@@ -1382,7 +1454,7 @@ class TaskExecutor:
                 finding.get("validation_method"),
                 finding.get("confidence_reason"),
                 str(finding.get("finding_kind") or "observation"),
-                finding.get("finding_group_id"),
+                finding_group_id,
                 finding.get("asset_id"),
                 first_seen_at,
                 last_seen_at,
@@ -1401,6 +1473,13 @@ class TaskExecutor:
                 json.dumps(risk_factors),
             ),
         )
+
+        row = await db.fetchone(
+            "SELECT id, occurrence_count FROM findings WHERE owner_id = ? AND finding_group_id = ?",
+            (owner_id, finding_group_id),
+        )
+        finding_id = row["id"] if row else finding_id
+        occurrence_count = int(row["occurrence_count"]) if row else occurrence_count
         return {
             **finding,
             "id": finding_id,
@@ -1432,25 +1511,25 @@ class TaskExecutor:
             result=parsed,
         )
         findings_data: List[Dict[str, Any]] = []
-        for finding in structured_result.get("findings", []):
-            findings_data.append(
-                await self._persist_finding(
-                    db,
-                    owner_id=owner_id,
-                    task_id=task_id,
-                    plugin_id=plugin_id,
-                    target=target,
-                    finding=finding,
-                )
-            )
-
-        structured_result["findings"] = findings_data
-        structured_result["severity_counts"] = self._build_severity_counts(findings_data)
-        structured_result["finding_groups"] = build_finding_groups(findings_data)
-        structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
-        structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
-
         async with db.transaction():
+            for finding in structured_result.get("findings", []):
+                findings_data.append(
+                    await self._persist_finding(
+                        db,
+                        owner_id=owner_id,
+                        task_id=task_id,
+                        plugin_id=plugin_id,
+                        target=target,
+                        finding=finding,
+                    )
+                )
+
+            structured_result["findings"] = findings_data
+            structured_result["severity_counts"] = self._build_severity_counts(findings_data)
+            structured_result["finding_groups"] = build_finding_groups(findings_data)
+            structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
+            structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
+
             await db.execute(
                 "UPDATE tasks SET structured_json = ? WHERE id = ?",
                 (json.dumps(structured_result), task_id)
@@ -1498,25 +1577,25 @@ class TaskExecutor:
             result=result,
         )
         findings_data: List[Dict[str, Any]] = []
-        for finding in structured_result.get("findings", []):
-            findings_data.append(
-                await self._persist_finding(
-                    db,
-                    owner_id=owner_id,
-                    task_id=task_id,
-                    plugin_id=plugin_id,
-                    target=target,
-                    finding=finding,
-                )
-            )
-
-        structured_result["findings"] = findings_data
-        structured_result["severity_counts"] = self._build_severity_counts(findings_data)
-        structured_result["finding_groups"] = build_finding_groups(findings_data)
-        structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
-        structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
-
         async with db.transaction():
+            for finding in structured_result.get("findings", []):
+                findings_data.append(
+                    await self._persist_finding(
+                        db,
+                        owner_id=owner_id,
+                        task_id=task_id,
+                        plugin_id=plugin_id,
+                        target=target,
+                        finding=finding,
+                    )
+                )
+
+            structured_result["findings"] = findings_data
+            structured_result["severity_counts"] = self._build_severity_counts(findings_data)
+            structured_result["finding_groups"] = build_finding_groups(findings_data)
+            structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
+            structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
+
             await db.execute(
                 "UPDATE tasks SET structured_json = ? WHERE id = ?",
                 (json.dumps(structured_result), task_id)
@@ -1873,9 +1952,15 @@ class TaskExecutor:
             if sent:
                 logger.info("Task %s: delivered %d notification(s)", task_id, sent)
 
-            # Send Slack Webhook notification for scan completion
+            # Send Slack Webhook notification for scan completion (legacy,
+            # single global webhook configured via env var).
             from .notification_service import process_slack_notification
             await process_slack_notification(db, task_id)
+
+            # Send the per-owner scan-completion webhook (Slack/Discord/
+            # generic JSON), configured from the Settings page (issue #1615).
+            from .notification_service import process_scan_completion_webhook
+            await process_scan_completion_webhook(db, task_id)
         except Exception as exc:
             logger.warning(
                 "Task %s: notification dispatch failed: %s",
