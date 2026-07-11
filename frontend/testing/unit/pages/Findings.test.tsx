@@ -329,7 +329,7 @@ describe('Findings — virtualized list', () => {
 
     const gridContainer = fieldContainer?.parentElement
     expect(gridContainer).toHaveClass('grid', 'gap-x-4', 'gap-y-5')
-    
+
     const filterContainer = gridContainer?.parentElement
     expect(filterContainer).toHaveClass('flex', 'flex-col', 'gap-6')
   })
