@@ -186,6 +186,24 @@ class PluginMetadataValidator:
                 continue
 
             if token.startswith("--if:"):
+                # --if tokens have the form:
+                #   --if:<condition>:then:<then_segment>[:else:<else_segment>]
+                # Extract then/else segments so placeholders inside them are
+                # still validated against declared field ids.
+                parts = token.split(":")
+                # Find 'then' and 'else' markers and collect the segments after them
+                segments_to_check: list[str] = []
+                for j, part in enumerate(parts):
+                    if part in ("then", "else") and j + 1 < len(parts):
+                        segments_to_check.append(parts[j + 1])
+                for segment in segments_to_check:
+                    for match in placeholder_re.finditer(segment):
+                        var_name = match.group(1)
+                        if known_field_ids and var_name not in known_field_ids:
+                            result.add(
+                                f"command_template[{i}]",
+                                f"Placeholder '{{{var_name}}}' inside --if token does not match any declared field id",
+                            )
                 continue
 
             for match in placeholder_re.finditer(token):
