@@ -16,6 +16,30 @@ function resolveApiBase(): string {
 
 export const API_BASE = resolveApiBase()
 
+import {
+  buildTaskStreamUrl as buildTaskStreamUrlForBase,
+  createReconnectingEventSource,
+  resolveSseUrl as resolveSseUrlForBase,
+  resolveWsBase as resolveWsBaseForBase,
+  resolveWsUrl as resolveWsUrlForBase,
+} from './utils/streamTransport'
+
+export function resolveSseUrl(pathOrUrl: string): string {
+  return resolveSseUrlForBase(API_BASE, pathOrUrl)
+}
+
+export function resolveWsBase(): string {
+  return resolveWsBaseForBase(API_BASE)
+}
+
+export function resolveWsUrl(path = '/ws/feed'): string {
+  return resolveWsUrlForBase(API_BASE, path)
+}
+
+export function buildTaskStreamUrl(taskId: string): string {
+  return buildTaskStreamUrlForBase(API_BASE, taskId)
+}
+
 export type PluginFieldType =
   | 'string'
   | 'text'
@@ -630,12 +654,63 @@ export function cancelTask(taskId: string) {
   })
 }
 
-export function streamTask(taskId: string, onEvent: (ev: MessageEvent) => void) {
-  const url = `${API_BASE}/task/${taskId}/stream`
-  const es = new EventSource(url, { withCredentials: true })
-  es.onmessage = onEvent
-  es.onerror = () => {}
-  return es
+export interface StreamTaskOptions {
+  maxReconnectAttempts?: number
+  reconnectBaseDelay?: number
+  maxReconnectDelay?: number
+  onReconnect?: (attempt: number, delayMs: number) => void
+}
+
+export function streamTask(
+  taskId: string,
+  onEvent: (ev: MessageEvent) => void,
+  options: StreamTaskOptions = {},
+) {
+  const url = buildTaskStreamUrl(taskId)
+  let activeSource: EventSource | null = null
+
+  const connection = createReconnectingEventSource(url, {
+    maxReconnectAttempts: options.maxReconnectAttempts ?? 5,
+    reconnectBaseDelay: options.reconnectBaseDelay ?? 1000,
+    maxReconnectDelay: options.maxReconnectDelay,
+    onReconnect: options.onReconnect,
+    withCredentials: true,
+    onInstance: (instance) => {
+      activeSource = instance as EventSource
+      activeSource.onmessage = onEvent
+    },
+  })
+
+  return {
+    get url() {
+      return url
+    },
+    get readyState() {
+      return activeSource?.readyState ?? EventSource.CLOSED
+    },
+    close() {
+      connection.close()
+      activeSource = null
+    },
+    addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+      activeSource?.addEventListener(type, listener)
+    },
+    removeEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+      activeSource?.removeEventListener(type, listener)
+    },
+    dispatchEvent(event: Event) {
+      return activeSource?.dispatchEvent(event) ?? false
+    },
+    set onmessage(handler: ((this: EventSource, ev: MessageEvent) => unknown) | null) {
+      if (activeSource) activeSource.onmessage = handler
+    },
+    set onerror(handler: ((this: EventSource, ev: Event) => unknown) | null) {
+      if (activeSource) activeSource.onerror = handler
+    },
+    set onopen(handler: ((this: EventSource, ev: Event) => unknown) | null) {
+      if (activeSource) activeSource.onopen = handler
+    },
+  }
 }
 export interface WorkflowStep {
   plugin_id: string

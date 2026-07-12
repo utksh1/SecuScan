@@ -4,7 +4,7 @@ import React from 'react'
 import { useTaskSubscription } from '../../../src/hooks/useTaskSubscription'
 
 vi.mock('../../../src/api', () => ({
-  API_BASE: 'http://localhost',
+  buildTaskStreamUrl: (taskId: string) => `http://localhost/task/${taskId}/stream`,
   getTaskStatus: vi.fn().mockResolvedValue({ status: 'running' }),
 }))
 
