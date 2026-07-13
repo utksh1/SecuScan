@@ -273,7 +273,7 @@ def _fingerprint_score(finding: Dict[str, Any]) -> tuple[float, str]:
         or ("validated" if finding.get("validated") else "none")
     ).lower()
     mapping = {"validated": 1.0, "exact": 0.95, "strong_fuzzy": 0.8, "fuzzy": 0.7, "family": 0.45, "none": 0.25}
-    return mapping.get(match_strength, 0.35), match_strength
+    return mapping.get(match_strength, 0.0), match_strength
 
 
 def _source_quality(sources: Iterable[str]) -> float:
