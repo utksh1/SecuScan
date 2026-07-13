@@ -377,6 +377,40 @@ class TestEnvironmentSanitisation:
         env = _sanitised_env()
         assert "PATH" in env
 
+    def test_injected_pythonpath_cannot_be_imported(self, tmp_path):
+        """Regression for the sandbox-escape vector (issue #1804).
+
+        A caller-controlled PYTHONPATH must NOT let the parser import modules
+        from an attacker-chosen directory. We plant an ``evilmod`` on PYTHONPATH
+        and confirm the sandboxed parser cannot import it.
+        """
+        evil_dir = tmp_path / "attacker"
+        evil_dir.mkdir()
+        (evil_dir / "evilmod.py").write_text("PWNED = True\n")
+
+        p = _write_parser(
+            tmp_path,
+            """\
+            import evilmod
+            def parse(output):
+                return {"pwned": evilmod.PWNED}
+            """,
+        )
+
+        prev = os.environ.get("PYTHONPATH")
+        os.environ["PYTHONPATH"] = str(evil_dir)
+        try:
+            with pytest.raises(ParserSandboxError) as exc_info:
+                run_parser_in_sandbox(p, "escape_plugin", "data")
+        finally:
+            if prev is None:
+                os.environ.pop("PYTHONPATH", None)
+            else:
+                os.environ["PYTHONPATH"] = prev
+
+        # The failure must be the blocked import, not some unrelated error.
+        assert "evilmod" in exc_info.value.stderr_excerpt
+
 
 # ---------------------------------------------------------------------------
 # ParserSandboxError

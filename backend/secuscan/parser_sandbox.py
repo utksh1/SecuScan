@@ -10,6 +10,12 @@ parser in a fresh, short-lived subprocess so that:
     other in-process state.
   - Environment variables (which may contain SECUSCAN_VAULT_KEY, API keys, etc.)
     are stripped from the child process.
+  - The child's import path is locked down: neither PYTHONPATH nor HOME is
+    inherited, and user-site / current-directory imports are disabled, so a
+    caller cannot point the "sandboxed" interpreter at an attacker-controlled
+    directory and have the parser import arbitrary modules.
+  - When the backend runs as root, the parser child drops to an unprivileged
+    user before it executes, so untrusted parser code never runs as root.
   - Execution is bounded by a configurable timeout.
   - Output size is capped so a runaway parser cannot exhaust backend memory.
   - On Linux with unprivileged user namespaces available, the child runs in
@@ -139,14 +145,67 @@ _BOOTSTRAP_TEMPLATE = string.Template(
 
 
 def _sanitised_env() -> Dict[str, str]:
-    """Return a minimal environment for the child process.
+    """Return a minimal, hardened environment for the parser child.
 
-    Retains PATH and PYTHONPATH (needed to locate the interpreter and any
-    installed packages) while stripping all credentials and application
-    secrets present in the parent's environment.
+    Beyond stripping credentials and application secrets, this deliberately
+    drops the two variables that let a caller inject import search paths into
+    the "sandboxed" interpreter:
+
+      * ``PYTHONPATH`` — prepends arbitrary directories to ``sys.path``, so an
+        inherited value pointing at an attacker-controlled directory lets the
+        parser ``import`` anything placed there.
+      * ``HOME`` — controls the per-user site directory
+        (``~/.local/lib/pythonX.Y/site-packages``), which is another
+        ``sys.path`` entry and therefore an equivalent injection vector.
+
+    Only variables the interpreter genuinely needs to start and to decode text
+    are kept (``PATH``, temp-dir hints, locale). ``PYTHONNOUSERSITE`` disables
+    the user-site directory even if ``HOME`` leaks in some other way, and
+    ``PYTHONSAFEPATH`` (3.11+) stops the process working directory — added to
+    ``sys.path`` by ``python -c`` — from being used to smuggle in modules.
+    Installed dependencies still resolve normally: the interpreter's own
+    ``site-packages`` is on ``sys.path`` regardless of ``PYTHONPATH``.
     """
-    keep_keys = {"PATH", "PYTHONPATH", "HOME", "TMPDIR", "TEMP", "TMP", "LANG", "LC_ALL"}
-    return {k: v for k, v in os.environ.items() if k in keep_keys}
+    keep_keys = {"PATH", "TMPDIR", "TEMP", "TMP", "LANG", "LC_ALL"}
+    env = {k: v for k, v in os.environ.items() if k in keep_keys}
+    env["PYTHONNOUSERSITE"] = "1"
+    env["PYTHONSAFEPATH"] = "1"
+    return env
+
+
+# Fallback ids for the classic unprivileged "nobody"/"nogroup" accounts, used
+# only if the names cannot be resolved on this host.
+_NOBODY_UID = 65534
+_NOBODY_GID = 65534
+
+
+def _privilege_drop_kwargs() -> Dict[str, Any]:
+    """subprocess kwargs that run the parser child as an unprivileged user.
+
+    Untrusted parser code must never execute with root privileges. When the
+    backend itself runs as root we resolve the ``nobody`` account (falling back
+    to the conventional 65534 ids) and hand ``user``/``group``/``extra_groups``
+    to :class:`subprocess.Popen`, which performs the setgid/setgroups/setuid
+    drop in the child between ``fork`` and ``exec``.
+
+    Returns an empty dict — i.e. no change in behaviour — when the backend is
+    not running as root or the platform has no concept of uids (Windows). In
+    that common case the process is already unprivileged and there is nothing
+    to drop.
+    """
+    if os.name != "posix" or not hasattr(os, "geteuid") or os.geteuid() != 0:
+        return {}
+
+    uid, gid = _NOBODY_UID, _NOBODY_GID
+    try:
+        import pwd
+
+        entry = pwd.getpwnam("nobody")
+        uid, gid = entry.pw_uid, entry.pw_gid
+    except (ImportError, KeyError):
+        pass
+
+    return {"user": uid, "group": gid, "extra_groups": []}
 
 
 # ---------------------------------------------------------------------------
@@ -200,6 +259,10 @@ def _unshare_net_supported() -> bool:
             [unshare_path, "--user", "--net", "--", "true"],
             capture_output=True,
             timeout=5,
+            # Probe under the same privilege drop the real run uses, so that a
+            # host where root can create user namespaces but "nobody" cannot is
+            # detected here rather than failing at parse time.
+            **_privilege_drop_kwargs(),
         )
         _unshare_available = probe.returncode == 0
     except Exception:
@@ -280,6 +343,7 @@ def run_parser_in_sandbox(
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         env=_sanitised_env(),
+        **_privilege_drop_kwargs(),
     )
 
     def _read_stdout() -> None:
