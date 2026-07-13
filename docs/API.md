@@ -89,6 +89,59 @@ and retry with a new request.
 }
 ```
 
+## Search API
+
+### Global Search
+
+**Endpoint:** `GET /api/v1/search`
+
+**Description:** Searches the caller's findings and reports by keyword. Findings
+are matched against `title` and `description`; reports are matched against
+`name`. Results are owner-scoped (see
+[Authentication and ownership](#authentication-and-ownership)) — a search never
+returns findings or reports owned by another `X-User-Id`.
+
+**Query Parameters:**
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| q | string | Yes | — | Search query (1-200 characters) |
+| limit | integer | No | 20 | Max results per category (1-100) |
+
+**Response (200 OK):**
+
+```json
+{
+  "query": "sql injection",
+  "findings": [
+    {
+      "id": "finding-id",
+      "task_id": "task-id",
+      "title": "SQL Injection in login form",
+      "category": "Injection",
+      "severity": "high",
+      "target": "example.com",
+      "discovered_at": "2026-07-01T12:00:00Z"
+    }
+  ],
+  "reports": [
+    {
+      "id": "report-id",
+      "task_id": "task-id",
+      "name": "Q3 Security Report",
+      "type": "technical",
+      "generated_at": "2026-07-05T09:15:00Z"
+    }
+  ],
+  "total": 2
+}
+```
+
+```bash
+curl -H "X-Api-Key: $API_KEY" \
+  "http://localhost:8000/api/v1/search?q=sql+injection&limit=10"
+```
+
 ## See Also
 
 * [API Authentication](api-authentication.md) — How requests are authenticated with the API key and authorized per owner (`X-User-Id` → `owner_id`), including the cross-owner test requirement.

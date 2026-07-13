@@ -54,5 +54,9 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "539bd64f8c8774c54857bfb826f9748ba487dedcba1482a26a5383c1b022d786"
+  "capabilities": [
+    "network",
+    "intrusive"
+  ],
+  "checksum": "91eecd78a8e88a1e92135215a9bafe0f612827c096b226827bf8b5013d77392d"
 }

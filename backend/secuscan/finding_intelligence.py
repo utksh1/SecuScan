@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import urlparse
+
+from backend.secuscan import triage_engine
+from backend.secuscan.config import settings
 
 
 _OBSERVATION_CATEGORIES = {
@@ -433,6 +437,20 @@ async def normalize_and_correlate_findings(
                 match_strength=match_strength if fingerprint_score >= 0.45 else "none",
             )
         normalized.append(finding)
+
+    if settings.triage_engine_enabled and settings.triage_engine_api_key:
+        try:
+            triage_engine.triage_findings(
+                normalized,
+                model=settings.triage_engine_model,
+                api_key=settings.triage_engine_api_key,
+                base_url=settings.triage_engine_base_url or None,
+                eligible_categories=settings.triage_engine_eligible_categories,
+                min_confidence_to_skip=settings.triage_engine_min_confidence_to_skip,
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Triage is a best-effort enhancement — never let it break scan results.
+            logging.getLogger(__name__).warning("triage_engine: batch triage failed — %s", exc)
 
     normalized.sort(
         key=lambda item: (

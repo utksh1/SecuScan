@@ -44,6 +44,8 @@ class Database:
         conn.row_factory = aiosqlite.Row
         await conn.execute("PRAGMA foreign_keys = ON")
         await self._create_schema()
+        await self._ensure_schema_migrations_table()
+        await self._validate_schema_version()
         await self._run_migrations()
 
     async def disconnect(self):
@@ -701,6 +703,54 @@ ON credential_vault(owner_id);
             )
 
 
+    async def _ensure_schema_migrations_table(self):
+        """Create the migration tracking table if it does not already exist."""
+        await self.connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version TEXT PRIMARY KEY,
+                applied_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
+            )
+            """
+        )
+        await self.connection.commit()
+
+    async def _applied_migrations(self) -> set[str]:
+        """Return the set of migration filenames already applied."""
+        rows = await self.fetchall(
+            "SELECT version FROM schema_migrations"
+        )
+        return {row["version"] for row in rows}
+
+    async def _validate_schema_version(self):
+        """Ensure the database was not created by a newer application."""
+
+        applied = await self._applied_migrations()
+
+        available = {
+            migration.name
+            for migration in (Path(__file__).parent / "migrations").glob("*.sql")
+        }
+
+        unknown = applied - available
+
+        if unknown:
+            raise RuntimeError(
+                "Database schema is newer than this application. "
+                f"Unknown migration(s): {', '.join(sorted(unknown))}"
+            )
+
+    async def _record_migration(self, version: str):
+        """Record a successfully applied migration."""
+        await self.execute(
+            """
+            INSERT INTO schema_migrations(version)
+            VALUES (?)
+            """,
+            (version,),
+        )
+
+
     async def _run_migrations(self):
         migrations_dir = Path(__file__).parent / "migrations"
 
@@ -710,13 +760,22 @@ ON credential_vault(owner_id);
                 "ensure the backend package is installed correctly."
             )
 
+        applied = await self._applied_migrations()
+
         for migration_file in sorted(migrations_dir.glob("*.sql")):
+            migration_name = migration_file.name
+
+            if migration_name in applied:
+                continue
+
             sql = migration_file.read_text(encoding="utf-8")
+
             try:
                 await self.connection.executescript(sql)
+                await self._record_migration(migration_name)
             except Exception as exc:
                 raise RuntimeError(
-                    f"Migration {migration_file.name} failed — startup aborted: {exc}"
+                    f"Migration {migration_name} failed — startup aborted: {exc}"
                 ) from exc
 
         await self._backfill_risk_scores()

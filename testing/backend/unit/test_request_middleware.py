@@ -51,7 +51,7 @@ class TestRequestIDMiddleware:
         except ValueError:
             raise AssertionError(f"Expected UUID format, got: {rid}")
 
-    def test_very_long_request_id_is_preserved(self):
+    def test_very_long_request_id_is_rejected(self):
         with TestClient(app) as client:
             long_id = "x" * 512
             response = client.get(
@@ -60,30 +60,50 @@ class TestRequestIDMiddleware:
             )
 
         assert response.status_code == 200
-        assert response.headers["X-Request-ID"] == long_id
+        # Oversized ID should be replaced with a generated UUID
+        assert response.headers["X-Request-ID"] != long_id
+        assert response.headers["X-Request-ID"]
 
 
 class TestRequestIDMiddlewareEdgeCases:
     """Edge case tests for RequestIDMiddleware covering special characters and concurrency."""
 
-    def test_special_characters_in_request_id_are_preserved(self):
-        """Special characters in X-Request-ID header should be preserved in response."""
-        special_ids = [
-            "req-with-dash_underscore.dot",
+    def test_malicious_request_ids_are_rejected(self):
+        """Malformed X-Request-ID values with dangerous chars should be rejected."""
+        malicious_ids = [
             "req/with/slashes",
             "req;with;semicolons",
             'req"with"quotes',
             "req with spaces",
         ]
-        for special_id in special_ids:
+        for malicious_id in malicious_ids:
             with TestClient(app) as client:
                 response = client.get(
                     "/api/v1/health",
-                    headers={"X-Request-ID": special_id},
+                    headers={"X-Request-ID": malicious_id},
                 )
 
             assert response.status_code == 200
-            assert response.headers["X-Request-ID"] == special_id
+            # Malicious ID should be replaced with a safe UUID
+            assert response.headers["X-Request-ID"] != malicious_id
+            assert response.headers["X-Request-ID"]
+
+    def test_valid_request_ids_are_preserved(self):
+        """Valid alphanumeric request IDs with hyphens/underscores should be preserved."""
+        valid_ids = [
+            "req-with-dash_underscore",
+            "abc123",
+            "550e8400-e29b-41d4-a716-446655440000",
+        ]
+        for valid_id in valid_ids:
+            with TestClient(app) as client:
+                response = client.get(
+                    "/api/v1/health",
+                    headers={"X-Request-ID": valid_id},
+                )
+
+            assert response.status_code == 200
+            assert response.headers["X-Request-ID"] == valid_id
 
     def test_concurrent_requests_get_isolated_request_ids(self):
         """Two concurrent threads should each get an isolated request ID via ContextVar."""

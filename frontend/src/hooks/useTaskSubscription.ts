@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { API_BASE, getTaskStatus } from '../api'
+import { buildTaskStreamUrl, getTaskStatus } from '../api'
+import { createReconnectBackoff } from '../utils/streamTransport'
 
 export interface UseTaskSubscriptionOptions {
   taskId: string
@@ -35,7 +36,9 @@ export function useTaskSubscription({
   const onOutputRef = useRef(onOutput)
   const esRef = useRef<EventSource | null>(null)
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const reconnectAttemptRef = useRef(0)
+  const reconnectBackoffRef = useRef(
+    createReconnectBackoff({ baseDelay: reconnectBaseDelay, maxAttempts: maxReconnectAttempts }),
+  )
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastStatusRef = useRef<string | null>(null)
   const cleanupRef = useRef(false)
@@ -102,7 +105,7 @@ export function useTaskSubscription({
       esRef.current = null
     }
 
-    const url = `${API_BASE}/task/${taskId}/stream`
+    const url = buildTaskStreamUrl(taskId)
     const es = new EventSource(url, { withCredentials: true })
     esRef.current = es
 
@@ -155,9 +158,8 @@ export function useTaskSubscription({
       setIsConnected(false)
       setError('SSE connection lost')
 
-      if (reconnectAttemptRef.current < maxReconnectAttempts) {
-        const delay = reconnectBaseDelay * Math.pow(2, reconnectAttemptRef.current)
-        reconnectAttemptRef.current++
+      if (reconnectBackoffRef.current.canRetry()) {
+        const delay = reconnectBackoffRef.current.nextDelay()
         reconnectTimerRef.current = setTimeout(() => {
           if (!cleanupRef.current) connectSSE()
         }, delay)
@@ -168,24 +170,27 @@ export function useTaskSubscription({
 
     es.onopen = () => {
       if (cleanupRef.current || versionRef.current !== version) return
-      reconnectAttemptRef.current = 0
+      reconnectBackoffRef.current.reset()
       setIsConnected(true)
       setIsPolling(false)
       setError(null)
     }
-  }, [taskId, maxReconnectAttempts, reconnectBaseDelay, cleanupAll, startPolling])
+  }, [taskId, cleanupAll, startPolling])
 
   useEffect(() => {
     cleanupRef.current = false
     lastStatusRef.current = null
-    reconnectAttemptRef.current = 0
+    reconnectBackoffRef.current = createReconnectBackoff({
+      baseDelay: reconnectBaseDelay,
+      maxAttempts: maxReconnectAttempts,
+    })
 
     connectSSE()
 
     return () => {
       cleanupAll()
     }
-  }, [taskId, connectSSE, cleanupAll])
+  }, [taskId, connectSSE, cleanupAll, reconnectBaseDelay, maxReconnectAttempts])
 
   return { isConnected, isPolling, error }
 }

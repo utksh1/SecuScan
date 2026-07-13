@@ -16,6 +16,30 @@ function resolveApiBase(): string {
 
 export const API_BASE = resolveApiBase()
 
+import {
+  buildTaskStreamUrl as buildTaskStreamUrlForBase,
+  createReconnectingEventSource,
+  resolveSseUrl as resolveSseUrlForBase,
+  resolveWsBase as resolveWsBaseForBase,
+  resolveWsUrl as resolveWsUrlForBase,
+} from './utils/streamTransport'
+
+export function resolveSseUrl(pathOrUrl: string): string {
+  return resolveSseUrlForBase(API_BASE, pathOrUrl)
+}
+
+export function resolveWsBase(): string {
+  return resolveWsBaseForBase(API_BASE)
+}
+
+export function resolveWsUrl(path = '/ws/feed'): string {
+  return resolveWsUrlForBase(API_BASE, path)
+}
+
+export function buildTaskStreamUrl(taskId: string): string {
+  return buildTaskStreamUrlForBase(API_BASE, taskId)
+}
+
 export type PluginFieldType =
   | 'string'
   | 'text'
@@ -57,6 +81,8 @@ export interface ExecutionContext {
   validation_mode: 'detect_only' | 'proof' | 'controlled_extract'
   evidence_level: 'minimal' | 'standard' | 'full'
 }
+
+export type ScanInputs = Record<string, unknown>
 
 export interface EvidenceRecord {
   type: string
@@ -185,6 +211,31 @@ export interface FindingsResponse {
   total?: number
   page?: number
   per_page?: number
+}
+
+export interface SearchFindingResult {
+  id: string
+  task_id?: string | null
+  title: string
+  category: string
+  severity: string
+  target: string
+  discovered_at?: string
+}
+
+export interface SearchReportResult {
+  id: string
+  task_id?: string | null
+  name: string
+  type: string
+  generated_at: string
+}
+
+export interface SearchResponse {
+  query: string
+  findings: SearchFindingResult[]
+  reports: SearchReportResult[]
+  total: number
 }
 
 export interface TaskResultResponse {
@@ -420,6 +471,11 @@ export function getReports() {
   return request('/reports')
 }
 
+export function search(query: string, limit = 20) {
+  const params = new URLSearchParams({ q: query, limit: String(limit) })
+  return request<SearchResponse>(`/search?${params.toString()}`)
+}
+
 export type NotificationChannelType = 'webhook' | 'email'
 export type NotificationSeverityThreshold = 'critical' | 'high' | 'medium' | 'low' | 'info'
 
@@ -565,9 +621,20 @@ export function getTaskDiff(taskId: string): Promise<ScanDiff> {
   return request<ScanDiff>(`/task/${taskId}/diff`)
 }
 
-export function startTask(
+export function previewCommand(
   plugin_id: string,
   inputs: Record<string, unknown>,
+): Promise<{ command: string[] }> {
+  return request<{ command: string[] }>(`/plugin/${plugin_id}/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ inputs }),
+  })
+}
+
+export function startTask(
+  plugin_id: string,
+  inputs: ScanInputs,
   consent_granted: boolean,
   preset?: string,
   execution_context?: Partial<ExecutionContext>,
@@ -617,16 +684,67 @@ export function cancelTask(taskId: string) {
   })
 }
 
-export function streamTask(taskId: string, onEvent: (ev: MessageEvent) => void) {
-  const url = `${API_BASE}/task/${taskId}/stream`
-  const es = new EventSource(url, { withCredentials: true })
-  es.onmessage = onEvent
-  es.onerror = () => {}
-  return es
+export interface StreamTaskOptions {
+  maxReconnectAttempts?: number
+  reconnectBaseDelay?: number
+  maxReconnectDelay?: number
+  onReconnect?: (attempt: number, delayMs: number) => void
+}
+
+export function streamTask(
+  taskId: string,
+  onEvent: (ev: MessageEvent) => void,
+  options: StreamTaskOptions = {},
+) {
+  const url = buildTaskStreamUrl(taskId)
+  let activeSource: EventSource | null = null
+
+  const connection = createReconnectingEventSource(url, {
+    maxReconnectAttempts: options.maxReconnectAttempts ?? 5,
+    reconnectBaseDelay: options.reconnectBaseDelay ?? 1000,
+    maxReconnectDelay: options.maxReconnectDelay,
+    onReconnect: options.onReconnect,
+    withCredentials: true,
+    onInstance: (instance) => {
+      activeSource = instance as EventSource
+      activeSource.onmessage = onEvent
+    },
+  })
+
+  return {
+    get url() {
+      return url
+    },
+    get readyState() {
+      return activeSource?.readyState ?? EventSource.CLOSED
+    },
+    close() {
+      connection.close()
+      activeSource = null
+    },
+    addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+      activeSource?.addEventListener(type, listener)
+    },
+    removeEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+      activeSource?.removeEventListener(type, listener)
+    },
+    dispatchEvent(event: Event) {
+      return activeSource?.dispatchEvent(event) ?? false
+    },
+    set onmessage(handler: ((this: EventSource, ev: MessageEvent) => unknown) | null) {
+      if (activeSource) activeSource.onmessage = handler
+    },
+    set onerror(handler: ((this: EventSource, ev: Event) => unknown) | null) {
+      if (activeSource) activeSource.onerror = handler
+    },
+    set onopen(handler: ((this: EventSource, ev: Event) => unknown) | null) {
+      if (activeSource) activeSource.onopen = handler
+    },
+  }
 }
 export interface WorkflowStep {
   plugin_id: string
-  inputs: Record<string, unknown>
+  inputs: ScanInputs
   preset?: string
   execution_context?: ExecutionContext
 }

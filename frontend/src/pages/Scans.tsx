@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
-import { API_BASE, deleteTask, clearAllTasks, bulkDeleteTasks, startTask, ExecutionContext } from "../api";
+import { API_BASE, deleteTask, clearAllTasks, bulkDeleteTasks, startTask, ExecutionContext, ScanInputs } from "../api";
 import { routePath } from "../routes";
 import {
   parseDateSafe,
@@ -24,7 +24,7 @@ interface Task {
   completed_at?: string;
   duration_seconds?: number;
   error_message?: string;
-  inputs?: any;
+  inputs?: ScanInputs;
   preset?: string;
   execution_context?: ExecutionContext;
   queue_position?: number;
