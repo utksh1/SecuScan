@@ -373,7 +373,7 @@ class ReportGenerator:
             "target": cls._clean_text(task.get("target")) or "Unknown target",
             "status": cls._clean_text(task.get("status")) or "unknown",
             "created_at": cls._clean_text(task.get("created_at")),
-            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M"),
             "preset": cls._clean_text(task.get("preset")),
             "findings": findings,
             "summary": summary,
