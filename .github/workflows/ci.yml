@@ -74,9 +74,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install backend system dependencies
-        run: |
-          sudo rm -f /etc/apt/sources.list.d/azure-cli.sources /etc/apt/sources.list.d/azure-cli.list /etc/apt/sources.list.d/microsoft-prod.sources /etc/apt/sources.list.d/microsoft-prod.list
-          sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
       - name: Install backend development dependencies
         run: |
           python -m pip install --upgrade pip
@@ -98,9 +96,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install backend system dependencies
-        run: |
-          sudo rm -f /etc/apt/sources.list.d/azure-cli.sources /etc/apt/sources.list.d/azure-cli.list /etc/apt/sources.list.d/microsoft-prod.sources /etc/apt/sources.list.d/microsoft-prod.list
-          sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
@@ -122,9 +118,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install backend system dependencies
-        run: |
-          sudo rm -f /etc/apt/sources.list.d/azure-cli.sources /etc/apt/sources.list.d/azure-cli.list /etc/apt/sources.list.d/microsoft-prod.sources /etc/apt/sources.list.d/microsoft-prod.list
-          sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
@@ -153,9 +147,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install backend system dependencies
-        run: |
-          sudo rm -f /etc/apt/sources.list.d/azure-cli.sources /etc/apt/sources.list.d/azure-cli.list /etc/apt/sources.list.d/microsoft-prod.sources /etc/apt/sources.list.d/microsoft-prod.list
-          sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
@@ -186,9 +178,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install backend system dependencies
-        run: |
-          sudo rm -f /etc/apt/sources.list.d/azure-cli.sources /etc/apt/sources.list.d/azure-cli.list /etc/apt/sources.list.d/microsoft-prod.sources /etc/apt/sources.list.d/microsoft-prod.list
-          sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
@@ -237,9 +227,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install backend system dependencies
-        run: |
-          sudo rm -f /etc/apt/sources.list.d/azure-cli.sources /etc/apt/sources.list.d/azure-cli.list /etc/apt/sources.list.d/microsoft-prod.sources /etc/apt/sources.list.d/microsoft-prod.list
-          sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
       - name: Install backend dependencies
         run: |
           python -m pip install --upgrade pip
