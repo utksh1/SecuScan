@@ -114,7 +114,10 @@ def test_amass_command_renders_with_target(setup_test_environment):
     assert "-d" in command
     assert "secuscan.in" in command
     assert "-dir" in command
-    assert "/tmp/amass" in command
+    # The old hardcoded world-writable /tmp/amass path (issue #1803) must be gone,
+    # replaced by the reserved scratch-dir placeholder the executor resolves per task.
+    assert "/tmp/amass" not in command
+    assert "%SECUSCAN_SCRATCH_DIR%" in command
     assert "-silent" in command
 
 
@@ -131,7 +134,7 @@ def test_amass_command_full_token_sequence(setup_test_environment):
         "-d",
         "secuscan.in",
         "-dir",
-        "/tmp/amass",
+        "%SECUSCAN_SCRATCH_DIR%",
         "-silent",
     ], f"Command template drift detected. Got: {command}"
 
@@ -148,7 +151,7 @@ def test_amass_drops_target_token_when_absent(setup_test_environment):
 
     assert rendered is not None
     assert not any("{" in token for token in rendered), "Unresolved placeholder leaked"
-    assert rendered == ["amass", "enum", "-d", "-dir", "/tmp/amass", "-silent"]
+    assert rendered == ["amass", "enum", "-d", "-dir", "%SECUSCAN_SCRATCH_DIR%", "-silent"]
 
     populated = manager.build_command("amass", {"target": "secuscan.in"})
     assert "secuscan.in" in populated

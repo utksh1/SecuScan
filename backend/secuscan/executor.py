@@ -5,8 +5,10 @@ Task execution engine with Docker sandboxing
 import asyncio
 from asyncio import subprocess
 import os
+import shutil
 import signal
 import base64
+import tempfile
 import uuid
 import json
 import time
@@ -17,6 +19,39 @@ import logging
 import re
 
 _CANCEL_GRACE_SECONDS = 5
+
+# Reserved command-template token. A plugin that needs a writable working
+# directory puts this literal in its ``command_template`` instead of a
+# hardcoded path (e.g. amass's ``-dir``). At execution time it is replaced with
+# a fresh, private (0700) per-task directory created via ``tempfile.mkdtemp``
+# and removed once the scan finishes. This closes the predictable-world-writable
+# ``/tmp/<tool>`` symlink-hijack / cross-user-collision class of bug: the path is
+# unguessable per run and never shared or left behind. The token deliberately
+# contains no ``{...}`` so it passes plugin validation and template
+# interpolation through untouched as an opaque literal.
+SCRATCH_DIR_PLACEHOLDER = "%SECUSCAN_SCRATCH_DIR%"
+
+
+def _substitute_scratch_dir(
+    command: List[str], plugin_id: str
+) -> Tuple[List[str], Optional[str]]:
+    """Resolve ``SCRATCH_DIR_PLACEHOLDER`` tokens to a fresh private directory.
+
+    Returns ``(command, scratch_dir)``. When the command contains no
+    placeholder, ``command`` is returned unchanged and ``scratch_dir`` is
+    ``None``. Otherwise a new ``tempfile.mkdtemp`` directory is created (mode
+    0700, unpredictable name) and every placeholder token is replaced with its
+    path; the caller is responsible for removing that directory afterwards.
+    """
+    if SCRATCH_DIR_PLACEHOLDER not in command:
+        return command, None
+
+    scratch_dir = tempfile.mkdtemp(prefix=f"secuscan-{plugin_id}-")
+    resolved = [
+        scratch_dir if token == SCRATCH_DIR_PLACEHOLDER else token
+        for token in command
+    ]
+    return resolved, scratch_dir
 
 from .auth import DEFAULT_OWNER_ID
 from .redaction import redact
@@ -557,44 +592,51 @@ class TaskExecutor:
         if not command:
             raise ValueError("Failed to build command")
 
-        from .validation import validate_command_network_egress
-        cmd_valid, cmd_err = validate_command_network_egress(
-            command, safe_mode, plugin_id, task_id
-        )
-        if not cmd_valid:
-            raise ValueError(f"Command network egress validation failed: {cmd_err}")
+        # Replace any reserved scratch-dir placeholder with a fresh private
+        # per-task directory, and guarantee its removal once execution ends.
+        command, scratch_dir = _substitute_scratch_dir(command, plugin_id)
+        try:
+            from .validation import validate_command_network_egress
+            cmd_valid, cmd_err = validate_command_network_egress(
+                command, safe_mode, plugin_id, task_id
+            )
+            if not cmd_valid:
+                raise ValueError(f"Command network egress validation failed: {cmd_err}")
 
-        # Apply Docker Sandboxing if enabled
-        if settings.docker_enabled:
-            await self._ensure_docker_network()
-            docker_image = plugin.docker_image or "alpine:latest"
-            docker_cmd = [
-                "docker",
-                "run",
-                "--rm",
-                "--name",
-                f"secuscan_task_{task_id}",
-                "--memory",
-                f"{settings.sandbox_memory_mb}m",
-                "--cpus",
-                str(settings.sandbox_cpu_quota),
-                "--cap-drop", "NET_RAW",
-                "--network", settings.docker_network,
-                docker_image,
-            ]
-            command = docker_cmd + command
+            # Apply Docker Sandboxing if enabled
+            if settings.docker_enabled:
+                await self._ensure_docker_network()
+                docker_image = plugin.docker_image or "alpine:latest"
+                docker_cmd = [
+                    "docker",
+                    "run",
+                    "--rm",
+                    "--name",
+                    f"secuscan_task_{task_id}",
+                    "--memory",
+                    f"{settings.sandbox_memory_mb}m",
+                    "--cpus",
+                    str(settings.sandbox_cpu_quota),
+                    "--cap-drop", "NET_RAW",
+                    "--network", settings.docker_network,
+                    docker_image,
+                ]
+                command = docker_cmd + command
 
-        logger.info(f"Executing task {task_id}: {' '.join(command)}")
-        await self._broadcast(task_id, "status", TaskStatus.RUNNING.value)
-        await self._broadcast_phase(task_id, ScanPhase.RUNNING_COMMAND.value)
+            logger.info(f"Executing task {task_id}: {' '.join(command)}")
+            await self._broadcast(task_id, "status", TaskStatus.RUNNING.value)
+            await self._broadcast_phase(task_id, ScanPhase.RUNNING_COMMAND.value)
 
-        # Execute command
-        start_time = time.time()
-        output, exit_code = await self._execute_command(
-            command,
-            task_id,
-            timeout=self._resolve_execution_timeout(inputs),
-        )
+            # Execute command
+            start_time = time.time()
+            output, exit_code = await self._execute_command(
+                command,
+                task_id,
+                timeout=self._resolve_execution_timeout(inputs),
+            )
+        finally:
+            if scratch_dir:
+                shutil.rmtree(scratch_dir, ignore_errors=True)
         duration = time.time() - start_time
 
         # Save raw output
