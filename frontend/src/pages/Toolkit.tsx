@@ -438,7 +438,7 @@ export default function Scanner() {
                         <div className="w-12 h-1 bg-silver-bright/10 mt-4 group-hover:w-full group-hover:bg-rag-red/30 transition-all duration-700" />
                       </div>
 
-                      <p id={descriptionId} className="text-[10px] text-silver/40 uppercase tracking-widest leading-relaxed line-clamp-3 font-bold italic">
+                      <p id={descriptionId} className="text-[10px] text-silver/40 uppercase tracking-widest leading-relaxed line-clamp-3 text-ellipsis overflow-hidden font-bold italic">
                         {tool.purpose}
                       </p>
 
