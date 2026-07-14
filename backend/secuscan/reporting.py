@@ -4,7 +4,8 @@ import html
 import io
 import json
 
-from .config import settingsimport re
+from .config import settings
+import re
 from .redaction import redact, redact_dict
 from .ai_summary import generate_summary
 from datetime import datetime
@@ -1240,24 +1241,28 @@ class ReportGenerator:
 
         sarif_output = {
     "$schema": settings.sarif_schema_url,
-
-    "version":"2.1.0",
-
-    "runs":[
+    "version": "2.1.0",
+    "runs": [
         {
-            "tool":{
-                "driver":{
-                    "name":tool_name,
-                    "version":"1.0.0",
+            "tool": {
+                "driver": {
+                    "name": tool_name,
+                    "version": "1.0.0",
                     "informationUri": settings.repository_url,
-                            "rules": rules
-                        }
+                    "rules": rules,
+                    "properties": {
+                        "generatorVersion": _version_,
                     },
-                    "results": results
                 }
-            ]
+            },
+            "properties": {
+                "pluginId": task.get("plugin_id"),
+                "exportTimestamp": datetime.now(timezone.utc).isoformat(),
+            },
+            "results": results,
         }
-
+    ]
+}
         return json.dumps(sarif_output, indent=2)
 
 
