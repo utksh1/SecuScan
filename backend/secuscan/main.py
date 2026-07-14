@@ -2,6 +2,7 @@
 SecuScan Backend - Main application entry point
 """
 
+import html as html_mod
 import logging
 import sys
 import shutil
@@ -162,30 +163,39 @@ async def lifespan(app: FastAPI):
     await scheduler.stop()
     logger.info("✓ Shutdown complete")
 
-# Create FastAPI application
+# Create FastAPI application — docs/redoc/openapi only exposed when debug=True
 app = FastAPI(
     title="SecuScan API",
     description="Backend for SecuScan Pentesting Toolkit",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
+    docs_url="/docs" if settings.debug else None,
+    redoc_url="/redoc" if settings.debug else None,
+    openapi_url="/openapi.json" if settings.debug else None,
     lifespan=lifespan
 )
 
 @app.get("/api/docs", include_in_schema=False)
 async def redirect_api_docs():
     from fastapi.responses import RedirectResponse
+    if not settings.debug:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Not found")
     return RedirectResponse(url="/docs")
 
 @app.get("/api/redoc", include_in_schema=False)
 async def redirect_api_redoc():
     from fastapi.responses import RedirectResponse
+    if not settings.debug:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Not found")
     return RedirectResponse(url="/redoc")
 
 @app.get("/api/openapi.json", include_in_schema=False)
 async def redirect_api_openapi():
     from fastapi.responses import RedirectResponse
+    if not settings.debug:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Not found")
     return RedirectResponse(url="/openapi.json")
 
 # CORS middleware
@@ -280,8 +290,9 @@ async def custom_unhandled_exception_handler(request: Request, exc: Exception):
 
     if settings.debug:
         import traceback
-        html = f"<html><body><h1>500 Internal Server Error</h1><pre>{traceback.format_exc()}</pre></body></html>"
-        response = HTMLResponse(html, status_code=500)
+        safe_traceback = html_mod.escape(traceback.format_exc())
+        html_content = f"<html><body><h1>500 Internal Server Error</h1><pre>{safe_traceback}</pre></body></html>"
+        response = HTMLResponse(html_content, status_code=500)
     else:
         response = PlainTextResponse("Internal Server Error", status_code=500)
 

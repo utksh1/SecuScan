@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # Server Configuration
     bind_address: str = "127.0.0.1"
     bind_port: int = 8000
-    debug: bool = True
+    debug: bool = False
 
     # Primary data store
     database_path: str = str(PROJECT_ROOT / "data" / "secuscan.db")
