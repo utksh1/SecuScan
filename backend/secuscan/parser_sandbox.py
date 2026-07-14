@@ -86,11 +86,9 @@ class ParserSandboxError(RuntimeError):
     def __init__(self, plugin_id: str, reason: str, stderr: str = "") -> None:
         self.plugin_id = plugin_id
         self.reason = reason
-        sanitized = redact(stderr[:2000]) if stderr else ""
         self._stderr_diagnostic: str = stderr
-        self.stderr_excerpt = sanitized
-        detail = f": {sanitized[:200]}" if sanitized.strip() else ""
-        super().__init__(f"Parser sandbox failed for '{plugin_id}' ({reason}){detail}")
+        self.stderr_excerpt = redact(stderr[:2000]) if stderr else ""
+        super().__init__(f"Parser sandbox failed for '{plugin_id}' ({reason})")
 
 
 # ---------------------------------------------------------------------------

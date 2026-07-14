@@ -403,3 +403,37 @@ class TestParserSandboxError:
     def test_str_contains_plugin_id(self):
         err = ParserSandboxError("my_plugin", "bad thing")
         assert "my_plugin" in str(err)
+
+    def test_str_does_not_expose_stderr_secrets(self):
+        """Regression: API-facing str() must never leak parser stderr contents."""
+        secret = "Bearer eyJhbGciOiJIUzI1NiJ9.secret_payload_12345"
+        api_key = "AKIA1234567890ABCDEF"
+        err = ParserSandboxError(
+            "plugin_secret",
+            "unexpected failure",
+            stderr=f"secret={secret} api_key={api_key}",
+        )
+        msg = str(err)
+        assert secret not in msg
+        assert api_key not in msg
+        assert "eyJhbGciOiJIUzI1NiJ9" not in msg
+        assert "AKIA1234567890ABCDEF" not in msg
+
+    def test_str_does_not_expose_arbitrary_stderr(self):
+        """Regression: arbitrary parser diagnostic output must not appear in str()."""
+        arbitrary_output = (
+            "Password: hunter2\n"
+            "Internal path: /etc/shadow\n"
+            "Private key: -----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQ..."
+        )
+        err = ParserSandboxError("plugin_arb", "crash", stderr=arbitrary_output)
+        msg = str(err)
+        assert "hunter2" not in msg
+        assert "/etc/shadow" not in msg
+        assert "BEGIN RSA PRIVATE KEY" not in msg
+
+    def test_stderr_excerpt_is_available_for_diagnostics(self):
+        """Internal diagnostic attribute is still accessible for logging."""
+        stderr = "diagnostic: segfault at 0xdeadbeef"
+        err = ParserSandboxError("plugin_diag", "signal", stderr=stderr)
+        assert err.stderr_excerpt == stderr
