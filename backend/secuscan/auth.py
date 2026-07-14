@@ -15,6 +15,7 @@ Session management (signed cookie, no server-side state):
 import base64
 import hmac
 import json
+import logging
 import os
 import secrets
 import time
@@ -229,19 +230,58 @@ def get_api_key() -> str | None:
 # proxy / SSO layer; deployments that do not send it fall back to a single
 # shared ``DEFAULT_OWNER_ID`` and keep their existing (single-user) behaviour.
 #
+# SECURITY FIX (Issue #2021): The X-User-Id header is now validated against a
+# configurable whitelist (``trusted_owner_ids``).  When the whitelist is empty
+# (the default), the header is ignored and all requests use DEFAULT_OWNER_ID,
+# preventing cross-workspace BOLA attacks.  Operators who need multi-user
+# isolation must explicitly populate the whitelist with the allowed workspace
+# IDs.
+#
 # This value is duplicated as the SQL column default ('default') in
 # database.py — keep the two in sync.
 DEFAULT_OWNER_ID = "default"
 
 _OWNER_HEADER = "x-user-id"
 
+_logger = logging.getLogger(__name__)
+
 
 def resolve_owner_id(request: Request | None) -> str:
-    """Resolve the owning user/workspace identity for the current request."""
+    """Resolve the owning user/workspace identity for the current request.
+
+    The ``X-User-Id`` header is only honoured when its value appears in the
+    ``trusted_owner_ids`` configuration list.  An unrecognised value is
+    rejected with a logged warning and the request is scoped to the default
+    owner — this prevents an attacker who knows the shared API key from
+    reading another workspace's vault secrets, tasks, and reports (BOLA).
+    """
     if request is not None:
         user_id = request.headers.get(_OWNER_HEADER)
         if user_id and user_id.strip():
-            return f"user:{user_id.strip()}"
+            user_id = user_id.strip()
+            # Lazy-import to avoid circular dependency at module level.
+            from .config import settings
+
+            trusted = settings.trusted_owner_ids
+            if not trusted:
+                _logger.warning(
+                    "Ignoring X-User-Id header %r — no trusted_owner_ids "
+                    "are configured; all requests are scoped to the default "
+                    "owner.  Set SECUSCAN_TRUSTED_OWNER_IDS to enable "
+                    "multi-user isolation.",
+                    user_id,
+                )
+                return DEFAULT_OWNER_ID
+
+            if user_id not in trusted:
+                _logger.warning(
+                    "Rejected X-User-Id header %r — not in trusted_owner_ids "
+                    "whitelist; request scoped to default owner.",
+                    user_id,
+                )
+                return DEFAULT_OWNER_ID
+
+            return f"user:{user_id}"
     return DEFAULT_OWNER_ID
 
 

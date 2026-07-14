@@ -38,6 +38,8 @@ def setup_test_environment(monkeypatch):
     monkeypatch.setattr(settings, "enforce_network_policy", False)
     # Disable scan rate limiter in tests to avoid 429 interference
     monkeypatch.setattr(settings, "scan_rate_limit", 0)
+    # Allow alice/bob as trusted owner IDs for multi-user integration tests
+    monkeypatch.setattr(settings, "trusted_owner_ids", ["alice", "bob"])
 
     settings.ensure_directories()
 

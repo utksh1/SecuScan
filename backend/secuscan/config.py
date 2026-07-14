@@ -118,6 +118,13 @@ class Settings(BaseSettings):
 
     trusted_proxies: List[str] = ["127.0.0.1", "::1"]
 
+    # Owner identity — restrict which X-User-Id values are accepted.
+    # Empty list (default) means the header is ignored and all requests use
+    # DEFAULT_OWNER_ID, preventing cross-workspace BOLA attacks.
+    # Set to a comma-separated list of allowed workspace IDs to enable
+    # multi-user mode (e.g. "team-alpha,team-beta").
+    trusted_owner_ids: List[str] = []
+
     # Sandbox
     docker_enabled: bool = False
     sandbox_timeout: int = 600  # seconds
