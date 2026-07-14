@@ -3,7 +3,8 @@ import csv
 import html
 import io
 import json
-import re
+
+from .config import settingsimport re
 from .redaction import redact, redact_dict
 from .ai_summary import generate_summary
 from datetime import datetime
@@ -1238,15 +1239,17 @@ class ReportGenerator:
             results.append(sarif_result)
 
         sarif_output = {
-            "$schema": "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0-rtm.5.json",
-            "version": "2.1.0",
-            "runs": [
-                {
-                    "tool": {
-                        "driver": {
-                            "name": tool_name,
-                            "version": "1.0.0",
-                            "informationUri": "https://github.com/utksh1/SecuScan",
+    "$schema": settings.sarif_schema_url,
+
+    "version":"2.1.0",
+
+    "runs":[
+        {
+            "tool":{
+                "driver":{
+                    "name":tool_name,
+                    "version":"1.0.0",
+                    "informationUri": settings.repository_url,
                             "rules": rules
                         }
                     },

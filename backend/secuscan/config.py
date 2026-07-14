@@ -18,6 +18,15 @@ class Settings(BaseSettings):
     # Server Configuration
     bind_address: str = "127.0.0.1"
     bind_port: int = 8000
+
+    # Repository Configuration
+    repository_url: str = "https://github.com/utksh1/SecuScan"
+
+    # SARIF Schema Configuration
+    sarif_schema_url: str = (
+        "https://schemastore.azurewebsites.net/schemas/json/sarif-2.1.0-rtm.5.json"
+    )
+
     debug: bool = True
 
     # Primary data store
