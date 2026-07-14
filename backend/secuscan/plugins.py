@@ -254,19 +254,17 @@ class PluginManager:
 
         if has_signature:
             if not settings.plugin_signature_key:
-                if settings.enforce_plugin_signatures:
-                    logger.error("SECUSCAN_PLUGIN_SIGNATURE_KEY required for verifying %s", plugin.id)
-                    return False
-                logger.warning("Skipping signature verification for %s: key not configured", plugin.id)
-            else:
-                expected_sig = hmac.new(
-                    settings.plugin_signature_key.encode("utf-8"),
-                    combined_digest.encode("utf-8"),
-                    hashlib.sha256,
-                ).hexdigest()
-                if not hmac.compare_digest(expected_sig, plugin.signature):
-                    logger.error("Signature mismatch for plugin %s", plugin.id)
-                    return False
+                logger.error("SECUSCAN_PLUGIN_SIGNATURE_KEY required for verifying %s", plugin.id)
+                return False
+
+            expected_sig = hmac.new(
+                settings.plugin_signature_key.encode("utf-8"),
+                combined_digest.encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()
+            if not hmac.compare_digest(expected_sig, plugin.signature):
+                logger.error("Signature mismatch for plugin %s", plugin.id)
+                return False
 
         return True
 

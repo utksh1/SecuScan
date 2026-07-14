@@ -328,7 +328,7 @@ describe('Findings — virtualized list', () => {
     expect(fieldContainer).toHaveClass('space-y-2', 'min-w-0')
 
     const gridContainer = fieldContainer?.parentElement
-    expect(gridContainer).toHaveClass('grid', 'gap-4', 'sm:grid-cols-2', 'lg:grid-cols-3', 'xl:grid-cols-4')
+    expect(gridContainer).toHaveClass('grid', 'gap-x-4', 'gap-y-5')
 
     const filterContainer = gridContainer?.parentElement
     expect(filterContainer).toHaveClass('flex', 'flex-col', 'gap-6')

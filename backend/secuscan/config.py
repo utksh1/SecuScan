@@ -39,6 +39,7 @@ class Settings(BaseSettings):
 
     # Security
     safe_mode_default: bool = True
+    verify_ssl: bool = True
     dns_resolution_timeout_seconds: float = 1.5
     dns_cache_ttl_seconds: int = 60
     dns_rebind_check: bool = True
@@ -82,6 +83,7 @@ class Settings(BaseSettings):
     ]
     network_audit_log_file: str = str(PROJECT_ROOT / "logs" / "network.audit.log")
     network_audit_retention_days: int = 90
+    network_audit_max_entries: int = 10000
     enforce_network_policy: bool = True
     network_policy_failure_mode: str = "block"  # "block" or "log_only"
 
@@ -167,6 +169,16 @@ class Settings(BaseSettings):
     ai_summary_api_key: str = ""
     ai_summary_base_url: str = ""
     ai_summary_model: str = "gpt-4o-mini"
+
+    # AI Triage Engine — LLM-assisted false positive reduction (opt-in, off by default)
+    triage_engine_enabled: bool = False
+    triage_engine_api_key: str = ""
+    triage_engine_base_url: str = ""
+    triage_engine_model: str = "gpt-4o-mini"
+    # Findings at/above this confidence score already skip LLM triage (already trusted).
+    triage_engine_min_confidence_to_skip: float = 0.9
+    # Only these finding categories are eligible for LLM triage by default (AST/pattern-based SAST).
+    triage_engine_eligible_categories: List[str] = ["code security", "static analysis", "sast"]
 
     # SMTP Configuration for Email Notifications
     smtp_host: str = "smtp.gmail.com"
