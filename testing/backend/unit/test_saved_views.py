@@ -510,3 +510,163 @@ async def test_database_newer_than_application_fails(tmp_path):
 
     with pytest.raises(RuntimeError, match="Database schema is newer"):
         await db.connect()
+
+
+# ─── Ownership scoping (issue #1879) ────────────────────────────────────────
+
+OWNER_A = "user:alice"
+OWNER_B = "user:bob"
+
+
+@pytest.mark.asyncio
+async def test_create_stores_owner_id(app_client: AsyncClient):
+    """Created views carry the caller's owner_id."""
+    res = await app_client.post(
+        "/api/v1/saved-views",
+        json=make_body("Owned View"),
+        headers={"X-User-Id": "alice"},
+    )
+    assert res.status_code == 201
+
+    list_res = await app_client.get(
+        "/api/v1/saved-views",
+        headers={"X-User-Id": "alice"},
+    )
+    views = list_res.json()["views"]
+    assert len(views) == 1
+    assert views[0]["owner_id"] == OWNER_A
+
+
+@pytest.mark.asyncio
+async def test_user_b_cannot_see_user_a_private_views(app_client: AsyncClient):
+    """Private views of user A are invisible to user B."""
+    await app_client.post(
+        "/api/v1/saved-views",
+        json=make_body("Alice Private"),
+        headers={"X-User-Id": "alice"},
+    )
+
+    list_res = await app_client.get(
+        "/api/v1/saved-views",
+        headers={"X-User-Id": "bob"},
+    )
+    assert list_res.json()["views"] == []
+    assert list_res.json()["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_user_b_can_see_user_a_shared_views(app_client: AsyncClient):
+    """Shared views from user A are visible to user B."""
+    await app_client.post(
+        "/api/v1/saved-views",
+        json={**make_body("Alice Shared"), "shared": True},
+        headers={"X-User-Id": "alice"},
+    )
+
+    list_res = await app_client.get(
+        "/api/v1/saved-views",
+        headers={"X-User-Id": "bob"},
+    )
+    assert list_res.json()["total"] == 1
+    assert list_res.json()["views"][0]["name"] == "Alice Shared"
+
+
+@pytest.mark.asyncio
+async def test_user_b_cannot_modify_user_a_shared_view(app_client: AsyncClient):
+    """Shared views are read-only to non-owners."""
+    create_res = await app_client.post(
+        "/api/v1/saved-views",
+        json={**make_body("Shared View"), "shared": True},
+        headers={"X-User-Id": "alice"},
+    )
+    view_id = create_res.json()["id"]
+
+    put_res = await app_client.put(
+        f"/api/v1/saved-views/{view_id}",
+        json={"name": "Hacked Name"},
+        headers={"X-User-Id": "bob"},
+    )
+    assert put_res.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_user_b_cannot_delete_user_a_private_view(app_client: AsyncClient):
+    """Non-owners cannot delete private views."""
+    create_res = await app_client.post(
+        "/api/v1/saved-views",
+        json=make_body("Alice Private"),
+        headers={"X-User-Id": "alice"},
+    )
+    view_id = create_res.json()["id"]
+
+    del_res = await app_client.delete(
+        f"/api/v1/saved-views/{view_id}",
+        headers={"X-User-Id": "bob"},
+    )
+    assert del_res.status_code == 403
+
+    # Verify view still exists for alice
+    list_res = await app_client.get(
+        "/api/v1/saved-views",
+        headers={"X-User-Id": "alice"},
+    )
+    assert list_res.json()["total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_owner_can_delete_own_view(app_client: AsyncClient):
+    """Owners can delete their own views."""
+    create_res = await app_client.post(
+        "/api/v1/saved-views",
+        json=make_body("Delete Me"),
+        headers={"X-User-Id": "alice"},
+    )
+    view_id = create_res.json()["id"]
+
+    del_res = await app_client.delete(
+        f"/api/v1/saved-views/{view_id}",
+        headers={"X-User-Id": "alice"},
+    )
+    assert del_res.status_code == 200
+    assert del_res.json()["deleted"] is True
+
+
+@pytest.mark.asyncio
+async def test_duplicate_name_scoped_to_owner(app_client: AsyncClient):
+    """Two different owners can create views with the same name."""
+    await app_client.post(
+        "/api/v1/saved-views",
+        json=make_body("Same Name"),
+        headers={"X-User-Id": "alice"},
+    )
+    res = await app_client.post(
+        "/api/v1/saved-views",
+        json=make_body("Same Name"),
+        headers={"X-User-Id": "bob"},
+    )
+    assert res.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_shared_flag_toggle(app_client: AsyncClient):
+    """Owner can toggle the shared flag on their view."""
+    create_res = await app_client.post(
+        "/api/v1/saved-views",
+        json={**make_body("Toggle Me"), "shared": False},
+        headers={"X-User-Id": "alice"},
+    )
+    view_id = create_res.json()["id"]
+
+    put_res = await app_client.put(
+        f"/api/v1/saved-views/{view_id}",
+        json={"shared": True},
+        headers={"X-User-Id": "alice"},
+    )
+    assert put_res.status_code == 200
+
+    # Now bob can see it
+    list_res = await app_client.get(
+        "/api/v1/saved-views",
+        headers={"X-User-Id": "bob"},
+    )
+    assert list_res.json()["total"] == 1
