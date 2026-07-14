@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional
 from urllib.parse import urlparse
+
+from backend.secuscan import triage_engine
+from backend.secuscan.config import settings
 
 
 _OBSERVATION_CATEGORIES = {
@@ -40,6 +44,19 @@ _SOURCE_QUALITY = {
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def generate_finding_key(finding: Dict[str, Any], plugin_id: str, target: str, owner_id: str) -> str:
+    """
+    Generate a stable deduplication key for a finding that is consistent
+    across different scan tasks targeting the same asset. Unlike the per-task
+    finding ID, this key intentionally excludes any task identifier so that
+    the same vulnerability discovered by separate tasks produces the same key.
+    """
+    asset_ref = _guess_asset_ref(finding, target)
+    asset_id = _stable_id("asset", target, asset_ref)
+    signature = _issue_signature(finding)
+    return _stable_id("group", plugin_id, asset_id, signature, owner_id)
 
 
 def _parse_timestamp(raw: Any) -> str:
@@ -256,7 +273,7 @@ def _fingerprint_score(finding: Dict[str, Any]) -> tuple[float, str]:
         or ("validated" if finding.get("validated") else "none")
     ).lower()
     mapping = {"validated": 1.0, "exact": 0.95, "strong_fuzzy": 0.8, "fuzzy": 0.7, "family": 0.45, "none": 0.25}
-    return mapping.get(match_strength, 0.35), match_strength
+    return mapping.get(match_strength, 0.0), match_strength
 
 
 def _source_quality(sources: Iterable[str]) -> float:
@@ -420,6 +437,20 @@ async def normalize_and_correlate_findings(
                 match_strength=match_strength if fingerprint_score >= 0.45 else "none",
             )
         normalized.append(finding)
+
+    if settings.triage_engine_enabled and settings.triage_engine_api_key:
+        try:
+            triage_engine.triage_findings(
+                normalized,
+                model=settings.triage_engine_model,
+                api_key=settings.triage_engine_api_key,
+                base_url=settings.triage_engine_base_url or None,
+                eligible_categories=settings.triage_engine_eligible_categories,
+                min_confidence_to_skip=settings.triage_engine_min_confidence_to_skip,
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Triage is a best-effort enhancement — never let it break scan results.
+            logging.getLogger(__name__).warning("triage_engine: batch triage failed — %s", exc)
 
     normalized.sort(
         key=lambda item: (

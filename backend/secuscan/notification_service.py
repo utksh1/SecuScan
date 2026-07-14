@@ -423,33 +423,48 @@ async def send_webhook(
 
         if response.status_code in (301, 302, 303, 307, 308):
             redirect_url = response.headers.get("location", "")
-            if redirect_url:
-                from urllib.parse import urlparse
+            if not redirect_url:
+                return (
+                    False,
+                    f"Webhook returned HTTP {response.status_code} with no Location header, payload not delivered",
+                )
 
-                parsed_redirect = urlparse(redirect_url)
-                if parsed_redirect.hostname:
-                    try:
-                        redirect_ips = socket.getaddrinfo(
-                            parsed_redirect.hostname, parsed_redirect.port or 443
-                        )
-                        for _family, _stype, _proto, _cname, sockaddr in redirect_ips:
-                            rip = ipaddress.ip_address(sockaddr[0])
-                            for blocked_cidr in settings.notification_blocked_ip_ranges:
-                                try:
-                                    if rip in ipaddress.ip_network(
-                                        blocked_cidr, strict=False
-                                    ):
-                                        return (
-                                            False,
-                                            f"Redirect to blocked IP range: {blocked_cidr}",
-                                        )
-                                except ValueError:
-                                    continue
-                    except OSError:
-                        return (
-                            False,
-                            f"Could not resolve redirect target: {redirect_url}",
-                        )
+            from urllib.parse import urlparse
+
+            parsed_redirect = urlparse(redirect_url)
+            if not parsed_redirect.hostname:
+                return (
+                    False,
+                    f"Webhook returned HTTP {response.status_code} redirect with no hostname: {redirect_url}, payload not delivered",
+                )
+
+            try:
+                redirect_ips = socket.getaddrinfo(
+                    parsed_redirect.hostname, parsed_redirect.port or 443
+                )
+                for _family, _stype, _proto, _cname, sockaddr in redirect_ips:
+                    rip = ipaddress.ip_address(sockaddr[0])
+                    for blocked_cidr in settings.notification_blocked_ip_ranges:
+                        try:
+                            if rip in ipaddress.ip_network(
+                                blocked_cidr, strict=False
+                            ):
+                                return (
+                                    False,
+                                    f"Redirect to blocked IP range: {blocked_cidr}",
+                                )
+                        except ValueError:
+                            continue
+            except OSError:
+                return (
+                    False,
+                    f"Could not resolve redirect target: {redirect_url}",
+                )
+
+            return (
+                False,
+                f"Webhook returned HTTP {response.status_code} redirect to {redirect_url}, payload not delivered",
+            )
 
         return True, None
     except httpx.HTTPError as exc:

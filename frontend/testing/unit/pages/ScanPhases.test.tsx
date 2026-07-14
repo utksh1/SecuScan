@@ -6,6 +6,7 @@ import * as api from '../../../src/api';
 
 vi.mock('../../../src/api', () => ({
   API_BASE: 'http://localhost',
+  buildTaskStreamUrl: (taskId: string) => `http://localhost/task/${taskId}/stream`,
   getTaskStatus: vi.fn(),
   getTaskResult: vi.fn(),
   getPluginSchema: vi.fn().mockResolvedValue(null),

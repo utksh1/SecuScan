@@ -4,7 +4,7 @@ import React from 'react'
 import { useTaskSubscription } from '../../../src/hooks/useTaskSubscription'
 
 vi.mock('../../../src/api', () => ({
-  API_BASE: 'http://localhost',
+  buildTaskStreamUrl: (taskId: string) => `http://localhost/task/${taskId}/stream`,
   getTaskStatus: vi.fn().mockResolvedValue({ status: 'running' }),
 }))
 
@@ -153,7 +153,7 @@ describe('useTaskSubscription', () => {
   })
 
   it('stops polling on terminal status', async () => {
-    let resolveGetTaskStatus: (value: unknown) => void
+    let resolveGetTaskStatus: (value: Awaited<ReturnType<typeof getTaskStatus>>) => void
     vi.mocked(getTaskStatus).mockImplementation(() => new Promise(resolve => {
       resolveGetTaskStatus = resolve
     }))
