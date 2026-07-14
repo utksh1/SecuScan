@@ -432,7 +432,7 @@ export default function Scanner() {
                       </div>
 
                       <div>
-                        <h3 className="text-3xl font-black text-silver-bright uppercase tracking-tighter italic leading-tight break-words min-w-0 group-hover:text-rag-red transition-colors">
+                        <h3 className="text-3xl font-black text-silver-bright uppercase tracking-tighter italic leading-tight break-words min-w-0 group-hover:text-rag-red transition-colors line-clamp-2 text-ellipsis">
   {tool.name}
 </h3>
                         <div className="w-12 h-1 bg-silver-bright/10 mt-4 group-hover:w-full group-hover:bg-rag-red/30 transition-all duration-700" />
@@ -443,7 +443,7 @@ export default function Scanner() {
                       </p>
 
                       {tool.isPlugin && tool.availability && tool.availability.missing_binaries.length > 0 && (
-                        <div className="text-[9px] uppercase tracking-widest text-rag-amber font-black leading-relaxed">
+                        <div className="text-[9px] uppercase tracking-widest text-rag-amber font-black leading-relaxed line-clamp-2 text-ellipsis">
                           {tool.availability.guidance ||
                             `Unavailable: Requires external binaries (${tool.availability.missing_binaries.join(', ')})`}
                         </div>
