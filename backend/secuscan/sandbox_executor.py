@@ -114,6 +114,21 @@ async def sandbox_execute(
     violation_reason is None on success, or one of
     "timeout", "memory_limit", "output_limit".
     """
+    # Enforce network isolation when allow_network is False.
+    # On Linux, use unshare(1) to create a new network namespace so the
+    # subprocess cannot reach any network interface.  On non-Linux platforms
+    # we log a warning; full enforcement requires Docker --network none.
+    if not config.allow_network:
+        if IS_LINUX:
+            cmd = ["unshare", "--net", "--"] + cmd
+            logger.info("Network namespace isolation enabled (unshare --net)")
+        else:
+            logger.warning(
+                "allow_network=False requested but network namespace isolation "
+                "requires Linux unshare.  Network access is NOT restricted on %s.",
+                platform.system(),
+            )
+
     preexec_fn = _build_preexec_fn(config) if IS_LINUX else None
 
     rss_before = 0

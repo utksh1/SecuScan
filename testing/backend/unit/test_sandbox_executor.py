@@ -5,15 +5,18 @@ Covers (separately from testing/backend/test_sandbox_executor.py which tests
 sandbox_execute end-to-end):
 - classify_memory_violation: exit-code, stderr, and RSS threshold heuristics
 - resolve_sandbox_config: global defaults merged with per-plugin overrides
+- sandbox_execute network namespace enforcement (unshare --net)
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
+import asyncio
 
 import pytest
 
 from backend.secuscan.sandbox_executor import (
     classify_memory_violation,
     resolve_sandbox_config,
+    sandbox_execute,
 )
 from backend.secuscan.models import SandboxConfig
 
@@ -186,3 +189,71 @@ def test_resolve_sandbox_config_full_override():
     assert config.max_memory_mb == 256
     assert config.max_output_bytes == 1_000_000
     assert config.allow_network is False
+
+
+# ---------------------------------------------------------------------------
+# sandbox_execute – network namespace enforcement
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_sandbox_execute_wraps_with_unshare_net_when_network_disabled():
+    """When allow_network=False on Linux, the command is prefixed with unshare --net."""
+    config = SandboxConfig(allow_network=False, timeout_seconds=5)
+
+    mock_process = AsyncMock()
+    mock_process.stdout = AsyncMock()
+    mock_process.stderr = AsyncMock()
+    mock_process.returncode = 0
+
+    async def fake_read(*args, **kwargs):
+        return b""
+
+    mock_process.stdout.read = fake_read
+    mock_process.stderr.read = fake_read
+
+    with patch("backend.secuscan.sandbox_executor.IS_LINUX", True), \
+         patch("backend.secuscan.sandbox_executor.asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec, \
+         patch("backend.secuscan.sandbox_executor._build_preexec_fn", return_value=None):
+
+        mock_exec.return_value = mock_process
+        mock_process.wait = AsyncMock(return_value=0)
+
+        await sandbox_execute(["echo", "hello"], config)
+
+        mock_exec.assert_called_once()
+        called_args = mock_exec.call_args[0]
+        assert called_args[0] == "unshare"
+        assert called_args[1] == "--net"
+        assert called_args[2] == "--"
+        assert called_args[3:] == ("echo", "hello")
+
+
+@pytest.mark.asyncio
+async def test_sandbox_execute_no_unshare_when_network_allowed():
+    """When allow_network=True, the command is NOT wrapped with unshare."""
+    config = SandboxConfig(allow_network=True, timeout_seconds=5)
+
+    mock_process = AsyncMock()
+    mock_process.stdout = AsyncMock()
+    mock_process.stderr = AsyncMock()
+    mock_process.returncode = 0
+
+    async def fake_read(*args, **kwargs):
+        return b""
+
+    mock_process.stdout.read = fake_read
+    mock_process.stderr.read = fake_read
+
+    with patch("backend.secuscan.sandbox_executor.IS_LINUX", True), \
+         patch("backend.secuscan.sandbox_executor.asyncio.create_subprocess_exec", new_callable=AsyncMock) as mock_exec, \
+         patch("backend.secuscan.sandbox_executor._build_preexec_fn", return_value=None):
+
+        mock_exec.return_value = mock_process
+        mock_process.wait = AsyncMock(return_value=0)
+
+        await sandbox_execute(["echo", "hello"], config)
+
+        mock_exec.assert_called_once()
+        called_args = mock_exec.call_args[0]
+        assert called_args[0] == "echo"
+        assert called_args[1] == "hello"

@@ -571,8 +571,12 @@ class TaskExecutor:
 
         # Apply Docker Sandboxing if enabled
         if settings.docker_enabled:
+            from .sandbox_executor import resolve_sandbox_config
+            sandbox_cfg = resolve_sandbox_config(getattr(plugin, 'sandbox', None))
+
             await self._ensure_docker_network()
             docker_image = plugin.docker_image or "alpine:latest"
+            docker_network = "none" if not sandbox_cfg.allow_network else settings.docker_network
             docker_cmd = [
                 "docker",
                 "run",
@@ -584,7 +588,7 @@ class TaskExecutor:
                 "--cpus",
                 str(settings.sandbox_cpu_quota),
                 "--cap-drop", "NET_RAW",
-                "--network", settings.docker_network,
+                "--network", docker_network,
                 docker_image,
             ]
             command = docker_cmd + command

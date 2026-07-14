@@ -166,6 +166,7 @@ class PluginMetadata(BaseModel):
     learning: Optional[Dict[str, Any]] = None
     dependencies: Optional[Dict[str, List[str]]] = None
     docker_image: Optional[str] = None
+    sandbox: Optional[SandboxConfig] = None
 
     checksum: Optional[str] = None
     signature: Optional[str] = None
