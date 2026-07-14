@@ -279,4 +279,96 @@ describe('Scans — task list', () => {
     // Error is shown via toast, not the banner — no Close alert button expected
     expect(screen.queryByRole('button', { name: /Close alert/i })).not.toBeInTheDocument()
   })
+
+  it('handles bulkDeleteTasks failure: rows persist and error toast shown', async () => {
+    const { bulkDeleteTasks } = await import('../../../src/api')
+    vi.mocked(bulkDeleteTasks).mockRejectedValueOnce(new Error('Network Error or Internal Server Error'))
+
+    const tasks = [
+      makeTask({ task_id: 'task-1', tool: 'nmap', target: 'target1.com' }),
+      makeTask({ task_id: 'task-2', tool: 'nmap', target: 'target2.com' }),
+    ]
+    mockFetch(tasks)
+    renderScans()
+
+    await waitFor(() => expect(screen.getByText('target1.com')).toBeInTheDocument())
+    expect(screen.getByText('target2.com')).toBeInTheDocument()
+
+    // Select all tasks
+    await userEvent.click(screen.getByRole('button', { name: /Select_All/i }))
+    await waitFor(() => {
+      expect(screen.getByText('2')).toBeInTheDocument()
+    })
+
+    // Click the bulk delete button
+    const deleteBtn = screen.getByRole('button', { name: /Prune_Selected/i })
+    await userEvent.click(deleteBtn)
+
+    // Confirm modal should appear
+    await waitFor(() => expect(screen.getByText('Bulk Delete Records')).toBeInTheDocument())
+
+    // Click Confirm
+    const confirmBtn = screen.getByRole('button', { name: /Confirm/i })
+    await userEvent.click(confirmBtn)
+
+    // Assert error toast is shown
+    await waitFor(() => {
+      const alertEl = screen.getByRole('alert')
+      expect(alertEl).toBeInTheDocument()
+      expect(alertEl.textContent).toMatch(/Failed to delete some tasks/)
+    })
+
+    // Assert rows are NOT removed — they persist despite the API failure
+    expect(screen.getByText('target1.com')).toBeInTheDocument()
+    expect(screen.getByText('target2.com')).toBeInTheDocument()
+
+    // Assert selection count is still shown (not cleared)
+    expect(screen.getByText('2')).toBeInTheDocument()
+  })
+
+  it('bulkDeleteTasks failure does not clear selection state', async () => {
+    const { bulkDeleteTasks } = await import('../../../src/api')
+    vi.mocked(bulkDeleteTasks).mockRejectedValueOnce(new Error('Server Error'))
+
+    const tasks = [
+      makeTask({ task_id: 'task-1', tool: 'nmap', target: 'target1.com' }),
+      makeTask({ task_id: 'task-2', tool: 'nmap', target: 'target2.com' }),
+      makeTask({ task_id: 'task-3', tool: 'nmap', target: 'target3.com' }),
+    ]
+    mockFetch(tasks)
+    renderScans()
+
+    await waitFor(() => expect(screen.getByText('target1.com')).toBeInTheDocument())
+
+    // Select only first two tasks by clicking their selection divs (material icon "add")
+    const addIcons = screen.getAllByText('add')
+    await userEvent.click(addIcons[0])
+    await userEvent.click(addIcons[1])
+
+    await waitFor(() => {
+      expect(screen.getByText('2')).toBeInTheDocument()
+    })
+
+    // Click bulk delete
+    const deleteBtn = screen.getByRole('button', { name: /Prune_Selected/i })
+    await userEvent.click(deleteBtn)
+
+    await waitFor(() => expect(screen.getByText('Bulk Delete Records')).toBeInTheDocument())
+
+    const confirmBtn = screen.getByRole('button', { name: /Confirm/i })
+    await userEvent.click(confirmBtn)
+
+    // Wait for error
+    await waitFor(() => {
+      const alertEl = screen.getByRole('alert')
+      expect(alertEl).toBeInTheDocument()
+    })
+
+    // Verify the two tasks are still visible
+    expect(screen.getByText('target1.com')).toBeInTheDocument()
+    expect(screen.getByText('target2.com')).toBeInTheDocument()
+
+    // Verify selection count is still 2 (not cleared)
+    expect(screen.getByText('2')).toBeInTheDocument()
+  })
 })
