@@ -286,3 +286,89 @@ def test_sandbox_settings_env_override():
     assert s.sandbox_timeout == 30
     assert s.sandbox_memory_mb == 128
     assert s.sandbox_allow_network is False
+
+
+# ── debug mode docs gating (Issue #2022) ──────────────────────────────────────
+
+
+def test_debug_mode_true_enables_docs():
+    """When debug=True, docs_url/redoc_url/openapi_url are set."""
+    s = Settings(debug=True)
+    assert s.debug is True
+
+
+def test_debug_mode_false_disables_docs():
+    """When debug=False (default), docs should not be exposed."""
+    s = Settings(debug=False)
+    assert s.debug is False
+
+
+# ── FastAPI docs gating via TestClient ────────────────────────────────────────
+
+
+def test_docs_disabled_when_debug_false(tmp_path, monkeypatch):
+    """/docs returns 404 when the app was created with debug=False."""
+    from backend.secuscan.main import app as _app
+    from fastapi.testclient import TestClient
+
+    # The app is created with debug=False by default, so docs_url=None
+    assert _app.docs_url is None
+
+    with TestClient(_app, raise_server_exceptions=False) as client:
+        resp = client.get("/docs")
+        assert resp.status_code == 404
+
+
+def test_openapi_disabled_when_debug_false(tmp_path, monkeypatch):
+    """/openapi.json returns 404 when the app was created with debug=False."""
+    from backend.secuscan.main import app as _app
+    from fastapi.testclient import TestClient
+
+    # The app is created with debug=False by default, so openapi_url=None
+    assert _app.openapi_url is None
+
+    with TestClient(_app, raise_server_exceptions=False) as client:
+        resp = client.get("/openapi.json")
+        assert resp.status_code == 404
+
+
+def test_docs_enabled_when_debug_true(tmp_path):
+    """/docs returns 200 when a fresh app is created with debug=True."""
+    from backend.secuscan.config import Settings
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    app_debug = FastAPI(
+        title="Test",
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
+    )
+
+    with TestClient(app_debug, raise_server_exceptions=False) as client:
+        resp = client.get("/docs")
+        assert resp.status_code == 200
+        resp = client.get("/openapi.json")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "openapi" in data
+
+
+def test_traceback_not_leaked_in_production(tmp_path, monkeypatch):
+    """In production (debug=False), unhandled exceptions return plain text, not HTML tracebacks."""
+    from backend.secuscan.config import settings as real_settings
+    from backend.secuscan.main import app as _app
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setattr(real_settings, "debug", False)
+
+    @_app.get("/test-exception-prod")
+    async def raise_exception_prod():
+        raise RuntimeError("secret-sauce-error-12345")
+
+    with TestClient(_app, raise_server_exceptions=False) as client:
+        resp = client.get("/test-exception-prod")
+        assert resp.status_code == 500
+        body = resp.text
+        assert "secret-sauce-error-12345" not in body
+        assert "<pre>" not in body
