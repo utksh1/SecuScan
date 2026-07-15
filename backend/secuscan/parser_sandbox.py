@@ -45,6 +45,7 @@ can investigate failures without leaking sensitive details to API callers.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import platform
@@ -53,9 +54,10 @@ import shutil
 import sys
 import subprocess
 import string
+import tempfile
 import logging
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Iterator
 
 logger = logging.getLogger(__name__)
 
@@ -208,6 +210,46 @@ def _privilege_drop_kwargs() -> Dict[str, Any]:
     return {"user": uid, "group": gid, "extra_groups": []}
 
 
+@contextlib.contextmanager
+def _staged_parser(
+    parser_path: Path, drop_kwargs: Dict[str, Any]
+) -> Iterator[Path]:
+    """Yield a ``parser.py`` path the (possibly privilege-dropped) child can read.
+
+    When the parser child drops to an unprivileged user (i.e. the backend runs
+    as root and ``drop_kwargs`` is non-empty), the original ``parser.py`` may
+    live under a root-owned, non-world-readable directory that the drop target
+    cannot traverse or read — the child would then fail to import it. Stage a
+    private copy owned by that account, with the staging directory and file
+    readable only by it (and root), and remove the copy once the child has
+    finished.
+
+    When no privilege drop is in effect the original path is yielded unchanged
+    and nothing is copied — the already-unprivileged backend can read its own
+    plugin files directly.
+    """
+    if not drop_kwargs:
+        yield parser_path
+        return
+
+    uid, gid = drop_kwargs["user"], drop_kwargs["group"]
+    staging_dir = tempfile.mkdtemp(prefix="secuscan-parser-")
+    try:
+        staged = Path(staging_dir) / "parser.py"
+        shutil.copyfile(parser_path, staged)
+        # Give the copy to the unprivileged account read-only (0400); other
+        # local users cannot read it. The directory stays owned by the backend
+        # and only traversable by others (0711, not readable/listable), which
+        # lets the dropped child reach the file while keeping cleanup below
+        # working whether or not the backend is root.
+        os.chown(staged, uid, gid)
+        os.chmod(staged, 0o400)
+        os.chmod(staging_dir, 0o711)
+        yield staged
+    finally:
+        shutil.rmtree(staging_dir, ignore_errors=True)
+
+
 # ---------------------------------------------------------------------------
 # Network isolation for the parser subprocess
 # ---------------------------------------------------------------------------
@@ -318,12 +360,10 @@ def run_parser_in_sandbox(
 
     max_input_bytes = max(len(parser_input.encode("utf-8")) + 128, 64 * 1024)
 
-    # Use Template.safe_substitute so that any stray $ in parser_path does not
-    # raise; repr() ensures the path is a valid Python string literal.
-    bootstrap = _BOOTSTRAP_TEMPLATE.safe_substitute(
-        parser_path_repr=repr(str(parser_path)),
-        max_input_bytes=max_input_bytes,
-    )
+    # Resolve the privilege drop once and reuse it for both staging and the
+    # child process, so the account the file is made readable for is exactly
+    # the account the child runs as.
+    drop_kwargs = _privilege_drop_kwargs()
 
     envelope = json.dumps({"input": parser_input})
     stdin_bytes = envelope.encode("utf-8")
@@ -337,61 +377,73 @@ def run_parser_in_sandbox(
     # Stderr cap: diagnostics only — 64 KB is more than enough for any error message.
     _MAX_STDERR_BYTES = 65536
 
-    proc = subprocess.Popen(
-        _sandbox_argv(sys.executable, bootstrap),
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        env=_sanitised_env(),
-        **_privilege_drop_kwargs(),
-    )
+    # Stage the parser where the (possibly privilege-dropped) child can read it,
+    # then run it. The staged copy must outlive the child, so the whole run
+    # happens inside the context; _staged_parser removes it on exit and is a
+    # no-op when the backend is already unprivileged.
+    with _staged_parser(parser_path, drop_kwargs) as effective_parser_path:
+        # Use Template.safe_substitute so that any stray $ in parser_path does
+        # not raise; repr() ensures the path is a valid Python string literal.
+        bootstrap = _BOOTSTRAP_TEMPLATE.safe_substitute(
+            parser_path_repr=repr(str(effective_parser_path)),
+            max_input_bytes=max_input_bytes,
+        )
 
-    def _read_stdout() -> None:
-        nonlocal stdout_total, overflow
-        assert proc.stdout is not None
-        while True:
-            chunk = proc.stdout.read(65536)
-            if not chunk:
-                break
-            stdout_total += len(chunk)
-            if stdout_total > max_output_bytes:
-                overflow = True
-                proc.kill()
-                break
-            stdout_chunks.append(chunk)
+        proc = subprocess.Popen(
+            _sandbox_argv(sys.executable, bootstrap),
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=_sanitised_env(),
+            **drop_kwargs,
+        )
 
-    def _read_stderr() -> None:
-        assert proc.stderr is not None
-        total = 0
-        while True:
-            chunk = proc.stderr.read(4096)
-            if not chunk:
-                break
-            total += len(chunk)
-            if total <= _MAX_STDERR_BYTES:
-                stderr_chunks.append(chunk)
-            # Always drain so the child is never blocked on a full pipe.
+        def _read_stdout() -> None:
+            nonlocal stdout_total, overflow
+            assert proc.stdout is not None
+            while True:
+                chunk = proc.stdout.read(65536)
+                if not chunk:
+                    break
+                stdout_total += len(chunk)
+                if stdout_total > max_output_bytes:
+                    overflow = True
+                    proc.kill()
+                    break
+                stdout_chunks.append(chunk)
 
-    t_out = threading.Thread(target=_read_stdout, daemon=True)
-    t_err = threading.Thread(target=_read_stderr, daemon=True)
-    t_out.start()
-    t_err.start()
+        def _read_stderr() -> None:
+            assert proc.stderr is not None
+            total = 0
+            while True:
+                chunk = proc.stderr.read(4096)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total <= _MAX_STDERR_BYTES:
+                    stderr_chunks.append(chunk)
+                # Always drain so the child is never blocked on a full pipe.
 
-    try:
-        proc.stdin.write(stdin_bytes)  # type: ignore[union-attr]
-        proc.stdin.close()  # type: ignore[union-attr]
-    except BrokenPipeError:
-        pass
+        t_out = threading.Thread(target=_read_stdout, daemon=True)
+        t_err = threading.Thread(target=_read_stderr, daemon=True)
+        t_out.start()
+        t_err.start()
 
-    timed_out = False
-    try:
-        proc.wait(timeout=timeout_seconds)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        proc.kill()
+        try:
+            proc.stdin.write(stdin_bytes)  # type: ignore[union-attr]
+            proc.stdin.close()  # type: ignore[union-attr]
+        except BrokenPipeError:
+            pass
 
-    t_out.join(timeout=5)
-    t_err.join(timeout=5)
+        timed_out = False
+        try:
+            proc.wait(timeout=timeout_seconds)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            proc.kill()
+
+        t_out.join(timeout=5)
+        t_err.join(timeout=5)
 
     stderr_text = b"".join(stderr_chunks).decode("utf-8", errors="replace")
 

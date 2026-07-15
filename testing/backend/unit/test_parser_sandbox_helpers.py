@@ -4,6 +4,8 @@ Unit tests for parser_sandbox pure helpers.
 Covers _sanitised_env() from backend.secuscan.parser_sandbox.
 """
 
+import os
+
 import pytest
 from unittest.mock import patch
 
@@ -164,3 +166,56 @@ def test_privilege_drop_falls_back_to_65534_when_nobody_missing():
 
     assert kwargs["user"] == parser_sandbox._NOBODY_UID
     assert kwargs["group"] == parser_sandbox._NOBODY_GID
+
+
+# ---------------------------------------------------------------------------
+# _staged_parser() — makes parser.py readable to the privilege-dropped child
+# (PR #2019 review: prove the drop target can actually read the parser).
+# ---------------------------------------------------------------------------
+
+
+def test_staged_parser_is_noop_without_drop(tmp_path):
+    """With no privilege drop the original path is yielded, nothing is copied."""
+    import os
+    from backend.secuscan.parser_sandbox import _staged_parser
+
+    original = tmp_path / "parser.py"
+    original.write_text("def parse(x):\n    return {}\n")
+
+    before = set(os.listdir(tmp_path))
+    with _staged_parser(original, {}) as effective:
+        assert effective == original
+    # No staging directory was created next to (or instead of) the original.
+    assert set(os.listdir(tmp_path)) == before
+
+
+@pytest.mark.skipif(os.name != "posix", reason="chown/file-mode semantics are POSIX-only")
+def test_staged_parser_makes_a_private_readable_copy(tmp_path):
+    """A drop stages a faithful, drop-target-readable, then cleaned-up copy."""
+    import os
+    import stat
+    from backend.secuscan.parser_sandbox import _staged_parser
+
+    original = tmp_path / "parser.py"
+    source = "def parse(output):\n    return {'echo': output}\n"
+    original.write_text(source)
+
+    # A real drop needs root; targeting our own ids exercises the same staging
+    # path (chown to self is always permitted) so this runs on non-root CI.
+    drop = {"user": os.getuid(), "group": os.getgid(), "extra_groups": []}
+
+    with _staged_parser(original, drop) as staged:
+        staged_dir = staged.parent
+        # A distinct copy under a fresh secuscan staging directory.
+        assert staged != original
+        assert "secuscan-parser-" in os.path.basename(staged_dir)
+        # Faithful copy of the source parser.
+        assert staged.read_text() == source
+        # File is read-only to the drop target; directory only traversable.
+        assert stat.S_IMODE(os.stat(staged).st_mode) == 0o400
+        assert stat.S_IMODE(os.stat(staged_dir).st_mode) == 0o711
+        # The drop target (here: us) can actually read it.
+        assert os.access(staged, os.R_OK)
+
+    # The staged copy is removed once the context exits.
+    assert not staged_dir.exists()

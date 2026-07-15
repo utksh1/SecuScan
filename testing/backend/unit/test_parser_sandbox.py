@@ -413,6 +413,90 @@ class TestEnvironmentSanitisation:
 
 
 # ---------------------------------------------------------------------------
+# Privilege drop: the dropped child must still be able to read + run parser.py
+# (PR #2019 review): dropping to nobody must not make the parser unreadable.
+# ---------------------------------------------------------------------------
+
+
+class TestPrivilegeDropExecution:
+    @pytest.mark.skipif(os.name != "posix", reason="privilege drop is POSIX-only")
+    def test_parser_runs_when_privilege_drop_is_active(self, tmp_path, monkeypatch):
+        """With a drop in effect the parser is staged and still parses correctly."""
+        from backend.secuscan import parser_sandbox
+
+        p = _write_parser(
+            tmp_path,
+            """\
+            def parse(output):
+                return {"echo": output}
+            """,
+        )
+
+        # A real drop to another account needs root; drop to our own ids so the
+        # staging + child-exec path runs unchanged on non-root CI. Omit
+        # extra_groups (setgroups needs privilege) to keep the child startable.
+        drop = {"user": os.getuid(), "group": os.getgid()}
+        monkeypatch.setattr(parser_sandbox, "_privilege_drop_kwargs", lambda: drop)
+
+        result = run_parser_in_sandbox(p, "drop_plugin", "payload")
+        assert result == {"echo": "payload"}
+
+    @pytest.mark.skipif(os.name != "posix", reason="privilege drop is POSIX-only")
+    def test_no_staging_dir_leaks_after_dropped_run(self, tmp_path, monkeypatch):
+        """The staged parser copy is cleaned up after a privilege-dropped run."""
+        import tempfile
+        from pathlib import Path
+        from backend.secuscan import parser_sandbox
+
+        p = _write_parser(
+            tmp_path,
+            """\
+            def parse(output):
+                return {"ok": True}
+            """,
+        )
+        drop = {"user": os.getuid(), "group": os.getgid()}
+        monkeypatch.setattr(parser_sandbox, "_privilege_drop_kwargs", lambda: drop)
+
+        before = set(Path(tempfile.gettempdir()).glob("secuscan-parser-*"))
+        run_parser_in_sandbox(p, "drop_plugin", "data")
+        after = set(Path(tempfile.gettempdir()).glob("secuscan-parser-*"))
+        assert after == before
+
+    @pytest.mark.skipif(
+        os.name != "posix" or not hasattr(os, "geteuid") or os.geteuid() != 0,
+        reason="requires running as root to exercise a real privilege drop",
+    )
+    def test_root_reads_and_runs_root_private_parser_unprivileged(self, tmp_path):
+        """As root, a root-private parser.py is still read+run by the dropped child.
+
+        Reproduces the exact condition the naive drop broke: parser.py and its
+        parent directory are root-owned and unreadable to others. The staged
+        copy must let the unprivileged child read and execute it.
+        """
+        private_dir = tmp_path / "private"
+        private_dir.mkdir()
+        p = _write_parser(
+            private_dir,
+            """\
+            import os
+            def parse(output):
+                return {"euid": os.geteuid(), "echo": output}
+            """,
+        )
+        # Root-private: only root can read the original file / traverse its dir.
+        os.chmod(p, 0o600)
+        os.chmod(private_dir, 0o700)
+
+        result = run_parser_in_sandbox(p, "root_plugin", "payload")
+
+        # The parser ran at all → the dropped child could read the staged copy.
+        assert result["echo"] == "payload"
+        # And it ran unprivileged, never as root.
+        assert result["euid"] != 0
+
+
+# ---------------------------------------------------------------------------
 # ParserSandboxError
 # ---------------------------------------------------------------------------
 
