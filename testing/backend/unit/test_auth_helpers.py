@@ -4,15 +4,24 @@ Unit tests for backend.secuscan.auth pure helpers.
 Covers:
 - resolve_owner_id returns DEFAULT_OWNER_ID when request is None
 - resolve_owner_id returns DEFAULT_OWNER_ID when X-User-Id header is absent
-- resolve_owner_id returns user:<id> when X-User-Id header is present and trusted
+- resolve_owner_id returns user:<id> when X-User-Id header is present and from trusted proxy
 - resolve_owner_id strips whitespace from user ID
-- resolve_owner_id rejects untrusted X-User-Id values (BOLA fix)
+- resolve_owner_id rejects X-User-Id from untrusted sources (BOLA fix)
 - get_api_key returns the current API key or None when not initialised
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from backend.secuscan import auth
+
+
+def _mock_request(headers, client_host="127.0.0.1"):
+    """Create a mock request with headers and a client host for proxy checks."""
+    req = MagicMock()
+    req.headers = headers
+    req.client = MagicMock()
+    req.client.host = client_host
+    return req
 
 
 class TestResolveOwnerId:
@@ -23,53 +32,42 @@ class TestResolveOwnerId:
 
     def test_returns_default_when_header_absent(self):
         """resolve_owner_id returns DEFAULT_OWNER_ID when X-User-Id is absent."""
-        mock_request = MagicMock()
-        mock_request.headers = {}
-        result = auth.resolve_owner_id(mock_request)
+        result = auth.resolve_owner_id(_mock_request({}))
         assert result == auth.DEFAULT_OWNER_ID
 
     def test_returns_default_when_header_empty(self):
         """resolve_owner_id returns DEFAULT_OWNER_ID when X-User-Id is empty."""
-        mock_request = MagicMock()
-        mock_request.headers = {"x-user-id": ""}
-        result = auth.resolve_owner_id(mock_request)
+        result = auth.resolve_owner_id(_mock_request({"x-user-id": ""}))
         assert result == auth.DEFAULT_OWNER_ID
 
-    def test_returns_user_prefix_when_header_present_and_trusted(self):
-        """resolve_owner_id returns 'user:<id>' when X-User-Id is set and trusted."""
-        mock_request = MagicMock()
-        mock_request.headers = {"x-user-id": "alice"}
-        with patch("backend.secuscan.config.settings") as mock_settings:
-            mock_settings.trusted_owner_ids = ["alice", "bob"]
-            result = auth.resolve_owner_id(mock_request)
-            assert result == "user:alice"
+    def test_returns_user_prefix_when_header_present_and_trusted_proxy(self):
+        """resolve_owner_id returns 'user:<id>' when X-User-Id is set and from trusted proxy."""
+        result = auth.resolve_owner_id(
+            _mock_request({"x-user-id": "alice"}, client_host="127.0.0.1")
+        )
+        assert result == "user:alice"
 
     def test_strips_whitespace_from_user_id(self):
         """resolve_owner_id strips leading/trailing whitespace from user ID."""
-        mock_request = MagicMock()
-        mock_request.headers = {"x-user-id": "  bob  "}
-        with patch("backend.secuscan.config.settings") as mock_settings:
-            mock_settings.trusted_owner_ids = ["bob"]
-            result = auth.resolve_owner_id(mock_request)
-            assert result == "user:bob"
+        result = auth.resolve_owner_id(
+            _mock_request({"x-user-id": "  bob  "}, client_host="127.0.0.1")
+        )
+        assert result == "user:bob"
 
-    def test_returns_default_when_user_not_in_trusted_list(self):
-        """resolve_owner_id returns DEFAULT_OWNER_ID for untrusted X-User-Id."""
-        mock_request = MagicMock()
-        mock_request.headers = {"x-user-id": "attacker"}
-        with patch("backend.secuscan.config.settings") as mock_settings:
-            mock_settings.trusted_owner_ids = ["alice", "bob"]
-            result = auth.resolve_owner_id(mock_request)
-            assert result == auth.DEFAULT_OWNER_ID
+    def test_returns_default_when_header_from_untrusted_source(self):
+        """resolve_owner_id returns DEFAULT_OWNER_ID for X-User-Id from untrusted IP."""
+        result = auth.resolve_owner_id(
+            _mock_request({"x-user-id": "alice"}, client_host="203.0.113.50")
+        )
+        assert result == auth.DEFAULT_OWNER_ID
 
-    def test_returns_default_when_trusted_list_is_empty(self):
-        """resolve_owner_id ignores X-User-Id when trusted_owner_ids is empty."""
-        mock_request = MagicMock()
-        mock_request.headers = {"x-user-id": "alice"}
-        with patch("backend.secuscan.config.settings") as mock_settings:
-            mock_settings.trusted_owner_ids = []
-            result = auth.resolve_owner_id(mock_request)
-            assert result == auth.DEFAULT_OWNER_ID
+    def test_returns_default_when_no_client_info(self):
+        """resolve_owner_id returns DEFAULT_OWNER_ID when request has no client info."""
+        req = MagicMock()
+        req.headers = {"x-user-id": "alice"}
+        req.client = None
+        result = auth.resolve_owner_id(req)
+        assert result == auth.DEFAULT_OWNER_ID
 
 
 class TestGetApiKey:

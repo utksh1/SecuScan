@@ -222,20 +222,16 @@ def get_api_key() -> str | None:
 #
 # ``resolve_owner_id`` derives a stable owner identity for the request and is
 # persisted as ``owner_id`` on tasks/findings/reports at creation time and
-# compared on every read/delete/report access. It deliberately prioritises the
-# explicit authenticated-user header (``X-User-Id``) — the same header
-# ``resolve_client_identity`` already treats as the authenticated user — so that
-# multiple workspaces sharing the deployment API key remain isolated. In a
-# production deployment the header is expected to be set by an upstream auth
-# proxy / SSO layer; deployments that do not send it fall back to a single
-# shared ``DEFAULT_OWNER_ID`` and keep their existing (single-user) behaviour.
+# compared on every read/delete/report access.
 #
-# SECURITY FIX (Issue #2021): The X-User-Id header is now validated against a
-# configurable whitelist (``trusted_owner_ids``).  When the whitelist is empty
-# (the default), the header is ignored and all requests use DEFAULT_OWNER_ID,
-# preventing cross-workspace BOLA attacks.  Operators who need multi-user
-# isolation must explicitly populate the whitelist with the allowed workspace
-# IDs.
+# SECURITY FIX (Issue #2021): The X-User-Id header is only accepted when the
+# request originates from a trusted proxy (``request.client.host`` is in
+# ``settings.trusted_proxies``).  This prevents any client holding the shared
+# API key from spoofing the header to impersonate another workspace.  In a
+# production deployment the reverse proxy / SSO layer is the trusted source
+# that sets this header; direct clients cannot bypass this check.  Deployments
+# that do not use a proxy fall back to a single shared ``DEFAULT_OWNER_ID``
+# and keep their existing (single-user) behaviour.
 #
 # This value is duplicated as the SQL column default ('default') in
 # database.py — keep the two in sync.
@@ -243,45 +239,39 @@ DEFAULT_OWNER_ID = "default"
 
 _OWNER_HEADER = "x-user-id"
 
-_logger = logging.getLogger(__name__)
+import logging as _logging
+
+_logger = _logging.getLogger(__name__)
+
+
+def _is_trusted_proxy(request: Request) -> bool:
+    """Return True if the direct client IP is a configured trusted proxy."""
+    from .config import settings
+    client_host = request.client.host if request.client else None
+    return client_host is not None and client_host in settings.trusted_proxies
 
 
 def resolve_owner_id(request: Request | None) -> str:
     """Resolve the owning user/workspace identity for the current request.
 
-    The ``X-User-Id`` header is only honoured when its value appears in the
-    ``trusted_owner_ids`` configuration list.  An unrecognised value is
-    rejected with a logged warning and the request is scoped to the default
-    owner — this prevents an attacker who knows the shared API key from
-    reading another workspace's vault secrets, tasks, and reports (BOLA).
+    The ``X-User-Id`` header is only honoured when the request originates from
+    a trusted proxy (i.e. ``request.client.host`` is in
+    ``settings.trusted_proxies``).  This binds owner identity to an
+    authenticated infrastructure component rather than accepting a client-
+    controlled header, preventing cross-workspace BOLA attacks.
     """
     if request is not None:
         user_id = request.headers.get(_OWNER_HEADER)
         if user_id and user_id.strip():
-            user_id = user_id.strip()
-            # Lazy-import to avoid circular dependency at module level.
-            from .config import settings
-
-            trusted = settings.trusted_owner_ids
-            if not trusted:
-                _logger.warning(
-                    "Ignoring X-User-Id header %r — no trusted_owner_ids "
-                    "are configured; all requests are scoped to the default "
-                    "owner.  Set SECUSCAN_TRUSTED_OWNER_IDS to enable "
-                    "multi-user isolation.",
-                    user_id,
-                )
-                return DEFAULT_OWNER_ID
-
-            if user_id not in trusted:
-                _logger.warning(
-                    "Rejected X-User-Id header %r — not in trusted_owner_ids "
-                    "whitelist; request scoped to default owner.",
-                    user_id,
-                )
-                return DEFAULT_OWNER_ID
-
-            return f"user:{user_id}"
+            if _is_trusted_proxy(request):
+                return f"user:{user_id.strip()}"
+            _logger.warning(
+                "Ignoring X-User-Id header %r from untrusted source %s; "
+                "request scoped to default owner.  Add this IP to "
+                "SECUSCAN_TRUSTED_PROXIES to enable multi-user isolation.",
+                user_id.strip(),
+                request.client.host if request.client else "unknown",
+            )
     return DEFAULT_OWNER_ID
 
 
