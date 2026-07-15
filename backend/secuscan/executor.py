@@ -619,8 +619,16 @@ class TaskExecutor:
                     str(settings.sandbox_cpu_quota),
                     "--cap-drop", "NET_RAW",
                     "--network", settings.docker_network,
-                    docker_image,
                 ]
+                # A plugin that resolved SCRATCH_DIR_PLACEHOLDER got a path on
+                # the *host*; the container has its own filesystem, so bind-mount
+                # that private dir into the container at the same path or the
+                # tool cannot write there. The host dir is 0700-private and is
+                # removed in the finally block below; mount it read-write so the
+                # tool can populate it.
+                if scratch_dir:
+                    docker_cmd += ["-v", f"{scratch_dir}:{scratch_dir}:rw"]
+                docker_cmd.append(docker_image)
                 command = docker_cmd + command
 
             logger.info(f"Executing task {task_id}: {' '.join(command)}")

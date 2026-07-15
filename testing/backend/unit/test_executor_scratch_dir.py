@@ -11,13 +11,19 @@ removes when the scan ends. These tests cover ``_substitute_scratch_dir``.
 import os
 import shutil
 import stat
+import uuid
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from backend.secuscan.database import get_db, init_db
+from backend.secuscan.config import settings
 from backend.secuscan.executor import (
     SCRATCH_DIR_PLACEHOLDER,
+    TaskExecutor,
     _substitute_scratch_dir,
 )
+from backend.secuscan.models import TaskStatus
 
 
 def test_no_placeholder_returns_command_unchanged():
@@ -81,3 +87,129 @@ def test_scratch_dir_is_private():
     finally:
         if scratch_dir:
             shutil.rmtree(scratch_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# Docker command path (PR #2020 review): the host scratch dir must be
+# bind-mounted into the sandbox container, else the tool cannot write there.
+# ---------------------------------------------------------------------------
+
+
+async def _run_standard_scanner_with_docker(command, docker_image="caffix/amass:latest"):
+    """Drive ``_execute_standard_scanner`` with Docker enabled.
+
+    Returns ``(final_command, scratch_dir, existed_during_run)`` where
+    ``final_command`` is the argv actually handed to ``_execute_command``.
+    """
+    await init_db(settings.database_path)
+    db = await get_db()
+
+    task_id = str(uuid.uuid4())
+    owner_id = str(uuid.uuid4())
+    await db.execute(
+        """
+        INSERT INTO tasks (id, owner_id, plugin_id, tool_name, target,
+                           inputs_json, status, consent_granted, safe_mode)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (task_id, owner_id, "amass", "amass", "example.com", "{}",
+         TaskStatus.QUEUED.value, 1, 0),
+    )
+
+    executor = TaskExecutor()
+
+    mock_plugin = MagicMock()
+    mock_plugin.id = "amass"
+    mock_plugin.name = "amass"
+    mock_plugin.docker_image = docker_image
+
+    recorded = {}
+
+    # Capture the real scratch dir the executor creates by wrapping the helper,
+    # so recovery is robust to path formats (e.g. Windows drive-letter colons).
+    real_substitute = _substitute_scratch_dir
+
+    def wrapped_substitute(cmd, plugin_id):
+        resolved, sd = real_substitute(cmd, plugin_id)
+        recorded["scratch_dir"] = sd
+        return resolved, sd
+
+    def fake_execute_command(cmd, task, timeout=None):
+        recorded["command"] = list(cmd)
+        sd = recorded.get("scratch_dir")
+        recorded["existed_during_run"] = bool(sd) and os.path.isdir(sd)
+        return ("mock output\n", 0)
+
+    try:
+        with patch("backend.secuscan.executor.get_plugin_manager") as mock_pm, \
+             patch("backend.secuscan.executor._substitute_scratch_dir", wrapped_substitute), \
+             patch.object(settings, "docker_enabled", True), \
+             patch.object(executor, "_ensure_docker_network", new=AsyncMock()), \
+             patch("backend.secuscan.validation.validate_command_network_egress",
+                   return_value=(True, None)), \
+             patch.object(executor, "_execute_command",
+                          side_effect=fake_execute_command), \
+             patch.object(executor, "_classify_command_result",
+                          return_value=(TaskStatus.COMPLETED.value, None)), \
+             patch.object(executor, "_upsert_findings_and_report", new=AsyncMock()):
+            mock_pm.return_value.build_command.return_value = command
+
+            await executor._execute_standard_scanner(
+                db=db,
+                task_id=task_id,
+                owner_id=owner_id,
+                plugin=mock_plugin,
+                plugin_id="amass",
+                target="example.com",
+                inputs={},
+                safe_mode=0,
+            )
+    finally:
+        await db.disconnect()
+
+    return recorded["command"], recorded.get("scratch_dir"), recorded["existed_during_run"]
+
+
+@pytest.mark.asyncio
+async def test_docker_mode_bind_mounts_scratch_dir():
+    """In Docker mode the private scratch dir is mounted into the container."""
+    command = ["amass", "enum", "-d", "example.com", "-dir", SCRATCH_DIR_PLACEHOLDER]
+    final_command, scratch_dir, existed = await _run_standard_scanner_with_docker(command)
+
+    # A docker run wrapper with an explicit bind mount was built.
+    assert final_command[:2] == ["docker", "run"]
+    assert "-v" in final_command
+    assert f"{scratch_dir}:{scratch_dir}:rw" in final_command
+
+    # The placeholder is fully resolved and the vulnerable path is gone.
+    assert SCRATCH_DIR_PLACEHOLDER not in final_command
+    assert scratch_dir not in ("/tmp/amass", "/tmp/amass/")
+    assert "secuscan-amass-" in os.path.basename(scratch_dir)
+
+    # The inner tool references the *same* path that was mounted.
+    assert final_command[final_command.index("-dir") + 1] == scratch_dir
+
+    # The mount points at a directory that really existed during the run.
+    assert existed is True
+
+
+@pytest.mark.asyncio
+async def test_docker_mode_cleans_up_scratch_dir():
+    """The scratch dir is removed after the Docker run finishes."""
+    command = ["amass", "enum", "-d", "example.com", "-dir", SCRATCH_DIR_PLACEHOLDER]
+    _final_command, scratch_dir, existed = await _run_standard_scanner_with_docker(command)
+
+    assert existed is True
+    # finally-block cleanup removed the host directory once execution ended.
+    assert not os.path.exists(scratch_dir)
+
+
+@pytest.mark.asyncio
+async def test_docker_mode_without_placeholder_adds_no_mount():
+    """A plugin that uses no scratch token gets no bind mount."""
+    command = ["nmap", "-sV", "127.0.0.1"]
+    final_command, _scratch, _existed = await _run_standard_scanner_with_docker(
+        command, docker_image="instrumentisto/nmap:latest"
+    )
+    assert final_command[:2] == ["docker", "run"]
+    assert "-v" not in final_command
