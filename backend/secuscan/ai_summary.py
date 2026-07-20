@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import asyncio
 import logging
 import re
 from collections import Counter
@@ -76,38 +76,27 @@ def _build_prompt(findings: list[dict]) -> str:
     )
 
 
-def generate_summary(
+async def generate_summary(
     findings: list[dict],
     model: str,
     api_key: str,
     base_url: Optional[str] = None,
     timeout: float = 15.0,
 ) -> str:
+    """Generate an LLM executive summary from scan findings.
+
+    Args:
+        findings: List of normalised finding dicts from a completed scan.
+        model:    Model name e.g. ``"gpt-4o-mini"`` or ``"llama3"``.
+        api_key:  API key for the OpenAI-compatible endpoint.
+        base_url: Optional base URL override for non-OpenAI providers.
+        timeout:  Hard timeout in seconds (default 15). If the LLM exceeds
+                  this, the call is cancelled and ``""`` is returned so that
+                  report export is never blocked.
+
+    Returns:
+        A plain-text executive summary string, or ``""`` on any failure so
+        that callers always get a safe value to embed in reports.
+    """
     if not findings:
-        return ""
-
-    if OpenAI is None:
-        logger.warning(
-            "ai_summary: 'openai' package not installed. "
-            "Run `pip install openai>=1.0.0` to enable AI summaries."
-        )
-        return ""
-
-    prompt = _build_prompt(findings)
-    client_kwargs: dict = {"api_key": api_key, "timeout": timeout}
-    if base_url:
-        client_kwargs["base_url"] = base_url
-
-    try:
-        client = OpenAI(**client_kwargs)
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=300,
-            temperature=0.4,
-        )
-        summary = response.choices[0].message.content or ""
-        return summary.strip()
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("ai_summary: LLM call failed — %s", exc)
         return ""

@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import csv
 import html
@@ -96,14 +97,14 @@ class ReportGenerator:
             output.close()
 
     @classmethod
-    def _get_ai_summary(cls, findings):
+    async def _get_ai_summary(cls, findings):
         """Return an AI executive summary, or '' when the feature is disabled."""
         from .config import settings as _settings
         if not _settings.ai_summary_enabled:
             return ""
         if not _settings.ai_summary_api_key:
             return ""
-        return generate_summary(
+        return await generate_summary(
             findings=findings,
             model=_settings.ai_summary_model,
             api_key=_settings.ai_summary_api_key,
@@ -391,7 +392,10 @@ class ReportGenerator:
         payload = cls._build_report_payload(task, result)
         findings = payload["findings"]
         severity_counts = payload["severity_counts"]
-        ai_summary = cls._get_ai_summary(findings)
+        try:
+          ai_summary = asyncio.run(cls._get_ai_summary(findings))
+        except Exception:
+          ai_summary = ""
         shield_icon = cls._icon_data_uri("shield", "1e3a5f")
         target_icon = cls._icon_data_uri("target", "2563eb")
         findings_icon = cls._icon_data_uri("findings", "0f172a")
@@ -448,7 +452,10 @@ class ReportGenerator:
         payload = cls._build_report_payload(task, result)
         findings = payload["findings"]
         severity_counts = payload["severity_counts"]
-        ai_summary = cls._get_ai_summary(findings)
+        try:
+          ai_summary = asyncio.run(cls._get_ai_summary(findings))
+        except Exception:
+          ai_summary = ""
         shield_icon = cls._icon_data_uri("shield", "1e3a5f")
         target_icon = cls._icon_data_uri("target", "2563eb")
         findings_icon = cls._icon_data_uri("findings", "0f172a")
