@@ -1,0 +1,60 @@
+{
+  "id": "amass",
+  "name": "Amass",
+  "version": "1.0.0",
+  "description": "Deep attack-surface mapping and subdomain discovery.",
+  "long_description": "Deep attack-surface mapping and subdomain discovery.",
+  "category": "recon",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "🔎",
+  "engine": {
+    "type": "cli",
+    "binary": "amass"
+  },
+  "command_template": [
+    "amass",
+    "enum",
+    "-d",
+    "{target}",
+    "-dir",
+    "/tmp/amass",
+    "-silent"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Root Domain",
+      "type": "string",
+      "required": true,
+      "placeholder": "secuscan.in",
+      "help": "Enter the root domain to enumerate subdomains for (for example: example.com). Do not include http://, https://, paths, or subdomains."
+    }
+  ],
+  "presets": {
+    "default": {}
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": false,
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "amass"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  },
+  "checksum": "5a0ea8ff2a07b965685a2772bb2557afde4ef50e23dc423c99c27ce518494747"
+}

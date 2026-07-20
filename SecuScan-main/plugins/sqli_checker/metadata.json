@@ -1,0 +1,128 @@
+{
+  "id": "sqli_checker",
+  "name": "SQL Injection Feasibility",
+  "version": "1.0.0",
+  "description": "Validates potential SQL injection vulnerabilities using Ghauri.",
+  "long_description": "Performs controlled feasibility checks to identify potential SQL injection indicators without focusing on exploitation or data extraction.",
+  "category": "expert",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83e\uddea",
+  "engine": {
+    "type": "cli",
+    "binary": "ghauri"
+  },
+  "command_template": [
+    "ghauri",
+    "-u",
+    "{target}",
+    "--batch",
+    "--level",
+    "{level}",
+    "--risk",
+    "{risk}",
+    "--technique",
+    "{technique}",
+    "--dbs"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target URL",
+      "type": "string",
+      "required": true,
+      "placeholder": "https://target.local/item?id=1",
+      "validation": {
+        "pattern": "^https?://",
+        "message": "Must be a valid HTTP(S) URL"
+      }
+    },
+    {
+      "id": "level",
+      "label": "Testing Level",
+      "type": "integer",
+      "required": false,
+      "default": 1
+    },
+    {
+      "id": "risk",
+      "label": "Risk Level",
+      "type": "integer",
+      "required": false,
+      "default": 1
+    },
+    {
+      "id": "technique",
+      "label": "SQLi Technique",
+      "type": "select",
+      "required": false,
+      "default": "BEUSTQ",
+      "options": [
+        {
+          "value": "B",
+          "label": "Boolean-based"
+        },
+        {
+          "value": "E",
+          "label": "Error-based"
+        },
+        {
+          "value": "U",
+          "label": "UNION query"
+        },
+        {
+          "value": "S",
+          "label": "Stacked queries"
+        },
+        {
+          "value": "T",
+          "label": "Time-based"
+        },
+        {
+          "value": "Q",
+          "label": "Inline query"
+        },
+        {
+          "value": "BEUSTQ",
+          "label": "All techniques"
+        }
+      ]
+    }
+  ],
+  "presets": {
+    "quick": {
+      "level": 1,
+      "risk": 1,
+      "technique": "BEUSTQ"
+    },
+    "aggressive": {
+      "level": 3,
+      "risk": 3,
+      "technique": "BEUSTQ"
+    }
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "SQLi checks actively probe injection vectors. Use only with authorization.",
+    "rate_limit": {
+      "max_per_hour": 8,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "ghauri"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  },
+  "checksum": "62ed5d57c77eaff266ec03e8aa81f2325d2e24d6e71dc2f657072b0df5c64354"
+}

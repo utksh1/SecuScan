@@ -1,0 +1,74 @@
+{
+  "id": "sitemap_gen",
+  "name": "Sitemap Generator",
+  "version": "1.0.0",
+  "description": "Depth-focused Katana crawl for sitemap-style URL inventory.",
+  "long_description": "Runs Katana with a deeper default crawl depth to produce a sitemap-style inventory of discovered URLs. This does not generate XML; it returns discovered URLs for cataloging target surface area.",
+  "category": "robots",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "🛠️",
+  "engine": {
+    "type": "cli",
+    "binary": "katana"
+  },
+  "command_template": [
+    "katana",
+    "-u",
+    "{target}",
+    "-depth",
+    "{depth:4}",
+    "-silent"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target URL",
+      "help": "Enter the HTTP(S) URL to crawl and generate a sitemap from.",
+      "type": "string",
+      "required": true,
+      "placeholder": "https://secuscan.in",
+      "validation": {
+        "pattern": "^https?://",
+        "message": "Must be a valid HTTP(S) URL"
+      }
+    },
+    {
+      "id": "depth",
+      "label": "Depth",
+      "help": "Maximum crawl depth. Higher values discover more pages but may take longer to complete.",
+      "type": "integer",
+      "required": false,
+      "default": 4
+    }
+  ],
+  "presets": {
+    "default": {
+      "depth": 4
+    }
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "Sitemap generation crawls target resources actively.",
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "katana"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  },
+  "checksum": "e65c7ee56ef634d35f5cd13877ab2d69858e102398361acd8fd09a17f110f349"
+}

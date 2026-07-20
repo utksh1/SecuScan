@@ -1,0 +1,58 @@
+{
+  "id": "katana",
+  "name": "Katana",
+  "version": "1.0.0",
+  "description": "Baseline Katana URL discovery using the default crawl behavior.",
+  "long_description": "Runs Katana with minimal flags for lightweight endpoint and route discovery. Use this as the baseline Katana wrapper when no custom crawl depth or JavaScript crawling is required.",
+  "category": "recon",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "🔎",
+  "engine": {
+    "type": "cli",
+    "binary": "katana"
+  },
+  "command_template": [
+    "katana",
+    "-u",
+    "{target}",
+    "-silent"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target URL",
+      "help": "Enter the HTTP(S) URL to crawl for endpoint and route discovery.",
+      "type": "string",
+      "required": true,
+      "placeholder": "https://secuscan.in"
+    }
+  ],
+  "presets": {
+    "default": {}
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "intrusive",
+    "requires_consent": true,
+    "consent_message": "Crawler generates active traffic. Ensure authorization.",
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "katana"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  },
+  "checksum": "539bd64f8c8774c54857bfb826f9748ba487dedcba1482a26a5383c1b022d786"
+}

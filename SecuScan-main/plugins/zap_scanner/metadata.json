@@ -1,0 +1,76 @@
+{
+  "id": "zap_scanner",
+  "name": "DAST Web Proxy (ZAP)",
+  "version": "1.0.0",
+  "description": "Dynamic proxy spidering and payload injection.",
+  "long_description": "Dynamic proxy spidering and payload injection.",
+  "category": "vulnerability",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "🛠️",
+  "implementation_status": "integrated",
+  "supports_authenticated_crawling": true,
+  "supports_session_reuse": true,
+  "engine": {
+    "type": "cli",
+    "binary": "docker"
+  },
+  "command_template": [
+    "docker",
+    "run",
+    "--rm",
+    "ghcr.io/zaproxy/zaproxy:stable",
+    "zap-baseline.py",
+    "-t",
+    "{target}",
+    "-m",
+    "5"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Target URL",
+      "type": "string",
+      "required": true,
+      "placeholder": "https://secuscan.in",
+      "validation": {
+        "pattern": "^https?://",
+        "message": "Must be a valid HTTP(S) URL"
+      }
+    }
+  ],
+  "presets": {
+    "default": {}
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "exploit",
+    "requires_consent": true,
+    "consent_message": "DAST payload injection should only run in authorized environments.",
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "capabilities": [
+    "network",
+    "intrusive",
+    "exploit",
+    "docker",
+    "credentials"
+  ],
+  "dependencies": {
+    "binaries": [
+      "docker"
+    ],
+    "python_packages": [],
+    "system_packages": []
+  },
+  "checksum": "4d7cd9e4bed793703811204fd22a5e0b511d8880750f07a593301a7eae5732a0"
+}

@@ -1,0 +1,95 @@
+{
+  "id": "dns_enum",
+  "name": "DNS Reconnaissance",
+  "version": "1.0.0",
+  "description": "Enumerate DNS records and configurations",
+  "long_description": "DNSRecon performs DNS reconnaissance against a single registrable domain (for example example.com or scanme.nmap.org). Standard enumeration resolves the domain's A/AAAA, NS, MX and SOA records and groups repeated values into one readable entry per host. Zone Transfer (AXFR) attempts a full zone copy and reports a critical finding when a name server allows it. Brute Force discovers subdomains from a built-in name list. Run it only against domains you own or are explicitly authorized to assess.",
+  "category": "recon",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "\ud83d\udce6",
+  "engine": {
+    "type": "cli",
+    "binary": "dnsrecon"
+  },
+  "command_template": [
+    "dnsrecon",
+    "-d",
+    "{target}",
+    "--if:type:then:-t:{type}"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Domain",
+      "type": "string",
+      "required": true,
+      "placeholder": "example.com",
+      "help": "Registrable domain to enumerate — no scheme or path (e.g. example.com, scanme.nmap.org, or an internal domain such as corp.example). DNSRecon resolves this domain's A/AAAA, NS, MX and SOA records; subdomains are only discovered when Enum Type is set to Brute Force."
+    },
+    {
+      "id": "type",
+      "label": "Enum Type",
+      "type": "select",
+      "required": false,
+      "default": "std",
+      "options": [
+        {
+          "value": "std",
+          "label": "Standard (A, MX, NS, SOA)"
+        },
+        {
+          "value": "axfr",
+          "label": "Zone Transfer (AXFR)"
+        },
+        {
+          "value": "brt",
+          "label": "Brute Force Subdomains"
+        }
+      ],
+      "help": "What DNSRecon enumerates. Standard returns the domain's A/AAAA, NS, MX and SOA records grouped per host. Zone Transfer (AXFR) attempts a full zone copy and reports a critical finding if the server allows it. Brute Force discovers subdomains from a built-in name list."
+    }
+  ],
+  "presets": {
+    "standard": {
+      "type": "std"
+    },
+    "zone_transfer": {
+      "type": "axfr"
+    },
+    "subdomain_bruteforce": {
+      "type": "brt"
+    }
+  },
+  "output": {
+    "format": "text",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": false,
+    "rate_limit": {
+      "max_per_hour": 30,
+      "max_concurrent": 1
+    }
+  },
+  "learning": {
+    "difficulty": "intermediate",
+    "estimated_duration": "1-3 minutes",
+    "tutorial_url": "https://docs.secuscan.local/plugins/dns_enum"
+  },
+  "dependencies": {
+    "binaries": [
+      "dnsrecon"
+    ],
+    "python_packages": [],
+    "system_packages": [
+      "dnsrecon"
+    ]
+  },
+  "docker_image": "darkoperator/dnsrecon:latest",
+  "checksum": "12cd4e84e7bf888e9b8d5a21d597ca1487f2ab843be78ab367e486bec9b2b761"
+}

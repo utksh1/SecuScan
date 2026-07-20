@@ -1,0 +1,78 @@
+{
+  "id": "semgrep_scanner",
+  "name": "Semgrep Scanner",
+  "version": "1.0.0",
+  "description": "Multi-language static code analysis using Semgrep",
+  "long_description": "Semgrep is a fast, open-source static analysis tool for finding bugs and enforcing code standards at editor, commit, and CI time.",
+  "category": "code",
+  "author": {
+    "name": "SecuScan Contributors",
+    "email": "dev@secuscan.local"
+  },
+  "license": "MIT",
+  "icon": "🔎",
+  "engine": {
+    "type": "cli",
+    "binary": "semgrep"
+  },
+  "command_template": [
+    "semgrep",
+    "scan",
+    "--json",
+    "-q",
+    "--config",
+    "{config}",
+    "{target}"
+  ],
+  "fields": [
+    {
+      "id": "target",
+      "label": "Source Path",
+      "type": "string",
+      "required": true,
+      "placeholder": "/path/to/source",
+      "help": "Absolute path to the directory or file to scan."
+    },
+    {
+      "id": "config",
+      "label": "Semgrep Config",
+      "type": "string",
+      "required": false,
+      "default": "auto",
+      "help": "Semgrep configuration (e.g., auto, p/security-audit, p/ci, or path to config file)."
+    }
+  ],
+  "presets": {
+    "default": {
+      "config": "auto"
+    }
+  },
+  "output": {
+    "format": "json",
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "safe",
+    "requires_consent": false,
+    "rate_limit": {
+      "max_per_hour": 20,
+      "max_concurrent": 1
+    }
+  },
+  "learning": {
+    "difficulty": "intermediate",
+    "estimated_duration": "1-5 minutes",
+    "tutorial_url": "https://semgrep.dev/docs/"
+  },
+  "dependencies": {
+    "binaries": [
+      "semgrep"
+    ],
+    "python_packages": [
+      "semgrep"
+    ],
+    "system_packages": []
+  },
+  "docker_image": "returntocorp/semgrep:latest",
+  "checksum": "8e59254f5ad937c0a5a2af47367cddf07e07b8a528d13ff303360d6e478a51d8"
+}
