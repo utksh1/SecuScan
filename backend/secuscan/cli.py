@@ -21,7 +21,7 @@ from backend.secuscan.config import settings
 from backend.secuscan.plugins import init_plugins, get_plugin_manager
 from backend.secuscan.reporting import reporting
 
-async def run_scan(target: str, plugin_id: str, output_format: str, output_file: Optional[str] = None):
+async def run_scan(target: str, plugin_id: str, output_format: str, output_file: Optional[str] = None, dry_run: bool = False):
     """Initialize components and execute a scan task."""
 
     # Ensure directories exist
@@ -50,6 +50,29 @@ async def run_scan(target: str, plugin_id: str, output_format: str, output_file:
     # Create task
     safe_mode = bool(settings.safe_mode_default)
     inputs = {"target": target, "safe_mode": safe_mode}
+
+    if dry_run:
+        command = plugin_manager.build_command(plugin_id, inputs)
+        if not command:
+            print(f"Error: Failed to build command for plugin {plugin_id}")
+            return 1
+            
+        if settings.docker_enabled:
+            docker_image = getattr(plugin, "docker_image", "alpine:latest") or "alpine:latest"
+            docker_cmd = [
+                "docker", "run", "--rm",
+                "--name", "secuscan_task_DRY_RUN",
+                "--memory", f"{settings.sandbox_memory_mb}m",
+                "--cpus", str(settings.sandbox_cpu_quota),
+                "--cap-drop", "NET_RAW",
+                "--network", settings.docker_network,
+                docker_image,
+            ]
+            command = docker_cmd + command
+            
+        print("[*] Dry run command:")
+        print(" ".join(command))
+        return 0
     try:
         task_id = await executor.create_task(plugin_id, inputs, safe_mode=safe_mode, consent_granted=True)
     except Exception as e:
@@ -143,6 +166,7 @@ def main():
     scan_parser.add_argument("--plugin", default="nmap", help="Plugin ID to use (default: nmap)")
     scan_parser.add_argument("--format", choices=["sarif", "json", "csv", "html", "console"], default="console", help="Output format")
     scan_parser.add_argument("--output", "-o", help="Output file path")
+    scan_parser.add_argument("--dry-run", action="store_true", help="Print the resolved command without executing")
 
     # List plugins command
     subparsers.add_parser("plugins", help="List available plugins")
@@ -150,7 +174,7 @@ def main():
     args = parser.parse_args()
 
     if args.command == "scan":
-        sys.exit(asyncio.run(run_scan(args.target, args.plugin, args.format, args.output)))
+        sys.exit(asyncio.run(run_scan(args.target, args.plugin, args.format, args.output, args.dry_run)))
     elif args.command == "plugins":
         # Synchronous shortcut for listing
         async def list_plugins():
