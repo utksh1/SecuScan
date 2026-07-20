@@ -11,7 +11,7 @@ Supports any OpenAI-compatible endpoint:
 """
 
 from __future__ import annotations
-
+import asyncio
 import logging
 import re
 from collections import Counter
@@ -95,7 +95,7 @@ def _build_prompt(findings: list[dict]) -> str:
     )
 
 
-def generate_summary(
+async def generate_summary(
     findings: list[dict],
     model: str,
     api_key: str,
@@ -109,8 +109,9 @@ def generate_summary(
         model:    Model name e.g. ``"gpt-4o-mini"`` or ``"llama3"``.
         api_key:  API key for the OpenAI-compatible endpoint.
         base_url: Optional base URL override for non-OpenAI providers.
-        timeout:  HTTP timeout in seconds (default 15). Prevents LLM calls
-                  from stalling report generation.
+        timeout:  Hard timeout in seconds (default 15). If the LLM exceeds
+                  this, the call is cancelled and ``""`` is returned so that
+                  report export is never blocked.
 
     Returns:
         A plain-text executive summary string, or ``""`` on any failure so
@@ -118,7 +119,6 @@ def generate_summary(
     """
     if not findings:
         return ""
-
     if OpenAI is None:
         logger.warning(
             "ai_summary: 'openai' package not installed. "
@@ -131,16 +131,25 @@ def generate_summary(
     if base_url:
         client_kwargs["base_url"] = base_url
 
-    try:
+    async def _call() -> str:
+        loop = asyncio.get_running_loop()
         client = OpenAI(**client_kwargs)
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=300,
-            temperature=0.4,
+        response = await loop.run_in_executor(
+            None,
+            lambda: client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=300,
+                temperature=0.4,
+            ),
         )
-        summary = response.choices[0].message.content or ""
-        return summary.strip()
+        return (response.choices[0].message.content or "").strip()
+
+    try:
+        return await asyncio.wait_for(_call(), timeout=timeout)
+    except asyncio.TimeoutError:
+        logger.warning("ai_summary: LLM call timed out after %.1fs — skipping summary", timeout)
+        return ""
     except Exception as exc:  # noqa: BLE001
         logger.warning("ai_summary: LLM call failed — %s", exc)
         return ""
