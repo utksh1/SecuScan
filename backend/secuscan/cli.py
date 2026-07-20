@@ -56,7 +56,7 @@ async def run_scan(target: str, plugin_id: str, output_format: str, output_file:
         if not command:
             print(f"Error: Failed to build command for plugin {plugin_id}")
             return 1
-            
+
         if settings.docker_enabled:
             docker_image = getattr(plugin, "docker_image", "alpine:latest") or "alpine:latest"
             docker_cmd = [
@@ -69,7 +69,7 @@ async def run_scan(target: str, plugin_id: str, output_format: str, output_file:
                 docker_image,
             ]
             command = docker_cmd + command
-            
+
         print("[*] Dry run command:")
         print(" ".join(command))
         return 0
