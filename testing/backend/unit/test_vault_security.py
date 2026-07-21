@@ -35,11 +35,11 @@ class TestAesGcmProperties:
         assert c1 != c2, "Each call must use a fresh nonce"
 
     def test_blob_structure_has_12_byte_nonce(self):
-        """Blob starts with a 12-byte nonce (AES-GCM standard)."""
+        """Blob has versioned header SV1:(4) + key ID(8) + 12-byte nonce (AES-GCM standard)."""
         crypto = VaultCrypto(_make_key("test"))
         blob = base64.urlsafe_b64decode(crypto.encrypt("x").encode())
-        # nonce(12) + 1-byte plaintext + 16-byte auth_tag = 29 bytes total
-        assert len(blob) == 29
+        # header(4) + key_id(8) + nonce(12) + 1-byte plaintext + 16-byte auth_tag = 41 bytes total
+        assert len(blob) == 41
 
     def test_tamper_ciphertext_raises(self):
         crypto = VaultCrypto(_make_key("test"))

@@ -149,3 +149,97 @@ class TestKeyFingerprint:
         key = _make_key()
         crypto = VaultCrypto(key)
         assert not hasattr(type(crypto).key_fingerprint, "fset") or type(crypto).key_fingerprint.fset is None
+
+
+def test_encrypt_includes_header_prefix_and_key_id():
+    """encrypt() output wire format starts with SV1: header prefix and key ID bytes."""
+    import base64
+    key = _make_key()
+    crypto = VaultCrypto(key)
+    encrypted = crypto.encrypt("my_secret")
+    raw = base64.urlsafe_b64decode(encrypted.encode("ascii"))
+    assert raw.startswith(b"SV1:")
+    extracted_key_id = crypto.extract_key_id(encrypted)
+    assert extracted_key_id == crypto.key_fingerprint
+
+
+def test_extract_key_id_returns_none_for_legacy_payload():
+    """extract_key_id returns None when passed a legacy unversioned payload."""
+    import base64
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    key = _make_key()
+    crypto = VaultCrypto(key)
+    raw_key = base64.urlsafe_b64decode(key)
+
+    # Construct legacy blob manually: nonce(12) + ciphertext + tag(16)
+    nonce = b"123456789012"
+    aesgcm = AESGCM(raw_key)
+    ct = aesgcm.encrypt(nonce, b"secret", None)
+    legacy_payload = base64.urlsafe_b64encode(nonce + ct).decode("ascii")
+
+    assert crypto.extract_key_id(legacy_payload) is None
+    # Decrypting legacy payload must still succeed
+    assert crypto.decrypt(legacy_payload) == "secret"
+
+
+def test_vault_keyring_rotation():
+    """VaultCrypto with fallback_keys decrypts blobs encrypted with primary or fallback keys."""
+    import base64
+    key_old = base64.urlsafe_b64encode(b"11111111111111111111111111111111").decode("ascii")
+    key_new = base64.urlsafe_b64encode(b"22222222222222222222222222222222").decode("ascii")
+
+    crypto_old = VaultCrypto(key_old)
+    encrypted_old = crypto_old.encrypt("old_secret")
+
+    # New active crypto instance with fallback_keys
+    crypto_new = VaultCrypto(key_new, fallback_keys=[key_old])
+
+    encrypted_new = crypto_new.encrypt("new_secret")
+
+    # Should decrypt both old and new encrypted payloads
+    assert crypto_new.decrypt(encrypted_new) == "new_secret"
+    assert crypto_new.decrypt(encrypted_old) == "old_secret"
+
+
+def test_header_prefix_collision_fallback():
+    """A legacy blob whose nonce starts with b'SV1:' is correctly decrypted via fallback."""
+    import base64
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    key = _make_key()
+    crypto = VaultCrypto(key)
+    raw_key = base64.urlsafe_b64decode(key)
+
+    # Construct legacy nonce that starts with b"SV1:"
+    nonce = b"SV1:12345678"  # exactly 12 bytes
+    aesgcm = AESGCM(raw_key)
+    ct = aesgcm.encrypt(nonce, b"collision_secret", None)
+    legacy_collision_payload = base64.urlsafe_b64encode(nonce + ct).decode("ascii")
+
+    # decrypt must not raise ValueError, but successfully decrypt via legacy fallback
+    assert crypto.decrypt(legacy_collision_payload) == "collision_secret"
+
+
+def test_payload_length_guards():
+    """decrypt raises ValueError when payload length is below minimum required bytes."""
+    import base64
+    key = _make_key()
+    crypto = VaultCrypto(key)
+
+    # 1. Below 28 bytes (below minimum legacy length)
+    short_raw = b"x" * 20
+    short_payload = base64.urlsafe_b64encode(short_raw).decode("ascii")
+    try:
+        crypto.decrypt(short_payload)
+        raise AssertionError("Expected ValueError for short payload")
+    except ValueError as exc:
+        assert "too short" in str(exc)
+
+    # 2. Versioned header present (SV1:) but total length < 40 bytes
+    short_versioned_raw = b"SV1:" + b"x" * 25
+    short_versioned_payload = base64.urlsafe_b64encode(short_versioned_raw).decode("ascii")
+    try:
+        crypto.decrypt(short_versioned_payload)
+        raise AssertionError("Expected ValueError for short versioned payload")
+    except ValueError as exc:
+        assert "verification failed" in str(exc) or "too short" in str(exc)
+
