@@ -309,3 +309,32 @@ def test_sandbox_settings_validation_refuses_negative():
         Settings(sandbox_timeout=-10)
     assert "Timeout settings must be a positive non-zero integer" in str(exc_info.value)
 
+
+def test_sandbox_settings_env_var_validation(monkeypatch):
+    """Verify that env var loading fails if timeouts are invalid (0, negative, None, empty, or non-int)."""
+    from pydantic import ValidationError
+    import pytest
+
+    # Test environment variable SECUSCAN_SANDBOX_TIMEOUT=0
+    monkeypatch.setenv("SECUSCAN_SANDBOX_TIMEOUT", "0")
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+    assert "Timeout settings must be a positive non-zero integer" in str(exc_info.value)
+
+    # Test environment variable SECUSCAN_PARSER_SANDBOX_TIMEOUT_SECONDS=0
+    monkeypatch.delenv("SECUSCAN_SANDBOX_TIMEOUT", raising=False)
+    monkeypatch.setenv("SECUSCAN_PARSER_SANDBOX_TIMEOUT_SECONDS", "0")
+    with pytest.raises(ValidationError) as exc_info:
+        Settings()
+    assert "Timeout settings must be a positive non-zero integer" in str(exc_info.value)
+
+    # Test environment variable SECUSCAN_SANDBOX_TIMEOUT="" (empty string)
+    monkeypatch.delenv("SECUSCAN_PARSER_SANDBOX_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.setenv("SECUSCAN_SANDBOX_TIMEOUT", "")
+    with pytest.raises(ValidationError):
+        Settings()
+
+    # Test environment variable SECUSCAN_SANDBOX_TIMEOUT="invalid" (non-integer string)
+    monkeypatch.setenv("SECUSCAN_SANDBOX_TIMEOUT", "invalid")
+    with pytest.raises(ValidationError):
+        Settings()

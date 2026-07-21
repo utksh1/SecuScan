@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import logging
 import platform
 from asyncio import subprocess
@@ -105,8 +105,6 @@ async def sandbox_execute(
     Args:
         cmd: Command list to execute.
         config: SandboxConfig with timeout, memory, output limits.
-            When timeout_seconds is 0 or None, no wall-clock timeout is
-            applied internally (the caller handles it externally).
         broadcast_callback: Optional async callable(chunk: bytes, stream_name: str)
             invoked for each output chunk to enable live streaming.
 
@@ -114,6 +112,9 @@ async def sandbox_execute(
     violation_reason is None on success, or one of
     "timeout", "memory_limit", "output_limit".
     """
+    if config.timeout_seconds is None or config.timeout_seconds <= 0:
+        raise ValueError("Sandbox timeout_seconds must be a positive non-zero integer")
+
     preexec_fn = _build_preexec_fn(config) if IS_LINUX else None
 
     rss_before = 0

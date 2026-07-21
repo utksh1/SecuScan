@@ -250,6 +250,9 @@ def run_parser_in_sandbox(
     Raises:
         ParserSandboxError: on timeout, crash, oversized output, or malformed JSON.
     """
+    if timeout_seconds is None or timeout_seconds <= 0:
+        raise ValueError("Parser sandbox timeout_seconds must be a positive non-zero integer")
+
     if not parser_path.exists():
         raise ParserSandboxError(plugin_id, "parser.py not found")
 

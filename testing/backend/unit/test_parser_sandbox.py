@@ -403,3 +403,19 @@ class TestParserSandboxError:
     def test_str_contains_plugin_id(self):
         err = ParserSandboxError("my_plugin", "bad thing")
         assert "my_plugin" in str(err)
+
+
+class TestParserSandboxTimeoutValidation:
+    def test_refuses_zero_timeout(self, tmp_path):
+        """Verify run_parser_in_sandbox raises ValueError if timeout_seconds is 0."""
+        p = _write_parser(tmp_path, "def parse(output): return {}")
+        with pytest.raises(ValueError) as exc_info:
+            run_parser_in_sandbox(p, "test_plugin", "data", timeout_seconds=0)
+        assert "Parser sandbox timeout_seconds must be a positive non-zero integer" in str(exc_info.value)
+
+    def test_refuses_none_timeout(self, tmp_path):
+        """Verify run_parser_in_sandbox raises ValueError if timeout_seconds is None."""
+        p = _write_parser(tmp_path, "def parse(output): return {}")
+        with pytest.raises(ValueError) as exc_info:
+            run_parser_in_sandbox(p, "test_plugin", "data", timeout_seconds=None)
+        assert "Parser sandbox timeout_seconds must be a positive non-zero integer" in str(exc_info.value)

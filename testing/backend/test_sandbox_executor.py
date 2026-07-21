@@ -233,3 +233,21 @@ async def test_resolve_sandbox_config_plugin_overrides():
     assert resolved.timeout_seconds == 999
     assert resolved.max_memory_mb == 2048
     assert resolved.max_output_bytes == 5_242_880
+
+
+@pytest.mark.asyncio
+async def test_sandbox_execute_refuses_zero_timeout():
+    """Verify sandbox_execute raises ValueError if config timeout_seconds is 0."""
+    invalid_cfg = SandboxConfig.model_construct(timeout_seconds=0)
+    with pytest.raises(ValueError) as exc_info:
+        await sandbox_execute([sys.executable, "-c", "print('hello')"], invalid_cfg)
+    assert "Sandbox timeout_seconds must be a positive non-zero integer" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_sandbox_execute_refuses_none_timeout():
+    """Verify sandbox_execute raises ValueError if config timeout_seconds is None."""
+    invalid_cfg = SandboxConfig.model_construct(timeout_seconds=None)
+    with pytest.raises(ValueError) as exc_info:
+        await sandbox_execute([sys.executable, "-c", "print('hello')"], invalid_cfg)
+    assert "Sandbox timeout_seconds must be a positive non-zero integer" in str(exc_info.value)
