@@ -4,8 +4,11 @@ Pydantic models for API requests and responses
 
 from typing import Optional, Dict, Any, List, Annotated
 from datetime import datetime
-from pydantic import BaseModel, Field, RootModel
+from pydantic import BaseModel, Field, RootModel, field_validator
 from enum import Enum
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 MAX_BULK_DELETE = 500
@@ -32,6 +35,14 @@ class SandboxConfig(BaseModel):
     max_memory_mb: int = Field(default=512, description="Max virtual memory in MB (RLIMIT_AS on Linux)")
     max_output_bytes: int = Field(default=5_242_880, description="Max bytes captured from stdout/stderr")
     allow_network: bool = Field(default=True, description="Whether subprocess can make network calls")
+
+    @field_validator("timeout_seconds")
+    @classmethod
+    def validate_timeout_seconds(cls, v: int) -> int:
+        if v is None or v <= 0:
+            logger.warning("Refusing falsy or non-positive sandbox timeout_seconds: %s. A non-zero timeout is required.", v)
+            raise ValueError("timeout_seconds must be a positive non-zero integer")
+        return v
 
 
 class SandboxViolation(Exception):

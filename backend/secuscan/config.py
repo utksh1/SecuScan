@@ -8,7 +8,10 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings
 import base64
 import hashlib
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -213,6 +216,14 @@ class Settings(BaseSettings):
     class Config:
         env_prefix = "SECUSCAN_"
         case_sensitive = False
+
+    @field_validator("sandbox_timeout", "parser_sandbox_timeout_seconds")
+    @classmethod
+    def validate_sandbox_timeouts(cls, v: int) -> int:
+        if v is None or v <= 0:
+            logger.warning("Refusing falsy or non-positive sandbox timeout: %s. A non-zero timeout is required.", v)
+            raise ValueError("Timeout settings must be a positive non-zero integer")
+        return v
 
     @field_validator(
         "cors_allowed_origins",

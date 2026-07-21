@@ -81,3 +81,22 @@ class TestSandboxConfigOverrides:
         repr_str = repr(config)
         assert "45" in repr_str
         assert "128" in repr_str
+
+
+class TestSandboxConfigValidation:
+    def test_timeout_seconds_refuses_zero(self):
+        """ValidationError is raised when timeout_seconds is 0."""
+        from pydantic import ValidationError
+        import pytest
+        with pytest.raises(ValidationError) as exc_info:
+            SandboxConfig(timeout_seconds=0)
+        assert "timeout_seconds must be a positive non-zero integer" in str(exc_info.value)
+
+    def test_timeout_seconds_refuses_negative(self):
+        """ValidationError is raised when timeout_seconds is negative."""
+        from pydantic import ValidationError
+        import pytest
+        with pytest.raises(ValidationError) as exc_info:
+            SandboxConfig(timeout_seconds=-10)
+        assert "timeout_seconds must be a positive non-zero integer" in str(exc_info.value)
+

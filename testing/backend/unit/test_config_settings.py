@@ -286,3 +286,26 @@ def test_sandbox_settings_env_override():
     assert s.sandbox_timeout == 30
     assert s.sandbox_memory_mb == 128
     assert s.sandbox_allow_network is False
+
+
+def test_sandbox_settings_validation_refuses_zero():
+    """ValidationError is raised when sandbox_timeout or parser_sandbox_timeout_seconds is 0."""
+    from pydantic import ValidationError
+    import pytest
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(sandbox_timeout=0)
+    assert "Timeout settings must be a positive non-zero integer" in str(exc_info.value)
+
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(parser_sandbox_timeout_seconds=0)
+    assert "Timeout settings must be a positive non-zero integer" in str(exc_info.value)
+
+
+def test_sandbox_settings_validation_refuses_negative():
+    """ValidationError is raised when sandbox_timeout or parser_sandbox_timeout_seconds is negative."""
+    from pydantic import ValidationError
+    import pytest
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(sandbox_timeout=-10)
+    assert "Timeout settings must be a positive non-zero integer" in str(exc_info.value)
+
