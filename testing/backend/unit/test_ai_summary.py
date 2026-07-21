@@ -8,7 +8,7 @@ or directly:
 """
 
 from __future__ import annotations
-
+import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -76,22 +76,22 @@ class TestGenerateSummary:
         expected = "The scan found 5 findings including a critical SQL injection."
         with patch("backend.secuscan.ai_summary.OpenAI") as mock_cls:
             mock_cls.return_value.chat.completions.create.return_value = _mock_response(expected)
-            result = generate_summary(SAMPLE_FINDINGS, "gpt-4o-mini", "test-key")
+            result = asyncio.run(generate_summary(SAMPLE_FINDINGS, "gpt-4o-mini", "test-key"))
         assert result == expected
 
     def test_strips_whitespace(self):
         with patch("backend.secuscan.ai_summary.OpenAI") as mock_cls:
             mock_cls.return_value.chat.completions.create.return_value = _mock_response("  Summary.  ")
-            result = generate_summary(SAMPLE_FINDINGS, "gpt-4o-mini", "key")
+            result = asyncio.run(generate_summary(SAMPLE_FINDINGS, "gpt-4o-mini", "key"))
         assert result == "Summary."
 
     def test_passes_base_url_to_client(self):
         with patch("backend.secuscan.ai_summary.OpenAI") as mock_cls:
             mock_cls.return_value.chat.completions.create.return_value = _mock_response("ok")
-            generate_summary(
+            asyncio.run(generate_summary(
                 SAMPLE_FINDINGS, model="llama3", api_key="ollama",
                 base_url="http://localhost:11434/v1",
-            )
+            ))
             mock_cls.assert_called_once_with(
                 api_key="ollama", base_url="http://localhost:11434/v1", timeout=15.0
             )
@@ -99,17 +99,17 @@ class TestGenerateSummary:
     def test_returns_empty_string_on_llm_exception(self):
         with patch("backend.secuscan.ai_summary.OpenAI") as mock_cls:
             mock_cls.return_value.chat.completions.create.side_effect = RuntimeError("conn refused")
-            assert generate_summary(SAMPLE_FINDINGS, "gpt-4o-mini", "key") == ""
+            assert asyncio.run(generate_summary(SAMPLE_FINDINGS, "gpt-4o-mini", "key")) == ""
 
     def test_returns_empty_string_for_empty_findings(self):
         with patch("backend.secuscan.ai_summary.OpenAI") as mock_cls:
-            result = generate_summary([], "gpt-4o-mini", "key")
+            result = asyncio.run(generate_summary([], "gpt-4o-mini", "key"))
         assert result == ""
         mock_cls.assert_not_called()
 
     def test_returns_empty_string_when_openai_none(self):
         with patch("backend.secuscan.ai_summary.OpenAI", None):
-            result = generate_summary(SAMPLE_FINDINGS, "gpt-4o-mini", "key")
+            result = asyncio.run(generate_summary(SAMPLE_FINDINGS, "gpt-4o-mini", "key"))
         assert result == ""
 
 
@@ -178,7 +178,7 @@ class TestReportGeneratorAiSummary:
         with patch("backend.secuscan.config.settings") as ms:
             ms.ai_summary_enabled = True
             ms.ai_summary_api_key = ""
-            result = ReportGenerator._get_ai_summary([{"title": "x", "severity": "high"}])
+            result = asyncio.run(ReportGenerator._get_ai_summary([{"title": "x", "severity": "high"}]))
         assert result == ""
 
     def test_sarif_report_unchanged(self):
