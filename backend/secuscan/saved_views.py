@@ -1,12 +1,9 @@
 from __future__ import annotations
-
 import json
 import uuid
 from typing import Any, Dict, List, Optional
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
-
 from .auth import get_current_owner, require_api_key
 from .database import get_db
 
@@ -21,7 +18,6 @@ _VALID_SEVERITIES = {"all", "critical", "high", "medium", "low", "info"}
 
 
 class FilterPreset(BaseModel):
-    """Validated representation of the frontend filter state."""
     severity:    str = "all"
     target:      str = "all"
     scanner:     str = "all"
@@ -46,9 +42,9 @@ class FilterPreset(BaseModel):
 
 
 class SavedViewCreate(BaseModel):
-    """Request body for POST /saved-views."""
     name:        str = Field(..., min_length=1, max_length=60)
     filter_json: str
+    shared:      bool = False
 
     @field_validator("name")
     @classmethod
@@ -70,9 +66,9 @@ class SavedViewCreate(BaseModel):
 
 
 class SavedViewUpdate(BaseModel):
-    """Request body for PUT /saved-views/{id}."""
     name:        Optional[str] = Field(None, min_length=1, max_length=60)
     filter_json: Optional[str] = None
+    shared:      Optional[bool] = None
 
     @field_validator("name")
     @classmethod
@@ -97,12 +93,9 @@ class SavedViewUpdate(BaseModel):
         return v
 
 
-
-
-
 async def require_owned_saved_view(db, view_id: str, owner: str) -> Dict[str, Any]:
     row = await db.fetchone(
-        "SELECT id, owner_id FROM saved_views WHERE id = ?", (view_id,)
+        "SELECT id, owner_id, shared FROM saved_views WHERE id = ?", (view_id,)
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Saved view not found")
@@ -115,10 +108,15 @@ async def require_owned_saved_view(db, view_id: str, owner: str) -> Dict[str, An
 
 @saved_views_router.get("")
 async def list_saved_views(owner: str = Depends(get_current_owner)) -> Dict[str, Any]:
+    """Return views owned by the caller plus all shared views."""
     db = await get_db()
     rows: List[Dict] = await db.fetchall(
-        "SELECT id, name, filter_json, created_at, updated_at "
-        "FROM saved_views WHERE owner_id = ? ORDER BY created_at ASC",
+        """
+        SELECT id, name, filter_json, shared, owner_id, created_at, updated_at
+        FROM saved_views
+        WHERE owner_id = ? OR shared = 1
+        ORDER BY created_at ASC
+        """,
         (owner,),
     )
     return {"views": rows, "total": len(rows)}
@@ -129,7 +127,6 @@ async def create_saved_view(
     body: SavedViewCreate, owner: str = Depends(get_current_owner)
 ) -> Dict[str, Any]:
     db = await get_db()
-
     existing = await db.fetchone(
         "SELECT id FROM saved_views WHERE LOWER(name) = LOWER(?) AND owner_id = ?",
         (body.name, owner),
@@ -140,10 +137,13 @@ async def create_saved_view(
             detail=f"A saved view named '{body.name}' already exists. "
                    "Use PUT to overwrite it.",
         )
-
     view_id = str(uuid.uuid4())
     await db.execute(
-        (view_id, body.name, body.filter_json, owner),
+        """
+        INSERT INTO saved_views (id, name, filter_json, shared, owner_id)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (view_id, body.name, body.filter_json, int(body.shared), owner),
     )
     return {"id": view_id, "name": body.name, "created": True}
 
@@ -155,14 +155,12 @@ async def update_saved_view(
     owner: str = Depends(get_current_owner),
 ) -> Dict[str, Any]:
     db = await get_db()
-
     await require_owned_saved_view(db, view_id, owner)
 
     updates: List[str] = []
     params: List[Any] = []
 
     if body.name is not None:
-        # Check for name collision with a *different* record owned by this caller
         collision = await db.fetchone(
             "SELECT id FROM saved_views WHERE LOWER(name) = LOWER(?) "
             "AND id != ? AND owner_id = ?",
@@ -179,6 +177,10 @@ async def update_saved_view(
     if body.filter_json is not None:
         updates.append("filter_json = ?")
         params.append(body.filter_json)
+
+    if body.shared is not None:
+        updates.append("shared = ?")
+        params.append(int(body.shared))
 
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -199,7 +201,6 @@ async def delete_saved_view(
     view_id: str, owner: str = Depends(get_current_owner)
 ) -> Dict[str, Any]:
     db = await get_db()
-
     row = await db.fetchone(
         "SELECT owner_id FROM saved_views WHERE id = ?", (view_id,)
     )
@@ -207,7 +208,6 @@ async def delete_saved_view(
         raise HTTPException(
             status_code=403, detail="You do not have access to this saved view"
         )
-
     await db.execute(
         "DELETE FROM saved_views WHERE id = ? AND owner_id = ?", (view_id, owner)
     )
