@@ -242,24 +242,33 @@ class NetworkPolicyEngine:
                 return False, reason, None
 
         # ═ Step 1: Check denylist (highest priority) ═
-        for net, policy in self.denylist:
-            if self._is_expired(policy):
-                continue
-            if ip in net:
-                reason = f"Blocked by denylist rule: {policy.reason} (matched: {policy.cidr})"
-                entry = AuditLogEntry(
-                    timestamp=datetime.now(),
-                    plugin_id=plugin_id,
-                    task_id=task_id,
-                    action=PolicyAction.DENY,
-                    dest_ip=dest_ip,
-                    dest_port=dest_port,
-                    dest_hostname=dest_hostname,
-                    policy_matched=policy.cidr,
-                    reason=reason,
-                )
-                self._log_audit_entry(entry)
-                return False, reason, policy
+        # Loopback is exempted here when SECUSCAN_ALLOW_LOOPBACK_SCANS is enabled,
+        # mirroring the exemption Safe Mode already applies in validation.py. Safe
+        # Mode and Network Policy are independent gates; both must agree that
+        # loopback is permitted for a loopback scan to succeed, and both key off
+        # the same setting so they don't drift out of sync again.
+        from .config import settings
+        loopback_exempt = ip.is_loopback and settings.allow_loopback_scans
+
+        if not loopback_exempt:
+            for net, policy in self.denylist:
+                if self._is_expired(policy):
+                    continue
+                if ip in net:
+                    reason = f"Blocked by denylist rule: {policy.reason} (matched: {policy.cidr})"
+                    entry = AuditLogEntry(
+                        timestamp=datetime.now(),
+                        plugin_id=plugin_id,
+                        task_id=task_id,
+                        action=PolicyAction.DENY,
+                        dest_ip=dest_ip,
+                        dest_port=dest_port,
+                        dest_hostname=dest_hostname,
+                        policy_matched=policy.cidr,
+                        reason=reason,
+                    )
+                    self._log_audit_entry(entry)
+                    return False, reason, policy
 
         # ═ Step 2: Check allowlist ═
         for net, policy in self.allowlist:

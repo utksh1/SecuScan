@@ -61,9 +61,11 @@ class TestInitDefaultPolicies:
         audit_log = tmp_path / "audit.log"
         engine = NetworkPolicyEngine(audit_log_path=str(audit_log))
         _init_default_policies(engine)
-        # Private/metadata IPs should still be blocked by denylist
+        # Private/metadata IPs should still be blocked by denylist.
+        # 127.0.0.1 is excluded here: with the default SECUSCAN_ALLOW_LOOPBACK_SCANS=true
+        # it is intentionally exempted from the denylist (see TestLoopbackExemption).
         for blocked_ip in ["10.0.0.1", "192.168.1.1", "172.16.0.1",
-                           "169.254.169.254", "127.0.0.1", "100.64.0.1"]:
+                           "169.254.169.254", "100.64.0.1"]:
             allowed, _, _ = engine.check_access(blocked_ip, plugin_id="test")
             assert not allowed, f"{blocked_ip} should be blocked by denylist"
 
@@ -413,6 +415,61 @@ class TestResolveAndPin:
         assert pinned_ip is None
         assert allowed is False
         assert "Unresolvable" in reason
+
+
+class TestLoopbackExemption:
+    """Test that Network Policy respects SECUSCAN_ALLOW_LOOPBACK_SCANS for loopback,
+    consistent with Safe Mode's handling in validation.py (GH #2047)"""
+
+    def test_loopback_allowed_when_flag_enabled(self, monkeypatch, tmp_path):
+        """127.0.0.1 must pass Network Policy when allow_loopback_scans=True (the default),
+        matching the README Quick Start nmap/127.0.0.1 example"""
+        monkeypatch.setattr(
+            "backend.secuscan.config.settings.allow_loopback_scans", True
+        )
+        audit_log = tmp_path / "audit.log"
+        engine = NetworkPolicyEngine(audit_log_path=str(audit_log))
+        _init_default_policies(engine)
+
+        allowed, reason, _ = engine.check_access("127.0.0.1", plugin_id="nmap")
+        assert allowed, f"127.0.0.1 should be allowed, got: {reason}"
+
+    def test_loopback_ipv6_allowed_when_flag_enabled(self, monkeypatch, tmp_path):
+        """::1 must also be exempted when allow_loopback_scans=True"""
+        monkeypatch.setattr(
+            "backend.secuscan.config.settings.allow_loopback_scans", True
+        )
+        audit_log = tmp_path / "audit.log"
+        engine = NetworkPolicyEngine(audit_log_path=str(audit_log))
+        _init_default_policies(engine)
+
+        allowed, reason, _ = engine.check_access("::1", plugin_id="nmap")
+        assert allowed, f"::1 should be allowed, got: {reason}"
+
+    def test_loopback_blocked_when_flag_disabled(self, monkeypatch, tmp_path):
+        """127.0.0.1 must still be blocked when allow_loopback_scans=False"""
+        monkeypatch.setattr(
+            "backend.secuscan.config.settings.allow_loopback_scans", False
+        )
+        audit_log = tmp_path / "audit.log"
+        engine = NetworkPolicyEngine(audit_log_path=str(audit_log))
+        _init_default_policies(engine)
+
+        allowed, reason, _ = engine.check_access("127.0.0.1", plugin_id="nmap")
+        assert not allowed
+        assert "denylist" in reason.lower()
+
+    def test_non_loopback_denylist_entries_unaffected_by_flag(self, monkeypatch, tmp_path):
+        """Enabling loopback exemption must not weaken unrelated denylist rules"""
+        monkeypatch.setattr(
+            "backend.secuscan.config.settings.allow_loopback_scans", True
+        )
+        audit_log = tmp_path / "audit.log"
+        engine = NetworkPolicyEngine(audit_log_path=str(audit_log))
+        _init_default_policies(engine)
+
+        allowed, _, _ = engine.check_access("10.0.0.1", plugin_id="test")
+        assert not allowed, "Private RFC1918 range must remain blocked"
 
 
 class TestDefaultDenylistSSRFProtection:
