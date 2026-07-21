@@ -242,4 +242,3 @@ def test_payload_length_guards():
         raise AssertionError("Expected ValueError for short versioned payload")
     except ValueError as exc:
         assert "verification failed" in str(exc) or "too short" in str(exc)
-
