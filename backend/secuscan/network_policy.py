@@ -243,10 +243,10 @@ class NetworkPolicyEngine:
 
         # ═ Step 1: Check denylist (highest priority) ═
         # Loopback is exempted here when SECUSCAN_ALLOW_LOOPBACK_SCANS is enabled,
-        # mirroring the exemption Safe Mode already applies in validation.py. Safe
-        # Mode and Network Policy are independent gates; both must agree that
-        # loopback is permitted for a loopback scan to succeed, and both key off
-        # the same setting so they don't drift out of sync again.
+        # mirroring the exemption Safe Mode already applies in validation.py. This
+        # applies to scan-target validation only (this method). It intentionally
+        # does not apply to validate_egress_target() below, which always blocks
+        # loopback for webhook/egress destinations to prevent SSRF.
         from .config import settings
         loopback_exempt = ip.is_loopback and settings.allow_loopback_scans
 
