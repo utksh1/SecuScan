@@ -29,7 +29,7 @@ import httpcore
 
 from .database import Database
 from .models import NotificationChannelType, NotificationDeliveryStatus
-from .redaction import redact_dict, redact_inputs
+from .redaction import redact_dict, redact_inputs, redact
 
 logger = logging.getLogger(__name__)
 
@@ -254,7 +254,7 @@ def build_alert_payload(
             "title": finding.get("title"),
             "category": finding.get("category"),
             "severity": finding.get("severity"),
-            "target": finding.get("target"),
+            "target": redact(finding.get("target") or ""),
             "description": finding.get("description"),
             "remediation": finding.get("remediation"),
             "metadata": metadata,
@@ -742,7 +742,7 @@ async def _gather_scan_summary(db: Database, task_id: str) -> Optional[Dict[str,
         return None
 
     status = str(task.get("status") or "unknown").lower()
-    target = task.get("target") or "Unknown Target"
+    target = redact(task.get("target")) or "Unknown Target"
     tool_name = task.get("tool_name") or task.get("plugin_id") or "Security Scan"
 
     findings = await db.fetchall(
@@ -948,7 +948,7 @@ async def process_slack_notification(db: Database, task_id: str) -> None:
 
     status = str(task.get("status") or "unknown").upper()
     tool_name = task.get("tool_name") or task.get("plugin_id") or "Security Scan"
-    target = task.get("target") or "Unknown Target"
+    target = redact(task.get("target")) or "Unknown Target"
     duration = task.get("duration_seconds")
     duration_str = f"{duration:.2f}s" if duration is not None else "N/A"
 

@@ -43,7 +43,9 @@ _SOURCE_QUALITY = {
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    from .time_utils import to_utc_iso
+
+    return to_utc_iso()
 
 
 def generate_finding_key(finding: Dict[str, Any], plugin_id: str, target: str, owner_id: str) -> str:
@@ -60,19 +62,15 @@ def generate_finding_key(finding: Dict[str, Any], plugin_id: str, target: str, o
 
 
 def _parse_timestamp(raw: Any) -> str:
-    if isinstance(raw, datetime):
-        return raw.astimezone(timezone.utc).isoformat()
-    if isinstance(raw, str) and raw.strip():
-        try:
-            return datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(timezone.utc).isoformat()
-        except ValueError:
-            return _now_iso()
-    return _now_iso()
+    from .time_utils import parse_to_utc, to_utc_iso
+
+    parsed = parse_to_utc(raw)
+    return to_utc_iso(parsed) if parsed is not None else to_utc_iso()
 
 
 def _stable_id(prefix: str, *parts: Any) -> str:
     material = "||".join(str(part or "").strip().lower() for part in parts)
-    digest = hashlib.sha1(material.encode("utf-8")).hexdigest()[:16]
+    digest = hashlib.sha1(material.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
     return f"{prefix}:{digest}"
 
 

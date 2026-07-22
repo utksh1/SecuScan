@@ -4,7 +4,7 @@ import html
 import io
 import json
 import re
-from .redaction import redact, redact_dict
+from .redaction import redact, redact_dict, _redact_value
 from .ai_summary import generate_summary
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -14,6 +14,8 @@ from backend import __version__
 
 from PIL import Image, ImageDraw
 from xhtml2pdf import pisa
+
+from .time_utils import format_utc_display, to_utc_iso
 
 
 class ReportGenerator:
@@ -203,7 +205,7 @@ class ReportGenerator:
             "title": cls._clean_text(finding.get("title")) or "Untitled finding",
             "category": cls._clean_text(finding.get("category")) or "General",
             "severity": cls._clean_text(finding.get("severity") or "info").upper(),
-            "target": cls._clean_text(finding.get("target")),
+            "target": redact(cls._clean_text(finding.get("target"))),
             "description": redact(cls._clean_text(finding.get("description")) or "No description was provided."),
             "remediation": redact(cls._clean_text(finding.get("remediation"))),
             "proof": redact(cls._clean_text(finding.get("proof"))),
@@ -215,8 +217,8 @@ class ReportGenerator:
             "confidence_reason": redact(cls._clean_text(finding.get("confidence_reason"))),
             "service_fingerprint": cls._clean_text(finding.get("service_fingerprint")),
             "cpe": cls._clean_text(finding.get("cpe")),
-            "discovered_at": cls._clean_text(finding.get("discovered_at")),
-            "evidence": finding.get("evidence", []) if isinstance(finding.get("evidence"), list) else [],
+            "discovered_at": to_utc_iso(finding.get("discovered_at")) if finding.get("discovered_at") else "",
+            "evidence": _redact_value(finding.get("evidence", [])) if isinstance(finding.get("evidence"), list) else [],
             "asset_refs": finding.get("asset_refs", []) if isinstance(finding.get("asset_refs"), list) else [],
             "references": finding.get("references", []) if isinstance(finding.get("references"), list) else [],
             "metadata": redact_dict({cls._clean_text(key): cls._clean_text(val) for key, val in metadata.items()}),
@@ -372,8 +374,8 @@ class ReportGenerator:
             "tool_name": cls._clean_text(task.get("tool_name")) or cls._clean_text(task.get("plugin_id")) or "Unknown tool",
             "target": cls._clean_text(task.get("target")) or "Unknown target",
             "status": cls._clean_text(task.get("status")) or "unknown",
-            "created_at": cls._clean_text(task.get("created_at")),
-            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "created_at": to_utc_iso(task.get("created_at")) if task.get("created_at") else "",
+            "generated_at": to_utc_iso(),
             "preset": cls._clean_text(task.get("preset")),
             "findings": findings,
             "summary": summary,
@@ -389,12 +391,7 @@ class ReportGenerator:
     def _format_timestamp(value: str) -> str:
         if not value:
             return "Unknown"
-        for fmt in ("%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
-            try:
-                return datetime.strptime(value.replace("Z", ""), fmt).strftime("%b %d, %Y %H:%M")
-            except ValueError:
-                continue
-        return value
+        return format_utc_display(value)
 
     @classmethod
     def _generate_pdf_html_report(cls, task: Dict[str, Any], result: Dict[str, Any]) -> str:

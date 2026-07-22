@@ -28,6 +28,7 @@ from .plugins import get_plugin_manager
 from .models import NotificationDeliveryStatus, TaskStatus, ScanPhase
 from .ratelimit import concurrent_limiter
 from .risk_scoring import compute_risk_score, compute_risk_factors
+from .time_utils import to_utc_iso
 from .capabilities import CapabilityEnforcer, CapabilityDeniedError, build_enforcer_from_settings
 from .parser_sandbox import run_parser_in_sandbox, ParserSandboxError
 from .network_policy import get_policy_engine
@@ -90,17 +91,11 @@ async def _terminate_process_group(pid: int, task_id: str, grace_seconds: int = 
 
 
 def _parse_discovered_at(finding: dict) -> Optional[datetime]:
-    """Extract and parse discovered_at from a finding dict, or return current UTC time."""
-    raw = finding.get("discovered_at")
-    if raw:
-        try:
-            if isinstance(raw, str):
-                return datetime.fromisoformat(raw)
-            if isinstance(raw, datetime):
-                return raw
-        except (ValueError, TypeError):
-            pass
-    return datetime.now(timezone.utc)
+    """Extract and parse discovered_at from a finding dict as timezone-aware UTC."""
+    from .time_utils import parse_to_utc, utc_now
+
+    parsed = parse_to_utc(finding.get("discovered_at"))
+    return parsed if parsed is not None else utc_now()
 
 
 def _validate_risk_fields(finding: dict) -> None:
@@ -1362,8 +1357,8 @@ class TaskExecutor:
         asset_refs = finding.get("asset_refs", []) if isinstance(finding.get("asset_refs"), list) else []
         references = finding.get("references", []) if isinstance(finding.get("references"), list) else []
         corroborating_sources = finding.get("corroborating_sources", []) if isinstance(finding.get("corroborating_sources"), list) else []
-        first_seen_at = str(finding.get("first_seen_at") or discovered.isoformat())
-        last_seen_at = str(finding.get("last_seen_at") or discovered.isoformat())
+        first_seen_at = str(finding.get("first_seen_at") or to_utc_iso(discovered))
+        last_seen_at = str(finding.get("last_seen_at") or to_utc_iso(discovered))
         occurrence_count = int(finding.get("occurrence_count") or 1)
         evidence_count = int(finding.get("evidence_count") or len(evidence))
         risk_score = compute_risk_score(
@@ -1447,7 +1442,7 @@ class TaskExecutor:
                 finding.get("cvss"),
                 finding.get("cve"),
                 json.dumps(metadata),
-                discovered.isoformat(),
+                to_utc_iso(discovered),
                 exploitability,
                 confidence,
                 1 if finding.get("validated") else 0,
@@ -1485,7 +1480,7 @@ class TaskExecutor:
             "id": finding_id,
             "plugin_id": plugin_id,
             "target": target_value,
-            "discovered_at": discovered.isoformat(),
+            "discovered_at": to_utc_iso(discovered),
             "metadata": metadata,
             "evidence": evidence,
             "asset_refs": asset_refs,
@@ -1539,11 +1534,12 @@ class TaskExecutor:
                 """
                 INSERT INTO reports (
                     id, owner_id, task_id, name, type, generated_at, status, findings, pages
-                ) VALUES (?, ?, ?, ?, ?, (datetime('now')), ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (id) DO UPDATE SET
                     status = EXCLUDED.status,
                     findings = EXCLUDED.findings,
-                    pages = EXCLUDED.pages
+                    pages = EXCLUDED.pages,
+                    generated_at = EXCLUDED.generated_at
                 """,
                 (
                     f"report:{task_id}",
@@ -1551,6 +1547,7 @@ class TaskExecutor:
                     task_id,
                     f"{plugin.name} Report",
                     "technical",
+                    to_utc_iso(),
                     "ready" if status == TaskStatus.COMPLETED.value else "failed",
                     len(findings_data),
                     1,
@@ -1606,11 +1603,12 @@ class TaskExecutor:
                 """
                 INSERT INTO reports (
                     id, owner_id, task_id, name, type, generated_at, status, findings, pages
-                ) VALUES (?, ?, ?, ?, ?, (datetime('now')), ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (id) DO UPDATE SET
                     status = EXCLUDED.status,
                     findings = EXCLUDED.findings,
-                    pages = EXCLUDED.pages
+                    pages = EXCLUDED.pages,
+                    generated_at = EXCLUDED.generated_at
                 """,
                 (
                     f"report:{task_id}",
@@ -1618,6 +1616,7 @@ class TaskExecutor:
                     task_id,
                     f"{scanner.name} Report",
                     "professional" if status == TaskStatus.COMPLETED.value else "failed",
+                    to_utc_iso(),
                     "ready" if status == TaskStatus.COMPLETED.value else "failed",
                     len(findings_data),
                     2, # Professional reports are typically multi-page

@@ -54,9 +54,9 @@ def test_settings_default_bind_address():
 
 
 def test_settings_default_debug():
-    """Debug defaults to True."""
+    """Debug defaults to False for security."""
     s = Settings()
-    assert s.debug is True
+    assert s.debug is False
 
 
 def test_settings_default_sandbox_disabled():

@@ -390,7 +390,7 @@ export async function logoutSession(): Promise<void> {
   _apiKey = null
 }
 
-function getApiKey(): string | null {
+export function getApiKey(): string | null {
   return _apiKey
 }
 

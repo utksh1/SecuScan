@@ -62,7 +62,10 @@ def deserialize_finding_rows(rows: List[Dict]) -> List[Dict[str, Any]]:
     The ``*_json`` suffix is stripped from the parsed values:
     ``metadata_json`` -> ``metadata``, ``evidence_json`` -> ``evidence``, etc.
     Rows that do not contain a given ``*_json`` key are passed through.
+    Timestamps are normalized to ISO-8601 UTC with an explicit offset.
     """
+    from .time_utils import to_utc_iso
+
     findings = parse_json_fields(rows, FINDING_JSON_FIELDS)
     for finding in findings:
         if "metadata_json" in finding:
@@ -77,6 +80,10 @@ def deserialize_finding_rows(rows: List[Dict]) -> List[Dict[str, Any]]:
             finding["references"] = finding.pop("references_json")
         if "corroborating_sources_json" in finding:
             finding["corroborating_sources"] = finding.pop("corroborating_sources_json")
+
+        for ts_field in ("discovered_at", "first_seen_at", "last_seen_at"):
+            if finding.get(ts_field):
+                finding[ts_field] = to_utc_iso(finding[ts_field])
 
         # Expose remediation safety fields at the top level
         metadata = finding.get("metadata")
