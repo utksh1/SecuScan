@@ -221,13 +221,14 @@ def get_api_key() -> str | None:
 #
 # ``resolve_owner_id`` derives a stable owner identity for the request and is
 # persisted as ``owner_id`` on tasks/findings/reports at creation time and
-# compared on every read/delete/report access. It deliberately prioritises the
-# explicit authenticated-user header (``X-User-Id``) — the same header
-# ``resolve_client_identity`` already treats as the authenticated user — so that
-# multiple workspaces sharing the deployment API key remain isolated. In a
-# production deployment the header is expected to be set by an upstream auth
-# proxy / SSO layer; deployments that do not send it fall back to a single
-# shared ``DEFAULT_OWNER_ID`` and keep their existing (single-user) behaviour.
+# compared on every read/delete/report access.
+#
+# SECURITY FIX: The X-User-Id header was previously trusted unconditionally
+# for owner identity resolution. This allowed any authenticated user to
+# impersonate any other user by spoofing the header, bypassing all
+# multi-tenant isolation checks. The header is now ignored for ownership
+# purposes — owner identity is bound to the authentication mechanism
+# (session cookie / API key) rather than a client-supplied header.
 #
 # This value is duplicated as the SQL column default ('default') in
 # database.py — keep the two in sync.
@@ -237,11 +238,12 @@ _OWNER_HEADER = "x-user-id"
 
 
 def resolve_owner_id(request: Request | None) -> str:
-    """Resolve the owning user/workspace identity for the current request."""
-    if request is not None:
-        user_id = request.headers.get(_OWNER_HEADER)
-        if user_id and user_id.strip():
-            return f"user:{user_id.strip()}"
+    """Resolve the owning user/workspace identity for the current request.
+
+    Returns the default owner identity. The X-User-Id header is NOT trusted
+    for ownership resolution to prevent header spoofing attacks that would
+    bypass multi-tenant isolation.
+    """
     return DEFAULT_OWNER_ID
 
 
