@@ -51,18 +51,47 @@ class TestSettingsVerifySslDefault:
 # ---------------------------------------------------------------------------
 
 
+class _MockStreamContextManager:
+    """Mimics httpx's ``client.stream(...)`` return value.
+
+    ``AsyncClient.stream()`` is a *synchronous* call that returns an async
+    context manager (it is not itself a coroutine) — the response is only
+    produced on ``__aenter__``. A plain ``AsyncMock`` attribute would make
+    ``client.stream(...)`` return a coroutine instead, which blows up with
+    "'coroutine' object does not support the asynchronous context manager
+    protocol" the moment ``crawl_target`` does ``async with client.stream(...)``.
+    """
+
+    def __init__(self, response):
+        self._response = response
+
+    async def __aenter__(self):
+        return self._response
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+def _make_mock_stream_response(body: bytes = b"<html></html>", url: str = "https://example.com/"):
+    async def _aiter_bytes():
+        yield body
+
+    mock_response = MagicMock()
+    mock_response.url = url
+    mock_response.status_code = 200
+    mock_response.headers = {}
+    mock_response.history = []
+    mock_response.aiter_bytes = MagicMock(return_value=_aiter_bytes())
+    return mock_response
+
+
 class TestCrawlerVerifySsl:
     @pytest.mark.asyncio
     async def test_crawl_target_passes_verify_ssl(self):
-        mock_response = MagicMock()
-        mock_response.text = "<html></html>"
-        mock_response.url = "https://example.com/"
-        mock_response.status_code = 200
-        mock_response.headers = {}
-        mock_response.history = []
+        mock_response = _make_mock_stream_response()
 
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.stream = MagicMock(return_value=_MockStreamContextManager(mock_response))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
@@ -79,15 +108,10 @@ class TestCrawlerVerifySsl:
 
     @pytest.mark.asyncio
     async def test_crawl_target_verify_ssl_false_when_disabled(self):
-        mock_response = MagicMock()
-        mock_response.text = "<html></html>"
-        mock_response.url = "https://example.com/"
-        mock_response.status_code = 200
-        mock_response.headers = {}
-        mock_response.history = []
+        mock_response = _make_mock_stream_response()
 
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.stream = MagicMock(return_value=_MockStreamContextManager(mock_response))
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
@@ -116,19 +140,23 @@ class TestAPIScannerVerifySsl:
 
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=MagicMock(status_code=404, text="", headers={}))
+        mock_client.stream = MagicMock(
+            return_value=_MockStreamContextManager(_make_mock_stream_response())
+        )
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("backend.secuscan.scanners.api_scanner.httpx.AsyncClient", return_value=mock_client) as mock_cls:
             with patch("backend.secuscan.scanners.api_scanner.settings") as mock_settings:
-                mock_settings.verify_ssl = True
-                with patch.object(scanner, "_fetch_spec", return_value=None):
-                    with patch.object(scanner, "_probe_graphql", return_value=([], [])):
-                        await scanner.run("https://example.com", {})
+                with patch("backend.secuscan.scanners.api_scanner.crawl_target", return_value={"api_hints": []}):
+                    mock_settings.verify_ssl = True
+                    with patch.object(scanner, "_fetch_spec", return_value=None):
+                        with patch.object(scanner, "_probe_graphql", return_value=([], [])):
+                            await scanner.run("https://example.com", {})
 
-                        mock_cls.assert_called()
-                        _, kwargs = mock_cls.call_args
-                        assert kwargs["verify"] is True
+                            mock_cls.assert_called()
+                            _, kwargs = mock_cls.call_args
+                            assert kwargs["verify"] is True
 
     @pytest.mark.asyncio
     async def test_api_scanner_verify_ssl_false_when_disabled(self):
@@ -138,18 +166,22 @@ class TestAPIScannerVerifySsl:
 
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=MagicMock(status_code=404, text="", headers={}))
+        mock_client.stream = MagicMock(
+            return_value=_MockStreamContextManager(_make_mock_stream_response())
+        )
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=False)
 
         with patch("backend.secuscan.scanners.api_scanner.httpx.AsyncClient", return_value=mock_client) as mock_cls:
             with patch("backend.secuscan.scanners.api_scanner.settings") as mock_settings:
-                mock_settings.verify_ssl = False
-                with patch.object(scanner, "_fetch_spec", return_value=None):
-                    with patch.object(scanner, "_probe_graphql", return_value=([], [])):
-                        await scanner.run("https://example.com", {})
+                with patch("backend.secuscan.scanners.api_scanner.crawl_target", return_value={"api_hints": []}):
+                    mock_settings.verify_ssl = False
+                    with patch.object(scanner, "_fetch_spec", return_value=None):
+                        with patch.object(scanner, "_probe_graphql", return_value=([], [])):
+                            await scanner.run("https://example.com", {})
 
-                        _, kwargs = mock_cls.call_args
-                        assert kwargs["verify"] is False
+                            _, kwargs = mock_cls.call_args
+                            assert kwargs["verify"] is False
 
 
 # ---------------------------------------------------------------------------

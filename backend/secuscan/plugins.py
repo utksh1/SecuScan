@@ -218,7 +218,11 @@ class PluginManager:
         # Validate parser exists
         parser_file = plugin_dir / "parser.py"
         if plugin.output.get("parser") == "custom" and not parser_file.exists():
-            logger.warning("Custom parser specified but parser.py not found")
+            logger.error(
+                "Plugin %s declares output.parser == 'custom' but parser.py "
+                "is missing from %s", plugin.id, plugin_dir,
+            )
+            return False
 
         if not self._validate_safety(plugin.safety):
             return False
@@ -242,8 +246,11 @@ class PluginManager:
             logger.error("Plugin %s missing checksum/signature while enforcement is enabled", plugin.id)
             return False
 
+        requires_parser = plugin.output.get("parser") == "custom"
         try:
-            combined_digest = self.compute_plugin_digest(metadata_file, parser_file)
+            combined_digest = self.compute_plugin_digest(
+                metadata_file, parser_file, require_parser=requires_parser
+            )
         except Exception as exc:
             logger.error("Failed to hash plugin files for %s: %s", plugin.id, exc)
             return False
@@ -269,13 +276,30 @@ class PluginManager:
         return True
 
     @staticmethod
-    def compute_plugin_digest(metadata_file: Path, parser_file: Path) -> str:
-        """Compute deterministic plugin digest ignoring mutable checksum/signature fields."""
+    def compute_plugin_digest(
+        metadata_file: Path, parser_file: Path, require_parser: bool = False
+    ) -> str:
+        """Compute deterministic plugin digest ignoring mutable checksum/signature fields.
+
+        Args:
+            require_parser: When True, parser_file must exist. Used for plugins
+                that declare output.parser == 'custom', where a missing parser.py
+                would otherwise be silently hashed as an empty digest and let a
+                broken plugin pass integrity verification.
+
+        Raises:
+            FileNotFoundError: If require_parser is True and parser_file is missing.
+        """
         metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
         metadata.pop("checksum", None)
         metadata.pop("signature", None)
         metadata_canonical = json.dumps(metadata, sort_keys=True, separators=(",", ":"))
         metadata_digest = hashlib.sha256(metadata_canonical.encode("utf-8")).hexdigest()
+
+        if require_parser and not parser_file.exists():
+            raise FileNotFoundError(
+                f"Custom parser required but not found: {parser_file}"
+            )
 
         parser_digest = ""
         if parser_file.exists():

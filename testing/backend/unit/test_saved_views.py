@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import tempfile
+
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
@@ -8,33 +10,68 @@ from httpx import AsyncClient, ASGITransport
 from fastapi import FastAPI
 from backend.secuscan.saved_views import saved_views_router
 from backend.secuscan.database import Database, get_db
+from backend.secuscan.auth import require_api_key
 import backend.secuscan.database as _db_module
+import backend.secuscan.auth as _auth_module
 from pathlib import Path
 
 
 # ─── Fixtures ─────────────────────────────────────────────────────────────────
 
+async def _mock_require_api_key() -> str:
+    """Mock auth dependency that always succeeds."""
+    return "test-owner-id"
+
+
 @pytest_asyncio.fixture
 async def app_client():
     """
     Spin up an isolated FastAPI app with an in-memory SQLite database
-    and the saved_views_router registered.
+    and the saved_views_router registered. The client authenticates as
+    the "default" owner (no X-User-Id header) using a real API key,
+    matching how routes.py's own tests exercise auth (issue #1743).
     """
     # In-memory DB — isolated per test function
     test_db = Database(":memory:")
     await test_db.connect()
     _db_module.db = test_db
 
-    # Minimal app
+    # Minimal app with auth override
     _app = FastAPI()
     _app.include_router(saved_views_router)
+    
+    # Override auth dependency to bypass authentication in tests
+    _app.dependency_overrides[require_api_key] = _mock_require_api_key
 
-    transport = ASGITransport(app=_app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        yield client
+    with tempfile.TemporaryDirectory() as tmp_data_dir:
+        api_key = _auth_module.init_api_key(tmp_data_dir)
+
+        transport = ASGITransport(app=_app)
+        async with AsyncClient(
+            transport=transport,
+            base_url="http://test",
+            headers={"X-Api-Key": api_key},
+        ) as client:
+            client.api_key = api_key
+            client.test_transport = transport
+            yield client
 
     await test_db.disconnect()
     _db_module.db = None
+    _auth_module._api_key = None
+
+
+@pytest_asyncio.fixture
+async def other_owner_client(app_client: AsyncClient):
+    """A second authenticated client acting as a different owner (`bob`),
+    sharing the same app/db as ``app_client`` but scoped to a different
+    X-User-Id, for cross-owner isolation tests."""
+    async with AsyncClient(
+        transport=app_client.test_transport,
+        base_url="http://test",
+        headers={"X-Api-Key": app_client.api_key, "X-User-Id": "bob"},
+    ) as client:
+        yield client
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -314,6 +351,89 @@ async def test_filter_json_with_null_values_rejected(app_client: AsyncClient):
     bad_preset = {**VALID_PRESET, "severity": None}
     res = await app_client.post("/api/v1/saved-views", json=make_body("Null Sev", bad_preset))
     assert res.status_code == 422
+
+# ─── Auth & owner isolation (issue #1743) ────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_unauthenticated_request_rejected(app_client: AsyncClient):
+    """Requests without a valid API key/session are rejected, not served."""
+    res = await app_client.get(
+        "/api/v1/saved-views", headers={"X-Api-Key": ""}
+    )
+    assert res.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_wrong_api_key_rejected(app_client: AsyncClient):
+    """A malformed/incorrect API key is rejected."""
+    res = await app_client.get(
+        "/api/v1/saved-views", headers={"X-Api-Key": "not-the-real-key"}
+    )
+    assert res.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_list_is_scoped_to_owner(app_client: AsyncClient, other_owner_client: AsyncClient):
+    """A view created by one owner does not appear in another owner's list."""
+    await app_client.post("/api/v1/saved-views", json=make_body("Owner A's View"))
+
+    other_res = await other_owner_client.get("/api/v1/saved-views")
+    assert other_res.status_code == 200
+    assert other_res.json()["total"] == 0
+
+    own_res = await app_client.get("/api/v1/saved-views")
+    assert own_res.json()["total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_different_owners_can_reuse_the_same_name(
+    app_client: AsyncClient, other_owner_client: AsyncClient
+):
+    """Per-owner uniqueness: two owners can each have a view named 'Alpha'."""
+    res_a = await app_client.post("/api/v1/saved-views", json=make_body("Alpha"))
+    res_b = await other_owner_client.post("/api/v1/saved-views", json=make_body("Alpha"))
+    assert res_a.status_code == 201
+    assert res_b.status_code == 201
+
+
+@pytest.mark.asyncio
+async def test_cannot_read_other_owners_view_by_guessing_id(
+    app_client: AsyncClient, other_owner_client: AsyncClient
+):
+    """
+    There's no GET-by-id endpoint, but PUT/DELETE both accept a bare id — this
+    verifies neither leaks or mutates another owner's row (BOLA regression).
+    """
+    create_res = await app_client.post("/api/v1/saved-views", json=make_body("Private View"))
+    view_id = create_res.json()["id"]
+
+    put_res = await other_owner_client.put(
+        f"/api/v1/saved-views/{view_id}", json={"name": "Hijacked"}
+    )
+    assert put_res.status_code == 403
+
+    del_res = await other_owner_client.delete(f"/api/v1/saved-views/{view_id}")
+    assert del_res.status_code == 403
+
+    # Confirm the original owner's view is untouched
+    list_res = await app_client.get("/api/v1/saved-views")
+    assert list_res.json()["views"][0]["name"] == "Private View"
+
+
+@pytest.mark.asyncio
+async def test_cannot_delete_other_owners_view(
+    app_client: AsyncClient, other_owner_client: AsyncClient
+):
+    """Deleting another owner's view id returns 403 and leaves it intact."""
+    create_res = await app_client.post("/api/v1/saved-views", json=make_body("Keep Safe"))
+    view_id = create_res.json()["id"]
+
+    res = await other_owner_client.delete(f"/api/v1/saved-views/{view_id}")
+    assert res.status_code == 403
+
+    list_res = await app_client.get("/api/v1/saved-views")
+    assert list_res.json()["total"] == 1
+
 
 # ── File-backed DB migration path ─────────────────────────────────────────────
 

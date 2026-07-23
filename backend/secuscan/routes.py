@@ -1247,12 +1247,20 @@ async def get_reports(owner: str = Depends(get_current_owner)):
     """Return the caller's generated reports."""
 
     async def build():
+        from .time_utils import to_utc_iso
+
         db = await get_db()
         rows = await db.fetchall(
             "SELECT * FROM reports WHERE owner_id = ? ORDER BY generated_at DESC",
             (owner,),
         )
-        return {"reports": parse_json_fields(rows, ["metadata_json"])}
+        reports = []
+        for row in parse_json_fields(rows, ["metadata_json"]):
+            report = dict(row)
+            if report.get("generated_at"):
+                report["generated_at"] = to_utc_iso(report["generated_at"])
+            reports.append(report)
+        return {"reports": reports}
 
     return await get_or_set_cached(f"reports:list:{owner}", build)
 
@@ -1269,6 +1277,8 @@ async def search(
     owner: str = Depends(get_current_owner),
 ):
     """Search the caller's findings and reports by title/description/name."""
+    from .time_utils import to_utc_iso
+
     db = await get_db()
     pattern = f"%{_escape_like(q.strip())}%"
 
@@ -1304,7 +1314,7 @@ async def search(
                 "category": row["category"],
                 "severity": row["severity"],
                 "target": row["target"],
-                "discovered_at": row["discovered_at"],
+                "discovered_at": to_utc_iso(row["discovered_at"]) if row["discovered_at"] else row["discovered_at"],
             }
             for row in finding_rows
         ],
@@ -1314,7 +1324,7 @@ async def search(
                 "task_id": row["task_id"],
                 "name": row["name"],
                 "type": row["type"],
-                "generated_at": row["generated_at"],
+                "generated_at": to_utc_iso(row["generated_at"]) if row["generated_at"] else row["generated_at"],
             }
             for row in report_rows
         ],
@@ -2581,6 +2591,8 @@ async def list_notification_history(
 @router.get("/finding/{finding_id}")
 async def get_finding_details(finding_id: str, owner: str = Depends(get_current_owner)):
     """Get detailed information for a specific finding"""
+    from .time_utils import to_utc_iso
+
     db = await get_db()
 
     finding_row = await db.fetchone(
@@ -2627,7 +2639,7 @@ async def get_finding_details(finding_id: str, owner: str = Depends(get_current_
         "proof": finding_row["proof"],
         "cvss": finding_row["cvss"],
         "cve": finding_row["cve"],
-        "discovered_at": finding_row["discovered_at"],
+        "discovered_at": to_utc_iso(finding_row["discovered_at"]) if finding_row.get("discovered_at") else finding_row.get("discovered_at"),
         "metadata": metadata,
         "exploitability": finding_row.get("exploitability"),
         "confidence": finding_row.get("confidence"),

@@ -4,12 +4,17 @@ import json
 import uuid
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
+from .auth import get_current_owner, require_api_key
 from .database import get_db
 
-saved_views_router = APIRouter(prefix="/api/v1/saved-views", tags=["saved-views"])
+saved_views_router = APIRouter(
+    prefix="/api/v1/saved-views",
+    tags=["saved-views"],
+    dependencies=[Depends(require_api_key)],
+)
 
 _VALID_SORT_MODES = {"severity", "newest", "oldest", "target"}
 _VALID_SEVERITIES = {"all", "critical", "high", "medium", "low", "info"}
@@ -95,28 +100,50 @@ class SavedViewUpdate(BaseModel):
 
 
 
+async def require_owned_saved_view(db, view_id: str, owner: str) -> Dict[str, Any]:
+    """Fetch a saved view and enforce that it belongs to ``owner`` (issue #1743).
+
+    Raises 404 when the view does not exist and 403 when it exists but is
+    owned by a different user/workspace, matching require_owned_task's
+    behaviour for tasks in routes.py.
+    """
+    row = await db.fetchone(
+        "SELECT id, owner_id FROM saved_views WHERE id = ?", (view_id,)
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Saved view not found")
+    if row["owner_id"] != owner:
+        raise HTTPException(
+            status_code=403, detail="You do not have access to this saved view"
+        )
+    return row
+
+
 @saved_views_router.get("")
-async def list_saved_views() -> Dict[str, Any]:
-    """Return all saved views ordered by creation date."""
+async def list_saved_views(owner: str = Depends(get_current_owner)) -> Dict[str, Any]:
+    """Return all saved views for the current owner, ordered by creation date."""
     db = await get_db()
     rows: List[Dict] = await db.fetchall(
         "SELECT id, name, filter_json, created_at, updated_at "
-        "FROM saved_views ORDER BY created_at ASC"
+        "FROM saved_views WHERE owner_id = ? ORDER BY created_at ASC",
+        (owner,),
     )
     return {"views": rows, "total": len(rows)}
 
 
 @saved_views_router.post("", status_code=201)
-async def create_saved_view(body: SavedViewCreate) -> Dict[str, Any]:
+async def create_saved_view(
+    body: SavedViewCreate, owner: str = Depends(get_current_owner)
+) -> Dict[str, Any]:
     """
-    Create a new saved view.
-    Returns 409 if a view with the same name already exists.
+    Create a new saved view for the current owner.
+    Returns 409 if the owner already has a view with the same name.
     """
     db = await get_db()
 
-
     existing = await db.fetchone(
-        "SELECT id FROM saved_views WHERE LOWER(name) = LOWER(?)", (body.name,)
+        "SELECT id FROM saved_views WHERE LOWER(name) = LOWER(?) AND owner_id = ?",
+        (body.name, owner),
     )
     if existing:
         raise HTTPException(
@@ -128,34 +155,37 @@ async def create_saved_view(body: SavedViewCreate) -> Dict[str, Any]:
     view_id = str(uuid.uuid4())
     await db.execute(
         """
-        INSERT INTO saved_views (id, name, filter_json)
-        VALUES (?, ?, ?)
+        INSERT INTO saved_views (id, name, filter_json, owner_id)
+        VALUES (?, ?, ?, ?)
         """,
-        (view_id, body.name, body.filter_json),
+        (view_id, body.name, body.filter_json, owner),
     )
     return {"id": view_id, "name": body.name, "created": True}
 
 
 @saved_views_router.put("/{view_id}")
-async def update_saved_view(view_id: str, body: SavedViewUpdate) -> Dict[str, Any]:
+async def update_saved_view(
+    view_id: str,
+    body: SavedViewUpdate,
+    owner: str = Depends(get_current_owner),
+) -> Dict[str, Any]:
     """
-    Overwrite name and/or filter_json for an existing view.
+    Overwrite name and/or filter_json for an existing view owned by the caller.
     Also accepts PATCH semantics — only supplied fields are updated.
     """
     db = await get_db()
 
-    row = await db.fetchone("SELECT id FROM saved_views WHERE id = ?", (view_id,))
-    if not row:
-        raise HTTPException(status_code=404, detail="Saved view not found")
+    await require_owned_saved_view(db, view_id, owner)
 
     updates: List[str] = []
     params: List[Any] = []
 
     if body.name is not None:
-        # Check for name collision with a *different* record
+        # Check for name collision with a *different* record owned by this caller
         collision = await db.fetchone(
-            "SELECT id FROM saved_views WHERE LOWER(name) = LOWER(?) AND id != ?",
-            (body.name, view_id),
+            "SELECT id FROM saved_views WHERE LOWER(name) = LOWER(?) "
+            "AND id != ? AND owner_id = ?",
+            (body.name, view_id, owner),
         )
         if collision:
             raise HTTPException(
@@ -174,17 +204,33 @@ async def update_saved_view(view_id: str, body: SavedViewUpdate) -> Dict[str, An
 
     updates.append("updated_at = datetime('now')")
     params.append(view_id)
+    params.append(owner)
 
     await db.execute(
-        f"UPDATE saved_views SET {', '.join(updates)} WHERE id = ?",
+        f"UPDATE saved_views SET {', '.join(updates)} WHERE id = ? AND owner_id = ?",
         tuple(params),
     )
     return {"id": view_id, "updated": True}
 
 
 @saved_views_router.delete("/{view_id}")
-async def delete_saved_view(view_id: str) -> Dict[str, Any]:
-    """Delete a saved view by id. Idempotent — returns 200 even if not found."""
+async def delete_saved_view(
+    view_id: str, owner: str = Depends(get_current_owner)
+) -> Dict[str, Any]:
+    """Delete a saved view owned by the caller. Idempotent — returns 200 even
+    if the view was already gone. Raises 403 if it exists but belongs to a
+    different owner, so callers can't confirm/erase other users' views."""
     db = await get_db()
-    await db.execute("DELETE FROM saved_views WHERE id = ?", (view_id,))
+
+    row = await db.fetchone(
+        "SELECT owner_id FROM saved_views WHERE id = ?", (view_id,)
+    )
+    if row is not None and row["owner_id"] != owner:
+        raise HTTPException(
+            status_code=403, detail="You do not have access to this saved view"
+        )
+
+    await db.execute(
+        "DELETE FROM saved_views WHERE id = ? AND owner_id = ?", (view_id, owner)
+    )
     return {"id": view_id, "deleted": True}

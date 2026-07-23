@@ -483,9 +483,23 @@ def get_policy_engine() -> NetworkPolicyEngine:
 
 def _init_default_policies(engine: NetworkPolicyEngine) -> None:
     """Initialize default security policies"""
-    from .config import settings
+    from .config import settings, MANDATORY_DENYLIST
 
-    # Add operator-configured denylist (always enforced)
+    # Add the mandatory denylist first. These entries (cloud metadata,
+    # loopback, private/CGNAT ranges, IPv6 link-local/ULA) are enforced
+    # unconditionally and are NOT affected by SECUSCAN_NETWORK_DENYLIST --
+    # an operator customizing the denylist can only add to this set, never
+    # replace or remove it, so SSRF to 169.254.169.254 (and equivalents on
+    # GCP/Azure/OCI) stays blocked no matter how the operator configures
+    # things.
+    for cidr in MANDATORY_DENYLIST:
+        try:
+            engine.add_deny_rule(cidr, reason="Mandatory denylist (not operator-configurable)")
+        except ValueError:
+            logger.warning(f"Skipping invalid mandatory denylist CIDR: {cidr}")
+
+    # Add operator-configured denylist additions (layered on top of the
+    # mandatory set above, never a replacement for it)
     for cidr in settings.network_denylist:
         try:
             engine.add_deny_rule(cidr, reason="Operator configured denylist")
