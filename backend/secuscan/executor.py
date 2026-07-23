@@ -1124,8 +1124,8 @@ class TaskExecutor:
             effective_inputs["__extra_headers"] = {
                 str(key): str(value) for key, value in headers.items()
             }
-            username = await self._read_vault_secret(db, credential_profile.get("username_secret_name"))
-            password = await self._read_vault_secret(db, credential_profile.get("password_secret_name"))
+            username = await self._read_vault_secret(db, credential_profile.get("username_secret_name"), owner_id)
+            password = await self._read_vault_secret(db, credential_profile.get("password_secret_name"), owner_id)
             if username is not None and password is not None:
                 token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
                 effective_inputs.setdefault("__extra_headers", {})
@@ -1142,7 +1142,7 @@ class TaskExecutor:
                 effective_inputs.setdefault("__extra_headers", {})
                 for key, value in extra_headers.items():
                     effective_inputs["__extra_headers"][str(key)] = str(value)
-            cookie_secret = await self._read_vault_secret(db, session_profile.get("cookie_secret_name"))
+            cookie_secret = await self._read_vault_secret(db, session_profile.get("cookie_secret_name"), owner_id)
             if cookie_secret:
                 try:
                     parsed = json.loads(cookie_secret)
@@ -1156,12 +1156,12 @@ class TaskExecutor:
         effective_inputs["__execution_context"] = execution_context
         return effective_inputs
 
-    async def _read_vault_secret(self, db, secret_name: Any) -> Optional[str]:
+    async def _read_vault_secret(self, db, secret_name: Any, owner_id: str) -> Optional[str]:
         if not secret_name:
             return None
         row = await db.fetchone(
-            "SELECT encrypted_value FROM credential_vault WHERE name = ?",
-            (str(secret_name),),
+            "SELECT encrypted_value FROM credential_vault WHERE name = ? AND owner_id = ?",
+            (str(secret_name), owner_id),
         )
         if not row:
             return None
