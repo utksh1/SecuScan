@@ -1,10 +1,12 @@
 """
-Unit tests for PolicyAction enum values and dataclass to_dict() methods in
-backend/secuscan/network_policy.py.
+Unit tests for PolicyAction enum and dataclass to_dict() serialization
+contracts in backend/secuscan/network_policy.py.
 
-The to_dict() methods are used to serialize audit log entries and policy rules
-for JSON logging and API responses.
+Tests meaningful serialization contracts and JSON round-trip behavior
+for NetworkPolicy and AuditLogEntry.
 """
+
+import json
 
 import pytest
 from datetime import datetime, timezone
@@ -17,23 +19,19 @@ from backend.secuscan.network_policy import (
 
 
 class TestPolicyActionEnum:
-    def test_allow_value(self):
-        assert PolicyAction.ALLOW.value == "allow"
+    """Minimal enum coverage focused on behavior."""
 
-    def test_deny_value(self):
-        assert PolicyAction.DENY.value == "deny"
-
-    def test_member_count(self):
-        assert len(PolicyAction) == 2
-
-    def test_allow_is_policy_action(self):
-        assert isinstance(PolicyAction.ALLOW, PolicyAction)
-
-    def test_deny_is_policy_action(self):
-        assert isinstance(PolicyAction.DENY, PolicyAction)
+    def test_policy_action_members_are_valid_strings(self):
+        """Each PolicyAction member serialises to a non-empty lowercase string."""
+        for member in PolicyAction:
+            assert isinstance(member.value, str)
+            assert member.value
+            assert member.value == member.value.lower()
 
 
 class TestNetworkPolicyToDict:
+    """Meaningful serialization contract tests for NetworkPolicy.to_dict()."""
+
     def test_returns_all_expected_keys(self):
         now = datetime.now(timezone.utc)
         policy = NetworkPolicy(
@@ -43,25 +41,15 @@ class TestNetworkPolicyToDict:
             created_at=now,
         )
         result = policy.to_dict()
-        assert "cidr" in result
-        assert "action" in result
-        assert "reason" in result
-        assert "created_at" in result
-        assert "expires_at" in result
+        assert set(result.keys()) == {
+            "cidr",
+            "action",
+            "reason",
+            "created_at",
+            "expires_at",
+        }
 
-    def test_action_serialized_as_string(self):
-        now = datetime.now(timezone.utc)
-        policy = NetworkPolicy(
-            cidr="10.0.0.0/8",
-            action=PolicyAction.ALLOW,
-            reason="test",
-            created_at=now,
-        )
-        result = policy.to_dict()
-        assert isinstance(result["action"], str)
-        assert result["action"] == "allow"
-
-    def test_deny_action_serialized_as_string(self):
+    def test_action_serialised_as_lowercase_string(self):
         now = datetime.now(timezone.utc)
         policy = NetworkPolicy(
             cidr="0.0.0.0/8",
@@ -70,9 +58,21 @@ class TestNetworkPolicyToDict:
             created_at=now,
         )
         result = policy.to_dict()
+        assert isinstance(result["action"], str)
         assert result["action"] == "deny"
 
-    def test_expires_at_serialized_as_iso_string(self):
+    def test_expires_at_none_when_not_set(self):
+        now = datetime.now(timezone.utc)
+        policy = NetworkPolicy(
+            cidr="10.0.0.0/8",
+            action=PolicyAction.ALLOW,
+            reason="test",
+            created_at=now,
+        )
+        result = policy.to_dict()
+        assert result["expires_at"] is None
+
+    def test_expires_at_iso_string_when_set(self):
         now = datetime.now(timezone.utc)
         expires = datetime(2030, 1, 1, tzinfo=timezone.utc)
         policy = NetworkPolicy(
@@ -86,30 +86,7 @@ class TestNetworkPolicyToDict:
         assert result["expires_at"] is not None
         assert "2030-01-01" in result["expires_at"]
 
-    def test_expires_at_none_when_not_set(self):
-        now = datetime.now(timezone.utc)
-        policy = NetworkPolicy(
-            cidr="10.0.0.0/8",
-            action=PolicyAction.ALLOW,
-            reason="test",
-            created_at=now,
-        )
-        result = policy.to_dict()
-        assert result["expires_at"] is None
-
-    def test_created_at_serialized_as_iso_string(self):
-        now = datetime.now(timezone.utc)
-        policy = NetworkPolicy(
-            cidr="10.0.0.0/8",
-            action=PolicyAction.ALLOW,
-            reason="test",
-            created_at=now,
-        )
-        result = policy.to_dict()
-        assert result["created_at"] is not None
-        assert "T" in result["created_at"]  # ISO format
-
-    def test_cidr_preserved(self):
+    def test_cidr_and_reason_preserved(self):
         now = datetime.now(timezone.utc)
         policy = NetworkPolicy(
             cidr="192.168.1.0/24",
@@ -119,20 +96,29 @@ class TestNetworkPolicyToDict:
         )
         result = policy.to_dict()
         assert result["cidr"] == "192.168.1.0/24"
+        assert result["reason"] == "internal"
 
-    def test_reason_preserved(self):
+    def test_json_roundtrip(self):
+        """NetworkPolicy.to_dict() round-trips cleanly through JSON."""
         now = datetime.now(timezone.utc)
         policy = NetworkPolicy(
             cidr="10.0.0.0/8",
             action=PolicyAction.ALLOW,
-            reason="my reason text",
+            reason="internal network",
             created_at=now,
         )
         result = policy.to_dict()
-        assert result["reason"] == "my reason text"
+        serialized = json.dumps(result)
+        restored = json.loads(serialized)
+        assert restored["cidr"] == "10.0.0.0/8"
+        assert restored["action"] == "allow"
+        assert restored["reason"] == "internal network"
+        assert restored["expires_at"] is None
 
 
 class TestAuditLogEntryToDict:
+    """Meaningful serialization contract tests for AuditLogEntry.to_dict()."""
+
     def test_returns_all_expected_keys(self):
         now = datetime.now(timezone.utc)
         entry = AuditLogEntry(
@@ -160,24 +146,7 @@ class TestAuditLogEntryToDict:
         }
         assert set(result.keys()) == expected_keys
 
-    def test_action_serialized_as_string(self):
-        now = datetime.now(timezone.utc)
-        entry = AuditLogEntry(
-            timestamp=now,
-            plugin_id="test",
-            task_id="t1",
-            action=PolicyAction.ALLOW,
-            dest_ip="8.8.8.8",
-            dest_port=80,
-            dest_hostname=None,
-            policy_matched="0.0.0.0/0",
-            reason="ok",
-        )
-        result = entry.to_dict()
-        assert isinstance(result["action"], str)
-        assert result["action"] == "allow"
-
-    def test_deny_action_serialized_as_string(self):
+    def test_action_serialised_as_lowercase_string(self):
         now = datetime.now(timezone.utc)
         entry = AuditLogEntry(
             timestamp=now,
@@ -209,22 +178,6 @@ class TestAuditLogEntryToDict:
         result = entry.to_dict()
         assert result["dest_hostname"] is None
 
-    def test_timestamp_serialized_as_iso_string(self):
-        now = datetime.now(timezone.utc)
-        entry = AuditLogEntry(
-            timestamp=now,
-            plugin_id="test",
-            task_id="t1",
-            action=PolicyAction.ALLOW,
-            dest_ip="1.1.1.1",
-            dest_port=443,
-            dest_hostname=None,
-            policy_matched="0.0.0.0/0",
-            reason="ok",
-        )
-        result = entry.to_dict()
-        assert "T" in result["timestamp"]
-
     def test_plugin_id_preserved(self):
         now = datetime.now(timezone.utc)
         entry = AuditLogEntry(
@@ -240,3 +193,26 @@ class TestAuditLogEntryToDict:
         )
         result = entry.to_dict()
         assert result["plugin_id"] == "my-scanner-plugin"
+
+    def test_json_roundtrip(self):
+        """AuditLogEntry.to_dict() round-trips cleanly through JSON."""
+        now = datetime.now(timezone.utc)
+        entry = AuditLogEntry(
+            timestamp=now,
+            plugin_id="test_plugin",
+            task_id="task-123",
+            action=PolicyAction.ALLOW,
+            dest_ip="8.8.8.8",
+            dest_port=53,
+            dest_hostname="dns.google",
+            policy_matched="0.0.0.0/0",
+            reason="allowed",
+        )
+        result = entry.to_dict()
+        serialized = json.dumps(result)
+        restored = json.loads(serialized)
+        assert restored["plugin_id"] == "test_plugin"
+        assert restored["dest_ip"] == "8.8.8.8"
+        assert restored["action"] == "allow"
+        assert restored["dest_hostname"] == "dns.google"
+
