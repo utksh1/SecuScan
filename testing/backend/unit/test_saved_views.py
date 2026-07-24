@@ -10,18 +10,12 @@ from httpx import AsyncClient, ASGITransport
 from fastapi import FastAPI
 from backend.secuscan.saved_views import saved_views_router
 from backend.secuscan.database import Database, get_db
-from backend.secuscan.auth import require_api_key
 import backend.secuscan.database as _db_module
 import backend.secuscan.auth as _auth_module
 from pathlib import Path
 
 
 # ─── Fixtures ─────────────────────────────────────────────────────────────────
-
-async def _mock_require_api_key() -> str:
-    """Mock auth dependency that always succeeds."""
-    return "test-owner-id"
-
 
 @pytest_asyncio.fixture
 async def app_client():
@@ -30,18 +24,18 @@ async def app_client():
     and the saved_views_router registered. The client authenticates as
     the "default" owner (no X-User-Id header) using a real API key,
     matching how routes.py's own tests exercise auth (issue #1743).
+
+    require_api_key is exercised for real (not mocked) so the auth
+    negative-path tests below actually verify enforcement instead of
+    always observing whatever the mock returns.
     """
     # In-memory DB — isolated per test function
     test_db = Database(":memory:")
     await test_db.connect()
     _db_module.db = test_db
 
-    # Minimal app with auth override
     _app = FastAPI()
     _app.include_router(saved_views_router)
-    
-    # Override auth dependency to bypass authentication in tests
-    _app.dependency_overrides[require_api_key] = _mock_require_api_key
 
     with tempfile.TemporaryDirectory() as tmp_data_dir:
         api_key = _auth_module.init_api_key(tmp_data_dir)
