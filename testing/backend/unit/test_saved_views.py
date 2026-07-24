@@ -62,6 +62,37 @@ async def app_client():
 
 
 @pytest_asyncio.fixture
+async def unauthed_client():
+    """
+    FastAPI app with saved_views_router and NO auth dependency override.
+    Used for tests that verify the real require_api_key enforcement,
+    specifically auth-rejection tests that must exercise the actual
+    authentication logic (not a mock that always succeeds).
+    """
+    test_db = Database(":memory:")
+    await test_db.connect()
+    _db_module.db = test_db
+
+    _app = FastAPI()
+    _app.include_router(saved_views_router)
+    # No dependency override — real require_api_key runs
+
+    with tempfile.TemporaryDirectory() as tmp_data_dir:
+        api_key = _auth_module.init_api_key(tmp_data_dir)
+
+        transport = ASGITransport(app=_app)
+        async with AsyncClient(
+            transport=transport,
+            base_url="http://test",
+        ) as client:
+            yield client
+
+    await test_db.disconnect()
+    _db_module.db = None
+    _auth_module._api_key = None
+
+
+@pytest_asyncio.fixture
 async def other_owner_client(app_client: AsyncClient):
     """A second authenticated client acting as a different owner (`bob`),
     sharing the same app/db as ``app_client`` but scoped to a different
@@ -355,18 +386,16 @@ async def test_filter_json_with_null_values_rejected(app_client: AsyncClient):
 # ─── Auth & owner isolation (issue #1743) ────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_unauthenticated_request_rejected(app_client: AsyncClient):
+async def test_unauthenticated_request_rejected(unauthed_client: AsyncClient):
     """Requests without a valid API key/session are rejected, not served."""
-    res = await app_client.get(
-        "/api/v1/saved-views", headers={"X-Api-Key": ""}
-    )
+    res = await unauthed_client.get("/api/v1/saved-views")
     assert res.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_wrong_api_key_rejected(app_client: AsyncClient):
+async def test_wrong_api_key_rejected(unauthed_client: AsyncClient):
     """A malformed/incorrect API key is rejected."""
-    res = await app_client.get(
+    res = await unauthed_client.get(
         "/api/v1/saved-views", headers={"X-Api-Key": "not-the-real-key"}
     )
     assert res.status_code == 401
