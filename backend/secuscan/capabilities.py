@@ -117,7 +117,7 @@ def effective_capabilities(
         validated = validate_capability_list(declared, plugin_id)
         return set(validated)
 
-    implied = _SAFETY_LEVEL_IMPLIED.get(safety_level, ["network"])
+    implied = _SAFETY_LEVEL_IMPLIED.get(safety_level.lower(), ["network"])
     return set(implied)
 
 
