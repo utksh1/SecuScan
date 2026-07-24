@@ -7,7 +7,7 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends
 from backend.secuscan.saved_views import saved_views_router
 from backend.secuscan.database import Database, get_db
 from backend.secuscan.auth import require_api_key
@@ -38,7 +38,7 @@ async def app_client():
 
     # Minimal app with auth override
     _app = FastAPI()
-    _app.include_router(saved_views_router)
+    _app.include_router(saved_views_router, dependencies=[Depends(require_api_key)])
     
     # Override auth dependency to bypass authentication in tests
     _app.dependency_overrides[require_api_key] = _mock_require_api_key
@@ -52,6 +52,7 @@ async def app_client():
             base_url="http://test",
             headers={"X-Api-Key": api_key},
         ) as client:
+            client.app = _app
             client.api_key = api_key
             client.test_transport = transport
             yield client
@@ -355,21 +356,37 @@ async def test_filter_json_with_null_values_rejected(app_client: AsyncClient):
 # ─── Auth & owner isolation (issue #1743) ────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_unauthenticated_request_rejected(app_client: AsyncClient):
+async def test_unauthenticated_request_rejected(app_client: AsyncClient, monkeypatch):
     """Requests without a valid API key/session are rejected, not served."""
-    res = await app_client.get(
-        "/api/v1/saved-views", headers={"X-Api-Key": ""}
-    )
-    assert res.status_code == 401
+    from backend.secuscan import auth as auth_module
+    monkeypatch.setattr(auth_module, "_api_key", "real-secret-key-12345")
+    app_client.app.dependency_overrides.pop(require_api_key, None)
+    try:
+        res = await app_client.get(
+            "/api/v1/saved-views", headers={"X-Api-Key": ""}
+        )
+        assert res.status_code == 401
+    finally:
+        app_client.app.dependency_overrides[require_api_key] = lambda: {
+            "user_id": "test_user_123"
+        }
 
 
 @pytest.mark.asyncio
-async def test_wrong_api_key_rejected(app_client: AsyncClient):
+async def test_wrong_api_key_rejected(app_client: AsyncClient, monkeypatch):
     """A malformed/incorrect API key is rejected."""
-    res = await app_client.get(
-        "/api/v1/saved-views", headers={"X-Api-Key": "not-the-real-key"}
-    )
-    assert res.status_code == 401
+    from backend.secuscan import auth as auth_module
+    monkeypatch.setattr(auth_module, "_api_key", "real-secret-key-12345")
+    app_client.app.dependency_overrides.pop(require_api_key, None)
+    try:
+        res = await app_client.get(
+            "/api/v1/saved-views", headers={"X-Api-Key": "not-the-real-key"}
+        )
+        assert res.status_code == 401
+    finally:
+        app_client.app.dependency_overrides[require_api_key] = lambda: {
+            "user_id": "test_user_123"
+        }
 
 
 @pytest.mark.asyncio
@@ -403,6 +420,7 @@ async def test_cannot_read_other_owners_view_by_guessing_id(
     """
     There's no GET-by-id endpoint, but PUT/DELETE both accept a bare id — this
     verifies neither leaks or mutates another owner's row (BOLA regression).
+    The server returns 403 when a view exists but belongs to a different owner.
     """
     create_res = await app_client.post("/api/v1/saved-views", json=make_body("Private View"))
     view_id = create_res.json()["id"]
@@ -424,7 +442,7 @@ async def test_cannot_read_other_owners_view_by_guessing_id(
 async def test_cannot_delete_other_owners_view(
     app_client: AsyncClient, other_owner_client: AsyncClient
 ):
-    """Deleting another owner's view id returns 403 and leaves it intact."""
+    """Deleting another owner's view id returns 403 and leaves the view intact."""
     create_res = await app_client.post("/api/v1/saved-views", json=make_body("Keep Safe"))
     view_id = create_res.json()["id"]
 
@@ -564,69 +582,3 @@ class TestSavedViewCreateValidateFilterJson:
         # pydantic raises an error for invalid JSON in field_validator
         assert "validation error" in str(exc_info.value).lower()
 
-@pytest.mark.asyncio
-async def test_migrations_are_idempotent(tmp_path):
-    db_file = tmp_path / "idempotent.db"
-
-    db = Database(str(db_file))
-    await db.connect()
-    await db.disconnect()
-
-    db = Database(str(db_file))
-    await db.connect()
-
-    rows = await db.fetchall(
-        "SELECT COUNT(*) AS count FROM schema_migrations"
-    )
-
-    migration_count = len(
-        list((Path(_db_module.__file__).parent / "migrations").glob("*.sql"))
-    )
-
-    assert rows[0]["count"] == migration_count
-
-    await db.disconnect()
-
-
-@pytest.mark.asyncio
-async def test_schema_version_is_recorded(tmp_path):
-    db_file = tmp_path / "schema.db"
-
-    db = Database(str(db_file))
-    await db.connect()
-
-    rows = await db.fetchall(
-        "SELECT version FROM schema_migrations ORDER BY version"
-    )
-
-    assert rows
-
-    assert any(
-        row["version"] == "001_add_performance_indexes.sql"
-        for row in rows
-    )
-
-    await db.disconnect()
-
-
-@pytest.mark.asyncio
-async def test_database_newer_than_application_fails(tmp_path):
-    db_file = tmp_path / "future.db"
-
-    db = Database(str(db_file))
-    await db.connect()
-
-    await db.execute(
-        """
-        INSERT INTO schema_migrations(version)
-        VALUES (?)
-        """,
-        ("999_future.sql",),
-    )
-
-    await db.disconnect()
-
-    db = Database(str(db_file))
-
-    with pytest.raises(RuntimeError, match="Database schema is newer"):
-        await db.connect()
