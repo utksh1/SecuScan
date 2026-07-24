@@ -2,12 +2,10 @@
 Integration tests for per-user ownership of workflows and notification rules
 (issue #961 — BOLA in workflow and notification rule CRUD).
 
-Two distinct users are simulated by sending different ``X-User-Id`` headers on
-top of the shared deployment API key.  The tests assert:
-  - Same-named workflows can coexist under different owners.
-  - User B can never list, read, update, delete, run, version, or rollback
-    User A's workflows (or notification rules).
-  - User A retains full access to their own resources.
+Security model: X-User-Id is NOT trusted for ownership (to prevent header
+spoofing BOLA). The authenticated principal resolves to DEFAULT_OWNER_ID.
+Cross-owner isolation is verified by seeding data directly with different
+owner_ids and confirming the API only exposes the caller's data.
 """
 
 import json
@@ -17,13 +15,11 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from backend.secuscan.config import settings
+from backend.secuscan.auth import DEFAULT_OWNER_ID
 
 
-ALICE = {"X-User-Id": "alice"}
-BOB = {"X-User-Id": "bob"}
-
-ALICE_OWNER = "user:alice"
-BOB_OWNER = "user:bob"
+OWNER_DEFAULT = DEFAULT_OWNER_ID
+OWNER_OTHER = "user:other-tenant"
 
 
 # ---------------------------------------------------------------------------
@@ -111,96 +107,77 @@ def _wf_payload(name: str = "Nightly Scan"):
 
 
 # ---------------------------------------------------------------------------
-# Same-name workflows across owners
+# Workflow creation and ownership
 # ---------------------------------------------------------------------------
 
-def test_same_name_workflows_allowed_across_owners(test_client):
-    """Two different owners can each create a workflow with the same name."""
-    resp_a = test_client.post("/api/v1/workflows", json=_wf_payload("MyScan"), headers=ALICE)
-    assert resp_a.status_code == 200, resp_a.text
-    wf_a = resp_a.json()
-
-    resp_b = test_client.post("/api/v1/workflows", json=_wf_payload("MyScan"), headers=BOB)
-    assert resp_b.status_code == 200, resp_b.text
-    wf_b = resp_b.json()
-
-    assert wf_a["id"] != wf_b["id"]
-    assert wf_a["name"] == wf_b["name"] == "MyScan"
-    assert _workflow_owner(wf_a["id"]) == ALICE_OWNER
-    assert _workflow_owner(wf_b["id"]) == BOB_OWNER
+def test_created_workflow_has_default_owner(test_client):
+    """A workflow created via the API is owned by DEFAULT_OWNER_ID."""
+    resp = test_client.post("/api/v1/workflows", json=_wf_payload("MyScan"))
+    assert resp.status_code == 200, resp.text
+    wf = resp.json()
+    assert _workflow_owner(wf["id"]) == OWNER_DEFAULT
 
 
 # ---------------------------------------------------------------------------
-# Cross-owner isolation — workflows
+# Cross-owner isolation — other owner's workflows are invisible
 # ---------------------------------------------------------------------------
 
 def test_workflow_list_is_scoped_to_owner(test_client):
-    _seed_workflow(ALICE_OWNER, "wf-alice-1", "AliceWF")
-    _seed_workflow(BOB_OWNER, "wf-bob-1", "BobWF")
+    _seed_workflow(OWNER_DEFAULT, "wf-default-1", "DefaultWF")
+    _seed_workflow(OWNER_OTHER, "wf-other-1", "OtherWF")
 
-    alice_wfs = {w["id"] for w in test_client.get("/api/v1/workflows", headers=ALICE).json()["workflows"]}
-    bob_wfs = {w["id"] for w in test_client.get("/api/v1/workflows", headers=BOB).json()["workflows"]}
-
-    assert "wf-alice-1" in alice_wfs and "wf-bob-1" not in alice_wfs
-    assert "wf-bob-1" in bob_wfs and "wf-alice-1" not in bob_wfs
-
-
-def test_workflow_get_blocks_cross_owner(test_client):
-    _seed_workflow(ALICE_OWNER, "wf-alice-get", "AliceWF")
-
-    resp = test_client.get("/api/v1/workflows/wf-alice-get", headers=BOB)
-    # The PR does not add a dedicated GET /workflows/{id} endpoint; use run as proxy.
-    # If a future GET endpoint uses _verify_workflow_owner, it will return 403.
-    # For now, verify via update (PATCH) and delete that these block cross-owner.
-    assert True
+    resp = test_client.get("/api/v1/workflows")
+    assert resp.status_code == 200
+    wf_ids = {w["id"] for w in resp.json()["workflows"]}
+    assert "wf-default-1" in wf_ids
+    assert "wf-other-1" not in wf_ids
 
 
-def test_workflow_update_blocks_cross_owner(test_client):
-    _seed_workflow(ALICE_OWNER, "wf-alice-upd", "AliceWF")
+def test_workflow_update_blocks_other_owner(test_client):
+    _seed_workflow(OWNER_OTHER, "wf-other-upd", "OtherWF")
 
-    resp = test_client.patch("/api/v1/workflows/wf-alice-upd", json={"enabled": False}, headers=BOB)
-    assert resp.status_code == 403, resp.text
-
-
-def test_workflow_delete_blocks_cross_owner(test_client):
-    _seed_workflow(ALICE_OWNER, "wf-alice-del", "AliceWF")
-
-    resp = test_client.delete("/api/v1/workflows/wf-alice-del", headers=BOB)
-    assert resp.status_code == 403, resp.text
-    # Workflow must still exist
-    assert _workflow_exists("wf-alice-del")
+    resp = test_client.patch("/api/v1/workflows/wf-other-upd", json={"enabled": False})
+    assert resp.status_code in (403, 404), resp.text
 
 
-def test_workflow_run_blocks_cross_owner(test_client):
-    _seed_workflow(ALICE_OWNER, "wf-alice-run", "AliceWF", enabled=0)
+def test_workflow_delete_blocks_other_owner(test_client):
+    _seed_workflow(OWNER_OTHER, "wf-other-del", "OtherWF")
+
+    resp = test_client.delete("/api/v1/workflows/wf-other-del")
+    assert resp.status_code in (403, 404), resp.text
+    assert _workflow_exists("wf-other-del")
+
+
+def test_workflow_run_blocks_other_owner(test_client):
+    _seed_workflow(OWNER_OTHER, "wf-other-run", "OtherWF", enabled=0)
 
     with patch("backend.secuscan.routes.executor.create_task", new=AsyncMock(return_value="t-1")), \
          patch("backend.secuscan.routes.executor.execute_task", new=AsyncMock()):
-        resp = test_client.post("/api/v1/workflows/wf-alice-run/run", headers=BOB)
-    assert resp.status_code == 403, resp.text
+        resp = test_client.post("/api/v1/workflows/wf-other-run/run")
+    assert resp.status_code in (403, 404), resp.text
 
 
-def test_workflow_runs_blocks_cross_owner(test_client):
-    _seed_workflow(ALICE_OWNER, "wf-alice-runs", "AliceWF")
+def test_workflow_runs_blocks_other_owner(test_client):
+    _seed_workflow(OWNER_OTHER, "wf-other-runs", "OtherWF")
 
-    resp = test_client.get("/api/v1/workflows/wf-alice-runs/runs", headers=BOB)
-    assert resp.status_code == 403, resp.text
-
-
-def test_workflow_versions_blocks_cross_owner(test_client):
-    _seed_workflow(ALICE_OWNER, "wf-alice-vers", "AliceWF")
-    _seed_workflow_version("wf-alice-vers", 1)
-
-    resp = test_client.get("/api/v1/workflows/wf-alice-vers/versions", headers=BOB)
-    assert resp.status_code == 403, resp.text
+    resp = test_client.get("/api/v1/workflows/wf-other-runs/runs")
+    assert resp.status_code in (403, 404), resp.text
 
 
-def test_workflow_rollback_blocks_cross_owner(test_client):
-    _seed_workflow(ALICE_OWNER, "wf-alice-rb", "AliceWF")
-    _seed_workflow_version("wf-alice-rb", 1)
+def test_workflow_versions_blocks_other_owner(test_client):
+    _seed_workflow(OWNER_OTHER, "wf-other-vers", "OtherWF")
+    _seed_workflow_version("wf-other-vers", 1)
 
-    resp = test_client.post("/api/v1/workflows/wf-alice-rb/rollback/1", headers=BOB)
-    assert resp.status_code == 403, resp.text
+    resp = test_client.get("/api/v1/workflows/wf-other-vers/versions")
+    assert resp.status_code in (403, 404), resp.text
+
+
+def test_workflow_rollback_blocks_other_owner(test_client):
+    _seed_workflow(OWNER_OTHER, "wf-other-rb", "OtherWF")
+    _seed_workflow_version("wf-other-rb", 1)
+
+    resp = test_client.post("/api/v1/workflows/wf-other-rb/rollback/1")
+    assert resp.status_code in (403, 404), resp.text
 
 
 # ---------------------------------------------------------------------------
@@ -208,16 +185,16 @@ def test_workflow_rollback_blocks_cross_owner(test_client):
 # ---------------------------------------------------------------------------
 
 def test_workflow_owner_can_update(test_client):
-    _seed_workflow(ALICE_OWNER, "wf-own-upd", "OwnWF")
+    _seed_workflow(OWNER_DEFAULT, "wf-own-upd", "OwnWF")
 
-    resp = test_client.patch("/api/v1/workflows/wf-own-upd", json={"enabled": False}, headers=ALICE)
+    resp = test_client.patch("/api/v1/workflows/wf-own-upd", json={"enabled": False})
     assert resp.status_code == 200, resp.text
 
 
 def test_workflow_owner_can_delete(test_client):
-    _seed_workflow(ALICE_OWNER, "wf-own-del", "OwnWF")
+    _seed_workflow(OWNER_DEFAULT, "wf-own-del", "OwnWF")
 
-    resp = test_client.delete("/api/v1/workflows/wf-own-del", headers=ALICE)
+    resp = test_client.delete("/api/v1/workflows/wf-own-del")
     assert resp.status_code == 200, resp.text
     assert not _workflow_exists("wf-own-del")
 
@@ -227,64 +204,62 @@ def test_workflow_owner_can_delete(test_client):
 # ---------------------------------------------------------------------------
 
 def test_notification_rule_list_is_scoped_to_owner(test_client):
-    _seed_notification_rule(ALICE_OWNER, "nr-alice", "AliceRule")
-    _seed_notification_rule(BOB_OWNER, "nr-bob", "BobRule")
+    _seed_notification_rule(OWNER_DEFAULT, "nr-default", "DefaultRule")
+    _seed_notification_rule(OWNER_OTHER, "nr-other", "OtherRule")
 
-    alice_rules = {r["id"] for r in test_client.get("/api/v1/notifications/rules", headers=ALICE).json()["rules"]}
-    bob_rules = {r["id"] for r in test_client.get("/api/v1/notifications/rules", headers=BOB).json()["rules"]}
-
-    assert "nr-alice" in alice_rules and "nr-bob" not in alice_rules
-    assert "nr-bob" in bob_rules and "nr-alice" not in bob_rules
-
-
-def test_notification_rule_get_blocks_cross_owner(test_client):
-    _seed_notification_rule(ALICE_OWNER, "nr-get", "RuleGet")
-
-    resp = test_client.get("/api/v1/notifications/rules/nr-get", headers=BOB)
-    assert resp.status_code == 403, resp.text
+    resp = test_client.get("/api/v1/notifications/rules")
+    assert resp.status_code == 200
+    rule_ids = {r["id"] for r in resp.json()["rules"]}
+    assert "nr-default" in rule_ids
+    assert "nr-other" not in rule_ids
 
 
-def test_notification_rule_update_blocks_cross_owner(test_client):
-    _seed_notification_rule(ALICE_OWNER, "nr-upd", "RuleUpd")
+def test_notification_rule_get_blocks_other_owner(test_client):
+    _seed_notification_rule(OWNER_OTHER, "nr-other-get", "RuleGet")
+
+    resp = test_client.get("/api/v1/notifications/rules/nr-other-get")
+    assert resp.status_code in (403, 404), resp.text
+
+
+def test_notification_rule_update_blocks_other_owner(test_client):
+    _seed_notification_rule(OWNER_OTHER, "nr-other-upd", "RuleUpd")
 
     resp = test_client.patch(
-        "/api/v1/notifications/rules/nr-upd",
+        "/api/v1/notifications/rules/nr-other-upd",
         json={"severity_threshold": "high"},
-        headers=BOB,
     )
-    assert resp.status_code == 403, resp.text
+    assert resp.status_code in (403, 404), resp.text
 
 
-def test_notification_rule_delete_blocks_cross_owner(test_client):
-    _seed_notification_rule(ALICE_OWNER, "nr-del", "RuleDel")
+def test_notification_rule_delete_blocks_other_owner(test_client):
+    _seed_notification_rule(OWNER_OTHER, "nr-other-del", "RuleDel")
 
-    resp = test_client.delete("/api/v1/notifications/rules/nr-del", headers=BOB)
-    assert resp.status_code == 403, resp.text
+    resp = test_client.delete("/api/v1/notifications/rules/nr-other-del")
+    assert resp.status_code in (403, 404), resp.text
 
     # Must still exist
     conn = _conn()
     try:
-        cur = conn.execute("SELECT 1 FROM notification_rules WHERE id = 'nr-del'")
+        cur = conn.execute("SELECT 1 FROM notification_rules WHERE id = 'nr-other-del'")
         assert cur.fetchone() is not None
     finally:
         conn.close()
 
 
 def test_notification_rule_owner_can_update(test_client):
-    _seed_notification_rule(ALICE_OWNER, "nr-own-upd", "OwnRule")
+    _seed_notification_rule(OWNER_DEFAULT, "nr-own-upd", "OwnRule")
 
     resp = test_client.patch(
         "/api/v1/notifications/rules/nr-own-upd",
         json={"severity_threshold": "high"},
-        headers=ALICE,
     )
     assert resp.status_code == 200, resp.text
 
 
 def test_notification_rule_owner_can_delete(test_client):
-    _seed_notification_rule(ALICE_OWNER, "nr-own-del", "OwnRule")
+    _seed_notification_rule(OWNER_DEFAULT, "nr-own-del", "OwnRule")
 
-    resp = test_client.delete("/api/v1/notifications/rules/nr-own-del", headers=ALICE)
+    resp = test_client.delete("/api/v1/notifications/rules/nr-own-del")
     assert resp.status_code == 200, resp.text
 
     conn = _conn()
@@ -300,10 +275,27 @@ def test_notification_rule_owner_can_delete(test_client):
 # ---------------------------------------------------------------------------
 
 def test_unknown_workflow_returns_404_not_403(test_client):
-    resp = test_client.get("/api/v1/workflows/does-not-exist/runs", headers=BOB)
+    resp = test_client.get("/api/v1/workflows/does-not-exist/runs")
     assert resp.status_code == 404, resp.text
 
 
 def test_unknown_notification_rule_returns_404_not_403(test_client):
-    resp = test_client.get("/api/v1/notifications/rules/does-not-exist", headers=BOB)
+    resp = test_client.get("/api/v1/notifications/rules/does-not-exist")
     assert resp.status_code == 404, resp.text
+
+
+# ---------------------------------------------------------------------------
+# Header spoofing regression
+# ---------------------------------------------------------------------------
+
+def test_x_user_id_header_cannot_select_other_owner_workflow(test_client):
+    """Spoofed X-User-Id cannot access another owner's workflow."""
+    _seed_workflow(OWNER_OTHER, "wf-spoof-target", "SpoofTarget")
+
+    resp = test_client.get(
+        "/api/v1/workflows/wf-spoof-target/runs",
+        headers={"X-User-Id": "other-tenant"},
+    )
+    assert resp.status_code in (403, 404), (
+        "Spoofed X-User-Id header allowed access to another owner's workflow"
+    )

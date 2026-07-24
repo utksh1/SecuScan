@@ -63,13 +63,16 @@ async def app_client():
 
 @pytest_asyncio.fixture
 async def other_owner_client(app_client: AsyncClient):
-    """A second authenticated client acting as a different owner (`bob`),
-    sharing the same app/db as ``app_client`` but scoped to a different
-    X-User-Id, for cross-owner isolation tests."""
+    """A second authenticated client sharing the same app/db.
+
+    Since X-User-Id is not trusted for ownership (security fix to prevent
+    header-spoofing BOLA), cross-owner isolation tests seed data directly
+    with different owner_ids via SQL rather than relying on headers.
+    This client is identical to app_client in terms of resolved owner."""
     async with AsyncClient(
         transport=app_client.test_transport,
         base_url="http://test",
-        headers={"X-Api-Key": app_client.api_key, "X-User-Id": "bob"},
+        headers={"X-Api-Key": app_client.api_key},
     ) as client:
         yield client
 
@@ -373,32 +376,46 @@ async def test_wrong_api_key_rejected(app_client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_list_is_scoped_to_owner(app_client: AsyncClient, other_owner_client: AsyncClient):
-    """A view created by one owner does not appear in another owner's list."""
+async def test_list_is_scoped_to_owner(app_client: AsyncClient):
+    """A view created under a different owner does not appear in the list."""
     await app_client.post("/api/v1/saved-views", json=make_body("Owner A's View"))
 
-    other_res = await other_owner_client.get("/api/v1/saved-views")
-    assert other_res.status_code == 200
-    assert other_res.json()["total"] == 0
+    # Seed a view under a different owner directly in the DB
+    db = await _db_module.get_db()
+    await db.execute(
+        "INSERT INTO saved_views (id, name, filter_json, owner_id) VALUES (?, ?, ?, ?)",
+        ("other-owner-view", "Other Owner View", json.dumps(VALID_PRESET), "user:other"),
+    )
 
-    own_res = await app_client.get("/api/v1/saved-views")
-    assert own_res.json()["total"] == 1
+    res = await app_client.get("/api/v1/saved-views")
+    assert res.status_code == 200
+    assert res.json()["total"] == 1
+    assert res.json()["views"][0]["name"] == "Owner A's View"
 
 
 @pytest.mark.asyncio
 async def test_different_owners_can_reuse_the_same_name(
-    app_client: AsyncClient, other_owner_client: AsyncClient
+    app_client: AsyncClient
 ):
-    """Per-owner uniqueness: two owners can each have a view named 'Alpha'."""
-    res_a = await app_client.post("/api/v1/saved-views", json=make_body("Alpha"))
-    res_b = await other_owner_client.post("/api/v1/saved-views", json=make_body("Alpha"))
-    assert res_a.status_code == 201
-    assert res_b.status_code == 201
+    """Per-owner uniqueness: seeded views under different owners don't conflict."""
+    await app_client.post("/api/v1/saved-views", json=make_body("Alpha"))
+
+    # Seed a same-named view under a different owner directly
+    db = await _db_module.get_db()
+    await db.execute(
+        "INSERT INTO saved_views (id, name, filter_json, owner_id) VALUES (?, ?, ?, ?)",
+        ("other-alpha", "Alpha", json.dumps(VALID_PRESET), "user:other"),
+    )
+
+    res = await app_client.get("/api/v1/saved-views")
+    assert res.status_code == 200
+    # Only the authenticated owner's view is returned
+    assert res.json()["total"] == 1
 
 
 @pytest.mark.asyncio
 async def test_cannot_read_other_owners_view_by_guessing_id(
-    app_client: AsyncClient, other_owner_client: AsyncClient
+    app_client: AsyncClient
 ):
     """
     There's no GET-by-id endpoint, but PUT/DELETE both accept a bare id — this
@@ -407,12 +424,20 @@ async def test_cannot_read_other_owners_view_by_guessing_id(
     create_res = await app_client.post("/api/v1/saved-views", json=make_body("Private View"))
     view_id = create_res.json()["id"]
 
-    put_res = await other_owner_client.put(
-        f"/api/v1/saved-views/{view_id}", json={"name": "Hijacked"}
+    # Seed a view under a different owner
+    db = await _db_module.get_db()
+    other_view_id = "other-owner-view-id"
+    await db.execute(
+        "INSERT INTO saved_views (id, name, filter_json, owner_id) VALUES (?, ?, ?, ?)",
+        (other_view_id, "Other Private View", json.dumps(VALID_PRESET), "user:other"),
+    )
+
+    put_res = await app_client.put(
+        f"/api/v1/saved-views/{other_view_id}", json={"name": "Hijacked"}
     )
     assert put_res.status_code == 403
 
-    del_res = await other_owner_client.delete(f"/api/v1/saved-views/{view_id}")
+    del_res = await app_client.delete(f"/api/v1/saved-views/{other_view_id}")
     assert del_res.status_code == 403
 
     # Confirm the original owner's view is untouched
@@ -422,17 +447,23 @@ async def test_cannot_read_other_owners_view_by_guessing_id(
 
 @pytest.mark.asyncio
 async def test_cannot_delete_other_owners_view(
-    app_client: AsyncClient, other_owner_client: AsyncClient
+    app_client: AsyncClient
 ):
     """Deleting another owner's view id returns 403 and leaves it intact."""
-    create_res = await app_client.post("/api/v1/saved-views", json=make_body("Keep Safe"))
-    view_id = create_res.json()["id"]
+    # Seed a view under a different owner
+    db = await _db_module.get_db()
+    other_view_id = "other-owner-del-id"
+    await db.execute(
+        "INSERT INTO saved_views (id, name, filter_json, owner_id) VALUES (?, ?, ?, ?)",
+        (other_view_id, "Keep Safe", json.dumps(VALID_PRESET), "user:other"),
+    )
 
-    res = await other_owner_client.delete(f"/api/v1/saved-views/{view_id}")
+    res = await app_client.delete(f"/api/v1/saved-views/{other_view_id}")
     assert res.status_code == 403
 
-    list_res = await app_client.get("/api/v1/saved-views")
-    assert list_res.json()["total"] == 1
+    # Verify it still exists in the DB
+    row = await db.fetchone("SELECT id FROM saved_views WHERE id = ?", (other_view_id,))
+    assert row is not None
 
 
 # ── File-backed DB migration path ─────────────────────────────────────────────

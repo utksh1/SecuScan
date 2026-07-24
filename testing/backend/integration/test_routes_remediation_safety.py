@@ -2,9 +2,10 @@ import sqlite3
 import json
 import pytest
 from backend.secuscan.config import settings
+from backend.secuscan.auth import DEFAULT_OWNER_ID
 
-ALICE = {"X-User-Id": "alice"}
-ALICE_OWNER = "user:alice"
+OWNER_DEFAULT = DEFAULT_OWNER_ID
+OWNER_OTHER = "user:other-tenant"
 
 def _seed_task(owner_id: str, task_id: str) -> None:
     """Insert a task row directly with an explicit owner_id."""
@@ -40,7 +41,7 @@ def _seed_finding(owner_id: str, finding_id: str, task_id: str, metadata: dict |
 
 def test_routes_expose_remediation_safety_fields(test_client):
     """Test that safe_to_apply, compatible_range, and alternatives fields are exposed in API responses when present in metadata, and default to None otherwise."""
-    _seed_task(ALICE_OWNER, "task-1")
+    _seed_task(OWNER_DEFAULT, "task-1")
 
     # 1. Seed finding with validated remediation metadata
     metadata_validated = {
@@ -49,16 +50,16 @@ def test_routes_expose_remediation_safety_fields(test_client):
         "alternatives": ["Upgrade package-y"],
         "other_key": "some_value"
     }
-    _seed_finding(ALICE_OWNER, "finding-validated", "task-1", metadata=metadata_validated)
+    _seed_finding(OWNER_DEFAULT, "finding-validated", "task-1", metadata=metadata_validated)
 
     # 2. Seed finding without validated remediation metadata
     metadata_unvalidated = {
         "other_key": "some_value"
     }
-    _seed_finding(ALICE_OWNER, "finding-unvalidated", "task-1", metadata=metadata_unvalidated)
+    _seed_finding(OWNER_DEFAULT, "finding-unvalidated", "task-1", metadata=metadata_unvalidated)
 
     # 3. Test `/findings` list endpoint
-    response_list = test_client.get("/api/v1/findings", headers=ALICE)
+    response_list = test_client.get("/api/v1/findings")
     assert response_list.status_code == 200
     findings_list = response_list.json()["findings"]
 
@@ -73,7 +74,7 @@ def test_routes_expose_remediation_safety_fields(test_client):
     assert finding_unval["alternatives"] is None
 
     # 4. Test `/finding/{finding_id}` detail endpoint - Validated Case
-    response_detail_val = test_client.get("/api/v1/finding/finding-validated", headers=ALICE)
+    response_detail_val = test_client.get("/api/v1/finding/finding-validated")
     assert response_detail_val.status_code == 200
     detail_val = response_detail_val.json()
     assert detail_val["safe_to_apply"] is False
@@ -81,7 +82,7 @@ def test_routes_expose_remediation_safety_fields(test_client):
     assert detail_val["alternatives"] == ["Upgrade package-y"]
 
     # 5. Test `/finding/{finding_id}` detail endpoint - Unvalidated Case
-    response_detail_unval = test_client.get("/api/v1/finding/finding-unvalidated", headers=ALICE)
+    response_detail_unval = test_client.get("/api/v1/finding/finding-unvalidated")
     assert response_detail_unval.status_code == 200
     detail_unval = response_detail_unval.json()
     assert detail_unval["safe_to_apply"] is None

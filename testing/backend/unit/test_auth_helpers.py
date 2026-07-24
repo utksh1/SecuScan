@@ -4,8 +4,8 @@ Unit tests for backend.secuscan.auth pure helpers.
 Covers:
 - resolve_owner_id returns DEFAULT_OWNER_ID when request is None
 - resolve_owner_id returns DEFAULT_OWNER_ID when X-User-Id header is absent
-- resolve_owner_id returns user:<id> when X-User-Id header is present
-- resolve_owner_id strips whitespace from user ID
+- resolve_owner_id returns DEFAULT_OWNER_ID when X-User-Id header is present
+  (header is intentionally ignored to prevent spoofing attacks)
 - get_api_key returns the current API key or None when not initialised
 """
 
@@ -34,19 +34,27 @@ class TestResolveOwnerId:
         result = auth.resolve_owner_id(mock_request)
         assert result == auth.DEFAULT_OWNER_ID
 
-    def test_returns_user_prefix_when_header_present(self):
-        """resolve_owner_id returns 'user:<id>' when X-User-Id is set."""
+    def test_returns_default_when_header_present(self):
+        """resolve_owner_id ignores X-User-Id header to prevent spoofing."""
         mock_request = MagicMock()
         mock_request.headers = {"x-user-id": "alice"}
         result = auth.resolve_owner_id(mock_request)
-        assert result == "user:alice"
+        assert result == auth.DEFAULT_OWNER_ID
 
-    def test_strips_whitespace_from_user_id(self):
-        """resolve_owner_id strips leading/trailing whitespace from user ID."""
+    def test_ignores_whitespace_from_user_id(self):
+        """resolve_owner_id ignores X-User-Id regardless of whitespace."""
         mock_request = MagicMock()
         mock_request.headers = {"x-user-id": "  bob  "}
         result = auth.resolve_owner_id(mock_request)
-        assert result == "user:bob"
+        assert result == auth.DEFAULT_OWNER_ID
+
+    def test_header_spoofing_does_not_select_other_owner(self):
+        """Spoofing X-User-Id cannot select another owner's identity."""
+        mock_request = MagicMock()
+        mock_request.headers = {"x-user-id": "admin"}
+        result = auth.resolve_owner_id(mock_request)
+        assert result == auth.DEFAULT_OWNER_ID
+        assert not result.startswith("user:")
 
 
 class TestGetApiKey:

@@ -2,6 +2,9 @@
 Unit tests for auth.py owner-resolution helpers.
 
 Covers: resolve_owner_id, DEFAULT_OWNER_ID
+
+Security model: resolve_owner_id ignores the X-User-Id header and always
+returns DEFAULT_OWNER_ID to prevent header-spoofing BOLA attacks.
 """
 
 from backend.secuscan.auth import resolve_owner_id, DEFAULT_OWNER_ID
@@ -18,27 +21,27 @@ def test_default_owner_id_value():
 
 
 def test_resolve_owner_id_with_x_user_id_header():
-    """X-User-Id header with value returns prefixed owner ID."""
+    """X-User-Id header is IGNORED — owner always resolves to default."""
     class MockRequest:
         def __init__(self, headers):
             self.headers = headers
 
     request = MockRequest({"x-user-id": "alice"})
-    assert resolve_owner_id(request) == "user:alice"
+    assert resolve_owner_id(request) == DEFAULT_OWNER_ID
 
 
 def test_resolve_owner_id_trims_whitespace():
-    """Leading/trailing whitespace in X-User-Id is stripped."""
+    """Whitespace in X-User-Id does not change the resolved owner."""
     class MockRequest:
         def __init__(self, headers):
             self.headers = headers
 
     request = MockRequest({"x-user-id": "  bob  "})
-    assert resolve_owner_id(request) == "user:bob"
+    assert resolve_owner_id(request) == DEFAULT_OWNER_ID
 
 
 def test_resolve_owner_id_whitespace_only():
-    """Whitespace-only X-User-Id falls back to DEFAULT_OWNER_ID."""
+    """Whitespace-only X-User-Id still returns DEFAULT_OWNER_ID."""
     class MockRequest:
         def __init__(self, headers):
             self.headers = headers
@@ -48,7 +51,7 @@ def test_resolve_owner_id_whitespace_only():
 
 
 def test_resolve_owner_id_empty_header():
-    """Empty X-User-Id falls back to DEFAULT_OWNER_ID."""
+    """Empty X-User-Id returns DEFAULT_OWNER_ID."""
     class MockRequest:
         def __init__(self, headers):
             self.headers = headers
@@ -58,7 +61,7 @@ def test_resolve_owner_id_empty_header():
 
 
 def test_resolve_owner_id_missing_header():
-    """Missing X-User-Id falls back to DEFAULT_OWNER_ID."""
+    """Missing X-User-Id returns DEFAULT_OWNER_ID."""
     class MockRequest:
         def __init__(self, headers):
             self.headers = headers
@@ -72,14 +75,18 @@ def test_resolve_owner_id_no_request():
     assert resolve_owner_id(None) == DEFAULT_OWNER_ID
 
 
-def test_resolve_owner_id_prefix_format():
-    """Resolved owner ID always starts with 'user:' prefix."""
+def test_resolve_owner_id_header_spoofing_blocked():
+    """Spoofing X-User-Id to impersonate another owner is blocked."""
     class MockRequest:
         def __init__(self, headers):
             self.headers = headers
 
-    for user_id in ["alice", "bob", "test-user-123", "UPPERCASE"]:
+    for user_id in ["alice", "bob", "test-user-123", "UPPERCASE", "admin"]:
         request = MockRequest({"x-user-id": user_id})
         result = resolve_owner_id(request)
-        assert result.startswith("user:"), f"failed for {user_id}"
-        assert result == f"user:{user_id.strip()}"
+        assert result == DEFAULT_OWNER_ID, (
+            f"X-User-Id header '{user_id}' was trusted — spoofing is not blocked"
+        )
+        assert not result.startswith("user:"), (
+            f"Header spoofing produced owner '{result}' instead of default"
+        )
