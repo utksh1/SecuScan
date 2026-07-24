@@ -1446,3 +1446,38 @@ async def test_pinned_ip_preserves_host_input_for_host_header_scanners(setup_tes
     assert original_inputs_seen.get("domain") == "example.com"
     assert original_inputs_seen.get("__pinned_ip") == "93.184.216.34"
     await db.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_read_vault_secret_isolated_by_owner(setup_test_environment):
+    """Two owners store a secret with the same name; each only sees their own."""
+    from backend.secuscan.vault import VaultCrypto
+
+    await init_db(settings.database_path)
+    db = await get_db()
+    executor = TaskExecutor()
+
+    crypto = VaultCrypto(settings.resolved_vault_key)
+    secret_a = crypto.encrypt("owner-a-password")
+    secret_b = crypto.encrypt("owner-b-password")
+
+    await db.execute(
+        "INSERT INTO credential_vault (id, owner_id, name, encrypted_value) "
+        "VALUES (?, ?, ?, ?)",
+        ("v1", "owner-a", "shared-name", secret_a),
+    )
+    await db.execute(
+        "INSERT INTO credential_vault (id, owner_id, name, encrypted_value) "
+        "VALUES (?, ?, ?, ?)",
+        ("v2", "owner-b", "shared-name", secret_b),
+    )
+    await db.commit()
+
+    result_a = await executor._read_vault_secret(db, "shared-name", "owner-a")
+    result_b = await executor._read_vault_secret(db, "shared-name", "owner-b")
+
+    assert result_a == "owner-a-password"
+    assert result_b == "owner-b-password"
+
+    wrong_owner = await executor._read_vault_secret(db, "shared-name", "owner-c")
+    assert wrong_owner is None
