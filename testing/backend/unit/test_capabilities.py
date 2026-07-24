@@ -262,3 +262,24 @@ class TestBuildEnforcerFromSettings:
             # Only denied_capabilities should affect the enforcer
             assert enforcer.denied == frozenset({"docker"})
             assert "exploit" not in enforcer.denied
+
+
+class TestCapabilityConstantsBehavior:
+    """Minimal behavior-focused enum tests, folded into the existing suite."""
+
+    def test_capability_enum_members_are_valid_strings(self):
+        """All Capability enum values are non-empty lowercase strings."""
+        for member in Capability:
+            assert isinstance(member.value, str)
+            assert member.value
+            assert member.value == member.value.lower()
+
+    def test_all_capabilities_frozenset_contains_all_enum_members(self):
+        """ALL_CAPABILITIES frozenset contains every Capability member."""
+        assert ALL_CAPABILITIES.issuperset({m.value for m in Capability})
+
+    def test_no_duplicate_capability_values(self):
+        """Capability enum has no duplicate string values."""
+        values = [m.value for m in Capability]
+        assert len(values) == len(set(values))
+
