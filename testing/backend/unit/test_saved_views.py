@@ -580,4 +580,3 @@ class TestSavedViewCreateValidateFilterJson:
             SavedViewCreate(name="v", filter_json="not json")
         # pydantic raises an error for invalid JSON in field_validator
         assert "validation error" in str(exc_info.value).lower()
-
