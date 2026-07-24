@@ -275,13 +275,13 @@ py -3 --version
 
 If running `./setup.sh`, `./start.sh`, or `./testing/test_python.sh` in Git Bash fails with errors like `\r: command not found` or `syntax error near unexpected token $'r\r'`:
 
-* This occurs because Git on Windows converted shell scripts to Windows CRLF line endings upon checkout.
+* This occurs because Git on Windows may convert shell scripts to Windows CRLF line endings upon checkout.
 * Configure Git to preserve LF line endings for the repository:
   ```powershell
   git config core.autocrlf input
-  git checkout-index --force --all
   ```
-* Or check `.gitattributes` to ensure `.sh` files retain `text eol=lf`.
+* Verify the repository `.gitattributes` configuration to ensure `*.sh` files retain `text eol=lf`.
+* If shell scripts were already checked out with CRLF line endings, convert them using your editor (e.g. VS Code line-ending selector) or re-clone the repository fresh if needed.
 
 ---
 
