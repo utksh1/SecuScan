@@ -357,19 +357,31 @@ async def test_filter_json_with_null_values_rejected(app_client: AsyncClient):
 @pytest.mark.asyncio
 async def test_unauthenticated_request_rejected(app_client: AsyncClient):
     """Requests without a valid API key/session are rejected, not served."""
-    res = await app_client.get(
-        "/api/v1/saved-views", headers={"X-Api-Key": ""}
-    )
-    assert res.status_code == 401
+    app = app_client.test_transport.app
+    old_override = app.dependency_overrides.pop(require_api_key, None)
+    try:
+        res = await app_client.get(
+            "/api/v1/saved-views", headers={"X-Api-Key": ""}
+        )
+        assert res.status_code == 401
+    finally:
+        if old_override is not None:
+            app.dependency_overrides[require_api_key] = old_override
 
 
 @pytest.mark.asyncio
 async def test_wrong_api_key_rejected(app_client: AsyncClient):
     """A malformed/incorrect API key is rejected."""
-    res = await app_client.get(
-        "/api/v1/saved-views", headers={"X-Api-Key": "not-the-real-key"}
-    )
-    assert res.status_code == 401
+    app = app_client.test_transport.app
+    old_override = app.dependency_overrides.pop(require_api_key, None)
+    try:
+        res = await app_client.get(
+            "/api/v1/saved-views", headers={"X-Api-Key": "not-the-real-key"}
+        )
+        assert res.status_code == 401
+    finally:
+        if old_override is not None:
+            app.dependency_overrides[require_api_key] = old_override
 
 
 @pytest.mark.asyncio
