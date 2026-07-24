@@ -34,6 +34,10 @@ def parse_to_utc(value: Any) -> Optional[datetime]:
         return None
     if isinstance(value, datetime):
         return ensure_utc(value)
+    if isinstance(value, bool):
+        # Explicitly reject bool so that True/False are not silently interpreted
+        # as Unix timestamps (True==1, False==0) which is almost always a mistake.
+        return None
     if isinstance(value, (int, float)):
         return datetime.fromtimestamp(value, tz=UTC)
 
