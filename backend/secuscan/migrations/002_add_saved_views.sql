@@ -12,13 +12,10 @@
 
 CREATE TABLE IF NOT EXISTS saved_views (
     id          TEXT PRIMARY KEY,
-    name        TEXT NOT NULL,
-    owner_id    TEXT NOT NULL DEFAULT 'default',
+    name        TEXT NOT NULL UNIQUE,
     filter_json TEXT NOT NULL,
     created_at  TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-    updated_at  TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-    UNIQUE(owner_id, name)
+    updated_at  TIMESTAMP NOT NULL DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_saved_views_name ON saved_views(LOWER(name));
-CREATE INDEX IF NOT EXISTS idx_saved_views_owner ON saved_views(owner_id);
