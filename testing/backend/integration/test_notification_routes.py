@@ -318,3 +318,118 @@ def test_admin_diagnostics_notifications(test_client, monkeypatch):
     assert "backoff_factor_seconds" in data
     assert type(data["max_retries"]) is int
     assert type(data["webhook_timeout_seconds"]) is float
+
+
+# ── Cross-tenant notification isolation (regression tests) ────────────────────
+
+OWNER_A = "user:alice"
+OWNER_B = "user:bob"
+
+
+def _seed_notification_rule_sync(owner_id: str, rule_id: str, name: str,
+                                  *, severity_threshold: str = "medium",
+                                  is_active: int = 1):
+    """Insert a notification rule directly with an explicit owner_id."""
+    import sqlite3
+    conn = sqlite3.connect(settings.database_path)
+    try:
+        conn.execute(
+            "INSERT INTO notification_rules "
+            "(id, name, owner_id, severity_threshold, channel_type, target_url_or_email, is_active) "
+            "VALUES (?, ?, ?, ?, 'webhook', 'https://example.com/hook', ?)",
+            (rule_id, name, owner_id, severity_threshold, is_active),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _seed_finding_sync(owner_id: str, finding_id: str, task_id: str,
+                        *, severity: str = "high"):
+    """Insert a finding directly with an explicit owner_id."""
+    import sqlite3
+    conn = sqlite3.connect(settings.database_path)
+    try:
+        conn.execute(
+            "INSERT INTO findings (id, owner_id, task_id, plugin_id, title, category, "
+            "severity, target, description, remediation) "
+            "VALUES (?, ?, ?, 'nmap', 'Open port', 'network', ?, '127.0.0.1', 'desc', 'fix')",
+            (finding_id, owner_id, task_id, severity),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _seed_task_sync(owner_id: str, task_id: str):
+    """Insert a task directly with an explicit owner_id."""
+    import sqlite3
+    conn = sqlite3.connect(settings.database_path)
+    try:
+        conn.execute(
+            "INSERT INTO tasks (id, owner_id, plugin_id, tool_name, target, "
+            "status, inputs_json, structured_json, consent_granted) "
+            "VALUES (?, ?, 'nmap', 'nmap', '127.0.0.1', 'completed', '{}', "
+            "'{\"findings\": []}', 1)",
+            (task_id, owner_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+@pytest.mark.asyncio
+async def test_finding_only_triggers_own_owner_rules(test_client):
+    """A finding with owner_id A must only trigger rules owned by A,
+    never rules owned by B (cross-tenant notification isolation)."""
+    from backend.secuscan.database import get_db
+    from backend.secuscan.notification_service import process_finding_notifications
+
+    db = await get_db()
+
+    task_a = "task-owner-a"
+    task_b = "task-owner-b"
+    _seed_task_sync(OWNER_A, task_a)
+    _seed_task_sync(OWNER_B, task_b)
+
+    _seed_notification_rule_sync(OWNER_A, "rule-a", "Alice Rule",
+                                  severity_threshold="medium")
+    _seed_notification_rule_sync(OWNER_B, "rule-b", "Bob Rule",
+                                  severity_threshold="medium")
+
+    finding_a = "finding-owner-a"
+    _seed_finding_sync(OWNER_A, finding_a, task_a, severity="high")
+
+    results = await process_finding_notifications(db, finding_a)
+
+    triggered_rule_ids = [r.rule_id for r in results]
+    assert "rule-a" in triggered_rule_ids, (
+        "Owner A's finding should trigger owner A's rule"
+    )
+    assert "rule-b" not in triggered_rule_ids, (
+        "Owner A's finding must NOT trigger owner B's rule (cross-tenant isolation)"
+    )
+
+
+@pytest.mark.asyncio
+async def test_inactive_rules_not_triggered_for_any_owner(test_client):
+    """Inactive rules should not be triggered regardless of owner."""
+    from backend.secuscan.database import get_db
+    from backend.secuscan.notification_service import process_finding_notifications
+
+    db = await get_db()
+
+    _seed_task_sync(OWNER_A, "task-inactive-test")
+    _seed_notification_rule_sync(OWNER_A, "rule-inactive", "Inactive Rule",
+                                  severity_threshold="medium", is_active=0)
+    _seed_notification_rule_sync(OWNER_A, "rule-active", "Active Rule",
+                                  severity_threshold="medium", is_active=1)
+
+    _seed_finding_sync(OWNER_A, "finding-inactive-test", "task-inactive-test",
+                        severity="high")
+
+    results = await process_finding_notifications(db, "finding-inactive-test")
+
+    triggered_rule_ids = [r.rule_id for r in results]
+    assert "rule-inactive" not in triggered_rule_ids
+    assert "rule-active" in triggered_rule_ids
