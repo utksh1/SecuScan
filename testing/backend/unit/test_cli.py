@@ -207,3 +207,34 @@ async def test_run_scan_failed_task_returns_1():
 
         result = await run_scan("127.0.0.1", "nmap", "console")
         assert result == 1
+
+
+@pytest.mark.anyio
+async def test_run_scan_dry_run_prints_command_and_avoids_execution(capsys):
+    """Test --dry-run prints resolved command, returns 0, and avoids task creation/execution."""
+    mock_plugin = MagicMock()
+    mock_plugin.name = "Nmap"
+    mock_plugin.docker_image = "secuscan/nmap:latest"
+
+    mock_pm = MagicMock()
+    mock_pm.get_plugin.return_value = mock_plugin
+    mock_pm.build_command.return_value = ["nmap", "-sV", "127.0.0.1"]
+
+    mock_executor = AsyncMock()
+
+    with patch("backend.secuscan.cli.init_db", new_callable=AsyncMock), \
+         patch("backend.secuscan.cli.init_cache", new_callable=AsyncMock), \
+         patch("backend.secuscan.cli.init_plugins", new_callable=AsyncMock), \
+         patch("backend.secuscan.cli.get_plugin_manager", return_value=mock_pm), \
+         patch("backend.secuscan.cli.executor", mock_executor):
+
+        result = await run_scan("127.0.0.1", "nmap", "console", dry_run=True)
+        assert result == 0
+
+        mock_pm.build_command.assert_called_once()
+        mock_executor.create_task.assert_not_called()
+        mock_executor.execute_task.assert_not_called()
+
+        captured = capsys.readouterr()
+        assert "[*] Dry run command:" in captured.out
+        assert "nmap -sV 127.0.0.1" in captured.out
