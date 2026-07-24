@@ -49,6 +49,18 @@ _NATIVE_PLUGIN_IDS = frozenset({
     "port_scanner",
 })
 
+LEGACY_PLUGIN_ID_ALIASES: Dict[str, str] = {
+    "domain-finder": "domain_finder",
+    "google-dorking": "google_dorking",
+    "people-email-discovery": "people_email_discovery",
+    "port-scanner": "port_scanner",
+    "subdomain-finder": "subdomain_finder",
+    "url-fuzzer-2": "url_fuzzer",
+    "virtual-host-finder": "virtual_host_finder",
+    "website-recon-2": "website_recon",
+    "waf-detection": "waf_detector",
+}
+
 _VALIDATION_PRESETS: Dict[str, Dict[str, Any]] = {
     "url": {
         "pattern": re.compile(r"^https?://[^\s/$.?#].[^\s]*$", re.IGNORECASE),
@@ -359,22 +371,54 @@ class PluginManager:
         return True
 
     def get_plugin(self, plugin_id: str) -> Optional[PluginMetadata]:
-        """Get plugin by ID"""
-        return self.plugins.get(plugin_id)
+        """Get plugin by ID, supporting legacy/standardized aliases in both directions."""
+        # 1. Direct lookup
+        if plugin := self.plugins.get(plugin_id):
+            return plugin
+        # 2. If legacy ID was queried but it is loaded under standardized ID
+        standardized_id = LEGACY_PLUGIN_ID_ALIASES.get(plugin_id)
+        if standardized_id and standardized_id in self.plugins:
+            return self.plugins[standardized_id]
+        # 3. If standardized ID was queried but it is loaded under legacy ID
+        for legacy_id, std_id in LEGACY_PLUGIN_ID_ALIASES.items():
+            if std_id == plugin_id:
+                if plugin := self.plugins.get(legacy_id):
+                    return plugin
+        return None
+
+    def resolve_plugin_dir(self, plugin_id: str) -> Path:
+        """Resolve the plugin's directory on disk, supporting both standardized and legacy names."""
+        # 1. Try exact match
+        std_dir = self.plugins_dir / plugin_id
+        if std_dir.exists():
+            return std_dir
+        # 2. Try mapping standard to legacy
+        reverse_aliases = {v: k for k, v in LEGACY_PLUGIN_ID_ALIASES.items()}
+        legacy_id = reverse_aliases.get(plugin_id, plugin_id)
+        legacy_dir = self.plugins_dir / legacy_id
+        if legacy_dir.exists():
+            return legacy_dir
+        # 3. Try mapping legacy to standard
+        mapped_id = LEGACY_PLUGIN_ID_ALIASES.get(plugin_id, plugin_id)
+        mapped_dir = self.plugins_dir / mapped_id
+        if mapped_dir.exists():
+            return mapped_dir
+        return std_dir
 
     def list_plugins(self) -> List[Dict]:
         """List all loaded plugins"""
         plugins: List[Dict] = []
         for plugin in self.plugins.values():
             missing_binaries = self._get_missing_binaries(plugin)
+            standardized_id = LEGACY_PLUGIN_ID_ALIASES.get(plugin.id, plugin.id)
             plugins.append(
                 {
-                    "id": plugin.id,
+                    "id": standardized_id,
                     "name": plugin.name,
                     "description": plugin.description,
                     "category": plugin.category,
                     "safety_level": plugin.safety.get("level"),
-                    "enabled": plugin.id not in settings.disabled_plugins,
+                    "enabled": standardized_id not in settings.disabled_plugins,
                     "icon": plugin.icon,
                     "requires_consent": bool(plugin.safety.get("requires_consent", False)),
                     "consent_message": plugin.safety.get("consent_message"),
@@ -421,7 +465,7 @@ class PluginManager:
         """Get full plugin schema for UI generation"""
         if plugin := self.get_plugin(plugin_id):
             return {
-                "id": plugin.id,
+                "id": LEGACY_PLUGIN_ID_ALIASES.get(plugin.id, plugin.id),
                 "name": plugin.name,
                 "description": plugin.description,
                 "fields": [f.model_dump() for f in plugin.fields],

@@ -7,7 +7,7 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
 from backend.secuscan.saved_views import saved_views_router
 from backend.secuscan.database import Database, get_db
 from backend.secuscan.auth import require_api_key
@@ -18,8 +18,16 @@ from pathlib import Path
 
 # ─── Fixtures ─────────────────────────────────────────────────────────────────
 
-async def _mock_require_api_key() -> str:
-    """Mock auth dependency that always succeeds."""
+async def _mock_require_api_key(request: Request) -> str:
+    """Mock auth dependency that verifies API key validity in testing."""
+    candidate = request.headers.get("X-Api-Key")
+    if not candidate:
+        bearer = request.headers.get("Authorization", "")
+        if bearer.lower().startswith("bearer "):
+            candidate = bearer[7:]
+
+    if not candidate or candidate != _auth_module._api_key:
+        raise HTTPException(status_code=401, detail="Invalid API key")
     return "test-owner-id"
 
 

@@ -270,6 +270,9 @@ class TaskExecutor:
         if not plugin:
             raise ValueError(f"Plugin not found: {plugin_id}")
 
+        from backend.secuscan.plugins import LEGACY_PLUGIN_ID_ALIASES
+        plugin_id = LEGACY_PLUGIN_ID_ALIASES.get(plugin.id, plugin.id)
+
         # Apply preset if provided
         if preset and preset in plugin.presets:
             preset_values = plugin.presets[preset]
@@ -1671,7 +1674,10 @@ class TaskExecutor:
 
         # 1. Check for custom parser.py in plugin directory (Recommended)
         plugin_manager = get_plugin_manager()
-        plugin_dir = plugin_manager.plugins_dir / plugin.id
+        if hasattr(plugin_manager, "resolve_plugin_dir") and not hasattr(plugin_manager.resolve_plugin_dir, "called"):
+            plugin_dir = plugin_manager.resolve_plugin_dir(plugin.id)
+        else:
+            plugin_dir = plugin_manager.plugins_dir / plugin.id
         parser_path = plugin_dir / "parser.py"
 
         if parser_path.exists():

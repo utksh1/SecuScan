@@ -482,8 +482,10 @@ async def start_task(
     # Check rate limits per (client, plugin) so one client cannot exhaust
     # the quota for all other users of the same plugin.
     client_id = resolve_client_identity(raw_request)
+    from backend.secuscan.plugins import LEGACY_PLUGIN_ID_ALIASES
+    standardized_id = LEGACY_PLUGIN_ID_ALIASES.get(plugin.id, plugin.id)
     can_execute, error_msg = await rate_limiter.can_execute(
-        request.plugin_id,
+        standardized_id,
         plugin.safety.get("rate_limit", {}).get("max_per_hour", settings.max_tasks_per_hour),
         client_id=client_id,
     )
@@ -494,7 +496,7 @@ async def start_task(
     # Create task record first so we have a real task_id for the limiter
     try:
         task_id = await executor.create_task(
-            request.plugin_id,
+            standardized_id,
             effective_inputs,
             safe_mode=safe_mode,
             preset=request.preset,
