@@ -115,8 +115,11 @@ def _validate_risk_fields(finding: dict) -> None:
             raise ValueError(f"confidence must be in [0, 1], got {conf}")
 
     ae = finding.get("asset_exposure")
-    if ae is not None and ae.lower() not in ("critical", "high", "medium", "low"):
-        raise ValueError(f"asset_exposure must be one of critical/high/medium/low, got {ae}")
+    if ae is not None:
+        if not isinstance(ae, str):
+            raise ValueError(f"asset_exposure must be a string, got {type(ae).__name__}")
+        if ae.lower() not in ("critical", "high", "medium", "low"):
+            raise ValueError(f"asset_exposure must be one of critical/high/medium/low, got {ae}")
 
 # Modular Scanners
 from .scanners.port_scanner import PortScanner

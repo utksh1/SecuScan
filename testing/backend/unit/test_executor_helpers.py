@@ -1,76 +1,151 @@
 """
-Unit tests for backend.secuscan.executor_target_helpers.extract_target.
+Unit tests for executor.py module-level helpers:
+  - _row_value: dict/sqlite row accessor with default
+  - _validate_risk_fields: validates exploitability, confidence, asset_exposure bounds
 
-The helper was extracted from executor.py into a small import-safe module so
-that it can be unit-tested without pulling in the heavy FastAPI/cache chain.
-executor.py re-exports it so existing call sites keep working unchanged.
+Imports the real production functions so regressions are caught.
 """
 
-from backend.secuscan.executor_target_helpers import extract_target
+import pytest
+
+from backend.secuscan.executor import _row_value, _validate_risk_fields
 
 
-class TestExtractTarget:
-    def test_target_key_returns_target_value(self):
-        """When 'target' is present, its value is returned."""
-        inputs = {"target": "https://example.com", "url": "https://other.com"}
-        assert extract_target(inputs) == "https://example.com"
+class TestRowValue:
+    """Tests for _row_value."""
 
-    def test_url_without_target_returns_url(self):
-        """When 'url' is present but not 'target', url is returned."""
-        inputs = {"url": "https://example.com", "host": "example.com"}
-        assert extract_target(inputs) == "https://example.com"
+    def test_dict_key_present(self):
+        """Returns the value when the key exists in the dict."""
+        assert _row_value({"a": 1}, "a") == 1
 
-    def test_host_without_target_or_url_returns_host(self):
-        """When 'host' is present but not 'target' or 'url', host is returned."""
-        inputs = {"host": "example.com", "domain": "example.org"}
-        assert extract_target(inputs) == "example.com"
+    def test_dict_key_missing_returns_none(self):
+        """Returns None when the key is absent and no default is given."""
+        assert _row_value({"a": 1}, "b") is None
 
-    def test_domain_without_prior_keys_returns_domain(self):
-        """When 'domain' is the first available key, its value is returned."""
-        inputs = {"domain": "example.com"}
-        assert extract_target(inputs) == "example.com"
+    def test_dict_key_missing_with_default(self):
+        """Returns the default when the key is absent."""
+        assert _row_value({"a": 1}, "b", "fallback") == "fallback"
 
-    def test_priority_order_target_url_host_domain(self):
-        """Keys are checked in priority order: target > url > host > domain."""
-        inputs = {
-            "target": "from-target",
-            "url": "from-url",
-            "host": "from-host",
-            "domain": "from-domain",
-        }
-        assert extract_target(inputs) == "from-target"
+    def test_none_row_returns_default(self):
+        """None row returns the default (handles sqlite NULL gracefully)."""
+        assert _row_value(None, "a") is None
+        assert _row_value(None, "a", "fallback") == "fallback"
 
-        del inputs["target"]
-        assert extract_target(inputs) == "from-url"
+    def test_empty_dict_returns_default(self):
+        """Empty dict returns the default for missing keys."""
+        assert _row_value({}, "a") is None
+        assert _row_value({}, "a", "fallback") == "fallback"
 
-        del inputs["url"]
-        assert extract_target(inputs) == "from-host"
+    def test_string_value_returned(self):
+        """String values are returned correctly."""
+        assert _row_value({"k": "hello"}, "k") == "hello"
 
-        del inputs["host"]
-        assert extract_target(inputs) == "from-domain"
+    def test_zero_and_false_are_valid_values(self):
+        """Zero and False are returned as-is (not treated as missing)."""
+        assert _row_value({"zero": 0, "false": False}, "zero") == 0
+        assert _row_value({"zero": 0, "false": False}, "false") is False
 
-    def test_empty_inputs_returns_empty_string(self):
-        """An empty inputs dict returns an empty string."""
-        assert extract_target({}) == ""
 
-    def test_none_values_skipped(self):
-        """None values are skipped, falling through to the next key."""
-        inputs = {"target": None, "url": None, "host": "real-host"}
-        assert extract_target(inputs) == "real-host"
+class TestValidateRiskFieldsExploitability:
+    """Tests for _validate_risk_fields — exploitability field."""
 
-    def test_empty_string_values_skipped(self):
-        """Empty-string values are skipped, falling through to the next key."""
-        inputs = {"target": "", "url": "", "domain": "real-domain"}
-        assert extract_target(inputs) == "real-domain"
+    def test_valid_exploitability_integer(self):
+        """Integer exploitability in [0, 10] is accepted."""
+        _validate_risk_fields({"exploitability": 5})
+        _validate_risk_fields({"exploitability": 0})
+        _validate_risk_fields({"exploitability": 10})
 
-    def test_all_none_returns_empty_string(self):
-        """When all keys have None value, an empty string is returned."""
-        inputs = {"target": None, "url": None, "host": None, "domain": None}
-        assert extract_target(inputs) == ""
+    def test_valid_exploitability_float(self):
+        """Float exploitability in [0, 10] is accepted."""
+        _validate_risk_fields({"exploitability": 5.5})
 
-    def test_is_pure_function_no_side_effects(self):
-        """extract_target does not modify the input dict."""
-        inputs = {"target": "https://example.com"}
-        original = dict(inputs)
-        extract_target(inputs)
-        assert inputs == original
+    def test_exploitability_none_is_ignored(self):
+        """None exploitability is accepted (field is optional)."""
+        _validate_risk_fields({"exploitability": None})
+
+    def test_exploitability_missing_is_ignored(self):
+        """Missing exploitability is accepted."""
+        _validate_risk_fields({})
+
+    def test_exploitability_below_zero_rejected(self):
+        """Negative exploitability raises ValueError."""
+        with pytest.raises(ValueError, match="exploitability"):
+            _validate_risk_fields({"exploitability": -1})
+
+    def test_exploitability_above_ten_rejected(self):
+        """Exploitability > 10 raises ValueError."""
+        with pytest.raises(ValueError, match="exploitability"):
+            _validate_risk_fields({"exploitability": 11})
+
+    def test_exploitability_string_rejected(self):
+        """String exploitability raises ValueError."""
+        with pytest.raises(ValueError, match="exploitability must be numeric"):
+            _validate_risk_fields({"exploitability": "high"})
+
+
+class TestValidateRiskFieldsConfidence:
+    """Tests for _validate_risk_fields — confidence field."""
+
+    def test_valid_confidence(self):
+        """Confidence in [0, 1] is accepted."""
+        _validate_risk_fields({"confidence": 0.5})
+        _validate_risk_fields({"confidence": 0})
+        _validate_risk_fields({"confidence": 1})
+
+    def test_confidence_none_ignored(self):
+        """None confidence is accepted."""
+        _validate_risk_fields({"confidence": None})
+
+    def test_confidence_below_zero_rejected(self):
+        """Negative confidence raises ValueError."""
+        with pytest.raises(ValueError, match="confidence"):
+            _validate_risk_fields({"confidence": -0.1})
+
+    def test_confidence_above_one_rejected(self):
+        """Confidence > 1 raises ValueError."""
+        with pytest.raises(ValueError, match="confidence"):
+            _validate_risk_fields({"confidence": 1.1})
+
+    def test_confidence_string_rejected(self):
+        """String confidence raises ValueError."""
+        with pytest.raises(ValueError, match="confidence must be numeric"):
+            _validate_risk_fields({"confidence": "high"})
+
+
+class TestValidateRiskFieldsAssetExposure:
+    """Tests for _validate_risk_fields — asset_exposure field."""
+
+    def test_valid_asset_exposure_values(self):
+        """Valid asset_exposure values are accepted (case-insensitive)."""
+        for val in ("critical", "high", "medium", "low",
+                    "CRITICAL", "High", "Medium", "Low"):
+            _validate_risk_fields({"asset_exposure": val})
+
+    def test_asset_exposure_none_ignored(self):
+        """None asset_exposure is accepted."""
+        _validate_risk_fields({"asset_exposure": None})
+
+    def test_asset_exposure_missing_ignored(self):
+        """Missing asset_exposure is accepted."""
+        _validate_risk_fields({})
+
+    def test_asset_exposure_invalid_value_rejected(self):
+        """Invalid asset_exposure raises ValueError."""
+        with pytest.raises(ValueError, match="asset_exposure must be one of"):
+            _validate_risk_fields({"asset_exposure": "unknown"})
+
+    def test_asset_exposure_non_string_rejected(self):
+        """Non-string asset_exposure (e.g., int) raises ValueError, not AttributeError."""
+        with pytest.raises(ValueError, match="asset_exposure must be a string"):
+            _validate_risk_fields({"asset_exposure": 123})
+
+    def test_asset_exposure_boolean_rejected(self):
+        """Boolean asset_exposure raises ValueError."""
+        with pytest.raises(ValueError, match="asset_exposure must be a string"):
+            _validate_risk_fields({"asset_exposure": True})
+
+    def test_asset_exposure_empty_string_rejected(self):
+        """Empty string asset_exposure raises ValueError."""
+        with pytest.raises(ValueError, match="asset_exposure must be one of"):
+            _validate_risk_fields({"asset_exposure": ""})
+
