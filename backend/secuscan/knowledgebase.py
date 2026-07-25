@@ -177,14 +177,25 @@ class KnowledgeBase:
             try:
                 loaded = json.loads(path.read_text(encoding="utf-8"))
             except Exception as exc:
-                logger.warning("Failed to load knowledge-base feed %s: %s", path, exc)
+                logger.warning("Failed to load knowledge-base feed %s: %s", path.name, exc)
                 continue
 
             if not isinstance(loaded, dict):
+                logger.warning(
+                    "Skipping malformed knowledge-base feed %s: expected a top-level JSON object, got %s",
+                    path.name,
+                    type(loaded).__name__,
+                )
                 continue
 
             for cpe, vuln_entries in loaded.items():
                 if not isinstance(cpe, str) or not isinstance(vuln_entries, list):
+                    logger.warning(
+                        "Skipping malformed CPE entry in knowledge-base feed %s: key=%r value_type=%s",
+                        path.name,
+                        cpe if isinstance(cpe, str) else type(cpe).__name__,
+                        type(vuln_entries).__name__,
+                    )
                     continue
                 bucket = entries.setdefault(cpe, [])
                 for item in vuln_entries:
