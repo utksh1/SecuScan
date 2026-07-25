@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Unit tests for validation pure helpers.
 
@@ -103,7 +105,6 @@ class TestParseUrlHostname:
 # _resolve_host_ips_uncached
 # ---------------------------------------------------------------------------
 
-from __future__ import annotations
 
 import ipaddress
 from unittest.mock import patch
