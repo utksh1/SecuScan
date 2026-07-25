@@ -471,6 +471,39 @@ class TestLoopbackExemption:
         allowed, _, _ = engine.check_access("10.0.0.1", plugin_id="test")
         assert not allowed, "Private RFC1918 range must remain blocked"
 
+    def test_operator_explicit_loopback_deny_honored_despite_flag(self, monkeypatch, tmp_path):
+        """An operator who explicitly denies loopback must have it enforced even
+        when allow_loopback_scans=True. The flag exempts only the default loopback
+        rule, never an intentional operator deny (maintainer review on #2053)."""
+        monkeypatch.setattr(
+            "backend.secuscan.config.settings.allow_loopback_scans", True
+        )
+        audit_log = tmp_path / "audit.log"
+        engine = NetworkPolicyEngine(audit_log_path=str(audit_log))
+        _init_default_policies(engine)
+        # Operator explicitly re-blocks loopback (loopback_exemptible defaults to False)
+        engine.add_deny_rule("127.0.0.1/32", reason="Operator explicitly blocks loopback")
+
+        allowed, reason, _ = engine.check_access("127.0.0.1", plugin_id="test")
+        assert not allowed, "explicit operator loopback deny must win over the flag"
+        assert "denylist" in reason.lower()
+
+    def test_default_loopback_rule_still_exempt_with_operator_deny_on_other_range(
+        self, monkeypatch, tmp_path
+    ):
+        """Sanity: adding an unrelated operator deny rule must not accidentally
+        re-block loopback while the flag is on (only scan targets are exempted)."""
+        monkeypatch.setattr(
+            "backend.secuscan.config.settings.allow_loopback_scans", True
+        )
+        audit_log = tmp_path / "audit.log"
+        engine = NetworkPolicyEngine(audit_log_path=str(audit_log))
+        _init_default_policies(engine)
+        engine.add_deny_rule("203.0.113.0/24", reason="Operator unrelated block")
+
+        allowed, reason, _ = engine.check_access("127.0.0.1", plugin_id="nmap")
+        assert allowed, f"loopback scan target should stay exempt, got: {reason}"
+
 
 class TestDefaultDenylistSSRFProtection:
     """Test that private subnets and cloud metadata are always blocked, and
@@ -495,6 +528,13 @@ class TestDefaultDenylistSSRFProtection:
         monkeypatch.setattr(
             "backend.secuscan.config.settings.network_denylist",
             ["203.0.113.0/24"],  # operator's own unrelated addition
+        )
+        # Disable the loopback scan exemption so 127.0.0.1 is expected to remain
+        # blocked here -- this test asserts operator config cannot drop the
+        # *mandatory* ranges; the loopback-flag exemption is covered separately
+        # in TestLoopbackExemption.
+        monkeypatch.setattr(
+            "backend.secuscan.config.settings.allow_loopback_scans", False
         )
         audit_log = tmp_path / "audit.log"
         engine = NetworkPolicyEngine(audit_log_path=str(audit_log))

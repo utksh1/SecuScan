@@ -33,6 +33,11 @@ class NetworkPolicy:
     reason: str                   # Why this rule exists
     created_at: datetime          # When rule was added
     expires_at: Optional[datetime] = None  # Optional expiration
+    # True only for the default/mandatory loopback deny rule. When
+    # SECUSCAN_ALLOW_LOOPBACK_SCANS is enabled, check_access() skips *this*
+    # rule for loopback scan targets. Operator-configured loopback deny rules
+    # leave this False and are therefore always enforced.
+    loopback_exemptible: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for logging"""
@@ -136,7 +141,8 @@ class NetworkPolicyEngine:
         self,
         cidr: str,
         reason: str = "System blocked",
-        expires_at: Optional[datetime] = None
+        expires_at: Optional[datetime] = None,
+        loopback_exemptible: bool = False,
     ) -> None:
         """
         Add a network to the denylist.
@@ -145,6 +151,9 @@ class NetworkPolicyEngine:
             cidr: Network in CIDR notation
             reason: Human-readable reason for this rule
             expires_at: Optional expiration timestamp
+            loopback_exemptible: Mark this as the default loopback rule that
+                SECUSCAN_ALLOW_LOOPBACK_SCANS may bypass for scan targets. Must
+                stay False for operator-configured deny rules so they always win.
         """
         try:
             net = ipaddress.ip_network(cidr, strict=False)
@@ -154,6 +163,7 @@ class NetworkPolicyEngine:
                 reason=reason,
                 created_at=datetime.now(),
                 expires_at=expires_at,
+                loopback_exemptible=loopback_exemptible,
             )
             self.denylist.append((net, policy))
             logger.info(f"Added deny rule for {cidr}: {reason}")
@@ -242,33 +252,39 @@ class NetworkPolicyEngine:
                 return False, reason, None
 
         # ═ Step 1: Check denylist (highest priority) ═
-        # Loopback is exempted here when SECUSCAN_ALLOW_LOOPBACK_SCANS is enabled,
-        # mirroring the exemption Safe Mode already applies in validation.py. This
-        # applies to scan-target validation only (this method). It intentionally
-        # does not apply to validate_egress_target() below, which always blocks
-        # loopback for webhook/egress destinations to prevent SSRF.
+        # When SECUSCAN_ALLOW_LOOPBACK_SCANS is enabled we exempt loopback scan
+        # targets, mirroring the exemption Safe Mode already applies in
+        # validation.py. The exemption is scoped to *only* the default/mandatory
+        # loopback deny rule (loopback_exemptible=True): an operator who
+        # explicitly adds a loopback deny rule still has it enforced, so the flag
+        # never silently overrides an intentional operator block. This applies to
+        # scan-target validation only (this method); validate_egress_target()
+        # below always blocks loopback for webhook/egress to prevent SSRF.
         from .config import settings
         loopback_exempt = ip.is_loopback and settings.allow_loopback_scans
 
-        if not loopback_exempt:
-            for net, policy in self.denylist:
-                if self._is_expired(policy):
+        for net, policy in self.denylist:
+            if self._is_expired(policy):
+                continue
+            if ip in net:
+                # Skip only the default loopback rule when scans are allowed;
+                # operator-configured loopback deny rules keep precedence.
+                if loopback_exempt and policy.loopback_exemptible:
                     continue
-                if ip in net:
-                    reason = f"Blocked by denylist rule: {policy.reason} (matched: {policy.cidr})"
-                    entry = AuditLogEntry(
-                        timestamp=datetime.now(),
-                        plugin_id=plugin_id,
-                        task_id=task_id,
-                        action=PolicyAction.DENY,
-                        dest_ip=dest_ip,
-                        dest_port=dest_port,
-                        dest_hostname=dest_hostname,
-                        policy_matched=policy.cidr,
-                        reason=reason,
-                    )
-                    self._log_audit_entry(entry)
-                    return False, reason, policy
+                reason = f"Blocked by denylist rule: {policy.reason} (matched: {policy.cidr})"
+                entry = AuditLogEntry(
+                    timestamp=datetime.now(),
+                    plugin_id=plugin_id,
+                    task_id=task_id,
+                    action=PolicyAction.DENY,
+                    dest_ip=dest_ip,
+                    dest_port=dest_port,
+                    dest_hostname=dest_hostname,
+                    policy_matched=policy.cidr,
+                    reason=reason,
+                )
+                self._log_audit_entry(entry)
+                return False, reason, policy
 
         # ═ Step 2: Check allowlist ═
         for net, policy in self.allowlist:
@@ -503,7 +519,15 @@ def _init_default_policies(engine: NetworkPolicyEngine) -> None:
     # things.
     for cidr in MANDATORY_DENYLIST:
         try:
-            engine.add_deny_rule(cidr, reason="Mandatory denylist (not operator-configurable)")
+            # Tag the default loopback ranges so SECUSCAN_ALLOW_LOOPBACK_SCANS can
+            # bypass only these for scan targets, without weakening the other
+            # mandatory ranges or any operator-added loopback deny rule.
+            is_loopback_rule = ipaddress.ip_network(cidr, strict=False).network_address.is_loopback
+            engine.add_deny_rule(
+                cidr,
+                reason="Mandatory denylist (not operator-configurable)",
+                loopback_exemptible=is_loopback_rule,
+            )
         except ValueError:
             logger.warning(f"Skipping invalid mandatory denylist CIDR: {cidr}")
 
