@@ -462,6 +462,10 @@ export function getFindings(page: number = 1, perPage: number = 50) {
   return request<FindingsResponse>(`/findings?page=${page}&per_page=${perPage}`)
 }
 
+export function getFindingDetails(findingId: string) {
+  return request<FindingRecord>(`/finding/${findingId}`)
+}
+
 export function getFindingGroups(page: number = 1, perPage: number = 50) {
   return request<{ groups: FindingGroup[]; total: number; page: number; per_page: number }>(`/finding-groups?page=${page}&per_page=${perPage}`)
 }

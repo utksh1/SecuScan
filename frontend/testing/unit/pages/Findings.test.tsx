@@ -8,6 +8,7 @@ import Findings from '../../../src/pages/Findings'
 
 vi.mock('../../../src/api', () => ({
   getFindings: vi.fn(),
+  getFindingDetails: vi.fn(),
 }))
 
 vi.mock('../../../src/utils/exportUtils', () => ({
@@ -53,7 +54,7 @@ if (typeof global.ResizeObserver === 'undefined') {
 Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, value: 800 })
 Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 600 })
 
-import { getFindings } from '../../../src/api'
+import { getFindings, getFindingDetails } from '../../../src/api'
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -403,6 +404,44 @@ describe('Findings — virtualized list', () => {
     const newJsonExportBtn = await screen.findByRole('button', { name: /Export as JSON/i })
     await userEvent.click(newJsonExportBtn)
     expect(exportFindingsAsJSON).toHaveBeenCalled()
+  })
+
+  it('fetches missing selected findings from the server before export', async () => {
+    const findings = [
+      makeFinding({ id: 'f1', title: 'Loaded Finding', severity: 'critical' }),
+    ]
+    vi.mocked(getFindings).mockResolvedValue({ findings })
+
+    const unloadedFinding = makeFinding({ id: 'f-unloaded', title: 'Unloaded Finding', severity: 'high' })
+    vi.mocked(getFindingDetails).mockResolvedValue(unloadedFinding)
+
+    const realUseState = React.useState
+    const stateSpy = vi.spyOn(React, 'useState').mockImplementation(((initialValue: any) => {
+      if (initialValue instanceof Set) {
+        return [new Set(['f-unloaded']), vi.fn()]
+      }
+      return realUseState(initialValue)
+    }) as any)
+
+    render(<Findings />)
+    await waitFor(() => expect(screen.queryByText('Synchronizing findings feed...')).not.toBeInTheDocument())
+
+    const bulkExportBtn = screen.getByRole('button', { name: /Bulk Export/i })
+    await userEvent.click(bulkExportBtn)
+
+    const csvExportBtn = screen.getByRole('button', { name: /Export as CSV/i })
+    await userEvent.click(csvExportBtn)
+
+    await waitFor(() => {
+      expect(getFindingDetails).toHaveBeenCalledWith('f-unloaded')
+      expect(exportFindingsAsCSV).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'f-unloaded', title: 'Unloaded Finding' })
+        ])
+      )
+    })
+
+    stateSpy.mockRestore()
   })
 })
 

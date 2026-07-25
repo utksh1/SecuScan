@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { getFindings, FindingsResponse } from '../api'
+import { getFindings, getFindingDetails, FindingsResponse } from '../api'
 import { formatLocaleDate, parseDateSafe, getCurrentTimeZone } from '../utils/date'
 import SavedViewsPanel from '../components/SavedViewsPanel'
 import { useSavedViews, FilterPreset } from '../hooks/useSavedViews'
@@ -174,8 +174,9 @@ export default function Findings() {
   const [copiedFindingId, setCopiedFindingId] = useState<string | null>(null)
 
   // ── Multi-select export state & handlers ───────────────────────────────────
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   const [columnVisibility, setColumnVisibility] = useState({
     category: true,
@@ -421,13 +422,42 @@ export default function Findings() {
     })
   }
 
-  const handleExportCSV = () => {
-    const selectedFindings = findings.filter((f) => selectedIds.has(f.id))
+  const fetchFullSelection = async (): Promise<Finding[]> => {
+    const loadedSelected = findings.filter((f) => selectedIds.has(f.id))
+    const missingIds = Array.from(selectedIds).filter(
+      (id) => !findings.some((f) => f.id === id)
+    )
+
+    if (missingIds.length === 0) {
+      return loadedSelected
+    }
+
+    setExporting(true)
+    try {
+      const fetched = await Promise.all(
+        missingIds.map((id) => getFindingDetails(id))
+      )
+      return [...loadedSelected, ...fetched] as Finding[]
+    } catch (error) {
+      console.error('Failed to fetch missing findings for export', error)
+      try {
+        window.alert('Failed to fetch some selected findings from the server. Only currently loaded selected findings will be exported.')
+      } catch {
+        // Ignore alert failure in test environments without window.alert
+      }
+      return loadedSelected
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleExportCSV = async () => {
+    const selectedFindings = await fetchFullSelection()
     exportFindingsAsCSV(selectedFindings)
   }
 
-  const handleExportJSON = () => {
-    const selectedFindings = findings.filter((f) => selectedIds.has(f.id))
+  const handleExportJSON = async () => {
+    const selectedFindings = await fetchFullSelection()
     exportFindingsAsJSON(selectedFindings)
   }
 
@@ -1071,13 +1101,16 @@ export default function Findings() {
                       <button
                         type="button"
                         id="bulk-export-btn"
+                        disabled={exporting}
                         onClick={() => setExportDropdownOpen(!exportDropdownOpen)}
-                        className="bg-rag-blue text-black border-2 border-black px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-rag-blue/90 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center gap-2"
+                        className="bg-rag-blue text-black border-2 border-black px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-rag-blue/90 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center gap-2 disabled:opacity-50"
                       >
-                        Bulk Export
-                        <span className="material-symbols-outlined text-sm">arrow_drop_down</span>
+                        {exporting ? 'Exporting...' : 'Bulk Export'}
+                        {!exporting && (
+                          <span className="material-symbols-outlined text-sm">arrow_drop_down</span>
+                        )}
                       </button>
-                      {exportDropdownOpen && (
+                      {exportDropdownOpen && !exporting && (
                         <div className="absolute right-0 mt-2 w-48 border-2 border-black bg-charcoal-dark shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] z-30">
                           <button
                             type="button"
