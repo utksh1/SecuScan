@@ -217,4 +217,3 @@ class TestReset:
 
         # After reset, one request should pass (counter starts from 0 again)
         await limiter._check_fallback(request)
-
