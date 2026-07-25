@@ -215,4 +215,3 @@ class TestAuditLogEntryToDict:
         assert restored["dest_ip"] == "8.8.8.8"
         assert restored["action"] == "allow"
         assert restored["dest_hostname"] == "dns.google"
-
