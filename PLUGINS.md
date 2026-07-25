@@ -11,6 +11,63 @@ This file is a human-readable index of the plugins currently present in `plugins
 
 Last synced: 2026-05-11
 
+## Plugin Metadata Schema
+
+Every plugin must have a `metadata.json` file in its directory. The following
+fields are **required** — a plugin with any missing required field will be
+skipped at startup with a clear error log identifying the plugin and field.
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | ✅ | Unique plugin identifier (snake_case) |
+| `name` | `string` | ✅ | Human-readable display name |
+| `version` | `string` | ✅ | Semantic version e.g. `"1.0.0"` |
+| `description` | `string` | ✅ | Short one-line description |
+| `category` | `string` | ✅ | One of: `recon`, `web`, `vulnerability`, `exploit`, `network`, `code`, `forensics`, `utils`, `security`, `execution`, `expert`, `robots` |
+| `engine` | `object` | ✅ | Engine config with `type` (`cli`, `python`, `docker`) and `binary` |
+| `command_template` | `array` | ✅ | List of command tokens with `{placeholder}` variables |
+| `fields` | `array` | ✅ | Input field definitions (see Field Schema below) |
+| `presets` | `object` | ✅ | Named preset configurations (can be `{}`) |
+| `output` | `object` | ✅ | Output config with `parser` and `format` |
+| `safety` | `object` | ✅ | Safety config with `level` (`safe`, `intrusive`, `exploit`) and `requires_consent` |
+
+### Optional Fields
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `long_description` | `string` | Extended markdown description |
+| `author` | `object` | Author info with `name` and `url` |
+| `icon` | `string` | Emoji icon shown in the UI |
+| `capabilities` | `array` | Declared capability strings |
+| `dependencies` | `object` | External binaries required e.g. `{"binaries": ["nmap"]}` |
+| `checksum` | `string` | SHA-256 digest for integrity verification |
+| `signature` | `string` | HMAC signature for signed deployments |
+
+### Field Schema
+
+Each entry in `fields` must have:
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `id` | `string` | ✅ | Field identifier matching `{placeholder}` in command_template |
+| `label` | `string` | ✅ | Display label shown in the UI |
+| `type` | `string` | ✅ | One of: `string`, `text`, `integer`, `boolean`, `select` |
+| `required` | `boolean` | ✅ | Whether the field must be supplied by the user |
+| `default` | `any` | ✅ | Default value (use `""` or `null` for none) |
+| `placeholder` | `string` | ✅ | Example value shown as hint in the UI |
+| `validation` | `object` | ✅ | Validation rules (can be `{}`) |
+
+### Validation at Startup
+
+The backend validates every `metadata.json` against the `PluginMetadata`
+Pydantic schema at startup. If validation fails:
+
+- The invalid plugin is **skipped** — the backend continues loading other plugins
+- An error is logged identifying exactly which plugin directory failed and why
+- The rest of the application starts normally
+
+This means a typo in one plugin cannot crash the backend for all users.
+
 ## At a Glance
 
 - Total plugins: 59
