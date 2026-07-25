@@ -535,3 +535,99 @@ describe('Findings — virtualizer scrolling', () => {
     expect(mockScrollToIndex).not.toHaveBeenCalled()
   })
 })
+
+it('scrolls to the correct fresh index after sort order changes then selection changes', async () => {
+  const findings = [
+    makeFinding({ id: 'f1', title: 'Finding Alpha', severity: 'critical', discovered_at: '2024-01-01T00:00:00Z' }),
+    makeFinding({ id: 'f2', title: 'Finding Beta', severity: 'high', discovered_at: '2024-01-03T00:00:00Z' }),
+    makeFinding({ id: 'f3', title: 'Finding Gamma', severity: 'medium', discovered_at: '2024-01-02T00:00:00Z' }),
+  ]
+  vi.mocked(getFindings).mockResolvedValue({ findings })
+
+  render(<Findings />)
+  await waitFor(() => expect(screen.queryByText('Synchronizing findings feed...')).not.toBeInTheDocument())
+
+  // Switch to "newest" sort — new order is Beta(0), Gamma(1), Alpha(2)
+  const selects = screen.getAllByRole('combobox')
+  const sortSelect = selects.find((s) =>
+    Array.from(s.querySelectorAll('option')).some((o) => /Newest First/i.test(o.textContent || '')),
+  )
+  await userEvent.selectOptions(sortSelect!, 'newest')
+
+  mockScrollToIndex.mockClear()
+
+  // Now select Gamma — should scroll to its *post-sort* index (1), not a stale pre-sort index
+  const gammaOption = await screen.findByRole('option', { name: /Finding Gamma/i })
+  await userEvent.click(gammaOption)
+
+  expect(mockScrollToIndex).toHaveBeenCalledWith(1, { align: 'auto', behavior: 'smooth' })
+})
+
+describe('Findings — load more totalItems sync (#1862)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+  })
+
+  it('updates totalItems after each loadMore fetch so the button guard stays accurate', async () => {
+    // Initial load: 2 findings, server reports 10 total
+    const page1 = [
+      makeFinding({ id: 'p1-f1', title: 'Page 1 Finding A' }),
+      makeFinding({ id: 'p1-f2', title: 'Page 1 Finding B' }),
+    ]
+    // loadMore call: 2 more findings, server now reports total=4 (filter narrowed)
+    const page2 = [
+      makeFinding({ id: 'p2-f1', title: 'Page 2 Finding A' }),
+      makeFinding({ id: 'p2-f2', title: 'Page 2 Finding B' }),
+    ]
+
+    vi.mocked(getFindings)
+      .mockResolvedValueOnce({ findings: page1, total: 10 })
+      .mockResolvedValueOnce({ findings: page2, total: 4 })
+
+    render(<Findings />)
+    await waitFor(() =>
+      expect(screen.queryByText('Synchronizing findings feed...')).not.toBeInTheDocument(),
+    )
+
+    // After initial load: 2 findings loaded, server total=10, button shows "Load More (2/10)"
+    const loadMoreBtn = screen.getByRole('button', { name: /Load More/i })
+    expect(loadMoreBtn).toHaveTextContent('Load More (2/10)')
+
+    // Click Load More — triggers second fetch (total updates to 4)
+    await userEvent.click(loadMoreBtn)
+
+    // After loadMore: 4 findings loaded, totalItems updated to 4 → button hidden (4 >= 4)
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /Load More/i })).not.toBeInTheDocument(),
+    )
+  })
+
+  it('shows Load More button when loadMore response total exceeds current findings count', async () => {
+    const page1 = [
+      makeFinding({ id: 'p1-f1', title: 'Page 1 Finding' }),
+    ]
+    const page2 = [
+      makeFinding({ id: 'p2-f1', title: 'Page 2 Finding' }),
+    ]
+
+    vi.mocked(getFindings)
+      .mockResolvedValueOnce({ findings: page1, total: 5 })
+      .mockResolvedValueOnce({ findings: page2, total: 5 })
+
+    render(<Findings />)
+    await waitFor(() =>
+      expect(screen.queryByText('Synchronizing findings feed...')).not.toBeInTheDocument(),
+    )
+
+    // Initial state: 1/5 loaded, button visible
+    expect(screen.getByRole('button', { name: /Load More \(1\/5\)/i })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /Load More/i }))
+
+    // After loadMore: 2/5, totalItems stays 5, button still visible
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Load More \(2\/5\)/i })).toBeInTheDocument(),
+    )
+  })
+})
