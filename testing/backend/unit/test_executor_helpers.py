@@ -148,4 +148,3 @@ class TestValidateRiskFieldsAssetExposure:
         """Empty string asset_exposure raises ValueError."""
         with pytest.raises(ValueError, match="asset_exposure must be one of"):
             _validate_risk_fields({"asset_exposure": ""})
-
