@@ -98,16 +98,17 @@ class TestNotificationRuleCreate:
         )
         assert len(rule.name) == 255
 
-    def test_target_url_or_email_max_length(self):
-        # Very long URL should be accepted (up to 2000)
+    def test_target_url_or_email_length_at_boundary(self):
+        # URL of exactly 2000 chars (protocol + domain + 1980 a's) is accepted
         long_url = "https://example.com/" + "a" * 1980
+        assert len(long_url) == 2000
         rule = NotificationRuleCreate(
             name="Long URL",
             severity_threshold=NotificationSeverityThreshold.HIGH,
             channel_type=NotificationChannelType.WEBHOOK,
             target_url_or_email=long_url,
         )
-        assert len(rule.target_url_or_email) > 2000
+        assert rule.target_url_or_email == long_url
 
     def test_target_url_or_email_max_length_rejected_over_2000(self):
         long_url = "https://example.com/" + "a" * 2001
@@ -223,14 +224,18 @@ class TestErrorResponse:
         assert err.error == "not_found"
         assert err.message == "Resource not found"
 
-    def test_help_url_optional(self):
+    def test_field_optional(self):
         err = ErrorResponse(error="bad_request", message="Invalid input")
-        assert err.help_url is None
+        assert err.field is None
 
-    def test_help_url_can_be_set(self):
+    def test_details_optional(self):
+        err = ErrorResponse(error="bad_request", message="Invalid input")
+        assert err.details is None
+
+    def test_details_can_be_set(self):
         err = ErrorResponse(
-            error="rate_limited",
-            message="Too many requests",
-            help_url="https://docs.example.com/rate-limits",
+            error="validation_error",
+            message="Invalid input",
+            details={"field": "target", "reason": "too long"},
         )
-        assert err.help_url == "https://docs.example.com/rate-limits"
+        assert err.details == {"field": "target", "reason": "too long"}
