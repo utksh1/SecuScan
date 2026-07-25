@@ -27,9 +27,8 @@ async def _mock_require_api_key() -> str:
 async def app_client():
     """
     Spin up an isolated FastAPI app with an in-memory SQLite database
-    and the saved_views_router registered. The client authenticates as
-    the "default" owner (no X-User-Id header) using a real API key,
-    matching how routes.py's own tests exercise auth (issue #1743).
+    and the saved_views_router registered. Auth is overridden so happy-path
+    tests can focus on saved-view behaviour (issue #1743).
     """
     # In-memory DB — isolated per test function
     test_db = Database(":memory:")
@@ -54,6 +53,28 @@ async def app_client():
         ) as client:
             client.api_key = api_key
             client.test_transport = transport
+            yield client
+
+    await test_db.disconnect()
+    _db_module.db = None
+    _auth_module._api_key = None
+
+
+@pytest_asyncio.fixture
+async def real_auth_client():
+    """Client that exercises real ``require_api_key`` (no dependency override)."""
+    test_db = Database(":memory:")
+    await test_db.connect()
+    _db_module.db = test_db
+
+    _app = FastAPI()
+    _app.include_router(saved_views_router)
+
+    with tempfile.TemporaryDirectory() as tmp_data_dir:
+        api_key = _auth_module.init_api_key(tmp_data_dir)
+        transport = ASGITransport(app=_app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            client.api_key = api_key
             yield client
 
     await test_db.disconnect()
@@ -355,18 +376,18 @@ async def test_filter_json_with_null_values_rejected(app_client: AsyncClient):
 # ─── Auth & owner isolation (issue #1743) ────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_unauthenticated_request_rejected(app_client: AsyncClient):
+async def test_unauthenticated_request_rejected(real_auth_client: AsyncClient):
     """Requests without a valid API key/session are rejected, not served."""
-    res = await app_client.get(
+    res = await real_auth_client.get(
         "/api/v1/saved-views", headers={"X-Api-Key": ""}
     )
     assert res.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_wrong_api_key_rejected(app_client: AsyncClient):
+async def test_wrong_api_key_rejected(real_auth_client: AsyncClient):
     """A malformed/incorrect API key is rejected."""
-    res = await app_client.get(
+    res = await real_auth_client.get(
         "/api/v1/saved-views", headers={"X-Api-Key": "not-the-real-key"}
     )
     assert res.status_code == 401
