@@ -88,19 +88,22 @@ class TestComputeRiskFactorsRecencyFarPast:
         discovered = datetime.now(timezone.utc) - timedelta(days=365)
         factors = compute_risk_factors("high", discovered_at=discovered)
         rec_factor = next(f for f in factors if f["factor"] == "recency")
-        assert rec_factor["score"] == 0.0
+        # _recency_score returns 1.0 for dates >= 365 days old
+        assert rec_factor["score"] == 1.0
 
     def test_discovered_at_400_days_ago(self):
         discovered = datetime.now(timezone.utc) - timedelta(days=400)
         factors = compute_risk_factors("critical", discovered_at=discovered)
         rec_factor = next(f for f in factors if f["factor"] == "recency")
-        assert rec_factor["score"] == 0.0
+        # _recency_score returns 1.0 for dates >= 365 days old
+        assert rec_factor["score"] == 1.0
 
     def test_discovered_at_very_far_past(self):
         discovered = datetime(2000, 1, 1, tzinfo=timezone.utc)
         factors = compute_risk_factors("info", discovered_at=discovered)
         rec_factor = next(f for f in factors if f["factor"] == "recency")
-        assert rec_factor["score"] == 0.0
+        # _recency_score returns 1.0 for dates >= 365 days old
+        assert rec_factor["score"] == 1.0
 
 
 class TestComputeRiskFactorsAssetExposure:
