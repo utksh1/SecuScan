@@ -85,4 +85,3 @@ class TestToUtcIsoEdgeCases:
         result = to_utc_iso("2026-01-01T12:00:00Z")
         assert result.startswith("2026-01-01T12:00:00")
         assert result.endswith("+00:00")
-
