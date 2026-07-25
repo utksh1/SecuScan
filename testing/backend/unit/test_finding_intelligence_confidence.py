@@ -144,6 +144,13 @@ class TestFingerprintScore:
         assert score == 0.25
         assert strength == "none"
 
+    def test_unknown_match_strength_has_no_fingerprint_confidence(self):
+        score, strength = _fingerprint_score(
+            {"metadata": {"match_strength": "unknown_strength"}}
+        )
+        assert score == 0.0
+        assert strength == "unknown_strength"
+
     def test_missing_metadata(self):
         score, strength = _fingerprint_score({})
         assert score == 0.25

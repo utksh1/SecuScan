@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { API_BASE } from '../api'
+import { API_BASE, getApiKey } from '../api'
 
 export interface FilterPreset {
   severity: string
@@ -126,8 +126,15 @@ async function apiFetch<T>(
   init?: RequestInit,
 ): Promise<T | null> {
   try {
+    const apiKey = getApiKey()
+    const authHeaders: Record<string, string> = apiKey ? { 'X-Api-Key': apiKey } : {}
     const res = await fetch(`${API_BASE}${path}`, {
       ...init,
+      headers: {
+        ...authHeaders,
+        ...(init?.headers as Record<string, string> | undefined),
+      },
+      credentials: 'include',
       signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) return null

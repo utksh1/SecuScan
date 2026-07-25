@@ -6,6 +6,7 @@ from urllib.parse import urljoin
 
 import httpx
 
+from ..config import settings
 from .base import BaseScanner
 from ..crawler import crawl_target
 
@@ -52,7 +53,7 @@ class APIScanner(BaseScanner):
             timeout=timeout,
             headers={str(k): str(v) for k, v in extra_headers.items()},
             cookies={str(k): str(v) for k, v in cookies.items()},
-            verify=False,
+            verify=settings.verify_ssl,
         ) as client:
             for path in self.COMMON_SPEC_PATHS:
                 url = urljoin(target.rstrip("/") + "/", path.lstrip("/"))

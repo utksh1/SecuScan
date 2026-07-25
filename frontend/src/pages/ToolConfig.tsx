@@ -16,6 +16,7 @@ import {
   PluginListItem,
   PluginSchemaResponse,
   startTask,
+  previewCommand,
 } from '../api'
 import { useToast } from '../components/ToastContext'
 import { routePath, routes } from '../routes'
@@ -80,6 +81,8 @@ export default function ToolConfig() {
     evidence_level: 'standard',
   })
   const fieldRefs = useRef<Record<string, HTMLElement | null>>({})
+  const [preview, setPreview] = useState<string>('')
+  const [previewError, setPreviewError] = useState<string>('')
 
   useEffect(() => {
     let cancelled = false
@@ -161,6 +164,36 @@ export default function ToolConfig() {
   const availability = plugin?.availability
   const missingBinaries = availability?.missing_binaries ?? []
   const hasMissingBinaries = missingBinaries.length > 0
+
+  useEffect(() => {
+    if (!toolId || !plugin || !schema) return
+    if (hasValidationErrors) {
+      setPreview('')
+      setPreviewError('Fix highlighted validation errors to preview command.')
+      return
+    }
+
+    let active = true
+    async function updatePreview() {
+      try {
+        const response = await previewCommand(toolId!, inputs)
+        if (active) {
+          setPreview(response.command.join(' '))
+          setPreviewError('')
+        }
+      } catch (error: any) {
+        if (active) {
+          setPreview('')
+          setPreviewError(error?.message || 'Failed to generate command preview.')
+        }
+      }
+    }
+
+    updatePreview()
+    return () => {
+      active = false
+    }
+  }, [toolId, inputs, hasValidationErrors, plugin, schema])
 
   const handleFieldChange = (field: PluginFieldSchema, value: unknown) => {
     setInputs((prev) => ({ ...prev, [field.id]: value }))
@@ -467,6 +500,24 @@ export default function ToolConfig() {
                 )
               })}
             </div>
+          </section>
+
+          <section className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-4">
+            <h3 className="text-xs font-black text-silver-bright uppercase tracking-[0.4em] italic">Command_Preview</h3>
+            {previewError ? (
+              <p className="text-[10px] text-rag-amber uppercase tracking-widest font-black" role="alert">
+                ⚠️ {previewError}
+              </p>
+            ) : (
+              <div className="space-y-4">
+                <div className="bg-charcoal-dark border-4 border-black p-4 font-mono text-xs text-rag-blue break-all select-all">
+                  {preview}
+                </div>
+                <p className="text-[9px] text-silver/40 uppercase tracking-widest leading-relaxed">
+                  Note: This preview is generated locally/sanitized and does not guarantee copy-paste execution if runtime normalization changes values.
+                </p>
+              </div>
+            )}
           </section>
         </div>
 

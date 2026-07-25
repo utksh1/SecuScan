@@ -86,6 +86,8 @@ pip install -q -r backend/requirements.txt
 mkdir -p "$ROOT_DIR/data" "$ROOT_DIR/logs"
 
 echo "🚀 Starting backend on http://127.0.0.1:8000"
+# Dev workflow needs debug=True for /docs, /redoc, and hot-reload
+export SECUSCAN_DEBUG=true
 python -m uvicorn backend.secuscan.main:app \
   --host 127.0.0.1 \
   --port 8000 \

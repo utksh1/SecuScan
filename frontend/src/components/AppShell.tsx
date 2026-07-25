@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Background from './Background'
+import GlobalSearch from './GlobalSearch'
 import { useShortcuts } from '../hooks/useShortcuts'
 import { SidebarProvider, useSidebar } from '../context/SidebarContext'
 import { routes } from '../routes'
@@ -91,11 +92,11 @@ function AppShellInner({ children }: AppShellProps) {
             <Background state="idle" />
             <div className="flex bg-charcoal-dark min-h-screen">
                 <Sidebar />
-                <div className="lg:hidden fixed inset-x-0 top-0 z-[60] bg-[var(--bg-secondary)] border-b border-accent-silver/10 h-14 px-4 flex items-center justify-between">
+                <div className="lg:hidden fixed inset-x-0 top-0 z-[60] bg-[var(--bg-secondary)] border-b border-accent-silver/10 h-14 px-4 flex items-center gap-3">
                     <button
                         ref={menuButtonRef}
                         onClick={() => setMobileMenuOpen((prev) => !prev)}
-                        className="w-9 h-9 border border-accent-silver/20 flex items-center justify-center text-silver-bright bg-charcoal-dark"
+                        className="w-9 h-9 shrink-0 border border-accent-silver/20 flex items-center justify-center text-silver-bright bg-charcoal-dark"
                         aria-label="Toggle navigation menu"
                         aria-expanded={mobileMenuOpen}
                         aria-controls="mobile-nav-drawer"
@@ -104,8 +105,7 @@ function AppShellInner({ children }: AppShellProps) {
                             {mobileMenuOpen ? 'close' : 'menu'}
                         </span>
                     </button>
-                    <span className="text-[12px] font-black tracking-[0.2em] text-silver-bright uppercase">SecuScan</span>
-                    <span className="w-9 h-9" />
+                    <GlobalSearch className="flex-1 min-w-0" />
                 </div>
 
                 {mobileMenuOpen && (
@@ -146,12 +146,20 @@ function AppShellInner({ children }: AppShellProps) {
                     </>
                 )}
 
-                <main
-                    className="flex-1 overflow-auto transition-all duration-300 ease-in-out ml-0 lg:ml-[var(--sidebar-width)] pt-14 lg:pt-0 pb-20 lg:pb-0"
+                <div
+                    className="flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out ml-0 lg:ml-[var(--sidebar-width)]"
                     style={{ '--sidebar-width': `${desktopSidebarWidth}px` } as React.CSSProperties}
                 >
-                    {children}
-                </main>
+                    <div className="hidden lg:flex items-center h-14 px-6 border-b border-accent-silver/10 bg-[var(--bg-secondary)]">
+                        <GlobalSearch className="w-full max-w-md" />
+                    </div>
+                    <main
+                        className="flex-1 overflow-auto pt-14 lg:pt-0 pb-20 lg:pb-0"
+                        style={{ '--sidebar-width': `${desktopSidebarWidth}px` } as React.CSSProperties}
+                    >
+                        {children}
+                    </main>
+                </div>
 
                 <nav className="lg:hidden fixed bottom-0 inset-x-0 z-40 h-16 bg-[var(--bg-secondary)] border-t border-accent-silver/10 grid grid-cols-5 px-1 pb-safe">
                     {mobilePrimaryNav.map((item) => (

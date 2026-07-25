@@ -173,6 +173,8 @@ cd SecuScan
 docker compose up --build
 ```
 
+The quickstart uses default local-only credentials. For production or any deployment where PostgreSQL is reachable beyond localhost, set `SECUSCAN_POSTGRES_PASSWORD` (and optionally `SECUSCAN_POSTGRES_USER`, `SECUSCAN_POSTGRES_DB`) in a `.env` file before starting. See `.env.example` for details.
+
 Open:
 
 - Frontend: `http://127.0.0.1:5173`

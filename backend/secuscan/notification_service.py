@@ -29,7 +29,7 @@ import httpcore
 
 from .database import Database
 from .models import NotificationChannelType, NotificationDeliveryStatus
-from .redaction import redact_dict, redact_inputs
+from .redaction import redact_dict, redact_inputs, redact
 
 logger = logging.getLogger(__name__)
 
@@ -254,7 +254,7 @@ def build_alert_payload(
             "title": finding.get("title"),
             "category": finding.get("category"),
             "severity": finding.get("severity"),
-            "target": finding.get("target"),
+            "target": redact(finding.get("target") or ""),
             "description": finding.get("description"),
             "remediation": finding.get("remediation"),
             "metadata": metadata,
@@ -423,33 +423,48 @@ async def send_webhook(
 
         if response.status_code in (301, 302, 303, 307, 308):
             redirect_url = response.headers.get("location", "")
-            if redirect_url:
-                from urllib.parse import urlparse
+            if not redirect_url:
+                return (
+                    False,
+                    f"Webhook returned HTTP {response.status_code} with no Location header, payload not delivered",
+                )
 
-                parsed_redirect = urlparse(redirect_url)
-                if parsed_redirect.hostname:
-                    try:
-                        redirect_ips = socket.getaddrinfo(
-                            parsed_redirect.hostname, parsed_redirect.port or 443
-                        )
-                        for _family, _stype, _proto, _cname, sockaddr in redirect_ips:
-                            rip = ipaddress.ip_address(sockaddr[0])
-                            for blocked_cidr in settings.notification_blocked_ip_ranges:
-                                try:
-                                    if rip in ipaddress.ip_network(
-                                        blocked_cidr, strict=False
-                                    ):
-                                        return (
-                                            False,
-                                            f"Redirect to blocked IP range: {blocked_cidr}",
-                                        )
-                                except ValueError:
-                                    continue
-                    except OSError:
-                        return (
-                            False,
-                            f"Could not resolve redirect target: {redirect_url}",
-                        )
+            from urllib.parse import urlparse
+
+            parsed_redirect = urlparse(redirect_url)
+            if not parsed_redirect.hostname:
+                return (
+                    False,
+                    f"Webhook returned HTTP {response.status_code} redirect with no hostname: {redirect_url}, payload not delivered",
+                )
+
+            try:
+                redirect_ips = socket.getaddrinfo(
+                    parsed_redirect.hostname, parsed_redirect.port or 443
+                )
+                for _family, _stype, _proto, _cname, sockaddr in redirect_ips:
+                    rip = ipaddress.ip_address(sockaddr[0])
+                    for blocked_cidr in settings.notification_blocked_ip_ranges:
+                        try:
+                            if rip in ipaddress.ip_network(
+                                blocked_cidr, strict=False
+                            ):
+                                return (
+                                    False,
+                                    f"Redirect to blocked IP range: {blocked_cidr}",
+                                )
+                        except ValueError:
+                            continue
+            except OSError:
+                return (
+                    False,
+                    f"Could not resolve redirect target: {redirect_url}",
+                )
+
+            return (
+                False,
+                f"Webhook returned HTTP {response.status_code} redirect to {redirect_url}, payload not delivered",
+            )
 
         return True, None
     except httpx.HTTPError as exc:
@@ -727,7 +742,7 @@ async def _gather_scan_summary(db: Database, task_id: str) -> Optional[Dict[str,
         return None
 
     status = str(task.get("status") or "unknown").lower()
-    target = task.get("target") or "Unknown Target"
+    target = redact(task.get("target")) or "Unknown Target"
     tool_name = task.get("tool_name") or task.get("plugin_id") or "Security Scan"
 
     findings = await db.fetchall(
@@ -933,7 +948,7 @@ async def process_slack_notification(db: Database, task_id: str) -> None:
 
     status = str(task.get("status") or "unknown").upper()
     tool_name = task.get("tool_name") or task.get("plugin_id") or "Security Scan"
-    target = task.get("target") or "Unknown Target"
+    target = redact(task.get("target")) or "Unknown Target"
     duration = task.get("duration_seconds")
     duration_str = f"{duration:.2f}s" if duration is not None else "N/A"
 

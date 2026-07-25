@@ -28,6 +28,7 @@ from .plugins import get_plugin_manager
 from .models import NotificationDeliveryStatus, TaskStatus, ScanPhase
 from .ratelimit import concurrent_limiter
 from .risk_scoring import compute_risk_score, compute_risk_factors
+from .time_utils import to_utc_iso
 from .capabilities import CapabilityEnforcer, CapabilityDeniedError, build_enforcer_from_settings
 from .parser_sandbox import run_parser_in_sandbox, ParserSandboxError
 from .network_policy import get_policy_engine
@@ -90,17 +91,11 @@ async def _terminate_process_group(pid: int, task_id: str, grace_seconds: int = 
 
 
 def _parse_discovered_at(finding: dict) -> Optional[datetime]:
-    """Extract and parse discovered_at from a finding dict, or return current UTC time."""
-    raw = finding.get("discovered_at")
-    if raw:
-        try:
-            if isinstance(raw, str):
-                return datetime.fromisoformat(raw)
-            if isinstance(raw, datetime):
-                return raw
-        except (ValueError, TypeError):
-            pass
-    return datetime.now(timezone.utc)
+    """Extract and parse discovered_at from a finding dict as timezone-aware UTC."""
+    from .time_utils import parse_to_utc, utc_now
+
+    parsed = parse_to_utc(finding.get("discovered_at"))
+    return parsed if parsed is not None else utc_now()
 
 
 def _validate_risk_fields(finding: dict) -> None:
@@ -1349,6 +1344,7 @@ class TaskExecutor:
     ) -> Dict[str, Any]:
         u_id = str(uuid.uuid4()).replace("-", "")
         finding_id = f"finding:{task_id}:{u_id[:8]}"
+        finding_group_id = finding.get("finding_group_id")
 
         _validate_risk_fields(finding)
         exploitability = finding.get("exploitability")
@@ -1361,8 +1357,8 @@ class TaskExecutor:
         asset_refs = finding.get("asset_refs", []) if isinstance(finding.get("asset_refs"), list) else []
         references = finding.get("references", []) if isinstance(finding.get("references"), list) else []
         corroborating_sources = finding.get("corroborating_sources", []) if isinstance(finding.get("corroborating_sources"), list) else []
-        first_seen_at = str(finding.get("first_seen_at") or discovered.isoformat())
-        last_seen_at = str(finding.get("last_seen_at") or discovered.isoformat())
+        first_seen_at = str(finding.get("first_seen_at") or to_utc_iso(discovered))
+        last_seen_at = str(finding.get("last_seen_at") or to_utc_iso(discovered))
         occurrence_count = int(finding.get("occurrence_count") or 1)
         evidence_count = int(finding.get("evidence_count") or len(evidence))
         risk_score = compute_risk_score(
@@ -1395,6 +1391,41 @@ class TaskExecutor:
                 asset_exposure, risk_score, risk_factors_json
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (owner_id, finding_group_id) DO UPDATE SET
+                task_id = EXCLUDED.task_id,
+                plugin_id = EXCLUDED.plugin_id,
+                title = EXCLUDED.title,
+                category = EXCLUDED.category,
+                severity = EXCLUDED.severity,
+                target = EXCLUDED.target,
+                description = EXCLUDED.description,
+                remediation = EXCLUDED.remediation,
+                proof = EXCLUDED.proof,
+                cvss = EXCLUDED.cvss,
+                cve = EXCLUDED.cve,
+                metadata_json = EXCLUDED.metadata_json,
+                discovered_at = EXCLUDED.discovered_at,
+                exploitability = EXCLUDED.exploitability,
+                confidence = EXCLUDED.confidence,
+                validated = EXCLUDED.validated,
+                validation_method = EXCLUDED.validation_method,
+                confidence_reason = EXCLUDED.confidence_reason,
+                finding_kind = EXCLUDED.finding_kind,
+                asset_id = EXCLUDED.asset_id,
+                last_seen_at = EXCLUDED.last_seen_at,
+                occurrence_count = COALESCE(findings.occurrence_count, 0) + EXCLUDED.occurrence_count,
+                corroborating_sources_json = EXCLUDED.corroborating_sources_json,
+                evidence_count = EXCLUDED.evidence_count,
+                analyst_status = EXCLUDED.analyst_status,
+                retest_status = EXCLUDED.retest_status,
+                evidence_json = EXCLUDED.evidence_json,
+                asset_refs_json = EXCLUDED.asset_refs_json,
+                service_fingerprint = EXCLUDED.service_fingerprint,
+                cpe = EXCLUDED.cpe,
+                references_json = EXCLUDED.references_json,
+                asset_exposure = EXCLUDED.asset_exposure,
+                risk_score = EXCLUDED.risk_score,
+                risk_factors_json = EXCLUDED.risk_factors_json
             """,
             (
                 finding_id,
@@ -1411,14 +1442,14 @@ class TaskExecutor:
                 finding.get("cvss"),
                 finding.get("cve"),
                 json.dumps(metadata),
-                discovered.isoformat(),
+                to_utc_iso(discovered),
                 exploitability,
                 confidence,
                 1 if finding.get("validated") else 0,
                 finding.get("validation_method"),
                 finding.get("confidence_reason"),
                 str(finding.get("finding_kind") or "observation"),
-                finding.get("finding_group_id"),
+                finding_group_id,
                 finding.get("asset_id"),
                 first_seen_at,
                 last_seen_at,
@@ -1437,12 +1468,19 @@ class TaskExecutor:
                 json.dumps(risk_factors),
             ),
         )
+
+        row = await db.fetchone(
+            "SELECT id, occurrence_count FROM findings WHERE owner_id = ? AND finding_group_id = ?",
+            (owner_id, finding_group_id),
+        )
+        finding_id = row["id"] if row else finding_id
+        occurrence_count = int(row["occurrence_count"]) if row else occurrence_count
         return {
             **finding,
             "id": finding_id,
             "plugin_id": plugin_id,
             "target": target_value,
-            "discovered_at": discovered.isoformat(),
+            "discovered_at": to_utc_iso(discovered),
             "metadata": metadata,
             "evidence": evidence,
             "asset_refs": asset_refs,
@@ -1468,25 +1506,25 @@ class TaskExecutor:
             result=parsed,
         )
         findings_data: List[Dict[str, Any]] = []
-        for finding in structured_result.get("findings", []):
-            findings_data.append(
-                await self._persist_finding(
-                    db,
-                    owner_id=owner_id,
-                    task_id=task_id,
-                    plugin_id=plugin_id,
-                    target=target,
-                    finding=finding,
-                )
-            )
-
-        structured_result["findings"] = findings_data
-        structured_result["severity_counts"] = self._build_severity_counts(findings_data)
-        structured_result["finding_groups"] = build_finding_groups(findings_data)
-        structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
-        structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
-
         async with db.transaction():
+            for finding in structured_result.get("findings", []):
+                findings_data.append(
+                    await self._persist_finding(
+                        db,
+                        owner_id=owner_id,
+                        task_id=task_id,
+                        plugin_id=plugin_id,
+                        target=target,
+                        finding=finding,
+                    )
+                )
+
+            structured_result["findings"] = findings_data
+            structured_result["severity_counts"] = self._build_severity_counts(findings_data)
+            structured_result["finding_groups"] = build_finding_groups(findings_data)
+            structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
+            structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
+
             await db.execute(
                 "UPDATE tasks SET structured_json = ? WHERE id = ?",
                 (json.dumps(structured_result), task_id)
@@ -1496,11 +1534,12 @@ class TaskExecutor:
                 """
                 INSERT INTO reports (
                     id, owner_id, task_id, name, type, generated_at, status, findings, pages
-                ) VALUES (?, ?, ?, ?, ?, (datetime('now')), ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (id) DO UPDATE SET
                     status = EXCLUDED.status,
                     findings = EXCLUDED.findings,
-                    pages = EXCLUDED.pages
+                    pages = EXCLUDED.pages,
+                    generated_at = EXCLUDED.generated_at
                 """,
                 (
                     f"report:{task_id}",
@@ -1508,6 +1547,7 @@ class TaskExecutor:
                     task_id,
                     f"{plugin.name} Report",
                     "technical",
+                    to_utc_iso(),
                     "ready" if status == TaskStatus.COMPLETED.value else "failed",
                     len(findings_data),
                     1,
@@ -1534,25 +1574,25 @@ class TaskExecutor:
             result=result,
         )
         findings_data: List[Dict[str, Any]] = []
-        for finding in structured_result.get("findings", []):
-            findings_data.append(
-                await self._persist_finding(
-                    db,
-                    owner_id=owner_id,
-                    task_id=task_id,
-                    plugin_id=plugin_id,
-                    target=target,
-                    finding=finding,
-                )
-            )
-
-        structured_result["findings"] = findings_data
-        structured_result["severity_counts"] = self._build_severity_counts(findings_data)
-        structured_result["finding_groups"] = build_finding_groups(findings_data)
-        structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
-        structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
-
         async with db.transaction():
+            for finding in structured_result.get("findings", []):
+                findings_data.append(
+                    await self._persist_finding(
+                        db,
+                        owner_id=owner_id,
+                        task_id=task_id,
+                        plugin_id=plugin_id,
+                        target=target,
+                        finding=finding,
+                    )
+                )
+
+            structured_result["findings"] = findings_data
+            structured_result["severity_counts"] = self._build_severity_counts(findings_data)
+            structured_result["finding_groups"] = build_finding_groups(findings_data)
+            structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
+            structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
+
             await db.execute(
                 "UPDATE tasks SET structured_json = ? WHERE id = ?",
                 (json.dumps(structured_result), task_id)
@@ -1563,11 +1603,12 @@ class TaskExecutor:
                 """
                 INSERT INTO reports (
                     id, owner_id, task_id, name, type, generated_at, status, findings, pages
-                ) VALUES (?, ?, ?, ?, ?, (datetime('now')), ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (id) DO UPDATE SET
                     status = EXCLUDED.status,
                     findings = EXCLUDED.findings,
-                    pages = EXCLUDED.pages
+                    pages = EXCLUDED.pages,
+                    generated_at = EXCLUDED.generated_at
                 """,
                 (
                     f"report:{task_id}",
@@ -1575,6 +1616,7 @@ class TaskExecutor:
                     task_id,
                     f"{scanner.name} Report",
                     "professional" if status == TaskStatus.COMPLETED.value else "failed",
+                    to_utc_iso(),
                     "ready" if status == TaskStatus.COMPLETED.value else "failed",
                     len(findings_data),
                     2, # Professional reports are typically multi-page

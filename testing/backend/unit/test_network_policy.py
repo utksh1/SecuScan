@@ -416,20 +416,40 @@ class TestResolveAndPin:
 
 
 class TestDefaultDenylistSSRFProtection:
-    """Test that private subnets are blocked by default in settings"""
+    """Test that private subnets and cloud metadata are always blocked, and
+    that this protection cannot be silently dropped via operator config."""
 
-    def test_private_subnets_in_default_denylist(self):
-        """Standard private ranges (RFC1918, RFC6598, IPv6 local) must be in the default denylist"""
-        from backend.secuscan.config import Settings
-        default_settings = Settings()
-        denylist = default_settings.network_denylist
-        assert "10.0.0.0/8" in denylist
-        assert "172.16.0.0/12" in denylist
-        assert "192.168.0.0/16" in denylist
-        assert "100.64.0.0/10" in denylist
-        assert "fc00::/7" in denylist
-        assert "fe80::/10" in denylist
-        assert "::1/128" in denylist
+    def test_mandatory_ranges_present(self):
+        """Standard private ranges, CGNAT, and cloud metadata must be in MANDATORY_DENYLIST"""
+        from backend.secuscan.config import MANDATORY_DENYLIST
+        assert "169.254.169.254/32" in MANDATORY_DENYLIST
+        assert "169.254.0.0/16" in MANDATORY_DENYLIST
+        assert "10.0.0.0/8" in MANDATORY_DENYLIST
+        assert "172.16.0.0/12" in MANDATORY_DENYLIST
+        assert "192.168.0.0/16" in MANDATORY_DENYLIST
+        assert "100.64.0.0/10" in MANDATORY_DENYLIST
+        assert "fc00::/7" in MANDATORY_DENYLIST
+        assert "fe80::/10" in MANDATORY_DENYLIST
+        assert "::1/128" in MANDATORY_DENYLIST
+
+    def test_operator_denylist_override_does_not_drop_mandatory_ranges(self, monkeypatch, tmp_path):
+        """Regression test for #1748: an operator setting SECUSCAN_NETWORK_DENYLIST
+        to a custom, unrelated value must not lose metadata/private-range protection."""
+        monkeypatch.setattr(
+            "backend.secuscan.config.settings.network_denylist",
+            ["203.0.113.0/24"],  # operator's own unrelated addition
+        )
+        audit_log = tmp_path / "audit.log"
+        engine = NetworkPolicyEngine(audit_log_path=str(audit_log))
+        _init_default_policies(engine)
+
+        for blocked_ip in ["169.254.169.254", "10.0.0.1", "192.168.1.1",
+                           "172.16.0.1", "127.0.0.1", "100.64.0.1"]:
+            allowed, _, _ = engine.check_access(blocked_ip, plugin_id="test")
+            assert not allowed, f"{blocked_ip} should still be blocked after operator denylist override"
+
+        allowed, _, _ = engine.check_access("203.0.113.1", plugin_id="test")
+        assert not allowed, "operator-configured denylist entry should still be enforced"
 
 def test_check_access_logs_url_parse_failure(caplog, tmp_path):
     engine = NetworkPolicyEngine(audit_log_path=str(tmp_path / "audit.log"))
