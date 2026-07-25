@@ -282,4 +282,3 @@ class TestCapabilityConstantsBehavior:
         """Capability enum has no duplicate string values."""
         values = [m.value for m in Capability]
         assert len(values) == len(set(values))
-
