@@ -122,4 +122,3 @@ class TestJsonPayloadInvalidFallback:
         """_json_payload with invalid fallback JSON must raise JSONDecodeError."""
         with pytest.raises(json.JSONDecodeError):
             _json_payload(None, "not-valid-json{")
-
