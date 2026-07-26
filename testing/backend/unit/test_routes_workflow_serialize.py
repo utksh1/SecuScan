@@ -134,4 +134,3 @@ class TestSerializeWorkflowStepsParsing:
         result = _serialize_workflow(row)
         # A JSON object is not a list, so _parse_workflow_steps skips it
         assert result["steps"] == []
-
