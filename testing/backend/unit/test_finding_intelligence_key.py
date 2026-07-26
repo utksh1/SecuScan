@@ -146,4 +146,3 @@ class TestGenerateFindingKeyEdgeCases:
         key1 = generate_finding_key(finding_small, "nmap", "http://example.com", "user-1")
         key2 = generate_finding_key(finding_large, "nmap", "http://example.com", "user-1")
         assert len(key1) == len(key2)
-
