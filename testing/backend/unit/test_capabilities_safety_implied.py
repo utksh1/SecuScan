@@ -116,4 +116,3 @@ class TestSafetyLevelImpliedEffectiveCapabilities:
             assert "network" in implied, (
                 f"Safety level '{level}' does not include 'network'"
             )
-
