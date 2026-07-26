@@ -8,49 +8,40 @@ a regression in the actual implementation is caught by these tests.
 import re
 from backend.secuscan.routes_report_helpers import _slugify_filename_part, build_report_filename
 
-
 # ---------------------------------------------------------------------------
 # _slugify_filename_part
 # ---------------------------------------------------------------------------
-
 
 def test_slugify_lowercases():
     """Input is lowercased before slugification."""
     assert _slugify_filename_part("Nmap", "scan") == "nmap"
 
-
 def test_slugify_replaces_non_alphanumeric_with_dash():
     """Non-alphanumeric characters are replaced with dashes."""
     assert _slugify_filename_part("Hello World!", "scan") == "hello-world"
-
 
 def test_slugify_collapse_multiple_dashes():
     """Multiple consecutive non-alphanumeric chars collapse to a single dash."""
     assert _slugify_filename_part("hello...world", "scan") == "hello-world"
     assert _slugify_filename_part("a--b--c", "scan") == "a-b-c"
 
-
 def test_slugify_strips_leading_trailing_dashes():
     """Leading and trailing dashes are stripped."""
     assert _slugify_filename_part("!!!scan!!!", "scan") == "scan"
     assert _slugify_filename_part("--nmap--", "scan") == "nmap"
-
 
 def test_slugify_returns_fallback_on_empty():
     """Empty result after cleaning returns the fallback string."""
     assert _slugify_filename_part("!!!", "scan") == "scan"
     assert _slugify_filename_part("---", "fallback") == "fallback"
 
-
 def test_slugify_already_slug():
     """Already-slugified input passes through unchanged."""
     assert _slugify_filename_part("nmap-scanner", "scan") == "nmap-scanner"
 
-
 def test_slugify_with_underscores():
     """Underscores are treated as non-alphanumeric and replaced with dash."""
     assert _slugify_filename_part("nmap_scanner", "scan") == "nmap-scanner"
-
 
 def test_slugify_fallback_not_used_when_result_is_valid():
     """Fallback is not returned when there is a valid result."""
@@ -58,11 +49,9 @@ def test_slugify_fallback_not_used_when_result_is_valid():
     assert result == "tool"
     assert result != "fallback"
 
-
 # ---------------------------------------------------------------------------
 # build_report_filename
 # ---------------------------------------------------------------------------
-
 
 def test_filename_includes_tool_target_date():
     """Filename follows the pattern secuscan_{tool}_{target}_{date}.{ext}."""
@@ -73,7 +62,6 @@ def test_filename_includes_tool_target_date():
     }
     result = build_report_filename(task, "csv")
     assert result.startswith("secuscan_nmap_example-com_2026-06-22.csv")
-
 
 def test_filename_uses_plugin_id_when_tool_name_absent():
     """plugin_id is used when tool_name is missing."""
@@ -87,7 +75,6 @@ def test_filename_uses_plugin_id_when_tool_name_absent():
     assert "example-com" in result
     assert result.endswith(".csv")
 
-
 def test_filename_uses_scan_fallback_for_missing_tool():
     """scan is used as tool fallback when both tool_name and plugin_id are absent."""
     task = {
@@ -96,7 +83,6 @@ def test_filename_uses_scan_fallback_for_missing_tool():
     }
     result = build_report_filename(task, "csv")
     assert result.startswith("secuscan_scan_")
-
 
 def test_filename_strips_scheme_from_target():
     """The scheme (http://) is stripped from target."""
@@ -109,7 +95,6 @@ def test_filename_strips_scheme_from_target():
     assert "http://" not in result
     assert "example-com" in result
 
-
 def test_filename_uses_netloc_for_full_url():
     """Netloc is extracted from full URL targets."""
     task = {
@@ -119,7 +104,6 @@ def test_filename_uses_netloc_for_full_url():
     }
     result = build_report_filename(task, "csv")
     assert "app-example-com" in result
-
 
 def test_filename_uses_path_for_scheme_less_url():
     """Path is used when target has no scheme."""
@@ -131,7 +115,6 @@ def test_filename_uses_path_for_scheme_less_url():
     result = build_report_filename(task, "csv")
     assert "example-com" in result
 
-
 def test_filename_uses_report_fallback_when_no_date():
     """report is used when created_at is missing."""
     task = {
@@ -140,7 +123,6 @@ def test_filename_uses_report_fallback_when_no_date():
     }
     result = build_report_filename(task, "csv")
     assert "_report." in result
-
 
 def test_filename_uses_report_fallback_when_date_not_iso_format():
     """report is used when created_at does not contain an ISO date."""
@@ -152,13 +134,11 @@ def test_filename_uses_report_fallback_when_date_not_iso_format():
     result = build_report_filename(task, "csv")
     assert "_report." in result
 
-
 def test_filename_handles_html_extension():
     """html extension is appended correctly."""
     task = {"tool_name": "nmap", "target": "example.com", "created_at": "2026-06-22"}
     result = build_report_filename(task, "html")
     assert result.endswith(".html")
-
 
 def test_filename_handles_pdf_extension():
     """pdf extension is appended correctly."""
@@ -166,13 +146,11 @@ def test_filename_handles_pdf_extension():
     result = build_report_filename(task, "pdf")
     assert result.endswith(".pdf")
 
-
 def test_filename_handles_sarif_extension():
     """sarif extension is appended correctly."""
     task = {"tool_name": "nmap", "target": "example.com", "created_at": "2026-06-22"}
     result = build_report_filename(task, "sarif")
     assert result.endswith(".sarif")
-
 
 def test_filename_target_fallback():
     """target is used as target fallback when target is empty."""
@@ -184,7 +162,6 @@ def test_filename_target_fallback():
     result = build_report_filename(task, "csv")
     assert "_target_" in result
 
-
 def test_filename_contains_only_safe_chars():
     """Output contains only lowercase alphanumerics, underscores, hyphens, dots."""
     task = {
@@ -195,9 +172,7 @@ def test_filename_contains_only_safe_chars():
     result = build_report_filename(task, "csv")
     assert re.match(r"^[a-z0-9_.\-]+$", result)
 
-
 # Malformed input edge cases
-
 
 def test_filename_tool_name_none_uses_plugin_id():
     """tool_name None falls through to plugin_id."""
@@ -210,7 +185,6 @@ def test_filename_tool_name_none_uses_plugin_id():
     result = build_report_filename(task, "csv")
     assert "nmap" in result
 
-
 def test_filename_both_tool_keys_none_uses_scan_fallback():
     """Both tool_name and plugin_id as None uses scan fallback."""
     task = {
@@ -222,7 +196,6 @@ def test_filename_both_tool_keys_none_uses_scan_fallback():
     result = build_report_filename(task, "csv")
     assert result.startswith("secuscan_scan_")
 
-
 def test_filename_target_none_uses_target_fallback():
     """target as None uses target fallback."""
     task = {
@@ -232,7 +205,6 @@ def test_filename_target_none_uses_target_fallback():
     }
     result = build_report_filename(task, "csv")
     assert "_target_" in result
-
 
 def test_filename_created_at_none_uses_report_fallback():
     """created_at as None uses report fallback."""
@@ -244,20 +216,17 @@ def test_filename_created_at_none_uses_report_fallback():
     result = build_report_filename(task, "csv")
     assert "_report." in result
 
-
 def test_filename_empty_extension_uses_empty_extension():
     """Empty extension is used as-is (produces file ending with dot)."""
     task = {"tool_name": "nmap", "target": "example.com", "created_at": "2026-06-22"}
     result = build_report_filename(task, "")
     assert result.endswith(".")
 
-
 def test_filename_none_extension_uses_none_extension():
     """None extension becomes string 'None' in filename."""
     task = {"tool_name": "nmap", "target": "example.com", "created_at": "2026-06-22"}
     result = build_report_filename(task, None)
     assert ".None" in result
-
 
 def test_filename_iso_date_extracted_from_malformed_timestamp():
     """ISO date is extracted from a timestamp that also has extra content."""
@@ -268,4 +237,3 @@ def test_filename_iso_date_extracted_from_malformed_timestamp():
     }
     result = build_report_filename(task, "csv")
     assert "_2026-06-22.csv" in result
-
