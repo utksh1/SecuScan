@@ -194,3 +194,78 @@ def test_filename_contains_only_safe_chars():
     }
     result = build_report_filename(task, "csv")
     assert re.match(r"^[a-z0-9_.\-]+$", result)
+
+
+# Malformed input edge cases
+
+
+def test_filename_tool_name_none_uses_plugin_id():
+    """tool_name None falls through to plugin_id."""
+    task = {
+        "tool_name": None,
+        "plugin_id": "nmap",
+        "target": "example.com",
+        "created_at": "2026-06-22",
+    }
+    result = build_report_filename(task, "csv")
+    assert "nmap" in result
+
+
+def test_filename_both_tool_keys_none_uses_scan_fallback():
+    """Both tool_name and plugin_id as None uses scan fallback."""
+    task = {
+        "tool_name": None,
+        "plugin_id": None,
+        "target": "example.com",
+        "created_at": "2026-06-22",
+    }
+    result = build_report_filename(task, "csv")
+    assert result.startswith("secuscan_scan_")
+
+
+def test_filename_target_none_uses_target_fallback():
+    """target as None uses target fallback."""
+    task = {
+        "tool_name": "nmap",
+        "target": None,
+        "created_at": "2026-06-22",
+    }
+    result = build_report_filename(task, "csv")
+    assert "_target_" in result
+
+
+def test_filename_created_at_none_uses_report_fallback():
+    """created_at as None uses report fallback."""
+    task = {
+        "tool_name": "nmap",
+        "target": "example.com",
+        "created_at": None,
+    }
+    result = build_report_filename(task, "csv")
+    assert "_report." in result
+
+
+def test_filename_empty_extension_uses_empty_extension():
+    """Empty extension is used as-is (produces file ending with dot)."""
+    task = {"tool_name": "nmap", "target": "example.com", "created_at": "2026-06-22"}
+    result = build_report_filename(task, "")
+    assert result.endswith(".")
+
+
+def test_filename_none_extension_uses_none_extension():
+    """None extension becomes string 'None' in filename."""
+    task = {"tool_name": "nmap", "target": "example.com", "created_at": "2026-06-22"}
+    result = build_report_filename(task, None)
+    assert ".None" in result
+
+
+def test_filename_iso_date_extracted_from_malformed_timestamp():
+    """ISO date is extracted from a timestamp that also has extra content."""
+    task = {
+        "tool_name": "nmap",
+        "target": "example.com",
+        "created_at": "Started: 2026-06-22 at 10:00:00 UTC",
+    }
+    result = build_report_filename(task, "csv")
+    assert "_2026-06-22.csv" in result
+
