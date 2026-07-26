@@ -313,6 +313,7 @@ export interface PluginListItem {
   supports_authenticated_crawling?: boolean
   supports_session_reuse?: boolean
   availability: PluginAvailability
+  is_available: boolean
 }
 
 export interface PluginListResponse {
@@ -330,6 +331,7 @@ export interface PluginSchemaResponse {
   implementation_status?: 'native' | 'integrated' | 'placeholder'
   supports_authenticated_crawling?: boolean
   supports_session_reuse?: boolean
+  availability?: PluginAvailability
 }
 
 export interface TaskStartResponse {

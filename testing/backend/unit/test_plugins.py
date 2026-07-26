@@ -140,6 +140,10 @@ def test_plugin_list_exposes_runtime_capabilities(setup_test_environment, monkey
     assert by_id["scapy_recon"]["requires_consent"] is True
     assert by_id["scapy_recon"]["consent_message"]
 
+    # is_available flag mirrors the runtime runnable state
+    assert by_id["subdomain_discovery"]["is_available"] is False
+    assert by_id["scapy_recon"]["is_available"] is True
+
 
 def test_nikto_plugin_supports_expanded_cli_parameters(setup_test_environment):
     manager = PluginManager(settings.plugins_dir)
@@ -475,3 +479,16 @@ def test_plugin_build_command_allows_legitimate_targets(setup_test_environment):
     )
     assert command is not None
     assert "https://example.com" in command
+
+
+def test_plugin_schema_includes_availability(setup_test_environment):
+    """get_plugin_schema includes availability details."""
+    manager = PluginManager(settings.plugins_dir)
+    asyncio.run(manager.load_plugins())
+
+    schema = manager.get_plugin_schema("nmap")
+    assert schema is not None
+    assert "availability" in schema
+    assert schema["availability"]["runnable"] is True
+    assert schema["availability"]["missing_binaries"] == []
+    assert schema["availability"]["status"] == "available"

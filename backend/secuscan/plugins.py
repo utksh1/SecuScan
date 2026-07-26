@@ -125,6 +125,8 @@ class PluginManager:
         """
         plugin_dirs = self._scan_plugin_dirs()
         loaded = 0
+        available_count = 0
+        unavailable_count = 0
 
         for plugin_dir in plugin_dirs:
             metadata_file = plugin_dir / "metadata.json"
@@ -140,6 +142,17 @@ class PluginManager:
                     self.plugins[plugin_meta.id] = plugin_meta
                     loaded += 1
                     logger.info(f"✓ Loaded plugin: {plugin_meta.name} v{plugin_meta.version}")
+
+                    # Check startup dependency health and log warnings
+                    missing = self._get_missing_binaries(plugin_meta)
+                    if missing:
+                        unavailable_count += 1
+                        logger.warning(
+                            "Plugin %s (%s) is unavailable — missing dependency binaries: %s",
+                            plugin_meta.name, plugin_meta.id, ", ".join(missing),
+                        )
+                    else:
+                        available_count += 1
                 else:
                     logger.error(f"✗ Failed to validate plugin: {plugin_meta.id}")
 
@@ -147,6 +160,7 @@ class PluginManager:
                 logger.error(f"Failed to load plugin from {plugin_dir}: {e}")
 
         logger.info(f"Loaded {loaded} plugins")
+        logger.info("Plugin dependency health: %d available, %d unavailable (missing required binaries)", available_count, unavailable_count)
 
         # Invalidate caches when plugin state changes
         try:
@@ -367,6 +381,7 @@ class PluginManager:
         plugins: List[Dict] = []
         for plugin in self.plugins.values():
             missing_binaries = self._get_missing_binaries(plugin)
+            is_available = len(missing_binaries) == 0
             plugins.append(
                 {
                     "id": plugin.id,
@@ -379,9 +394,16 @@ class PluginManager:
                     "requires_consent": bool(plugin.safety.get("requires_consent", False)),
                     "consent_message": plugin.safety.get("consent_message"),
                     "capabilities": plugin.capabilities or [],
+                    "is_available": is_available,
                     "implementation_status": self._resolve_implementation_status(plugin),
                     "supports_authenticated_crawling": bool(getattr(plugin, "supports_authenticated_crawling", False)),
                     "supports_session_reuse": bool(getattr(plugin, "supports_session_reuse", False)),
+                "availability": {
+                    "runnable": len(self._get_missing_binaries(plugin)) == 0,
+                    "missing_binaries": self._get_missing_binaries(plugin),
+                    "status": "available" if len(self._get_missing_binaries(plugin)) == 0 else "unavailable",
+                    "guidance": None if len(self._get_missing_binaries(plugin)) == 0 else f"Unavailable: Requires external binaries ({", ".join(self._get_missing_binaries(plugin))}). Install required tools locally to enable this scanner.",
+                },
                     "availability": {
                         "runnable": len(missing_binaries) == 0,
                         "missing_binaries": missing_binaries,
@@ -420,6 +442,7 @@ class PluginManager:
     def get_plugin_schema(self, plugin_id: str) -> Optional[Dict]:
         """Get full plugin schema for UI generation"""
         if plugin := self.get_plugin(plugin_id):
+            missing_binaries = self._get_missing_binaries(plugin)
             return {
                 "id": plugin.id,
                 "name": plugin.name,
@@ -430,6 +453,19 @@ class PluginManager:
                 "implementation_status": self._resolve_implementation_status(plugin),
                 "supports_authenticated_crawling": bool(getattr(plugin, "supports_authenticated_crawling", False)),
                 "supports_session_reuse": bool(getattr(plugin, "supports_session_reuse", False)),
+                "availability": {
+                    "runnable": len(missing_binaries) == 0,
+                    "missing_binaries": missing_binaries,
+                    "status": "available" if len(missing_binaries) == 0 else "unavailable",
+                    "guidance": (
+                        None
+                        if len(missing_binaries) == 0
+                        else (
+                            f"Unavailable: Requires external binaries ({", ".join(missing_binaries)}). "
+                            "Install required tools locally to enable this scanner."
+                        )
+                    ),
+                },
             }
         else:
             return None

@@ -133,7 +133,7 @@ function mapPluginToCatalogTool(plugin: PluginListItem): CatalogTool {
     presetCompatibility: pinnedTool ? pinnedTool.presetCompatibility : 'both',
     requiresConsent: plugin.requires_consent,
     category: mapPluginCategoryToLegacyTab(normalizedCategory, plugin.id),
-    disabled: false,
+    disabled: !plugin.availability.runnable,
     isPlugin: true,
     isQuickStart: pinnedTool?.isQuickStart,
     isProfessional: ['port_scanner', 'web_scanner', 'recon_scanner'].includes(plugin.id),

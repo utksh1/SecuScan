@@ -632,16 +632,21 @@ export default function ToolConfig() {
             <button
               type="button"
               onClick={handleStartScan}
-              disabled={submitting}
-              aria-disabled={submitting || hasValidationErrors}
+              disabled={submitting || hasMissingBinaries}
+              aria-disabled={submitting || hasValidationErrors || hasMissingBinaries}
               className={`w-full py-4 border-4 border-black text-black text-[10px] font-black uppercase tracking-[0.3em] transition-all ${
                 submitting || hasValidationErrors
                   ? 'bg-rag-red/70 cursor-not-allowed opacity-60'
                   : 'bg-rag-red hover:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:-translate-y-1'
               } disabled:hover:shadow-none disabled:hover:translate-y-0`}
             >
-              {submitting ? 'QUEUEING...' : 'INITIATE_SCAN'}
+              {submitting ? 'QUEUEING...' : hasMissingBinaries ? 'MISSING_DEPENDENCIES' : 'INITIATE_SCAN'}
             </button>
+            {hasMissingBinaries && (
+              <p role="status" className="text-[10px] text-rag-amber uppercase tracking-widest font-black mt-2">
+                Missing dependency: {missingBinaries.join(', ')}
+              </p>
+            )}
             {hasValidationErrors && (
               <p role="status" className="text-[10px] text-rag-red uppercase tracking-widest font-black">
                 {invalidFieldCount} invalid field{invalidFieldCount > 1 ? 's' : ''} highlighted
