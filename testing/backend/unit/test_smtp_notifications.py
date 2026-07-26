@@ -1,7 +1,8 @@
 from unittest.mock import MagicMock, patch
+import smtplib
 import pytest
 from backend.secuscan.config import settings
-from backend.secuscan.notification_service import send_email
+from backend.secuscan.notification_service import send_email, _send_smtp_email_sync
 
 @pytest.fixture
 def smtp_payload():
@@ -139,3 +140,128 @@ async def test_send_email_html_escaping(mock_smtp_class):
     assert "<img src" not in html_part
     assert "<div class=" not in html_part
     assert "<iframe>" not in html_part
+
+
+# ---------------------------------------------------------------------------
+# _send_smtp_email_sync error handling
+# ---------------------------------------------------------------------------
+
+
+@patch("backend.secuscan.notification_service.smtplib.SMTP")
+def test_send_smtp_email_sync_connection_refused(mock_smtp_class):
+    """SMTP connection refused raises an exception that propagates."""
+    settings.smtp_username = "testuser"
+    settings.smtp_password = "testpassword"
+    settings.smtp_host = "smtp.test.com"
+    settings.smtp_port = 587
+    settings.smtp_from_email = "test@secuscan.io"
+    settings.smtp_use_tls = True
+
+    # Simulate connection refused
+    mock_smtp_class.side_effect = ConnectionRefusedError("Connection refused")
+
+    with pytest.raises(ConnectionRefusedError):
+        _send_smtp_email_sync(
+            target_email="recipient@test.com",
+            subject="Test Subject",
+            body_text="Plain text body",
+            body_html="<p>HTML body</p>",
+        )
+
+
+@patch("backend.secuscan.notification_service.smtplib.SMTP")
+def test_send_smtp_email_sync_timeout(mock_smtp_class):
+    """SMTP connection timeout raises a timeout exception."""
+    settings.smtp_username = "testuser"
+    settings.smtp_password = "testpassword"
+    settings.smtp_host = "unreachable.test.com"
+    settings.smtp_port = 587
+    settings.smtp_from_email = "test@secuscan.io"
+    settings.smtp_use_tls = False
+
+    mock_smtp_class.side_effect = TimeoutError("Connection timed out")
+
+    with pytest.raises(TimeoutError):
+        _send_smtp_email_sync(
+            target_email="recipient@test.com",
+            subject="Test Subject",
+            body_text="Plain text body",
+            body_html="<p>HTML body</p>",
+        )
+
+
+@patch("backend.secuscan.notification_service.smtplib.SMTP")
+def test_send_smtp_email_sync_smtp_auth_failure(mock_smtp_class):
+    """SMTP authentication failure raises an exception."""
+    settings.smtp_username = "testuser"
+    settings.smtp_password = "wrongpassword"
+    settings.smtp_host = "smtp.test.com"
+    settings.smtp_port = 587
+    settings.smtp_from_email = "test@secuscan.io"
+    settings.smtp_use_tls = True
+
+    mock_server = MagicMock()
+    mock_smtp_class.return_value = mock_server
+    mock_server.__enter__.return_value = mock_server
+    mock_server.login.side_effect = smtplib.SMTPAuthenticationError(535, b"Authentication failed")
+
+    with pytest.raises(smtplib.SMTPAuthenticationError):
+        _send_smtp_email_sync(
+            target_email="recipient@test.com",
+            subject="Test Subject",
+            body_text="Plain text body",
+            body_html="<p>HTML body</p>",
+        )
+
+
+@patch("backend.secuscan.notification_service.smtplib.SMTP")
+def test_send_smtp_email_sync_successful_delivery(mock_smtp_class):
+    """Successful SMTP delivery completes without exception."""
+    settings.smtp_username = "testuser"
+    settings.smtp_password = "testpassword"
+    settings.smtp_host = "smtp.test.com"
+    settings.smtp_port = 587
+    settings.smtp_from_email = "test@secuscan.io"
+    settings.smtp_use_tls = True
+
+    mock_server = MagicMock()
+    mock_smtp_class.return_value = mock_server
+    mock_server.__enter__.return_value = mock_server
+
+    # Should not raise
+    _send_smtp_email_sync(
+        target_email="recipient@test.com",
+        subject="Test Subject",
+        body_text="Plain text body",
+        body_html="<p>HTML body</p>",
+    )
+
+    mock_server.sendmail.assert_called_once()
+    call_args = mock_server.sendmail.call_args[0]
+    assert call_args[0] == "test@secuscan.io"  # from
+    assert call_args[1] == ["recipient@test.com"]  # to
+
+
+@patch("backend.secuscan.notification_service.smtplib.SMTP")
+def test_send_smtp_email_sync_without_tls(mock_smtp_class):
+    """SMTP delivery without TLS skips starttls."""
+    settings.smtp_username = "testuser"
+    settings.smtp_password = "testpassword"
+    settings.smtp_host = "smtp.test.com"
+    settings.smtp_port = 25
+    settings.smtp_from_email = "test@secuscan.io"
+    settings.smtp_use_tls = False
+
+    mock_server = MagicMock()
+    mock_smtp_class.return_value = mock_server
+    mock_server.__enter__.return_value = mock_server
+
+    _send_smtp_email_sync(
+        target_email="recipient@test.com",
+        subject="Test Subject",
+        body_text="Plain text body",
+        body_html="<p>HTML body</p>",
+    )
+
+    mock_server.starttls.assert_not_called()
+    mock_server.login.assert_called_once()
