@@ -22,14 +22,16 @@ const NavItem = ({ to, icon, label, isExpanded, highlight = false }: NavItemProp
             onClick={(e) => e.stopPropagation()}
             className={({ isActive }) => `
                 relative flex items-center transition-all duration-300 group
-                ${isExpanded ? 'gap-3 px-5 py-2.5 mx-2 rounded-lg' : 'justify-center py-3 px-2 mx-2 rounded-lg'}
+                focus:outline-none focus:ring-2 focus:ring-rag-red/50
+                ${isExpanded ? 'gap-3 px-5 py-3 mx-2 rounded-lg' : 'justify-center py-3 px-2 mx-2 rounded-lg'}
                 ${isActive
-                    ? 'bg-accent-silver/10 text-primary shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)]'
-                    : highlight
-                        ? 'bg-rag-blue/15 border border-rag-blue/30 text-silver-bright hover:bg-rag-blue/25'
-                        : 'text-secondary hover:text-primary hover:bg-accent-silver/5'}
+    ? 'bg-accent-silver/15 text-primary shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)]'
+    : highlight
+        ? 'bg-rag-blue/15 border border-rag-blue/30 text-silver-bright hover:bg-rag-blue/25 hover:translate-x-1'
+        : 'text-secondary hover:text-primary hover:bg-accent-silver/10 hover:translate-x-1'}
             `}
             title={!isExpanded ? label : undefined}
+            aria-label={label}
         >
             {({ isActive }) => (
                 <>
@@ -91,7 +93,7 @@ const NavSection = ({ label, isExpanded }: { label: string, isExpanded: boolean 
                 exit={{ opacity: 0 }}
                 className="px-6 mt-6 mb-2 flex items-center gap-3"
             >
-                <span className="text-[9px] font-black tracking-[0.2em] text-muted uppercase whitespace-nowrap">{label}</span>
+                <span className="text-[10px] font-black tracking-[0.25em] text-silver-bright uppercase whitespace-nowrap">{label}</span>
                 <div className="h-[1px] w-full bg-accent-silver/10" />
             </motion.div>
         ) : (
@@ -118,7 +120,7 @@ export default function Sidebar() {
             aria-expanded={isExpanded}
         >
             {/* Header / Logo */}
-            <div className={`flex flex-col pt-8 pb-4 mb-4`}>
+            <div className={`flex flex-col pt-5 pb-3 mb-2`}>
                 <div className={`flex items-center gap-4 px-6`}>
                     <motion.div
                         whileHover={{ scale: 1.05 }}
@@ -164,7 +166,7 @@ export default function Sidebar() {
             </div>
 
             {/* Bottom Actions */}
-            <div className="p-4 mt-auto border-t border-accent-silver/5 bg-bg-primary/30 backdrop-blur-md space-y-3">
+            <div className="p-4 mt-auto border-t border-accent-silver/5 bg-bg-primary/30 backdrop-blur-md space-y-2">
                 <NavItem to={routes.settings} icon="settings" label="Settings" isExpanded={isExpanded} />
                 {isAuthenticated && (
                     <button
@@ -197,7 +199,7 @@ export default function Sidebar() {
                         aria-controls="sidebar-nav"
                         className="flex-1 py-2 flex items-center justify-center text-muted hover:text-primary transition-colors rounded hover:bg-accent-silver/5 focus:outline-none focus:ring-2 focus:ring-rag-red/50"
                     >
-                        <span className="material-symbols-outlined text-[18px]">
+                        <span className="material-symbols-outlined text-[20px]">
                             {isExpanded ? 'keyboard_double_arrow_left' : 'keyboard_double_arrow_right'}
                         </span>
                     </button>
