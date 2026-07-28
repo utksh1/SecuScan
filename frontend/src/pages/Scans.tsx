@@ -335,13 +335,14 @@ export default function Scans() {
         <div className="flex flex-wrap items-center gap-4">
           <button
             onClick={toggleSelectAll}
+            aria-label={selectedIds.length === tasks.length && tasks.length > 0 ? "Deselect all tasks" : "Select all tasks"}
             className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-3 ${
               selectedIds.length === tasks.length && tasks.length > 0
                 ? "bg-rag-blue text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
                 : "bg-charcoal-dark text-silver/30 border-silver-bright/5 hover:border-silver-bright/20"
             }`}
           >
-            <span className="material-symbols-outlined text-sm">
+            <span className="material-symbols-outlined text-sm" aria-hidden="true">
               {selectedIds.length === tasks.length && tasks.length > 0
                 ? "check_box"
                 : "check_box_outline_blank"}
@@ -353,6 +354,9 @@ export default function Scans() {
             <button
               key={f.value}
               onClick={() => handleFilterChange(f.value)}
+              role="button"
+              aria-pressed={filter === f.value}
+              aria-label={`Filter by ${f.label} tasks`}
               className={`px-6 py-3 text-[10px] font-black uppercase tracking-widest transition-all border-2 flex items-center gap-2 ${
                 filter === f.value
                   ? "bg-silver-bright text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-x-0.5 -translate-y-0.5"
@@ -426,6 +430,18 @@ export default function Scans() {
                     ></div>
 
                     <div
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={expandedId === task.task_id}
+                      aria-label={`Task: ${task.tool} — ${task.status}`}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          setExpandedId(
+                            expandedId === task.task_id ? null : task.task_id,
+                          )
+                        }
+                      }}
                       className={`bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] transition-all cursor-pointer relative overflow-hidden group/card ${
                         expandedId === task.task_id
                           ? "border-rag-blue/40 shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]"
@@ -441,14 +457,25 @@ export default function Scans() {
                         <div className="flex-1 space-y-6">
                           <div className="flex flex-wrap items-center gap-4">
                             <div
+                              role="checkbox"
+                              aria-checked={selectedIds.includes(task.task_id)}
+                              aria-label={`Select task ${task.task_id}`}
+                              tabIndex={-1}
                               onClick={(e) => toggleSelection(task.task_id, e)}
+                              onKeyDown={(e) => {
+                                if (e.key === ' ' || e.key === 'Enter') {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  toggleSelection(task.task_id, e as any)
+                                }
+                              }}
                               className={`w-10 h-10 border-4 border-black flex items-center justify-center transition-all ${
                                 selectedIds.includes(task.task_id)
                                   ? "bg-rag-blue text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] -translate-x-1 -translate-y-1"
                                   : "bg-charcoal-dark text-silver/10 hover:border-rag-blue/40"
                               }`}
                             >
-                              <span className="material-symbols-outlined text-base font-black">
+                              <span className="material-symbols-outlined text-base font-black" aria-hidden="true">
                                 {selectedIds.includes(task.task_id)
                                   ? "check"
                                   : "add"}
@@ -756,16 +783,18 @@ export default function Scans() {
               <div className="flex items-center gap-4">
                 <button
                   onClick={() => setSelectedIds([])}
+                  aria-label="Cancel bulk selection"
                   className="px-6 py-3 text-[10px] font-black uppercase tracking-widest text-silver/40 hover:text-silver transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleBulkDelete}
+                  aria-label={`Delete ${selectedIds.length} selected records`}
                   className="bg-rag-red text-black px-8 py-3 text-[10px] font-black uppercase tracking-widest shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all flex items-center gap-3 italic"
                 >
                   Prune_Selected_Records
-                  <span className="material-symbols-outlined text-sm">
+                  <span className="material-symbols-outlined text-sm" aria-hidden="true">
                     delete_sweep
                   </span>
                 </button>

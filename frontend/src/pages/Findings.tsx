@@ -968,13 +968,16 @@ export default function Findings() {
                   <button
                     type="button"
                     onClick={() => setShowColumnChooser(!showColumnChooser)}
+                    aria-expanded={showColumnChooser}
+                    aria-haspopup="dialog"
+                    aria-label="Toggle column visibility"
                     className="h-11 border border-silver-bright/20 bg-charcoal-dark px-4 text-[10px] font-black uppercase tracking-[0.18em] text-silver/75"
                   >
                     Columns
                   </button>
 
                   {showColumnChooser && (
-                    <div className="absolute right-0 top-12 z-50 w-56 border border-black bg-charcoal-dark p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+                    <div className="absolute right-0 top-12 z-50 w-56 border border-black bg-charcoal-dark p-3 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]" role="dialog" aria-label="Column visibility options">
                       {Object.entries(columnVisibility).map(([key, value]) => (
                         <label
                           key={key}
@@ -1033,7 +1036,7 @@ export default function Findings() {
           {/* ── Virtualized Findings List ── */}
           <motion.section variants={sectionVariants} initial="hidden" animate="visible">
             {loading ? (
-              <div className="border-4 border-dashed border-silver-bright/10 bg-charcoal/40 px-6 py-16 text-center">
+              <div className="border-4 border-dashed border-silver-bright/10 bg-charcoal/40 px-6 py-16 text-center" role="status" aria-live="polite">
                 <p className="text-sm font-mono uppercase tracking-[0.25em] text-silver/50">Synchronizing findings feed...</p>
               </div>
             ) : filteredFindings.length === 0 ? (
@@ -1072,15 +1075,19 @@ export default function Findings() {
                         type="button"
                         id="bulk-export-btn"
                         onClick={() => setExportDropdownOpen(!exportDropdownOpen)}
+                        aria-expanded={exportDropdownOpen}
+                        aria-haspopup="menu"
+                        aria-label="Export selected findings"
                         className="bg-rag-blue text-black border-2 border-black px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-rag-blue/90 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center gap-2"
                       >
                         Bulk Export
-                        <span className="material-symbols-outlined text-sm">arrow_drop_down</span>
+                        <span className="material-symbols-outlined text-sm" aria-hidden="true">arrow_drop_down</span>
                       </button>
                       {exportDropdownOpen && (
-                        <div className="absolute right-0 mt-2 w-48 border-2 border-black bg-charcoal-dark shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] z-30">
+                        <div className="absolute right-0 mt-2 w-48 border-2 border-black bg-charcoal-dark shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] z-30" role="menu" aria-label="Export options">
                           <button
                             type="button"
+                            role="menuitem"
                             onClick={() => {
                               handleExportCSV()
                               setExportDropdownOpen(false)
@@ -1091,6 +1098,7 @@ export default function Findings() {
                           </button>
                           <button
                             type="button"
+                            role="menuitem"
                             onClick={() => {
                               handleExportJSON()
                               setExportDropdownOpen(false)

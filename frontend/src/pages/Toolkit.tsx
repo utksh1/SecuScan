@@ -334,13 +334,14 @@ export default function Scanner() {
       </header>
 
       {loadError && (
-        <section className="bg-charcoal border-4 border-rag-red p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
+        <section className="bg-charcoal border-4 border-rag-red p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]" role="alert">
           <p className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-red">Catalog load failed</p>
           <p className="text-[10px] text-silver/60 uppercase tracking-widest mt-3">{loadError}</p>
           <button
             type="button"
             onClick={() => setCatalogLoadAttempt((value) => value + 1)}
             disabled={loading}
+            aria-label="Retry loading scanner catalog"
             className="mt-5 px-6 py-3 text-[10px] font-black uppercase tracking-[0.3em] bg-rag-red text-black border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] disabled:opacity-60 disabled:cursor-not-allowed hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
           >
             {loading ? 'Retrying...' : 'Retry'}
@@ -371,6 +372,10 @@ export default function Scanner() {
       </nav>
 
       {/* Quick Access section removed per user request */}
+
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {loading ? 'Catalog loading' : loadError ? `Catalog error: ${loadError}` : `Catalog loaded, ${filteredTools.length} tools in ${activeTab}`}
+      </div>
 
       <main
         role="tabpanel"
