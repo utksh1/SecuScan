@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence, type Variants } from 'framer-motion'
 import { listPlugins, PluginListItem } from '../api'
 import { scanTools } from '../data/scanTools'
+import { scanTemplates, ScanTemplate } from '../data/scanTemplates'
 import { routePath } from '../routes'
 import { ToolCheatSheet } from '../components/ToolCheatSheet'
 
@@ -25,13 +26,14 @@ interface CatalogTool {
   availability?: PluginListItem['availability']
 }
 
-type UITab = 'quick-start' | 'recon' | 'vulnerability' | 'exploit' | 'utils' | 'robots'
+type UITab = 'quick-start' | 'recon' | 'vulnerability' | 'exploit' | 'utils' | 'robots' | 'templates'
 
-const LEGACY_TAB_ORDER = ['quick-start', 'recon', 'vulnerability', 'exploit', 'utils', 'robots'] as const
+const LEGACY_TAB_ORDER = ['templates', 'quick-start', 'recon', 'vulnerability', 'exploit', 'utils', 'robots'] as const
 const RECENT_TOOLS_STORAGE_KEY = 'secuscan_recent_tools'
 const RECENT_TOOLS_LIMIT = 6
 
 const LEGACY_TAB_LABELS: Record<string, string> = {
+  templates: 'Templates',
   'quick-start': 'Quick Start',
   recon: 'Recon Tools',
   vulnerability: 'Vulnerability Scanners',
@@ -378,6 +380,84 @@ export default function Scanner() {
         aria-labelledby={`scanner-tab-${toDomId(activeTab)}`}
       >
         <AnimatePresence mode="wait">
+          {activeTab === 'templates' ? (
+            <motion.div
+              key="templates"
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+              exit={{ opacity: 0, y: 20 }}
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8"
+            >
+              {scanTemplates.map((tmpl) => (
+                <motion.button
+                  key={tmpl.id}
+                  type="button"
+                  variants={itemVariants}
+                  onClick={() => navigate(routePath.scanTool(tmpl.steps[0].toolId))}
+                  className="group relative p-8 bg-charcoal border-4 border-black text-left flex flex-col justify-between h-80 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all overflow-hidden hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] hover:-translate-x-1 hover:-translate-y-1"
+                >
+                  <div className="space-y-6 relative z-10">
+                    <div className="flex justify-between items-start">
+                      <div
+                        aria-hidden="true"
+                        className={`px-2 py-0.5 text-[8px] font-black uppercase tracking-widest italic border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] ${
+                          tmpl.riskLevel === 'aggressive'
+                            ? 'bg-rag-red text-black'
+                            : tmpl.riskLevel === 'active'
+                              ? 'bg-rag-amber text-black'
+                              : 'bg-rag-green text-black'
+                        }`}
+                      >
+                        {tmpl.riskLevel.toUpperCase()}_TMPL
+                      </div>
+                      <span className="material-symbols-outlined text-silver/10 group-hover:text-rag-blue transition-colors duration-500" aria-hidden="true">dashboard_customize</span>
+                    </div>
+                    <div>
+                      <h3 className="text-3xl font-black text-silver-bright uppercase tracking-tighter italic leading-tight break-words min-w-0 group-hover:text-rag-blue transition-colors">
+                        {tmpl.name}
+                      </h3>
+                      <div className="w-12 h-1 bg-silver-bright/10 mt-4 group-hover:w-full group-hover:bg-rag-blue/30 transition-all duration-700" />
+                    </div>
+                    <p className="text-[10px] text-silver/40 uppercase tracking-widest leading-relaxed line-clamp-3 font-bold italic">
+                      {tmpl.description}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {tmpl.steps.map((step) => (
+                        <span
+                          key={step.toolId}
+                          className="px-2 py-0.5 text-[8px] font-black uppercase tracking-widest bg-charcoal-dark border border-black text-silver/60"
+                        >
+                          {step.toolName}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="pt-6 border-t-2 border-black border-dashed flex justify-between items-end">
+                    <span className="text-[9px] font-black text-silver-bright/20 uppercase tracking-[0.4em] group-hover:text-rag-blue transition-colors">
+                      {tmpl.estimatedDuration}
+                    </span>
+                    <span className="text-[9px] font-black text-silver-bright/20 uppercase tracking-[0.4em] group-hover:text-silver-bright transition-colors">
+                      LAUNCH_TEMPLATE
+                    </span>
+                  </div>
+                </motion.button>
+              ))}
+              {scanTemplates.length === 0 && (
+                <motion.div
+                  variants={itemVariants}
+                  className="md:col-span-2 xl:col-span-4 bg-charcoal border-4 border-black p-10 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]"
+                >
+                  <div className="space-y-6">
+                    <div className="text-[10px] font-black uppercase tracking-[0.3em] text-rag-amber">No templates available</div>
+                    <p className="text-[10px] text-silver/60 uppercase tracking-widest leading-relaxed">
+                      Scan templates will appear here once configured.
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+            </motion.div>
+          ) : (
           <motion.div
             key={activeTab || 'loading'}
             variants={containerVariants}

@@ -134,6 +134,79 @@ router = APIRouter(prefix="/api/v1", dependencies=[Depends(require_api_key)])
 
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
+SCAN_TEMPLATES = [
+    {
+        "id": "basic-web-recon",
+        "name": "Basic Web Recon",
+        "description": "Comprehensive reconnaissance of a web target — port scan, HTTP header inspection, subdomain discovery, and DNS enumeration.",
+        "category": "recon",
+        "estimated_duration": "10-15 min",
+        "risk_level": "active",
+        "steps": [
+            {"tool_id": "nmap", "tool_name": "Nmap", "description": "Port scan for open services"},
+            {"tool_id": "http_inspector", "tool_name": "HTTP Inspector", "description": "Inspect HTTP headers and endpoint behavior"},
+            {"tool_id": "subdomain_discovery", "tool_name": "Subdomain Discovery", "description": "Enumerate subdomains via passive sources"},
+            {"tool_id": "dns_enum", "tool_name": "DNS Enumeration", "description": "DNS record analysis and zone transfer attempt"},
+        ],
+    },
+    {
+        "id": "api-surface-check",
+        "name": "API Surface Check",
+        "description": "Audit an API endpoint for common weaknesses — header analysis, secret leakage, and template-based vulnerability screening.",
+        "category": "vulnerability",
+        "estimated_duration": "8-12 min",
+        "risk_level": "active",
+        "steps": [
+            {"tool_id": "http_inspector", "tool_name": "HTTP Inspector", "description": "Analyze API endpoint responses and headers"},
+            {"tool_id": "secret_scanner", "tool_name": "Secret Scanner", "description": "Detect hardcoded secrets in responses and source"},
+            {"tool_id": "nuclei", "tool_name": "Nuclei", "description": "Template-based vulnerability scanning"},
+        ],
+    },
+    {
+        "id": "subdomain-audit",
+        "name": "Subdomain Audit",
+        "description": "Deep subdomain enumeration paired with DNS reconnaissance and targeted service discovery.",
+        "category": "recon",
+        "estimated_duration": "12-18 min",
+        "risk_level": "active",
+        "steps": [
+            {"tool_id": "subdomain_discovery", "tool_name": "Subdomain Discovery", "description": "Passive and active subdomain enumeration"},
+            {"tool_id": "dns_enum", "tool_name": "DNS Enumeration", "description": "DNS record analysis across discovered subdomains"},
+            {"tool_id": "nmap", "tool_name": "Nmap", "description": "Service discovery on resolved subdomains"},
+        ],
+    },
+    {
+        "id": "local-network-inventory",
+        "name": "Local Network Inventory",
+        "description": "Map all live hosts and services on the local network segment.",
+        "category": "recon",
+        "estimated_duration": "5-10 min",
+        "risk_level": "active",
+        "steps": [
+            {"tool_id": "nmap", "tool_name": "Nmap", "description": "Network sweep for live hosts and open ports"},
+            {"tool_id": "scapy_recon", "tool_name": "Scapy Recon", "description": "Low-level packet crafting for OS fingerprinting", "optional": True},
+        ],
+    },
+    {
+        "id": "quick-vulnerability-sweep",
+        "name": "Quick Vulnerability Sweep",
+        "description": "Rapid multi-vector vulnerability assessment combining template-based scanning, web server audit, and directory fuzzing.",
+        "category": "vulnerability",
+        "estimated_duration": "15-25 min",
+        "risk_level": "active",
+        "steps": [
+            {"tool_id": "nuclei", "tool_name": "Nuclei", "description": "Template-driven vulnerability detection"},
+            {"tool_id": "nikto", "tool_name": "Nikto", "description": "Web server vulnerability scanning"},
+            {"tool_id": "dir_discovery", "tool_name": "Directory Discovery", "description": "Fuzzing for hidden files and directories"},
+        ],
+    },
+]
+
+
+@router.get("/templates")
+async def list_templates():
+    return {"templates": SCAN_TEMPLATES}
+
 
 def _validate_notification_target(channel_type: NotificationChannelType, target: str) -> str:
     cleaned = target.strip()

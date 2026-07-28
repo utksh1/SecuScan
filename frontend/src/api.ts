@@ -434,6 +434,31 @@ export function getHealth() {
   return request('/health')
 }
 
+export interface ScanTemplateStep {
+  tool_id: string
+  tool_name: string
+  description: string
+  optional?: boolean
+}
+
+export interface ScanTemplateData {
+  id: string
+  name: string
+  description: string
+  category: string
+  estimated_duration: string
+  risk_level: string
+  steps: ScanTemplateStep[]
+}
+
+export interface ScanTemplateListResponse {
+  templates: ScanTemplateData[]
+}
+
+export function listTemplates() {
+  return request<ScanTemplateListResponse>('/templates')
+}
+
 export function listPlugins() {
   return request<PluginListResponse>('/plugins')
 }
