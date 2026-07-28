@@ -648,13 +648,20 @@ async def process_finding_notifications(
     db: Database,
     finding_id: str,
 ) -> List[DeliveryResult]:
-    """Evaluate all active rules against one finding and attempt delivery."""
+    """Evaluate all active rules against one finding and attempt delivery.
+
+    Security fix: Scoped to the finding's owner_id to prevent cross-tenant
+    data exfiltration via notification rules.
+    """
     finding = await db.fetchone("SELECT * FROM findings WHERE id = ?", (finding_id,))
     if not finding:
         return []
 
+    owner_id = finding.get("owner_id", "default")
+
     rules = await db.fetchall(
-        "SELECT * FROM notification_rules WHERE is_active = 1 ORDER BY created_at ASC"
+        "SELECT * FROM notification_rules WHERE is_active = 1 AND owner_id = ? ORDER BY created_at ASC",
+        (owner_id,),
     )
     results: List[DeliveryResult] = []
     for rule in rules:
