@@ -2,6 +2,10 @@
 Plugin loader and management system
 """
 
+# Re-export _is_absolute_path from the import-safe helpers module so existing
+# import paths (from backend.secuscan.plugins import _is_absolute_path) keep working.
+from .plugins_helpers import _is_absolute_path
+
 import time
 import json
 import os
@@ -83,18 +87,6 @@ _VALIDATION_PRESETS: Dict[str, Dict[str, Any]] = {
         "message": "Must be a valid CIDR block (e.g. 192.168.1.0/24)",
     },
 }
-
-def _is_absolute_path(value: str) -> bool:
-    """Check if a path is absolute regardless of the server OS.
-
-    Handles Unix (/), Windows drive-letter (C:\\, C:/),
-    and UNC (\\\\server\\share) absolute path styles.
-    """
-    if value.startswith("/"):
-        return True
-    if value.startswith("\\"):
-        return True
-    return bool(re.match(r'^[a-zA-Z]:[/\\]', value))
 
 class PluginManager:
     """Manages plugin loading and validation"""
