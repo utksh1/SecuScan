@@ -1,5 +1,5 @@
 import React from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { routes } from '../routes'
 import { useAuth } from './AuthContext'
@@ -105,6 +105,20 @@ const NavSection = ({ label, isExpanded }: { label: string, isExpanded: boolean 
 export default function Sidebar() {
     const { isExpanded, toggleSidebar } = useSidebar()
     const { isAuthenticated, signOut } = useAuth()
+    const navigate = useNavigate()
+
+    const handleLogoClick = (e: React.MouseEvent) => {
+        e.stopPropagation()
+        navigate(routes.dashboard)
+    }
+
+    const handleLogoKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            e.stopPropagation()
+            navigate(routes.dashboard)
+        }
+    }
 
     return (
         <motion.aside
@@ -116,6 +130,7 @@ export default function Sidebar() {
             `}
             aria-label="Main navigation"
             aria-expanded={isExpanded}
+            onClick={(e) => e.stopPropagation()}
         >
             {/* Header / Logo */}
             <div className={`flex flex-col pt-8 pb-4 mb-4`}>
@@ -123,9 +138,15 @@ export default function Sidebar() {
                     <motion.div
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
+                        onClick={handleLogoClick}
+                        onKeyDown={handleLogoKeyDown}
+                        role="button"
+                        tabIndex={0}
+                        aria-label="Navigate to dashboard"
                         className={`
                             w-12 h-12 bg-bg-tertiary flex items-center justify-center rounded-xl border border-accent-silver/20
                             shadow-[inset_0_1px_1px_rgba(255,255,255,0.1)]
+                            cursor-pointer hover:border-rag-red/30 transition-colors duration-200
                         `}
                     >
                         <span className="material-symbols-outlined text-rag-red text-[24px] glow-red fill-1">shield</span>
@@ -137,7 +158,12 @@ export default function Sidebar() {
                                 initial={{ opacity: 0, x: -20 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: -20 }}
-                                className="flex flex-col leading-none"
+                                onClick={handleLogoClick}
+                                onKeyDown={handleLogoKeyDown}
+                                role="button"
+                                tabIndex={0}
+                                aria-label="Navigate to dashboard"
+                                className="flex flex-col leading-none cursor-pointer"
                             >
                                 <span className="text-[16px] font-black tracking-tighter text-primary italic">SECUSCAN</span>
                                 <span className="text-[8px] font-bold tracking-[0.3em] text-rag-red mt-1">LOCAL WORKSPACE</span>
