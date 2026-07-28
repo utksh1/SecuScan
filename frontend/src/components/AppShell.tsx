@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Background from './Background'
 import GlobalSearch from './GlobalSearch'
+import CommandPalette from './CommandPalette'
 import { useShortcuts } from '../hooks/useShortcuts'
 import { SidebarProvider, useSidebar } from '../context/SidebarContext'
 import { routes } from '../routes'
@@ -16,6 +17,21 @@ function AppShellInner({ children }: AppShellProps) {
     const { isExpanded: sidebarExpanded, toggleSidebar } = useSidebar()
     useShortcuts(toggleSidebar)
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+    const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+
+    useEffect(() => {
+        function handleKeyDown(e: KeyboardEvent) {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                e.preventDefault()
+                setCommandPaletteOpen((prev) => !prev)
+            }
+            if (e.key === 'Escape' && commandPaletteOpen) {
+                setCommandPaletteOpen(false)
+            }
+        }
+        window.addEventListener('keydown', handleKeyDown)
+        return () => window.removeEventListener('keydown', handleKeyDown)
+    }, [commandPaletteOpen])
     const menuButtonRef = useRef<HTMLButtonElement>(null)
     const drawerRef = useRef<HTMLDivElement>(null)
 
@@ -87,8 +103,15 @@ function AppShellInner({ children }: AppShellProps) {
         { to: routes.settings, label: 'Settings' },
     ]
 
+    useEffect(() => {
+        function handleToggleSidebar() { toggleSidebar() }
+        window.addEventListener('toggle-sidebar', handleToggleSidebar)
+        return () => window.removeEventListener('toggle-sidebar', handleToggleSidebar)
+    }, [toggleSidebar])
+
     return (
         <>
+            <CommandPalette isOpen={commandPaletteOpen} onClose={() => setCommandPaletteOpen(false)} />
             <Background state="idle" />
             <div className="flex bg-charcoal-dark min-h-screen">
                 <Sidebar />
@@ -150,8 +173,18 @@ function AppShellInner({ children }: AppShellProps) {
                     className="flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out ml-0 lg:ml-[var(--sidebar-width)]"
                     style={{ '--sidebar-width': `${desktopSidebarWidth}px` } as React.CSSProperties}
                 >
-                    <div className="hidden lg:flex items-center h-14 px-6 border-b border-accent-silver/10 bg-[var(--bg-secondary)]">
+                    <div className="hidden lg:flex items-center h-14 px-6 border-b border-accent-silver/10 bg-[var(--bg-secondary)] gap-3">
                         <GlobalSearch className="w-full max-w-md" />
+                        <button
+                            onClick={() => setCommandPaletteOpen(true)}
+                            className="flex items-center gap-2 px-3 py-1.5 text-[9px] font-black uppercase tracking-widest text-silver/40 border border-accent-silver/20 hover:text-silver-bright hover:border-rag-blue/30 transition-colors"
+                            aria-label="Open command palette"
+                            title="Ctrl+K — Command palette"
+                        >
+                            <span className="material-symbols-outlined text-sm" aria-hidden="true">terminal</span>
+                            CMD
+                            <kbd className="text-[8px] text-silver/20 border border-black px-1 py-0.5 bg-charcoal-dark">⌘K</kbd>
+                        </button>
                     </div>
                     <main
                         className="flex-1 overflow-auto pt-14 lg:pt-0 pb-20 lg:pb-0"
