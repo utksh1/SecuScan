@@ -4,6 +4,7 @@ import React, {
   useState,
   useEffect,
   useCallback,
+  useRef,
   ReactNode,
 } from 'react'
 
@@ -41,10 +42,8 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
-    // Priority 1: manual localStorage override
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved === 'light' || saved === 'dark') return saved
-    // Priority 2: OS preference
     return getSystemTheme()
   })
 
@@ -52,12 +51,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     () => !localStorage.getItem(STORAGE_KEY)
   )
 
-  // Apply theme class on every change
+  const themeRef = useRef(theme)
+  themeRef.current = theme
+
   useEffect(() => {
     applyTheme(theme)
   }, [theme])
 
-  // Listen for OS preference changes — only auto-follow if no manual override
+  useEffect(() => {
+    applyTheme(themeRef.current)
+  }, [])
+
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
@@ -75,17 +79,23 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(STORAGE_KEY, next)
     setIsSystemControlled(false)
     setThemeState(next)
+    applyTheme(next)
   }, [])
 
   const toggleTheme = useCallback(() => {
-    setTheme(theme === 'dark' ? 'light' : 'dark')
-  }, [theme, setTheme])
+    const next = themeRef.current === 'dark' ? 'light' : 'dark'
+    localStorage.setItem(STORAGE_KEY, next)
+    setIsSystemControlled(false)
+    setThemeState(next)
+    applyTheme(next)
+  }, [])
 
   const resetToSystem = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY)
     setIsSystemControlled(true)
     const sys = getSystemTheme()
     setThemeState(sys)
+    applyTheme(sys)
   }, [])
 
   return (
