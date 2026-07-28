@@ -392,7 +392,37 @@ export default function Settings() {
         addToast("Encryption export successful", "success")
     }
 
-    const InputField = ({ label, description, type = "text", value, onChange, placeholder }: any) => (
+    interface InputFieldProps {
+        label: string
+        description: string
+        type?: string
+        value: string | number
+        onChange: (val: string | number) => void
+        placeholder?: string
+    }
+
+    interface SelectFieldOption {
+        label: string
+        value: string | number
+    }
+
+    interface SelectFieldProps {
+        label: string
+        description: string
+        value: string | number
+        onChange: (val: string) => void
+        options: SelectFieldOption[]
+    }
+
+    interface ToggleProps {
+        checked: boolean
+        onChange: (val: boolean) => void
+        label: string
+        description: string
+        ariaLabel?: string
+    }
+
+    const InputField = ({ label, description, type = "text", value, onChange, placeholder }: InputFieldProps) => (
         <div className="bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] transition-all group">
             <div className="space-y-2 mb-6">
                 <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] block italic group-hover:text-rag-blue transition-colors">{label}</label>
@@ -408,7 +438,7 @@ export default function Settings() {
         </div>
     )
 
-    const SelectField = ({ label, description, value, onChange, options }: any) => (
+    const SelectField = ({ label, description, value, onChange, options }: SelectFieldProps) => (
         <div className="bg-charcoal border-4 border-black p-8 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-[10px_10px_0px_0px_rgba(0,0,0,1)] transition-all group">
             <div className="space-y-2 mb-6">
                 <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] block italic group-hover:text-rag-blue transition-colors">{label}</label>
@@ -419,14 +449,14 @@ export default function Settings() {
                 onChange={(e) => onChange(e.target.value)}
                 className="w-full bg-black/40 border-4 border-black p-4 text-xs font-mono text-rag-blue font-bold focus:outline-none focus:border-rag-blue/50 transition-colors uppercase appearance-none"
             >
-                {options.map((opt: any) => (
+                {options.map((opt) => (
                     <option key={opt.value} value={opt.value} className="bg-charcoal text-silver-bright">{opt.label}</option>
                 ))}
             </select>
         </div>
     )
 
-    const Toggle = ({ checked, onChange, label, description, ariaLabel }: any) => (
+    const Toggle = ({ checked, onChange, label, description, ariaLabel }: ToggleProps) => (
         <button
             type="button"
             onClick={() => onChange(!checked)}
