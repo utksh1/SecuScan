@@ -281,8 +281,10 @@ async def custom_unhandled_exception_handler(request: Request, exc: Exception):
 
     if settings.debug:
         import traceback
-        html = f"<html><body><h1>500 Internal Server Error</h1><pre>{traceback.format_exc()}</pre></body></html>"
-        response = HTMLResponse(html, status_code=500)
+        import html
+        escaped_traceback = html.escape(traceback.format_exc())
+        html_content = f"<html><body><h1>500 Internal Server Error</h1><pre>{escaped_traceback}</pre></body></html>"
+        response = HTMLResponse(html_content, status_code=500)
     else:
         response = PlainTextResponse("Internal Server Error", status_code=500)
 
