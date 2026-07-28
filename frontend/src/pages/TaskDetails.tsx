@@ -29,6 +29,7 @@ import {
     CartesianGrid
 } from 'recharts'
 import { useToast } from '../components/ToastContext'
+import { classifyFailure, getFailureDiagnostic } from '../utils/failureDiagnostics'
 
 interface Task {
     task_id: string
@@ -945,21 +946,31 @@ export default function TaskDetails() {
                         animate={{ opacity: 1, height: 'auto' }}
                         className="bg-rag-red/10 border-l-4 border-rag-red p-6 space-y-3"
                     >
-                        <div className="flex items-start justify-between gap-3">
-                            <div className="flex items-center gap-3 text-rag-red">
-                                <DetailIcon icon={AlertCircleIcon} />
-                                <h3 className="text-xs font-black uppercase tracking-[0.3em] italic">Critical_Execution_Fault</h3>
-                            </div>
-                            <CopyToClipboard
-                                textToCopy={task.error_message}
-                                label="Copy Trace"
-                                title="Copy error trace to clipboard"
-                            />
-                        </div>
-                        <CollapsiblePane content={task.error_message} maxCollapsedLength={400} label="error output" />
-                        <div className="pt-2">
-                            <span className="text-[9px] font-black text-silver/30 uppercase tracking-[0.2em] italic">Diagnostic_Code::EXEC_FAIL_{task.exit_code || 'ERR'}</span>
-                        </div>
+                        {(() => {
+                            const diag = getFailureDiagnostic(task.error_message, task.exit_code, rawOutput || result?.raw_output)
+                            return (
+                                <>
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="flex items-center gap-3 text-rag-red">
+                                            <DetailIcon icon={AlertCircleIcon} />
+                                            <div>
+                                                <h3 className="text-xs font-black uppercase tracking-[0.3em] italic">Fault::{diag.label.replace(/\s+/g, '_').toUpperCase()}</h3>
+                                                <p className="text-[9px] text-rag-red/70 uppercase tracking-widest font-bold mt-1">{task.plugin_id} :: EXIT_{task.exit_code || 'ERR'}</p>
+                                            </div>
+                                        </div>
+                                        <CopyToClipboard
+                                            textToCopy={task.error_message}
+                                            label="Copy Trace"
+                                            title="Copy error trace to clipboard"
+                                        />
+                                    </div>
+                                    <div className="bg-black/20 border border-rag-red/20 p-4">
+                                        <p className="text-[10px] text-silver/80 uppercase tracking-widest font-bold leading-relaxed">{diag.guidance}</p>
+                                    </div>
+                                    <CollapsiblePane content={task.error_message} maxCollapsedLength={400} label="error output" />
+                                </>
+                            )
+                        })()}
                     </motion.div>
                 )}
             </AnimatePresence>
