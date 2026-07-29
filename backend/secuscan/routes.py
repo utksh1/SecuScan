@@ -341,6 +341,17 @@ async def get_all_presets():
     }
 
 
+def _validation_error(code: str, message: str, details: Optional[Dict[str, Any]] = None, status_code: int = 422) -> HTTPException:
+    return HTTPException(
+        status_code=status_code,
+        detail={
+            "error": code,
+            "message": message,
+            "details": details or {},
+        }
+    )
+
+
 @router.post("/task/start", dependencies=[Depends(task_start_limiter), Depends(check_scan_rate_limit)])
 async def start_task(
     request: TaskCreateRequest,
@@ -356,7 +367,7 @@ async def start_task(
     execution_context = normalize_execution_context(request.execution_context)
     ok, status_code, error_msg = validate_task_start_payload(raw_body, request.inputs, execution_context)
     if not ok:
-        raise HTTPException(status_code=status_code, detail=error_msg)
+        raise _validation_error("invalid_payload", error_msg)
 
     db = await get_db()
 
@@ -370,10 +381,7 @@ async def start_task(
             context={"plugin_id": request.plugin_id},
             plugin_id=request.plugin_id,
         )
-        raise HTTPException(
-            status_code=400,
-            detail="Consent required. You must acknowledge the legal notice."
-        )
+        raise _validation_error("consent_required", "Consent required. You must acknowledge the legal notice.")
 
     # Get plugin
     plugin_manager = await get_plugin_manager_for_request()
@@ -390,24 +398,21 @@ async def start_task(
     )
     if not preset_ok:
         logger.warning("Task start failed: %s", preset_error)
-        raise HTTPException(status_code=400, detail=preset_error)
+        raise _validation_error("invalid_preset", preset_error)
 
     target_policy = await get_target_policy(db, owner, execution_context.get("target_policy_id"))
     credential_profile = await get_credential_profile(db, owner, execution_context.get("credential_profile_id"))
     session_profile = await get_session_profile(db, owner, execution_context.get("session_profile_id"))
 
     if execution_context.get("target_policy_id") and not target_policy:
-        raise HTTPException(status_code=400, detail="Target policy not found for this workspace")
+        raise _validation_error("target_policy_not_found", "Target policy not found for this workspace")
     if execution_context.get("credential_profile_id") and not credential_profile:
-        raise HTTPException(status_code=400, detail="Credential profile not found for this workspace")
+        raise _validation_error("credential_profile_not_found", "Credential profile not found for this workspace")
     if execution_context.get("session_profile_id") and not session_profile:
-        raise HTTPException(status_code=400, detail="Session profile not found for this workspace")
+        raise _validation_error("session_profile_not_found", "Session profile not found for this workspace")
 
     if (credential_profile or session_profile) and not (target_policy and target_policy.get("allow_authenticated_scan")):
-        raise HTTPException(
-            status_code=400,
-            detail="Authenticated scans require a target policy with authenticated scanning enabled.",
-        )
+        raise _validation_error("authenticated_scan_not_allowed", "Authenticated scans require a target policy with authenticated scanning enabled.")
 
     requires_exploit_policy = (
         plugin.safety.get("level") == "exploit"
@@ -415,10 +420,7 @@ async def start_task(
     )
 
     if requires_exploit_policy and not (target_policy and target_policy.get("allow_exploit_validation")):
-        raise HTTPException(
-            status_code=400,
-            detail="Offensive validation requires a target policy that explicitly allows exploit validation.",
-        )
+        raise _validation_error("exploit_validation_not_allowed", "Offensive validation requires a target policy that explicitly allows exploit validation.")
 
     # Server-controlled safe mode: public-target scans are opt-in via target policy.
     safe_mode = bool(
@@ -442,9 +444,9 @@ async def start_task(
             try:
                 tval = int(effective_inputs[tkey])
             except (TypeError, ValueError):
-                raise HTTPException(status_code=400, detail=f"Invalid value for {tkey}: must be an integer")
+                raise _validation_error("invalid_timeout", f"Invalid value for {tkey}: must be an integer", details={"field": tkey})
             if tval <= 0 or tval > settings.sandbox_timeout:
-                raise HTTPException(status_code=400, detail=f"{tkey} must be between 1 and {settings.sandbox_timeout} seconds")
+                raise _validation_error("invalid_timeout", f"{tkey} must be between 1 and {settings.sandbox_timeout} seconds", details={"field": tkey})
 
     if target := effective_inputs.get("target"):
         target_str = str(target)
@@ -458,10 +460,7 @@ async def start_task(
                 )
             except asyncio.TimeoutError:
                 logger.warning("Task start failed: Target validation timed out for '%s'", target_str)
-                raise HTTPException(
-                    status_code=400,
-                    detail="Target validation timed out in safe mode (SecuScan Guardrail)",
-                )
+                raise _validation_error("target_validation_timeout", "Target validation timed out in safe mode (SecuScan Guardrail)")
 
             if not is_valid:
                 logger.warning(f"Task start failed: Target validation failed for '{target}': {error_msg}")
@@ -477,7 +476,7 @@ async def start_task(
                     },
                     plugin_id=request.plugin_id,
                 )
-                raise HTTPException(status_code=400, detail=error_msg)
+                raise _validation_error("target_validation_failed", error_msg, details={"target": target_str})
 
     # Check rate limits per (client, plugin) so one client cannot exhaust
     # the quota for all other users of the same plugin.
@@ -489,7 +488,7 @@ async def start_task(
     )
 
     if not can_execute:
-        raise HTTPException(status_code=429, detail=error_msg)
+        raise _validation_error("rate_limited", error_msg, status_code=429)
 
     # Create task record first so we have a real task_id for the limiter
     try:
@@ -503,7 +502,7 @@ async def start_task(
             owner_id=owner,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise _validation_error("task_creation_failed", str(e)) from e
 
     # Atomically acquire a concurrency slot using the real task_id.
     # acquire() is lock-protected internally, so the check and register
