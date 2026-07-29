@@ -76,6 +76,13 @@ class VaultCrypto:
         truncated = digest[: cls._FINGERPRINT_BYTES]
         return ":".join(f"{byte:02x}" for byte in truncated)
 
+    @classmethod
+    def re_encrypt(cls, encrypted_payload: str, old_key: bytes, new_key: bytes) -> str:
+        old_crypto = cls(old_key)
+        plaintext = old_crypto.decrypt(encrypted_payload)
+        new_crypto = cls(new_key)
+        return new_crypto.encrypt(plaintext)
+
     @property
     def key_fingerprint(self) -> str:
         """A non-secret, stable identifier for the active vault key.

@@ -1738,6 +1738,91 @@ async def delete_vault_secret(
         "deleted": True,
     }
 
+
+@router.post("/vault/rotate", dependencies=[Depends(admin_limiter)])
+async def rotate_vault_key(
+    payload: Dict[str, str],
+    owner: str = Depends(get_current_owner),
+):
+    new_key_b64 = payload.get("new_key", "").strip()
+    if not new_key_b64:
+        raise HTTPException(status_code=400, detail="new_key is required")
+
+    try:
+        crypto_old = VaultCrypto(settings.resolved_vault_key)
+        crypto_new = VaultCrypto(new_key_b64)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    db = await get_db()
+
+    rows = await db.fetchall(
+        "SELECT id, name, encrypted_value FROM credential_vault WHERE owner_id = ?",
+        (owner,),
+    )
+
+    re_encrypted = []
+    errors = []
+
+    async with db.transaction():
+        for row in rows:
+            try:
+                new_encrypted = VaultCrypto.re_encrypt(
+                    row["encrypted_value"],
+                    settings.resolved_vault_key,
+                    new_key_b64,
+                )
+                await db.execute_no_commit(
+                    "UPDATE credential_vault SET encrypted_value = ?, updated_at = datetime('now') WHERE id = ?",
+                    (new_encrypted, row["id"]),
+                )
+                re_encrypted.append(row["id"])
+            except Exception as e:
+                errors.append({"id": row["id"], "name": row["name"], "error": str(e)})
+                raise
+
+    new_fingerprint = crypto_new.key_fingerprint
+    old_fingerprint = crypto_old.key_fingerprint
+
+    await db.log_audit(
+        "vault_key_rotated",
+        f"Vault key rotated. Old fingerprint: {old_fingerprint}, New fingerprint: {new_fingerprint}",
+        severity="info",
+        context={
+            "old_fingerprint": old_fingerprint,
+            "new_fingerprint": new_fingerprint,
+            "re_encrypted_count": len(re_encrypted),
+        },
+    )
+
+    return {
+        "rotated": True,
+        "old_fingerprint": old_fingerprint,
+        "new_fingerprint": new_fingerprint,
+        "re_encrypted_count": len(re_encrypted),
+    }
+
+
+@router.get("/vault/status", dependencies=[Depends(vault_limiter)])
+async def get_vault_status(
+    owner: str = Depends(get_current_owner),
+):
+    crypto = VaultCrypto(settings.resolved_vault_key)
+
+    db = await get_db()
+    row = await db.fetchone(
+        "SELECT COUNT(*) AS count FROM credential_vault WHERE owner_id = ?",
+        (owner,),
+    )
+    secret_count = row["count"] if row else 0
+
+    return {
+        "key_fingerprint": crypto.key_fingerprint,
+        "secret_count": secret_count,
+        "encryption": "AES-256-GCM",
+    }
+
+
 @router.get("/target-policies")
 async def list_target_policies(owner: str = Depends(get_current_owner)):
     db = await get_db()
