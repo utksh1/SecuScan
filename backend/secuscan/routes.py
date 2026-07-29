@@ -30,6 +30,9 @@ from .routes_report_helpers import (
     _slugify_filename_part,
     build_report_filename,
 )
+from .routes_escape_helpers import _escape_like  # noqa: E402
+from .routes_validation_helpers import _validate_lengths  # noqa: E402
+from .routes_notification_helpers import _serialize_notification_history  # noqa: E402
 
 __all__ = [
     "FINDING_JSON_FIELDS",
@@ -177,17 +180,6 @@ def _serialize_notification_rule(row: Dict[str, Any]) -> Dict[str, Any]:
         "is_active": bool(row.get("is_active")),
         "created_at": row.get("created_at"),
         "updated_at": row.get("updated_at"),
-    }
-
-
-def _serialize_notification_history(row: Dict[str, Any]) -> Dict[str, Any]:
-    return {
-        "id": row["id"],
-        "rule_id": row["rule_id"],
-        "finding_id": row["finding_id"],
-        "status": row["status"],
-        "error_message": row.get("error_message"),
-        "sent_at": row.get("sent_at"),
     }
 
 
@@ -1265,11 +1257,6 @@ async def get_reports(owner: str = Depends(get_current_owner)):
     return await get_or_set_cached(f"reports:list:{owner}", build)
 
 
-def _escape_like(value: str) -> str:
-    """Escape SQLite LIKE wildcards so user input can't inject % or _ patterns."""
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-
 @router.get("/search", dependencies=[Depends(read_heavy_limiter)])
 async def search(
     q: str = Query(..., min_length=1, max_length=200),
@@ -1746,29 +1733,6 @@ async def list_target_policies(owner: str = Depends(get_current_owner)):
         (owner,),
     )
     return {"items": deserialize_resource_rows(rows), "total": len(rows)}
-
-
-def _validate_lengths(
-    name: Optional[str] = None,
-    description: Optional[str] = None,
-    notes: Optional[str] = None,
-    resource_type: str = "Resource",
-):
-    if name is not None and len(str(name).strip()) > 255:
-        raise HTTPException(
-            status_code=400,
-            detail=f"{resource_type} name exceeds maximum length of 255 characters",
-        )
-    if description is not None and len(str(description).strip()) > 2000:
-        raise HTTPException(
-            status_code=400,
-            detail=f"{resource_type} description exceeds maximum length of 2000 characters",
-        )
-    if notes is not None and len(str(notes).strip()) > 2000:
-        raise HTTPException(
-            status_code=400,
-            detail=f"{resource_type} notes exceeds maximum length of 2000 characters",
-        )
 
 
 @router.post("/target-policies", dependencies=[Depends(admin_limiter)])
