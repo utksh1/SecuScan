@@ -957,8 +957,45 @@ export default function TaskDetails() {
                             />
                         </div>
                         <CollapsiblePane content={task.error_message} maxCollapsedLength={400} label="error output" />
-                        <div className="pt-2">
-                            <span className="text-[9px] font-black text-silver/30 uppercase tracking-[0.2em] italic">Diagnostic_Code::EXEC_FAIL_{task.exit_code || 'ERR'}</span>
+                        <div className="pt-2 space-y-2">
+                            <span className="text-[9px] font-black text-silver/30 uppercase tracking-[0.2em] italic">Diagnostic_Code::EXEC_FAIL_{task.exit_code ?? 'ERR'}</span>
+                            <div className="flex flex-wrap gap-2 mt-2">
+                                {task.exit_code !== undefined && task.exit_code !== null && (
+                                    <span className="text-[9px] font-black text-silver/30 uppercase tracking-[0.2em] italic border border-white/10 px-2 py-1">
+                                        EXIT_CODE::{task.exit_code}
+                                    </span>
+                                )}
+                                {task.error_message.startsWith('TIMEOUT:') && (
+                                    <span className="text-[9px] font-black text-rag-amber uppercase tracking-[0.2em] italic border border-rag-amber/30 px-2 py-1">
+                                        CLASSIFICATION::TIMEOUT
+                                    </span>
+                                )}
+                                {task.error_message.startsWith('TOOL_ERROR') && (
+                                    <span className="text-[9px] font-black text-rag-red uppercase tracking-[0.2em] italic border border-rag-red/30 px-2 py-1">
+                                        CLASSIFICATION::TOOL_ERROR
+                                    </span>
+                                )}
+                                {task.error_message.startsWith('SYSTEM_ERROR:') && (
+                                    <span className="text-[9px] font-black text-rag-red uppercase tracking-[0.2em] italic border border-rag-red/30 px-2 py-1">
+                                        CLASSIFICATION::SYSTEM_ERROR
+                                    </span>
+                                )}
+                            </div>
+                            {task.error_message.startsWith('TIMEOUT:') && (
+                                <p className="text-[9px] text-rag-amber/60 mt-2 italic">
+                                    Suggestion: Try increasing max_scan_time or reducing the target scope
+                                </p>
+                            )}
+                            {task.error_message.startsWith('TOOL_ERROR') && (
+                                <p className="text-[9px] text-silver/40 mt-2 italic">
+                                    Suggestion: Verify the target is reachable and the tool supports this scan type
+                                </p>
+                            )}
+                            {task.error_message.startsWith('SYSTEM_ERROR:') && (
+                                <p className="text-[9px] text-silver/40 mt-2 italic">
+                                    Suggestion: Check system resources and scan configuration
+                                </p>
+                            )}
                         </div>
                     </motion.div>
                 )}

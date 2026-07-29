@@ -953,7 +953,7 @@ class TaskExecutor:
                 return min(timeout, settings.sandbox_timeout)
         return settings.sandbox_timeout
 
-    def _classify_command_result(self, plugin, output: str, exit_code: int) -> tuple[str, Optional[str]]:
+    def _classify_command_result(self, plugin, output: str, exit_code: int, timeout: int = 600) -> tuple[str, Optional[str]]:
         """Map raw process exit codes into task status with plugin-specific tolerances."""
         normalized_output = output.lower()
 
@@ -988,9 +988,28 @@ class TaskExecutor:
             )
             return TaskStatus.COMPLETED.value, None
 
+        if exit_code == -1 and "task timed out" in normalized_output:
+            return (
+                TaskStatus.FAILED.value,
+                f"TIMEOUT: The scan exceeded its execution limit ({timeout}s) and was terminated.",
+            )
+
+        if exit_code == -1 and normalized_output.startswith("execution error:"):
+            details = output[len("Execution error:"):].strip() or "Unknown system error"
+            return (
+                TaskStatus.FAILED.value,
+                f"SYSTEM_ERROR: {details}",
+            )
+
+        if exit_code == 124:
+            return (
+                TaskStatus.FAILED.value,
+                f"TIMEOUT: The scan exceeded its execution limit ({timeout}s) and was terminated.",
+            )
+
         return (
             TaskStatus.FAILED.value,
-            f"Tool returned non-zero exit code {exit_code}. Check raw output for details.",
+            f"TOOL_ERROR (exit {exit_code}): The tool exited with non-zero status. Check raw output for details.",
         )
 
     async def cancel_task(self, task_id: str) -> bool:
