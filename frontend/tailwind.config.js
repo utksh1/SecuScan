@@ -17,27 +17,30 @@ export default {
         'primary-text': 'var(--text-primary)',
         'secondary-text': 'var(--text-secondary)',
         'muted': 'var(--text-muted)',
-        'charcoal-dark': 'var(--bg-primary)',
+        'charcoal-dark': 'var(--bg-secondary)',
         charcoal: {
-          light: 'var(--bg-tertiary)',
-          DEFAULT: 'var(--bg-secondary)',
+          light: 'var(--bg-elevated)',
+          DEFAULT: 'var(--bg-tertiary)',
           dark: 'var(--bg-primary)', /* mapped for backward compatibility */
         },
+        'silver-bright': 'var(--accent-silver-bright)',
         silver: {
-          bright: 'var(--text-primary)',
-          DEFAULT: 'var(--text-secondary)',
+          bright: 'var(--accent-silver-bright)',
+          DEFAULT: 'var(--accent-silver)',
           dark: 'var(--text-muted)',
         },
         rag: {
-          red: '#ef4444',
-          amber: '#f59e0b',
+          red: 'var(--rag-red)',
+          amber: 'var(--rag-amber)',
           'amber-bright': '#fbbf24',   
-          green: '#10b981',
-          blue: '#1e88e5',
+          green: 'var(--rag-green)',
+          blue: 'var(--rag-blue)',
           'blue-bright': '#3b82f6',    
         },
         accent: {
-          silver: 'var(--accent-silver)'
+          silver: 'var(--accent-silver)',
+          'silver-bright': 'var(--accent-silver-bright)',
+          'silver-dim': 'var(--accent-silver-dim)',
         }
       },
       fontFamily: {
