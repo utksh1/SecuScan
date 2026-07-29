@@ -30,6 +30,7 @@ from .routes_report_helpers import (
     _slugify_filename_part,
     build_report_filename,
 )
+from .routes_escape_helpers import _escape_like  # noqa: E402
 
 __all__ = [
     "FINDING_JSON_FIELDS",
@@ -1263,11 +1264,6 @@ async def get_reports(owner: str = Depends(get_current_owner)):
         return {"reports": reports}
 
     return await get_or_set_cached(f"reports:list:{owner}", build)
-
-
-def _escape_like(value: str) -> str:
-    """Escape SQLite LIKE wildcards so user input can't inject % or _ patterns."""
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 @router.get("/search", dependencies=[Depends(read_heavy_limiter)])
