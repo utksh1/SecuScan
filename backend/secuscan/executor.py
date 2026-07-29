@@ -439,6 +439,69 @@ class TaskExecutor:
 
         return (True, None)
 
+    async def validate_redirect_url(
+        self,
+        redirect_url: str,
+        original_target: str,
+        task_id: str,
+        plugin_id: str,
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Validate a redirect URL against the network policy to prevent SSRF via open redirects.
+
+        If the redirect target resolves to a private or denylisted IP, the redirect is blocked.
+        This prevents SSRF attacks where an external server redirects the scanner to an internal
+        resource (e.g., http://evil.com -> http://169.254.169.254/latest/meta-data/).
+
+        Returns:
+            Tuple of (allowed, blocked_reason)
+        """
+        if not settings.enforce_network_policy:
+            return (True, None)
+
+        try:
+            from urllib.parse import urlparse
+            parsed = urlparse(redirect_url)
+            redirect_host = parsed.hostname
+            if not redirect_host:
+                return (True, None)
+        except Exception:
+            return (False, "Failed to parse redirect URL")
+
+        # Skip validation for relative redirects or same-host redirects
+        try:
+            from urllib.parse import urlparse as _urlparse
+            original_parsed = _urlparse(original_target)
+            if original_parsed.hostname == redirect_host:
+                return (True, None)
+        except Exception:
+            pass
+
+        engine = get_policy_engine()
+
+        try:
+            import asyncio
+            import socket
+            pinned_ip, allowed, reason = await asyncio.wait_for(
+                asyncio.to_thread(
+                    engine.resolve_and_pin,
+                    redirect_host,
+                    plugin_id,
+                    task_id,
+                ),
+                timeout=float(settings.dns_resolution_timeout_seconds),
+            )
+        except asyncio.TimeoutError:
+            return (False, "Redirect target DNS resolution timed out")
+
+        if not allowed:
+            logger.warning(
+                f"SSRF guardrail blocked redirect from {original_target} -> {redirect_url}: {reason}"
+            )
+            return (False, f"Redirect target blocked by network policy: {reason}")
+
+        return (True, None)
+
     async def _ensure_docker_network(self) -> None:
         """Validate and automatically create the configured Docker network if missing."""
         _net_check = await asyncio.create_subprocess_exec(
