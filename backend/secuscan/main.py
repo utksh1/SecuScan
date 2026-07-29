@@ -206,88 +206,21 @@ app.add_middleware(
 )
 app.add_middleware(RequestIDMiddleware)
 
-# ─── CUSTOM 429 RATE LIMIT EXCEPTION HANDLER ──────────────────────────────
-@app.exception_handler(RateLimitExceeded)
-async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
-    """
-    Custom handler for rate limit exceeded errors.
-    Returns a consistent JSON 429 response matching the API's error schema.
-    """
-    logger.warning(
-        f"Rate limit exceeded for {request.client.host if request.client else 'unknown'} "
-        f"on {request.url.path} - {str(exc)}"
-    )
-    
-    # Get retry-after from exception if available
-    retry_after = getattr(exc, 'retry_after', 60)
-    
-    return JSONResponse(
-        status_code=HTTP_429_TOO_MANY_REQUESTS,
-        content={
-            "error": str(exc.detail) if hasattr(exc, 'detail') else "Too Many Requests",
-            "retry_after": retry_after,
-            "message": "Rate limit exceeded. Please wait before making more requests."
-        },
-        headers={
-            "Retry-After": str(retry_after),
-            "X-Request-ID": getattr(request.state, "request_id", get_request_id()),
-        },
-    )
+# ─── EXCEPTION HANDLERS (imported from main_exception_handlers.py) ──────────
+from .main_exception_handlers import (
+    rate_limit_exceeded_handler,
+    generic_rate_limit_handler,
+    custom_http_exception_handler,
+    custom_validation_exception_handler,
+    custom_unhandled_exception_handler,
+)
 
-# Also handle generic 429 exceptions (for compatibility)
-@app.exception_handler(HTTP_429_TOO_MANY_REQUESTS)
-async def generic_rate_limit_handler(request: Request, exc: Exception):
-    """
-    Generic handler for 429 status code exceptions.
-
-    Merges headers from the original exception (e.g. X-RateLimit-Limit,
-    X-RateLimit-Remaining, Retry-After) with default headers, so
-    callers always receive accurate rate-limit metadata.
-    """
-    exc_headers = getattr(exc, "headers", None) or {}
-    headers = {
-        "X-Request-ID": getattr(request.state, "request_id", get_request_id()),
-        **exc_headers,
-    }
-    if "Retry-After" not in headers:
-        headers["Retry-After"] = "60"
-
-    return JSONResponse(
-        status_code=HTTP_429_TOO_MANY_REQUESTS,
-        content={
-            "error": "Too Many Requests",
-            "message": "Rate limit exceeded. Please try again later."
-        },
-        headers=headers,
-    )
-# ─── END CUSTOM 429 HANDLER ──────────────────────────────────────────────────
-
-@app.exception_handler(StarletteHTTPException)
-async def custom_http_exception_handler(request: Request, exc: StarletteHTTPException):
-    response = await http_exception_handler(request, exc)
-    response.headers["X-Request-ID"] = getattr(request.state, "request_id", get_request_id())
-    return response
-
-
-@app.exception_handler(RequestValidationError)
-async def custom_validation_exception_handler(request: Request, exc: RequestValidationError):
-    response = await request_validation_exception_handler(request, exc)
-    response.headers["X-Request-ID"] = getattr(request.state, "request_id", get_request_id())
-    return response
-
-@app.exception_handler(Exception)
-async def custom_unhandled_exception_handler(request: Request, exc: Exception):
-    logger.exception("Unhandled exception in request lifecycle")
-
-    if settings.debug:
-        import traceback
-        html = f"<html><body><h1>500 Internal Server Error</h1><pre>{traceback.format_exc()}</pre></body></html>"
-        response = HTMLResponse(html, status_code=500)
-    else:
-        response = PlainTextResponse("Internal Server Error", status_code=500)
-
-    response.headers["X-Request-ID"] = getattr(request.state, "request_id", get_request_id())
-    return response
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+app.add_exception_handler(HTTP_429_TOO_MANY_REQUESTS, generic_rate_limit_handler)
+app.add_exception_handler(StarletteHTTPException, custom_http_exception_handler)
+app.add_exception_handler(RequestValidationError, custom_validation_exception_handler)
+app.add_exception_handler(Exception, custom_unhandled_exception_handler)
+# ─── END EXCEPTION HANDLERS ─────────────────────────────────────────────────
 
 # Include API routes
 app.include_router(auth_router)
