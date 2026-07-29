@@ -962,3 +962,23 @@ export function getAssetServices() {
 export function getKnowledgebaseStatus() {
   return request('/knowledgebase/status')
 }
+
+export interface ScanTemplate {
+  id: string
+  name: string
+  description: string
+  category: string
+  complexity: string
+  estimated_duration: string
+  plugin_id: string
+  preset?: string | null
+  inputs: Record<string, unknown>
+  execution_context?: Record<string, unknown> | null
+  tags: string[]
+  icon: string
+}
+
+export function getScanTemplates(category?: string) {
+  const params = category ? `?category=${encodeURIComponent(category)}` : ''
+  return request<{ templates: ScanTemplate[]; total: number }>(`/scan-templates${params}`)
+}

@@ -341,6 +341,29 @@ async def get_all_presets():
     }
 
 
+@router.get("/scan-templates")
+async def list_scan_templates(
+    category: Optional[str] = None,
+):
+    """List all curated scan templates, optionally filtered by category"""
+    from .templates import get_templates, get_templates_by_category
+    if category:
+        templates = get_templates_by_category(category)
+    else:
+        templates = get_templates()
+    return {"templates": templates, "total": len(templates)}
+
+
+@router.get("/scan-templates/{template_id}")
+async def get_scan_template(template_id: str):
+    """Get a specific scan template by ID"""
+    from .templates import get_template
+    template = get_template(template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail=f"Scan template not found: {template_id}")
+    return template
+
+
 @router.post("/task/start", dependencies=[Depends(task_start_limiter), Depends(check_scan_rate_limit)])
 async def start_task(
     request: TaskCreateRequest,

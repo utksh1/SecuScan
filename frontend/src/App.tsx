@@ -11,6 +11,7 @@ import Settings from './pages/Settings'
 import Scans from './pages/Scans'
 import TaskDetails from './pages/TaskDetails'
 import Workflows from './pages/Workflows'
+import ScanTemplates from './pages/ScanTemplates'
 import NotFound from './pages/NotFound'
 import SignIn from './pages/SignIn'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -49,6 +50,7 @@ export function AppRoutes() {
           <Route path={routes.reports} element={<Reports />} />
           <Route path={routes.reportsCompare} element={<ReportCompare />} />
           <Route path={routes.workflows} element={<Workflows />} />
+          <Route path={routes.templates} element={<ScanTemplates />} />
           <Route path={routes.settings} element={<Settings />} />
           <Route path={routes.task} element={<TaskDetails />} />
           <Route path="*" element={<NotFound />} />

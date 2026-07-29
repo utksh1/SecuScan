@@ -10,6 +10,7 @@ export const routes = {
   settings: '/settings',
   task: '/task/:taskId',
   signIn: '/signin',
+  templates: '/templates',
 } as const
 
 export const routePath = {
