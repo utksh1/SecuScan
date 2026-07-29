@@ -57,7 +57,9 @@ export function downloadFile(content: string, filename: string, contentType: str
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+  setTimeout(() => {
+    URL.revokeObjectURL(url)
+  }, 1000)
 }
 
 export function exportFindingsAsCSV(findings: any[]): void {

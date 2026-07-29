@@ -1,5 +1,13 @@
-import { describe, test, expect } from "vitest";
-import { escapeCSV, serializeFindingsToCSV } from "../../../src/utils/exportUtils";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { downloadFile, escapeCSV, serializeFindingsToCSV } from "../../../src/utils/exportUtils";
+
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("exportUtils utility", () => {
   test("escapeCSV handles standard inputs", () => {
@@ -62,5 +70,30 @@ describe("exportUtils utility", () => {
     // Check comma escaping in title, quote escaping in description
     expect(csvContent).toContain('"Information Disclosure, Version Leak"');
     expect(csvContent).toContain('"Version string ""1.2.3"" disclosed."');
+  });
+
+  test("downloadFile revokes object URLs after a short delay", () => {
+    const createObjectURLSpy = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:test-url");
+    const revokeObjectURLSpy = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    const originalClick = HTMLAnchorElement.prototype.click;
+    const clickSpy = vi.fn();
+
+    HTMLAnchorElement.prototype.click = clickSpy as typeof HTMLAnchorElement.prototype.click;
+
+    try {
+      downloadFile("test", "test.csv", "text/csv");
+
+      expect(createObjectURLSpy).toHaveBeenCalledTimes(1);
+      expect(revokeObjectURLSpy).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(999);
+      expect(revokeObjectURLSpy).not.toHaveBeenCalled();
+
+      vi.advanceTimersByTime(1);
+      expect(revokeObjectURLSpy).toHaveBeenCalledWith("blob:test-url");
+      expect(clickSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      HTMLAnchorElement.prototype.click = originalClick;
+    }
   });
 });
