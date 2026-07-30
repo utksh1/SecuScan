@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd11",
+  "icon": "🔑",
   "engine": {
     "type": "cli",
     "binary": "gitleaks"
@@ -66,5 +66,8 @@
     "system_packages": []
   },
   "docker_image": "zricethezav/gitleaks:latest",
-  "checksum": "4287007a8a060b41dea04e2f3e2ce98c4db0fefa8e0cca318168bc0ce4aaa032"
+  "capabilities": [
+    "filesystem"
+  ],
+  "checksum": "21be5ea70b9709f64b05352f8d9d4fded99bdb4f0471bfa76a9fec23764171e3"
 }

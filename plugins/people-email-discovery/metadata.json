@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd0e",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
     "binary": "theHarvester"
@@ -26,6 +26,7 @@
     {
       "id": "target",
       "label": "Target Domain",
+      "help": "Enter the domain name to search for associated email addresses and public profiles.",
       "type": "string",
       "required": true,
       "placeholder": "secuscan.in"
@@ -53,5 +54,8 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "0f0889733638a60dc134a94a668c6683cbdb435560d60f61e7735d47114334c6"
+  "capabilities": [
+    "network"
+  ],
+  "checksum": "5377a2b1fa014409b40af87d8c50e9e8af7109fb6cb57136ed2cd2a4315463c1"
 }

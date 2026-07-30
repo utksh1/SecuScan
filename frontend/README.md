@@ -1,6 +1,9 @@
 # SecuScan Frontend
 
 React-based web interface for the SecuScan pentesting toolkit.
+<p align="center">
+  <img src="Favicon-SecuScan.png" alt="Favicon" width="120"/>
+</p>
 
 ## 🚀 Quick Start
 
@@ -39,30 +42,30 @@ npm run preview
 frontend/
 ├── src/
 │   ├── components/          # Reusable UI components
-│   │   ├── Layout.jsx       # Main app layout with sidebar
-│   │   ├── ConsentModal.jsx # Consent confirmation dialog
-│   │   ├── DynamicForm.jsx  # Form generator from plugin schema
-│   │   └── TaskCard.jsx     # Task display card
+│   │   ├── AppShell.tsx     # Main app layout with sidebar
+│   │   ├── ConsentModal.tsx # Consent confirmation dialog
+│   │   ├── DynamicForm.tsx  # Form generator from plugin schema
+│   │   └── TaskCard.tsx     # Task display card
 │   │
 │   ├── pages/               # Route components
-│   │   ├── Scanner.jsx      # Main scanning interface
-│   │   ├── TaskHistory.jsx  # Task history list
-│   │   ├── TaskDetails.jsx  # Individual task view
-│   │   └── Settings.jsx     # Settings page
+│   │   ├── Scanner.tsx      # Main scanning interface
+│   │   ├── Scans.tsx        # Task history list
+│   │   ├── TaskDetails.tsx  # Individual task view
+│   │   └── Settings.tsx     # Settings page
 │   │
 │   ├── context/             # React Context for state
-│   │   └── AppContext.jsx   # Global app state
+│   │   └── AppContext.tsx   # Global app state
 │   │
 │   ├── services/            # API integration
-│   │   └── api.js           # Backend API client
+│   │   └── api.ts           # Backend API client
 │   │
-│   ├── App.jsx              # Main app component with routing
+│   ├── App.tsx              # Main app component with routing
 │   ├── App.css              # App-specific styles
-│   ├── main.jsx             # React entry point
+│   ├── main.tsx             # React entry point
 │   └── index.css            # Global styles
 │
 ├── index.html               # HTML template
-├── vite.config.js           # Vite configuration
+├── vite.config.ts           # Vite configuration
 ├── package.json             # Dependencies
 └── README.md                # This file
 ```
@@ -93,7 +96,7 @@ frontend/
 - Centralized data fetching
 
 #### 3. **Service Layer**
-- `api.js` abstracts backend communication
+- `api.ts` abstracts backend communication
 - Consistent error handling
 - Type-safe responses (via Pydantic backend)
 
@@ -173,64 +176,77 @@ useEffect(() => {
 ### Adding a New Page
 
 1. Create component in `src/pages/`:
-```jsx
-// src/pages/MyPage.jsx
+```tsx
+// src/pages/MyPage.tsx
 export default function MyPage() {
   return <div>My Page Content</div>
 }
 ```
 
-2. Add route in `App.jsx`:
-```jsx
+2. Add route in `App.tsx`:
+```tsx
 <Route path="/mypage" element={<MyPage />} />
 ```
 
-3. Add navigation link in `Layout.jsx`:
-```jsx
+3. Add navigation link in your layout component (e.g. `AppShell.tsx`):
+```tsx
 <NavLink to="/mypage">My Page</NavLink>
 ```
 
 ### Adding a New Component
 
 1. Create component in `src/components/`:
-```jsx
-// src/components/MyComponent.jsx
-export default function MyComponent({ prop1, prop2 }) {
-  return <div>{prop1} - {prop2}</div>
-}
+```tsx
+// src/components/MyComponent.tsx
+
+type Props = {
+  prop1: string;
+  prop2: number;
+};
+
+const MyComponent = ({ prop1, prop2 }: Props): JSX.Element => {
+  return <div>{prop1} - {prop2}</div>;
+};
+
+export default MyComponent;
 ```
 
 2. Import and use:
-```jsx
-import MyComponent from '../components/MyComponent'
+```tsx
+import MyComponent from '../components/MyComponent';
 
 <MyComponent prop1="value" prop2={123} />
 ```
 
 ### API Integration
 
-Add new endpoints in `src/services/api.js`:
-```javascript
+Add new endpoints in `src/services/api.ts`:
+```ts
+// src/services/api.ts
+
 export const api = {
-  // ... existing methods
-  
-  myNewEndpoint: (param) => request(`/my-endpoint/${param}`, {
-    method: 'POST',
-    body: JSON.stringify({ data: 'value' })
-  })
-}
+  myNewEndpoint: (param: string) =>
+    request(`/my-endpoint/${param}`, {
+      method: "POST",
+      body: JSON.stringify({ data: "value" }),
+    }),
+};
 ```
 
 Use in components:
-```jsx
-import { api } from '../services/api'
+```tsx
+import { api } from "../services/api";
 
-async function handleAction() {
+async function handleAction(): Promise<void> {
   try {
-    const result = await api.myNewEndpoint('param')
-    console.log(result)
-  } catch (error) {
-    console.error(error.message)
+    const result = await api.myNewEndpoint("param");
+    console.log(result);
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      console.error(error.message);
+    } else {
+      console.error(error);
+    }
   }
 }
 ```
@@ -242,7 +258,7 @@ async function handleAction() {
 ### `<Layout>`
 Main app layout with sidebar navigation.
 
-**Props:** 
+**Props:**
 - `children` - Page content
 
 **Usage:**
@@ -353,9 +369,9 @@ import { useApp } from '../context/AppContext'
 
 function MyComponent() {
   const { plugins, settings, loading } = useApp()
-  
+
   if (loading) return <div>Loading...</div>
-  
+
   return <div>{plugins.length} plugins</div>
 }
 ```
@@ -401,7 +417,24 @@ function MyComponent() {
 ```
 
 ---
+## Available Commands
 
+All commands must be run from the `frontend/` directory.
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Start the Vite development server |
+| `npm run build` | Compile TypeScript and build for production |
+| `npm run preview` | Preview the production build locally (port 8080) |
+| `npm run typecheck` | Run TypeScript type checking without emitting files |
+| `npm run test` | Run unit tests with Vitest |
+| `npm run test:watch` | Run unit tests in watch mode (re-runs on file changes) |
+| `npm run quality` | Run the quality gate checks |
+| `npm run quality:full` | Run quality checks, typecheck, and tests together |
+| `npm run e2e` | Run end-to-end tests with Playwright |
+| `npm run e2e:ui` | Run end-to-end tests with Playwright's interactive UI |
+
+---
 ## 🧪 Testing
 
 ### Manual Testing Checklist
@@ -419,6 +452,85 @@ function MyComponent() {
 - [ ] Navigation works between all pages
 - [ ] Responsive design works on mobile
 
+
+---
+## ⚡ Frontend Checks Quickstart
+
+Run all frontend commands from the `frontend/` directory.
+
+### Install Dependencies
+
+```bash
+cd frontend
+npm install
+```
+
+### Run Unit Tests
+
+```bash
+npm run test
+```
+
+### Run Tests in Watch Mode
+
+```bash
+npm run test:watch
+```
+
+### Run Type Checking
+
+```bash
+npm run typecheck
+```
+
+### Run Production Build
+
+```bash
+npm run build
+```
+
+### Run Quality Checks
+
+```bash
+npm run quality
+```
+
+### Run Full Quality Pipeline
+
+```bash
+npm run quality:full
+```
+
+### Run End-to-End Tests
+
+```bash
+npm run e2e
+```
+
+### Vitest Test File Locations
+
+Vitest unit tests are located in:
+
+```bash
+frontend/testing/unit
+```
+
+Supported naming patterns include:
+
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+
+> Note for Windows users:
+> Some npm scripts using `NODE_OPTIONS=...` may not run directly in PowerShell.
+
+Run tests manually using:
+
+```bash
+npx vitest run
+```
+
 ### Browser Support
 
 - Chrome/Edge 90+
@@ -435,7 +547,7 @@ function MyComponent() {
 
 **Solution:**
 1. Verify backend is running: `curl http://127.0.0.1:8000/api/v1/health`
-2. Check Vite proxy in `vite.config.js`:
+2. Check Vite proxy in `vite.config.ts`:
 ```js
 server: {
   proxy: {
@@ -465,35 +577,118 @@ server: {
 
 ---
 
-## 📦 Deployment
+## 🏭 Production Deployment
 
-### Build for Production
+### 1. Build the frontend
 
 ```bash
-# Install dependencies
-npm install
-
-# Create production build
+cd frontend
+npm ci
 npm run build
 ```
 
-Output in `dist/` directory.
+Output lands in `frontend/dist/`. Verify locally before deploying:
 
-### Serve with Backend
-
-Option 1: **Static File Serving**
-```python
-# In backend/main.py
-from fastapi.staticfiles import StaticFiles
-
-app.mount("/", StaticFiles(directory="frontend/dist", html=True), name="frontend")
-```
-
-Option 2: **Separate Web Server**
 ```bash
-# Serve frontend with nginx/caddy/apache
-# Point backend API calls to backend server
+npm run preview
+# Serves dist/ at http://127.0.0.1:8080
 ```
+
+---
+
+### 2. Set the API base URL at build time
+
+The frontend resolves the backend URL via `src/api.ts::resolveApiBase()` in this priority order:
+
+| Priority | Mechanism | When to use |
+|----------|-----------|-------------|
+| 1 | `VITE_API_BASE` env var | Production — always set this |
+| 2 | Window location heuristic | Dev server on a non-5173 port |
+| 3 | Vite proxy (`/api` → backend) | Local dev on port 5173 (default) |
+
+**`VITE_API_BASE` must be set at build time**, not at runtime. Vite inlines `import.meta.env` values during the
+build step — changing the env var after building has no effect.
+
+```bash
+VITE_API_BASE=http://your-backend-host:8081/api/v1 npm run build
+```
+
+Or create `frontend/.env.production`:
+VITE_API_BASE=http://your-backend-host:8081/api/v1
+
+> ⚠️ Do not confuse `VITE_API_BASE` (frontend, build-time) with `VITE_API_PROXY_TARGET` (Vite dev server only — has no effect in a production build).
+
+---
+
+### 3. Serve the built frontend
+
+> ⚠️ `backend/secuscan/main.py` currently imports `StaticFiles` but does not mount the `dist/` directory. The backend cannot serve the frontend
+> yet. Use one of the options below until that is wired up.
+
+**Option A — nginx (recommended)**
+
+```nginx
+server {
+    listen 80;
+    root /path/to/frontend/dist;
+    index index.html;
+
+    # SPA fallback — required for React Router
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Proxy API calls to the backend
+    location /api/ {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_set_header Host $host;
+    }
+}
+```
+
+**Option B — quick local verification**
+
+```bash
+npx serve dist --single
+# --single enables the SPA fallback for React Router
+```
+
+---
+
+### 4. SPA route fallback — why it matters
+
+SecuScan uses React Router for client-side navigation. If a user visits `/task/abc123` directly or refreshes the page on any route, the web
+server looks for a real file at that path, finds nothing, and returns a **404**.
+
+The fix is always the same: serve `index.html` for any path that does not match a real static file. The nginx `try_files` directive and
+`serve --single` flag above both handle this. Without it, every direct link and browser refresh on a non-root route breaks.
+
+---
+
+### 5. Docker Compose note
+
+The current `docker-compose.yml` runs the frontend service with `npm run dev` (Vite development server). This is intentional for
+contributor workflows and is **not production-ready**. A multi-stage frontend Dockerfile is not yet present in the repository.
+
+---
+
+### Troubleshooting
+
+**404 on page refresh or direct URL**
+The SPA fallback is missing. Add `try_files $uri /index.html` to your nginx config or use `npx serve dist --single`.
+
+**All API calls fail after deploying**
+`VITE_API_BASE` was not set at build time. Rebuild with the correct value:
+```bash
+VITE_API_BASE=http://your-backend:8081/api/v1 npm run build
+```
+
+**`VITE_API_PROXY_TARGET` has no effect in production**
+This variable only configures the Vite dev server proxy. It is completely ignored in the production build.
+
+**CORS errors in the browser console**
+Add your frontend's origin to the backend config in `.env`:
+SECUSCAN_CORS_ALLOWED_ORIGINS=http://your-frontend-host
 
 ---
 
@@ -536,5 +731,5 @@ For issues or questions:
 
 ---
 
-**Last Updated:** October 29, 2025  
+**Last Updated:** October 29, 2025
 **Version:** 0.1.0-alpha

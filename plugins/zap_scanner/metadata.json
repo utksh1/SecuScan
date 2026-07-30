@@ -10,16 +10,24 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udee0\ufe0f",
+  "icon": "🛠️",
+  "implementation_status": "integrated",
+  "supports_authenticated_crawling": true,
+  "supports_session_reuse": true,
   "engine": {
     "type": "cli",
-    "binary": "python3"
+    "binary": "docker"
   },
   "command_template": [
-    "python3",
-    "-c",
-    "import sys;print('ZAP connector placeholder scan');print('target='+sys.argv[1]);print('mode=dast')",
-    "{target}"
+    "docker",
+    "run",
+    "--rm",
+    "ghcr.io/zaproxy/zaproxy:stable",
+    "zap-baseline.py",
+    "-t",
+    "{target}",
+    "-m",
+    "5"
   ],
   "fields": [
     {
@@ -50,12 +58,19 @@
       "max_concurrent": 1
     }
   },
+  "capabilities": [
+    "network",
+    "intrusive",
+    "exploit",
+    "docker",
+    "credentials"
+  ],
   "dependencies": {
     "binaries": [
-      "python3"
+      "docker"
     ],
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "90b303f8523cee4e707be0003b9506dbb443d3e90ab41cd8f9c59f1e2654fe55"
+  "checksum": "4d7cd9e4bed793703811204fd22a5e0b511d8880750f07a593301a7eae5732a0"
 }

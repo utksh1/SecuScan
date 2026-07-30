@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd0e",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
     "binary": "ffuf"
@@ -33,7 +33,7 @@
       "required": true,
       "placeholder": "https://secuscan.in",
       "validation": {
-        "pattern": "^https?://",
+        "validation_type": "url",
         "message": "Must be a valid HTTP(S) URL"
       }
     },
@@ -74,5 +74,10 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "92487e75582ea0ca9680f5626a2aa93bcb8ecc72c64a35a78f8704175033ddc5"
+  "capabilities": [
+    "network",
+    "intrusive",
+    "filesystem"
+  ],
+  "checksum": "802e8af9ea34849eb6f3e54b8777c38dcbf3ca526992b8de78668b065bd3f066"
 }

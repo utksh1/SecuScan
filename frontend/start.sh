@@ -23,7 +23,7 @@ if curl -s http://127.0.0.1:8080/api/v1/health > /dev/null 2>&1; then
     echo "✅ Backend is running"
 else
     echo "⚠️  Warning: Backend is not responding at http://127.0.0.1:8080"
-    echo "   Please start the backend first: cd ../backend && python3 -m backend.main"
+    echo "   Please start the backend first: cd ../backend && python -m backend.main"
     echo ""
     read -p "Continue anyway? (y/N): " -n 1 -r
     echo

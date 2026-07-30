@@ -2,7 +2,7 @@
 name: Feature request
 about: Suggest an idea for SecuScan
 title: '[FEAT] '
-labels: feature
+labels: type:feature, priority:medium
 assignees: ''
 
 ---

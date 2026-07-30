@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udee0\ufe0f",
+  "icon": "🛠️",
   "engine": {
     "type": "cli",
     "binary": "uncover"
@@ -29,14 +29,16 @@
       "label": "Search Query",
       "type": "string",
       "required": true,
-      "placeholder": "s3.amazonaws.com org:example"
+      "placeholder": "s3.amazonaws.com org:example",
+      "help": "Enter an Uncover search query to identify exposed cloud storage assets. Examples include bucket names, domains, or organization filters."
     },
     {
       "id": "limit",
       "label": "Result Limit",
       "type": "integer",
       "required": false,
-      "default": 100
+      "default": 100,
+      "help": "Maximum number of results to return. Increase for broader discovery or reduce to limit output volume."
     }
   ],
   "presets": {
@@ -64,5 +66,8 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "8327c42108570fc0b7b5379661f811d3c36b26abf904182e6634bd22145b9c7a"
+  "capabilities": [
+    "network"
+  ],
+  "checksum": "bd03bd0e7a10a7b0c83409f78c632f657491ede824205dbf8e8da4cd7d039220"
 }

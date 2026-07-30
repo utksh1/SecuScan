@@ -1,0 +1,13 @@
+{
+  "concurrent_task_creates_10_total_ms": 1000,
+  "sequential_task_creates_mean_ms": 50,
+  "slot_rejection_ms": 5,
+  "report_payload_build_mean_ms": 5,
+  "finding_normalization_throughput_per_sec": 5000,
+  "html_report_generate_mean_ms": 30,
+  "task_fetchall_100_rows_ms": 50,
+  "task_fetchone_p95_ms": 5,
+  "findings_fetchall_500_rows_ms": 100,
+  "csv_export_mean_ms": 10,
+  "html_export_mean_ms": 30
+}
