@@ -854,8 +854,17 @@ async def download_sarif_report(task_id: str, owner: str = Depends(get_current_o
 
 
 @router.get("/task/{task_id}/result")
-async def get_task_result(task_id: str, owner: str = Depends(get_current_owner)):
-    """Get task execution result"""
+async def get_task_result(
+    task_id: str,
+    limit: int = Query(5000, ge=1, le=50000, description="Max findings to return (default 5000)"),
+    offset: int = Query(0, ge=0, description="Finding offset for pagination"),
+    owner: str = Depends(get_current_owner)
+):
+    """Get task execution result with optional pagination.
+
+    Computes exact aggregates (severity_counts, finding_groups, asset_summary) from ALL findings,
+    then paginates the findings list. Aggregates always reflect the complete scan, not just the page.
+    """
     db = await get_db()
 
     # Enforce ownership and existence check first
@@ -887,39 +896,45 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
         except json.JSONDecodeError:
             structured = {}
 
+    # Fetch ALL findings to compute exact aggregates, then paginate for response
     finding_rows = await db.fetchall(
         "SELECT * FROM findings WHERE owner_id = ? AND task_id = ? ORDER BY (risk_score IS NULL) ASC, risk_score DESC, discovered_at DESC",
         (owner, task_id),
     )
-    findings = deserialize_finding_rows(finding_rows)
+    all_findings = deserialize_finding_rows(finding_rows)
     asset_rows = await db.fetchall(
         "SELECT * FROM asset_services WHERE owner_id = ? AND task_id = ? ORDER BY created_at DESC",
         (owner, task_id),
     )
     asset_services = deserialize_asset_service_rows(asset_rows)
 
-    if not findings and isinstance(structured, dict):
-        findings = [item for item in structured.get("findings", []) if isinstance(item, dict)]
+    if not all_findings and isinstance(structured, dict):
+        all_findings = [item for item in structured.get("findings", []) if isinstance(item, dict)]
 
+    # Compute exact aggregates from COMPLETE finding set (before pagination)
     severity_counts: Dict[str, int] = {}
-    for finding in findings:
+    for finding in all_findings:
         severity = str(finding.get("severity", "info")).lower()
         severity_counts[severity] = severity_counts.get(severity, 0) + 1
 
     finding_groups = structured.get("finding_groups") if isinstance(structured, dict) else None
     if not isinstance(finding_groups, list) or not finding_groups:
-        finding_groups = build_finding_groups(findings)
+        finding_groups = build_finding_groups(all_findings)
 
     asset_summary = structured.get("asset_summary") if isinstance(structured, dict) else None
     if not isinstance(asset_summary, list) or not asset_summary:
-        asset_summary = build_asset_summary(findings, asset_services)
+        asset_summary = build_asset_summary(all_findings, asset_services)
 
     scan_diff = structured.get("scan_diff") if isinstance(structured, dict) else None
     if not isinstance(scan_diff, dict):
         scan_diff = {"new": [], "resolved": [], "changed": [], "summary": {"new_count": 0, "resolved_count": 0, "changed_count": 0}}
 
+    # Paginate findings for response
+    total_findings_count = len(all_findings)
+    paginated_findings = all_findings[offset:offset + limit]
+
     if isinstance(structured, dict):
-        structured["findings"] = findings
+        structured["findings"] = paginated_findings
         structured["finding_groups"] = finding_groups
         structured["asset_summary"] = asset_summary
         structured["scan_diff"] = scan_diff
@@ -931,13 +946,12 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
         str(item) for item in structured_summary
         if isinstance(item, (str, int, float)) and str(item).strip()
     ] if isinstance(structured_summary, list) else []
-    total_findings = len(findings)
-    if not summary and total_findings > 0:
+    if not summary and total_findings_count > 0:
         critical_high = severity_counts.get("critical", 0) + severity_counts.get("high", 0)
         if critical_high > 0:
-            summary.append(f"Assessment identified {total_findings} security risks, including {critical_high} high-priority items requiring remediation.")
+            summary.append(f"Assessment identified {total_findings_count} security risks, including {critical_high} high-priority items requiring remediation.")
         else:
-            summary.append(f"Assessment identified {total_findings} minor observations; no critical or high-severity threats were found.")
+            summary.append(f"Assessment identified {total_findings_count} minor observations; no critical or high-severity threats were found.")
     elif not summary:
         summary.append("Security analysis revealed no significant vulnerabilities or exposed risks.")
 
@@ -969,7 +983,7 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
         "execution_context": normalize_execution_context(json.loads(task_row["execution_context_json"] or "{}")),
         "summary": summary,
         "severity_counts": severity_counts,
-        "findings": findings,
+        "findings": paginated_findings,
         "finding_groups": finding_groups,
         "asset_summary": asset_summary,
         "scan_diff": scan_diff,
@@ -981,6 +995,13 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
         "errors": [{"message": redact(task_row["error_message"])}] if task_row["error_message"] else [],
         "error_message": redact(task_row["error_message"]) if task_row["error_message"] else None,
         "exit_code": task_row["exit_code"],
+        "pagination": {
+            "limit": limit,
+            "offset": offset,
+            "total": total_findings_count,
+            "returned": len(paginated_findings),
+            "has_more": (offset + limit) < total_findings_count
+        },
         "metadata": {}
     }
 

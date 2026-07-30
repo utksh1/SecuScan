@@ -238,6 +238,14 @@ export interface SearchResponse {
   total: number
 }
 
+export interface PaginationMetadata {
+  limit: number
+  offset: number
+  total: number
+  returned: number
+  has_more: boolean
+}
+
 export interface TaskResultResponse {
   task_id: string
   plugin_id: string
@@ -261,6 +269,7 @@ export interface TaskResultResponse {
   errors?: Array<{ message: string }>
   error_message?: string
   exit_code?: number
+  pagination?: PaginationMetadata
   metadata?: Record<string, unknown>
 }
 
@@ -613,8 +622,25 @@ export function getTaskStatus(taskId: string): Promise<TaskStatusResponse> {
   return request<TaskStatusResponse>(`/task/${taskId}/status`)
 }
 
-export function getTaskResult(taskId: string): Promise<TaskResultResponse | null> {
-  return request<TaskResultResponse | null>(`/task/${taskId}/result`)
+export interface GetTaskResultOptions {
+  limit?: number
+  offset?: number
+}
+
+export function getTaskResult(
+  taskId: string,
+  options?: GetTaskResultOptions
+): Promise<TaskResultResponse | null> {
+  const params = new URLSearchParams()
+  if (options?.limit !== undefined) {
+    params.append('limit', String(options.limit))
+  }
+  if (options?.offset !== undefined) {
+    params.append('offset', String(options.offset))
+  }
+  const query = params.toString()
+  const url = `/task/${taskId}/result${query ? `?${query}` : ''}`
+  return request<TaskResultResponse | null>(url)
 }
 
 export function getTaskDiff(taskId: string): Promise<ScanDiff> {
