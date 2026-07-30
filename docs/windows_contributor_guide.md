@@ -249,18 +249,39 @@ Then retry activation.
 
 ---
 
-### Python PATH Issues
+### Python PATH & Launcher Issues
 
-If `python` is not recognized:
+If `python` is not recognized, redirects to the Microsoft Store, or fails:
 
-* Reinstall Python
-* Ensure "Add Python to PATH" is checked during installation
+* Try using the Windows Python Launcher `py` or `py -3` directly:
+  ```powershell
+  py -3 --version
+  py -3 -m venv venv
+  py -3 -m uvicorn backend.secuscan.main:app --reload --host 127.0.0.1 --port 8000
+  ```
+* Alternatively, reinstall Python and ensure **"Add python.exe to PATH"** is checked during installation.
 
 Verify again:
 
 ```powershell
 python --version
+# or
+py -3 --version
 ```
+
+---
+
+### Git Line Endings (CRLF vs LF) for Shell Scripts
+
+If running `./setup.sh`, `./start.sh`, or `./testing/test_python.sh` in Git Bash fails with errors like `\r: command not found` or `syntax error near unexpected token $'r\r'`:
+
+* This occurs because Git on Windows may convert shell scripts to Windows CRLF line endings upon checkout.
+* Configure Git to preserve LF line endings for the repository:
+  ```powershell
+  git config core.autocrlf input
+  ```
+* Verify the repository `.gitattributes` configuration to ensure `*.sh` files retain `text eol=lf`.
+* If shell scripts were already checked out with CRLF line endings, convert them using your editor (e.g. VS Code line-ending selector) or re-clone the repository fresh if needed.
 
 ---
 
