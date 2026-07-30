@@ -46,6 +46,7 @@ services:
       - SECUSCAN_POSTGRES_DSN=postgresql://${SECUSCAN_POSTGRES_USER:-secuscan}:${SECUSCAN_POSTGRES_PASSWORD:-secuscan}@postgres:5432/${SECUSCAN_POSTGRES_DB:-secuscan}
       - SECUSCAN_REDIS_URL=redis://redis:6379/0
       - SECUSCAN_PLUGINS_DIR=/app/plugins
+      - SECUSCAN_CORS_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080,http://127.0.0.1:8080
     depends_on:
       postgres:
         condition: service_healthy
