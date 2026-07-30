@@ -36,7 +36,7 @@ export default function SignIn() {
   const { isAuthenticated, loading, markAuthenticated } = useAuth()
   const navigate = useNavigate()
   const location = useLocation() as { state?: { from?: { pathname?: string } } }
-  
+
   const rawFrom = location.state?.from?.pathname
   const from = rawFrom && isSafeInternalPath(rawFrom) ? rawFrom : routes.dashboard
 
