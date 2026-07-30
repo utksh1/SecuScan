@@ -64,6 +64,40 @@ describe('SignIn page (issue #795)', () => {
     await waitFor(() => expect(screen.getByText('FINDINGS PAGE')).toBeInTheDocument())
   })
 
+  it('rejects external HTTP/HTTPS URLs and redirects to the dashboard instead', async () => {
+    vi.mocked(authenticateWithApiKey).mockResolvedValue(undefined)
+    renderSignIn({ pathname: '/signin', state: { from: { pathname: 'https://evil.com/findings' } } })
+    await screen.findByLabelText(/Backend API Key/i)
+
+    await userEvent.type(screen.getByLabelText(/Backend API Key/i), 'operator-key-123')
+    await userEvent.click(screen.getByText(/Save and connect/i))
+
+    await waitFor(() => expect(screen.getByText('DASHBOARD HOME')).toBeInTheDocument())
+    expect(screen.queryByText('FINDINGS PAGE')).not.toBeInTheDocument()
+  })
+
+  it('rejects protocol-relative URLs (starts with //) and redirects to the dashboard', async () => {
+    vi.mocked(authenticateWithApiKey).mockResolvedValue(undefined)
+    renderSignIn({ pathname: '/signin', state: { from: { pathname: '//evil.com/findings' } } })
+    await screen.findByLabelText(/Backend API Key/i)
+
+    await userEvent.type(screen.getByLabelText(/Backend API Key/i), 'operator-key-123')
+    await userEvent.click(screen.getByText(/Save and connect/i))
+
+    await waitFor(() => expect(screen.getByText('DASHBOARD HOME')).toBeInTheDocument())
+  })
+
+  it('rejects javascript: schemes and redirects to the dashboard', async () => {
+    vi.mocked(authenticateWithApiKey).mockResolvedValue(undefined)
+    renderSignIn({ pathname: '/signin', state: { from: { pathname: 'javascript:alert(1)' } } })
+    await screen.findByLabelText(/Backend API Key/i)
+
+    await userEvent.type(screen.getByLabelText(/Backend API Key/i), 'operator-key-123')
+    await userEvent.click(screen.getByText(/Save and connect/i))
+
+    await waitFor(() => expect(screen.getByText('DASHBOARD HOME')).toBeInTheDocument())
+  })
+
   it('shows the backend error and does not redirect when the key is rejected', async () => {
     vi.mocked(authenticateWithApiKey).mockRejectedValue(new Error('Invalid API key'))
     renderSignIn()
