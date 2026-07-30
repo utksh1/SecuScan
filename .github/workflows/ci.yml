@@ -318,6 +318,16 @@ jobs:
         run: npm run test
       - name: Build frontend
         run: npm run build
+      - name: Run end-to-end tests
+        run: npm run e2e
+        continue-on-error: true
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.node-version }}
+          path: frontend/playwright-report
+          retention-days: 30
 
   frontend-checks:
     needs: [frontend-run-checks]
