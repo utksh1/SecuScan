@@ -238,3 +238,68 @@ def test_cloud_scanner_parser_preserves_raw_line_in_metadata():
     result = parse(single_line)
     assert result["findings"]
     assert result["findings"][0]["metadata"]["raw"] == "critical: public RDS instance detected"
+
+def test_cloud_scanner_parser_whitespace_only():
+    """Whitespace-only output should return an empty, stable result."""
+    result = parse("   \n\t\n    ")
+
+    assert result["findings"] == []
+    assert result["count"] == 0
+    assert result["items"] == []
+
+def test_cloud_scanner_parser_malformed_output():
+    """Malformed records should not cause parser failures."""
+    malformed = (
+        "\x00\x01\x02\n"
+        "%%%%%%%\n"
+        "{{{{{{{{\n"
+        ":::::::\n"
+    )
+    result = parse(malformed)
+    assert isinstance(result, dict)
+    assert "findings" in result
+    assert "count" in result
+    assert "items" in result
+
+def test_cloud_scanner_parser_valid_records_survive_noise():
+    """Valid findings should still be parsed when surrounded by noisy lines."""
+    output = """
+random garbage
+##########
+found exposed storage bucket
+@@@###$$$
+critical: database compromised
+some unrelated log line
+"""
+    result = parse(output)
+    descriptions = [
+        finding["description"]
+        for finding in result["findings"]
+    ]
+    assert any("found exposed storage bucket" in d for d in descriptions)
+    assert any("critical: database compromised" in d for d in descriptions)
+
+def test_cloud_scanner_parser_empty_result_shape():
+    """Parser should always return the expected structure."""
+    result = parse("")
+    assert set(result.keys()) == {
+        "findings",
+        "count",
+        "items",
+    }
+    assert isinstance(result["findings"], list)
+    assert isinstance(result["count"], int)
+    assert isinstance(result["items"], list)
+
+def test_cloud_scanner_parser_noise_defaults_to_info():
+    """Unrecognized lines should remain informational."""
+    result = parse(
+        "hello world\n"
+        "abcdefg\n"
+        "123456789\n"
+    )
+    assert len(result["findings"]) == 3
+    assert all(
+        finding["severity"] == "info"
+        for finding in result["findings"]
+    )
