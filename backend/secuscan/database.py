@@ -52,6 +52,7 @@ class Database:
             """
             CREATE TABLE IF NOT EXISTS tasks (
                 id TEXT PRIMARY KEY,
+                version INTEGER NOT NULL DEFAULT 1,
                 plugin_id TEXT NOT NULL,
                 tool_name TEXT NOT NULL,
                 target TEXT NOT NULL,
@@ -194,7 +195,8 @@ class Database:
             "memory_peak_mb": "REAL",
             "inputs_json": "TEXT NOT NULL DEFAULT '{}'",
             "preset": "TEXT",
-            "safe_mode": "BOOLEAN NOT NULL DEFAULT 1"
+            "safe_mode": "BOOLEAN NOT NULL DEFAULT 1",
+            "version": "INTEGER NOT NULL DEFAULT 1"
         }
 
         for col_name, col_type in needed_cols.items():
@@ -219,6 +221,23 @@ class Database:
         """Execute a write query."""
         await self.connection.execute(query, params)
         await self.connection.commit()
+
+    async def execute_cas(self, query: str, params: tuple = ()) -> int:
+        """
+        Execute a compare-and-set write (an UPDATE/DELETE whose WHERE clause
+        includes a version or status guard) and return the number of rows
+        actually affected, so callers can detect a lost update.
+        """
+        cursor = await self.connection.execute(query, params)
+        await self.connection.commit()
+        return cursor.rowcount
+
+    async def execute_returning(self, query: str, params: tuple = ()) -> List[Dict]:
+        """Execute a write query with a RETURNING clause and fetch the affected rows."""
+        async with self.connection.execute(query, params) as cursor:
+            rows = await cursor.fetchall()
+            await self.connection.commit()
+            return [dict(row) for row in rows]
 
     async def fetchone(self, query: str, params: tuple = ()) -> Optional[Dict]:
         """Fetch one row."""

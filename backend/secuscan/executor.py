@@ -148,11 +148,15 @@ class TaskExecutor:
         self.running_tasks[task_id] = asyncio.current_task()
 
         try:
-            # Update status to running
-            await db.execute(
-                "UPDATE tasks SET status = ?, started_at = ? WHERE id = ?",
-                (TaskStatus.RUNNING.value, datetime.now().isoformat(), task_id)
+            # Update status to running (guarded: only from queued, so a
+            # concurrent cancel/delete can't be silently overwritten)
+            started_rows = await db.execute_cas(
+                "UPDATE tasks SET status = ?, started_at = ?, version = version + 1 WHERE id = ? AND status = ?",
+                (TaskStatus.RUNNING.value, datetime.now().isoformat(), task_id, TaskStatus.QUEUED.value)
             )
+            if started_rows == 0:
+                logger.warning(f"Task {task_id} could not transition to running (status changed or task deleted concurrently)")
+                return
 
             # Get task details
             task_row = await db.fetchone(
@@ -184,15 +188,16 @@ class TaskExecutor:
                 # Update task with results
                 final_status = TaskStatus.COMPLETED.value if result.get("status") != "failed" else TaskStatus.FAILED.value
                 
-                await db.execute(
+                updated_rows = await db.execute_cas(
                     """
                     UPDATE tasks SET
                         status = ?,
                         completed_at = ?,
                         duration_seconds = ?,
                         structured_json = ?,
-                        error_message = ?
-                    WHERE id = ?
+                        error_message = ?,
+                        version = version + 1
+                    WHERE id = ? AND status = ?
                     """,
                     (
                         final_status,
@@ -200,9 +205,13 @@ class TaskExecutor:
                         duration,
                         json.dumps(result),
                         result.get("error_message"),
-                        task_id
+                        task_id,
+                        TaskStatus.RUNNING.value
                     )
                 )
+                if updated_rows == 0:
+                    logger.warning(f"Task {task_id} was modified concurrently (e.g. cancelled); skipping stale completion write")
+                    return
 
                 # Upsert findings and report using the scanner's result
                 await self._upsert_findings_and_report_from_scanner(
@@ -271,7 +280,7 @@ class TaskExecutor:
                     exit_code=exit_code,
                 )
 
-                await db.execute(
+                updated_rows = await db.execute_cas(
                     """
                     UPDATE tasks SET
                         status = ?,
@@ -280,8 +289,9 @@ class TaskExecutor:
                         exit_code = ?,
                         raw_output_path = ?,
                         command_used = ?,
-                        error_message = ?
-                    WHERE id = ?
+                        error_message = ?,
+                        version = version + 1
+                    WHERE id = ? AND status = ?
                     """,
                     (
                         final_status,
@@ -291,9 +301,13 @@ class TaskExecutor:
                         str(raw_path),
                         " ".join(command),
                         error_message,
-                        task_id
+                        task_id,
+                        TaskStatus.RUNNING.value
                     )
                 )
+                if updated_rows == 0:
+                    logger.warning(f"Task {task_id} was modified concurrently (e.g. cancelled); skipping stale completion write")
+                    return
 
                 # Upsert findings and report
                 await self._upsert_findings_and_report(
@@ -325,23 +339,27 @@ class TaskExecutor:
 
             # Update task as failed
             duration = (time.time() - start_time) if 'start_time' in locals() else 0
-            await db.execute(
+            failed_rows = await db.execute_cas(
                 """
                 UPDATE tasks SET
                     status = ?,
                     completed_at = ?,
                     duration_seconds = ?,
-                    error_message = ?
-                WHERE id = ?
+                    error_message = ?,
+                    version = version + 1
+                WHERE id = ? AND status = ?
                 """,
                 (
                     TaskStatus.FAILED.value,
                     datetime.now().isoformat(),
                     duration,
                     str(e),
-                    task_id
+                    task_id,
+                    TaskStatus.RUNNING.value
                 )
             )
+            if failed_rows == 0:
+                logger.warning(f"Task {task_id} was modified concurrently; skipping stale failure write")
 
             await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
             await self._invalidate_cached_views()
@@ -359,8 +377,8 @@ class TaskExecutor:
             
             # Check if task was cancelled
             if asyncio.current_task().cancelled():
-                await db.execute(
-                    "UPDATE tasks SET status = ?, completed_at = ? WHERE id = ? AND status = ?",
+                await db.execute_cas(
+                    "UPDATE tasks SET status = ?, completed_at = ?, version = version + 1 WHERE id = ? AND status = ?",
                     (TaskStatus.CANCELLED.value, datetime.now().isoformat(), task_id, TaskStatus.RUNNING.value)
                 )
     
@@ -506,10 +524,23 @@ class TaskExecutor:
                 logger.error(f"Failed to kill docker container for {task_id}: {e}")
 
         db = await get_db()
-        await db.execute(
-            "UPDATE tasks SET status = ?, completed_at = ? WHERE id = ?",
-            (TaskStatus.CANCELLED.value, datetime.now().isoformat(), task_id)
+        cancelled_rows = await db.execute_cas(
+            """
+            UPDATE tasks SET status = ?, completed_at = ?, version = version + 1
+            WHERE id = ? AND status IN (?, ?)
+            """,
+            (
+                TaskStatus.CANCELLED.value,
+                datetime.now().isoformat(),
+                task_id,
+                TaskStatus.QUEUED.value,
+                TaskStatus.RUNNING.value,
+            )
         )
+
+        if cancelled_rows == 0:
+            logger.info(f"Task {task_id} was already finished/cancelled before cancel could apply")
+            return False
 
         await self._broadcast(task_id, "status", TaskStatus.CANCELLED.value)
         await self._invalidate_cached_views()

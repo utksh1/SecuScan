@@ -442,11 +442,14 @@ async def get_task_result(task_id: str):
 @router.post("/task/{task_id}/cancel")
 async def cancel_task(task_id: str):
     """Cancel a running task"""
+    existing = await executor.get_task_status(task_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Task not found")
+
     cancelled = await executor.cancel_task(task_id)
-    
     if not cancelled:
-        raise HTTPException(status_code=404, detail="Task not found or not running")
-    
+        raise HTTPException(status_code=409, detail="Task already finished or cancelled")
+
     return {
         "task_id": task_id,
         "status": "cancelled",
@@ -600,22 +603,37 @@ async def list_tasks(
     }
 
 
-async def delete_task_records(task_ids: List[str]):
-    """Helper to delete database records and files for multiple tasks."""
+async def delete_task_records(task_ids: List[str]) -> List[str]:
+    """
+    Helper to delete database records and files for multiple tasks.
+
+    The tasks DELETE is guarded on status != 'running' so a task that
+    started running between the caller's check and this call is skipped
+    rather than deleted out from under an in-flight execution. Returns
+    the list of task_ids that were actually deleted.
+    """
     db = await get_db()
-    
-    # Get raw output paths for file cleanup
+
     placeholders = ",".join(["?"] * len(task_ids))
-    task_rows = await db.fetchall(f"SELECT raw_output_path FROM tasks WHERE id IN ({placeholders})", tuple(task_ids))
-    
-    # Delete associated data
-    await db.execute(f"DELETE FROM findings WHERE task_id IN ({placeholders})", tuple(task_ids))
-    await db.execute(f"DELETE FROM reports WHERE task_id IN ({placeholders})", tuple(task_ids))
-    await db.execute(f"DELETE FROM audit_log WHERE task_id IN ({placeholders})", tuple(task_ids))
-    await db.execute(f"DELETE FROM tasks WHERE id IN ({placeholders})", tuple(task_ids))
-    
+
+    # Only delete tasks that are not currently running (re-checked here to
+    # close the gap between the caller's status check and this delete)
+    deleted_rows = await db.execute_returning(
+        f"DELETE FROM tasks WHERE id IN ({placeholders}) AND status != 'running' RETURNING id, raw_output_path",
+        tuple(task_ids)
+    )
+    deleted_ids = [row["id"] for row in deleted_rows]
+
+    if not deleted_ids:
+        return []
+
+    del_placeholders = ",".join(["?"] * len(deleted_ids))
+    await db.execute(f"DELETE FROM findings WHERE task_id IN ({del_placeholders})", tuple(deleted_ids))
+    await db.execute(f"DELETE FROM reports WHERE task_id IN ({del_placeholders})", tuple(deleted_ids))
+    await db.execute(f"DELETE FROM audit_log WHERE task_id IN ({del_placeholders})", tuple(deleted_ids))
+
     # Cleanup files on disk
-    for row in task_rows:
+    for row in deleted_rows:
         if row and row["raw_output_path"]:
             try:
                 path = Path(row["raw_output_path"])
@@ -624,17 +642,28 @@ async def delete_task_records(task_ids: List[str]):
             except Exception as e:
                 logger.error(f"Failed to delete raw output file {row['raw_output_path']}: {e}")
 
+    return deleted_ids
+
+
 @router.delete("/task/{task_id}")
 async def delete_task(task_id: str):
     """Delete a task and its associated data (findings, reports, audit logs, and files)"""
     db = await get_db()
-    
-    # Check if task is running
+
+    # Check if task exists / is running
     status = await executor.get_task_status(task_id)
-    if status and status.get("status") == "running":
+    if not status:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if status.get("status") == "running":
         raise HTTPException(status_code=400, detail="Cannot delete a running task. Abort it first.")
 
-    await delete_task_records([task_id])
+    deleted_ids = await delete_task_records([task_id])
+    if not deleted_ids:
+        raise HTTPException(
+            status_code=409,
+            detail="Task could not be deleted; it started running concurrently. Try again once it finishes."
+        )
+
     await invalidate_view_cache()
     
     return {
@@ -654,12 +683,15 @@ async def bulk_delete_tasks(task_ids: List[str]):
     if running_tasks:
         raise HTTPException(status_code=400, detail="Cannot delete running tasks. Abort them first.")
 
-    await delete_task_records(task_ids)
+    deleted_ids = await delete_task_records(task_ids)
     await invalidate_view_cache()
+
+    skipped = [tid for tid in task_ids if tid not in deleted_ids]
     
     return {
-        "deleted_count": len(task_ids),
-        "success": True
+        "deleted_count": len(deleted_ids),
+        "skipped_ids": skipped,
+        "success": len(skipped) == 0
     }
 
 
