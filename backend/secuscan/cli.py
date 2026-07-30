@@ -147,6 +147,12 @@ def main():
     # List plugins command
     subparsers.add_parser("plugins", help="List available plugins")
 
+    # Scaffold command
+    scaffold_parser = subparsers.add_parser("scaffold", help="Generate a new plugin template")
+    scaffold_parser.add_argument("--id", help="Plugin ID (folder name)")
+    scaffold_parser.add_argument("--name", help="Display name of the plugin")
+    scaffold_parser.add_argument("--safety", help="Safety level (safe, intrusive, exploit)")
+
     args = parser.parse_args()
 
     if args.command == "scan":
@@ -161,6 +167,9 @@ def main():
             for p_id, p in pm.plugins.items():
                 print(f"{p_id:<20} {p.name:<30} {p.category:<15}")
         asyncio.run(list_plugins())
+    elif args.command == "scaffold":
+        from backend.secuscan.scaffold import generate_scaffold
+        generate_scaffold(args.id, args.name, args.safety)
     else:
         parser.print_help()
 
