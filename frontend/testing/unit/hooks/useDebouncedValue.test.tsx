@@ -27,7 +27,6 @@ function Harness({ value, delay, captured }: HarnessProps) {
 
 describe('useDebouncedValue', () => {
   it('keeps the previous value until the delay expires', () => {
-    // We'll implement this next.
     const captured = {
         current: 'A',
     }
@@ -139,4 +138,3 @@ describe('useDebouncedValue', () => {
   clearTimeoutSpy.mockRestore()
 })
 })
-
