@@ -193,11 +193,13 @@ def init_api_key(data_dir: str) -> str:
     can be checked against ``SECUSCAN_API_KEY_TTL_SECONDS`` and reported via
     ``GET /api/v1/admin/api-key/status``. A pre-existing plaintext key file
     (from before issue #1619) is migrated in place: the key is kept, wrapped
-    with a fresh ``created_at`` timestamp.
+    with a fresh ``created_at`` timestamp. Migration is skipped if the key file
+    is on a read-only mount or via a custom key-file path (e.g. Docker secrets).
     """
     global _api_key, _api_key_created_at, _api_key_file
     key_file = _resolve_key_file(data_dir)
     _api_key_file = key_file
+    custom_key_file = os.environ.get("SECUSCAN_API_KEY_FILE", "").strip()
 
     if key_file.exists():
         raw = key_file.read_text().strip()
@@ -207,15 +209,26 @@ def init_api_key(data_dir: str) -> str:
             _api_key_created_at = float(data["created_at"])
         except (json.JSONDecodeError, KeyError, TypeError, ValueError):
             # Legacy plaintext key file -- keep the existing key, but it has
-            # no known creation time, so treat it as freshly issued and
-            # migrate the file to the new JSON format.
+            # no known creation time, so treat it as freshly issued.
+            # Only attempt migration if the file is writable and not a custom path.
             _api_key = raw
             _api_key_created_at = time.time()
-            _write_key_file(key_file, _api_key, _api_key_created_at)
+
+            # Skip migration for read-only mounts or custom key-file paths
+            if not custom_key_file:
+                try:
+                    # Check if we can write to the file directory
+                    if os.access(key_file.parent, os.W_OK):
+                        _write_key_file(key_file, _api_key, _api_key_created_at)
+                except (OSError, IOError):
+                    # File is read-only or permission denied, continue without migration
+                    pass
     else:
         _api_key = secrets.token_hex(32)
         _api_key_created_at = time.time()
-        _write_key_file(key_file, _api_key, _api_key_created_at)
+        # Only write new key file if not using custom key-file path
+        if not custom_key_file:
+            _write_key_file(key_file, _api_key, _api_key_created_at)
 
     return _api_key
 

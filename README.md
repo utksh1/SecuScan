@@ -159,10 +159,10 @@ Open:
 - Swagger docs: `http://127.0.0.1:8000/docs`
 - ReDoc: `http://127.0.0.1:8000/redoc`
 
-The backend creates an API key at `backend/data/.api_key`. If the frontend asks for it:
+The backend creates an API key at `backend/data/.api_key` in JSON format. To retrieve the key:
 
 ```bash
-cat backend/data/.api_key
+cat backend/data/.api_key | jq -r '.key'
 ```
 
 ### Docker Compose
@@ -265,7 +265,7 @@ python scripts/refresh_plugin_checksum.py --plugin nmap
 ## API Examples
 
 ```bash
-API_KEY=$(cat backend/data/.api_key)
+API_KEY=$(cat backend/data/.api_key | jq -r '.key')
 curl http://127.0.0.1:8000/api/v1/health
 curl -H "X-API-Key: $API_KEY" http://127.0.0.1:8000/api/v1/plugins
 curl -H "X-API-Key: $API_KEY" http://127.0.0.1:8000/api/v1/plugin/nmap/schema
