@@ -197,23 +197,9 @@ def redact(text: str) -> str:
     return redacted
 
 
-def redact_dict(data: dict[str, Any]) -> dict[str, Any]:
-    """
-    Recursively redact all string values inside a dict (e.g. a finding dict).
-
-    Non-string values are left untouched; nested dicts and lists are walked.
-    """
-    if not isinstance(data, dict):
-        return data
-    result: dict[str, Any] = {}
-    for key, value in data.items():
-        result[key] = _redact_value(value)
-    return result
-
-
-# Keys whose values are unconditionally redacted in task inputs regardless of
-# value format.  Matched case-insensitively against the full key name.
-_SENSITIVE_INPUT_KEYS: frozenset[str] = frozenset({
+# Keys whose values are unconditionally redacted regardless of value format.
+# Matched case-insensitively against the full key name.
+_SENSITIVE_KEYS: frozenset[str] = frozenset({
     "api_key",
     "apikey",
     "api_secret",
@@ -226,6 +212,10 @@ _SENSITIVE_INPUT_KEYS: frozenset[str] = frozenset({
     "token",
     "access_token",
     "refresh_token",
+    "session_token",
+    "aws_session_token",
+    "aws_secret_access_key",
+    "aws_access_key_id",
     "auth",
     "auth_token",
     "authorization",
@@ -237,17 +227,81 @@ _SENSITIVE_INPUT_KEYS: frozenset[str] = frozenset({
     "encryption_key",
 })
 
+# Backwards-compatible alias — this set was input-specific before it also
+# backed ``redact_dict``.
+_SENSITIVE_INPUT_KEYS = _SENSITIVE_KEYS
+
+# Suffixes that make a key sensitive even when the full name is not in the set
+# above (e.g. ``gitlab_api_token``, ``vendor_client_secret``).  Deliberately
+# conservative: ``_key`` is NOT included because ordinary non-secret fields end
+# in it (``primary_key``, ``sort_key``, ``partition_key``, ``cache_key``), and
+# redacting those would corrupt legitimate report metadata.  Keys ending in
+# ``_key`` must be listed explicitly above instead.
+_SENSITIVE_KEY_SUFFIXES: tuple[str, ...] = (
+    "_token",
+    "_secret",
+    "_password",
+    "_passwd",
+    "_credentials",
+)
+
+
+def _is_sensitive_key(key: Any) -> bool:
+    """True when *key*'s name alone marks its value as secret.
+
+    Value-pattern redaction misses secrets whose value has no recognisable
+    shape — ``{"api_key": "hunter2"}`` matches none of the patterns above — so
+    the key name is the only signal available.
+    """
+    if not isinstance(key, str):
+        return False
+    normalized = key.strip().lower()
+    # Check the plural form too ("tokens", "secrets", "api_keys"): dropping a
+    # single trailing "s" is enough, and cannot promote an ordinary field to
+    # secret unless its singular is already listed.
+    candidates = (normalized, normalized[:-1]) if normalized.endswith("s") else (normalized,)
+    return any(
+        candidate in _SENSITIVE_KEYS or candidate.endswith(_SENSITIVE_KEY_SUFFIXES)
+        for candidate in candidates
+    )
+
+
+def redact_dict(data: dict[str, Any]) -> dict[str, Any]:
+    """
+    Recursively redact a dict (e.g. a finding dict), by key name and by value.
+
+    A key whose *name* marks it as secret (see ``_is_sensitive_key``) has its
+    value replaced with ``[REDACTED]`` outright, whatever that value is — a
+    short password or an opaque token matches none of the value patterns, so
+    the name is the only thing identifying it.  Replacement covers dict and
+    list values too: a key like ``credentials`` marks the whole subtree.
+
+    Every other value is redacted by pattern; nested dicts and lists are
+    walked, and non-string leaves are left untouched.
+    """
+    if not isinstance(data, dict):
+        return data
+    result: dict[str, Any] = {}
+    for key, value in data.items():
+        result[key] = REDACTED if _is_sensitive_key(key) else _redact_value(value)
+    return result
+
 
 def redact_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
     """
     Redact sensitive values from a task inputs dict before it is included in
     any API response.
 
-    Keys whose names appear in ``_SENSITIVE_INPUT_KEYS`` (case-insensitive) have
-    their value replaced with ``[REDACTED]``.  All other string values are also
-    passed through the pattern-based ``redact()`` function so that accidentally
+    Keys whose names mark them as secret (case-insensitive) have their value
+    replaced with ``[REDACTED]``.  All other string values are also passed
+    through the pattern-based ``redact()`` function so that accidentally
     embedded secrets (e.g. a token pasted into a ``target`` field) are caught as
     well.  Non-string values are left untouched.
+
+    Delegates to ``redact_dict``, which applies the same key-name rule at every
+    level.  This previously only matched top-level keys, so a nested
+    ``{"config": {"api_key": ...}}`` kept its secret; sharing one implementation
+    keeps the two entry points from drifting apart again.
 
     Args:
         inputs: Parsed task inputs dict (from ``inputs_json`` column).
@@ -255,16 +309,7 @@ def redact_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
     Returns:
         A new dict with sensitive values replaced by ``[REDACTED]``.
     """
-    if not isinstance(inputs, dict):
-        return inputs
-
-    result: dict[str, Any] = {}
-    for key, value in inputs.items():
-        if key.lower() in _SENSITIVE_INPUT_KEYS:
-            result[key] = REDACTED
-        else:
-            result[key] = _redact_value(value)
-    return result
+    return redact_dict(inputs)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

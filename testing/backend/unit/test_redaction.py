@@ -264,6 +264,116 @@ class TestRedactDict:
         assert redact_dict("not a dict") == "not a dict"  # type: ignore[arg-type]
 
 
+# ── redact_dict: key-name awareness (issue #1828) ─────────────────────────────
+
+class TestRedactDictSensitiveKeys:
+    """A sensitive *key* marks its value secret even when the value itself
+    matches none of the patterns — the case value-only redaction misses."""
+
+    def test_short_unpatterned_secret_under_sensitive_key(self):
+        """The core bug: 'hunter2' matches no value pattern and leaked in full."""
+        result = redact_dict({"api_key": "hunter2"})
+        assert result["api_key"] == REDACTED
+        assert "hunter2" not in str(result)
+
+    @pytest.mark.parametrize(
+        "key",
+        ["password", "token", "secret", "authorization", "credentials",
+         "private_key", "aws_session_token", "aws_secret_access_key"],
+    )
+    def test_known_sensitive_keys_redacted(self, key):
+        result = redact_dict({key: "plainvalue"})
+        assert result[key] == REDACTED
+
+    def test_key_match_is_case_insensitive(self):
+        result = redact_dict({"API_Key": "abc", "PASSWORD": "def"})
+        assert result["API_Key"] == REDACTED
+        assert result["PASSWORD"] == REDACTED
+
+    def test_suffix_match_catches_vendor_prefixed_keys(self):
+        """Keys the exact-match set cannot enumerate ahead of time."""
+        result = redact_dict({
+            "gitlab_api_token": "glpat-xxx",
+            "vendor_client_secret": "s3cr3t",
+            "db_password": "pw",
+        })
+        assert result["gitlab_api_token"] == REDACTED
+        assert result["vendor_client_secret"] == REDACTED
+        assert result["db_password"] == REDACTED
+
+    def test_key_suffix_does_not_over_match_ordinary_fields(self):
+        """``_key`` is deliberately excluded — these are not secrets."""
+        data = {
+            "primary_key": "id",
+            "sort_key": "created_at",
+            "partition_key": "owner",
+            "cache_key": "findings:v2",
+        }
+        assert redact_dict(data) == data
+
+    def test_sensitive_key_redacts_whole_subtree(self):
+        """A secret-named key marks its nested value too, not just strings."""
+        result = redact_dict({"credentials": {"user": "bob", "pass": "pw"}})
+        assert result["credentials"] == REDACTED
+        assert "bob" not in str(result)
+
+    def test_sensitive_key_redacts_list_value(self):
+        result = redact_dict({"tokens": ["aaa", "bbb"]})
+        assert result["tokens"] == REDACTED
+
+    def test_plural_sensitive_keys_redacted(self):
+        result = redact_dict({"secrets": "a", "passwords": "b", "api_keys": "c"})
+        assert result["secrets"] == REDACTED
+        assert result["passwords"] == REDACTED
+        assert result["api_keys"] == REDACTED
+
+    def test_plural_rule_does_not_promote_ordinary_fields(self):
+        """Dropping the trailing 's' only matches if the singular is listed."""
+        data = {"notes": "n", "findings": "f", "keys": "k", "hosts": "h"}
+        assert redact_dict(data) == data
+
+    def test_nested_sensitive_key_is_reached(self):
+        """Recursion applies the key rule at every level, not just the top."""
+        result = redact_dict({"config": {"nested": {"api_key": "hunter2"}}})
+        assert result["config"]["nested"]["api_key"] == REDACTED
+        assert "hunter2" not in str(result)
+
+    def test_sensitive_key_inside_list_of_dicts(self):
+        result = redact_dict({"items": [{"password": "pw"}, {"name": "ok"}]})
+        assert result["items"][0]["password"] == REDACTED
+        assert result["items"][1]["name"] == "ok"
+
+    def test_non_string_keys_do_not_raise(self):
+        """Dicts loaded from arbitrary JSON-ish sources may hold odd keys."""
+        data = {1: "one", None: "none", "ok": "value"}
+        result = redact_dict(data)  # type: ignore[arg-type]
+        assert result[1] == "one"
+        assert result["ok"] == "value"
+
+    def test_insensitive_keys_still_pattern_redacted(self):
+        """Key-awareness is additive — value patterns still apply elsewhere."""
+        result = redact_dict({"description": "AKIAIOSFODNN7EXAMPLE found"})
+        assert REDACTED in result["description"]
+
+
+# ── redact_inputs: nested sensitive keys (issue #1828) ────────────────────────
+
+class TestRedactInputsNested:
+    def test_nested_sensitive_key_now_redacted(self):
+        """Previously only top-level keys matched, so this leaked."""
+        result = redact_inputs({"config": {"api_key": "hunter2"}})
+        assert result["config"]["api_key"] == REDACTED
+        assert "hunter2" not in str(result)
+
+    def test_top_level_behaviour_unchanged(self):
+        result = redact_inputs({"api_key": "hunter2", "target": "example.com"})
+        assert result["api_key"] == REDACTED
+        assert result["target"] == "example.com"
+
+    def test_non_dict_passthrough(self):
+        assert redact_inputs("not a dict") == "not a dict"  # type: ignore[arg-type]
+
+
 # ── Multi-secret line ─────────────────────────────────────────────────────────
 
 class TestMultipleSecretsOnOneLine:
