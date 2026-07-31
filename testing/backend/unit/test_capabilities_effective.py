@@ -1,9 +1,9 @@
 """
 Unit tests for effective_capabilities in backend/secuscan/capabilities.py.
 
-Verifies the plugin capability resolution logic: explicit declarations take
-precedence, and legacy plugins without declarations get implied capabilities
-based on their safety level.
+Verifies the plugin capability resolution logic: explicit declarations are
+additive, and legacy plugins without declarations get implied capabilities based
+on their safety level.
 """
 
 from backend.secuscan.capabilities import effective_capabilities
@@ -19,6 +19,11 @@ class TestEffectiveCapabilities:
         """Declared capabilities are returned as a set (order-independent)."""
         result = effective_capabilities(["filesystem", "network"], "safe", "plugin-y")
         assert result == {"network", "filesystem"}
+
+    def test_declared_capabilities_include_exploit_safety_implication(self):
+        """Explicit capabilities cannot remove the exploit safety capability."""
+        result = effective_capabilities(["network"], "exploit", "plugin-exploit")
+        assert result == {"network", "intrusive", "exploit"}
 
     def test_declared_empty_treated_as_none(self):
         """Empty declared list is treated the same as None (uses implied)."""
@@ -53,9 +58,9 @@ class TestEffectiveCapabilities:
         assert "network" in result
 
     def test_declared_single_capability(self):
-        """Single declared capability is preserved."""
+        """Single declared capability is preserved alongside implications."""
         result = effective_capabilities(["docker"], "safe", "docker-plugin")
-        assert result == {"docker"}
+        assert result == {"docker", "network"}
 
     def test_declared_deduplicates(self):
         """Duplicate entries in declared list are deduplicated."""

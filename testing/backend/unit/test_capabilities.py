@@ -88,11 +88,10 @@ class TestEffectiveCapabilities:
         caps = effective_capabilities([], "intrusive", "plugin")
         assert "intrusive" in caps
 
-    def test_explicit_list_overrides_implied(self):
-        # Plugin explicitly declares only "filesystem" even though it's intrusive
+    def test_explicit_list_is_additive_to_implied(self):
+        # Plugin explicitly declares "filesystem" and is also intrusive
         caps = effective_capabilities(["filesystem"], "intrusive", "plugin")
-        assert caps == {"filesystem"}
-        assert "network" not in caps
+        assert caps == {"filesystem", "network", "intrusive"}
 
 
 # ---------------------------------------------------------------------------
@@ -199,7 +198,8 @@ class TestCapabilityEnforcerNormalisation:
 
     def test_empty_strings_in_denied_list_ignored(self):
         enforcer = CapabilityEnforcer(denied_capabilities=["", " ", "network"])
-        enforcer.check("nmap", ["filesystem"], "safe")
+        with pytest.raises(CapabilityDeniedError):
+            enforcer.check("nmap", ["filesystem"], "safe")
 
     def test_denied_property_is_frozenset(self):
         enforcer = CapabilityEnforcer(denied_capabilities=["network", "exploit"])

@@ -222,11 +222,10 @@ class TestEffectiveCapabilitiesImpliedSets:
         caps = effective_capabilities([], "intrusive", "plugin")
         assert "intrusive" in caps
 
-    def test_explicit_nonempty_list_overrides_implied(self):
-        # Plugin explicitly declares only filesystem; implied intrusive set is NOT added.
+    def test_explicit_nonempty_list_is_additive_to_implied(self):
+        # Plugin explicitly declares filesystem; intrusive implications remain.
         caps = effective_capabilities(["filesystem"], "intrusive", "plugin")
-        assert caps == {"filesystem"}
-        assert "intrusive" not in caps
+        assert caps == {"filesystem", "network", "intrusive"}
 
     def test_all_shipped_plugins_have_enforceable_effective_capabilities(self):
         """Every plugin in the plugins/ directory must produce a non-empty

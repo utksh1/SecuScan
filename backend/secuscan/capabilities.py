@@ -62,9 +62,9 @@ class Capability(str, Enum):
 
 ALL_CAPABILITIES: FrozenSet[str] = frozenset(c.value for c in Capability)
 
-# Capabilities that are implicitly required by a plugin's safety level when the
-# plugin has not declared them explicitly.  This lets older plugins without a
-# ``capabilities`` field degrade gracefully while still being enforceable.
+# Capabilities that are implicitly required by a plugin's safety level.  This
+# lets older plugins without a ``capabilities`` field degrade gracefully while
+# still being enforceable.
 _SAFETY_LEVEL_IMPLIED: dict[str, List[str]] = {
     "safe": ["network"],
     "intrusive": ["network", "intrusive"],
@@ -107,17 +107,15 @@ def effective_capabilities(
 ) -> Set[str]:
     """Combine explicitly declared capabilities with safety-level implied ones.
 
-    If the plugin declares an explicit capability list, that list is the source
-    of truth (implied capabilities are *not* added on top — they were already
-    considered by the plugin author).  If no capabilities are declared at all the
-    implied set for the plugin's safety level is used so that legacy plugins
-    remain enforceable.
+    Explicit capabilities are additive to the set implied by the plugin's
+    safety level. If no capabilities are declared at all, the implied set is
+    used so that legacy plugins remain enforceable.
     """
+    implied = _SAFETY_LEVEL_IMPLIED.get(safety_level, ["network"])
     if declared is not None and len(declared) > 0:
         validated = validate_capability_list(declared, plugin_id)
-        return set(validated)
+        return set(validated) | set(implied)
 
-    implied = _SAFETY_LEVEL_IMPLIED.get(safety_level, ["network"])
     return set(implied)
 
 
