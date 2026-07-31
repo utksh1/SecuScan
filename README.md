@@ -357,7 +357,7 @@ Before a PR, branch from `main`, keep the change focused, add tests for behavior
 | Frontend cannot connect to backend | Backend failed to start or API configuration issue | Verify backend is available at `http://127.0.0.1:8000`. |
 | API key not found | Backend has not generated the key yet | Check `backend/data/.api_key` after backend startup. |
 
-> Note: `start.sh` automatically attempts to terminate processes using ports `8000` and `5173` before starting the backend and frontend. Manual cleanup may still be required if the ports remain occupied.
+> Note: `start.sh` checks ports `8000` and `5173` before starting the backend and frontend. If either port is occupied, it exits with instructions to stop the conflicting process.
 
 #### Checking Port Conflicts
 

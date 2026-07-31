@@ -22,13 +22,19 @@ echo "  ║         SecuScan Dev Server            ║"
 echo "  ╚═══════════════════════════════════════╝"
 echo ""
 
-# Pre-flight checks: kill existing servers on 8000 and 5173
-# If ports remain occupied after startup fails, see README.md
-# Troubleshooting → Local Startup Troubleshooting.
-echo "🧹 Cleaning up existing processes on port 8000 and 5173..."
-lsof -ti :8000 | xargs kill -9 2>/dev/null || true
-lsof -ti :5173 | xargs kill -9 2>/dev/null || true
-sleep 1
+# Pre-flight checks: fail clearly if required ports are already occupied.
+check_port_available() {
+  local port="$1"
+  if lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null | grep -q .; then
+    echo "ERROR: port $port is already in use."
+    echo "Stop the process using port $port, then run ./start.sh again."
+    return 1
+  fi
+}
+
+echo "🔎 Checking required ports..."
+check_port_available 8000
+check_port_available 5173
 
 # ── Backend ────────────────────────────────────
 echo "⚙  Setting up backend..."

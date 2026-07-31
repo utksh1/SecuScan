@@ -38,6 +38,9 @@ jobs:
       - name: Validate start.sh syntax
         run: bash -n start.sh
 
+      - name: Verify port collision failure
+        run: python3 testing/test_startup_port_collision.py
+
       - name: Verify frontend failure message
         run: |
           mv frontend frontend_backup
