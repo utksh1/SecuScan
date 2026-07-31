@@ -95,11 +95,24 @@ def test_scratch_dir_is_private():
 # ---------------------------------------------------------------------------
 
 
-async def _run_standard_scanner_with_docker(command, docker_image="caffix/amass:latest"):
+async def _run_standard_scanner_with_docker(
+    command,
+    docker_image="caffix/amass:latest",
+    execute_result=("mock output\n", 0),
+    execute_exc=None,
+    egress_valid=(True, None),
+    out=None,
+):
     """Drive ``_execute_standard_scanner`` with Docker enabled.
 
     Returns ``(final_command, scratch_dir, existed_during_run)`` where
     ``final_command`` is the argv actually handed to ``_execute_command``.
+
+    ``execute_exc`` raises from ``_execute_command`` instead of returning,
+    ``execute_result`` sets the ``(output, exit_code)`` it returns, and
+    ``egress_valid`` sets the network-egress verdict. Pass ``out`` (a dict) to
+    recover what was recorded even when the call raises — failure-path tests
+    need the scratch dir path after the exception has propagated.
     """
     await init_db(settings.database_path)
     db = await get_db()
@@ -123,7 +136,7 @@ async def _run_standard_scanner_with_docker(command, docker_image="caffix/amass:
     mock_plugin.name = "amass"
     mock_plugin.docker_image = docker_image
 
-    recorded = {}
+    recorded = out if out is not None else {}
 
     # Capture the real scratch dir the executor creates by wrapping the helper,
     # so recovery is robust to path formats (e.g. Windows drive-letter colons).
@@ -138,7 +151,9 @@ async def _run_standard_scanner_with_docker(command, docker_image="caffix/amass:
         recorded["command"] = list(cmd)
         sd = recorded.get("scratch_dir")
         recorded["existed_during_run"] = bool(sd) and os.path.isdir(sd)
-        return ("mock output\n", 0)
+        if execute_exc is not None:
+            raise execute_exc
+        return execute_result
 
     try:
         with patch("backend.secuscan.executor.get_plugin_manager") as mock_pm, \
@@ -146,7 +161,7 @@ async def _run_standard_scanner_with_docker(command, docker_image="caffix/amass:
              patch.object(settings, "docker_enabled", True), \
              patch.object(executor, "_ensure_docker_network", new=AsyncMock()), \
              patch("backend.secuscan.validation.validate_command_network_egress",
-                   return_value=(True, None)), \
+                   return_value=egress_valid), \
              patch.object(executor, "_execute_command",
                           side_effect=fake_execute_command), \
              patch.object(executor, "_classify_command_result",
@@ -213,3 +228,88 @@ async def test_docker_mode_without_placeholder_adds_no_mount():
     )
     assert final_command[:2] == ["docker", "run"]
     assert "-v" not in final_command
+
+
+@pytest.mark.asyncio
+async def test_docker_bind_mount_precedes_image_and_tool_argv():
+    """``-v`` binds to ``docker run``, not to the containerised tool.
+
+    Docker only treats ``-v`` as a mount when it appears before the image
+    name; anything after the image is argv for the tool itself. Pinning the
+    ordering keeps a future edit from silently turning the mount into an
+    amass argument, which would leave the tool writing to an unmounted path.
+    """
+    command = ["amass", "enum", "-d", "example.com", "-dir", SCRATCH_DIR_PLACEHOLDER]
+    final_command, scratch_dir, _existed = await _run_standard_scanner_with_docker(command)
+
+    v_index = final_command.index("-v")
+    image_index = final_command.index("caffix/amass:latest")
+    tool_index = final_command.index("amass")
+
+    assert v_index < image_index, "-v must come before the image to be a mount"
+    assert final_command[v_index + 1] == f"{scratch_dir}:{scratch_dir}:rw"
+    assert image_index < tool_index, "image must precede the tool argv"
+
+
+# ---------------------------------------------------------------------------
+# Cleanup on the failure paths (PR #2020 review): the finally block must
+# remove the host scratch dir after a failed run, not just a successful one.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_scratch_dir_removed_when_command_raises():
+    """An exception mid-execution still leaves no scratch dir behind."""
+    command = ["amass", "enum", "-d", "example.com", "-dir", SCRATCH_DIR_PLACEHOLDER]
+    out = {}
+
+    with pytest.raises(RuntimeError, match="docker daemon gone"):
+        await _run_standard_scanner_with_docker(
+            command,
+            execute_exc=RuntimeError("docker daemon gone"),
+            out=out,
+        )
+
+    scratch_dir = out["scratch_dir"]
+    assert out["existed_during_run"] is True
+    assert not os.path.exists(scratch_dir)
+
+
+@pytest.mark.asyncio
+async def test_scratch_dir_removed_on_nonzero_exit_code():
+    """A tool that exits non-zero still gets its scratch dir cleaned up."""
+    command = ["amass", "enum", "-d", "example.com", "-dir", SCRATCH_DIR_PLACEHOLDER]
+    out = {}
+
+    await _run_standard_scanner_with_docker(
+        command,
+        execute_result=("amass: permission denied\n", 1),
+        out=out,
+    )
+
+    assert out["existed_during_run"] is True
+    assert not os.path.exists(out["scratch_dir"])
+
+
+@pytest.mark.asyncio
+async def test_scratch_dir_removed_when_egress_validation_rejects():
+    """A command rejected before Docker wrapping leaves no scratch dir.
+
+    The directory is created by ``_substitute_scratch_dir`` *before* egress
+    validation runs, so the early ValueError must not skip cleanup.
+    """
+    command = ["amass", "enum", "-d", "example.com", "-dir", SCRATCH_DIR_PLACEHOLDER]
+    out = {}
+
+    with pytest.raises(ValueError, match="network egress"):
+        await _run_standard_scanner_with_docker(
+            command,
+            egress_valid=(False, "blocked target"),
+            out=out,
+        )
+
+    scratch_dir = out["scratch_dir"]
+    assert scratch_dir is not None
+    # The run never reached _execute_command, so nothing recorded the dir as
+    # live — but it was created, and it must not survive the failure.
+    assert not os.path.exists(scratch_dir)
