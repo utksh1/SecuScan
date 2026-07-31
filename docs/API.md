@@ -4,9 +4,10 @@
 
 Every endpoint below requires the API key (`X-Api-Key` or `Authorization: Bearer`),
 and every result is **owner-scoped**: list and lookup endpoints only return rows
-owned by the caller, where the owner is derived from the optional `X-User-Id`
-header. Requesting another owner's object returns `403 Forbidden`; a genuinely
-missing object returns `404 Not Found`. See
+owned by the caller. Owner identity is bound to the authenticated principal and
+always resolves to the `"default"` workspace — the `X-User-Id` header is ignored
+for ownership to prevent header-spoofing BOLA. Requesting another owner's object
+returns `403 Forbidden`; a genuinely missing object returns `404 Not Found`. See
 [API Authentication → Owner Scoping and Multi-Workspace Isolation](api-authentication.md#owner-scoping-and-multi-workspace-isolation)
 for how the owner is resolved and why every owner-scoped endpoint needs a
 cross-owner test.
@@ -20,7 +21,7 @@ cross-owner test.
 **Description:** Returns a paginated list of the **caller's** scan tasks with
 navigation metadata. The list is owner-scoped (see
 [Authentication and ownership](#authentication-and-ownership)) — it never includes tasks
-owned by another `X-User-Id`.
+owned by another owner.
 
 **Query Parameters:**
 
@@ -99,7 +100,7 @@ and retry with a new request.
 are matched against `title` and `description`; reports are matched against
 `name`. Results are owner-scoped (see
 [Authentication and ownership](#authentication-and-ownership)) — a search never
-returns findings or reports owned by another `X-User-Id`.
+returns findings or reports owned by another owner.
 
 **Query Parameters:**
 
@@ -144,5 +145,5 @@ curl -H "X-Api-Key: $API_KEY" \
 
 ## See Also
 
-* [API Authentication](api-authentication.md) — How requests are authenticated with the API key and authorized per owner (`X-User-Id` → `owner_id`), including the cross-owner test requirement.
+* [API Authentication](api-authentication.md) — How requests are authenticated with the API key and scoped per owner, including the cross-owner test requirement.
 * [Backend Architecture](backend-architecture.md) — For a detailed overview of the backend's module structure, routing, execution engine, and scanners.
