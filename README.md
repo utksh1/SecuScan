@@ -175,7 +175,13 @@ docker compose up --build
 
 The quickstart uses default local-only credentials. For production or any deployment where PostgreSQL is reachable beyond localhost, set `SECUSCAN_POSTGRES_PASSWORD` (and optionally `SECUSCAN_POSTGRES_USER`, `SECUSCAN_POSTGRES_DB`) in a `.env` file before starting. See `.env.example` for details.
 
-Open:
+> **Network exposure:** By default, every port in `docker-compose.yml` (frontend, backend, PostgreSQL, Redis) is bound to `127.0.0.1`, matching the manual dev setup's localhost-only posture — the scan-triggering API is not reachable from other devices on your network by default. If you deliberately need network-wide access (e.g. team-shared scanning infra), opt in explicitly with:
+> ```bash
+> docker compose -f docker-compose.yml -f docker-compose.network.yml up --build
+> ```
+> Only do this on trusted networks — this exposes recon/web/cloud/container scan triggers per SecuScan's [Responsible Use](#security-model) policy.
+
+Open (all bound to localhost only by default):
 
 - Frontend: `http://127.0.0.1:5173`
 - Backend API: `http://127.0.0.1:8081`
