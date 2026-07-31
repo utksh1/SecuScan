@@ -341,6 +341,74 @@ class TestMissingParserFile:
 
 
 # ---------------------------------------------------------------------------
+# parser.py must be self-contained
+# ---------------------------------------------------------------------------
+
+
+class TestParserMustBeSelfContained:
+    """A parser may not import helper modules sitting beside it.
+
+    The bootstrap loads parser.py by absolute path via
+    ``importlib.util.spec_from_file_location`` and the child runs with
+    ``PYTHONSAFEPATH=1``, so the plugin directory is never placed on
+    ``sys.path``. Sibling imports therefore fail regardless of whether the
+    parser was staged — staging a single file does not introduce this
+    constraint, it only has to preserve it. These tests pin that contract
+    so a future change to the loader cannot quietly widen the import
+    surface available to parser code.
+    """
+
+    def test_sibling_module_import_fails_loudly(self, tmp_path):
+        """A sibling helper is not importable, and the failure is not silent."""
+        (tmp_path / "helper.py").write_text("VALUE = 'from-sibling'\n")
+        p = _write_parser(
+            tmp_path,
+            """\
+            import helper
+
+            def parse(output):
+                return {"value": helper.VALUE}
+            """,
+        )
+        with pytest.raises(ParserSandboxError) as exc_info:
+            run_parser_in_sandbox(p, "sibling_import_plugin", "data")
+        assert exc_info.value.plugin_id == "sibling_import_plugin"
+
+    def test_plugin_directory_is_not_on_sys_path(self, tmp_path):
+        """The parser's own directory never appears on the child's sys.path."""
+        p = _write_parser(
+            tmp_path,
+            """\
+            import os, sys
+
+            def parse(output):
+                here = os.path.dirname(os.path.abspath(__file__))
+                on_path = [q for q in sys.path if q and os.path.abspath(q) == here]
+                return {"plugin_dir_on_sys_path": on_path}
+            """,
+        )
+        result = run_parser_in_sandbox(p, "sys_path_plugin", "data")
+        assert result["plugin_dir_on_sys_path"] == []
+
+    def test_stdlib_imports_still_work(self, tmp_path):
+        """Self-contained parsers keep full access to the standard library."""
+        p = _write_parser(
+            tmp_path,
+            """\
+            import json
+            import re
+            from collections import Counter
+
+            def parse(output):
+                counts = Counter(re.findall(r"[a-z]+", output))
+                return json.loads(json.dumps({"top": counts.most_common(1)}))
+            """,
+        )
+        result = run_parser_in_sandbox(p, "stdlib_plugin", "aa bb aa")
+        assert result["top"] == [["aa", 2]]
+
+
+# ---------------------------------------------------------------------------
 # Environment sanitisation
 # ---------------------------------------------------------------------------
 

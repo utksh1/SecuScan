@@ -219,3 +219,43 @@ def test_staged_parser_makes_a_private_readable_copy(tmp_path):
 
     # The staged copy is removed once the context exits.
     assert not staged_dir.exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="chown/file-mode semantics are POSIX-only")
+def test_staged_parser_escapes_a_private_source_directory(tmp_path):
+    """Staging lifts parser.py out of a source directory the child cannot enter.
+
+    This is the case the staging exists for: the backend runs as root and the
+    plugin lives under a root-owned directory with no traversal for others, so
+    the privilege-dropped child cannot reach the original file at all. The
+    staged copy must live outside that directory and be readable on its own.
+    """
+    import os
+    import stat
+    from backend.secuscan.parser_sandbox import _staged_parser
+
+    private_dir = tmp_path / "root_private"
+    private_dir.mkdir()
+    original = private_dir / "parser.py"
+    source = "def parse(output):\n    return {'ok': True}\n"
+    original.write_text(source)
+
+    # 0o700: owner-only. Another account gets neither traversal nor read, which
+    # is what a root-owned plugin directory looks like to the drop target.
+    os.chmod(private_dir, 0o700)
+    assert stat.S_IMODE(os.stat(private_dir).st_mode) == 0o700
+
+    drop = {"user": os.getuid(), "group": os.getgid(), "extra_groups": []}
+
+    with _staged_parser(original, drop) as staged:
+        # The copy is not inside the unreachable directory.
+        assert private_dir not in staged.parents
+        assert staged.read_text() == source
+        assert os.access(staged, os.R_OK)
+        # The staging directory itself is traversable by the drop target, so
+        # the child reaches the copy without entering the private source dir.
+        assert stat.S_IMODE(os.stat(staged.parent).st_mode) & 0o001
+
+    # The private source directory is left exactly as it was found.
+    assert stat.S_IMODE(os.stat(private_dir).st_mode) == 0o700
+    assert original.read_text() == source

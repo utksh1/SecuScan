@@ -34,6 +34,21 @@ The child process is a minimal Python bootstrap that imports the plugin's
 parser.py, calls parse(input_data), and writes the result to stdout.  It
 imports nothing from the backend package, so no application state leaks.
 
+parser.py must be self-contained
+--------------------------------
+A parser may import from the standard library, but not from helper modules
+sitting beside it in the plugin directory.  The bootstrap loads parser.py by
+absolute path via ``importlib.util.spec_from_file_location`` and the child
+runs with ``PYTHONSAFEPATH=1``, so the plugin directory is never added to
+``sys.path``.  A sibling import therefore raises ``ParserSandboxError``.
+
+This is a property of the loader, not of the staging in ``_staged_parser``:
+sibling imports have never resolved in this sandbox, so copying only
+parser.py cannot break a parser that previously worked.  Keeping the plugin
+directory off ``sys.path`` is deliberate — it stops a parser from importing
+attacker-supplied modules dropped next to it.  See
+``TestParserMustBeSelfContained`` in testing/backend/unit/test_parser_sandbox.py.
+
 Security note on stderr
 -----------------------
 Stderr from the child process may contain stack traces, file paths, partial

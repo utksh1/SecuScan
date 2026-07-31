@@ -31,6 +31,21 @@ def parse(output):
         "raw_output": output
     }
 
+### parser.py must be self-contained
+
+Parsers run in a sandboxed subprocess that loads `parser.py` by absolute path
+and keeps the plugin directory off `sys.path`. Your parser may import from the
+Python standard library, but it may **not** import a helper module placed
+beside it in the plugin directory:
+
+    # plugins/example_plugin/parser.py
+    import json          # fine — standard library
+    import helper        # fails — sibling modules are not importable
+
+A sibling import raises `ParserSandboxError` at scan time, so keep everything
+the parser needs inside `parser.py`. This is deliberate: it prevents a parser
+from importing modules an attacker managed to drop into the plugin directory.
+
 ## Validation
 
 python scripts/validate_plugins.py
