@@ -9,6 +9,7 @@ cd "$ROOT_DIR"
 find_compatible_python() {
   local candidates=(
     "python3"
+    "python"
     "/opt/homebrew/bin/python3"
     "/usr/local/bin/python3"
     "python3.13"
@@ -34,7 +35,20 @@ find_compatible_python() {
 
 # If a venv already exists, check Python version compatibility
 if [ -d "$VENV_DIR" ]; then
-  VENV_PYTHON="$VENV_DIR/bin/python3"
+  if [ -d "$VENV_DIR/Scripts" ]; then
+    VENV_BIN_DIR="$VENV_DIR/Scripts"
+  else
+    VENV_BIN_DIR="$VENV_DIR/bin"
+  fi
+
+  if [ -x "$VENV_BIN_DIR/python3" ]; then
+    VENV_PYTHON="$VENV_BIN_DIR/python3"
+  elif [ -x "$VENV_BIN_DIR/python" ]; then
+    VENV_PYTHON="$VENV_BIN_DIR/python"
+  else
+    VENV_PYTHON="$VENV_BIN_DIR/python3"
+  fi
+
   if [ ! -x "$VENV_PYTHON" ] || \
      ! "$VENV_PYTHON" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)' >/dev/null 2>&1; then
     echo "Existing venv_tests is incompatible. Recreating..."
@@ -52,7 +66,13 @@ if [ ! -d "$VENV_DIR" ]; then
   "$PYTHON_BIN" -m venv "$VENV_DIR"
 fi
 
-source "$VENV_DIR/bin/activate"
+if [ -d "$VENV_DIR/Scripts" ]; then
+  VENV_BIN_DIR="$VENV_DIR/Scripts"
+else
+  VENV_BIN_DIR="$VENV_DIR/bin"
+fi
+
+source "$VENV_BIN_DIR/activate"
 if ! python -c "import pip" >/dev/null 2>&1; then
   python -m ensurepip --upgrade
 fi

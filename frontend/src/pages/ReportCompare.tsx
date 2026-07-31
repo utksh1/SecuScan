@@ -125,7 +125,12 @@ function CompareSection({
       {items.length === 0 ? (
         <p className="text-[10px] font-black uppercase tracking-widest text-silver/30 italic">None</p>
       ) : (
-        <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+        <div
+          className="space-y-3 max-h-80 overflow-y-auto pr-1"
+          role="region"
+          aria-label={`${title} findings list`}
+          tabIndex={0}
+        >
           {items.map((item) => (
             <FindingRow
               key={item.fingerprint}
@@ -223,6 +228,7 @@ export default function ReportCompare() {
           onClick={loadData}
           className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
           title="Refresh"
+          aria-label="Refresh reports"
         >
           <HugeiconsIcon icon={Refresh01Icon} size={20} />
         </button>
@@ -244,12 +250,17 @@ export default function ReportCompare() {
         <>
           <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <label className="space-y-3 block">
-              <span className="text-[10px] font-black uppercase tracking-widest text-silver-bright">
+              <span
+                id="baseline-select-label"
+                className="text-[10px] font-black uppercase tracking-widest text-silver-bright"
+              >
                 Baseline report (older)
               </span>
               <select
                 value={baselineReportId}
                 onChange={(e) => setBaselineReportId(e.target.value)}
+                aria-labelledby="baseline-select-label"
+                aria-label="Baseline report (older)"
                 className="w-full bg-charcoal border-4 border-black p-4 text-sm font-mono text-silver-bright"
               >
                 <option value="">Select baseline...</option>
@@ -261,12 +272,17 @@ export default function ReportCompare() {
               </select>
             </label>
             <label className="space-y-3 block">
-              <span className="text-[10px] font-black uppercase tracking-widest text-silver-bright">
+              <span
+                id="comparison-select-label"
+                className="text-[10px] font-black uppercase tracking-widest text-silver-bright"
+              >
                 Comparison report (newer)
               </span>
               <select
                 value={comparisonReportId}
                 onChange={(e) => setComparisonReportId(e.target.value)}
+                aria-labelledby="comparison-select-label"
+                aria-label="Comparison report (newer)"
                 className="w-full bg-charcoal border-4 border-black p-4 text-sm font-mono text-silver-bright"
               >
                 <option value="">Select comparison...</option>

@@ -3,15 +3,22 @@ from typing import Any, Dict, List
 
 def parse(output: str) -> Dict[str, Any]:
     lines = [line.strip() for line in output.splitlines() if line.strip()]
+
+    alert_lines = [
+        line
+        for line in lines
+        if line.startswith("WARN-NEW:") or line.startswith("FAIL-NEW:")
+    ]
+
     findings: List[Dict[str, Any]] = []
 
-    for line in lines[:300]:
-        severity = "info"
-        low_line = line.lower()
-        if any(keyword in low_line for keyword in ["open", "found", "vuln", "warning", "detected", "exposed"]):
-            severity = "low"
-        if any(keyword in low_line for keyword in ["critical", "exploit", "injection", "compromised"]):
+    for line in alert_lines[:300]:
+        if line.startswith("FAIL-NEW:"):
             severity = "high"
+        elif line.startswith("WARN-NEW:"):
+            severity = "low"
+        else:
+            severity = "info"
 
         findings.append(
             {
@@ -27,5 +34,5 @@ def parse(output: str) -> Dict[str, Any]:
     return {
         "findings": findings,
         "count": len(findings),
-        "items": lines[:300],
+        "items": alert_lines[:300],
     }

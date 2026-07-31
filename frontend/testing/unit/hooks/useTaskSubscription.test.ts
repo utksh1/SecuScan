@@ -4,7 +4,7 @@ import React from 'react'
 import { useTaskSubscription } from '../../../src/hooks/useTaskSubscription'
 
 vi.mock('../../../src/api', () => ({
-  API_BASE: 'http://localhost',
+  buildTaskStreamUrl: (taskId: string) => `http://localhost/task/${taskId}/stream`,
   getTaskStatus: vi.fn().mockResolvedValue({ status: 'running' }),
 }))
 
@@ -16,9 +16,10 @@ class MockEventSource {
   onerror: ((err: Event) => void) | null = null
   listeners: Map<string, (e: MessageEvent) => void> = new Map()
   url: string
+  options?: EventSourceInit
   readyState = 0
   closeCount = 0
-  constructor(url: string) { this.url = url; MockEventSource.instances.push(this) }
+  constructor(url: string, options?: EventSourceInit) { this.url = url; this.options = options; MockEventSource.instances.push(this) }
   addEventListener(event: string, handler: (e: MessageEvent) => void) { this.listeners.set(event, handler) }
   close() { this.closeCount++; const idx = MockEventSource.instances.indexOf(this); if (idx !== -1) MockEventSource.instances.splice(idx, 1) }
   dispatchEvent(event: string, data: string) { const h = this.listeners.get(event); if (h) h(new MessageEvent(event, { data })) }
@@ -57,6 +58,12 @@ describe('useTaskSubscription', () => {
     const es = getES()
     expect(es).toBeTruthy()
     expect(es!.url).toContain('/task/task-1/stream')
+  })
+
+  it('includes credentials on the SSE connection', async () => {
+    renderHook({ taskId: 'task-1' })
+    await flush()
+    expect(getES()!.options).toEqual({ withCredentials: true })
   })
 
   it('calls onStatus on status event', async () => {
@@ -146,7 +153,7 @@ describe('useTaskSubscription', () => {
   })
 
   it('stops polling on terminal status', async () => {
-    let resolveGetTaskStatus: (value: unknown) => void
+    let resolveGetTaskStatus: (value: Awaited<ReturnType<typeof getTaskStatus>>) => void
     vi.mocked(getTaskStatus).mockImplementation(() => new Promise(resolve => {
       resolveGetTaskStatus = resolve
     }))

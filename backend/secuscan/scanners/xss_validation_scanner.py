@@ -6,6 +6,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 import httpx
 
+from ..config import settings
 from .base import BaseScanner
 
 
@@ -28,7 +29,7 @@ class XSSValidationScanner(BaseScanner):
         findings: List[Dict[str, Any]] = []
         self.update_progress(0.25)
 
-        async with httpx.AsyncClient(follow_redirects=True, timeout=int(inputs.get("timeout") or 10), verify=False) as client:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=int(inputs.get("timeout") or 10), verify=settings.verify_ssl) as client:
             response = await client.get(probe_url)
 
         body = response.text

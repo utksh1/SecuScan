@@ -41,6 +41,7 @@ find_compatible_python() {
 
     candidates+=(
         "python3"
+        "python"
         "/opt/homebrew/bin/python3"
         "/usr/local/bin/python3"
         "python3.13"
@@ -130,7 +131,20 @@ log_header "Backend Setup"
 # If a venv already exists, verify it was created with a compatible Python.
 # A stale venv built from Python 3.9 would otherwise bypass the version check above and silently re-use the wrong interpreter during pip install.
 if [ -d "venv" ]; then
-    VENV_PYTHON="venv/bin/python3"
+    if [ -d "venv/Scripts" ]; then
+        VENV_BIN="venv/Scripts"
+    else
+        VENV_BIN="venv/bin"
+    fi
+
+    if [ -x "$VENV_BIN/python3" ]; then
+        VENV_PYTHON="$VENV_BIN/python3"
+    elif [ -x "$VENV_BIN/python" ]; then
+        VENV_PYTHON="$VENV_BIN/python"
+    else
+        VENV_PYTHON="$VENV_BIN/python3"
+    fi
+
     if [ ! -x "$VENV_PYTHON" ] || \
        ! "$VENV_PYTHON" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' >/dev/null 2>&1; then
         VENV_OLD_VER="$("$VENV_PYTHON" --version 2>/dev/null | cut -d' ' -f2 || echo 'unknown')"
@@ -147,8 +161,14 @@ if [ ! -d "venv" ]; then
     log_success "Virtual environment created."
 fi
 
+if [ -d "venv/Scripts" ]; then
+    VENV_BIN="venv/Scripts"
+else
+    VENV_BIN="venv/bin"
+fi
+
 # Activate venv for installation
-source venv/bin/activate
+source "$VENV_BIN/activate"
 log_info "Upgrading pip..."
 pip install --upgrade pip -q
 
@@ -219,7 +239,11 @@ echo "To start the development environment, you can run:"
 echo -e "  ${BOLD}./start.sh${NC}"
 echo ""
 echo "Or start them manually in separate terminals:"
-echo -e "  ${CYAN}Backend:${NC}  source venv/bin/activate && python3 -m uvicorn backend.secuscan.main:app --reload"
+if [ -d "venv/Scripts" ]; then
+    echo -e "  ${CYAN}Backend:${NC}  source venv/Scripts/activate && python -m uvicorn backend.secuscan.main:app --reload"
+else
+    echo -e "  ${CYAN}Backend:${NC}  source venv/bin/activate && python -m uvicorn backend.secuscan.main:app --reload"
+fi
 echo -e "  ${CYAN}Frontend:${NC} cd frontend && npm run dev"
 echo ""
 echo "Access the app at: ${BOLD}http://localhost:5173${NC}"

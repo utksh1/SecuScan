@@ -1,4 +1,4 @@
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 def parse(output: str) -> Dict[str, Any]:
     """
@@ -13,10 +13,18 @@ def parse(output: str) -> Dict[str, Any]:
             "title": f"Subdomain Discovered: {sub}",
             "category": "Subdomain",
             "severity": "info",
-            "description": f"Discovered subdomain: {sub}",
-            "remediation": "Verify if this subdomain is intended to be public and secure.",
+            "description": (
+                f"Discovered subdomain: {sub}. "
+                "Confidence: high based on passive enumeration output."
+            ),
+            "remediation": (
+                "Verify if this subdomain is intended to be public and secure."
+            ),
             "metadata": {
-                "subdomain": sub
+                "subdomain": sub,
+                "source": "subfinder",
+                "evidence": f"Subdomain discovered from subfinder output: {sub}",
+                "confidence": "high"
             }
         })
         

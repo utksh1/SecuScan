@@ -17,7 +17,7 @@ SecuScan is built for learning, defensive security workflows, and ethical testin
 - Documentation fixes, setup clarification, and onboarding polish
 - Frontend UX improvements in `frontend/src`
 - Backend validation, test coverage, and API consistency in `backend/secuscan` (see [docs/backend-architecture.md](docs/backend-architecture.md) for a module-by-module reference)
-- Plugin metadata cleanup and parser improvements in `plugins`
+- Plugin metadata cleanup and parser improvements in `plugins` (see [docs/plugins/plugin-security-checklist.md](docs/plugins/plugin-security-checklist.md) for security guidelines and checklist)
 - CI, test reliability, and developer experience
 
 When issue labels are available, look for tags such as `good first issue`, `documentation`, `frontend`, `backend`, `plugin`, `help wanted`, or `gssoc`.
@@ -141,7 +141,19 @@ live under `testing/backend/unit/` and integration tests live under
 > **Note:** Run `./testing/test_python.sh` at least once before using this
 > shortcut so that `venv_tests/` exists and dependencies are installed.
 
-### 4. Where Requirements Files Live
+### 4. Run the Artifact Guard
+
+Before opening a pull request, verify that no generated artifacts or Python
+cache files are staged:
+
+```bash
+bash scripts/check-artifacts.sh origin/main
+```
+
+This script checks for blocked generated artifacts, `__pycache__/` directories,
+and `.pyc` files before changes are submitted.
+
+### 5. Where Requirements Files Live
 
 | File | Purpose |
 |---|---|
@@ -160,6 +172,14 @@ Both files must be installed for the test suite to run correctly. The
   Use `python3.11` or `python3.12` explicitly if needed.
 - **Permission denied on `./testing/test_python.sh`** — make it executable
   first with `chmod +x testing/test_python.sh`.
+
+## Plugin Contributions
+
+If you are adding a new plugin or editing an existing one, follow the dedicated guide before opening a pull request:
+
+**[docs/plugin-contribution-guide.md](docs/plugin-contribution-guide.md)**
+
+The guide covers the full workflow: editing metadata and parser files, refreshing checksums, validating the plugin, writing fixture-based parser tests, and the pre-PR checklist.
 
 ## Project Layout
 
@@ -424,7 +444,29 @@ Never commit these auto-generated paths:
 - `frontend/.vite/`
 - `.vite/deps/`
 
+### Runtime Generated Scan Artifacts
+
+Never commit runtime-generated scan outputs such as:
+
+- `output/`
+- `data/raw/`
+- `data/reports/`
+- `backend/data/raw/`
+- `backend/data/reports/`
+- `logs/`
+
+These directories contain runtime-generated artifacts such as PDF reports, scan results, and other temporary outputs. They should never be committed to the repository. Only intentionally maintained placeholder files such as `.gitkeep` should be tracked.
+
+If you accidentally commit a generated artifact, remove it from Git tracking:
+
+```bash
+git rm --cached <generated-file-or-directory>
+```
+
+Before committing again, verify that the generated artifact path is covered by `.gitignore` so it is not tracked in future commits.
+
 If CI fails, run:
 ```bash
-git rm --cached <file>
-echo 'frontend/dist/' >> .gitignore
+git rm --cached <generated-file-or-directory>
+
+# Ensure the generated artifact path is ignored in .gitignore

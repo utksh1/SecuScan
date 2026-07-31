@@ -4,14 +4,18 @@ import html
 import io
 import json
 import re
-from .redaction import redact, redact_dict
+from .redaction import redact, redact_dict, _redact_value
 from .ai_summary import generate_summary
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Any, Dict, List
 
+from backend import __version__
+
 from PIL import Image, ImageDraw
 from xhtml2pdf import pisa
+
+from .time_utils import format_utc_display, to_utc_iso
 
 
 class ReportGenerator:
@@ -92,9 +96,12 @@ class ReportGenerator:
             y_offset += bar_height + spacing
 
         output = io.BytesIO()
-        img.save(output, format="PNG")
-        encoded = base64.b64encode(output.getvalue()).decode("ascii")
-        return f"data:image/png;base64,{encoded}"
+        try:
+            img.save(output, format="PNG")
+            encoded = base64.b64encode(output.getvalue()).decode("ascii")
+            return f"data:image/png;base64,{encoded}"
+        finally:
+            output.close()
 
     @classmethod
     def _get_ai_summary(cls, findings):
@@ -157,9 +164,12 @@ class ReportGenerator:
             draw.ellipse((22, 33, 26, 37), fill=fg)
 
         output = io.BytesIO()
-        image.save(output, format="PNG")
-        encoded = base64.b64encode(output.getvalue()).decode("ascii")
-        return f"data:image/png;base64,{encoded}"
+        try:
+            image.save(output, format="PNG")
+            encoded = base64.b64encode(output.getvalue()).decode("ascii")
+            return f"data:image/png;base64,{encoded}"
+        finally:
+            output.close()
 
     @classmethod
     def _clean_text(cls, value: Any) -> str:
@@ -195,7 +205,7 @@ class ReportGenerator:
             "title": cls._clean_text(finding.get("title")) or "Untitled finding",
             "category": cls._clean_text(finding.get("category")) or "General",
             "severity": cls._clean_text(finding.get("severity") or "info").upper(),
-            "target": cls._clean_text(finding.get("target")),
+            "target": redact(cls._clean_text(finding.get("target"))),
             "description": redact(cls._clean_text(finding.get("description")) or "No description was provided."),
             "remediation": redact(cls._clean_text(finding.get("remediation"))),
             "proof": redact(cls._clean_text(finding.get("proof"))),
@@ -207,8 +217,8 @@ class ReportGenerator:
             "confidence_reason": redact(cls._clean_text(finding.get("confidence_reason"))),
             "service_fingerprint": cls._clean_text(finding.get("service_fingerprint")),
             "cpe": cls._clean_text(finding.get("cpe")),
-            "discovered_at": cls._clean_text(finding.get("discovered_at")),
-            "evidence": finding.get("evidence", []) if isinstance(finding.get("evidence"), list) else [],
+            "discovered_at": to_utc_iso(finding.get("discovered_at")) if finding.get("discovered_at") else "",
+            "evidence": _redact_value(finding.get("evidence", [])) if isinstance(finding.get("evidence"), list) else [],
             "asset_refs": finding.get("asset_refs", []) if isinstance(finding.get("asset_refs"), list) else [],
             "references": finding.get("references", []) if isinstance(finding.get("references"), list) else [],
             "metadata": redact_dict({cls._clean_text(key): cls._clean_text(val) for key, val in metadata.items()}),
@@ -364,8 +374,8 @@ class ReportGenerator:
             "tool_name": cls._clean_text(task.get("tool_name")) or cls._clean_text(task.get("plugin_id")) or "Unknown tool",
             "target": cls._clean_text(task.get("target")) or "Unknown target",
             "status": cls._clean_text(task.get("status")) or "unknown",
-            "created_at": cls._clean_text(task.get("created_at")),
-            "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "created_at": to_utc_iso(task.get("created_at")) if task.get("created_at") else "",
+            "generated_at": to_utc_iso(),
             "preset": cls._clean_text(task.get("preset")),
             "findings": findings,
             "summary": summary,
@@ -381,12 +391,7 @@ class ReportGenerator:
     def _format_timestamp(value: str) -> str:
         if not value:
             return "Unknown"
-        for fmt in ("%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
-            try:
-                return datetime.strptime(value.replace("Z", ""), fmt).strftime("%b %d, %Y %H:%M")
-            except ValueError:
-                continue
-        return value
+        return format_utc_display(value)
 
     @classmethod
     def _generate_pdf_html_report(cls, task: Dict[str, Any], result: Dict[str, Any]) -> str:
@@ -692,13 +697,30 @@ class ReportGenerator:
 
     @classmethod
     def generate_pdf_report(cls, task: Dict[str, Any], result: Dict[str, Any]) -> bytes:
-        """Generate the PDF from the same HTML used by the browser report."""
+        """Generate the PDF from the same HTML used by the browser report.
+
+        Contract:
+            - Returns raw PDF bytes on success.
+            - Raises RuntimeError("Failed to render SecuScan HTML report as PDF")
+              on any render failure (pisa error flag or unexpected exception).
+            - The internal BytesIO buffer is always closed before returning or
+              raising, regardless of the failure mode.
+            - No temporary files are written to disk; if this ever changes, the
+              same try/finally guarantee must be preserved.
+        """
         html_report = cls._generate_pdf_html_report(task, result)
         output = io.BytesIO()
-        pdf = pisa.CreatePDF(src=html_report, dest=output, encoding="utf-8")
-        if pdf.err:
-            raise RuntimeError("Failed to render SecuScan HTML report as PDF")
-        return output.getvalue()
+        try:
+            pdf = pisa.CreatePDF(src=html_report, dest=output, encoding="utf-8")
+            if pdf.err:
+                raise RuntimeError("Failed to render SecuScan HTML report as PDF")
+            return output.getvalue()
+        except RuntimeError:
+            raise
+        except Exception as exc:
+            raise RuntimeError("Failed to render SecuScan HTML report as PDF") from exc
+        finally:
+            output.close()
 
     @classmethod
     def generate_html_report(cls, task: Dict[str, Any], result: Dict[str, Any]) -> str:
@@ -1079,46 +1101,57 @@ class ReportGenerator:
 
     @classmethod
     def generate_csv_report(cls, task: Dict[str, Any], result: Dict[str, Any]) -> str:
-        """Generate a structured CSV export."""
+        """Generate a structured CSV export.
+
+        Contract:
+            - Returns a UTF-8 CSV string on success.
+            - Raises RuntimeError on unexpected generation failure.
+            - The internal StringIO buffer is always closed.
+        """
         payload = cls._build_report_payload(task, result)
         output = io.StringIO()
-        writer = csv.writer(output)
-        writer.writerow(
-            [
-                "Severity",
-                "Title",
-                "Category",
-                "Target",
-                "CVSS",
-                "CVE",
-                "CPE",
-                "Validated",
-                "Validation Method",
-                "Confidence Reason",
-                "Description",
-                "Evidence",
-                "Remediation",
-            ]
-        )
-        for finding in payload["findings"]:
+        try:
+            writer = csv.writer(output)
             writer.writerow(
                 [
-                    finding["severity"],
-                    finding["title"],
-                    finding["category"],
-                    finding["target"] or payload["target"],
-                    finding["cvss"] if finding["cvss"] is not None else "",
-                    finding["cve"],
-                    finding["cpe"],
-                    "yes" if finding["validated"] else "no",
-                    finding["validation_method"],
-                    finding["confidence_reason"],
-                    finding["description"],
-                    finding["proof"],
-                    finding["remediation"],
+                    "Severity",
+                    "Title",
+                    "Category",
+                    "Target",
+                    "CVSS",
+                    "CVE",
+                    "CPE",
+                    "Validated",
+                    "Validation Method",
+                    "Confidence Reason",
+                    "Description",
+                    "Evidence",
+                    "Remediation",
                 ]
             )
-        return output.getvalue()
+            for finding in payload["findings"]:
+                writer.writerow(
+                    [
+                        finding["severity"],
+                        finding["title"],
+                        finding["category"],
+                        finding["target"] or payload["target"],
+                        finding["cvss"] if finding["cvss"] is not None else "",
+                        finding["cve"],
+                        finding["cpe"],
+                        "yes" if finding["validated"] else "no",
+                        finding["validation_method"],
+                        finding["confidence_reason"],
+                        finding["description"],
+                        finding["proof"],
+                        finding["remediation"],
+                    ]
+                )
+            return output.getvalue()
+        except Exception as exc:
+            raise RuntimeError("Failed to generate CSV report") from exc
+        finally:
+            output.close()
 
     @classmethod
     def generate_sarif_report(cls, task: Dict[str, Any], result: Dict[str, Any]) -> str:
@@ -1247,8 +1280,15 @@ class ReportGenerator:
                             "name": tool_name,
                             "version": "1.0.0",
                             "informationUri": "https://github.com/utksh1/SecuScan",
-                            "rules": rules
+                            "rules": rules,
+                            "properties": {
+                                "generatorVersion": __version__,
+                            },
                         }
+                    },
+                    "properties": {
+                        "pluginId": task.get("plugin_id"),
+                        "exportTimestamp": datetime.now(timezone.utc).isoformat(),
                     },
                     "results": results
                 }

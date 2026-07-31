@@ -17,7 +17,11 @@ policy:
 
 # Documented exceptions with business justification
 # Format: CVE-XXXX-XXXXX or GHSA-xxxx-xxxx-xxxx
-exceptions: {}
+exceptions:
+  GHSA-gv7w-rqvm-qjhr:
+    package: esbuild
+    expires_at: "2026-12-31"
+    reason: "DevDependency esbuild vulnerability has no exploit path in production frontend artifact."
 
 # Packages to exclude from audits (use sparingly!)
 excluded_packages: []

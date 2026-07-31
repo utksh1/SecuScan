@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udcdd",
+  "icon": "📝",
   "engine": {
     "type": "cli",
     "binary": "wpscan"
@@ -88,5 +88,9 @@
       "rubygems"
     ]
   },
-  "checksum": "7f614451043fec61f9ff59bffb749e5a549ce8a8ba9710484532f198ecea3d3a"
+  "capabilities": [
+    "network",
+    "intrusive"
+  ],
+  "checksum": "2a7ce78a3d2a67efa6729d50172bec283d590f9a82dc8d8548ede3c0481dcf75"
 }
