@@ -82,4 +82,35 @@ describe('Scanner catalog integration', () => {
     await user.click(screen.getByRole('tab', { name: /^Quick Start$/i }))
     expect(await screen.findByText(/Backend plugin pending|No tools available in this category/i)).toBeInTheDocument()
   })
+
+  it('keeps the selected tab and panel wiring intact while filtering tools', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <Scanner />
+      </MemoryRouter>,
+    )
+
+    const reconTab = await screen.findByRole('tab', { name: /Recon Tools/i })
+    await user.click(reconTab)
+
+    expect(reconTab).toHaveAttribute('aria-selected', 'true')
+    expect(reconTab).toHaveAttribute('aria-controls', 'scanner-panel-recon')
+
+    expect(await screen.findByRole('button', { name: /Subdomain Discovery, passive risk scanner/i })).toBeInTheDocument()
+
+    const searchInput = screen.getByRole('textbox', { name: /Search scanner catalog/i })
+    reconTab.focus()
+    expect(reconTab).toHaveFocus()
+
+    await user.type(searchInput, 'subdomain')
+
+    const panel = screen.getByRole('tabpanel')
+    expect(panel).toHaveAttribute('aria-labelledby', 'scanner-tab-recon')
+    expect(screen.getByRole('button', { name: /Subdomain Discovery, passive risk scanner/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /SSH Runner/i })).not.toBeInTheDocument()
+
+    reconTab.focus()
+    expect(reconTab).toHaveFocus()
+  })
 })
