@@ -222,6 +222,42 @@ async def test_deliver_records_failure_on_webhook_error(test_db):
     assert row["status"] == NotificationDeliveryStatus.FAILED.value
     assert row["error_message"] == "connection refused"
 
+@pytest.mark.asyncio
+async def test_deliver_via_rule_retries_before_success(test_db):
+    _, finding_id = await _seed_finding(test_db)
+    rule_id = await _seed_rule(test_db)
+
+    finding = await test_db.fetchone(
+        "SELECT * FROM findings WHERE id = ?", (finding_id,)
+    )
+    rule = await test_db.fetchone(
+        "SELECT * FROM notification_rules WHERE id = ?", (rule_id,)
+    )
+
+    with (
+        patch(
+            "backend.secuscan.notification_service.get_delivery_configuration",
+            return_value={
+                "webhook_timeout_seconds": 10,
+                "webhook_connect_timeout_seconds": 3,
+                "max_retries": 2,
+                "backoff_factor_seconds": 0,
+            },
+        ),
+        patch(
+            "backend.secuscan.notification_service.send_webhook",
+            new=AsyncMock(
+                side_effect=[
+                    (False, "temporary error"),
+                    (True, None),
+                ]
+            ),
+        ) as mock_send,
+    ):
+        result = await deliver_via_rule(test_db, rule, finding)
+
+    assert result.status == NotificationDeliveryStatus.SUCCESS
+    assert mock_send.await_count == 2
 
 @pytest.mark.asyncio
 async def test_email_placeholder_records_success(test_db):

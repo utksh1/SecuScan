@@ -624,13 +624,31 @@ async def deliver_via_rule(
     channel = str(rule.get("channel_type", "")).lower()
     target = str(rule.get("target_url_or_email", ""))
 
-    if channel == NotificationChannelType.WEBHOOK.value:
-        ok, error = await send_webhook(target, payload)
-    elif channel == NotificationChannelType.EMAIL.value:
-        ok, error = await send_email(target, payload)
-    else:
-        ok, error = False, f"Unsupported channel type: {channel}"
+    
+    config = get_delivery_configuration()
+    max_retries = config["max_retries"]
+    backoff = config["backoff_factor_seconds"]
 
+    attempt = 0
+
+    while True:
+        if channel == NotificationChannelType.WEBHOOK.value:
+            ok, error = await send_webhook(target, payload)
+        elif channel == NotificationChannelType.EMAIL.value:
+            ok, error = await send_email(target, payload)
+        else:
+            ok, error = False, f"Unsupported channel type: {channel}"
+
+        if ok:
+            break
+
+        if attempt >= max_retries:
+            break
+
+        attempt += 1
+
+        if backoff > 0:
+            await asyncio.sleep(backoff * attempt)
     status = (
         NotificationDeliveryStatus.SUCCESS if ok else NotificationDeliveryStatus.FAILED
     )
