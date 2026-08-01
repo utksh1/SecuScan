@@ -624,7 +624,7 @@ async def deliver_via_rule(
     channel = str(rule.get("channel_type", "")).lower()
     target = str(rule.get("target_url_or_email", ""))
 
-    
+
     config = get_delivery_configuration()
     max_retries = config["max_retries"]
     backoff = config["backoff_factor_seconds"]
@@ -976,7 +976,7 @@ async def process_slack_notification(db: Database, task_id: str) -> None:
         (task_id,),
     )
     total_findings = len(findings)
-    
+
     severity_counts: Dict[str, int] = {}
     for row in findings:
         sev = str(row.get("severity") or "info").lower()
@@ -992,7 +992,7 @@ async def process_slack_notification(db: Database, task_id: str) -> None:
 
     # Status-specific formatting
     status_icon = "✅" if status == "COMPLETED" else "❌" if status == "FAILED" else "ℹ️"
-    
+
     blocks = [
         {
             "type": "header",
