@@ -116,6 +116,7 @@ export default function Sidebar() {
             `}
             aria-label="Main navigation"
             aria-expanded={isExpanded}
+            onClick={(e) => e.stopPropagation()}
         >
             {/* Header / Logo */}
             <div className={`flex flex-col pt-8 pb-4 mb-4`}>
