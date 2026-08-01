@@ -144,3 +144,170 @@ class TestBuildFindingGroups:
         f2 = _make_finding({"id": "f2", "finding_group_id": "g1"})
         result = build_finding_groups([f1, f2])
         assert result[0]["latest_finding_id"] == "f1"
+
+
+# ── Unified group keys (issue #1834) ──────────────────────────────────────────
+
+
+class TestUnifiedGroupKeys:
+    """Every producer of a group id must agree.
+
+    Before this, ``build_finding_groups`` fell back to hashing
+    ``(title, target)`` while ``normalize_and_correlate_findings`` grouped by
+    ``(plugin, asset, signature)``, so an uncorrelated finding grouped
+    differently from a correlated one.
+    """
+
+    @staticmethod
+    def _uncorrelated(**overrides):
+        """A finding with neither ``finding_group_id`` nor ``id`` — the only
+        case that reaches the fallback."""
+        base = {
+            "title": "Open port",
+            "target": "example.com",
+            "plugin_id": "nmap",
+            "category": "network",
+            "severity": "info",
+        }
+        base.update(overrides)
+        return base
+
+    def test_same_title_and_target_but_different_ports_stay_separate(self):
+        """The reported bug: distinct issues merged on title+target alone."""
+        groups = build_finding_groups([
+            self._uncorrelated(metadata={"port": 80, "protocol": "tcp"}),
+            self._uncorrelated(metadata={"port": 443, "protocol": "tcp"}),
+        ])
+        assert len(groups) == 2
+
+    def test_identical_findings_still_collapse(self):
+        groups = build_finding_groups([
+            self._uncorrelated(metadata={"port": 80, "protocol": "tcp"}),
+            self._uncorrelated(metadata={"port": 80, "protocol": "tcp"}),
+        ])
+        assert len(groups) == 1
+        assert groups[0]["occurrence_count"] >= 1
+
+    def test_same_issue_from_different_plugins_stays_separate(self):
+        """Matches the live correlate path, which keys on plugin_id."""
+        groups = build_finding_groups([
+            self._uncorrelated(plugin_id="nmap", metadata={"port": 80}),
+            self._uncorrelated(plugin_id="masscan", metadata={"port": 80}),
+        ])
+        assert len(groups) == 2
+
+    def test_same_title_on_different_targets_stay_separate(self):
+        groups = build_finding_groups([
+            self._uncorrelated(target="a.example.com"),
+            self._uncorrelated(target="b.example.com"),
+        ])
+        assert len(groups) == 2
+
+    def test_distinct_cves_stay_separate(self):
+        groups = build_finding_groups([
+            self._uncorrelated(cve="CVE-2023-1111"),
+            self._uncorrelated(cve="CVE-2023-2222"),
+        ])
+        assert len(groups) == 2
+
+    def test_explicit_group_id_still_wins_over_the_fallback(self):
+        groups = build_finding_groups([
+            self._uncorrelated(finding_group_id="group:fixed", metadata={"port": 80}),
+            self._uncorrelated(finding_group_id="group:fixed", metadata={"port": 443}),
+        ])
+        assert len(groups) == 1
+        assert groups[0]["id"] == "group:fixed"
+
+    def test_id_still_wins_when_no_group_id(self):
+        groups = build_finding_groups([
+            self._uncorrelated(id="f-1"),
+            self._uncorrelated(id="f-2"),
+        ])
+        assert {g["id"] for g in groups} == {"f-1", "f-2"}
+
+    def test_fallback_matches_the_correlate_path_key(self):
+        """An uncorrelated finding lands on the same id the writer would give it."""
+        from backend.secuscan.finding_intelligence import (
+            compute_finding_group_id,
+            resolve_asset_id,
+        )
+
+        finding = self._uncorrelated(metadata={"port": 8080, "protocol": "tcp"})
+        expected = compute_finding_group_id(
+            finding,
+            plugin_id="nmap",
+            asset_id=resolve_asset_id(finding, "example.com"),
+        )
+        assert build_finding_groups([finding])[0]["id"] == expected
+
+    def test_missing_plugin_id_does_not_raise(self):
+        groups = build_finding_groups([{"title": "x", "target": "t"}])
+        assert len(groups) == 1
+
+
+class TestGenerateFindingKeyAgreesWithCorrelatePath:
+    """``generate_finding_key`` used to fold ``owner_id`` into the digest, so it
+    could never reproduce a stored ``finding_group_id``. Owner scoping lives in
+    the unique index on ``(owner_id, finding_group_id)`` instead."""
+
+    def test_key_is_independent_of_owner(self):
+        from backend.secuscan.finding_intelligence import generate_finding_key
+
+        finding = {"title": "Open port", "category": "network",
+                   "metadata": {"port": 80, "protocol": "tcp"}}
+        a = generate_finding_key(finding, "nmap", "example.com", "owner-a")
+        b = generate_finding_key(finding, "nmap", "example.com", "owner-b")
+        assert a == b
+
+    def test_key_matches_compute_finding_group_id(self):
+        from backend.secuscan.finding_intelligence import (
+            compute_finding_group_id,
+            generate_finding_key,
+            resolve_asset_id,
+        )
+
+        finding = {"title": "Open port", "category": "network",
+                   "metadata": {"port": 80, "protocol": "tcp"}}
+        assert generate_finding_key(finding, "nmap", "example.com", "owner-a") == (
+            compute_finding_group_id(
+                finding,
+                plugin_id="nmap",
+                asset_id=resolve_asset_id(finding, "example.com"),
+            )
+        )
+
+
+class TestPersistedGroupIdIsStable:
+    """``finding_group_id`` is written to the database and carries a unique
+    index on ``(owner_id, finding_group_id)`` (migration 008). Changing the
+    hash material silently orphans every stored row, so these digests are
+    pinned deliberately — update them only alongside a migration."""
+
+    def test_known_digests_unchanged(self):
+        from backend.secuscan.finding_intelligence import (
+            compute_finding_group_id,
+            resolve_asset_id,
+        )
+
+        cases = [
+            (
+                {"title": "Open port", "category": "net",
+                 "metadata": {"port": 80, "protocol": "tcp"}},
+                "nmap", "example.com", "group:cafd1788390e6a54",
+            ),
+            (
+                {"title": "XSS", "category": "web", "cve": "CVE-2023-1234"},
+                "nuclei", "https://a.test", "group:2e364c6cba80965a",
+            ),
+            (
+                {"title": "", "category": "", "metadata": {}},
+                "", "", "group:602c571d42c25266",
+            ),
+        ]
+        for finding, plugin_id, target, expected in cases:
+            actual = compute_finding_group_id(
+                finding,
+                plugin_id=plugin_id,
+                asset_id=resolve_asset_id(finding, target),
+            )
+            assert actual == expected, f"group id drifted for {plugin_id or '<empty>'}"

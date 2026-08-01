@@ -48,17 +48,57 @@ def _now_iso() -> str:
     return to_utc_iso()
 
 
+def resolve_asset_id(finding: Dict[str, Any], target: str) -> str:
+    """Return the finding's asset id, deriving one when it is not already set.
+
+    Findings read back from the database carry ``asset_id``; freshly parsed
+    ones do not and have it computed from the target plus a guessed asset
+    reference.
+    """
+    existing = finding.get("asset_id")
+    if existing:
+        return str(existing)
+    return _stable_id("asset", target, _guess_asset_ref(finding, target))
+
+
+def compute_finding_group_id(
+    finding: Dict[str, Any], *, plugin_id: str, asset_id: str
+) -> str:
+    """The single definition of a finding's group id.
+
+    Group identity is ``(plugin, asset, issue signature)``. Every producer of a
+    group id must go through here so the same finding cannot be grouped one way
+    on write and another way on read.
+
+    ``owner_id`` is deliberately *not* hashed in. Owner scoping lives in the
+    storage layer — ``findings`` has a unique index on
+    ``(owner_id, finding_group_id)`` (migration 008) and the upsert keys on that
+    same pair — so folding the owner into the digest would be redundant and
+    would make the key disagree with the ids actually persisted.
+
+    This value is written to ``findings.finding_group_id``, so changing the
+    material below invalidates every stored row and needs a migration.
+    """
+    return _stable_id("group", plugin_id, asset_id, _issue_signature(finding))
+
+
 def generate_finding_key(finding: Dict[str, Any], plugin_id: str, target: str, owner_id: str) -> str:
     """
     Generate a stable deduplication key for a finding that is consistent
     across different scan tasks targeting the same asset. Unlike the per-task
     finding ID, this key intentionally excludes any task identifier so that
     the same vulnerability discovered by separate tasks produces the same key.
+
+    ``owner_id`` is accepted for backwards compatibility but is not part of the
+    key — see ``compute_finding_group_id`` for why owner scoping belongs to the
+    storage layer. It used to be hashed in here, which made this function
+    disagree with the ids ``normalize_and_correlate_findings`` actually writes.
     """
-    asset_ref = _guess_asset_ref(finding, target)
-    asset_id = _stable_id("asset", target, asset_ref)
-    signature = _issue_signature(finding)
-    return _stable_id("group", plugin_id, asset_id, signature, owner_id)
+    return compute_finding_group_id(
+        finding,
+        plugin_id=plugin_id,
+        asset_id=resolve_asset_id(finding, target),
+    )
 
 
 def _parse_timestamp(raw: Any) -> str:
@@ -332,7 +372,9 @@ async def normalize_and_correlate_findings(
         severity = _normalize_severity(finding.get("severity"))
         asset_ref = _guess_asset_ref(finding, target)
         asset_id = _stable_id("asset", target, asset_ref)
-        finding_group_id = _stable_id("group", plugin_id, asset_id, _issue_signature(finding))
+        finding_group_id = compute_finding_group_id(
+            finding, plugin_id=plugin_id, asset_id=asset_id
+        )
         base_source = str(
             (finding.get("metadata") or {}).get("source")
             if isinstance(finding.get("metadata"), dict)
@@ -460,10 +502,29 @@ async def normalize_and_correlate_findings(
     return normalized
 
 
+def _fallback_group_id(finding: Dict[str, Any]) -> str:
+    """Group id for a finding carrying neither ``finding_group_id`` nor ``id``.
+
+    Reached only by findings that were never persisted or correlated. It used
+    to hash ``(title, target)`` alone, which merged genuinely distinct issues
+    that happened to share a title on the same target — two different open
+    ports reported as "Open port", say — while every other code path grouped by
+    ``(plugin, asset, signature)``. Routing through
+    ``compute_finding_group_id`` makes an uncorrelated finding group the same
+    way a correlated one does.
+    """
+    target = str(finding.get("target") or "")
+    return compute_finding_group_id(
+        finding,
+        plugin_id=str(finding.get("plugin_id") or ""),
+        asset_id=resolve_asset_id(finding, target),
+    )
+
+
 def build_finding_groups(findings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     groups: Dict[str, Dict[str, Any]] = {}
     for finding in findings:
-        group_id = str(finding.get("finding_group_id") or finding.get("id") or _stable_id("group", finding.get("title"), finding.get("target")))
+        group_id = str(finding.get("finding_group_id") or finding.get("id") or _fallback_group_id(finding))
         current = groups.get(group_id)
         if current is None:
             groups[group_id] = {
