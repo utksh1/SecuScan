@@ -15,6 +15,18 @@ describe("exportUtils utility", () => {
     expect(escapeCSV('hello\nworld')).toBe('"hello\nworld"');
   });
 
+  test("escapeCSV neutralizes formula injection prefixes", () => {
+    expect(escapeCSV('=HYPERLINK("http://evil.example")')).toBe("\"'=HYPERLINK(\"\"http://evil.example\"\")\"");
+    expect(escapeCSV("+cmd|'/C calc'!A0")).toBe("'+cmd|'/C calc'!A0");
+    expect(escapeCSV("-2+3")).toBe("'-2+3");
+    expect(escapeCSV("@SUM(A1:A2)")).toBe("'@SUM(A1:A2)");
+  });
+
+  test("escapeCSV preserves quoting on formula strings", () => {
+    expect(escapeCSV('=1+1, safe')).toBe('"\'=1+1, safe"');
+    expect(escapeCSV('=1+1\nnext')).toBe('"\'=1+1\nnext"');
+  });
+
   test("serializeFindingsToCSV generates correct headers and mapped rows", () => {
     const sampleFindings = [
       {

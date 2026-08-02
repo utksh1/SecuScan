@@ -1099,6 +1099,20 @@ class ReportGenerator:
 </body>
 </html>"""
 
+    @staticmethod
+    def _sanitize_csv_cell(value: Any) -> Any:
+        """Neutralize CSV formula injection (CWE-1236).
+
+        Spreadsheet applications interpret cells beginning with ``=``, ``+``,
+        ``-``, or ``@`` as formulas. Finding fields are derived from
+        attacker-controlled scan targets (reflected headers, banners, page
+        titles), so prefix such string cells with a single quote to force
+        literal text interpretation.
+        """
+        if isinstance(value, str) and value and value[0] in ("=", "+", "-", "@"):
+            return "'" + value
+        return value
+
     @classmethod
     def generate_csv_report(cls, task: Dict[str, Any], result: Dict[str, Any]) -> str:
         """Generate a structured CSV export.
@@ -1132,19 +1146,19 @@ class ReportGenerator:
             for finding in payload["findings"]:
                 writer.writerow(
                     [
-                        finding["severity"],
-                        finding["title"],
-                        finding["category"],
-                        finding["target"] or payload["target"],
-                        finding["cvss"] if finding["cvss"] is not None else "",
-                        finding["cve"],
-                        finding["cpe"],
+                        cls._sanitize_csv_cell(finding["severity"]),
+                        cls._sanitize_csv_cell(finding["title"]),
+                        cls._sanitize_csv_cell(finding["category"]),
+                        cls._sanitize_csv_cell(finding["target"] or payload["target"]),
+                        cls._sanitize_csv_cell(finding["cvss"] if finding["cvss"] is not None else ""),
+                        cls._sanitize_csv_cell(finding["cve"]),
+                        cls._sanitize_csv_cell(finding["cpe"]),
                         "yes" if finding["validated"] else "no",
-                        finding["validation_method"],
-                        finding["confidence_reason"],
-                        finding["description"],
-                        finding["proof"],
-                        finding["remediation"],
+                        cls._sanitize_csv_cell(finding["validation_method"]),
+                        cls._sanitize_csv_cell(finding["confidence_reason"]),
+                        cls._sanitize_csv_cell(finding["description"]),
+                        cls._sanitize_csv_cell(finding["proof"]),
+                        cls._sanitize_csv_cell(finding["remediation"]),
                     ]
                 )
             return output.getvalue()

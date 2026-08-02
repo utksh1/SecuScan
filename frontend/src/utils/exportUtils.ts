@@ -1,6 +1,12 @@
 export function escapeCSV(val: any): string {
   if (val === null || val === undefined) return ''
-  const str = String(val)
+  let str = String(val)
+  // Neutralize CSV formula injection (CWE-1236): spreadsheet apps evaluate
+  // cells beginning with =, +, -, or @ as formulas. Scanner-supplied values
+  // can carry such prefixes, so prefix them with a single quote (text marker).
+  if (/^[=+\-@]/.test(str)) {
+    str = `'${str}`
+  }
   if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
     return `"${str.replace(/"/g, '""')}"`
   }
