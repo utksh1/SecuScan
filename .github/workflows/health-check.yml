@@ -1,0 +1,55 @@
+name: Post-Deployment Health Check
+
+on:
+  deployment_status:
+
+jobs:
+  health-check:
+    name: Verify Application Health
+    if: github.event.deployment_status.state == 'success'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Wait for Deployment Stabilization
+        run: |
+          echo "Waiting for 15 seconds to allow the deployment to stabilize..."
+          sleep 15
+
+      - name: Check Health Endpoint
+        id: health_check
+        env:
+          TARGET_URL: ${{ github.event.deployment_status.target_url }}
+        run: |
+          if [ -z "$TARGET_URL" ]; then
+            echo "::error::No target_url provided in the deployment status event."
+            exit 1
+          fi
+          
+          # We'll use the target URL as the base, and check the /api/v1/health or a generic root endpoint.
+          # Here we check the base URL since the exact health endpoint is dynamic or context-dependent.
+          HEALTH_URL="${TARGET_URL}"
+          
+          echo "Initiating health check for: $HEALTH_URL"
+          
+          MAX_RETRIES=5
+          RETRY_DELAY=10
+          ATTEMPT=1
+          
+          while [ $ATTEMPT -le $MAX_RETRIES ]; do
+            echo "Attempt $ATTEMPT of $MAX_RETRIES..."
+            
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL")
+            
+            if [ "$HTTP_STATUS" -eq 200 ] || [ "$HTTP_STATUS" -eq 301 ] || [ "$HTTP_STATUS" -eq 302 ]; then
+              echo "✅ Health check passed! Received HTTP status: $HTTP_STATUS"
+              exit 0
+            else
+              echo "⚠️ Health check failed with HTTP status: $HTTP_STATUS. Retrying in $RETRY_DELAY seconds..."
+              sleep $RETRY_DELAY
+            fi
+            
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+          
+          echo "::error::Health check failed after $MAX_RETRIES attempts."
+          exit 1
