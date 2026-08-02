@@ -223,7 +223,7 @@ export default function Settings() {
         try {
             await updateNotificationRule(rule.id, { is_active: !rule.is_active })
             setNotificationRules((prev) =>
-                prev.map((r) => (r.id === rule.id ? { ...r, is_active: !r.is_active } : r)),
+                (prev ?? []).map((r) => (r.id === rule.id ? { ...r, is_active: !r.is_active } : r)),
             )
         } catch {
             addToast('Failed to update rule', 'error')
