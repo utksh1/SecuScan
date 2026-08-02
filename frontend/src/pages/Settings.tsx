@@ -401,7 +401,7 @@ export default function Settings() {
             <input
                 type={type}
                 value={value}
-                onChange={(e) => onChange(type === 'number' ? parseInt(e.target.value) || 0 : e.target.value)}
+                onChange={(e) => onChange(type === 'number' ? parseInt(e.target.value, 10) || 0 : e.target.value)}
                 placeholder={placeholder}
                 className="w-full bg-black/40 border-4 border-black p-4 text-xs font-mono text-rag-blue font-bold focus:outline-none focus:border-rag-blue/50 transition-colors uppercase"
             />
