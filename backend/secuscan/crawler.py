@@ -3,13 +3,22 @@
 from __future__ import annotations
 
 from html.parser import HTMLParser
+import asyncio
+import logging
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 from urllib.parse import parse_qsl, urljoin, urlparse
 
 import httpx
 
 from .config import settings
+
+logger = logging.getLogger(__name__)
+
+# HTTP statuses that trigger redirect following. httpx also follows 303/307/308
+# alongside 301/302; we enumerate them explicitly because redirects are handled
+# manually so every hop can be re-validated.
+_REDIRECT_STATUSES = {301, 302, 303, 307, 308}
 
 
 class _SurfaceParser(HTMLParser):
@@ -74,6 +83,60 @@ def _build_headers(extra_headers: Dict[str, Any] | None = None) -> Dict[str, str
     return headers
 
 
+def _is_same_origin(a: Any, b: Any) -> bool:
+    """Return True when two parsed URLs share scheme, host, and effective port.
+
+    Mirrors the same-origin definition browsers use for credential handling: a
+    redirect to a different scheme, host, or port is a new origin and must not
+    inherit the seed's credentials.
+    """
+    try:
+        scheme_a = (a.scheme or "").lower()
+        scheme_b = (b.scheme or "").lower()
+        host_a = (a.hostname or "").lower()
+        host_b = (b.hostname or "").lower()
+        port_a = a.port if a.port is not None else (443 if scheme_a == "https" else 80)
+        port_b = b.port if b.port is not None else (443 if scheme_b == "https" else 80)
+    except ValueError:
+        # Malformed port on either side: treat as cross-origin so credentials
+        # are never forwarded.
+        return False
+    return scheme_a == scheme_b and host_a == host_b and port_a == port_b
+
+
+def _validate_redirect_target(url: str) -> Tuple[bool, str]:
+    """Re-validate a redirect destination against the network policy.
+
+    The seed target is validated by the executor before the scanner runs, but
+    httpx-followed redirects are not. Without this check a hostile or
+    compromised seed can pivot the crawler into cloud-metadata, loopback,
+    private/CGNAT, or IPv6 link-local/ULA ranges that were never authorized.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        return False, f"redirect to unsupported scheme '{parsed.scheme}'"
+    hostname = parsed.hostname
+    if not hostname:
+        return False, "redirect target has no hostname"
+
+    from .network_policy import get_policy_engine
+
+    try:
+        engine = get_policy_engine()
+        allowed, reason, _ = engine.check_access(
+            dest_ip=hostname,
+            dest_hostname=hostname,
+            plugin_id="crawler",
+            task_id="crawler-redirect",
+        )
+    except Exception as exc:
+        # Never fail open: if the policy engine cannot evaluate the target,
+        # block the redirect instead of silently fetching an internal host.
+        logger.warning("Redirect target validation failed for %s: %s", url, exc)
+        return False, "redirect target could not be validated"
+    return allowed, reason
+
+
 async def crawl_target(
     url: str,
     *,
@@ -83,42 +146,125 @@ async def crawl_target(
     max_redirects: int = 10,
     max_size: int = 5 * 1024 * 1024,
 ) -> Dict[str, Any]:
-    """Fetch a target and normalize discovered links/forms/scripts/API hints."""
-    headers = _build_headers(extra_headers)
+    """Fetch a target and normalize discovered links/forms/scripts/API hints.
+
+    Redirects are followed manually rather than by httpx's automatic handling
+    so every hop is re-validated:
+
+    - Each redirect destination is checked against the network policy before
+      it is fetched, closing the SSRF gap where a hostile seed pivots the
+      crawler into internal or metadata-only networks that were never
+      authorized (active when ``enforce_network_policy`` is enabled, matching
+      how the executor validates the seed target).
+    - Credentials supplied via ``extra_headers``/``cookies`` are only sent to
+      the seed origin; they are stripped on any cross-origin redirect so vault
+      credentials cannot be exfiltrated to an attacker-controlled host.
+    """
+    base_headers = _build_headers(None)
+    seed_origin = urlparse(url)
+    redirect_chain: List[Dict[str, Any]] = []
+    current_url = url
+    redirects_followed = 0
+    final_response: httpx.Response | None = None
+    body_bytes = b""
+    response_headers: Dict[str, str] = {}
+    set_cookie_headers: List[str] = []
+    forward_credentials = True
+
     async with httpx.AsyncClient(
-        follow_redirects=True,
-        max_redirects=max_redirects,
+        follow_redirects=False,
         timeout=timeout,
-        headers=headers,
-        cookies=cookies or {},
+        headers=base_headers,
         verify=settings.verify_ssl,
     ) as client:
-        async with client.stream("GET", url) as response:
-            # Check Content-Length header if present
-            content_length = response.headers.get("content-length")
-            if content_length:
-                try:
-                    cl_val = int(content_length)
-                except ValueError:
-                    cl_val = 0
-                if cl_val > max_size:
-                    raise ValueError(f"Response size exceeds limit of {max_size} bytes")
+        for _ in range(max_redirects + 1):
+            if not _is_same_origin(seed_origin, urlparse(current_url)):
+                forward_credentials = False
 
-            # Read response in chunks to enforce size limit
-            body_chunks = []
-            bytes_read = 0
-            async for chunk in response.aiter_bytes():
-                bytes_read += len(chunk)
-                if bytes_read > max_size:
-                    raise ValueError(f"Response size exceeds limit of {max_size} bytes")
-                body_chunks.append(chunk)
+            hop_headers = dict(base_headers)
+            if forward_credentials and extra_headers:
+                for key, value in extra_headers.items():
+                    if key and value is not None:
+                        hop_headers[str(key)] = str(value)
+            hop_cookies = dict(cookies or {}) if forward_credentials else {}
 
-            body_bytes = b"".join(body_chunks)
-            body = body_bytes.decode("utf-8", errors="replace")
+            if redirects_followed > 0 and settings.enforce_network_policy:
+                allowed, reason = await asyncio.to_thread(
+                    _validate_redirect_target, current_url
+                )
+                if not allowed:
+                    raise ValueError(
+                        f"Redirect to {current_url} rejected by network policy: {reason}"
+                    )
+
+            async with client.stream(
+                "GET", current_url, headers=hop_headers, cookies=hop_cookies
+            ) as response:
+                # Check Content-Length header if present
+                content_length = response.headers.get("content-length")
+                if content_length:
+                    try:
+                        cl_val = int(content_length)
+                    except ValueError:
+                        cl_val = 0
+                    if cl_val > max_size:
+                        raise ValueError(f"Response size exceeds limit of {max_size} bytes")
+
+                # Read response in chunks to enforce size limit
+                body_chunks: List[bytes] = []
+                bytes_read = 0
+                async for chunk in response.aiter_bytes():
+                    bytes_read += len(chunk)
+                    if bytes_read > max_size:
+                        raise ValueError(f"Response size exceeds limit of {max_size} bytes")
+                    body_chunks.append(chunk)
+                hop_body = b"".join(body_chunks)
+
+                status = response.status_code
+                location = response.headers.get("location")
+                if status in _REDIRECT_STATUSES and location:
+                    redirect_chain.append(
+                        {
+                            "url": str(response.url),
+                            "status_code": status,
+                            "location": location,
+                        }
+                    )
+                    if redirects_followed >= max_redirects:
+                        raise httpx.TooManyRedirects(
+                            f"Exceeded maximum redirects ({max_redirects})",
+                            request=response.request,
+                        )
+                    redirects_followed += 1
+                    current_url = urljoin(str(response.url), location)
+                    continue
+
+                final_response = response
+                body_bytes = hop_body
+                response_headers = dict(response.headers)
+                set_cookie_headers = (
+                    list(response.headers.get_list("set-cookie"))
+                    if hasattr(response.headers, "get_list")
+                    else []
+                )
+                break
+        else:
+            raise httpx.TooManyRedirects(
+                f"Exceeded maximum redirects ({max_redirects})",
+                request=None,
+            )
+
+    if final_response is None:
+        raise httpx.TooManyRedirects(
+            f"Exceeded maximum redirects ({max_redirects})",
+            request=None,
+        )
+
+    body = body_bytes.decode("utf-8", errors="replace")
     parser = _SurfaceParser()
     parser.feed(body)
 
-    base_url = str(response.url)
+    base_url = str(final_response.url)
     final_parsed = urlparse(base_url)
     normalized_links = sorted({urljoin(base_url, link) for link in parser.links if link})
     normalized_scripts = sorted({urljoin(base_url, script) for script in parser.scripts if script})
@@ -139,30 +285,21 @@ async def crawl_target(
             path_hints.append({"url": candidate, "kind": path_tag})
 
     forms = [_normalize_form(base_url, form) for form in parser.forms[:50]]
-    headers_snapshot = dict(response.headers)
-    set_cookie_headers = list(response.headers.get_list("set-cookie")) if hasattr(response.headers, "get_list") else []
+    headers_snapshot = response_headers
     tech_hints = _extract_tech_hints(headers_snapshot, parser.meta_generators, normalized_scripts, body)
     cms_hints = _extract_cms_hints(parser.meta_generators, body, normalized_scripts)
-    redirect_chain = [
-        {
-            "url": str(item.url),
-            "status_code": item.status_code,
-            "location": item.headers.get("location"),
-        }
-        for item in response.history
-    ]
 
     return {
         "seed_url": url,
         "final_url": base_url,
-        "status_code": response.status_code,
+        "status_code": final_response.status_code,
         "scheme": final_parsed.scheme,
         "headers": headers_snapshot,
         "set_cookie_headers": set_cookie_headers[:20],
         "redirect_chain": redirect_chain[:10],
         "tech_hints": tech_hints[:20],
         "cms_hints": cms_hints[:10],
-        "pages": [{"url": base_url, "title": _extract_title(body), "content_type": response.headers.get("content-type", "")}] + [
+        "pages": [{"url": base_url, "title": _extract_title(body), "content_type": response_headers.get("content-type", "")}] + [
             {"url": link, "title": "", "content_type": ""} for link in normalized_links[:100]
         ],
         "forms": forms,
