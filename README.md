@@ -15,6 +15,14 @@
   <a href="PLUGINS.md"><img src="https://img.shields.io/badge/plugins-60%20catalogued-brightgreen" alt="60 catalogued plugins"></a>
 </p>
 
+<p align="center">
+  <a href="https://github.com/AnzalKhan16/SecuScan/actions/workflows/ci.yml"><img src="https://github.com/AnzalKhan16/SecuScan/actions/workflows/ci.yml/badge.svg" alt="Continuous Integration"></a>
+  <a href="https://github.com/AnzalKhan16/SecuScan/actions/workflows/docker-validation.yml"><img src="https://github.com/AnzalKhan16/SecuScan/actions/workflows/docker-validation.yml/badge.svg" alt="Docker Build Validation"></a>
+  <a href="https://github.com/AnzalKhan16/SecuScan/actions/workflows/codeql-analysis.yml"><img src="https://github.com/AnzalKhan16/SecuScan/actions/workflows/codeql-analysis.yml/badge.svg" alt="CodeQL Analysis"></a>
+  <a href="https://github.com/AnzalKhan16/SecuScan/actions/workflows/security-scan.yml"><img src="https://github.com/AnzalKhan16/SecuScan/actions/workflows/security-scan.yml/badge.svg" alt="Security Scanning"></a>
+  <a href="https://github.com/AnzalKhan16/SecuScan/actions/workflows/docker-publish.yml"><img src="https://github.com/AnzalKhan16/SecuScan/actions/workflows/docker-publish.yml/badge.svg" alt="Release Workflow"></a>
+</p>
+
 > **Authorized use only:** Run SecuScan only against systems you own, systems you are explicitly permitted to assess, or deliberately vulnerable lab environments.
 
 ## Overview
