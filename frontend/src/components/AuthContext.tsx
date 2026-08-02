@@ -52,42 +52,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false
     checkAuthSession().then((authenticated) => {
-      if (!cancelled) {
-        setIsAuthenticated(authenticated)
-        setLoading(false)
-      }
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  // A 401 anywhere invalidates the session.
-  useEffect(() => {
-    function onAuthRequired() {
-      setIsAuthenticated(false)
-    }
-    window.addEventListener(AUTH_REQUIRED_EVENT, onAuthRequired)
-    return () => window.removeEventListener(AUTH_REQUIRED_EVENT, onAuthRequired)
-  }, [])
-
-  const markAuthenticated = useCallback(() => {
-    setIsAuthenticated(true)
-  }, [])
-
-  const signOut = useCallback(async () => {
-    await logoutSession()
-    setIsAuthenticated(false)
-  }, [])
-
-  const value = useMemo<AuthContextValue>(
-    () => ({ isAuthenticated, loading, markAuthenticated, signOut }),
-    [isAuthenticated, loading, markAuthenticated, signOut],
-  )
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
-
-export function useAuth(): AuthContextValue {
-  return useContext(AuthContext)
-}
+    .catch(err => console.error(err))
