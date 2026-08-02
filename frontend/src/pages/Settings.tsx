@@ -419,7 +419,7 @@ export default function Settings() {
                 onChange={(e) => onChange(e.target.value)}
                 className="w-full bg-black/40 border-4 border-black p-4 text-xs font-mono text-rag-blue font-bold focus:outline-none focus:border-rag-blue/50 transition-colors uppercase appearance-none"
             >
-                {options.map((opt: any) => (
+                {(options ?? []).map((opt: any) => (
                     <option key={opt.value} value={opt.value} className="bg-charcoal text-silver-bright">{opt.label}</option>
                 ))}
             </select>
