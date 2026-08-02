@@ -835,7 +835,7 @@ function normalizeWorkflow(raw: RawWorkflow): Workflow {
 export async function getWorkflows(): Promise<Workflow[]> {
   const data = await request<WorkflowListResponse | RawWorkflow[]>('/workflows')
   const workflows = Array.isArray(data) ? data : data.workflows
-  return Array.isArray(workflows) ? workflows.map(normalizeWorkflow) : []
+  return Array.isArray(workflows) ? (workflows ?? []).map(normalizeWorkflow) : []
 }
 
 export async function createWorkflow(data: WorkflowCreatePayload): Promise<Workflow> {
