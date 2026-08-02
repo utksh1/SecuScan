@@ -1,0 +1,73 @@
+name: Security Scanning
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  dependency-scan:
+    name: Dependency Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Scan Python dependencies
+        run: |
+          pip-audit -r backend/requirements.txt -f json -o backend-audit-report.json || true
+          pip-audit -r backend/requirements.txt --desc
+        continue-on-error: true
+        id: python_scan
+
+      - name: Upload Python audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-security-report
+          path: backend-audit-report.json
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Scan Node.js dependencies
+        working-directory: frontend
+        run: |
+          npm audit --json > ../frontend-audit-report.json || true
+          npm audit --audit-level=high
+        continue-on-error: true
+        id: node_scan
+
+      - name: Upload Node audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-security-report
+          path: frontend-audit-report.json
+
+      - name: Evaluate Security Scan Results
+        run: |
+          if [ "${{ steps.python_scan.outcome }}" == "failure" ] || [ "${{ steps.node_scan.outcome }}" == "failure" ]; then
+            echo "::error::HIGH or CRITICAL security vulnerabilities were detected in dependencies."
+            exit 1
+          fi
