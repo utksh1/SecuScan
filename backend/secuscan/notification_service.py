@@ -46,6 +46,7 @@ _SEVERITY_RANK: Dict[str, int] = {
 _WEBHOOK_TIMEOUT_SECONDS = 10.0
 _WEBHOOK_CONNECT_TIMEOUT_SECONDS = 5.0
 _USER_AGENT = "SecuScan-Notifications/1.0"
+_MAX_WEBHOOK_RESPONSE_BYTES = 1024 * 1024  # 1 MiB
 
 def get_delivery_configuration() -> Dict[str, Any]:
     """Return the currently active configuration for notification delivery."""
@@ -170,13 +171,23 @@ class _PinnedIPTransport(httpx.AsyncBaseTransport):
             extensions=request.extensions,
         )
         resp = await self._pool.handle_async_request(req)
-        content = b""
+        content = bytearray()
+        total_bytes = 0
         async for chunk in resp.stream:
-            content += chunk
+            total_bytes += len(chunk)
+
+            if total_bytes > _MAX_WEBHOOK_RESPONSE_BYTES:
+                await resp.aclose()
+                raise httpx.HTTPError(
+                    f"Webhook response exceeded {_MAX_WEBHOOK_RESPONSE_BYTES} bytes"
+                )
+
+            content.extend(chunk)
         return httpx.Response(
             status_code=resp.status,
             headers=resp.headers,
-            content=content,
+            content=bytes(content),
+            request=request,
             extensions=resp.extensions,
         )
 
