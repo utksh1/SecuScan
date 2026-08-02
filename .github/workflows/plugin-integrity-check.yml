@@ -8,6 +8,10 @@ on:
       - 'scripts/refresh_plugin_checksum.py'
       - 'backend/secuscan/plugins.py'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   parser-integrity:
     runs-on: ubuntu-latest
@@ -20,6 +24,7 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
+        cache: "pip"
 
     - name: Verify all plugin parser hashes match metadata
       run: |

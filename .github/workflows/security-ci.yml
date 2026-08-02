@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   security-events: write
@@ -19,6 +23,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
       - name: Install bandit
         run: pip install bandit[toml]
       - name: Run bandit security linter
@@ -52,6 +57,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
       - name: Check all API routers have authentication
         run: |
           python -c "
@@ -86,6 +92,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
       - name: Verify debug mode is off by default
         run: |
           python -c "
@@ -176,6 +183,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
       - name: Validate .env.example safe defaults
         run: |
           python -c "
@@ -209,6 +217,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
       - name: Install pip-audit
         run: pip install pip-audit
       - name: Audit Python dependencies

@@ -12,6 +12,10 @@ on:
       - "scripts/check-artifacts.sh"
       - ".github/workflows/check-artifacts.yml"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   artifact-check:
     runs-on: ubuntu-latest

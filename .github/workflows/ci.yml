@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -21,6 +25,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
       - name: Fetch base branch for diff
         if: github.event_name == 'pull_request'
         run: git fetch origin "${{ github.base_ref }}" --depth=1
@@ -50,6 +55,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
       - name: Validate issue template labels
         run: python scripts/validate_issue_template_labels.py
 
@@ -60,6 +66,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
 
       - name: Validate documentation anchors
         run: python scripts/validate_doc_anchors.py
@@ -73,6 +80,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
       - name: Install backend system dependencies
         run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
       - name: Install backend development dependencies
@@ -95,6 +103,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
       - name: Install backend system dependencies
         run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
       - name: Install backend dependencies
@@ -117,6 +126,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
       - name: Install backend system dependencies
         run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
       - name: Install backend dependencies
@@ -146,6 +156,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
       - name: Install backend system dependencies
         run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
       - name: Install backend dependencies
@@ -177,6 +188,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
       - name: Install backend system dependencies
         run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
       - name: Install backend dependencies
@@ -226,6 +238,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
       - name: Install backend system dependencies
         run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
       - name: Install backend dependencies

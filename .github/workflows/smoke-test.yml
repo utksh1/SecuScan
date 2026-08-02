@@ -27,6 +27,10 @@ on:
       - ".github/workflows/smoke-test.yml"
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   shell-smoke:
     name: start.sh shell smoke
@@ -67,6 +71,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
 
       # ── 3. Set up Node.js ──────────────────────────────────────────────────
       # setup.sh checks for node + npm; frontend uses Vite on port 5173.
