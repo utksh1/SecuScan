@@ -1,0 +1,54 @@
+name: Trivy Image Scan
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    name: Trivy Vulnerability Scanner
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        component: [backend, frontend]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build -t secuscan-${{ matrix.component }}:local ./${{ matrix.component }}
+
+      - name: Run Trivy vulnerability scanner (Report generation)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'secuscan-${{ matrix.component }}:local'
+          format: 'json'
+          output: 'trivy-results-${{ matrix.component }}.json'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+        continue-on-error: true
+
+      - name: Upload Trivy scan results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-results-${{ matrix.component }}
+          path: trivy-results-${{ matrix.component }}.json
+
+      - name: Run Trivy with failure condition
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'secuscan-${{ matrix.component }}:local'
+          format: 'table'
+          exit-code: '1'
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
