@@ -663,7 +663,7 @@ export default function TaskDetails() {
             .replace(/\b\w/g, char => char.toUpperCase())
 
     const formatValue = (value: unknown) => {
-        if (value === true) return 'ON'
+        if (value ) return 'ON'
         if (value === false) return 'OFF'
         if (value === null || value === undefined || value === '') return 'NONE'
         if (Array.isArray(value)) return value.join(', ')
