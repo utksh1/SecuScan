@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from backend.secuscan.triage_engine import (
+    _build_triage_prompt,
     extract_code_context,
     is_eligible_for_triage,
     triage_finding,
@@ -201,3 +202,116 @@ class TestFindingIntelligenceIntegration:
 
         assert settings.triage_engine_enabled is False
         assert settings.triage_engine_api_key == ""
+
+
+class TestBuildTriagePrompt:
+    """Unit tests for _build_triage_prompt."""
+
+    def _make_finding(self, **overrides):
+        finding = {
+            "title": "SQL Injection",
+            "category": "code security",
+            "severity": "high",
+            "description": "User input concatenated into query",
+            "proof": "query = f\"SELECT * FROM users WHERE id={user_id}\"",
+        }
+        finding.update(overrides)
+        return finding
+
+    def _make_context(self, **overrides):
+        context = {
+            "snippet": 'query = f"SELECT * FROM users WHERE id={user_id}"',
+            "variables": ["user_id"],
+            "file": "app/db.py",
+            "line": "42",
+        }
+        context.update(overrides)
+        return context
+
+    def test_includes_title(self):
+        finding = self._make_finding(title="Hardcoded Password")
+        prompt = _build_triage_prompt(finding, {})
+        assert "Hardcoded Password" in prompt
+
+    def test_includes_category(self):
+        finding = self._make_finding(category="authentication")
+        prompt = _build_triage_prompt(finding, {})
+        assert "authentication" in prompt
+
+    def test_includes_severity(self):
+        finding = self._make_finding(severity="critical")
+        prompt = _build_triage_prompt(finding, {})
+        assert "critical" in prompt
+
+    def test_includes_description(self):
+        finding = self._make_finding(description="Stack buffer overflow detected")
+        prompt = _build_triage_prompt(finding, {})
+        assert "Stack buffer overflow detected" in prompt
+
+    def test_includes_code_snippet(self):
+        finding = self._make_finding()
+        context = self._make_context(snippet='x = eval(user_input)')
+        prompt = _build_triage_prompt(finding, context)
+        assert 'x = eval(user_input)' in prompt
+
+    def test_includes_variable_hints(self):
+        finding = self._make_finding()
+        context = self._make_context(variables=["user_input", "password"])
+        prompt = _build_triage_prompt(finding, context)
+        assert "user_input" in prompt
+        assert "password" in prompt
+
+    def test_missing_title_defaults_to_untitled(self):
+        finding = self._make_finding(title="")
+        prompt = _build_triage_prompt(finding, {})
+        assert "Untitled finding" in prompt
+
+    def test_missing_category_defaults_to_unknown(self):
+        finding = self._make_finding(category="")
+        prompt = _build_triage_prompt(finding, {})
+        assert "unknown" in prompt
+
+    def test_missing_severity_defaults_to_unknown(self):
+        finding = self._make_finding(severity="")
+        prompt = _build_triage_prompt(finding, {})
+        assert "unknown" in prompt
+
+    def test_missing_description_shows_none_provided(self):
+        finding = self._make_finding(description="")
+        prompt = _build_triage_prompt(finding, {})
+        assert "(none provided)" in prompt
+
+    def test_missing_snippet_shows_fallback(self):
+        finding = self._make_finding()
+        context = self._make_context(snippet="")
+        prompt = _build_triage_prompt(finding, context)
+        assert "(no source snippet available)" in prompt
+
+    def test_missing_variables_shows_none_identified(self):
+        finding = self._make_finding()
+        context = self._make_context(variables=[])
+        prompt = _build_triage_prompt(finding, context)
+        assert "(none identified)" in prompt
+
+    def test_includes_file_and_line(self):
+        finding = self._make_finding()
+        context = self._make_context(file="src/app.py", line="10")
+        prompt = _build_triage_prompt(finding, context)
+        assert "src/app.py" in prompt
+        assert "line" in prompt
+
+    def test_includes_response_format_instructions(self):
+        finding = self._make_finding()
+        prompt = _build_triage_prompt(finding, {})
+        assert "JSON object" in prompt
+        assert "verdict" in prompt
+        assert "confidence" in prompt
+        assert "reasoning" in prompt
+        assert "remediation" in prompt
+
+    def test_is_deterministic(self):
+        finding = self._make_finding()
+        context = self._make_context()
+        prompt1 = _build_triage_prompt(finding, context)
+        prompt2 = _build_triage_prompt(finding, context)
+        assert prompt1 == prompt2
