@@ -16,11 +16,29 @@ SecuScan is built for learning, defensive security workflows, and ethical testin
 
 - Documentation fixes, setup clarification, and onboarding polish
 - Frontend UX improvements in `frontend/src`
-- Backend validation, test coverage, and API consistency in `backend/secuscan`
-- Plugin metadata cleanup and parser improvements in `plugins`
+- Backend validation, test coverage, and API consistency in `backend/secuscan` (see [docs/backend-architecture.md](docs/backend-architecture.md) for a module-by-module reference)
+- Plugin metadata cleanup and parser improvements in `plugins` (see [docs/plugins/plugin-security-checklist.md](docs/plugins/plugin-security-checklist.md) for security guidelines and checklist)
 - CI, test reliability, and developer experience
 
 When issue labels are available, look for tags such as `good first issue`, `documentation`, `frontend`, `backend`, `plugin`, `help wanted`, or `gssoc`.
+
+## Issue Template Label Maintenance
+
+Issue templates in `.github/ISSUE_TEMPLATE/` must only reference labels from the active repository taxonomy.
+
+When adding or updating issue template labels:
+
+- Use active label groups such as `type:*`, `area:*`, `priority:*`, and `level:*`.
+- Avoid deprecated labels such as `bug`, `feature`, `documentation`, and `help wanted`.
+- Keep template labels aligned with the labels used by maintainers and CI.
+
+Before opening a pull request that changes issue templates, run:
+
+```bash
+python scripts/validate_issue_template_labels.py
+```
+
+The CI workflow also runs this validation and will fail if an issue template references a label that is not included in the approved label taxonomy.
 
 ## Local Setup
 
@@ -37,6 +55,11 @@ When issue labels are available, look for tags such as `good first issue`, `docu
 ./setup.sh
 ./start.sh
 ```
+
+Windows contributors should also read the
+[`docs/windows_contributor_guide.md`](docs/windows_contributor_guide.md) guide
+for PowerShell activation, Git Bash equivalents, Docker Desktop notes, and
+Windows-specific troubleshooting.
 
 This starts:
 
@@ -65,6 +88,98 @@ cd frontend
 npm install
 npm run dev -- --host 127.0.0.1 --port 5173
 ```
+
+## Backend Testing Quickstart
+
+This section explains how to run the backend test suite from a fresh checkout
+without touching the main development environment.
+
+### 1. Prerequisites
+
+Make sure your machine has Python 3.11 or newer before running any test commands.
+
+```bash
+python3 --version
+```
+
+If the version shown is older than 3.11, substitute the full path to a compatible
+interpreter (e.g. `python3.11`) wherever `python3` appears below.
+
+### 2. Run the Full Backend Test Suite
+
+From the repo root, run:
+
+```bash
+./testing/test_python.sh
+```
+
+This script handles everything automatically:
+
+- Creates an isolated virtual environment at `venv_tests/` (separate from your
+  dev environment)
+- Installs all required dependencies from `backend/requirements.txt` and
+  `backend/requirements-dev.txt`
+- Runs the full `testing/backend/` suite with pytest in quiet mode
+
+You do not need to activate any virtual environment manually for this command.
+
+### 3. Run a Single Test File
+
+When you want faster feedback on one specific file, activate the test virtual
+environment and call pytest directly. Run these commands from the repo root:
+
+```bash
+source venv_tests/bin/activate
+python -m pytest testing/backend/unit/test_models.py -v
+deactivate
+```
+
+Replace `test_models.py` with whichever file you want to target. All unit tests
+live under `testing/backend/unit/` and integration tests live under
+`testing/backend/integration/`.
+
+> **Note:** Run `./testing/test_python.sh` at least once before using this
+> shortcut so that `venv_tests/` exists and dependencies are installed.
+
+### 4. Run the Artifact Guard
+
+Before opening a pull request, verify that no generated artifacts or Python
+cache files are staged:
+
+```bash
+bash scripts/check-artifacts.sh origin/main
+```
+
+This script checks for blocked generated artifacts, `__pycache__/` directories,
+and `.pyc` files before changes are submitted.
+
+### 5. Where Requirements Files Live
+
+| File | Purpose |
+|---|---|
+| `backend/requirements.txt` | Core runtime dependencies |
+| `backend/requirements-dev.txt` | Test and development dependencies (pytest, etc.) |
+
+Both files must be installed for the test suite to run correctly. The
+`./testing/test_python.sh` script installs both automatically.
+
+### 5. Common Dependency Issues
+
+- **`ModuleNotFoundError` on any import** — the `venv_tests/` environment may
+  be outdated. Delete it and re-run `./testing/test_python.sh` to rebuild from
+  scratch.
+- **`python3` resolves to an older version** — check with `python3 --version`.
+  Use `python3.11` or `python3.12` explicitly if needed.
+- **Permission denied on `./testing/test_python.sh`** — make it executable
+  first with `chmod +x testing/test_python.sh`.
+
+## Plugin Contributions
+
+If you are adding a new plugin or editing an existing one, follow the dedicated guide before opening a pull request:
+
+**[docs/plugin-contribution-guide.md](docs/plugin-contribution-guide.md)**
+
+The guide covers the full workflow: editing metadata and parser files, refreshing checksums, validating the plugin, writing fixture-based parser tests, and the pre-PR checklist.
 
 ## Project Layout
 
@@ -320,3 +435,38 @@ If a PR has been quiet for more than a week, a polite follow-up comment is compl
 - For security-sensitive reports, do not use public issues. Follow [SECURITY.md](SECURITY.md).
 
 Thank you for helping make SecuScan more useful, safer, and more welcoming to new contributors.
+## Frontend Generated Artifacts
+
+Never commit these auto-generated paths:
+- `frontend/dist/`
+- `frontend/playwright-report/`
+- `frontend/test-results/`
+- `frontend/.vite/`
+- `.vite/deps/`
+
+### Runtime Generated Scan Artifacts
+
+Never commit runtime-generated scan outputs such as:
+
+- `output/`
+- `data/raw/`
+- `data/reports/`
+- `backend/data/raw/`
+- `backend/data/reports/`
+- `logs/`
+
+These directories contain runtime-generated artifacts such as PDF reports, scan results, and other temporary outputs. They should never be committed to the repository. Only intentionally maintained placeholder files such as `.gitkeep` should be tracked.
+
+If you accidentally commit a generated artifact, remove it from Git tracking:
+
+```bash
+git rm --cached <generated-file-or-directory>
+```
+
+Before committing again, verify that the generated artifact path is covered by `.gitignore` so it is not tracked in future commits.
+
+If CI fails, run:
+```bash
+git rm --cached <generated-file-or-directory>
+
+# Ensure the generated artifact path is ignored in .gitignore

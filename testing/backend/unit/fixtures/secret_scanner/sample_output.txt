@@ -1,0 +1,16 @@
+[
+  {
+    "RuleID": "github-pat",
+    "File": "src/config/credentials.py",
+    "StartLine": 12,
+    "Offender": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "Secret": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  },
+  {
+    "RuleID": "aws-access-key",
+    "File": "deployments/env",
+    "StartLine": 3,
+    "Offender": "AKIAIOSFODNN7EXAMPLE",
+    "Secret": "AKIAIOSFODNN7EXAMPLE"
+  }
+]

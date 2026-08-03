@@ -1,0 +1,43 @@
+{
+  "vulnerabilities": {
+    "framer-motion": {
+      "name": "framer-motion",
+      "severity": "high",
+      "via": [
+        {
+          "source": 1085097,
+          "name": "framer-motion",
+          "dependency": "framer-motion",
+          "title": "framer-motion vulnerable to RCE",
+          "url": "https://github.com/advisories/GHSA-jqrj-82ww",
+          "severity": "high",
+          "cvss": {
+            "score": 9.8,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"
+          },
+          "cwe": [
+            "CWE-94"
+          ]
+        }
+      ]
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 1,
+      "critical": 0,
+      "total": 1
+    },
+    "dependencies": {
+      "prod": 100,
+      "dev": 20,
+      "optional": 0,
+      "peer": 0,
+      "peerOptional": 0,
+      "total": 120
+    }
+  }
+}
