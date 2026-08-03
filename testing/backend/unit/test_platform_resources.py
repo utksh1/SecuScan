@@ -2,6 +2,7 @@
 Unit tests for backend/secuscan/platform_resources.py
 
 Covers the pure helpers exposed by the module:
+  - _now_iso: UTC timestamp in ISO 8601 format
   - _stable_asset_id: deterministic asset id derivation
   - _deserialize_resource_row: unwrap *_json columns
   - deserialize_resource_rows: filter None rows
@@ -20,6 +21,7 @@ import pytest
 from backend.secuscan.execution_context import normalize_execution_context
 from backend.secuscan.platform_resources import (
     _deserialize_resource_row,
+    _now_iso,
     _stable_asset_id,
     deserialize_resource_rows,
     serialize_execution_context,
@@ -213,3 +215,36 @@ class TestSerializeExecutionContext:
         # The default ExecutionContext has at least these two fields
         assert "validation_mode" in parsed
         assert "evidence_level" in parsed
+
+
+# ---------------------------------------------------------------------------
+# _now_iso
+
+class TestNowIso:
+    def test_returns_string(self):
+        """_now_iso returns a string."""
+        result = _now_iso()
+        assert isinstance(result, str)
+
+    def test_returns_iso_8601_format(self):
+        """_now_iso returns a valid ISO 8601 formatted datetime string."""
+        result = _now_iso()
+        # datetime.utcnow().isoformat() produces YYYY-MM-DDTHH:MM:SS[.ffffff]
+        # The format is always ISO 8601 (UTC naive), e.g. 2026-08-03T07:48:42.438246
+        import datetime as dt
+        # Should parse without error
+        parsed = dt.datetime.fromisoformat(result)
+        assert isinstance(parsed, dt.datetime)
+        assert "T" in result  # ISO separator
+        # Should contain the current year
+        assert str(dt.datetime.utcnow().year) in result
+
+    def test_returns_time_within_a_few_seconds(self):
+        """_now_iso returns a time within a few seconds of now."""
+        import datetime as dt
+        before = dt.datetime.utcnow()
+        result = _now_iso()
+        after = dt.datetime.utcnow()
+        parsed = dt.datetime.fromisoformat(result)
+        # Should be between before and after
+        assert before <= parsed <= after or after <= parsed <= before
