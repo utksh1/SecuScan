@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { routes } from '../routes'
+import { useTheme } from './ThemeContext'
 
 interface NavItemProps {
     to: string;
@@ -18,7 +19,7 @@ const NavItem = ({ to, icon, label, isExpanded, highlight = false }: NavItemProp
             onClick={(e) => e.stopPropagation()}
             className={({ isActive }) => `
                 relative flex items-center transition-all duration-300 group
-                ${isExpanded ? 'gap-3 px-5 py-2.5 mx-2 rounded-lg' : 'justify-center py-3 px-2 mx-2 rounded-lg'}
+                ${isExpanded ? 'gap-3 px-5 py-3 mx-2 rounded-lg' : 'justify-center py-3 px-2 mx-2 rounded-lg'}
                 ${isActive 
                     ? 'bg-accent-silver/10 text-primary shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)]' 
                     : highlight
@@ -99,6 +100,8 @@ const NavSection = ({ label, isExpanded }: { label: string, isExpanded: boolean 
 )
 
 export default function Sidebar() {
+    const { theme, toggleTheme } = useTheme()
+
     const [isExpanded, setIsExpanded] = useState(() => {
         const saved = localStorage.getItem('sidebar-expanded')
         return saved !== null ? JSON.parse(saved) : true
@@ -163,25 +166,40 @@ export default function Sidebar() {
 
                 <NavSection label="Analyze" isExpanded={isExpanded} />
                 <NavItem to={routes.findings} icon="emergency_home" label="Findings" isExpanded={isExpanded} />
-
                 <NavItem to={routes.reports} icon="summarize" label="Reports" isExpanded={isExpanded} />
-
             </div>
 
             {/* Bottom Actions */}
             <div className="p-4 mt-auto border-t border-accent-silver/5 bg-bg-primary/30 backdrop-blur-md">
                 <NavItem to={routes.settings} icon="settings" label="Settings" isExpanded={isExpanded} />
-                <button 
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        setIsExpanded(!isExpanded);
-                    }}
-                    className="w-full mt-4 py-2 flex items-center justify-center text-muted hover:text-primary transition-colors"
-                >
-                    <span className="material-symbols-outlined text-[18px]">
-                        {isExpanded ? 'keyboard_double_arrow_left' : 'keyboard_double_arrow_right'}
-                    </span>
-                </button>
+
+                <div className={`flex items-center mt-4 gap-2 ${isExpanded ? 'flex-row' : 'flex-col'}`}>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            toggleTheme();
+                        }}
+                        title="Toggle theme"
+                        className="flex-1 w-full py-2 flex items-center justify-center rounded-lg text-muted hover:text-primary hover:bg-accent-silver/5 transition-colors"
+                    >
+                        <span className="material-symbols-outlined text-[18px]">
+                            {theme === 'dark' ? 'dark_mode' : 'light_mode'}
+                        </span>
+                    </button>
+
+                    <button 
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setIsExpanded(!isExpanded);
+                        }}
+                        title="Collapse sidebar"
+                        className="flex-1 w-full py-2 flex items-center justify-center rounded-lg text-muted hover:text-primary hover:bg-accent-silver/5 transition-colors"
+                    >
+                        <span className="material-symbols-outlined text-[18px]">
+                            {isExpanded ? 'keyboard_double_arrow_left' : 'keyboard_double_arrow_right'}
+                        </span>
+                    </button>
+                </div>
             </div>
         </motion.aside>
     )
