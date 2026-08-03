@@ -10,7 +10,7 @@
     "email": "dev@secuscan.in"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd0e",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
     "binary": "python3"
@@ -51,12 +51,17 @@
     "tutorial_url": "https://docs.secuscan.local/plugins/whois_lookup"
   },
   "dependencies": {
-    "binaries": [],
+    "binaries": [
+      "python3"
+    ],
     "python_packages": [
       "python-whois"
     ],
     "system_packages": []
   },
   "docker_image": "alpine:latest",
-  "checksum": "ecda30e7a979e1a0200d6f58c6c01fe6bae7dbe985cc0f47c5047165c46f3a53"
+  "capabilities": [
+    "network"
+  ],
+  "checksum": "3bd3e43d477b8ea7daff3919b364cc26669a81f278f413ab537473c5ec95e7e5"
 }

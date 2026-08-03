@@ -7,31 +7,50 @@ import sys
 import shutil
 from pathlib import Path
 from contextlib import asynccontextmanager
+from .request_middleware import RequestIDMiddleware
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.responses import HTMLResponse, PlainTextResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.exception_handlers import (
+    http_exception_handler,
+    request_validation_exception_handler,
+)
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.status import HTTP_429_TOO_MANY_REQUESTS
+from .request_context import get_request_id
 
 from .config import settings
+from .auth import init_api_key, auth_router
 from .cache import init_cache, cache as global_cache
 from .database import init_db, db as global_db
-from .plugins import init_plugins
 from .routes import router
+from .saved_views import saved_views_router
 from .workflows import scheduler
+from .plugins import init_plugins, get_plugin_check_latency_ms
 
+# Import rate limiter
+from .rate_limiter import make_scan_rate_limiter, RateLimitExceeded
 
-# Configure logging
 logging.basicConfig(
     level=getattr(logging, settings.log_level),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler(settings.log_file) if Path(settings.log_file).parent.exists() else logging.NullHandler()
+        logging.FileHandler(settings.log_file)
+        if Path(settings.log_file).parent.exists()
+        else logging.NullHandler()
     ]
 )
 
-logger = logging.getLogger(__name__)
+from .logging_utils import RequestIDFilter, JSONFormatter
 
+for handler in logging.getLogger().handlers:
+    handler.addFilter(RequestIDFilter())
+    handler.setFormatter(JSONFormatter())
+
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -42,6 +61,10 @@ async def lifespan(app: FastAPI):
     # Ensure directories exist
     settings.ensure_directories()
     logger.info("✓ Directories initialized")
+
+    # Initialize API key authentication
+    api_key = init_api_key(settings.data_dir)
+    logger.info("✓ API key authentication ready (key file: %s/.api_key)", settings.data_dir)
     
     # Initialize database
     await init_db(settings.database_path)
@@ -50,9 +73,78 @@ async def lifespan(app: FastAPI):
     await init_cache()
     logger.info("✓ In-memory cache initialized")
     
+    # ─── RATE LIMITER SETUP ──────────────────────────────────────────────
+    # Initialize rate limiter with Redis client from cache
+    # The cache client is stored in global_cache (which is a Redis client)
+    logger.info("🔒 Initializing rate limiter...")
+    
+    # Check if rate limiting is enabled
+    if getattr(settings, 'rate_limit_enabled', True):
+        try:
+            # Use the global_cache Redis client for rate limiting storage
+            app.state.scan_rate_limiter = make_scan_rate_limiter(
+                redis_client=global_cache._client if hasattr(global_cache, '_client') else global_cache,
+                rate_limit=getattr(settings, 'scan_rate_limit', '5/minute'),
+                rate_window=getattr(settings, 'scan_rate_window', 60),  # 60 seconds
+                burst_limit=getattr(settings, 'scan_burst_limit', '10/hour'),
+                burst_window=getattr(settings, 'scan_burst_window', 3600),  # 1 hour
+            )
+            logger.info("✓ Rate limiter initialized successfully")
+            logger.info(f"  Rate limit: {getattr(settings, 'scan_rate_limit', '5/minute')}")
+            logger.info(f"  Burst limit: {getattr(settings, 'scan_burst_limit', '10/hour')}")
+        except Exception as e:
+            logger.error(f"Failed to initialize rate limiter: {e}")
+            # Set a dummy limiter that doesn't actually limit
+            app.state.scan_rate_limiter = None
+            logger.warning("⚠️ Rate limiting disabled due to initialization error")
+    else:
+        logger.info("⚠️ Rate limiting disabled by configuration")
+        app.state.scan_rate_limiter = None
+    # ─── END RATE LIMITER SETUP ──────────────────────────────────────────
+    
     # Load plugins
     await init_plugins(settings.plugins_dir)
     logger.info("✓ Plugins loaded")
+
+    # If docker is enabled, verify and auto-create the restricted docker network
+    if settings.docker_enabled:
+        if shutil.which("docker"):
+            logger.info(f"Docker is enabled. Verifying network '{settings.docker_network}'...")
+            try:
+                import subprocess
+                res = subprocess.run(
+                    ["docker", "network", "inspect", settings.docker_network],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                if res.returncode != 0:
+                    logger.info(f"Docker network '{settings.docker_network}' not found. Creating isolated bridge network (ICC disabled)...")
+                    creation_res = subprocess.run(
+                        [
+                            "docker", "network", "create",
+                            "--driver", "bridge",
+                            "--opt", "com.docker.network.bridge.enable_icc=false",
+                            settings.docker_network
+                        ],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    if creation_res.returncode != 0:
+                        logger.warning("Failed to create isolated bridge network with ICC disabled. Falling back to standard bridge...")
+                        subprocess.run(
+                            ["docker", "network", "create", "--driver", "bridge", settings.docker_network],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
+                        logger.info(f"✓ Docker network '{settings.docker_network}' created (fallback)")
+                    else:
+                        logger.info(f"✓ Docker network '{settings.docker_network}' created with ICC disabled")
+                else:
+                    logger.info(f"✓ Docker network '{settings.docker_network}' verified")
+            except Exception as e:
+                logger.warning(f"Failed to check/create Docker network '{settings.docker_network}': {e}")
+        else:
+            logger.warning("Docker sandboxing is enabled but 'docker' executable is not in PATH.")
 
     await scheduler.start()
     logger.info("✓ Workflow scheduler started")
@@ -70,33 +162,32 @@ async def lifespan(app: FastAPI):
     await scheduler.stop()
     logger.info("✓ Shutdown complete")
 
-
 # Create FastAPI application
 app = FastAPI(
     title="SecuScan API",
     description="Backend for SecuScan Pentesting Toolkit",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
+    docs_url="/docs" if settings.debug else None,
+    redoc_url="/redoc" if settings.debug else None,
+    openapi_url="/openapi.json" if settings.debug else None,
     lifespan=lifespan
 )
 
-@app.get("/api/docs", include_in_schema=False)
-async def redirect_api_docs():
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/docs")
+if settings.debug:
+    @app.get("/api/docs", include_in_schema=False)
+    async def redirect_api_docs():
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/docs")
 
-@app.get("/api/redoc", include_in_schema=False)
-async def redirect_api_redoc():
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/redoc")
+    @app.get("/api/redoc", include_in_schema=False)
+    async def redirect_api_redoc():
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/redoc")
 
-@app.get("/api/openapi.json", include_in_schema=False)
-async def redirect_api_openapi():
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/openapi.json")
-
+    @app.get("/api/openapi.json", include_in_schema=False)
+    async def redirect_api_openapi():
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/openapi.json")
 
 # CORS middleware
 cors_allow_all = "*" in settings.cors_allowed_origins
@@ -113,9 +204,95 @@ app.add_middleware(
     allow_methods=settings.cors_allowed_methods,
     allow_headers=settings.cors_allowed_headers,
 )
+app.add_middleware(RequestIDMiddleware)
+
+# ─── CUSTOM 429 RATE LIMIT EXCEPTION HANDLER ──────────────────────────────
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
+    """
+    Custom handler for rate limit exceeded errors.
+    Returns a consistent JSON 429 response matching the API's error schema.
+    """
+    logger.warning(
+        f"Rate limit exceeded for {request.client.host if request.client else 'unknown'} "
+        f"on {request.url.path} - {str(exc)}"
+    )
+    
+    # Get retry-after from exception if available
+    retry_after = getattr(exc, 'retry_after', 60)
+    
+    return JSONResponse(
+        status_code=HTTP_429_TOO_MANY_REQUESTS,
+        content={
+            "error": str(exc.detail) if hasattr(exc, 'detail') else "Too Many Requests",
+            "retry_after": retry_after,
+            "message": "Rate limit exceeded. Please wait before making more requests."
+        },
+        headers={
+            "Retry-After": str(retry_after),
+            "X-Request-ID": getattr(request.state, "request_id", get_request_id()),
+        },
+    )
+
+# Also handle generic 429 exceptions (for compatibility)
+@app.exception_handler(HTTP_429_TOO_MANY_REQUESTS)
+async def generic_rate_limit_handler(request: Request, exc: Exception):
+    """
+    Generic handler for 429 status code exceptions.
+
+    Merges headers from the original exception (e.g. X-RateLimit-Limit,
+    X-RateLimit-Remaining, Retry-After) with default headers, so
+    callers always receive accurate rate-limit metadata.
+    """
+    exc_headers = getattr(exc, "headers", None) or {}
+    headers = {
+        "X-Request-ID": getattr(request.state, "request_id", get_request_id()),
+        **exc_headers,
+    }
+    if "Retry-After" not in headers:
+        headers["Retry-After"] = "60"
+
+    return JSONResponse(
+        status_code=HTTP_429_TOO_MANY_REQUESTS,
+        content={
+            "error": "Too Many Requests",
+            "message": "Rate limit exceeded. Please try again later."
+        },
+        headers=headers,
+    )
+# ─── END CUSTOM 429 HANDLER ──────────────────────────────────────────────────
+
+@app.exception_handler(StarletteHTTPException)
+async def custom_http_exception_handler(request: Request, exc: StarletteHTTPException):
+    response = await http_exception_handler(request, exc)
+    response.headers["X-Request-ID"] = getattr(request.state, "request_id", get_request_id())
+    return response
+
+
+@app.exception_handler(RequestValidationError)
+async def custom_validation_exception_handler(request: Request, exc: RequestValidationError):
+    response = await request_validation_exception_handler(request, exc)
+    response.headers["X-Request-ID"] = getattr(request.state, "request_id", get_request_id())
+    return response
+
+@app.exception_handler(Exception)
+async def custom_unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled exception in request lifecycle")
+
+    if settings.debug:
+        import traceback
+        html = f"<html><body><h1>500 Internal Server Error</h1><pre>{traceback.format_exc()}</pre></body></html>"
+        response = HTMLResponse(html, status_code=500)
+    else:
+        response = PlainTextResponse("Internal Server Error", status_code=500)
+
+    response.headers["X-Request-ID"] = getattr(request.state, "request_id", get_request_id())
+    return response
 
 # Include API routes
+app.include_router(auth_router)
 app.include_router(router)
+app.include_router(saved_views_router)
 
 
 # Health check endpoint
@@ -125,6 +302,10 @@ async def health_check():
     import platform
     import sys
     
+    # Check rate limiter status
+    rate_limiter_status = "enabled" if hasattr(app.state, 'scan_rate_limiter') and app.state.scan_rate_limiter else "disabled"
+    
+    logger.info("Health check endpoint accessed")
     return {
         "status": "operational",
         "version": "0.1.0-alpha",
@@ -132,9 +313,14 @@ async def health_check():
             "platform": platform.system(),
             "python_version": sys.version.split()[0],
             "docker_available": shutil.which("docker") is not None,
-        }
+        },
+        "rate_limiting": {
+            "status": rate_limiter_status,
+            "rate_limit": getattr(settings, 'scan_rate_limit', '5/minute'),
+            "burst_limit": getattr(settings, 'scan_burst_limit', '10/hour'),
+        },
+        "plugin_check_latency_ms": get_plugin_check_latency_ms(),
     }
-
 
 # Root endpoint
 @app.get("/")
@@ -147,7 +333,6 @@ async def root():
         "api_docs": f"{settings.base_url}/api/docs" if settings.debug else None,
         "legal_notice": "For authorized testing only. Unauthorized scanning may be illegal."
     }
-
 
 def main():
     """Main entry point"""
@@ -171,7 +356,6 @@ def main():
         reload=settings.debug,
         log_level=settings.log_level.lower()
     )
-
 
 if __name__ == "__main__":
     main()

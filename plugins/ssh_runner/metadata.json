@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udda5\ufe0f",
+  "icon": "🖥️",
   "engine": {
     "type": "cli",
     "binary": "ssh"
@@ -50,6 +50,20 @@
       "required": true,
       "default": "uptime",
       "help": "Command to execute on the remote host."
+    },
+    {
+      "id": "password",
+      "label": "Password",
+      "type": "string",
+      "required": false,
+      "help": "Password-based SSH authentication."
+    },
+    {
+      "id": "private_key",
+      "label": "Private Key",
+      "type": "string",
+      "required": false,
+      "help": "Path to SSH private key."
     }
   ],
   "presets": {
@@ -58,6 +72,14 @@
     },
     "check_auth_log": {
       "command": "cat /var/log/auth.log | tail -n 20"
+    }
+  },
+  "validation": {
+    "authentication": {
+      "mutually_exclusive": [
+        "password",
+        "private_key"
+      ]
     }
   },
   "output": {
@@ -88,5 +110,10 @@
     ]
   },
   "docker_image": "alpine:latest",
-  "checksum": "6d4495f58635dedb184e763e0e4467adf17dc3754a6b1ed7c2dca0d6b30a88ec"
+  "capabilities": [
+    "network",
+    "intrusive",
+    "credentials"
+  ],
+  "checksum": "eb7e087228a1787a35e9e9e6ddca58a5092bb07a9d12ce552ba029049e8166a1"
 }

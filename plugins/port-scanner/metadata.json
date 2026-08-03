@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd0e",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
     "binary": "nmap"
@@ -27,14 +27,16 @@
       "label": "Target Host/IP",
       "type": "string",
       "required": true,
-      "placeholder": "secuscan.in"
+      "placeholder": "192.168.1.1 or secuscan.in",
+      "help": "Target host or IP address to scan. Examples: 192.168.1.1 or secuscan.in."
     },
     {
       "id": "top_ports",
       "label": "Top Ports",
       "type": "integer",
       "required": false,
-      "default": 1000
+      "default": 1000,
+      "help": "Number of most common ports to scan. Examples: 100 or 1000."
     }
   ],
   "presets": {
@@ -65,5 +67,9 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "6d9c153513574048757d52702889c4e9f90819cb1d418970c60782f0fadd31b6"
+  "capabilities": [
+    "network",
+    "intrusive"
+  ],
+  "checksum": "061cbcacf0e61b0759350dd5cdba9aa95c61db46dde992938bed046bb40f9fad"
 }

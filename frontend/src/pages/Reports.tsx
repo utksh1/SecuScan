@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
+import { routes } from '../routes'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   Analytics02Icon,
@@ -15,7 +16,11 @@ import {
   UserShield02Icon,
 } from '@hugeicons/core-free-icons'
 import { getDashboardSummary, getReports, API_BASE } from '../api'
-import { formatDateLong } from '../utils/date'
+import { usePreferredExportFormat } from '../hooks/usePreferredExportFormat'
+import { formatDateLong, isWithinDateRange, type DateRange } from '../utils/date'
+import html2canvas from 'html2canvas'
+import jsPDF from 'jspdf'
+import ReportTemplatePicker from '../components/ReportTemplatePicker'
 
 type Report = {
   id: string
@@ -28,6 +33,8 @@ type Report = {
   assets: number
   pages: number
 }
+
+type ReportStatus = 'all' | 'ready' | 'generating' | 'failed'
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -47,7 +54,7 @@ const itemVariants = {
   },
 }
 
-const exportFormats = ['pdf', 'html', 'csv'] as const
+const exportFormats = ['pdf', 'html', 'csv' , 'sarif'] as const
 
 function ReportIcon({
   icon,
@@ -61,20 +68,93 @@ function ReportIcon({
   return <HugeiconsIcon icon={icon} size={size} strokeWidth={1.9} className={className} />
 }
 
+function normalizeReport(raw: Partial<Report> & Record<string, unknown>): Report {
+  const findings = Number(raw.findings ?? 0)
+  const pages = Number(raw.pages ?? 0)
+  const assets = Number(raw.assets ?? 0)
+  const type = raw.type === 'executive' || raw.type === 'compliance' ? raw.type : 'technical'
+  const status =
+    raw.status === 'ready' || raw.status === 'generating' || raw.status === 'failed'
+      ? raw.status
+      : 'ready'
+
+  return {
+    id: String(raw.id ?? ''),
+    task_id: String(raw.task_id ?? ''),
+    name: String(raw.name ?? 'Untitled report'),
+    type,
+    generated_at: String(raw.generated_at ?? ''),
+    status,
+    findings: Number.isFinite(findings) ? findings : 0,
+    assets: Number.isFinite(assets) ? assets : 0,
+    pages: Number.isFinite(pages) ? pages : 0,
+  }
+}
+
 export default function Reports() {
   const navigate = useNavigate()
   const [reports, setReports] = useState<Report[]>([])
   const [summary, setSummary] = useState<any>({ total_findings: 0, total_assets: 0, critical_findings: 0, high_findings: 0, total_attack_surface: 0 })
   const [selectedType, setSelectedType] = useState('all')
+  const [selectedStatus, setSelectedStatus] = useState<ReportStatus>('all')
+  const [selectedDateRange, setSelectedDateRange] = useState<DateRange>('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [templateReport, setTemplateReport] = useState<Report | null>(null)
+  const reportRefs = useRef<Record<string, HTMLDivElement | null>>({})
+
+  const downloadPdfReport = async (report: Report) => {
+    const element = reportRefs.current[report.id]
+
+    if (!element) return
+
+    try {
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        backgroundColor: '#111111',
+      })
+
+      const imageData = canvas.toDataURL('image/png')
+
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      })
+
+      const pdfWidth = pdf.internal.pageSize.getWidth()
+
+      const imgHeight =
+        (canvas.height * pdfWidth) / canvas.width
+
+      pdf.addImage(
+        imageData,
+        'PNG',
+        0,
+        0,
+        pdfWidth,
+        imgHeight
+      )
+
+      pdf.save(
+        `${report.name.replace(/\s+/g, '_')}.pdf`
+      )
+    } catch (error) {
+      console.error('PDF generation failed', error)
+    }
+  }
+  const { preferred: preferredFormat, savePreference } = usePreferredExportFormat()
+  const latestReadyReport = [...reports]
+    .filter((report) => report.status === 'ready')
+    .sort((a, b) => new Date(b.generated_at).getTime() - new Date(a.generated_at).getTime())[0]
 
   const fetchReports = () => {
     setLoading(true)
     setError(null)
     Promise.all([getReports(), getDashboardSummary()])
       .then(([reportData, summaryData]: any) => {
-        setReports(reportData.reports || [])
+        const rows = Array.isArray(reportData?.reports) ? reportData.reports : []
+        setReports(rows.map((row: Record<string, unknown>) => normalizeReport(row)))
         setSummary(summaryData || {})
       })
       .catch(() => {
@@ -89,7 +169,11 @@ export default function Reports() {
     fetchReports()
   }, [])
 
-  const filteredReports = reports.filter((report) => selectedType === 'all' || report.type === selectedType)
+  const filteredReports = reports.filter((report) =>
+    (selectedType === 'all' || report.type === selectedType) &&
+    (selectedStatus === 'all' || report.status === selectedStatus) &&
+    isWithinDateRange(report.generated_at, selectedDateRange)
+  )
 
   return (
     <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
@@ -108,12 +192,31 @@ export default function Reports() {
         </div>
 
         <div className="flex items-center gap-6">
+          <Link
+            to={routes.reportsCompare}
+            className="bg-rag-blue border-4 border-black px-6 py-4 text-[9px] font-black uppercase tracking-widest text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
+          >
+            Compare Reports
+          </Link>
+          <button
+            onClick={() => {
+              if (!latestReadyReport) return
+              const format = preferredFormat ?? 'pdf'
+              window.open(`${API_BASE}/task/${latestReadyReport.task_id}/report/${format}`, '_blank')
+            }}
+            aria-label={`Download latest ready report ${(preferredFormat ?? 'pdf').toUpperCase()}`}
+            title={latestReadyReport ? `Download latest ready report ${(preferredFormat ?? 'pdf').toUpperCase()}` : 'No ready report available'}
+            disabled={!latestReadyReport}
+            className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <ReportIcon icon={Download01Icon} className="block" aria-hidden="true" />
+          </button>
           <button
             onClick={fetchReports}
             className="bg-charcoal border-4 border-black p-4 text-silver-bright shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
             title="Refresh Archive"
           >
-            <ReportIcon icon={Refresh01Icon} className="block" />
+            <ReportIcon icon={Refresh01Icon} className="block" aria-hidden="true" />
           </button>
         </div>
       </header>
@@ -122,7 +225,7 @@ export default function Reports() {
       {loading && (
         <div className="flex items-center justify-center py-40 gap-6">
           <div className="animate-spin">
-            <ReportIcon icon={Refresh01Icon} size={48} className="text-silver/20" />
+            <ReportIcon icon={Refresh01Icon} size={48} className="text-silver/20" aria-hidden="true" />
           </div>
           <p className="text-[10px] font-black text-silver/20 uppercase tracking-[0.4em] italic animate-pulse">
             Retrieving Archive Data...
@@ -159,7 +262,7 @@ export default function Reports() {
               <div key={i} className={`${m.color} border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col justify-between h-40 group hover:-translate-y-1 transition-transform`}>
                 <div className="flex justify-between items-start">
                   <span className="text-[10px] font-black text-black uppercase tracking-[0.2em] italic">{m.label}</span>
-                  <ReportIcon icon={Archive02Icon} className="text-black/20 group-hover:text-black transition-colors" />
+                  <ReportIcon icon={Archive02Icon} className="text-black/20 group-hover:text-black transition-colors" aria-hidden="true" />
                 </div>
                 <div className="flex items-baseline gap-2">
                   <span className="text-5xl font-black text-black font-mono leading-none tracking-tighter">{m.val}</span>
@@ -173,6 +276,8 @@ export default function Reports() {
             {/* Filtration Sidebar */}
             <aside className="xl:col-span-1 space-y-12">
               <section className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-8">
+
+                {/* Type Filter */}
                 <div className="space-y-4">
                   <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic">Classification_Isolation</label>
                   <div className="grid grid-cols-1 gap-2">
@@ -187,7 +292,61 @@ export default function Reports() {
                         }`}
                       >
                         {t} BRIEFINGS
-                        {selectedType === t && <ReportIcon icon={Radar02Icon} size={16} className="text-black" />}
+                        {selectedType === t && <ReportIcon icon={Radar02Icon} size={16} className="text-black" aria-hidden="true" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Status Filter */}
+                <div className="space-y-4">
+                  <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic">Status_Filter</label>
+                  <div className="grid grid-cols-1 gap-2">
+                    {([
+                      { value: 'all',        label: 'All Statuses' },
+                      { value: 'ready',      label: 'Ready' },
+                      { value: 'generating', label: 'Generating' },
+                      { value: 'failed',     label: 'Failed' },
+                    ] as const).map(({ value, label }) => (
+                      <button
+                        key={value}
+                        onClick={() => setSelectedStatus(value)}
+                        aria-label={`status ${label}`}
+                        className={`px-6 py-4 text-left text-[10px] font-black uppercase tracking-widest border-4 transition-all flex justify-between items-center ${
+                          selectedStatus === value
+                            ? 'bg-rag-amber border-black text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+                            : 'bg-charcoal-dark border-black text-silver/40 hover:border-silver-bright/20'
+                        }`}
+                      >
+                        {label}
+                        {selectedStatus === value && <ReportIcon icon={Radar02Icon} size={16} className="text-black" />}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Date Range Filter */}
+                <div className="space-y-4">
+                  <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic">Date_Range</label>
+                  <div className="grid grid-cols-1 gap-2">
+                    {([
+                      { value: 'all', label: 'All Time' },
+                      { value: '24h', label: 'Last 24 Hours' },
+                      { value: '7d',  label: 'Last 7 Days' },
+                      { value: '30d', label: 'Last 30 Days' },
+                    ] as const).map(({ value, label }) => (
+                      <button
+                        key={value}
+                        onClick={() => setSelectedDateRange(value)}
+                        aria-label={`date ${label}`}
+                        className={`px-6 py-4 text-left text-[10px] font-black uppercase tracking-widest border-4 transition-all flex justify-between items-center ${
+                          selectedDateRange === value
+                            ? 'bg-rag-blue border-black text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+                            : 'bg-charcoal-dark border-black text-silver/40 hover:border-silver-bright/20'
+                        }`}
+                      >
+                        {label}
+                        {selectedDateRange === value && <ReportIcon icon={Radar02Icon} size={16} className="text-black" />}
                       </button>
                     ))}
                   </div>
@@ -195,7 +354,7 @@ export default function Reports() {
 
                 <div className="p-8 border-4 border-black border-dashed space-y-4 bg-charcoal-dark/50">
                   <div className="flex items-center gap-3">
-                    <ReportIcon icon={KnightShieldIcon} className="text-rag-green" />
+                    <ReportIcon icon={KnightShieldIcon} className="text-rag-green" aria-hidden="true" />
                     <h4 className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic leading-none">Integrity_Secure</h4>
                   </div>
                   <p className="text-[10px] text-silver/40 font-black uppercase tracking-widest leading-loose italic">
@@ -222,6 +381,9 @@ export default function Reports() {
                 >
                   {filteredReports.map((report) => (
                     <motion.div
+                      ref={(el) => {
+                        reportRefs.current[report.id] = el
+                      }}
                       key={report.id}
                       variants={itemVariants}
                       className="group bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[14px_14px_0px_0px_rgba(0,0,0,1)] transition-all relative overflow-hidden"
@@ -241,7 +403,7 @@ export default function Reports() {
                           }`}>
                             {report.type}_TYPE
                           </span>
-                          <ReportIcon icon={File01Icon} size={24} className="text-silver/10 group-hover:text-silver-bright transition-colors" />
+                          <ReportIcon icon={File01Icon} size={24} className="text-silver/10 group-hover:text-silver-bright transition-colors" aria-hidden="true" />
                         </div>
 
                         <div>
@@ -275,25 +437,52 @@ export default function Reports() {
                             <button
                               onClick={() => navigate(`/task/${report.task_id}`)}
                               className="bg-charcoal-dark border-4 border-black p-3 text-silver/20 group-hover:text-silver-bright group-hover:bg-black transition-all"
-                              title="View Briefing"
+                              title="View Briefing" aria-label="View briefing"
                             >
-                              <ReportIcon icon={ScanEyeIcon} size={18} />
+                              <ReportIcon icon={ScanEyeIcon} size={18} aria-hidden="true" />
                             </button>
-                            {exportFormats.map((format) => (
-                              <button
-                                key={format}
-                                onClick={() => {
-                                  if (report.status !== 'generating') {
+
+                            <button
+                              onClick={() => setTemplateReport(report)}
+                              aria-label={`Open templates for ${report.name}`}
+                              className="bg-charcoal-dark border-4 border-black px-3 py-2 text-[9px] font-black uppercase tracking-widest text-silver/70 hover:text-silver-bright hover:bg-black transition-all"
+                              title="Multi-format templates"
+                            >
+                              Templates
+                            </button>
+                            <button
+                              onClick={() => downloadPdfReport(report)}
+                              aria-label={`Download rendered PDF of ${report.name}`}
+                              className="bg-rag-green border-4 border-black px-3 py-2 text-[9px] font-black uppercase tracking-widest text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
+                              title="Download PDF Report"
+                            >
+                              Quick PDF
+                            </button>
+                            {(() => {
+                              const ordered = preferredFormat
+                                ? [preferredFormat, ...exportFormats.filter((f) => f !== preferredFormat)]
+                                : exportFormats
+
+                              return ordered.map((format) => (
+                                <button
+                                  key={format}
+                                  onClick={() => {
+                                    if (report.status === 'generating') return
+                                    savePreference(format)
                                     window.open(`${API_BASE}/task/${report.task_id}/report/${format}`, '_blank')
-                                  }
-                                }}
-                                disabled={report.status === 'generating'}
-                                className="bg-charcoal-dark border-4 border-black px-3 py-2 text-[9px] font-black uppercase tracking-widest text-silver/20 group-hover:text-silver-bright group-hover:bg-black transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:group-hover:text-silver/20 disabled:group-hover:bg-charcoal-dark"
-                                title={report.status === 'generating' ? 'Export unavailable while report is generating' : `Download ${format.toUpperCase()}`}
-                              >
-                                {format}
-                              </button>
-                            ))}
+                                  }}
+                                  disabled={report.status === 'generating'}
+                                  className={`border-4 border-black px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:group-hover:text-silver/20 disabled:group-hover:bg-charcoal-dark ${
+                                    format === preferredFormat
+                                      ? 'bg-rag-amber border-black text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]'
+                                      : 'bg-charcoal-dark text-silver/20 group-hover:text-silver-bright group-hover:bg-black'
+                                  }`}
+                                  title={report.status === 'generating' ? 'Export unavailable while report is generating' : `Download ${format.toUpperCase()}`}
+                                >
+                                  {format}
+                                </button>
+                              ))
+                            })()}
                           </div>
                         </div>
                       </div>
@@ -303,19 +492,36 @@ export default function Reports() {
                         <div className="text-silver-bright">
                           <ReportIcon
                             icon={report.type === 'executive' ? Analytics02Icon : report.type === 'compliance' ? UserShield02Icon : ShieldUserIcon}
-                            size={200}
+                            size={200} aria-hidden="true"
                           />
                         </div>
                       </div>
                     </motion.div>
                   ))}
 
-                  {filteredReports.length === 0 && (
+                  {filteredReports.length === 0 && reports.length === 0 && (
+                    <div className="col-span-2 py-40 border-4 border-dashed border-rag-blue/10 text-center flex flex-col items-center gap-8 bg-charcoal/30">
+                      <ReportIcon icon={Archive02Icon} size={120} className="text-rag-blue/15" aria-hidden="true" />
+                      <div className="space-y-3 max-w-md">
+                        <p className="text-xl font-black text-silver-bright uppercase tracking-[0.3em] italic">No Briefings Yet</p>
+                        <p className="text-xs font-mono text-silver/30 uppercase tracking-widest leading-relaxed">
+                            Run a scan from the Toolkit to generate your first report. Completed scans appear here automatically.
+                        </p>
+                      </div>
+                      <Link
+                        to={routes.toolkit}
+                        className="bg-rag-blue border-4 border-black px-8 py-4 text-[10px] font-black uppercase tracking-[0.3em] text-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
+                      >
+                        Launch_First_Scan
+                      </Link>
+                    </div>
+                  )}
+                  {filteredReports.length === 0 && reports.length > 0 && (
                     <div className="col-span-2 py-40 border-4 border-dashed border-black/5 text-center flex flex-col items-center gap-8 bg-charcoal/30">
-                      <ReportIcon icon={Archive02Icon} size={120} className="text-silver/5" />
+                      <ReportIcon icon={Archive02Icon} size={120} className="text-silver/5" aria-hidden="true" />
                       <div className="space-y-2">
                         <p className="text-xl font-black text-silver/20 uppercase tracking-[0.4em] italic">Archive Isolated</p>
-                        <p className="text-xs font-mono text-silver/10 uppercase tracking-widest leading-relaxed">System buffer awaiting briefing generation protocols</p>
+                        <p className="text-xs font-mono text-silver/10 uppercase tracking-widest leading-relaxed">No entries match the selected filters</p>
                       </div>
                     </div>
                   )}
@@ -324,6 +530,20 @@ export default function Reports() {
             </main>
           </div>
         </>
+      )}
+
+      {templateReport && (
+        <ReportTemplatePicker
+          reportName={templateReport.name}
+          reportType={templateReport.type}
+          generatedAt={templateReport.generated_at}
+          findings={templateReport.findings}
+          assets={templateReport.assets}
+          pages={templateReport.pages}
+          summary={summary}
+          isOpen={!!templateReport}
+          onClose={() => setTemplateReport(null)}
+        />
       )}
 
       {/* Tactical Footer */}
