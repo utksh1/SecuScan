@@ -120,7 +120,7 @@ const emptySummary: Summary = {
 
 
 function formatDuration(seconds?: number | null) {
-  if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return 'N/A'
+  if (seconds === null || !Number.isFinite(seconds) || seconds <= 0) return 'N/A'
   if (seconds < 60) return `${Math.round(seconds)}s`
   const mins = Math.floor(seconds / 60)
   const secs = Math.round(seconds % 60)
