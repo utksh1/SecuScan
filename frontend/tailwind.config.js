@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: 'class',
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -7,16 +8,25 @@ export default {
   theme: {
     extend: {
       colors: {
-        'charcoal-dark': '#0a0a0c',
+        'primary': 'var(--bg-primary)',
+        'secondary': 'var(--bg-secondary)',
+        'bg-primary': 'var(--bg-primary)',
+        'bg-secondary': 'var(--bg-secondary)',
+        'bg-tertiary': 'var(--bg-tertiary)',
+        'bg-elevated': 'var(--bg-elevated)',
+        'primary-text': 'var(--text-primary)',
+        'secondary-text': 'var(--text-secondary)',
+        'muted': 'var(--text-muted)',
+        'charcoal-dark': 'var(--bg-primary)',
         charcoal: {
-          light: '#1d1d21',
-          DEFAULT: '#121214',
-          dark: '#0a0a0c', /* mapped for backward compatibility */
+          light: 'var(--bg-tertiary)',
+          DEFAULT: 'var(--bg-secondary)',
+          dark: 'var(--bg-primary)', /* mapped for backward compatibility */
         },
         silver: {
-          bright: '#f4f4f5',
-          DEFAULT: '#a1a1aa',
-          dark: '#475569',
+          bright: 'var(--text-primary)',
+          DEFAULT: 'var(--text-secondary)',
+          dark: 'var(--text-muted)',
         },
         rag: {
           red: '#ef4444',
@@ -27,7 +37,7 @@ export default {
           'blue-bright': '#3b82f6',    
         },
         accent: {
-          silver: '#3f3f46'
+          silver: 'var(--accent-silver)'
         }
       },
       fontFamily: {

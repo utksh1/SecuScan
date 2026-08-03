@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udee0\ufe0f",
+  "icon": "🛠️",
   "engine": {
     "type": "cli",
     "binary": "python3"
@@ -27,7 +27,8 @@
       "label": "Target",
       "type": "string",
       "required": true,
-      "placeholder": "secuscan.in"
+      "placeholder": "secuscan.in",
+      "help": "Enter the hostname, domain, or service endpoint to review for weak credential and password policy risks."
     }
   ],
   "presets": {
@@ -53,5 +54,10 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "d3606fc8426a11a890874be7159b75b534da6c0f5aa56f8291578feb29934358"
+  "capabilities": [
+    "network",
+    "intrusive",
+    "credentials"
+  ],
+  "checksum": "77b3934791fef2d52836906c724e99fd7fd5f341c189db2d834e6ed63905e1e4"
 }

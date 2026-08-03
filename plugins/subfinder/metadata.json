@@ -2,15 +2,15 @@
   "id": "subfinder",
   "name": "Subfinder",
   "version": "1.0.0",
-  "description": "Fast passive subdomain enumeration.",
-  "long_description": "Fast passive subdomain enumeration.",
+  "description": "Quick passive subdomain enumeration with minimal configuration.",
+  "long_description": "A lightweight subdomain discovery plugin using ProjectDiscovery's subfinder. Optimized for speed with a single input — just provide the root domain. Best for quick recon where you want results fast without tuning parameters.",
   "category": "recon",
   "author": {
     "name": "SecuScan Contributors",
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd0e",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
     "binary": "subfinder"
@@ -52,5 +52,8 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "a1cb24265eea66c6059544857e22a5a5cd6c4fc0c1049b329f1b1f970d516312"
+  "capabilities": [
+    "network"
+  ],
+  "checksum": "66ed20fbc902b48a1d4247b33f701ac2734da250a599fd126bd75d14ffd70cab"
 }

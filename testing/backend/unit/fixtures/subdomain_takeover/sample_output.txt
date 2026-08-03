@@ -1,0 +1,3 @@
+subdomain takeover scan started
+staging.secuscan.in points to unclaimed S3 bucket
+dangling CNAME detected for legacy.secuscan.in

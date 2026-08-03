@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\ude80",
+  "icon": "🚀",
   "engine": {
     "type": "cli",
     "binary": "msfconsole"
@@ -27,21 +27,24 @@
       "label": "Remote Host",
       "type": "string",
       "required": true,
-      "placeholder": "10.10.10.10"
+      "placeholder": "10.10.10.10",
+      "help": "Enter the authorized target host or IP address that the selected Metasploit module will operate against."
     },
     {
       "id": "module",
       "label": "Metasploit Module",
       "type": "string",
       "required": true,
-      "default": "exploit/multi/handler"
+      "default": "exploit/multi/handler",
+      "help": "Specify the Metasploit module path to execute, for example exploit/multi/handler."
     },
     {
       "id": "payload",
       "label": "Payload",
       "type": "string",
       "required": false,
-      "default": "generic/shell_reverse_tcp"
+      "default": "generic/shell_reverse_tcp",
+      "help": "Optional payload to use with the selected module. Ensure it is compatible with the chosen Metasploit module."
     }
   ],
   "presets": {
@@ -70,5 +73,11 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "80a4db676d52e83a27dcb1e51780678f8b8476b5745ff81b2896b35662cf2767"
+  "capabilities": [
+    "network",
+    "intrusive",
+    "exploit",
+    "credentials"
+  ],
+  "checksum": "61a8c706c04ce3d244b5857b27e979c8a121ab9ecca4872c1090643cb8a5e73b"
 }

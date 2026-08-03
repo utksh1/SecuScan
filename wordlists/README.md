@@ -41,10 +41,16 @@ Place your own wordlists in this directory:
 
 ## Usage in SecuScan
 
-The Directory Discovery plugin automatically uses these wordlists based on the selected preset:
-- **Quick** → small.txt
-- **Standard** → medium.txt
-- **Deep** → large.txt
+The Directory Discovery plugin selects a wordlist by name. Only `small.txt` is
+bundled with SecuScan; `medium` and `large` resolve to files you install into this
+directory (see above), and a scan that references a missing wordlist will fail.
+
+The wordlist field **defaults to the bundled `small` list** so an out-of-the-box
+scan stays fast and low-traffic. The built-in presets select:
+- **Default** (no preset) → `small.txt` (bundled)
+- **Quick** → `small.txt` (bundled)
+- **Standard** → `medium.txt` (install required)
+- **Deep** → `large.txt` (install required)
 
 ## Format
 

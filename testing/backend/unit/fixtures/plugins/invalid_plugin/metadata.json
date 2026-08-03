@@ -1,0 +1,34 @@
+{
+  "id": "broken_plugin",
+  "name": "",
+  "description": "This fixture intentionally breaks several validation rules.",
+  "version": "1.0.0",
+  "category": "utils",
+  "icon": "bug",
+  "engine": {
+    "type": "spaceship"
+  },
+  "command_template": [
+    "run",
+    "{unknown_placeholder}"
+  ],
+  "fields": [
+    {
+      "id": "mode",
+      "label": "Mode",
+      "type": "select"
+    },
+    {
+      "id": "mode",
+      "label": "Duplicate",
+      "type": "text"
+    }
+  ],
+  "output": {
+    "parser": "custom"
+  },
+  "safety": {
+    "level": "nuclear",
+    "requires_consent": true
+  }
+}

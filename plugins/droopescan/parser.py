@@ -12,6 +12,16 @@ def _make_finding(title: str, category: str, severity: str, description: str, me
         "metadata": metadata,
     }
 
+def _map_severity(key: str) -> str:
+    key = key.lower()
+
+    if any(token in key for token in ("critical", "vuln")):
+        return "high"
+
+    if any(token in key for token in ("warning", "interesting", "exposed")):
+        return "medium"
+
+    return "low"
 
 def parse(output: str) -> Dict[str, Any]:
     findings: List[Dict[str, Any]] = []
@@ -42,11 +52,15 @@ def parse(output: str) -> Dict[str, Any]:
                 if not isinstance(item, dict):
                     continue
                 description = str(item.get("description") or item.get("url") or item)
-                severity = "high" if "vuln" in key.lower() else "low"
+                severity = _map_severity(key)
                 findings.append(
                     _make_finding(
                         title=f"DroopeScan {key}",
-                        category="CMS Vulnerability" if severity == "high" else "CMS Discovery",
+                        category=(
+                            "CMS Vulnerability"
+                            if severity in {"high", "medium"}
+                            else "CMS Discovery"
+                        ),
                         severity=severity,
                         description=description,
                         metadata=item,
