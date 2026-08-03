@@ -21,8 +21,8 @@ const NavItem = ({ to, icon, label, isExpanded, highlight = false }: NavItemProp
             className={({ isActive }) => `
                 relative flex items-center transition-all duration-300 group
                 ${isExpanded ? 'gap-3 px-5 py-3 mx-2 rounded-lg' : 'justify-center py-3 px-2 mx-2 rounded-lg'}
-                ${isActive 
-                    ? 'bg-accent-silver/10 text-primary shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)]' 
+                ${isActive
+                    ? 'bg-accent-silver/10 text-primary shadow-[inset_0_1px_1px_rgba(255,255,255,0.05)]'
                     : highlight
                         ? 'bg-rag-blue/15 border border-rag-blue/30 text-silver-bright hover:bg-rag-blue/25'
                         : 'text-secondary hover:text-primary hover:bg-accent-silver/5'}
@@ -184,7 +184,7 @@ export default function Sidebar() {
                         </span>
                     </button>
 
-                    <button 
+                    <button
                         onClick={(e) => {
                             e.stopPropagation();
                             setIsExpanded(!isExpanded);
