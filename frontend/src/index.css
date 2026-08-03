@@ -63,6 +63,30 @@
   --sidebar-expanded: 280px;
 }
 
+
+/* ============================================
+   Light Theme Overrides
+   Applied when <html> has class "theme-light"
+   ============================================ */
+.theme-light {
+  --bg-primary: #f5f6f8;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #eceef1;
+  --bg-elevated: #e2e5e9;
+
+  --accent-silver: #4b4f58;
+  --accent-silver-dim: #6b7078;
+  --accent-silver-bright: #1a1d23;
+
+  --text-primary: #1a1d23;
+  --text-secondary: #454952;
+  --text-muted: #6b7078;
+}
+
+.theme-light body {
+  background-color: var(--bg-primary);
+  color: var(--accent-silver);
+}
 /* Base Overrides */
 body {
   background-color: var(--bg-primary);

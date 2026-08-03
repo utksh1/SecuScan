@@ -229,7 +229,7 @@ export default function Settings() {
                                 label="Visual_Spectrum" 
                                 description="OPERATIONAL_AESTHETIC_MODE"
                                 value={config.theme}
-                                onChange={(val: string) => setConfig({...config, theme: val})}
+                                onChange={(val: string) => { setConfig({...config, theme: val}); setTheme(val as 'dark' | 'light') }}
                                 options={[
                                     { label: 'Dark (Obsidian)', value: 'dark' },
                                     { label: 'Light (Paper)', value: 'light' },
