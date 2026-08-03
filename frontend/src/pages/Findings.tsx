@@ -298,7 +298,7 @@ export default function Findings() {
     for (const f of enrichedFindings) {
       if (f.target) seen.add(f.target)
     }
-    return Array.from(seen).sort()
+    return Array.from(seen).sort((a, b) => a - b)
   }, [enrichedFindings])
 
   // plugin_id values serve as the "scanner/tool" filter per issue #43
