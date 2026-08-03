@@ -12,6 +12,7 @@ import {
     Refresh01Icon,
 } from '@hugeicons/core-free-icons'
 import { API_BASE, getPluginSchema, getTaskResult, getTaskStatus, PluginFieldSchema, PluginSchemaResponse, startTask } from '../api'
+import ScanTimeline from '../components/ScanTimeline'
 import { routes, routePath } from '../routes'
 import { parseDateSafe, formatDateLong, formatLocaleTime } from '../utils/date'
 import {
@@ -659,6 +660,8 @@ export default function TaskDetails() {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            <ScanTimeline status={task.status} latestOutputLine={stripAnsi(rawOutput.split(String.fromCharCode(10)).filter(Boolean).slice(-1)[0] || "")} />
 
             <div className="border-b border-white/8">
                 <div className="flex flex-wrap gap-2">
