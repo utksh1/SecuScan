@@ -799,7 +799,7 @@ interface WorkflowRunResponse {
 
 function parseWorkflowSteps(value: unknown): WorkflowStep[] {
   if (Array.isArray(value)) return value as WorkflowStep[]
-  if (typeof value !== 'string' || value.trim() === '') return []
+  if (typeof value !== 'string' || value.trim().length === 0) return []
 
   try {
     const parsed = JSON.parse(value)
