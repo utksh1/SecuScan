@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udce1",
+  "icon": "📡",
   "engine": {
     "type": "cli",
     "binary": "python3"
@@ -27,7 +27,7 @@
       "type": "string",
       "required": true,
       "placeholder": "192.168.1.0/24",
-      "help": "Target IP address or CIDR range."
+      "help": "Target IPv4 address or CIDR range. Examples: 192.168.1.10 or 192.168.1.0/24. Only scan networks you own or are authorized to assess."
     },
     {
       "id": "type",
@@ -45,7 +45,7 @@
           "label": "ICMP Ping (standard)"
         }
       ],
-      "help": "Method of network discovery."
+      "help": "Choose ARP Ping for local networks and ICMP Ping for standard host discovery. Use only with proper authorization."
     }
   ],
   "presets": {
@@ -86,5 +86,8 @@
     ]
   },
   "docker_image": "secdev/scapy:latest",
-  "checksum": "688f16afba16bcf122728cd46a060717622ffeb96dad29b964593b9025b79682"
+  "capabilities": [
+    "network"
+  ],
+  "checksum": "0f3ace1288075e9dbec9ebde6e8545a5db2af33d5697737e506567a70d744c91"
 }

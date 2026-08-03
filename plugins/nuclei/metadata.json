@@ -10,7 +10,7 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83e\uddec",
+  "icon": "🧬",
   "engine": {
     "type": "cli",
     "binary": "nuclei"
@@ -126,9 +126,15 @@
     "tutorial_url": "https://docs.secuscan.local/plugins/nuclei"
   },
   "dependencies": {
-    "binaries": [],
+    "binaries": [
+      "nuclei"
+    ],
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "ecdacab5d26ebd95d07fe61cc781768e046ab004438a254f2ed80efd167c728d"
+  "capabilities": [
+    "network",
+    "intrusive"
+  ],
+  "checksum": "3eb851f809d0abdfa637d305a9dc4a44e5fd36d0b8738ef3c1922c3a332c9614"
 }

@@ -10,7 +10,8 @@
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udee0\ufe0f",
+  "icon": "🛠️",
+  "implementation_status": "native",
   "engine": {
     "type": "cli",
     "binary": "nmap"
@@ -58,6 +59,10 @@
       "max_concurrent": 1
     }
   },
+  "capabilities": [
+    "network",
+    "intrusive"
+  ],
   "dependencies": {
     "binaries": [
       "nmap"
@@ -65,5 +70,5 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "54d4478eaeec8b047841ac1ab9971842b02cafa6c5895b82469c2c3e2ce97652"
+  "checksum": "76e2c3f5d2bb88cc52cd5844e9b9b25a478b9cd05c98acdb4956993314d9eb33"
 }

@@ -1,0 +1,236 @@
+from __future__ import annotations
+
+import json
+import uuid
+from typing import Any, Dict, List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field, field_validator
+
+from .auth import get_current_owner, require_api_key
+from .database import get_db
+
+saved_views_router = APIRouter(
+    prefix="/api/v1/saved-views",
+    tags=["saved-views"],
+    dependencies=[Depends(require_api_key)],
+)
+
+_VALID_SORT_MODES = {"severity", "newest", "oldest", "target"}
+_VALID_SEVERITIES = {"all", "critical", "high", "medium", "low", "info"}
+
+
+class FilterPreset(BaseModel):
+    """Validated representation of the frontend filter state."""
+    severity:    str = "all"
+    target:      str = "all"
+    scanner:     str = "all"
+    sortMode:    str = "severity"
+    dateFrom:    str = ""
+    dateTo:      str = ""
+    searchQuery: str = ""
+
+    @field_validator("sortMode")
+    @classmethod
+    def validate_sort_mode(cls, v: str) -> str:
+        if v not in _VALID_SORT_MODES:
+            raise ValueError(f"sortMode must be one of {_VALID_SORT_MODES}")
+        return v
+
+    @field_validator("severity")
+    @classmethod
+    def validate_severity(cls, v: str) -> str:
+        if v not in _VALID_SEVERITIES:
+            raise ValueError(f"severity must be one of {_VALID_SEVERITIES}")
+        return v
+
+
+class SavedViewCreate(BaseModel):
+    """Request body for POST /saved-views."""
+    name:        str = Field(..., min_length=1, max_length=60)
+    filter_json: str
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("name cannot be blank")
+        return stripped
+
+    @field_validator("filter_json")
+    @classmethod
+    def validate_filter_json(cls, v: str) -> str:
+        try:
+            data = json.loads(v)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"filter_json is not valid JSON: {exc}") from exc
+        FilterPreset(**data)
+        return v
+
+
+class SavedViewUpdate(BaseModel):
+    """Request body for PUT /saved-views/{id}."""
+    name:        Optional[str] = Field(None, min_length=1, max_length=60)
+    filter_json: Optional[str] = None
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("name cannot be blank")
+        return stripped
+
+    @field_validator("filter_json")
+    @classmethod
+    def validate_filter_json(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        try:
+            data = json.loads(v)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"filter_json is not valid JSON: {exc}") from exc
+        FilterPreset(**data)
+        return v
+
+
+
+
+
+async def require_owned_saved_view(db, view_id: str, owner: str) -> Dict[str, Any]:
+    """Fetch a saved view and enforce that it belongs to ``owner`` (issue #1743).
+
+    Raises 404 when the view does not exist and 403 when it exists but is
+    owned by a different user/workspace, matching require_owned_task's
+    behaviour for tasks in routes.py.
+    """
+    row = await db.fetchone(
+        "SELECT id, owner_id FROM saved_views WHERE id = ?", (view_id,)
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Saved view not found")
+    if row["owner_id"] != owner:
+        raise HTTPException(
+            status_code=403, detail="You do not have access to this saved view"
+        )
+    return row
+
+
+@saved_views_router.get("")
+async def list_saved_views(owner: str = Depends(get_current_owner)) -> Dict[str, Any]:
+    """Return all saved views for the current owner, ordered by creation date."""
+    db = await get_db()
+    rows: List[Dict] = await db.fetchall(
+        "SELECT id, name, filter_json, created_at, updated_at "
+        "FROM saved_views WHERE owner_id = ? ORDER BY created_at ASC",
+        (owner,),
+    )
+    return {"views": rows, "total": len(rows)}
+
+
+@saved_views_router.post("", status_code=201)
+async def create_saved_view(
+    body: SavedViewCreate, owner: str = Depends(get_current_owner)
+) -> Dict[str, Any]:
+    """
+    Create a new saved view for the current owner.
+    Returns 409 if the owner already has a view with the same name.
+    """
+    db = await get_db()
+
+    existing = await db.fetchone(
+        "SELECT id FROM saved_views WHERE LOWER(name) = LOWER(?) AND owner_id = ?",
+        (body.name, owner),
+    )
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"A saved view named '{body.name}' already exists. "
+                   "Use PUT to overwrite it.",
+        )
+
+    view_id = str(uuid.uuid4())
+    await db.execute(
+        """
+        INSERT INTO saved_views (id, name, filter_json, owner_id)
+        VALUES (?, ?, ?, ?)
+        """,
+        (view_id, body.name, body.filter_json, owner),
+    )
+    return {"id": view_id, "name": body.name, "created": True}
+
+
+@saved_views_router.put("/{view_id}")
+async def update_saved_view(
+    view_id: str,
+    body: SavedViewUpdate,
+    owner: str = Depends(get_current_owner),
+) -> Dict[str, Any]:
+    """
+    Overwrite name and/or filter_json for an existing view owned by the caller.
+    Also accepts PATCH semantics — only supplied fields are updated.
+    """
+    db = await get_db()
+
+    await require_owned_saved_view(db, view_id, owner)
+
+    updates: List[str] = []
+    params: List[Any] = []
+
+    if body.name is not None:
+        # Check for name collision with a *different* record owned by this caller
+        collision = await db.fetchone(
+            "SELECT id FROM saved_views WHERE LOWER(name) = LOWER(?) "
+            "AND id != ? AND owner_id = ?",
+            (body.name, view_id, owner),
+        )
+        if collision:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Another saved view named '{body.name}' already exists.",
+            )
+        updates.append("name = ?")
+        params.append(body.name)
+
+    if body.filter_json is not None:
+        updates.append("filter_json = ?")
+        params.append(body.filter_json)
+
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    updates.append("updated_at = datetime('now')")
+    params.append(view_id)
+    params.append(owner)
+
+    await db.execute(
+        f"UPDATE saved_views SET {', '.join(updates)} WHERE id = ? AND owner_id = ?",
+        tuple(params),
+    )
+    return {"id": view_id, "updated": True}
+
+
+@saved_views_router.delete("/{view_id}")
+async def delete_saved_view(
+    view_id: str, owner: str = Depends(get_current_owner)
+) -> Dict[str, Any]:
+    """Delete a saved view owned by the caller. Idempotent — returns 200 even
+    if the view was already gone. Raises 403 if it exists but belongs to a
+    different owner, so callers can't confirm/erase other users' views."""
+    db = await get_db()
+
+    row = await db.fetchone(
+        "SELECT owner_id FROM saved_views WHERE id = ?", (view_id,)
+    )
+    if row is not None and row["owner_id"] != owner:
+        raise HTTPException(
+            status_code=403, detail="You do not have access to this saved view"
+        )
+
+    await db.execute(
+        "DELETE FROM saved_views WHERE id = ? AND owner_id = ?", (view_id, owner)
+    )
+    return {"id": view_id, "deleted": True}

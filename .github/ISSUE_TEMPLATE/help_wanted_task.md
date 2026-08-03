@@ -2,7 +2,7 @@
 name: Help wanted task
 about: Create a scoped contributor task with clear implementation and verification notes
 title: '[TASK] '
-labels: help wanted
+labels: priority:medium
 assignees: ''
 
 ---

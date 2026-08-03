@@ -5,8 +5,11 @@ export const routes = {
   findings: '/findings',
   scans: '/scans',
   reports: '/reports',
+  reportsCompare: '/reports/compare',
+  workflows: '/workflows',
   settings: '/settings',
   task: '/task/:taskId',
+  signIn: '/signin',
 } as const
 
 export const routePath = {

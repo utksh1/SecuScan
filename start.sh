@@ -23,22 +23,62 @@ echo "  ╚═══════════════════════
 echo ""
 
 # Pre-flight checks: kill existing servers on 8000 and 5173
+# If ports remain occupied after startup fails, see README.md
+# Troubleshooting → Local Startup Troubleshooting.
 echo "🧹 Cleaning up existing processes on port 8000 and 5173..."
-lsof -ti :8000 | xargs kill -9 2>/dev/null || true
-lsof -ti :5173 | xargs kill -9 2>/dev/null || true
+if command -v lsof &>/dev/null; then
+  lsof -ti :8000 | xargs kill -9 2>/dev/null || true
+  lsof -ti :5173 | xargs kill -9 2>/dev/null || true
+elif command -v netstat &>/dev/null && command -v taskkill &>/dev/null; then
+  for port in 8000 5173; do
+    pids=$(netstat -ano | grep -i LISTENING | grep -E "[:.]$port[[:space:]]" | awk '{print $5}' | tr -d '\r' | sort -u || true)
+    for pid in $pids; do
+      if [ -n "$pid" ] && [[ "$pid" =~ ^[0-9]+$ ]]; then
+        taskkill //F //PID "$pid" &>/dev/null || true
+      fi
+    done
+  done
+fi
 sleep 1
 
 # ── Backend ────────────────────────────────────
 echo "⚙  Setting up backend..."
 cd "$ROOT_DIR"
 
-if [ -d "venv" ]; then
-  source venv/bin/activate
-else
-  echo "   Creating virtual environment..."
-  python3 -m venv venv
-  source venv/bin/activate
+# Validate project structure before any expensive setup
+if [ ! -f "$ROOT_DIR/backend/requirements.txt" ]; then
+  echo "ERROR: backend/requirements.txt not found."
+  exit 1
 fi
+
+if [ ! -d "$ROOT_DIR/frontend" ]; then
+  echo "ERROR: frontend directory not found."
+  exit 1
+fi
+
+# Determine python command (must be Python 3.11+)
+PYTHON_CMD=""
+if command -v python3 &>/dev/null && python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' &>/dev/null; then
+  PYTHON_CMD="python3"
+elif command -v python &>/dev/null && python -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' &>/dev/null; then
+  PYTHON_CMD="python"
+else
+  echo "ERROR: Python 3.11+ is required to start SecuScan." >&2
+  exit 1
+fi
+
+if [ ! -d "venv" ]; then
+  echo "   Creating virtual environment..."
+  $PYTHON_CMD -m venv venv
+fi
+
+if [ -d "venv/Scripts" ]; then
+  VENV_BIN="venv/Scripts"
+else
+  VENV_BIN="venv/bin"
+fi
+
+source "$VENV_BIN/activate"
 
 pip install -q --upgrade pip
 pip install -q -r backend/requirements.txt
@@ -46,7 +86,9 @@ pip install -q -r backend/requirements.txt
 mkdir -p "$ROOT_DIR/data" "$ROOT_DIR/logs"
 
 echo "🚀 Starting backend on http://127.0.0.1:8000"
-python3 -m uvicorn backend.secuscan.main:app \
+# Dev workflow needs debug=True for /docs, /redoc, and hot-reload
+export SECUSCAN_DEBUG=true
+python -m uvicorn backend.secuscan.main:app \
   --host 127.0.0.1 \
   --port 8000 \
   --reload \

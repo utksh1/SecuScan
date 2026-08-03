@@ -2,15 +2,15 @@
   "id": "website-recon-2",
   "name": "Website Recon",
   "version": "1.0.0",
-  "description": "Fingerprint web technologies of target website.",
-  "long_description": "Fingerprint web technologies of target website.",
+  "description": "Perform website reconnaissance focused on identifying web technologies, frameworks, and application stack details.",
+  "long_description": "Perform website reconnaissance focused on identifying web technologies, frameworks, and application stack details.",
   "category": "recon",
   "author": {
     "name": "SecuScan Contributors",
     "email": "dev@secuscan.local"
   },
   "license": "MIT",
-  "icon": "\ud83d\udd0e",
+  "icon": "🔎",
   "engine": {
     "type": "cli",
     "binary": "httpx"
@@ -60,5 +60,8 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "53ac15d9af192a5ac70225f2faaf1f3c086868ea67438d9b588de6645555ef01"
+  "capabilities": [
+    "network"
+  ],
+  "checksum": "6bd0e14c310e9aac448576158e2bd9e5b4a0971a5e9b12894f84f7c3b866148e"
 }

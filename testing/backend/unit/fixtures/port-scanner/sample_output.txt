@@ -1,0 +1,9 @@
+Starting Nmap scan of 192.168.1.1
+Host is up (0.0010s latency).
+PORT     STATE  SERVICE
+22/tcp   open   ssh
+80/tcp   open   http
+443/tcp  open   https
+3306/tcp open   mysql
+445/tcp  open   microsoft-ds
+8080/tcp open   http-proxy

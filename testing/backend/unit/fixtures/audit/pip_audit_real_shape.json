@@ -1,0 +1,19 @@
+[
+  {
+    "name": "requests",
+    "version": "2.25.0",
+    "vulns": [
+      {
+        "id": "GHSA-c5u2-73g7-4w73",
+        "aliases": [
+          "CVE-2021-28216"
+        ],
+        "description": "High severity vulnerability in requests package.",
+        "fix_versions": [
+          "2.28.0"
+        ],
+        "severity": "high"
+      }
+    ]
+  }
+]
