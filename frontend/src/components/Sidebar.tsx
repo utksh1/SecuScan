@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { routes } from '../routes'
 import { useTheme } from './ThemeContext'
+import { useSidebar } from '../context/SidebarContext'
 
 interface NavItemProps {
     to: string;
@@ -103,14 +104,7 @@ const NavSection = ({ label, isExpanded }: { label: string, isExpanded: boolean 
 export default function Sidebar() {
     const { theme, toggleTheme } = useTheme()
 
-    const [isExpanded, setIsExpanded] = useState(() => {
-        const saved = localStorage.getItem('sidebar-expanded')
-        return saved !== null ? JSON.parse(saved) : true
-    })
-
-    useEffect(() => {
-        localStorage.setItem('sidebar-expanded', JSON.stringify(isExpanded))
-    }, [isExpanded])
+    const { isExpanded, toggleSidebar } = useSidebar()
 
     return (
         <motion.aside
@@ -187,10 +181,11 @@ export default function Sidebar() {
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
-                            setIsExpanded(!isExpanded);
+                            toggleSidebar();
                         }}
-                        title="Collapse sidebar"
-                        className="flex-1 w-full py-2 flex items-center justify-center rounded-lg text-muted hover:text-primary hover:bg-accent-silver/5 transition-colors"
+                        title={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
+                        aria-label={isExpanded ? "Collapse sidebar" : "Expand sidebar"}
+                        className="flex-1 w-full py-2 flex items-center justify-center rounded-lg text-muted hover:text-primary hover:bg-accent-silver/5 transition-colors focus:ring-2 focus:ring-rag-red/50"
                     >
                         <span className="material-symbols-outlined text-[18px]">
                             {isExpanded ? 'keyboard_double_arrow_left' : 'keyboard_double_arrow_right'}
