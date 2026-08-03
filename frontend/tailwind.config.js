@@ -7,16 +7,16 @@ export default {
   theme: {
     extend: {
       colors: {
-        'charcoal-dark': '#0a0a0c',
+        'charcoal-dark': 'rgb(var(--color-charcoal-dark) / <alpha-value>)',
         charcoal: {
-          light: '#1d1d21',
-          DEFAULT: '#121214',
-          dark: '#0a0a0c', /* mapped for backward compatibility */
+          light: 'rgb(var(--color-charcoal-light) / <alpha-value>)',
+          DEFAULT: 'rgb(var(--color-charcoal) / <alpha-value>)',
+          dark: 'rgb(var(--color-charcoal-dark) / <alpha-value>)', /* mapped for backward compatibility */
         },
         silver: {
-          bright: '#f4f4f5',
-          DEFAULT: '#a1a1aa',
-          dark: '#475569',
+          bright: 'rgb(var(--color-silver-bright) / <alpha-value>)',
+          DEFAULT: 'rgb(var(--color-silver) / <alpha-value>)',
+          dark: 'rgb(var(--color-silver-dark) / <alpha-value>)',
         },
         rag: {
           red: '#ef4444',
@@ -27,7 +27,7 @@ export default {
           'blue-bright': '#3b82f6',    
         },
         accent: {
-          silver: '#3f3f46'
+          silver: 'rgb(var(--color-accent-silver) / <alpha-value>)'
         }
       },
       fontFamily: {

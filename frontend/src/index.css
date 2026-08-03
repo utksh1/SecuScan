@@ -63,6 +63,42 @@
   --sidebar-expanded: 280px;
 }
 
+/* ============================================
+   Theme-Aware Color Variables (RGB triplets)
+   Used by tailwind.config.js so utility classes
+   like bg-charcoal-dark, text-silver respond to
+   the .theme-light class on <html>.
+   ============================================ */
+:root {
+  --color-charcoal-dark: 10 10 12;
+  --color-charcoal: 18 18 20;
+  --color-charcoal-light: 29 29 33;
+  --color-silver: 161 161 170;
+  --color-silver-bright: 244 244 245;
+  --color-silver-dark: 71 85 105;
+  --color-accent-silver: 63 63 70;
+}
+
+.theme-light {
+  --color-charcoal-dark: 245 246 248;
+  --color-charcoal: 255 255 255;
+  --color-charcoal-light: 236 238 241;
+  --color-silver: 69 73 82;
+  --color-silver-bright: 26 29 35;
+  --bg-primary: #f5f6f8;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #eceef1;
+  --bg-elevated: #e2e5e9;
+  --accent-silver: #454952;
+  --accent-silver-dim: #64748b;
+  --accent-silver-bright: #1a1d23;
+  --text-primary: #1a1d23;
+  --text-secondary: #454952;
+  --text-muted: #64748b;
+  --color-silver-dark: 100 116 139;
+  --color-accent-silver: 226 229 233;
+}
+
 /* Base Overrides */
 body {
   background-color: var(--bg-primary);
