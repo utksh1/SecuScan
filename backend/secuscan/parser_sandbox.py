@@ -189,10 +189,12 @@ def _unshare_net_supported() -> bool:
     _unshare_capability_checked = True
 
     if platform.system() != "Linux":
+        _unshare_available = False
         return False
 
     unshare_path = shutil.which("unshare")
     if not unshare_path:
+        _unshare_available = False
         return False
 
     try:
