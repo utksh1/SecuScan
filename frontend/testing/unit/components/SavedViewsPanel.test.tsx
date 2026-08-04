@@ -1,8 +1,9 @@
 import React from 'react'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import SavedViewsPanel from '../../../src/components/SavedViewsPanel'
+import { ESCAPE_EVENT } from '../../../src/hooks/useEscapeToClose'
 
 /* ------------------------------------------------------------------ */
 /*  Mocks                                                             */
@@ -296,6 +297,40 @@ describe('SavedViewsPanel', () => {
       // The original rows should remain fully intact and not disappear or be replaced
       expect(screen.getByText('Critical Findings Only')).toBeInTheDocument()
       expect(screen.getByText('High Severity Filters')).toBeInTheDocument()
+    })
+  })
+  // ── Escape closes the panel (issue #1845) ────────────────────────────────
+  // Escape was a no-op outside inputs, so this panel stayed open.
+
+  describe('Closing with Escape', () => {
+    it('closes the open panel when Escape is broadcast', async () => {
+      const user = userEvent.setup()
+      renderSavedViewsPanel()
+
+      const toggleButton = screen.getByRole('button', { name: 'Saved filter views' })
+      await user.click(toggleButton)
+      expect(toggleButton).toHaveAttribute('aria-expanded', 'true')
+
+      await act(async () => {
+        window.dispatchEvent(new CustomEvent(ESCAPE_EVENT))
+      })
+
+      expect(toggleButton).toHaveAttribute('aria-expanded', 'false')
+      expect(
+        screen.queryByRole('dialog', { name: 'Saved filter views panel' }),
+      ).not.toBeInTheDocument()
+    })
+
+    it('ignores the escape broadcast while already closed', async () => {
+      renderSavedViewsPanel()
+
+      await act(async () => {
+        window.dispatchEvent(new CustomEvent(ESCAPE_EVENT))
+      })
+
+      expect(
+        screen.getByRole('button', { name: 'Saved filter views' }),
+      ).toHaveAttribute('aria-expanded', 'false')
     })
   })
 })

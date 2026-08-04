@@ -367,6 +367,18 @@ network behavior of these variables.
 > assess.
 
 ---
+## Raw Scan Output Retention and Cleanup
+
+SecuScan stores runtime-generated scan artifacts in directories such as `data/raw/`, `backend/data/raw/`, `data/reports/`, and `backend/data/reports/`. These directories contain temporary scan outputs, reports, and other generated artifacts that are created during scan execution.
+
+Operators should retain runtime-generated artifacts only for operational needs such as validation, troubleshooting, or incident analysis. These artifacts are not intended to be committed to version control.
+
+Before cleaning up runtime-generated artifacts:
+
+* Ensure no active scan is using the files.
+* Preserve any reports or artifacts required for investigation or auditing.
+* Delete only runtime-generated files and retain repository placeholder files such as `.gitkeep`.
+* Verify that required scan results have been exported or archived before removal.
 
 # Hardening Checklist
 

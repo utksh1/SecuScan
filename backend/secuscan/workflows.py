@@ -12,6 +12,7 @@ from .config import settings
 from .ratelimit import workflow_rate_limiter, rate_limiter, concurrent_limiter
 from .executor import executor
 from .execution_context import normalize_execution_context
+from .models import ValidationMode
 from .platform_resources import get_target_policy
 logger = logging.getLogger(__name__)
 class WorkflowScheduler:
@@ -145,6 +146,17 @@ class WorkflowScheduler:
             plugin = plugin_manager.get_plugin(plugin_id)
             if not plugin:
                 logger.warning("Workflow %s: plugin %s not found, skipping step", workflow_id, plugin_id)
+                continue
+            requires_exploit_policy = (
+                plugin.safety.get("level") == "exploit"
+                or execution_context.get("validation_mode") == ValidationMode.CONTROLLED_EXTRACT.value
+            )
+            if requires_exploit_policy and not (target_policy and target_policy.get("allow_exploit_validation")):
+                logger.warning(
+                    "Workflow %s: skipping exploit-level step %s: no target policy allows exploit validation",
+                    workflow_id,
+                    plugin_id,
+                )
                 continue
             effective_inputs = dict(inputs)
             effective_inputs.pop("safe_mode", None)

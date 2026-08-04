@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { routes } from '../routes'
+import { ESCAPE_EVENT } from './useEscapeToClose'
 
 /**
  * Global keyboard shortcuts hook for SecuScan.
@@ -12,7 +13,8 @@ import { routes } from '../routes'
  * g + r : Reports
  * g + t : Settings (Tools)
  * g + b : Toggle Sidebar
- * Esc   : Close focus/modals
+ * Esc   : Blur the focused field, or broadcast ESCAPE_EVENT so open
+ *         popovers and dropdowns close (see useEscapeToClose).
  */
 export function useShortcuts(onToggleSidebar?: () => void) {
     const navigate = useNavigate()
@@ -31,7 +33,9 @@ export function useShortcuts(onToggleSidebar?: () => void) {
             }
 
             if (e.key === 'Escape') {
-                // Could emit global event to close modals
+                // Broadcast so open popovers/dropdowns can close themselves.
+                // See useEscapeToClose for the subscriber side.
+                window.dispatchEvent(new CustomEvent(ESCAPE_EVENT))
                 return
             }
 
