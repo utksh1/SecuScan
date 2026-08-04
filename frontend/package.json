@@ -55,6 +55,6 @@
     "react-router": "^6.30.4",
     "dompurify": "^3.4.10",
     "@babel/core": "^7.29.7",
-    "undici": "^5.28.3"
+    "undici": "^8.10.0"
   }
 }
