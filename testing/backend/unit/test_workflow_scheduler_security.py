@@ -193,6 +193,58 @@ class TestSchedulerSecurityControls:
             await scheduler._run_workflow("wf-1", steps)
             mock_fail.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_skips_exploit_step_without_exploit_policy(self, scheduler):
+        """Exploit-level steps must be skipped when no target policy allows exploit validation."""
+        steps = [{
+            "plugin_id": "sqlmap",
+            "inputs": {"target": "example.com"},
+        }]
+        with patch("backend.secuscan.workflows.get_db", new_callable=AsyncMock), \
+             patch("backend.secuscan.plugins.get_plugin_manager") as mock_get_pm, \
+             patch("backend.secuscan.workflows.get_target_policy", new_callable=AsyncMock, return_value=None), \
+             patch("backend.secuscan.executor.executor.create_task", new_callable=AsyncMock, return_value="task-1") as mock_create:
+
+            mock_pm = MagicMock()
+            plugin = MagicMock()
+            plugin.category = "exploit"
+            plugin.safety = {"level": "exploit", "rate_limit": {"max_per_hour": 5}}
+            plugin.fields = []
+            mock_pm.get_plugin.return_value = plugin
+            mock_get_pm.return_value = mock_pm
+
+            await scheduler._run_workflow("wf-1", steps, owner_id="default")
+            mock_create.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_runs_exploit_step_when_policy_allows(self, scheduler):
+        """Exploit-level steps run when the target policy explicitly allows exploit validation."""
+        steps = [{
+            "plugin_id": "sqlmap",
+            "inputs": {"target": "example.com"},
+        }]
+        with patch("backend.secuscan.workflows.get_db", new_callable=AsyncMock), \
+             patch("backend.secuscan.plugins.get_plugin_manager") as mock_get_pm, \
+             patch("backend.secuscan.workflows.get_target_policy", new_callable=AsyncMock,
+                   return_value={"allow_exploit_validation": True, "allow_public_targets": True}), \
+             patch("backend.secuscan.validation.validate_target", return_value=(True, "")), \
+             patch("backend.secuscan.ratelimit.rate_limiter.can_execute", return_value=(True, "")), \
+             patch("backend.secuscan.ratelimit.concurrent_limiter.acquire", return_value=(True, "")), \
+             patch("backend.secuscan.executor.executor.create_task", new_callable=AsyncMock, return_value="task-1") as mock_create, \
+             patch("backend.secuscan.executor.executor.execute_task", new_callable=AsyncMock), \
+             patch("backend.secuscan.workflows._finalize_workflow_run", new_callable=AsyncMock):
+
+            mock_pm = MagicMock()
+            plugin = MagicMock()
+            plugin.category = "exploit"
+            plugin.safety = {"level": "exploit", "rate_limit": {"max_per_hour": 5}}
+            plugin.fields = []
+            mock_pm.get_plugin.return_value = plugin
+            mock_get_pm.return_value = mock_pm
+
+            await scheduler._run_workflow("wf-1", steps, owner_id="default")
+            mock_create.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # WorkflowScheduler.tick rate limit integration
