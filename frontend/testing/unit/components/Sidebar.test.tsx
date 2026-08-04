@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
@@ -149,5 +149,61 @@ describe('Sidebar - Accessibility', () => {
     setTimeout(() => {
       expect(sidebar).toHaveAttribute('aria-expanded', 'false')
     }, 100)
+  })
+})
+// --- Regression coverage for #2362 review: restored nav + auth actions ---
+
+const authState = vi.hoisted(() => ({
+  isAuthenticated: true,
+  signOut: vi.fn(),
+}))
+
+vi.mock('../../../src/components/AuthContext', () => ({
+  useAuth: () => authState,
+}))
+
+describe('Sidebar - Navigation & Auth Actions (regression)', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    authState.isAuthenticated = true
+    authState.signOut = vi.fn()
+  })
+
+  it('should retain the Workflows nav item after layout changes', () => {
+    renderSidebar()
+    expect(screen.getByRole('link', { name: /workflows/i })).toBeInTheDocument()
+  })
+
+  it('should retain the Reports and Settings nav items after layout changes', () => {
+    renderSidebar()
+    expect(screen.getByRole('link', { name: /reports/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /settings/i })).toBeInTheDocument()
+  })
+
+  it('should show the Sign Out action when the user is authenticated', () => {
+    authState.isAuthenticated = true
+    renderSidebar()
+    expect(screen.getByLabelText(/sign out/i)).toBeInTheDocument()
+  })
+
+  it('should not show the Sign Out action when the user is not authenticated', () => {
+    authState.isAuthenticated = false
+    renderSidebar()
+    expect(screen.queryByLabelText(/sign out/i)).not.toBeInTheDocument()
+  })
+
+  it('should call signOut when the Sign Out action is clicked', () => {
+    authState.isAuthenticated = true
+    renderSidebar()
+    const signOutButton = screen.getByLabelText(/sign out/i)
+
+    fireEvent.click(signOutButton)
+
+    expect(authState.signOut).toHaveBeenCalledTimes(1)
+  })
+
+  it('should still show the theme toggle alongside the retained auth/nav actions', () => {
+    renderSidebar()
+    expect(screen.getByTitle(/toggle theme/i)).toBeInTheDocument()
   })
 })

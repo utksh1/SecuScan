@@ -2,6 +2,7 @@ import React from 'react'
 import { NavLink } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { routes } from '../routes'
+import { useAuth } from './AuthContext'
 import { useTheme } from './ThemeContext'
 import { useSidebar } from '../context/SidebarContext'
 
@@ -105,6 +106,7 @@ export default function Sidebar() {
     const { theme, toggleTheme } = useTheme()
 
     const { isExpanded, toggleSidebar } = useSidebar()
+    const { isAuthenticated, signOut } = useAuth()
 
     return (
         <motion.aside
@@ -158,11 +160,29 @@ export default function Sidebar() {
                 <NavSection label="Analyze" isExpanded={isExpanded} />
                 <NavItem to={routes.findings} icon="emergency_home" label="Findings" isExpanded={isExpanded} />
                 <NavItem to={routes.reports} icon="summarize" label="Reports" isExpanded={isExpanded} />
+                <NavItem to={routes.workflows} icon="account_tree" label="Workflows" isExpanded={isExpanded} />
             </div>
 
             {/* Bottom Actions */}
             <div className="p-4 mt-auto border-t border-accent-silver/5 bg-bg-primary/30 backdrop-blur-md space-y-3">
                 <NavItem to={routes.settings} icon="settings" label="Settings" isExpanded={isExpanded} />
+                {isAuthenticated && (
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation()
+                            signOut()
+                        }}
+                        aria-label="Sign out"
+                        className="w-full flex items-center gap-3 px-3 py-2 text-muted hover:text-rag-red transition-colors"
+                    >
+                        <span className="material-symbols-outlined text-[20px]">logout</span>
+                        {isExpanded && (
+                            <span className="text-[11px] font-black uppercase tracking-widest whitespace-nowrap">
+                                Sign Out
+                            </span>
+                        )}
+                    </button>
+                )}
 
                 <div className={`flex items-center mt-4 gap-2 ${isExpanded ? 'flex-row' : 'flex-col'}`}>
                     <button
