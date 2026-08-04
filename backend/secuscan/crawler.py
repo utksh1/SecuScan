@@ -7,7 +7,7 @@ import asyncio
 import logging
 import re
 from typing import Any, Dict, List, Tuple
-from urllib.parse import parse_qsl, urljoin, urlparse
+from urllib.parse import parse_qsl, urljoin, urlparse, urlunparse
 
 import httpx
 
@@ -104,37 +104,63 @@ def _is_same_origin(a: Any, b: Any) -> bool:
     return scheme_a == scheme_b and host_a == host_b and port_a == port_b
 
 
-def _validate_redirect_target(url: str) -> Tuple[bool, str]:
+def _validate_redirect_target(url: str) -> Tuple[bool, str, str | None]:
     """Re-validate a redirect destination against the network policy.
 
     The seed target is validated by the executor before the scanner runs, but
     httpx-followed redirects are not. Without this check a hostile or
     compromised seed can pivot the crawler into cloud-metadata, loopback,
     private/CGNAT, or IPv6 link-local/ULA ranges that were never authorized.
+
+    Resolves DNS up front and validates every returned IP so that the caller
+    can pin the connection to the validated address, closing any
+    DNS-rebinding window between validation and fetch.
     """
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"}:
-        return False, f"redirect to unsupported scheme '{parsed.scheme}'"
+        return False, f"redirect to unsupported scheme '{parsed.scheme}'", None
     hostname = parsed.hostname
     if not hostname:
-        return False, "redirect target has no hostname"
+        return False, "redirect target has no hostname", None
+
+    import socket as _socket
+    try:
+        addr_infos = _socket.getaddrinfo(
+            hostname, parsed.port or (443 if parsed.scheme == "https" else 80),
+            proto=_socket.IPPROTO_TCP,
+        )
+    except OSError:
+        return False, "redirect hostname could not be resolved", None
 
     from .network_policy import get_policy_engine
 
     try:
         engine = get_policy_engine()
-        allowed, reason, _ = engine.check_access(
-            dest_ip=hostname,
-            dest_hostname=hostname,
-            plugin_id="crawler",
-            task_id="crawler-redirect",
-        )
     except Exception as exc:
-        # Never fail open: if the policy engine cannot evaluate the target,
-        # block the redirect instead of silently fetching an internal host.
         logger.warning("Redirect target validation failed for %s: %s", url, exc)
-        return False, "redirect target could not be validated"
-    return allowed, reason
+        return False, "redirect target could not be validated", None
+
+    validated_ip: str | None = None
+    for _family, _stype, _proto, _cname, sockaddr in addr_infos:
+        ip_str = sockaddr[0]
+        try:
+            allowed, reason, _ = engine.check_access(
+                dest_ip=ip_str,
+                dest_hostname=hostname,
+                plugin_id="crawler",
+                task_id="crawler-redirect",
+            )
+        except Exception as exc:
+            logger.warning("Redirect target validation failed for %s: %s", url, exc)
+            return False, "redirect target could not be validated", None
+        if not allowed:
+            return False, reason, None
+        if validated_ip is None:
+            validated_ip = ip_str
+
+    if validated_ip is None:
+        return False, "redirect target did not resolve to any address", None
+    return True, "Allowed", validated_ip
 
 
 async def crawl_target(
@@ -188,17 +214,40 @@ async def crawl_target(
                         hop_headers[str(key)] = str(value)
             hop_cookies = dict(cookies or {}) if forward_credentials else {}
 
+            # Pin the connection address for redirect hops to prevent
+            # DNS-rebinding: the hostname is resolved once for policy
+            # validation and the same IP is used for the actual fetch.
+            pinned_url = current_url
+            pinned_headers = dict(hop_headers)
+
             if redirects_followed > 0 and settings.enforce_network_policy:
-                allowed, reason = await asyncio.to_thread(
+                allowed, reason, validated_ip = await asyncio.to_thread(
                     _validate_redirect_target, current_url
                 )
                 if not allowed:
                     raise ValueError(
                         f"Redirect to {current_url} rejected by network policy: {reason}"
                     )
+                if validated_ip:
+                    parsed_hop = urlparse(current_url)
+                    hop_host = parsed_hop.hostname
+                    new_netloc = (
+                        f"[{validated_ip}]" if ":" in validated_ip else validated_ip
+                    )
+                    if parsed_hop.port:
+                        new_netloc = f"{new_netloc}:{parsed_hop.port}"
+                    pinned_url = urlunparse((
+                        parsed_hop.scheme,
+                        new_netloc,
+                        parsed_hop.path,
+                        parsed_hop.params,
+                        parsed_hop.query,
+                        parsed_hop.fragment,
+                    ))
+                    pinned_headers["Host"] = hop_host
 
             async with client.stream(
-                "GET", current_url, headers=hop_headers, cookies=hop_cookies
+                "GET", pinned_url, headers=pinned_headers, cookies=hop_cookies
             ) as response:
                 # Check Content-Length header if present
                 content_length = response.headers.get("content-length")

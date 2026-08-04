@@ -9,6 +9,8 @@ Covers the two halves of the redirect SSRF / credential-exfiltration fix in
 2. Credentials (``extra_headers`` / ``cookies``) are only sent to the seed
    origin and are stripped on any cross-origin redirect, so vault credentials
    cannot be leaked to an attacker-controlled host.
+3. DNS is resolved once for validation and the same IP is pinned for the
+   actual fetch, closing any DNS-rebinding window.
 
 Related issue: https://github.com/utksh1/SecuScan/issues/2369
 """
@@ -85,6 +87,11 @@ def _make_client(*responses):
     return client
 
 
+def _fake_addrinfo(ip):
+    """Return a fake socket.getaddrinfo result for the given IP."""
+    return [(2, 1, 6, "", (ip, 0, 0, 0))]
+
+
 # ---------------------------------------------------------------------------
 # _is_same_origin
 # ---------------------------------------------------------------------------
@@ -120,33 +127,54 @@ def test_is_same_origin_malformed_port_is_cross_origin():
 
 
 def test_validate_redirect_target_rejects_unsupported_scheme():
-    ok, reason = _validate_redirect_target("ftp://example.com/x")
+    ok, reason, _ip = _validate_redirect_target("ftp://example.com/x")
     assert ok is False
     assert "unsupported scheme" in reason
 
 
 def test_validate_redirect_target_rejects_missing_hostname():
-    ok, reason = _validate_redirect_target("http://")
+    ok, reason, _ip = _validate_redirect_target("http://")
     assert ok is False
     assert "no hostname" in reason
 
 
 def test_validate_redirect_target_consults_policy_engine():
     engine = _FakePolicyEngine()
-    with patch("backend.secuscan.network_policy.get_policy_engine", return_value=engine):
-        ok, reason = _validate_redirect_target("http://169.254.169.254/latest/meta-data/")
+    with patch("backend.secuscan.network_policy.get_policy_engine", return_value=engine), \
+         patch("socket.getaddrinfo", return_value=_fake_addrinfo("169.254.169.254")):
+        ok, reason, ip = _validate_redirect_target("http://169.254.169.254/latest/meta-data/")
     assert ok is False
     assert "denylist" in reason
+    assert ip is None
     assert engine.calls[-1]["dest_ip"] == "169.254.169.254"
     assert engine.calls[-1]["dest_hostname"] == "169.254.169.254"
 
 
 def test_validate_redirect_target_fails_closed_on_engine_error():
     engine = _FakePolicyEngine(raise_on_check=True)
-    with patch("backend.secuscan.network_policy.get_policy_engine", return_value=engine):
-        ok, reason = _validate_redirect_target("http://169.254.169.254/latest/meta-data/")
+    with patch("backend.secuscan.network_policy.get_policy_engine", return_value=engine), \
+         patch("socket.getaddrinfo", return_value=_fake_addrinfo("169.254.169.254")):
+        ok, reason, ip = _validate_redirect_target("http://169.254.169.254/latest/meta-data/")
     assert ok is False
     assert "could not be validated" in reason
+    assert ip is None
+
+
+def test_validate_redirect_target_resolves_dns_and_returns_validated_ip():
+    engine = _FakePolicyEngine()
+    with patch("backend.secuscan.network_policy.get_policy_engine", return_value=engine), \
+         patch("socket.getaddrinfo", return_value=_fake_addrinfo("93.184.216.34")):
+        ok, reason, ip = _validate_redirect_target("http://example.com/ok")
+    assert ok is True
+    assert ip == "93.184.216.34"
+
+
+def test_validate_redirect_target_rejects_dns_resolution_failure():
+    with patch("socket.getaddrinfo", side_effect=OSError("no such host")):
+        ok, reason, ip = _validate_redirect_target("http://nonexistent.invalid/")
+    assert ok is False
+    assert "could not be resolved" in reason
+    assert ip is None
 
 
 # ---------------------------------------------------------------------------
@@ -169,13 +197,14 @@ async def test_crawl_target_blocks_redirect_to_cloud_metadata():
     )
     engine = _FakePolicyEngine()
 
-    with patch("backend.secuscan.crawler.httpx.AsyncClient", return_value=client):
-        with patch("backend.secuscan.crawler.settings") as mock_settings:
-            mock_settings.verify_ssl = True
-            mock_settings.enforce_network_policy = True
-            with patch("backend.secuscan.network_policy.get_policy_engine", return_value=engine):
-                with pytest.raises(ValueError, match="rejected by network policy"):
-                    await crawl_target(seed, extra_headers={"Authorization": "Basic dXNlcjpwYXNz"})
+    with patch("backend.secuscan.crawler.httpx.AsyncClient", return_value=client), \
+         patch("backend.secuscan.crawler.settings") as mock_settings, \
+         patch("backend.secuscan.network_policy.get_policy_engine", return_value=engine), \
+         patch("socket.getaddrinfo", return_value=_fake_addrinfo("169.254.169.254")):
+        mock_settings.verify_ssl = True
+        mock_settings.enforce_network_policy = True
+        with pytest.raises(ValueError, match="rejected by network policy"):
+            await crawl_target(seed, extra_headers={"Authorization": "Basic dXNlcjpwYXNz"})
 
     # The metadata endpoint must never have been requested.
     assert client.stream.call_count == 1
@@ -194,13 +223,13 @@ async def test_crawl_target_strips_credentials_on_cross_origin_redirect():
     extra_headers = {"Authorization": "Basic dXNlcjpwYXNz", "X-Custom": "keep"}
     cookies = {"session": "secret"}
 
-    with patch("backend.secuscan.crawler.httpx.AsyncClient", return_value=client):
-        with patch("backend.secuscan.crawler.settings") as mock_settings:
-            mock_settings.verify_ssl = True
-            mock_settings.enforce_network_policy = False
-            result = await crawl_target(
-                seed, extra_headers=extra_headers, cookies=cookies
-            )
+    with patch("backend.secuscan.crawler.httpx.AsyncClient", return_value=client), \
+         patch("backend.secuscan.crawler.settings") as mock_settings:
+        mock_settings.verify_ssl = True
+        mock_settings.enforce_network_policy = False
+        result = await crawl_target(
+            seed, extra_headers=extra_headers, cookies=cookies
+        )
 
     calls = client.stream.call_args_list
     assert len(calls) == 2
@@ -233,13 +262,13 @@ async def test_crawl_target_keeps_credentials_on_same_origin_redirect():
     extra_headers = {"Authorization": "Basic dXNlcjpwYXNz"}
     cookies = {"session": "secret"}
 
-    with patch("backend.secuscan.crawler.httpx.AsyncClient", return_value=client):
-        with patch("backend.secuscan.crawler.settings") as mock_settings:
-            mock_settings.verify_ssl = True
-            mock_settings.enforce_network_policy = False
-            result = await crawl_target(
-                seed, extra_headers=extra_headers, cookies=cookies
-            )
+    with patch("backend.secuscan.crawler.httpx.AsyncClient", return_value=client), \
+         patch("backend.secuscan.crawler.settings") as mock_settings:
+        mock_settings.verify_ssl = True
+        mock_settings.enforce_network_policy = False
+        result = await crawl_target(
+            seed, extra_headers=extra_headers, cookies=cookies
+        )
 
     calls = client.stream.call_args_list
     assert len(calls) == 2
@@ -257,11 +286,49 @@ async def test_crawl_target_enforces_manual_redirect_limit():
         _make_response(302, "http://example.com/c", headers={"location": "http://example.com/d"}),
     )
 
-    with patch("backend.secuscan.crawler.httpx.AsyncClient", return_value=client):
-        with patch("backend.secuscan.crawler.settings") as mock_settings:
-            mock_settings.verify_ssl = True
-            mock_settings.enforce_network_policy = False
-            with pytest.raises(httpx.TooManyRedirects):
-                await crawl_target("http://example.com/", max_redirects=2)
+    with patch("backend.secuscan.crawler.httpx.AsyncClient", return_value=client), \
+         patch("backend.secuscan.crawler.settings") as mock_settings:
+        mock_settings.verify_ssl = True
+        mock_settings.enforce_network_policy = False
+        with pytest.raises(httpx.TooManyRedirects):
+            await crawl_target("http://example.com/", max_redirects=2)
 
     assert client.stream.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_crawl_target_pins_ip_for_redirect_hop():
+    """Redirect hops connect to the validated (pinned) IP, not a fresh DNS lookup.
+
+    This prevents DNS-rebinding: the hostname is resolved once for policy
+    validation and the resulting IP is used for the actual HTTP connection,
+    with the original hostname set in the Host header.
+    """
+    seed = "http://example.com/"
+    redirect_url = "http://example.com/secret"
+    client = _make_client(
+        _make_response(302, seed, headers={"location": redirect_url}),
+        _make_response(200, redirect_url, body=b"<html>ok</html>"),
+    )
+    engine = _FakePolicyEngine()
+
+    with patch("backend.secuscan.crawler.httpx.AsyncClient", return_value=client), \
+         patch("backend.secuscan.crawler.settings") as mock_settings, \
+         patch("backend.secuscan.network_policy.get_policy_engine", return_value=engine), \
+         patch("socket.getaddrinfo", return_value=_fake_addrinfo("93.184.216.34")):
+        mock_settings.verify_ssl = True
+        mock_settings.enforce_network_policy = True
+        result = await crawl_target(seed)
+
+    assert client.stream.call_count == 2
+    calls = client.stream.call_args_list
+
+    # The redirect hop must use the pinned IP in the URL.
+    second_url = calls[1].args[1]
+    assert "93.184.216.34" in second_url
+
+    # The Host header must preserve the original hostname.
+    second_headers = calls[1].kwargs["headers"]
+    assert second_headers.get("Host") == "example.com"
+
+    assert result["final_url"] == redirect_url
