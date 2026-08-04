@@ -1,45 +1,14 @@
 """
 Unit tests for check_scan_rate_limit async dependency in rate_limiter.py.
 
-The rate_limiter module imports redis.asyncio and fastapi. We mock these at the
-sys.modules level so the test can import and run the function without those
-dependencies being installed.
+fastapi and redis.asyncio are available in the test environment, so the module
+can be imported and tested directly without sys.modules mocking.
 """
-import sys
 from unittest.mock import MagicMock, AsyncMock
 import pytest
 
-
-# ---------------------------------------------------------------------------
-# Mock heavy dependencies BEFORE importing the module under test
-# ---------------------------------------------------------------------------
-
-class _StubHTTPException(Exception):
-    def __init__(self, status_code: int, detail=None, headers=None):
-        self.status_code = status_code
-        self.detail = detail or {}
-        self.headers = headers or {}
-        super().__init__(str(detail))
-
-
-class _StubStatus:
-    HTTP_429_TOO_MANY_REQUESTS = 429
-
-
-mock_fastapi = MagicMock()
-mock_fastapi.HTTPException = _StubHTTPException
-mock_fastapi.status = _StubStatus()
-
-sys.modules["redis"] = MagicMock()
-sys.modules["redis.asyncio"] = MagicMock()
-sys.modules["fastapi"] = mock_fastapi
-
-
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
-
 from backend.secuscan.rate_limiter import check_scan_rate_limit
+from fastapi import HTTPException
 
 
 class StubState:
@@ -77,7 +46,6 @@ class TestCheckScanRateLimit:
     @pytest.mark.asyncio
     async def test_raises_when_limiter_check_raises_httpexception(self):
         """When limiter.check() raises HTTPException, it should propagate."""
-        from fastapi import HTTPException
         mock_limiter = AsyncMock()
         mock_limiter.check.side_effect = HTTPException(status_code=429, detail="rate limit")
         mock_request = StubRequest(limiter=mock_limiter)
@@ -97,14 +65,12 @@ class TestCheckScanRateLimit:
 
     @pytest.mark.asyncio
     async def test_noop_when_state_is_absent(self):
-        """When request.app.state does not exist, no-op without AttributeError."""
+        """When request.app.state does not expose scan_rate_limiter, no-op."""
         mock_request = MagicMock()
-        # Make getattr(request.app.state, "scan_rate_limiter", None) return None
         mock_request.app.configure_mock(state=MagicMock(spec=[]))
-        # Delete the scan_rate_limiter attribute so getattr returns None
+        # Delete scan_rate_limiter so getattr falls back to None
         del mock_request.app.state.scan_rate_limiter
 
-        # getattr with default None should return None
         limiter = getattr(mock_request.app.state, "scan_rate_limiter", None)
         assert limiter is None
 
