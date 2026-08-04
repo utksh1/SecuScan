@@ -68,6 +68,7 @@ async def test_acquire_before_execute_task():
               AsyncMock(return_value=(True, ""))),
         patch("backend.secuscan.routes.normalize_execution_context", return_value={}),
         patch("backend.secuscan.routes.get_target_policy", AsyncMock(return_value=None)),
+        patch("backend.secuscan.routes.get_plugin_manager") as mock_get_pm,
         patch("backend.secuscan.routes.concurrent_limiter.acquire",
               side_effect=tracking_acquire),
         patch("backend.secuscan.routes.executor.create_task",
@@ -77,6 +78,7 @@ async def test_acquire_before_execute_task():
         patch("backend.secuscan.routes.logger"),
         patch("asyncio.create_task", side_effect=tracking_create_task),
     ):
+        mock_get_pm.return_value.get_plugin.return_value = MagicMock(safety={"level": "safe"})
         await run_workflow_once("wf-1", owner="owner")
 
     assert len(call_order) >= 2
@@ -111,6 +113,7 @@ async def test_rejected_acquire_marks_failed_and_skips_execution():
               AsyncMock(return_value=(True, ""))),
         patch("backend.secuscan.routes.normalize_execution_context", return_value={}),
         patch("backend.secuscan.routes.get_target_policy", AsyncMock(return_value=None)),
+        patch("backend.secuscan.routes.get_plugin_manager") as mock_get_pm,
         patch("backend.secuscan.routes.concurrent_limiter.acquire",
               AsyncMock(return_value=(False, "Concurrency limit reached"))),
         patch("backend.secuscan.routes.executor.create_task",
@@ -121,6 +124,7 @@ async def test_rejected_acquire_marks_failed_and_skips_execution():
               new_callable=AsyncMock) as mock_execute,
         patch("backend.secuscan.routes.logger"),
     ):
+        mock_get_pm.return_value.get_plugin.return_value = MagicMock(safety={"level": "safe"})
         result = await run_workflow_once("wf-1", owner="owner")
 
     mock_mark_failed.assert_called_once_with(
@@ -160,6 +164,7 @@ async def test_rejected_acquire_does_not_block_accepted_tasks():
               AsyncMock(return_value=(True, ""))),
         patch("backend.secuscan.routes.normalize_execution_context", return_value={}),
         patch("backend.secuscan.routes.get_target_policy", AsyncMock(return_value=None)),
+        patch("backend.secuscan.routes.get_plugin_manager") as mock_get_pm,
         patch("backend.secuscan.routes.concurrent_limiter.acquire",
               AsyncMock(side_effect=[
                   (False, "Concurrency limit reached"),
@@ -173,6 +178,7 @@ async def test_rejected_acquire_does_not_block_accepted_tasks():
               new_callable=AsyncMock) as mock_execute,
         patch("backend.secuscan.routes.logger"),
     ):
+        mock_get_pm.return_value.get_plugin.return_value = MagicMock(safety={"level": "safe"})
         result = await run_workflow_once("wf-1", owner="owner")
 
     assert result["queued_task_ids"] == ["task-2"]
