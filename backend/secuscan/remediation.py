@@ -2,13 +2,14 @@
 Dependency graph resolution and remediation conflict validation.
 """
 
+import importlib.metadata
 import json
 import re
-import importlib.metadata
 from pathlib import Path
-from typing import Dict, List, Any, Tuple
-from packaging.version import Version
+from typing import Any, Dict, List, Tuple
+
 from packaging.specifiers import SpecifierSet
+from packaging.version import Version
 
 
 def normalize_package_name(name: str) -> str:
@@ -33,6 +34,8 @@ def parse_remediation_suggestion(remediation_str: str) -> Tuple[str, str] | None
 
     Example: "Update framer-motion to version 11.0.0" -> ("framer-motion", "11.0.0")
     """
+    if not isinstance(remediation_str, (str, bytes)):
+        return None
     pattern = r"(?:update|upgrade)\s+([a-zA-Z0-9_\-\.]+)\s+(?:to\s+)?(?:version\s+)?([a-zA-Z0-9_\-\.\+\~]+)"
     match = re.search(pattern, remediation_str, re.IGNORECASE)
     if match:
@@ -146,10 +149,15 @@ def parse_package_lock(filepath: str) -> Dict[str, List[Tuple[str, str]]]:
     except Exception:
         return {}
 
+    if not isinstance(data, dict):
+        return {}
+
     relations = {}
 
     # Check for packages key (modern NPM lockfile v2/v3)
     packages = data.get("packages", {})
+    if not isinstance(packages, dict):
+        packages = {}
     for path, info in packages.items():
         if not path:
             parent = "root"
@@ -165,6 +173,7 @@ def parse_package_lock(filepath: str) -> Dict[str, List[Tuple[str, str]]]:
 
     # Fallback to dependencies key (NPM lockfile v1)
     dependencies = data.get("dependencies", {})
+
     def parse_v1_deps(deps_dict):
         for name, info in deps_dict.items():
             requires = info.get("requires", {})
@@ -189,9 +198,7 @@ def parse_package_json(filepath: str) -> Dict[str, List[Tuple[str, str]]]:
         dev_deps = data.get("devDependencies", {})
         peer_deps = data.get("peerDependencies", {})
         all_deps = {**deps, **dev_deps, **peer_deps}
-        return {
-            "root": [(normalize_package_name(k), v) for k, v in all_deps.items()]
-        }
+        return {"root": [(normalize_package_name(k), v) for k, v in all_deps.items()]}
     except Exception:
         return {}
 
@@ -199,7 +206,7 @@ def parse_package_json(filepath: str) -> Dict[str, List[Tuple[str, str]]]:
 def parse_requirement_line(line: str) -> Tuple[str, SpecifierSet] | None:
     """Parse a single requirements.txt line into a normalized package name and SpecifierSet."""
     line = line.strip()
-    if not line or line.startswith(('#', '-')):
+    if not line or line.startswith(("#", "-")):
         return None
     # Strip environment markers (e.g. "pydantic; python_version >= '3.8'")
     line = line.split(";")[0].strip()
@@ -215,6 +222,7 @@ def parse_requirement_line(line: str) -> Tuple[str, SpecifierSet] | None:
     except Exception:
         spec = SpecifierSet()
     return name, spec
+
 
 def get_python_transitive_dependencies(package_name: str) -> List[Tuple[str, SpecifierSet]]:
     """Retrieve python transitive dependencies from installed metadata."""
@@ -270,17 +278,13 @@ def build_dependency_graph(target_dir: str) -> Dict[str, List[Dict[str, Any]]]:
                         parsed = parse_requirement_line(line)
                         if parsed:
                             name, spec = parsed
-                            graph.setdefault(name, []).append({
-                                "parent": "root",
-                                "specifier": spec
-                            })
+                            graph.setdefault(name, []).append({"parent": "root", "specifier": spec})
 
                             # Transitive resolution
                             for dep_name, dep_spec in get_python_transitive_dependencies(name):
-                                graph.setdefault(dep_name, []).append({
-                                    "parent": name,
-                                    "specifier": dep_spec
-                                })
+                                graph.setdefault(dep_name, []).append(
+                                    {"parent": name, "specifier": dep_spec}
+                                )
             except Exception:
                 pass
 
@@ -294,10 +298,7 @@ def build_dependency_graph(target_dir: str) -> Dict[str, List[Dict[str, Any]]]:
             for parent, children in relations.items():
                 for child_name, semver_str in children:
                     spec = semver_to_pep440(semver_str)
-                    graph.setdefault(child_name, []).append({
-                        "parent": parent,
-                        "specifier": spec
-                    })
+                    graph.setdefault(child_name, []).append({"parent": parent, "specifier": spec})
         except Exception:
             pass
     elif pkg_path.exists():
@@ -306,33 +307,32 @@ def build_dependency_graph(target_dir: str) -> Dict[str, List[Dict[str, Any]]]:
             for parent, children in relations.items():
                 for child_name, semver_str in children:
                     spec = semver_to_pep440(semver_str)
-                    graph.setdefault(child_name, []).append({
-                        "parent": parent,
-                        "specifier": spec
-                    })
+                    graph.setdefault(child_name, []).append({"parent": parent, "specifier": spec})
         except Exception:
             pass
 
     return graph
 
 
-def validate_remediation(remediation_str: str, graph: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:
+def validate_remediation(
+    remediation_str: str, graph: Dict[str, List[Dict[str, Any]]]
+) -> Dict[str, Any]:
     """Validate a remediation string against a dependency graph, yielding safety status and alternative actions."""
-    res = {
-        "safe_to_apply": True,
-        "compatible_range": None,
-        "alternatives": []
-    }
+    res = {"safe_to_apply": True, "compatible_range": None, "alternatives": []}
 
     parsed = parse_remediation_suggestion(remediation_str)
     if not parsed:
         return res
 
     pkg_name, target_version = parsed
-    if pkg_name not in graph:
+    if not graph or pkg_name not in graph:
         return res
 
     constraints = graph[pkg_name]
+    if not isinstance(constraints, list):
+        return res
+    # Guard: skip any constraint entries that are missing the 'specifier' key
+    constraints = [c for c in constraints if isinstance(c, dict) and "specifier" in c]
     specifiers = [c["specifier"] for c in constraints]
 
     clean_target = clean_version_string(target_version)
@@ -362,9 +362,9 @@ def validate_remediation(remediation_str: str, graph: Dict[str, List[Dict[str, A
         # Determine which packages impose conflicting requirements
         try:
             ver = Version(clean_target)
-            conflicting_parents = sorted(list({
-                c["parent"] for c in constraints if ver not in c["specifier"]
-            }))
+            conflicting_parents = sorted(
+                list({c["parent"] for c in constraints if ver not in c["specifier"]})
+            )
         except Exception:
             conflicting_parents = sorted(list({c["parent"] for c in constraints}))
 
