@@ -6,6 +6,7 @@ allowlist/denylist policies. Supports both IPv4 and IPv6.
 """
 
 import ipaddress
+import json
 import logging
 import asyncio
 import socket
@@ -80,11 +81,12 @@ class NetworkPolicyEngine:
       3. Default deny (no match = blocked)
     """
 
-    def __init__(self, audit_log_path: str = "/var/log/secuscan/network.audit.log"):
+    def __init__(self, audit_log_path: str = "/var/log/secuscan/network.audit.log", max_audit_entries: int = 10000):
         self.allowlist: List[Tuple[ipaddress.ip_network, NetworkPolicy]] = []
         self.denylist: List[Tuple[ipaddress.ip_network, NetworkPolicy]] = []
         self.audit_log_path = audit_log_path
         self.audit_entries: List[AuditLogEntry] = []
+        self._max_audit_entries = max_audit_entries
 
         # Create audit log file
         self._init_audit_log()
@@ -301,6 +303,50 @@ class NetworkPolicyEngine:
         self._log_audit_entry(entry)
         return False, reason, deny_policy
 
+    def resolve_and_pin(
+        self,
+        target: str,
+        plugin_id: str = "unknown",
+        task_id: str = "unknown",
+    ) -> Tuple[Optional[str], bool, str]:
+        """Resolve target hostname once and validate against network policy.
+
+        Pins the resolved IP so the scanner subprocess cannot be victimized
+        by a DNS rebinding attack (where DNS switches to a malicious IP
+        between policy check and scan execution). Passes plugin/task context
+        through to the audit trail in check_access.
+
+        Args:
+            target: Hostname or IP address to resolve.
+            plugin_id: Plugin making the request (for audit trail).
+            task_id: Task ID (for audit trail).
+
+        Returns:
+            Tuple of (pinned_ip, is_allowed, reason).
+            pinned_ip is None if the hostname is unresolvable.
+        """
+        try:
+            ip = ipaddress.ip_address(target)
+            pinned = str(ip)
+            allowed, reason, _ = self.check_access(
+                dest_ip=pinned, dest_hostname=target,
+                plugin_id=plugin_id, task_id=task_id,
+            )
+            return (pinned, allowed, reason)
+        except ValueError:
+            pass
+
+        try:
+            resolved = socket.gethostbyname(target)
+            ipaddress.ip_address(resolved)
+            allowed, reason, _ = self.check_access(
+                dest_ip=resolved, dest_hostname=target,
+                plugin_id=plugin_id, task_id=task_id,
+            )
+            return (resolved, allowed, reason)
+        except socket.gaierror:
+            return (None, False, f"Unresolvable hostname: {target}")
+
     def _is_expired(self, policy: NetworkPolicy) -> bool:
         """Check if a policy has expired"""
         if policy.expires_at is None:
@@ -308,12 +354,15 @@ class NetworkPolicyEngine:
         return datetime.now() > policy.expires_at
 
     def _log_audit_entry(self, entry: AuditLogEntry) -> None:
-        """Log audit entry to file and memory"""
+        """Log audit entry to file and memory with bounded eviction."""
         self.audit_entries.append(entry)
+
+        # Evict oldest entries when the cap is exceeded
+        if len(self.audit_entries) > self._max_audit_entries:
+            self.audit_entries = self.audit_entries[-self._max_audit_entries:]
 
         try:
             with open(self.audit_log_path, 'a') as f:
-                import json
                 f.write(json.dumps(entry.to_dict()) + "\n")
         except IOError as e:
             logger.error(f"Failed to write audit log: {e}")
@@ -344,6 +393,10 @@ class NetworkPolicyEngine:
             entries = [e for e in entries if e.action == action]
 
         return entries[-limit:]  # Return most recent N
+
+    def clear_audit_entries(self) -> None:
+        """Clear all in-memory audit entries."""
+        self.audit_entries.clear()
 
     def validate_egress_target(self, host: str, port: int = 443) -> Tuple[bool, str]:
         """Validate an outbound webhook/egress destination against network policy.
@@ -422,16 +475,31 @@ def get_policy_engine() -> NetworkPolicyEngine:
     if _policy_engine is None:
         from .config import settings
         _policy_engine = NetworkPolicyEngine(
-            audit_log_path=settings.network_audit_log_file
+            audit_log_path=settings.network_audit_log_file,
+            max_audit_entries=settings.network_audit_max_entries,
         )
         _init_default_policies(_policy_engine)
     return _policy_engine
 
 def _init_default_policies(engine: NetworkPolicyEngine) -> None:
     """Initialize default security policies"""
-    from .config import settings
+    from .config import settings, MANDATORY_DENYLIST
 
-    # Add operator-configured denylist (always enforced)
+    # Add the mandatory denylist first. These entries (cloud metadata,
+    # loopback, private/CGNAT ranges, IPv6 link-local/ULA) are enforced
+    # unconditionally and are NOT affected by SECUSCAN_NETWORK_DENYLIST --
+    # an operator customizing the denylist can only add to this set, never
+    # replace or remove it, so SSRF to 169.254.169.254 (and equivalents on
+    # GCP/Azure/OCI) stays blocked no matter how the operator configures
+    # things.
+    for cidr in MANDATORY_DENYLIST:
+        try:
+            engine.add_deny_rule(cidr, reason="Mandatory denylist (not operator-configurable)")
+        except ValueError:
+            logger.warning(f"Skipping invalid mandatory denylist CIDR: {cidr}")
+
+    # Add operator-configured denylist additions (layered on top of the
+    # mandatory set above, never a replacement for it)
     for cidr in settings.network_denylist:
         try:
             engine.add_deny_rule(cidr, reason="Operator configured denylist")

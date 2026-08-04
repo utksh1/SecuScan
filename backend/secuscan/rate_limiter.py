@@ -7,17 +7,23 @@ Algorithm: Sliding window counter using Redis INCR + EXPIRE.
 - Per-IP counters stored as Redis keys with TTL.
 - Two-tier limits: per-minute (burst protection) and per-hour (sustained limit).
 - Returns HTTP 429 with Retry-After header when limits are exceeded.
-- When Redis is unavailable, fails OPEN (allows request) and logs a warning,
-  so a Redis outage does not take down the scan service entirely.
+- When Redis is unavailable, falls back to in-memory rate limiting and logs
+  an ERROR, so a Redis outage does not take down the scan service entirely.
 
 Key schema:
   rate_limit:scan:{ip}:minute:{window_start_minute}  → request count
   rate_limit:scan:{ip}:hour:{window_start_hour}      → request count
+
+Fallback:
+  In-memory dictionary is used when Redis is unreachable to maintain
+  rate limiting coverage. A circuit breaker periodically attempts to
+  reconnect to Redis.
 """
 
 import logging
 import time
-from typing import Optional
+from collections import defaultdict
+from typing import Dict, List, Optional
 
 import redis.asyncio as aioredis
 from fastapi import HTTPException, Request, status
@@ -52,6 +58,14 @@ class ScanRateLimiter:
         self._rate_window = rate_window  # e.g. per 60 seconds
         self._burst_limit = burst_limit  # e.g. 10 requests
         self._burst_window = burst_window  # e.g. per 3600 seconds
+        self._redis_failed = False
+        self._fallback_history: Dict[str, List[float]] = defaultdict(list)
+
+    async def reset(self) -> None:
+        """Clear in-memory fallback state and reset circuit breaker."""
+
+        self._fallback_history.clear()
+        self._redis_failed = False
 
     def _get_client_ip(self, request: Request) -> str:
         """
@@ -69,11 +83,69 @@ class ScanRateLimiter:
         """Build a namespaced Redis key for this IP and time window."""
         return f"rate_limit:scan:{ip}:{window_type}:{window_value}"
 
+    async def _check_fallback(self, request: Request) -> None:
+        """In-memory fallback rate limit check used when Redis is down."""
+        ip = self._get_client_ip(request)
+        now = time.time()
+
+        minute_window = int(now // self._rate_window)
+        hour_window = int(now // self._burst_window)
+
+        bucket_min = f"{ip}:minute:{minute_window}"
+        bucket_hr = f"{ip}:hour:{hour_window}"
+
+        # Clean stale entries
+        cutoff = now - max(self._rate_window, self._burst_window)
+        for key in list(self._fallback_history.keys()):
+            self._fallback_history[key] = [
+                ts for ts in self._fallback_history[key] if ts > cutoff
+            ]
+            if not self._fallback_history[key]:
+                del self._fallback_history[key]
+
+        # Check per-minute limit
+        minute_count = len(self._fallback_history[bucket_min]) + 1
+        if minute_count > self._rate_limit:
+            retry_after = self._rate_window - (int(now) % self._rate_window)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail={
+                    "error": "rate_limit_exceeded",
+                    "message": (
+                        f"Scan rate limit exceeded: maximum {self._rate_limit} "
+                        f"requests per {self._rate_window} seconds."
+                    ),
+                    "retry_after": retry_after,
+                },
+                headers={"Retry-After": str(retry_after)},
+            )
+
+        # Check per-hour limit
+        hour_count = len(self._fallback_history[bucket_hr]) + 1
+        if hour_count > self._burst_limit:
+            retry_after = self._burst_window - (int(now) % self._burst_window)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail={
+                    "error": "burst_limit_exceeded",
+                    "message": (
+                        f"Hourly scan limit exceeded: maximum {self._burst_limit} "
+                        f"requests per hour."
+                    ),
+                    "retry_after": retry_after,
+                },
+                headers={"Retry-After": str(retry_after)},
+            )
+
+        # Record the request
+        self._fallback_history[bucket_min].append(now)
+        self._fallback_history[bucket_hr].append(now)
+
     async def check(self, request: Request) -> None:
         """
         Check rate limits for the incoming request.
         Raises HTTP 429 if either the per-minute or per-hour limit is exceeded.
-        Does nothing (allows request) if Redis is unavailable.
+        Falls back to in-memory rate limiting if Redis is unavailable.
 
         Args:
             request: The incoming FastAPI request object.
@@ -85,16 +157,28 @@ class ScanRateLimiter:
         if self._rate_limit == 0:
             return
 
-        # If Redis is not configured, fail open with a warning
+        # If Redis is not configured, use in-memory fallback
         if self._redis is None:
             logger.warning(
-                "ScanRateLimiter: Redis client is None — rate limiting is DISABLED. "
-                "Configure REDIS_URL to enable rate limiting."
+                "ScanRateLimiter: Redis client is None — using in-memory fallback. "
+                "Configure REDIS_URL to enable Redis-backed rate limiting."
             )
-            return
+            return await self._check_fallback(request)
 
         ip = self._get_client_ip(request)
         now = int(time.time())
+
+        # If Redis previously failed, try to reconnect (circuit breaker)
+        if self._redis_failed:
+            try:
+                await self._redis.ping()
+                self._redis_failed = False
+                logger.info("ScanRateLimiter: Redis connection restored.")
+            except Exception:
+                logger.error(
+                    "ScanRateLimiter: Redis still unreachable, using in-memory fallback."
+                )
+                return await self._check_fallback(request)
 
         try:
             # ── Tier 1: Per-minute limit (burst protection) ──────────────────
@@ -163,10 +247,13 @@ class ScanRateLimiter:
             # Re-raise 429s — don't swallow them in the Redis error handler
             raise
         except Exception as exc:
-            # Redis connection error, timeout, etc. — fail open, log, continue
+            # Redis connection error, timeout, etc. — fail over, log, continue
+            self._redis_failed = True
             logger.error(
-                "ScanRateLimiter: Redis error, failing open: %s", exc, exc_info=True
+                "ScanRateLimiter: Redis error (%s), switching to in-memory fallback.",
+                exc,
             )
+            return await self._check_fallback(request)
 
 
 def make_scan_rate_limiter(

@@ -48,6 +48,7 @@ def parse(output: str) -> Dict[str, Any]:
                 }
             )
     except Exception:
-        pass
+        # If parsing fails, return empty findings
+        return {"findings": [], "count": 0}
 
     return {"findings": findings, "count": len(findings)}

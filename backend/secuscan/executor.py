@@ -12,7 +12,7 @@ import json
 import time
 from pathlib import Path
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 import logging
 import re
 
@@ -23,10 +23,12 @@ from .redaction import redact
 from .cache import get_cache
 from .config import settings
 from .database import get_db
+from .executor_target_helpers import extract_target
 from .plugins import get_plugin_manager
 from .models import NotificationDeliveryStatus, TaskStatus, ScanPhase
 from .ratelimit import concurrent_limiter
 from .risk_scoring import compute_risk_score, compute_risk_factors
+from .time_utils import to_utc_iso
 from .capabilities import CapabilityEnforcer, CapabilityDeniedError, build_enforcer_from_settings
 from .parser_sandbox import run_parser_in_sandbox, ParserSandboxError
 from .network_policy import get_policy_engine
@@ -74,7 +76,8 @@ async def _terminate_process_group(pid: int, task_id: str, grace_seconds: int = 
         await asyncio.sleep(0.1)
         try:
             os.killpg(pgid, 0)
-        except (ProcessLookupError, PermissionError):
+        except (ProcessLookupError, PermissionError) as exc:
+            logger.debug("pgid %d already exited during grace poll: %s", pgid, exc)
             return
 
     try:
@@ -88,17 +91,11 @@ async def _terminate_process_group(pid: int, task_id: str, grace_seconds: int = 
 
 
 def _parse_discovered_at(finding: dict) -> Optional[datetime]:
-    """Extract and parse discovered_at from a finding dict, or return current UTC time."""
-    raw = finding.get("discovered_at")
-    if raw:
-        try:
-            if isinstance(raw, str):
-                return datetime.fromisoformat(raw)
-            if isinstance(raw, datetime):
-                return raw
-        except (ValueError, TypeError):
-            pass
-    return datetime.now(timezone.utc)
+    """Extract and parse discovered_at from a finding dict as timezone-aware UTC."""
+    from .time_utils import parse_to_utc, utc_now
+
+    parsed = parse_to_utc(finding.get("discovered_at"))
+    return parsed if parsed is not None else utc_now()
 
 
 def _validate_risk_fields(finding: dict) -> None:
@@ -142,17 +139,6 @@ MODULAR_SCANNERS = {
 
 logger = logging.getLogger(__name__)
 STREAM_LISTENER_QUEUE_MAXSIZE = 100
-
-
-def extract_target(inputs: Dict[str, Any]) -> str:
-    """Best-effort target extraction across plugin shapes."""
-    return (
-        inputs.get("target")
-        or inputs.get("url")
-        or inputs.get("host")
-        or inputs.get("domain")
-        or ""
-    )
 
 
 def _stable_asset_id(target: str, host: Any, port: Any, protocol: Any) -> str:
@@ -226,6 +212,11 @@ class TaskExecutor:
             q.put_nowait(event)
         except asyncio.QueueFull:
             logger.warning("Dropping stream event for slow listener on task %s", task_id)
+
+    def _cleanup_listeners(self, task_id: str):
+        """Remove all listener queues for a completed task to prevent memory leaks."""
+        if task_id in self._listeners:
+            self._listeners.pop(task_id, None)
 
     async def _broadcast_phase(self, task_id: str, phase: str):
         """Broadcast a scan phase transition and persist it to the database."""
@@ -368,14 +359,16 @@ class TaskExecutor:
         plugin_id: str,
         safe_mode: bool,
         task_id: str,
-    ) -> bool:
+    ) -> Tuple[bool, Optional[str]]:
         """Enforce Safe Mode target validation and Network Policy access checks.
 
         Returns:
-            True if all checks pass or are bypassed. False if any check blocks execution.
+            Tuple of (all_checks_pass, pinned_ip).
+            pinned_ip is set when network policy is enforced and the target
+            hostname was resolved to a stable IP, preventing DNS rebinding attacks.
         """
         if not target:
-            return True
+            return (True, None)
 
         plugin_manager = get_plugin_manager()
         plugin = plugin_manager.get_plugin(plugin_id)
@@ -402,31 +395,32 @@ class TaskExecutor:
                         f"Safe mode target validation failed: {error_msg}",
                     )
                     await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
-                    return False
+                    return (False, None)
             except asyncio.TimeoutError:
                 await self.mark_task_failed(
                     task_id,
                     "Target validation timed out (SecuScan Guardrail)",
                 )
                 await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
-                return False
+                return (False, None)
 
-        # Check before launching any scanner or subprocess. check_access()
-        # writes an audit entry on every path, so no extra logging needed.
+        # Check before launching any scanner or subprocess. Uses resolve_and_pin
+        # to resolve the hostname ONCE and pin the IP, preventing DNS rebinding
+        # attacks where the scanner subprocess resolves a different (malicious) IP.
         if settings.enforce_network_policy:
             engine = get_policy_engine()
             try:
-                allowed, reason, _ = await asyncio.wait_for(
+                pinned_ip, allowed, reason = await asyncio.wait_for(
                     asyncio.to_thread(
-                        engine.check_access,
-                        dest_ip=target,
-                        plugin_id=plugin_id,
-                        task_id=task_id,
+                        engine.resolve_and_pin,
+                        target,
+                        plugin_id,
+                        task_id,
                     ),
                     timeout=float(settings.dns_resolution_timeout_seconds),
                 )
             except asyncio.TimeoutError:
-                allowed, reason = False, "Network policy check timed out (DNS resolution timeout)"
+                allowed, reason, pinned_ip = False, "Network policy check timed out (DNS resolution timeout)", None
 
             if not allowed:
                 if settings.network_policy_failure_mode == "log_only":
@@ -439,9 +433,11 @@ class TaskExecutor:
                         f"Network policy denied access to {target}: {reason}",
                     )
                     await self._broadcast(task_id, "status", TaskStatus.FAILED.value)
-                    return False
+                    return (False, None)
 
-        return True
+            return (True, pinned_ip)
+
+        return (True, None)
 
     async def _ensure_docker_network(self) -> None:
         """Validate and automatically create the configured Docker network if missing."""
@@ -560,6 +556,13 @@ class TaskExecutor:
 
         if not command:
             raise ValueError("Failed to build command")
+
+        from .validation import validate_command_network_egress
+        cmd_valid, cmd_err = validate_command_network_egress(
+            command, safe_mode, plugin_id, task_id
+        )
+        if not cmd_valid:
+            raise ValueError(f"Command network egress validation failed: {cmd_err}")
 
         # Apply Docker Sandboxing if enabled
         if settings.docker_enabled:
@@ -695,8 +698,11 @@ class TaskExecutor:
             )
 
             # ── Safe Mode & Network policy enforcement ───────────────────────
-            if not await self._enforce_guardrails(target, plugin_id, safe_mode, task_id):
+            guardrails_ok, pinned_ip = await self._enforce_guardrails(target, plugin_id, safe_mode, task_id)
+            if not guardrails_ok:
                 return
+            if pinned_ip:
+                inputs["__pinned_ip"] = pinned_ip
 
             # Check if this is a modular scanner or a standard plugin
             plugin_manager = get_plugin_manager()
@@ -810,10 +816,12 @@ class TaskExecutor:
                 },
                 task_id=task_id,
             )
+            await self._dispatch_task_notifications(db, task_id)
 
         except Exception as e:
             logger.error(f"Task {task_id} failed: {e}", exc_info=True)
             duration = (time.time() - start_time) if 'start_time' in locals() else 0
+            safe_error = redact(str(e))
             await db.execute(
                 """
                 UPDATE tasks SET
@@ -827,7 +835,7 @@ class TaskExecutor:
                     TaskStatus.FAILED.value,
                     datetime.now().isoformat(),
                     duration,
-                    str(e),
+                    safe_error,
                     task_id
                 )
             )
@@ -837,15 +845,17 @@ class TaskExecutor:
 
             await db.log_audit(
                 "task_failed",
-                f"Task failed: {str(e)}",
+                f"Task failed: {safe_error}",
                 severity="error",
-                context={"task_id": task_id, "error": str(e)},
+                context={"task_id": task_id, "error": safe_error},
                 task_id=task_id
             )
+            await self._dispatch_task_notifications(db, task_id)
         finally:
             self.running_tasks.pop(task_id, None)
             self._process_pids.pop(task_id, None)
             await concurrent_limiter.release(task_id)
+            self._cleanup_listeners(task_id)
 
     async def _execute_command(
         self,
@@ -1272,6 +1282,33 @@ class TaskExecutor:
             target=target,
             findings=[item for item in result.get("findings", []) if isinstance(item, dict)],
         )
+
+        try:
+            from .remediation import build_dependency_graph, validate_remediation
+            graph = build_dependency_graph(target)
+            validations = {}
+            for f in normalized_findings:
+                remediation_str = f.get("remediation", "")
+                if remediation_str:
+                    val_res = validate_remediation(remediation_str, graph)
+                    validations[id(f)] = val_res
+
+            for f in normalized_findings:
+                if id(f) in validations:
+                    val_res = validations[id(f)]
+                    f_metadata = f.setdefault("metadata", {})
+                    f_metadata["safe_to_apply"] = val_res["safe_to_apply"]
+                    f_metadata["compatible_range"] = val_res["compatible_range"]
+                    f_metadata["alternatives"] = val_res["alternatives"]
+        except Exception as e:
+            logger.warning(
+                "Remediation safety validation failed for task %s (plugin %s): %s. Skipping safety metadata enrichment.",
+                task_id,
+                plugin_id,
+                str(e),
+                exc_info=True,
+            )
+
         previous_findings = await self._load_previous_task_findings(
             db,
             owner_id=owner_id,
@@ -1307,6 +1344,7 @@ class TaskExecutor:
     ) -> Dict[str, Any]:
         u_id = str(uuid.uuid4()).replace("-", "")
         finding_id = f"finding:{task_id}:{u_id[:8]}"
+        finding_group_id = finding.get("finding_group_id")
 
         _validate_risk_fields(finding)
         exploitability = finding.get("exploitability")
@@ -1319,8 +1357,8 @@ class TaskExecutor:
         asset_refs = finding.get("asset_refs", []) if isinstance(finding.get("asset_refs"), list) else []
         references = finding.get("references", []) if isinstance(finding.get("references"), list) else []
         corroborating_sources = finding.get("corroborating_sources", []) if isinstance(finding.get("corroborating_sources"), list) else []
-        first_seen_at = str(finding.get("first_seen_at") or discovered.isoformat())
-        last_seen_at = str(finding.get("last_seen_at") or discovered.isoformat())
+        first_seen_at = str(finding.get("first_seen_at") or to_utc_iso(discovered))
+        last_seen_at = str(finding.get("last_seen_at") or to_utc_iso(discovered))
         occurrence_count = int(finding.get("occurrence_count") or 1)
         evidence_count = int(finding.get("evidence_count") or len(evidence))
         risk_score = compute_risk_score(
@@ -1353,6 +1391,41 @@ class TaskExecutor:
                 asset_exposure, risk_score, risk_factors_json
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (owner_id, finding_group_id) DO UPDATE SET
+                task_id = EXCLUDED.task_id,
+                plugin_id = EXCLUDED.plugin_id,
+                title = EXCLUDED.title,
+                category = EXCLUDED.category,
+                severity = EXCLUDED.severity,
+                target = EXCLUDED.target,
+                description = EXCLUDED.description,
+                remediation = EXCLUDED.remediation,
+                proof = EXCLUDED.proof,
+                cvss = EXCLUDED.cvss,
+                cve = EXCLUDED.cve,
+                metadata_json = EXCLUDED.metadata_json,
+                discovered_at = EXCLUDED.discovered_at,
+                exploitability = EXCLUDED.exploitability,
+                confidence = EXCLUDED.confidence,
+                validated = EXCLUDED.validated,
+                validation_method = EXCLUDED.validation_method,
+                confidence_reason = EXCLUDED.confidence_reason,
+                finding_kind = EXCLUDED.finding_kind,
+                asset_id = EXCLUDED.asset_id,
+                last_seen_at = EXCLUDED.last_seen_at,
+                occurrence_count = COALESCE(findings.occurrence_count, 0) + EXCLUDED.occurrence_count,
+                corroborating_sources_json = EXCLUDED.corroborating_sources_json,
+                evidence_count = EXCLUDED.evidence_count,
+                analyst_status = EXCLUDED.analyst_status,
+                retest_status = EXCLUDED.retest_status,
+                evidence_json = EXCLUDED.evidence_json,
+                asset_refs_json = EXCLUDED.asset_refs_json,
+                service_fingerprint = EXCLUDED.service_fingerprint,
+                cpe = EXCLUDED.cpe,
+                references_json = EXCLUDED.references_json,
+                asset_exposure = EXCLUDED.asset_exposure,
+                risk_score = EXCLUDED.risk_score,
+                risk_factors_json = EXCLUDED.risk_factors_json
             """,
             (
                 finding_id,
@@ -1369,14 +1442,14 @@ class TaskExecutor:
                 finding.get("cvss"),
                 finding.get("cve"),
                 json.dumps(metadata),
-                discovered.isoformat(),
+                to_utc_iso(discovered),
                 exploitability,
                 confidence,
                 1 if finding.get("validated") else 0,
                 finding.get("validation_method"),
                 finding.get("confidence_reason"),
                 str(finding.get("finding_kind") or "observation"),
-                finding.get("finding_group_id"),
+                finding_group_id,
                 finding.get("asset_id"),
                 first_seen_at,
                 last_seen_at,
@@ -1395,12 +1468,19 @@ class TaskExecutor:
                 json.dumps(risk_factors),
             ),
         )
+
+        row = await db.fetchone(
+            "SELECT id, occurrence_count FROM findings WHERE owner_id = ? AND finding_group_id = ?",
+            (owner_id, finding_group_id),
+        )
+        finding_id = row["id"] if row else finding_id
+        occurrence_count = int(row["occurrence_count"]) if row else occurrence_count
         return {
             **finding,
             "id": finding_id,
             "plugin_id": plugin_id,
             "target": target_value,
-            "discovered_at": discovered.isoformat(),
+            "discovered_at": to_utc_iso(discovered),
             "metadata": metadata,
             "evidence": evidence,
             "asset_refs": asset_refs,
@@ -1426,25 +1506,25 @@ class TaskExecutor:
             result=parsed,
         )
         findings_data: List[Dict[str, Any]] = []
-        for finding in structured_result.get("findings", []):
-            findings_data.append(
-                await self._persist_finding(
-                    db,
-                    owner_id=owner_id,
-                    task_id=task_id,
-                    plugin_id=plugin_id,
-                    target=target,
-                    finding=finding,
-                )
-            )
-
-        structured_result["findings"] = findings_data
-        structured_result["severity_counts"] = self._build_severity_counts(findings_data)
-        structured_result["finding_groups"] = build_finding_groups(findings_data)
-        structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
-        structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
-
         async with db.transaction():
+            for finding in structured_result.get("findings", []):
+                findings_data.append(
+                    await self._persist_finding(
+                        db,
+                        owner_id=owner_id,
+                        task_id=task_id,
+                        plugin_id=plugin_id,
+                        target=target,
+                        finding=finding,
+                    )
+                )
+
+            structured_result["findings"] = findings_data
+            structured_result["severity_counts"] = self._build_severity_counts(findings_data)
+            structured_result["finding_groups"] = build_finding_groups(findings_data)
+            structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
+            structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
+
             await db.execute(
                 "UPDATE tasks SET structured_json = ? WHERE id = ?",
                 (json.dumps(structured_result), task_id)
@@ -1454,11 +1534,12 @@ class TaskExecutor:
                 """
                 INSERT INTO reports (
                     id, owner_id, task_id, name, type, generated_at, status, findings, pages
-                ) VALUES (?, ?, ?, ?, ?, (datetime('now')), ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (id) DO UPDATE SET
                     status = EXCLUDED.status,
                     findings = EXCLUDED.findings,
-                    pages = EXCLUDED.pages
+                    pages = EXCLUDED.pages,
+                    generated_at = EXCLUDED.generated_at
                 """,
                 (
                     f"report:{task_id}",
@@ -1466,6 +1547,7 @@ class TaskExecutor:
                     task_id,
                     f"{plugin.name} Report",
                     "technical",
+                    to_utc_iso(),
                     "ready" if status == TaskStatus.COMPLETED.value else "failed",
                     len(findings_data),
                     1,
@@ -1492,25 +1574,25 @@ class TaskExecutor:
             result=result,
         )
         findings_data: List[Dict[str, Any]] = []
-        for finding in structured_result.get("findings", []):
-            findings_data.append(
-                await self._persist_finding(
-                    db,
-                    owner_id=owner_id,
-                    task_id=task_id,
-                    plugin_id=plugin_id,
-                    target=target,
-                    finding=finding,
-                )
-            )
-
-        structured_result["findings"] = findings_data
-        structured_result["severity_counts"] = self._build_severity_counts(findings_data)
-        structured_result["finding_groups"] = build_finding_groups(findings_data)
-        structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
-        structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
-
         async with db.transaction():
+            for finding in structured_result.get("findings", []):
+                findings_data.append(
+                    await self._persist_finding(
+                        db,
+                        owner_id=owner_id,
+                        task_id=task_id,
+                        plugin_id=plugin_id,
+                        target=target,
+                        finding=finding,
+                    )
+                )
+
+            structured_result["findings"] = findings_data
+            structured_result["severity_counts"] = self._build_severity_counts(findings_data)
+            structured_result["finding_groups"] = build_finding_groups(findings_data)
+            structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
+            structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
+
             await db.execute(
                 "UPDATE tasks SET structured_json = ? WHERE id = ?",
                 (json.dumps(structured_result), task_id)
@@ -1521,11 +1603,12 @@ class TaskExecutor:
                 """
                 INSERT INTO reports (
                     id, owner_id, task_id, name, type, generated_at, status, findings, pages
-                ) VALUES (?, ?, ?, ?, ?, (datetime('now')), ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (id) DO UPDATE SET
                     status = EXCLUDED.status,
                     findings = EXCLUDED.findings,
-                    pages = EXCLUDED.pages
+                    pages = EXCLUDED.pages,
+                    generated_at = EXCLUDED.generated_at
                 """,
                 (
                     f"report:{task_id}",
@@ -1533,6 +1616,7 @@ class TaskExecutor:
                     task_id,
                     f"{scanner.name} Report",
                     "professional" if status == TaskStatus.COMPLETED.value else "failed",
+                    to_utc_iso(),
                     "ready" if status == TaskStatus.COMPLETED.value else "failed",
                     len(findings_data),
                     2, # Professional reports are typically multi-page
@@ -1617,7 +1701,7 @@ class TaskExecutor:
             except Exception as exc:
                 logger.error("Unexpected error running parser sandbox for '%s': %s", plugin.id, exc)
                 raise RuntimeError(
-                    f"Custom parser encountered an unexpected error for plugin '{plugin.id}': {exc}"
+                    f"Custom parser encountered an unexpected error for plugin '{plugin.id}'"
                 ) from exc
 
         # 2. Fallback to legacy built-in parsers (only reached when no parser.py exists)
@@ -1867,9 +1951,15 @@ class TaskExecutor:
             if sent:
                 logger.info("Task %s: delivered %d notification(s)", task_id, sent)
 
-            # Send Slack Webhook notification for scan completion
+            # Send Slack Webhook notification for scan completion (legacy,
+            # single global webhook configured via env var).
             from .notification_service import process_slack_notification
             await process_slack_notification(db, task_id)
+
+            # Send the per-owner scan-completion webhook (Slack/Discord/
+            # generic JSON), configured from the Settings page (issue #1615).
+            from .notification_service import process_scan_completion_webhook
+            await process_scan_completion_webhook(db, task_id)
         except Exception as exc:
             logger.warning(
                 "Task %s: notification dispatch failed: %s",

@@ -6,10 +6,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 
-@pytest.fixture
-def anyio_backend():
-    return "asyncio"
-
 # Add repo root to sys.path so package imports work (backend.*)
 repo_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(repo_root))
@@ -40,6 +36,8 @@ def setup_test_environment(monkeypatch):
     # _execute_command but the policy check runs before that mock fires.
     # Tests that specifically test policy behaviour override this themselves.
     monkeypatch.setattr(settings, "enforce_network_policy", False)
+    # Disable scan rate limiter in tests to avoid 429 interference
+    monkeypatch.setattr(settings, "scan_rate_limit", 0)
 
     settings.ensure_directories()
 
@@ -68,6 +66,10 @@ def test_client(setup_test_environment):
             await reset_all_endpoint_limiters()
         except ImportError:
             pass
+        scan_limiter = getattr(app.state, "scan_rate_limiter", None)
+        if scan_limiter:
+            scan_limiter._rate_limit = 0
+            await scan_limiter.reset()
         await init_db(settings.database_path)
         await init_plugins(settings.plugins_dir)
 
@@ -87,6 +89,10 @@ def test_client(setup_test_environment):
             await reset_all_endpoint_limiters()
         except ImportError:
             pass
+        scan_limiter = getattr(app.state, "scan_rate_limiter", None)
+        if scan_limiter:
+            scan_limiter._rate_limit = 0
+            await scan_limiter.reset()
         if database_module.db:
             await database_module.db.disconnect()
 

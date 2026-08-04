@@ -138,6 +138,18 @@ class TestPluginCapabilityInventory:
                     bad.append(f"{plugin_id}: non-lowercase token {token!r}")
         assert not bad, "\n".join(bad)
 
+    def test_all_shipped_plugins_declare_capabilities(self):
+        """Every bundled plugin must declare an explicit capabilities list."""
+        missing: list[str] = []
+        for plugin_id, meta in _iter_plugin_metadata():
+            caps = meta.get("capabilities")
+            if not isinstance(caps, list) or not caps:
+                missing.append(plugin_id)
+        assert not missing, (
+            "Bundled plugin(s) missing explicit capabilities declarations: "
+            f"{missing}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # CapabilityEnforcer construction-time token validation
@@ -295,7 +307,11 @@ class TestDeniedCapabilityBlocksExecution:
     def test_safe_plugin_passes_when_only_exploit_denied(self):
         enforcer = CapabilityEnforcer(denied_capabilities=["exploit"])
         # Should not raise — safe plugins do not require exploit capability.
-        enforcer.check("whois_lookup", declared=None, safety_level="safe")
+        enforcer.check("whois_lookup", declared=["network"], safety_level="safe")
+
+    def test_filesystem_only_plugin_passes_when_network_denied(self):
+        enforcer = CapabilityEnforcer(denied_capabilities=["network"])
+        enforcer.check("code_analyzer", declared=["filesystem"], safety_level="safe")
 
     def test_plugin_with_explicit_caps_blocked_on_denied_token(self):
         enforcer = CapabilityEnforcer(denied_capabilities=["credentials"])

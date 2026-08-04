@@ -1,3 +1,4 @@
+import socket
 import pytest
 import ipaddress
 import tempfile
@@ -351,21 +352,104 @@ class TestURLTargetHandling:
         )
         assert allowed
 
-class TestDefaultDenylistSSRFProtection:
-    """Test that private subnets are blocked by default in settings"""
+class TestResolveAndPin:
+    """Test resolve_and_pin DNS rebinding prevention and audit context"""
 
-    def test_private_subnets_in_default_denylist(self):
-        """Standard private ranges (RFC1918, RFC6598, IPv6 local) must be in the default denylist"""
-        from backend.secuscan.config import Settings
-        default_settings = Settings()
-        denylist = default_settings.network_denylist
-        assert "10.0.0.0/8" in denylist
-        assert "172.16.0.0/12" in denylist
-        assert "192.168.0.0/16" in denylist
-        assert "100.64.0.0/10" in denylist
-        assert "fc00::/7" in denylist
-        assert "fe80::/10" in denylist
-        assert "::1/128" in denylist
+    @patch("socket.gethostbyname")
+    def test_resolve_and_pin_passes_audit_context(self, mock_gethostbyname, tmp_path):
+        """plugin_id and task_id must be forwarded to check_access for audit trail"""
+        audit_log = tmp_path / "audit.log"
+        engine = NetworkPolicyEngine(audit_log_path=str(audit_log))
+        engine.add_allow_rule("93.184.216.34/32", reason="Example IP")
+
+        mock_gethostbyname.return_value = "93.184.216.34"
+
+        pinned_ip, allowed, reason = engine.resolve_and_pin(
+            "example.com",
+            plugin_id="test_scanner",
+            task_id="task-42",
+        )
+
+        assert pinned_ip == "93.184.216.34"
+        assert allowed is True
+        entries = engine.get_audit_entries(plugin_id="test_scanner")
+        assert len(entries) == 1
+        assert entries[0].task_id == "task-42"
+        assert entries[0].plugin_id == "test_scanner"
+        assert entries[0].dest_ip == "93.184.216.34"
+        assert entries[0].dest_hostname == "example.com"
+
+    def test_resolve_and_pin_ip_input_retains_plugin_context(self, tmp_path):
+        """When given a raw IP, context must still appear in audit"""
+        audit_log = tmp_path / "audit.log"
+        engine = NetworkPolicyEngine(audit_log_path=str(audit_log))
+        engine.add_allow_rule("8.8.8.8/32", reason="Google DNS")
+
+        pinned_ip, allowed, reason = engine.resolve_and_pin(
+            "8.8.8.8",
+            plugin_id="dns_scanner",
+            task_id="task-99",
+        )
+
+        assert pinned_ip == "8.8.8.8"
+        assert allowed is True
+        entries = engine.get_audit_entries(plugin_id="dns_scanner")
+        assert len(entries) == 1
+        assert entries[0].task_id == "task-99"
+
+    @patch("socket.gethostbyname")
+    def test_resolve_and_pin_returns_none_on_unresolvable(self, mock_gethostbyname, tmp_path):
+        """Unresolvable hostnames should return (None, False, reason)"""
+        mock_gethostbyname.side_effect = socket.gaierror("Name or service not known")
+        audit_log = tmp_path / "audit.log"
+        engine = NetworkPolicyEngine(audit_log_path=str(audit_log))
+
+        pinned_ip, allowed, reason = engine.resolve_and_pin(
+            "nonexistent.invalid",
+            plugin_id="test",
+            task_id="task-1",
+        )
+
+        assert pinned_ip is None
+        assert allowed is False
+        assert "Unresolvable" in reason
+
+
+class TestDefaultDenylistSSRFProtection:
+    """Test that private subnets and cloud metadata are always blocked, and
+    that this protection cannot be silently dropped via operator config."""
+
+    def test_mandatory_ranges_present(self):
+        """Standard private ranges, CGNAT, and cloud metadata must be in MANDATORY_DENYLIST"""
+        from backend.secuscan.config import MANDATORY_DENYLIST
+        assert "169.254.169.254/32" in MANDATORY_DENYLIST
+        assert "169.254.0.0/16" in MANDATORY_DENYLIST
+        assert "10.0.0.0/8" in MANDATORY_DENYLIST
+        assert "172.16.0.0/12" in MANDATORY_DENYLIST
+        assert "192.168.0.0/16" in MANDATORY_DENYLIST
+        assert "100.64.0.0/10" in MANDATORY_DENYLIST
+        assert "fc00::/7" in MANDATORY_DENYLIST
+        assert "fe80::/10" in MANDATORY_DENYLIST
+        assert "::1/128" in MANDATORY_DENYLIST
+
+    def test_operator_denylist_override_does_not_drop_mandatory_ranges(self, monkeypatch, tmp_path):
+        """Regression test for #1748: an operator setting SECUSCAN_NETWORK_DENYLIST
+        to a custom, unrelated value must not lose metadata/private-range protection."""
+        monkeypatch.setattr(
+            "backend.secuscan.config.settings.network_denylist",
+            ["203.0.113.0/24"],  # operator's own unrelated addition
+        )
+        audit_log = tmp_path / "audit.log"
+        engine = NetworkPolicyEngine(audit_log_path=str(audit_log))
+        _init_default_policies(engine)
+
+        for blocked_ip in ["169.254.169.254", "10.0.0.1", "192.168.1.1",
+                           "172.16.0.1", "127.0.0.1", "100.64.0.1"]:
+            allowed, _, _ = engine.check_access(blocked_ip, plugin_id="test")
+            assert not allowed, f"{blocked_ip} should still be blocked after operator denylist override"
+
+        allowed, _, _ = engine.check_access("203.0.113.1", plugin_id="test")
+        assert not allowed, "operator-configured denylist entry should still be enforced"
 
 def test_check_access_logs_url_parse_failure(caplog, tmp_path):
     engine = NetworkPolicyEngine(audit_log_path=str(tmp_path / "audit.log"))

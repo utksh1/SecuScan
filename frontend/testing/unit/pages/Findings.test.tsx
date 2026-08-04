@@ -25,6 +25,22 @@ vi.mock('../../../src/utils/date', async (importOriginal: any) => {
   }
 })
 
+const mockScrollToIndex = vi.fn()
+
+vi.mock('@tanstack/react-virtual', async (importOriginal) => {
+  const actual = await importOriginal<any>()
+  return {
+    ...actual,
+    useVirtualizer: (options: any) => {
+      const virtualizer = actual.useVirtualizer(options)
+      return {
+        ...virtualizer,
+        scrollToIndex: mockScrollToIndex,
+      }
+    },
+  }
+})
+
 // @tanstack/react-virtual needs ResizeObserver + scrollHeight in jsdom
 if (typeof global.ResizeObserver === 'undefined') {
   global.ResizeObserver = class ResizeObserver {
@@ -33,7 +49,6 @@ if (typeof global.ResizeObserver === 'undefined') {
     disconnect() {}
   } as any
 }
-
 
 Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, value: 800 })
 Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 600 })
@@ -313,7 +328,7 @@ describe('Findings — virtualized list', () => {
     expect(fieldContainer).toHaveClass('space-y-2', 'min-w-0')
 
     const gridContainer = fieldContainer?.parentElement
-    expect(gridContainer).toHaveClass('grid', 'gap-4', 'sm:grid-cols-2', 'lg:grid-cols-3', 'xl:grid-cols-4')
+    expect(gridContainer).toHaveClass('grid', 'gap-x-4', 'gap-y-5')
 
     const filterContainer = gridContainer?.parentElement
     expect(filterContainer).toHaveClass('flex', 'flex-col', 'gap-6')
@@ -451,3 +466,99 @@ describe('Findings — severity legend help affordance', () => {
     )
   })
 })
+
+describe('Findings — virtualizer scrolling', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    localStorage.clear()
+  })
+
+  it('changing the selected finding triggers the expected scroll call', async () => {
+    const findings = [
+      makeFinding({ id: 'f1', title: 'Finding Alpha', severity: 'critical' }),
+      makeFinding({ id: 'f2', title: 'Finding Beta', severity: 'high' }),
+      makeFinding({ id: 'f3', title: 'Finding Gamma', severity: 'medium' }),
+    ]
+    vi.mocked(getFindings).mockResolvedValue({ findings })
+
+    render(<Findings />)
+    await waitFor(() => expect(screen.queryByText('Synchronizing findings feed...')).not.toBeInTheDocument())
+
+    // Clear initial scroll call on mount
+    mockScrollToIndex.mockClear()
+
+    // Click Finding Beta to select it
+    const betaOption = await screen.findByRole('option', { name: /Finding Beta/i })
+    await userEvent.click(betaOption)
+
+    // Assert it called scrollToIndex with correct index (1)
+    expect(mockScrollToIndex).toHaveBeenCalledWith(1, { align: 'auto', behavior: 'smooth' })
+  })
+
+  it('filtering/sorting does not scroll to stale indexes', async () => {
+    const findings = [
+      makeFinding({ id: 'f1', title: 'Finding Alpha', severity: 'critical' }),
+      makeFinding({ id: 'f2', title: 'Finding Beta', severity: 'high' }),
+      makeFinding({ id: 'f3', title: 'Finding Gamma', severity: 'medium' }),
+    ]
+    vi.mocked(getFindings).mockResolvedValue({ findings })
+
+    render(<Findings />)
+    await waitFor(() => expect(screen.queryByText('Synchronizing findings feed...')).not.toBeInTheDocument())
+
+    // Select Beta (triggers scroll) and then clear mocks
+    const betaOption = await screen.findByRole('option', { name: /Finding Beta/i })
+    await userEvent.click(betaOption)
+    expect(mockScrollToIndex).toHaveBeenCalled()
+    mockScrollToIndex.mockClear()
+
+    // Filter using search query that includes Beta
+    const searchInput = screen.getByPlaceholderText(/Title, target, CVE/i)
+    await userEvent.type(searchInput, 'Beta')
+
+    // Expect no scrollToIndex call because selectedFindingId did not change
+    expect(mockScrollToIndex).not.toHaveBeenCalled()
+
+    // Clear search query
+    await userEvent.clear(searchInput)
+    expect(mockScrollToIndex).not.toHaveBeenCalled()
+
+    // Change sorting mode (while Beta remains visible/selected)
+    const selects = screen.getAllByRole('combobox')
+    const sortSelect = selects.find((s) =>
+      Array.from(s.querySelectorAll('option')).some((o) => /Newest First/i.test(o.textContent || '')),
+    )
+    expect(sortSelect).toBeDefined()
+    await userEvent.selectOptions(sortSelect!, 'newest')
+
+    // Expect no scrollToIndex call
+    expect(mockScrollToIndex).not.toHaveBeenCalled()
+  })
+})
+
+it('scrolls to the correct fresh index after sort order changes then selection changes', async () => {
+    const findings = [
+      makeFinding({ id: 'f1', title: 'Finding Alpha', severity: 'critical', discovered_at: '2024-01-01T00:00:00Z' }),
+      makeFinding({ id: 'f2', title: 'Finding Beta', severity: 'high', discovered_at: '2024-01-03T00:00:00Z' }),
+      makeFinding({ id: 'f3', title: 'Finding Gamma', severity: 'medium', discovered_at: '2024-01-02T00:00:00Z' }),
+    ]
+    vi.mocked(getFindings).mockResolvedValue({ findings })
+
+    render(<Findings />)
+    await waitFor(() => expect(screen.queryByText('Synchronizing findings feed...')).not.toBeInTheDocument())
+
+    // Switch to "newest" sort — new order is Beta(0), Gamma(1), Alpha(2)
+    const selects = screen.getAllByRole('combobox')
+    const sortSelect = selects.find((s) =>
+      Array.from(s.querySelectorAll('option')).some((o) => /Newest First/i.test(o.textContent || '')),
+    )
+    await userEvent.selectOptions(sortSelect!, 'newest')
+
+    mockScrollToIndex.mockClear()
+
+    // Now select Gamma — should scroll to its *post-sort* index (1), not a stale pre-sort index
+    const gammaOption = await screen.findByRole('option', { name: /Finding Gamma/i })
+    await userEvent.click(gammaOption)
+
+    expect(mockScrollToIndex).toHaveBeenCalledWith(1, { align: 'auto', behavior: 'smooth' })
+  })

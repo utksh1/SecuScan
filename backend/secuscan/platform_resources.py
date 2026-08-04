@@ -26,7 +26,7 @@ def _stable_asset_id(target: str, host: Any, port: Any, protocol: Any) -> str:
             str(protocol or "").strip().lower(),
         ]
     )
-    digest = hashlib.sha1(material.encode("utf-8")).hexdigest()[:16]
+    digest = hashlib.sha1(material.encode("utf-8"), usedforsecurity=False).hexdigest()[:16]
     return f"asset:{digest}"
 
 

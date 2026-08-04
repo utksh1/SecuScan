@@ -141,6 +141,14 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
         "stripe_key",
         re.compile(r"(sk_(?:live|test)_[A-Za-z0-9]{24,})", re.IGNORECASE),
     ),
+    # Vault references (e.g. vault:secret_name or vault://secret_name)
+    (
+        "vault_ref",
+        re.compile(
+            r"((?:vault://|vault\s*:\s*)\s*)([A-Za-z0-9_\-\./]+)",
+            re.IGNORECASE,
+        ),
+    ),
     # Generic long hex secrets often used as tokens (≥ 32 hex chars after label)
     (
         "hex_secret",
@@ -151,6 +159,7 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
         ),
     ),
 ]
+
 
 # ── Public API ────────────────────────────────────────────────────────────────
 

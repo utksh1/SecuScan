@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import json
 import uuid
 
@@ -399,6 +399,7 @@ async def test_execute_task_blocked_by_network_policy(setup_test_environment):
     # Policy engine that always denies
     mock_engine = MagicMock()
     mock_engine.check_access.return_value = (False, "Blocked by denylist rule: test", None)
+    mock_engine.resolve_and_pin.return_value = ("10.0.0.1", False, "Blocked by denylist rule: test")
 
     with patch("backend.secuscan.executor.settings") as mock_settings, \
          patch("backend.secuscan.executor.get_policy_engine", return_value=mock_engine), \
@@ -409,6 +410,7 @@ async def test_execute_task_blocked_by_network_policy(setup_test_environment):
         mock_settings.docker_enabled = False
         mock_settings.raw_output_dir = settings.raw_output_dir
         mock_settings.sandbox_timeout = 600
+        mock_settings.dns_resolution_timeout_seconds = "5.0"
 
         mock_limiter.release = AsyncMock()
         mock_pm.return_value.get_plugin.return_value = MagicMock(name="nmap", presets={})
@@ -451,6 +453,7 @@ async def test_execute_task_allowed_by_network_policy(setup_test_environment):
 
     mock_engine = MagicMock()
     mock_engine.check_access.return_value = (True, "Allowed by allowlist rule: test", None)
+    mock_engine.resolve_and_pin.return_value = ("8.8.8.8", True, "Allowed by allowlist rule: test")
 
     async def fake_command(*args, **kwargs):
         return "80/tcp open http", 0
@@ -465,6 +468,7 @@ async def test_execute_task_allowed_by_network_policy(setup_test_environment):
         mock_settings.docker_enabled = False
         mock_settings.raw_output_dir = settings.raw_output_dir
         mock_settings.sandbox_timeout = 600
+        mock_settings.dns_resolution_timeout_seconds = "5.0"
 
         mock_limiter.release = AsyncMock()
 
@@ -490,7 +494,7 @@ async def test_execute_task_allowed_by_network_policy(setup_test_environment):
     assert row["status"] == TaskStatus.COMPLETED.value, (
         f"Expected COMPLETED, got {row['status']}"
     )
-    mock_engine.check_access.assert_called_once()
+    mock_engine.resolve_and_pin.assert_called_once()
     mock_limiter.release.assert_called_once_with(task_id)
     await db.disconnect()
 
@@ -520,6 +524,7 @@ async def test_execute_task_network_policy_log_only(setup_test_environment):
     # Policy denies target
     mock_engine = MagicMock()
     mock_engine.check_access.return_value = (False, "Blocked by denylist rule: test", None)
+    mock_engine.resolve_and_pin.return_value = ("10.0.0.1", False, "Blocked by denylist rule: test")
 
     async def fake_command(*args, **kwargs):
         return "80/tcp open http", 0
@@ -535,6 +540,7 @@ async def test_execute_task_network_policy_log_only(setup_test_environment):
         mock_settings.docker_enabled = False
         mock_settings.raw_output_dir = settings.raw_output_dir
         mock_settings.sandbox_timeout = 600
+        mock_settings.dns_resolution_timeout_seconds = "5.0"
 
         mock_limiter.release = AsyncMock()
 
@@ -559,7 +565,7 @@ async def test_execute_task_network_policy_log_only(setup_test_environment):
     row = await db.fetchone("SELECT status FROM tasks WHERE id = ?", (task_id,))
     # Task should successfully complete because network violation is ignored in log_only mode!
     assert row["status"] == TaskStatus.COMPLETED.value
-    mock_engine.check_access.assert_called_once()
+    mock_engine.resolve_and_pin.assert_called_once()
     await db.disconnect()
 
 @pytest.mark.asyncio
@@ -584,6 +590,7 @@ async def test_docker_network_autocreated_when_missing(setup_test_environment):
     # Policy allows the target so we reach the Docker block
     mock_engine = MagicMock()
     mock_engine.check_access.return_value = (True, "Allowed", None)
+    mock_engine.resolve_and_pin.return_value = ("8.8.8.8", True, "Allowed")
 
     call_count = 0
     async def fake_subprocess(*args, **kwargs):
@@ -613,6 +620,7 @@ async def test_docker_network_autocreated_when_missing(setup_test_environment):
 
         mock_settings.enforce_network_policy = True
         mock_settings.docker_enabled = True
+        mock_settings.dns_resolution_timeout_seconds = "5.0"
         mock_settings.docker_network = "restricted"
         mock_settings.sandbox_memory_mb = 512
         mock_settings.sandbox_cpu_quota = 0.5
@@ -666,6 +674,7 @@ async def test_docker_network_missing_and_create_fails(setup_test_environment):
     # Policy allows the target so we reach the Docker block
     mock_engine = MagicMock()
     mock_engine.check_access.return_value = (True, "Allowed", None)
+    mock_engine.resolve_and_pin.return_value = ("8.8.8.8", True, "Allowed")
 
     # All subprocess calls (inspect, create isolated, create fallback) return returncode=1
     async def fake_subprocess(*args, **kwargs):
@@ -686,6 +695,7 @@ async def test_docker_network_missing_and_create_fails(setup_test_environment):
 
         mock_settings.enforce_network_policy = True
         mock_settings.docker_enabled = True
+        mock_settings.dns_resolution_timeout_seconds = "5.0"
         mock_settings.docker_network = "restricted"
         mock_settings.sandbox_memory_mb = 512
         mock_settings.sandbox_cpu_quota = 0.5
@@ -717,9 +727,9 @@ async def test_docker_network_missing_and_create_fails(setup_test_environment):
 @pytest.mark.asyncio
 async def test_enforce_guardrails_empty_target():
     executor = TaskExecutor()
-    # If target is empty, enforce_guardrails should immediately return True
+    # If target is empty, enforce_guardrails should immediately return (True, None)
     res = await executor._enforce_guardrails("", "nmap", False, "task-1")
-    assert res is True
+    assert res == (True, None)
 
 
 @pytest.mark.asyncio
@@ -747,7 +757,7 @@ async def test_enforce_guardrails_validation_failure(setup_test_environment):
         mock_to_thread.return_value = (False, "invalid target")
 
         res = await executor._enforce_guardrails("127.0.0.1", "nmap", True, task_id)
-        assert res is False
+        assert res == (False, None)
 
     row = await db.fetchone("SELECT status, error_message FROM tasks WHERE id = ?", (task_id,))
     assert row["status"] == TaskStatus.FAILED.value
@@ -770,6 +780,7 @@ async def test_enforce_guardrails_network_policy_failure(setup_test_environment)
 
     mock_engine = MagicMock()
     mock_engine.check_access.return_value = (False, "Blocked by policy", None)
+    mock_engine.resolve_and_pin.return_value = ("10.0.0.1", False, "Blocked by policy")
 
     with patch("backend.secuscan.executor.settings") as mock_settings, \
          patch("backend.secuscan.executor.get_policy_engine", return_value=mock_engine), \
@@ -784,7 +795,7 @@ async def test_enforce_guardrails_network_policy_failure(setup_test_environment)
         mock_pm.return_value.get_plugin.return_value = mock_plugin
 
         res = await executor._enforce_guardrails("10.0.0.1", "nmap", False, task_id)
-        assert res is False
+        assert res == (False, None)
 
     row = await db.fetchone("SELECT status, error_message FROM tasks WHERE id = ?", (task_id,))
     assert row["status"] == TaskStatus.FAILED.value
@@ -1000,4 +1011,438 @@ async def test_execute_task_aborts_when_task_deleted_before_running(setup_test_e
         await executor.execute_task(task_id)
 
     assert task_id not in executor.running_tasks
+    await db.disconnect()
+
+# ---------------------------------------------------------------------------
+# Upsert atomicity tests (PR #1618)
+# ---------------------------------------------------------------------------
+
+def _make_minimal_finding(finding_group_id, severity="medium", **overrides):
+    base = {
+        "finding_group_id": finding_group_id,
+        "title": "Open SSH Port",
+        "category": "Network",
+        "severity": severity,
+        "description": "SSH port 22 is exposed",
+        "target": "127.0.0.1",
+    }
+    base.update(overrides)
+    return base
+
+
+async def _insert_task(db, owner_id=None):
+    task_id = str(uuid.uuid4())
+    await db.execute(
+        "INSERT INTO tasks (id, owner_id, plugin_id, tool_name, target, inputs_json, status, consent_granted, safe_mode) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (task_id, owner_id or str(uuid.uuid4()), "nmap", "nmap", "127.0.0.1",
+         "{}", TaskStatus.RUNNING.value, 1, 0),
+    )
+    return task_id
+
+
+@pytest.mark.asyncio
+async def test_upsert_same_finding_group_accumulates_occurrence_count(setup_test_environment):
+    await init_db(settings.database_path)
+    db = await get_db()
+    executor = TaskExecutor()
+
+    owner_id = str(uuid.uuid4())
+    group_id = "vuln:openssh-port"
+
+    task_a = await _insert_task(db, owner_id)
+    task_b = await _insert_task(db, owner_id)
+
+    finding_a = _make_minimal_finding(group_id)
+    result_a = await executor._persist_finding(
+        db, owner_id=owner_id, task_id=task_a,
+        plugin_id="nmap", target="127.0.0.1", finding=finding_a,
+    )
+
+    finding_b = _make_minimal_finding(group_id)
+    result_b = await executor._persist_finding(
+        db, owner_id=owner_id, task_id=task_b,
+        plugin_id="nmap", target="127.0.0.1", finding=finding_b,
+    )
+
+    rows = await db.fetchall(
+        "SELECT id, occurrence_count FROM findings WHERE owner_id = ? AND finding_group_id = ?",
+        (owner_id, group_id),
+    )
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["occurrence_count"] == 2
+    assert result_a["occurrence_count"] == 1
+    assert result_b["occurrence_count"] == 2
+
+    await db.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_upsert_different_finding_groups_create_separate_rows(setup_test_environment):
+    await init_db(settings.database_path)
+    db = await get_db()
+    executor = TaskExecutor()
+
+    owner_id = str(uuid.uuid4())
+    task_id = await _insert_task(db, owner_id)
+
+    result_a = await executor._persist_finding(
+        db, owner_id=owner_id, task_id=task_id,
+        plugin_id="nmap", target="10.0.0.1", finding=_make_minimal_finding("vuln:group-a"),
+    )
+    result_b = await executor._persist_finding(
+        db, owner_id=owner_id, task_id=task_id,
+        plugin_id="nmap", target="10.0.0.2", finding=_make_minimal_finding("vuln:group-b"),
+    )
+
+    rows = await db.fetchall(
+        "SELECT id, finding_group_id, occurrence_count FROM findings WHERE owner_id = ? ORDER BY finding_group_id",
+        (owner_id,),
+    )
+    assert len(rows) == 2
+    assert rows[0]["finding_group_id"] == "vuln:group-a"
+    assert rows[0]["occurrence_count"] == 1
+    assert rows[1]["finding_group_id"] == "vuln:group-b"
+    assert rows[1]["occurrence_count"] == 1
+
+    await db.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_upsert_updates_severity_and_last_seen_on_subsequent_discovery(setup_test_environment):
+    await init_db(settings.database_path)
+    db = await get_db()
+    executor = TaskExecutor()
+
+    owner_id = str(uuid.uuid4())
+    task_id = await _insert_task(db, owner_id)
+
+    old_ts = "2024-01-01T00:00:00"
+    result_1 = await executor._persist_finding(
+        db, owner_id=owner_id, task_id=task_id,
+        plugin_id="nmap", target="127.0.0.1",
+        finding=_make_minimal_finding("vuln:openssh-port", severity="low", first_seen_at=old_ts, last_seen_at=old_ts),
+    )
+
+    new_ts = "2024-06-15T12:00:00"
+    result_2 = await executor._persist_finding(
+        db, owner_id=owner_id, task_id=task_id,
+        plugin_id="nmap", target="127.0.0.1",
+        finding=_make_minimal_finding("vuln:openssh-port", severity="critical", first_seen_at=new_ts, last_seen_at=new_ts),
+    )
+
+    rows = await db.fetchall(
+        "SELECT severity, last_seen_at, occurrence_count FROM findings WHERE owner_id = ? AND finding_group_id = ?",
+        (owner_id, "vuln:openssh-port"),
+    )
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["severity"] == "critical"
+    assert row["last_seen_at"] == new_ts
+    assert row["occurrence_count"] == 2
+
+    await db.disconnect()
+
+
+# ---------------------------------------------------------------------------
+# Atomicity regression tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_transaction_rolls_back_findings_on_failure(setup_test_environment):
+    await init_db(settings.database_path)
+    db = await get_db()
+
+    task_id = str(uuid.uuid4())
+    owner_id = str(uuid.uuid4())
+    await db.execute(
+        "INSERT INTO tasks (id, owner_id, plugin_id, tool_name, target, inputs_json, status, consent_granted, safe_mode) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (task_id, owner_id, "nmap", "nmap", "127.0.0.1", "{}", TaskStatus.RUNNING.value, 1, 0)
+    )
+
+    executor = TaskExecutor()
+
+    mock_plugin = MagicMock()
+    mock_plugin.id = "nmap"
+    mock_plugin.name = "Nmap"
+    mock_plugin.output = {"parser": "builtin_nmap", "format": "text"}
+    mock_plugin.category = "Network"
+
+    with patch("backend.secuscan.executor.get_plugin_manager") as mock_pm:
+        mock_pm.return_value.build_command.return_value = ["nmap", "127.0.0.1"]
+        parser = MagicMock(return_value={"findings": [
+            {"title": "F1", "category": "N", "severity": "low", "description": "d1"},
+            {"title": "F2", "category": "N", "severity": "low", "description": "d2"},
+        ]})
+        executor._parse_results = parser
+
+        with patch.object(executor, "_persist_result_resources",
+                          side_effect=ValueError("DB write failed")):
+            findings_before = await db.fetchall(
+                "SELECT id FROM findings WHERE task_id = ?", (task_id,)
+            )
+            row_before = await db.fetchone(
+                "SELECT structured_json FROM tasks WHERE id = ?", (task_id,)
+            )
+
+            try:
+                await executor._upsert_findings_and_report(
+                    db=db, task_id=task_id, owner_id=owner_id,
+                    plugin=mock_plugin, plugin_id="nmap",
+                    target="127.0.0.1", status="failed", output="",
+                )
+            except ValueError:
+                pass
+
+    findings_after = await db.fetchall(
+        "SELECT id FROM findings WHERE task_id = ?", (task_id,)
+    )
+    row_after = await db.fetchone(
+        "SELECT structured_json FROM tasks WHERE id = ?", (task_id,)
+    )
+
+    assert len(findings_before) == 0
+    assert len(findings_after) == 0
+    assert row_before["structured_json"] is None
+    assert row_after["structured_json"] is None
+
+    await db.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_transaction_rolls_back_findings_and_report(setup_test_environment):
+    await init_db(settings.database_path)
+    db = await get_db()
+
+    task_id = str(uuid.uuid4())
+    owner_id = str(uuid.uuid4())
+    await db.execute(
+        "INSERT INTO tasks (id, owner_id, plugin_id, tool_name, target, inputs_json, status, consent_granted, safe_mode) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (task_id, owner_id, "nmap", "nmap", "127.0.0.1", "{}", TaskStatus.RUNNING.value, 1, 0)
+    )
+
+    executor = TaskExecutor()
+
+    mock_plugin = MagicMock()
+    mock_plugin.id = "nmap"
+    mock_plugin.name = "Nmap"
+    mock_plugin.output = {"parser": "builtin_nmap", "format": "text"}
+    mock_plugin.category = "Network"
+
+    with patch("backend.secuscan.executor.get_plugin_manager") as mock_pm:
+        mock_pm.return_value.build_command.return_value = ["nmap", "127.0.0.1"]
+        parser = MagicMock(return_value={"findings": [
+            {"title": "F1", "category": "N", "severity": "low", "description": "d1"},
+        ]})
+        executor._parse_results = parser
+
+        with patch.object(executor, "_persist_result_resources",
+                          side_effect=ValueError("Asset service write failed")):
+            try:
+                await executor._upsert_findings_and_report(
+                    db=db, task_id=task_id, owner_id=owner_id,
+                    plugin=mock_plugin, plugin_id="nmap",
+                    target="127.0.0.1", status="failed", output="",
+                )
+            except ValueError:
+                pass
+
+    findings = await db.fetchall(
+        "SELECT id FROM findings WHERE task_id = ?", (task_id,)
+    )
+    reports = await db.fetchall(
+        "SELECT id FROM reports WHERE task_id = ?", (task_id,)
+    )
+    assert len(findings) == 0
+    assert len(reports) == 0
+
+    await db.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_nested_transaction_rollback_on_exception(setup_test_environment):
+    await init_db(settings.database_path)
+    db = await get_db()
+
+    task_id = str(uuid.uuid4())
+    await db.execute(
+        "INSERT INTO tasks (id, owner_id, plugin_id, tool_name, target, inputs_json, status, consent_granted, safe_mode) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (task_id, "default", "test", "test", "t", "{}", TaskStatus.QUEUED.value, 1, 1)
+    )
+
+    assert db._in_transaction is False
+    await db.begin()
+    assert db._in_transaction is True
+
+    await db.execute(
+        "INSERT INTO findings (id, owner_id, task_id, plugin_id, title, category, severity, target, description) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ("f1", "default", task_id, "test", "Outer", "T", "low", "t", "outer finding")
+    )
+
+    assert db._in_transaction is True
+    async with db.transaction():
+        assert db._in_transaction is True
+        await db.execute(
+            "INSERT INTO findings (id, owner_id, task_id, plugin_id, title, category, severity, target, description) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ("f2", "default", task_id, "test", "Nested", "T", "low", "t", "nested finding")
+        )
+    assert db._in_transaction is True
+
+    await db.rollback()
+    assert db._in_transaction is False
+
+    rows = await db.fetchall("SELECT id FROM findings WHERE task_id = ?", (task_id,))
+    assert len(rows) == 0
+
+    await db.disconnect()
+
+# ---------------------------------------------------------------------------
+# Regression: URL inputs must not be replaced with pinned IP
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_pinned_ip_does_not_replace_url_target(setup_test_environment):
+    await init_db(settings.database_path)
+    db = await get_db()
+
+    task_id = str(uuid.uuid4())
+    await db.execute(
+        """
+        INSERT INTO tasks (id, plugin_id, tool_name, target, inputs_json,
+                           status, consent_granted, safe_mode)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (task_id, "nmap", "nmap", "https://example.com/path",
+         '{"url":"https://example.com/path","target":"https://example.com/path"}',
+         TaskStatus.QUEUED.value, 1, 0)
+    )
+
+    executor = TaskExecutor()
+
+    mock_engine = MagicMock()
+    mock_engine.resolve_and_pin.return_value = ("93.184.216.34", True, "Allowed")
+
+    original_inputs_seen = {}
+
+    async def fake_execute_std_scanner(db, **kwargs):
+        original_inputs_seen.update(kwargs.get("inputs", {}))
+        return TaskStatus.COMPLETED.value, 0.5, 0
+
+    async def fake_command(*args, **kwargs):
+        return "80/tcp open http", 0
+
+    with patch("backend.secuscan.executor.settings") as mock_settings, \
+         patch("backend.secuscan.executor.get_policy_engine", return_value=mock_engine), \
+         patch.object(executor, "_execute_command", side_effect=fake_command), \
+         patch.object(executor, "_execute_standard_scanner", side_effect=fake_execute_std_scanner), \
+         patch("backend.secuscan.executor.concurrent_limiter") as mock_limiter, \
+         patch("backend.secuscan.executor.get_plugin_manager") as mock_pm:
+
+        mock_settings.enforce_network_policy = True
+        mock_settings.docker_enabled = False
+        mock_settings.raw_output_dir = settings.raw_output_dir
+        mock_settings.sandbox_timeout = 600
+        mock_settings.dns_resolution_timeout_seconds = "5.0"
+        mock_settings.network_policy_failure_mode = "block"
+
+        mock_limiter.release = AsyncMock()
+
+        mock_plugin = MagicMock()
+        mock_plugin.name = "nmap"
+        mock_plugin.presets = {}
+        mock_plugin.docker_image = None
+        mock_plugin.output = {"parser": "builtin_nmap", "format": "text"}
+        mock_plugin.category = "Network"
+        mock_plugin.id = "nmap"
+        mock_pm.return_value.get_plugin.return_value = mock_plugin
+        mock_pm.return_value.build_command.return_value = ["nmap", "https://example.com/path"]
+        mock_pm.return_value.plugins_dir = MagicMock()
+        mock_pm.return_value.plugins_dir.__truediv__ = MagicMock(
+            return_value=MagicMock(
+                __truediv__=MagicMock(return_value=MagicMock(exists=lambda: False))
+            )
+        )
+
+        await executor.execute_task(task_id)
+
+    assert original_inputs_seen.get("url") == "https://example.com/path"
+    assert original_inputs_seen.get("target") == "https://example.com/path"
+    assert original_inputs_seen.get("__pinned_ip") == "93.184.216.34"
+    mock_engine.resolve_and_pin.assert_called_once()
+    await db.disconnect()
+
+
+@pytest.mark.asyncio
+async def test_pinned_ip_preserves_host_input_for_host_header_scanners(setup_test_environment):
+    await init_db(settings.database_path)
+    db = await get_db()
+
+    task_id = str(uuid.uuid4())
+    await db.execute(
+        """
+        INSERT INTO tasks (id, plugin_id, tool_name, target, inputs_json,
+                           status, consent_granted, safe_mode)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (task_id, "nmap", "nmap", "example.com",
+         '{"host":"example.com","domain":"example.com"}',
+         TaskStatus.QUEUED.value, 1, 0)
+    )
+
+    executor = TaskExecutor()
+    mock_engine = MagicMock()
+    mock_engine.resolve_and_pin.return_value = ("93.184.216.34", True, "Allowed")
+
+    original_inputs_seen = {}
+
+    async def fake_execute_std_scanner(db, **kwargs):
+        original_inputs_seen.update(kwargs.get("inputs", {}))
+        return TaskStatus.COMPLETED.value, 0.5, 0
+
+    async def fake_command(*args, **kwargs):
+        return "80/tcp open http", 0
+
+    with patch("backend.secuscan.executor.settings") as mock_settings, \
+         patch("backend.secuscan.executor.get_policy_engine", return_value=mock_engine), \
+         patch.object(executor, "_execute_command", side_effect=fake_command), \
+         patch.object(executor, "_execute_standard_scanner", side_effect=fake_execute_std_scanner), \
+         patch("backend.secuscan.executor.concurrent_limiter") as mock_limiter, \
+         patch("backend.secuscan.executor.get_plugin_manager") as mock_pm:
+
+        mock_settings.enforce_network_policy = True
+        mock_settings.docker_enabled = False
+        mock_settings.raw_output_dir = settings.raw_output_dir
+        mock_settings.sandbox_timeout = 600
+        mock_settings.dns_resolution_timeout_seconds = "5.0"
+        mock_settings.network_policy_failure_mode = "block"
+
+        mock_limiter.release = AsyncMock()
+
+        mock_plugin = MagicMock()
+        mock_plugin.name = "nmap"
+        mock_plugin.presets = {}
+        mock_plugin.docker_image = None
+        mock_plugin.output = {"parser": "builtin_nmap", "format": "text"}
+        mock_plugin.category = "Network"
+        mock_plugin.id = "nmap"
+        mock_pm.return_value.get_plugin.return_value = mock_plugin
+        mock_pm.return_value.build_command.return_value = ["nmap", "example.com"]
+        mock_pm.return_value.plugins_dir = MagicMock()
+        mock_pm.return_value.plugins_dir.__truediv__ = MagicMock(
+            return_value=MagicMock(
+                __truediv__=MagicMock(return_value=MagicMock(exists=lambda: False))
+            )
+        )
+
+        await executor.execute_task(task_id)
+
+    assert original_inputs_seen.get("host") == "example.com"
+    assert original_inputs_seen.get("domain") == "example.com"
+    assert original_inputs_seen.get("__pinned_ip") == "93.184.216.34"
     await db.disconnect()
