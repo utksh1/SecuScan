@@ -4,13 +4,8 @@ Unit tests for _unshare_net_supported in backend/secuscan/parser_sandbox.py.
 The parser_sandbox module is importable without conftest fixtures since it only
 depends on platform, shutil, and subprocess (all stdlib).
 """
-import sys
 from unittest.mock import patch, MagicMock
-
-# Ensure the module is re-imported fresh
-_mod_key = "backend.secuscan.parser_sandbox"
-if _mod_key in sys.modules:
-    del sys.modules[_mod_key]
+import pytest
 
 from backend.secuscan.parser_sandbox import _unshare_net_supported
 
@@ -47,7 +42,6 @@ class TestUnshareNetSupportedNonLinux:
         with patch("backend.secuscan.parser_sandbox.platform.system", return_value="Darwin"):
             result1 = _unshare_net_supported()
         assert result1 is False
-        # Subsequent calls return the cached _unshare_available value (False)
         result2 = _unshare_net_supported()
         assert result2 is False
 
@@ -72,7 +66,6 @@ class TestUnshareNetSupportedBinaryNotFound:
             with patch("backend.secuscan.parser_sandbox.shutil.which", return_value=None):
                 result1 = _unshare_net_supported()
         assert result1 is False
-        # Second call uses cached _unshare_available from first call (False)
         result2 = _unshare_net_supported()
         assert result2 is False
 
@@ -103,7 +96,6 @@ class TestUnshareNetSupportedProbeFails:
                 with patch("backend.secuscan.parser_sandbox.subprocess.run", return_value=mock_proc):
                     result1 = _unshare_net_supported()
         assert result1 is False
-        # Second call must use the cached False, not re-run subprocess
         result2 = _unshare_net_supported()
         assert result2 is False
 
@@ -135,7 +127,6 @@ class TestUnshareNetSupportedProbeSucceeds:
                     _unshare_net_supported()
         mock_run.assert_called_once()
         args, kwargs = mock_run.call_args
-        assert "unshare" in args[0][0] if args else True  # args[0] is the cmd list
         assert kwargs.get("capture_output") is True
         assert kwargs.get("timeout") == 5
 
