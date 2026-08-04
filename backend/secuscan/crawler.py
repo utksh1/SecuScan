@@ -68,7 +68,7 @@ def _validate_header_item(key: str, value: str) -> None:
         raise ValueError("Header names and values must not contain CR or LF characters.")
     if not _HEADER_NAME_re.match(key):
         raise ValueError(f"Invalid HTTP header name : {key!r}")
-    
+
 def _build_headers(extra_headers: Dict[str, Any] | None = None) -> Dict[str, str]:
     headers: Dict[str, str] = {
         "User-Agent": "SecuScan-Crawler/1.0",
