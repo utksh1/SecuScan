@@ -306,7 +306,40 @@ class TestRedaction:
 
 
 # ---------------------------------------------------------------------------
-# 5. Volume — the acceptance criterion
+# 5. CSV formula injection (CWE-1236)
+# ---------------------------------------------------------------------------
+
+class TestFormulaInjection:
+    """Same defence #2394 adds to the task-report CSV, for the findings CSV."""
+
+    def test_formula_injection_from_a_scan_is_neutralized(self, test_client, seeded_task):
+        """A hostile finding title must reach the CSV as text, not a formula.
+
+        Titles come from scanner output, so this is reachable end to end by
+        anything that reflects a page title or a service banner.
+        """
+        _seed_finding(
+            "f-formula",
+            seeded_task,
+            title='=HYPERLINK("http://attacker.example","click")',
+        )
+
+        r = export(test_client, format="csv")
+
+        assert r.status_code == 200
+        title_cell = csv_rows(r)[1][1]
+        assert title_cell.startswith("'="), f"formula written raw: {title_cell!r}"
+
+    def test_description_is_defended_too(self, test_client, seeded_task):
+        _seed_finding("f-desc", seeded_task, description="@SUM(A1:A2)")
+
+        r = export(test_client, format="csv")
+
+        assert csv_rows(r)[1][12] == "'@SUM(A1:A2)"
+
+
+# ---------------------------------------------------------------------------
+# 6. Volume — the acceptance criterion
 # ---------------------------------------------------------------------------
 
 class TestLargeExports:
@@ -368,7 +401,7 @@ class TestLargeExports:
 
 
 # ---------------------------------------------------------------------------
-# 6. Request cap
+# 7. Request cap
 # ---------------------------------------------------------------------------
 
 class TestExportCap:
@@ -403,7 +436,7 @@ class TestExportCap:
 
 
 # ---------------------------------------------------------------------------
-# 7. Auth
+# 8. Auth
 # ---------------------------------------------------------------------------
 
 class TestAuthRequired:

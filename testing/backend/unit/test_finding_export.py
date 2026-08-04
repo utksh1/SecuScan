@@ -20,6 +20,7 @@ from backend.secuscan.finding_export import (
     export_filename,
     finding_csv_row,
     redacted_finding,
+    sanitize_csv_cell,
     stream_csv,
     stream_json,
 )
@@ -147,6 +148,72 @@ class TestCsvEscaping:
 
         assert len(rows) == 2, "an embedded newline leaked into the row structure"
         assert rows[1][12] == "line one\nline two"
+
+
+# ---------------------------------------------------------------------------
+# CSV formula injection (CWE-1236)
+# ---------------------------------------------------------------------------
+# Findings carry scanner output, so cell content is attacker-influenced. Same
+# defence as ReportGenerator._sanitize_csv_cell for the task-report CSV (#2394);
+# the two paths must not disagree about what is safe to hand a spreadsheet.
+
+class TestFormulaInjection:
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            '=HYPERLINK("http://attacker.example","click")',
+            "+cmd|'/C calc'!A0",
+            "-2+3",
+            "@SUM(A1:A2)",
+        ],
+    )
+    def test_formula_prefixes_are_neutralized(self, payload):
+        assert sanitize_csv_cell(payload) == "'" + payload
+
+    def test_ordinary_text_is_untouched(self):
+        assert sanitize_csv_cell("Open port 22") == "Open port 22"
+        assert sanitize_csv_cell("") == ""
+        assert sanitize_csv_cell("9.8") == "9.8"
+
+    def test_every_text_column_is_defended(self):
+        """A guard on the title alone would leave eleven other ways in."""
+        hostile = "=1+1"
+        row = finding_csv_row(
+            {
+                "id": hostile,
+                "title": hostile,
+                "severity": hostile,
+                "category": hostile,
+                "target": hostile,
+                "discovered_at": hostile,
+                "cve": hostile,
+                "analyst_status": hostile,
+                "description": hostile,
+                "remediation": hostile,
+            }
+        )
+        assert all(cell in ("'=1+1", "", "false") for cell in row), row
+
+    @pytest.mark.anyio
+    async def test_payload_survives_as_literal_text_through_the_csv(self):
+        payload = '=HYPERLINK("http://attacker.example","click")'
+        findings = [{"id": "f-1", "title": payload}]
+
+        text = await _collect(stream_csv, findings)
+        rows = list(csv.reader(io.StringIO(text)))
+
+        # Quoted and prefixed: a reader gets the original string back, but a
+        # spreadsheet sees text rather than a formula.
+        assert rows[1][1] == "'" + payload
+        assert not rows[1][1].startswith("=")
+
+    @pytest.mark.anyio
+    async def test_json_export_is_not_quote_prefixed(self):
+        """The guard is a CSV concern — JSON consumers must get the real value."""
+        payload = "=1+1"
+        text = await _collect(stream_json, [{"id": "f-1", "title": payload}])
+        assert json.loads(text)[0]["title"] == payload
 
 
 # ---------------------------------------------------------------------------

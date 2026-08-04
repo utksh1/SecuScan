@@ -95,6 +95,30 @@ def redacted_finding(finding: Dict[str, Any]) -> Dict[str, Any]:
     return exported
 
 
+# Spreadsheet applications evaluate a cell beginning with any of these as a
+# formula, so a finding title of ``=HYPERLINK("http://attacker","click")``
+# becomes a live link when the export is opened.
+_FORMULA_PREFIXES: tuple[str, ...] = ("=", "+", "-", "@")
+
+
+def sanitize_csv_cell(value: str) -> str:
+    """Neutralize CSV formula injection (CWE-1236).
+
+    Findings carry scanner output — page titles, banners, reflected headers —
+    so cell content is attacker-influenced. Prefixing with a single quote makes
+    the spreadsheet treat the cell as literal text.
+
+    Deliberately mirrors ``ReportGenerator._sanitize_csv_cell`` in
+    :mod:`backend.secuscan.reporting` (added by #2394 for the task-report CSV).
+    Both paths write findings to a spreadsheet and must not disagree about what
+    is safe; folding them into one helper is a worthwhile follow-up once both
+    have landed.
+    """
+    if value and value[0] in _FORMULA_PREFIXES:
+        return "'" + value
+    return value
+
+
 def _text(value: Any) -> str:
     if value is None:
         return ""
@@ -109,22 +133,31 @@ def _number(value: Any) -> str:
 
 
 def finding_csv_row(finding: Dict[str, Any]) -> List[str]:
-    """Build one CSV row from an already-redacted finding."""
+    """Build one CSV row from an already-redacted finding.
+
+    Every cell goes through :func:`sanitize_csv_cell`. The booleans and numeric
+    columns cannot start with a formula prefix in valid data, but they are not
+    exempted — a column that is only safe while the data is well-formed is not
+    a guarantee worth relying on.
+    """
     return [
-        _text(finding.get("id")),
-        _text(finding.get("title")),
-        _text(finding.get("severity")),
-        _text(finding.get("category")),
-        _text(finding.get("target")),
-        _text(finding.get("discovered_at")),
-        _number(finding.get("cvss")),
-        _text(finding.get("cve")),
-        _number(finding.get("risk_score")),
-        _number(finding.get("confidence")),
-        "true" if finding.get("validated") else "false",
-        _text(finding.get("analyst_status")),
-        _text(finding.get("description")),
-        _text(finding.get("remediation")),
+        sanitize_csv_cell(cell)
+        for cell in (
+            _text(finding.get("id")),
+            _text(finding.get("title")),
+            _text(finding.get("severity")),
+            _text(finding.get("category")),
+            _text(finding.get("target")),
+            _text(finding.get("discovered_at")),
+            _number(finding.get("cvss")),
+            _text(finding.get("cve")),
+            _number(finding.get("risk_score")),
+            _number(finding.get("confidence")),
+            "true" if finding.get("validated") else "false",
+            _text(finding.get("analyst_status")),
+            _text(finding.get("description")),
+            _text(finding.get("remediation")),
+        )
     ]
 
 
