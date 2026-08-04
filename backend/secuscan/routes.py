@@ -2136,6 +2136,21 @@ async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_o
     for step in steps:
         execution_context = normalize_execution_context(step.get("execution_context") or {})
         target_policy = await get_target_policy(db, owner, execution_context.get("target_policy_id"))
+        plugin = get_plugin_manager().get_plugin(step.get("plugin_id"))
+        if not plugin:
+            logger.warning("Workflow %s: plugin %s not found, skipping step", workflow_id, step.get("plugin_id"))
+            continue
+        requires_exploit_policy = (
+            plugin.safety.get("level") == "exploit"
+            or execution_context.get("validation_mode") == ValidationMode.CONTROLLED_EXTRACT.value
+        )
+        if requires_exploit_policy and not (target_policy and target_policy.get("allow_exploit_validation")):
+            logger.warning(
+                "Workflow %s: skipping exploit-level step %s: no target policy allows exploit validation",
+                workflow_id,
+                step.get("plugin_id"),
+            )
+            continue
         safe_mode = bool(
             settings.safe_mode_default
             and not (target_policy and target_policy.get("allow_public_targets"))
