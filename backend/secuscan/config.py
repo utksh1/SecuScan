@@ -151,6 +151,12 @@ class Settings(BaseSettings):
     parser_sandbox_timeout_seconds: int = 30
     parser_sandbox_max_output_bytes: int = 8 * 1024 * 1024  # 8 MB
 
+    # Bulk findings export. Findings are read from the database in batches of
+    # export_batch_size and streamed out, so the ceiling below bounds the work
+    # a single request can ask for, not the memory it costs to serve it.
+    max_export_findings: int = 10_000
+    export_batch_size: int = 500
+
     # Workflow Configuration
     workflow_min_interval_seconds: int = 60
 

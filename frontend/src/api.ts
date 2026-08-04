@@ -466,6 +466,70 @@ export function getFindingGroups(page: number = 1, perPage: number = 50) {
   return request<{ groups: FindingGroup[]; total: number; page: number; per_page: number }>(`/finding-groups?page=${page}&per_page=${perPage}`)
 }
 
+export type FindingExportFormat = 'csv' | 'json' | 'sarif'
+
+export interface FindingExportResult {
+  blob: Blob
+  /** How many findings the backend actually wrote, when it is readable. */
+  count: number | null
+}
+
+/** Exports run against the database, so they can outlast the 10s request timeout. */
+const EXPORT_TIMEOUT_MS = 120000
+
+/**
+ * Export findings from the backend rather than from loaded page state.
+ *
+ * Pass `findingIds` to export a selection, or omit it to export everything the
+ * caller owns — which is how a selection spanning unloaded pages is possible.
+ * An empty array exports nothing; it is never treated as "everything".
+ */
+export async function exportFindings(
+  format: FindingExportFormat,
+  findingIds?: string[],
+): Promise<FindingExportResult> {
+  const controller = new AbortController()
+  const timeoutId = window.setTimeout(() => controller.abort(), EXPORT_TIMEOUT_MS)
+
+  const apiKey = getApiKey()
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (apiKey) headers['X-Api-Key'] = apiKey
+
+  try {
+    const response = await fetch(`${API_BASE}/findings/export`, {
+      method: 'POST',
+      headers,
+      credentials: 'include',
+      signal: controller.signal,
+      body: JSON.stringify(
+        findingIds === undefined ? { format } : { format, finding_ids: findingIds },
+      ),
+    })
+
+    if (response.status === 401) {
+      _apiKey = null
+      window.dispatchEvent(new CustomEvent(AUTH_REQUIRED_EVENT))
+      throw new Error('AUTH_REQUIRED')
+    }
+
+    if (!response.ok) {
+      throw new Error(`Export failed: ${response.status}`)
+    }
+
+    // Only readable same-origin (or with the header explicitly exposed by CORS);
+    // callers fall back to their own count when it is absent.
+    const reported = response.headers.get('X-Export-Finding-Count')
+    const count = reported === null ? null : Number(reported)
+
+    return {
+      blob: await response.blob(),
+      count: count !== null && Number.isFinite(count) ? count : null,
+    }
+  } finally {
+    window.clearTimeout(timeoutId)
+  }
+}
+
 
 export function getReports() {
   return request('/reports')

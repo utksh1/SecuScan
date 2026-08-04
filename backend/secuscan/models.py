@@ -381,3 +381,32 @@ class NotificationDiagnosticsResponse(BaseModel):
 class BulkDeleteRequest(RootModel[Annotated[List[str], Field(max_length=MAX_BULK_DELETE)]]):
     """Accepts a JSON array of task IDs directly. Max 500 per request."""
     pass
+
+
+class FindingExportFormat(str, Enum):
+    """Serialization formats offered by the bulk findings export."""
+    CSV = "csv"
+    JSON = "json"
+    SARIF = "sarif"
+
+
+class FindingExportRequest(BaseModel):
+    """Body for POST /findings/export.
+
+    ``finding_ids`` distinguishes three cases deliberately:
+
+    * omitted / ``null`` — export every finding the caller owns. This is what
+      makes "export across all pages" possible without the client first
+      loading those pages.
+    * a list of ids — export exactly those, in whatever order the database
+      returns them. Ids the caller does not own are skipped rather than
+      rejected, so the endpoint cannot be used to probe for their existence.
+    * ``[]`` — export nothing. An empty selection must never be read as
+      "everything".
+
+    The upper bound on list length is enforced in the route against
+    ``settings.max_export_findings`` so operators can tune it without a code
+    change.
+    """
+    finding_ids: Optional[List[str]] = None
+    format: FindingExportFormat = FindingExportFormat.CSV

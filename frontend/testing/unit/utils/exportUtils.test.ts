@@ -1,66 +1,54 @@
-import { describe, test, expect } from "vitest";
-import { escapeCSV, serializeFindingsToCSV } from "../../../src/utils/exportUtils";
+import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
+import { downloadBlob, downloadFile, findingsExportFilename } from "../../../src/utils/exportUtils";
+
+// The CSV/JSON serializers that used to live here moved to the backend with
+// issue #1875 — the browser no longer builds export files, it downloads them.
+// Their column contract is now pinned by testing/backend/unit/test_finding_export.py.
 
 describe("exportUtils utility", () => {
-  test("escapeCSV handles standard inputs", () => {
-    expect(escapeCSV("hello")).toBe("hello");
-    expect(escapeCSV(123)).toBe("123");
-    expect(escapeCSV(null)).toBe("");
-    expect(escapeCSV(undefined)).toBe("");
+  let createObjectURL: ReturnType<typeof vi.fn>;
+  let revokeObjectURL: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    createObjectURL = vi.fn(() => "blob:mock-url");
+    revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", { ...URL, createObjectURL, revokeObjectURL });
   });
 
-  test("escapeCSV escapes quotes, commas, and newlines", () => {
-    expect(escapeCSV('hello, world')).toBe('"hello, world"');
-    expect(escapeCSV('hello "world"')).toBe('"hello ""world"""');
-    expect(escapeCSV('hello\nworld')).toBe('"hello\nworld"');
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
-  test("serializeFindingsToCSV generates correct headers and mapped rows", () => {
-    const sampleFindings = [
-      {
-        id: "f-1",
-        title: "SQL Injection",
-        severity: "critical",
-        category: "Database",
-        target: "http://target1.local",
-        discovered_at: "2026-05-12T10:30:00Z",
-        cvss: 9.8,
-        cve: "CVE-2026-1234",
-        risk_score: 9.5,
-        confidence: 0.9,
-        validated: true,
-        analyst_status: "confirmed",
-        description: "An injection vulnerability in input parameter.",
-        remediation: "Use parameterized queries."
-      },
-      {
-        id: "f-2",
-        title: "Information Disclosure, Version Leak",
-        severity: "info",
-        category: "Information",
-        target: "http://target2.local",
-        discovered_at: "2026-05-12T10:35:00Z",
-        cvss: null,
-        cve: undefined,
-        risk_score: 1.0,
-        confidence: 1.0,
-        validated: false,
-        analyst_status: "new",
-        description: "Version string \"1.2.3\" disclosed.",
-        remediation: "Disable version banners."
-      }
-    ];
+  test("downloadBlob triggers a download and releases the object URL", () => {
+    const click = vi.fn();
+    const anchor = document.createElement("a");
+    anchor.click = click;
+    vi.spyOn(document, "createElement").mockReturnValueOnce(anchor);
 
-    const csvContent = serializeFindingsToCSV(sampleFindings);
-    
-    // Header check
-    expect(csvContent).toContain("ID,Title,Severity,Category,Target,Discovered At,CVSS,CVE,Risk Score,Confidence,Validated,Analyst Status,Description,Remediation");
-    
-    // Row checks
-    expect(csvContent).toContain("f-1,SQL Injection,critical,Database,http://target1.local,2026-05-12T10:30:00Z,9.8,CVE-2026-1234,9.5,0.9,true,confirmed,An injection vulnerability in input parameter.,Use parameterized queries.");
-    
-    // Check comma escaping in title, quote escaping in description
-    expect(csvContent).toContain('"Information Disclosure, Version Leak"');
-    expect(csvContent).toContain('"Version string ""1.2.3"" disclosed."');
+    downloadBlob(new Blob(["payload"]), "findings.csv");
+
+    expect(anchor.download).toBe("findings.csv");
+    expect(anchor.href).toBe("blob:mock-url");
+    expect(click).toHaveBeenCalledOnce();
+    // Leaving the URL alive would leak the blob for the lifetime of the document.
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:mock-url");
+    expect(document.body.contains(anchor)).toBe(false);
+  });
+
+  test("downloadFile wraps its content in a blob of the given type", () => {
+    vi.spyOn(document, "createElement").mockReturnValueOnce(
+      Object.assign(document.createElement("a"), { click: vi.fn() }),
+    );
+
+    downloadFile("a,b,c", "findings.csv", "text/csv");
+
+    const blob = createObjectURL.mock.calls[0][0] as Blob;
+    expect(blob.type).toBe("text/csv");
+  });
+
+  test("findingsExportFilename is dated and carries the format extension", () => {
+    const when = new Date("2026-05-12T10:30:00Z");
+    expect(findingsExportFilename("csv", when)).toBe("secuscan_findings_2026-05-12.csv");
+    expect(findingsExportFilename("sarif", when)).toBe("secuscan_findings_2026-05-12.sarif");
   });
 });

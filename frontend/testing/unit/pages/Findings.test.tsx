@@ -8,14 +8,20 @@ import Findings from '../../../src/pages/Findings'
 
 vi.mock('../../../src/api', () => ({
   getFindings: vi.fn(),
+  exportFindings: vi.fn(),
 }))
 
 vi.mock('../../../src/utils/exportUtils', () => ({
-  exportFindingsAsCSV: vi.fn(),
-  exportFindingsAsJSON: vi.fn(),
+  downloadBlob: vi.fn(),
+  findingsExportFilename: (extension: string) => `secuscan_findings_2026-01-01.${extension}`,
 }))
 
-import { exportFindingsAsCSV, exportFindingsAsJSON } from '../../../src/utils/exportUtils'
+const mockAddToast = vi.fn()
+vi.mock('../../../src/components/ToastContext', () => ({
+  useToast: () => ({ addToast: mockAddToast }),
+}))
+
+import { downloadBlob } from '../../../src/utils/exportUtils'
 
 vi.mock('../../../src/utils/date', async (importOriginal: any) => {
   const actual = await importOriginal() as typeof import('../../../src/utils/date')
@@ -53,7 +59,7 @@ if (typeof global.ResizeObserver === 'undefined') {
 Object.defineProperty(HTMLElement.prototype, 'scrollHeight', { configurable: true, value: 800 })
 Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, value: 600 })
 
-import { getFindings } from '../../../src/api'
+import { getFindings, exportFindings } from '../../../src/api'
 
 // ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -350,7 +356,7 @@ describe('Findings — virtualized list', () => {
     await userEvent.click(checkboxF2)
     expect(checkboxF2).toBeChecked()
 
-    expect(screen.getByRole('button', { name: /Bulk Export/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Export Selected \(1\)/i })).toBeInTheDocument()
 
     expect(screen.getByRole('heading', { name: /SQL Injection/i, level: 2 })).toBeInTheDocument()
   })
@@ -376,33 +382,68 @@ describe('Findings — virtualized list', () => {
     expect(screen.getByLabelText('Select CSRF Vulnerability')).not.toBeChecked()
   })
 
-  it('trigger CSV and JSON bulk export calls utility function', async () => {
-    const findings = [
-      makeFinding({ id: 'f1', title: 'SQL Injection', severity: 'critical' }),
-    ]
-    vi.mocked(getFindings).mockResolvedValue({ findings })
+  // ── Bulk export (issue #1875) ──────────────────────────────────────────────
+  // Export is resolved by the backend from finding ids, so a selection is no
+  // longer limited to the findings this component has loaded.
 
+  async function renderWithFindings(findings: any[]) {
+    vi.mocked(getFindings).mockResolvedValue({ findings, total: findings.length })
+    vi.mocked(exportFindings).mockResolvedValue({
+      blob: new Blob(['exported']),
+      count: findings.length,
+    })
     render(<Findings />)
-    await waitFor(() => expect(screen.queryByText('Synchronizing findings feed...')).not.toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.queryByText('Synchronizing findings feed...')).not.toBeInTheDocument(),
+    )
+  }
+
+  it('sends the selected ids to the backend instead of serializing loaded rows', async () => {
+    await renderWithFindings([
+      makeFinding({ id: 'f1', title: 'SQL Injection', severity: 'critical' }),
+      makeFinding({ id: 'f2', title: 'CSRF Vulnerability', severity: 'high' }),
+    ])
 
     await userEvent.click(screen.getByLabelText('Select SQL Injection'))
+    await userEvent.click(screen.getByRole('button', { name: /Export Selected \(1\)/i }))
+    await userEvent.click(screen.getByRole('button', { name: /Export as CSV/i }))
 
-    const bulkExportBtn = screen.getByRole('button', { name: /Bulk Export/i })
-    await userEvent.click(bulkExportBtn)
+    await waitFor(() => expect(exportFindings).toHaveBeenCalledWith('csv', ['f1']))
+    expect(downloadBlob).toHaveBeenCalled()
+  })
 
-    const csvExportBtn = screen.getByRole('button', { name: /Export as CSV/i })
-    const jsonExportBtn = screen.getByRole('button', { name: /Export as JSON/i })
+  it('exports every owned finding when nothing is selected', async () => {
+    await renderWithFindings([
+      makeFinding({ id: 'f1', title: 'SQL Injection', severity: 'critical' }),
+    ])
 
-    expect(csvExportBtn).toBeInTheDocument()
-    expect(jsonExportBtn).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /Export All \(1\)/i }))
+    await userEvent.click(screen.getByRole('button', { name: /Export as JSON/i }))
 
-    await userEvent.click(csvExportBtn)
-    expect(exportFindingsAsCSV).toHaveBeenCalled()
+    // undefined ids — an empty array would mean "export nothing".
+    await waitFor(() => expect(exportFindings).toHaveBeenCalledWith('json', undefined))
+  })
 
-    await userEvent.click(bulkExportBtn)
-    const newJsonExportBtn = await screen.findByRole('button', { name: /Export as JSON/i })
-    await userEvent.click(newJsonExportBtn)
-    expect(exportFindingsAsJSON).toHaveBeenCalled()
+  it('offers SARIF alongside CSV and JSON', async () => {
+    await renderWithFindings([makeFinding({ id: 'f1', title: 'SQL Injection' })])
+
+    await userEvent.click(screen.getByRole('button', { name: /Export All/i }))
+    await userEvent.click(screen.getByRole('button', { name: /Export as SARIF/i }))
+
+    await waitFor(() => expect(exportFindings).toHaveBeenCalledWith('sarif', undefined))
+  })
+
+  it('reports a failed export instead of downloading an empty file', async () => {
+    await renderWithFindings([makeFinding({ id: 'f1', title: 'SQL Injection' })])
+    vi.mocked(exportFindings).mockRejectedValue(new Error('Export failed: 500'))
+
+    await userEvent.click(screen.getByRole('button', { name: /Export All/i }))
+    await userEvent.click(screen.getByRole('button', { name: /Export as CSV/i }))
+
+    await waitFor(() =>
+      expect(mockAddToast).toHaveBeenCalledWith('Export failed. Please try again.', 'error'),
+    )
+    expect(downloadBlob).not.toHaveBeenCalled()
   })
 })
 

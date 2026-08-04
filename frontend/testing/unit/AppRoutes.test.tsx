@@ -5,6 +5,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom'
 import { AppRoutes } from '../../src/App'
 import { ThemeProvider } from '../../src/components/ThemeContext'
 import { AuthProvider } from '../../src/components/AuthContext'
+import { ToastProvider } from '../../src/components/ToastContext'
 
 // Keep AppRoutes a focused routing test: stub the shell, mock the network.
 vi.mock('../../src/components/AppShell', () => ({
@@ -48,6 +49,7 @@ vi.mock('../../src/api', () => ({
     ],
   }),
   cancelTask: vi.fn(),
+  exportFindings: vi.fn(),
 }))
 
 function PathProbe() {
@@ -56,13 +58,16 @@ function PathProbe() {
 }
 
 function renderAt(path: string, extra?: React.ReactNode) {
+  // Provider stack mirrors App.tsx, which wraps AppRoutes in ToastProvider.
   return render(
     <ThemeProvider>
       <AuthProvider>
-        <MemoryRouter initialEntries={[path]}>
-          <AppRoutes />
-          {extra}
-        </MemoryRouter>
+        <ToastProvider>
+          <MemoryRouter initialEntries={[path]}>
+            <AppRoutes />
+            {extra}
+          </MemoryRouter>
+        </ToastProvider>
       </AuthProvider>
     </ThemeProvider>,
   )

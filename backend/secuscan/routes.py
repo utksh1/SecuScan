@@ -3,7 +3,7 @@ API routes for SecuScan backend
 """
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request, Depends, Body, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from typing import Any, Optional, List, Dict, Callable
 import json
 import logging
@@ -11,6 +11,7 @@ import re
 import os
 import uuid
 import asyncio
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode, urlparse
 
@@ -98,8 +99,10 @@ from .models import (
     ExecutionContext, WorkflowStep, ValidationMode, EvidenceLevel,
     NotificationDiagnosticsResponse,
     ScanWebhookSettingsRequest, ScanWebhookSettingsResponse,
+    FindingExportRequest,
 )
 from .config import settings
+from . import finding_export
 from .database import get_db
 from .plugins import get_plugin_manager, init_plugins
 from . import notification_service
@@ -1191,6 +1194,148 @@ async def get_findings(
 
     # Cache key includes pagination params so different pages do not collide.
     return await get_or_set_cached(f"findings:list:{owner}:page={page}:per_page={per_page}", build)
+
+
+def _id_batches(finding_ids: List[str], batch_size: int):
+    """Split ids into groups small enough to bind as SQL parameters."""
+    for start in range(0, len(finding_ids), batch_size):
+        yield finding_ids[start:start + batch_size]
+
+
+async def _iter_owner_findings(
+    db,
+    owner: str,
+    finding_ids: Optional[List[str]],
+    batch_size: int,
+):
+    """Yield the caller's findings in batches.
+
+    Every query is scoped by ``owner_id``, so an id belonging to someone else
+    simply never matches. Ordering carries an ``id`` tiebreaker because
+    ``discovered_at`` is not unique: LIMIT/OFFSET paging over rows the sort
+    cannot distinguish is only stable by accident. SQLite happens to be
+    consistent here, PostgreSQL is under no such obligation.
+    """
+    if finding_ids is None:
+        offset = 0
+        while True:
+            rows = await db.fetchall(
+                "SELECT * FROM findings WHERE owner_id = ? "
+                "ORDER BY discovered_at DESC, id LIMIT ? OFFSET ?",
+                (owner, batch_size, offset),
+            )
+            if not rows:
+                return
+            yield deserialize_finding_rows(rows)
+            if len(rows) < batch_size:
+                return
+            offset += batch_size
+
+    for chunk in _id_batches(finding_ids, batch_size):
+        placeholders = ",".join("?" for _ in chunk)
+        rows = await db.fetchall(
+            f"SELECT * FROM findings WHERE owner_id = ? AND id IN ({placeholders}) "
+            "ORDER BY discovered_at DESC, id",
+            (owner, *chunk),
+        )
+        if rows:
+            yield deserialize_finding_rows(rows)
+
+
+async def _count_owner_findings(db, owner: str, finding_ids: List[str], batch_size: int) -> int:
+    """Count how many of ``finding_ids`` the caller actually owns.
+
+    Batched for the same reason the read is: an ``IN`` list is one bound
+    parameter per id, and every database has a ceiling on those. Ids are
+    de-duplicated before they get here, so summing the batches cannot
+    double-count.
+    """
+    total = 0
+    for chunk in _id_batches(finding_ids, batch_size):
+        placeholders = ",".join("?" for _ in chunk)
+        row = await db.fetchone(
+            f"SELECT COUNT(*) as count FROM findings WHERE owner_id = ? AND id IN ({placeholders})",
+            (owner, *chunk),
+        )
+        total += row["count"] if row else 0
+    return total
+
+
+@router.post("/findings/export", dependencies=[Depends(report_download_limiter)])
+async def export_findings(
+    payload: FindingExportRequest,
+    owner: str = Depends(get_current_owner),
+):
+    """Stream the caller's findings as CSV, JSON, or SARIF.
+
+    Exports are built from the database rather than from whatever the client
+    has loaded, so a selection spanning pages the browser never fetched still
+    exports in full.
+    """
+    export_format = payload.format.value
+    requested_ids = payload.finding_ids
+
+    if requested_ids is not None:
+        # De-duplicate before the cap: the cap bounds how many findings get
+        # read and serialized, and a repeated id is still one finding. Order is
+        # preserved so the request stays recognisable in the audit log. The cost
+        # of parsing an oversized body is a request-size concern, not this one.
+        requested_ids = list(dict.fromkeys(requested_ids))
+        if len(requested_ids) > settings.max_export_findings:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Too many findings requested: {len(requested_ids)} "
+                    f"(maximum {settings.max_export_findings})"
+                ),
+            )
+
+    db = await get_db()
+
+    if requested_ids is None:
+        count_row = await db.fetchone(
+            "SELECT COUNT(*) as count FROM findings WHERE owner_id = ?",
+            (owner,),
+        )
+        matched = count_row["count"] if count_row else 0
+        if matched > settings.max_export_findings:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Export would include {matched} findings "
+                    f"(maximum {settings.max_export_findings}). Select a subset instead."
+                ),
+            )
+    else:
+        matched = await _count_owner_findings(
+            db, owner, requested_ids, settings.export_batch_size
+        )
+
+    await db.log_audit(
+        "findings_exported",
+        f"Bulk findings export ({export_format}): {matched} findings",
+        context={
+            "format": export_format,
+            "requested": "all" if requested_ids is None else len(requested_ids),
+            "exported": matched,
+        },
+    )
+
+    batches = _iter_owner_findings(db, owner, requested_ids, settings.export_batch_size)
+    body = finding_export.STREAMERS[export_format](batches)
+    generated_on = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    return StreamingResponse(
+        body,
+        media_type=finding_export.MEDIA_TYPES[export_format],
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{finding_export.export_filename(export_format, generated_on)}"'
+            ),
+            "X-Export-Finding-Count": str(matched),
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.get("/finding-groups", dependencies=[Depends(read_heavy_limiter)])

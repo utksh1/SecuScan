@@ -353,6 +353,8 @@ network behavior of these variables.
 | `SECUSCAN_MAX_REQUESTS_PER_MINUTE` | `100` | Global API request-rate cap. |
 | `SECUSCAN_TRUSTED_PROXIES` | `127.0.0.1,::1` | Proxies trusted for client-IP resolution (rate-limit accuracy). Only list proxies you control. |
 | `SECUSCAN_TASK_START_MAX_BODY_BYTES` | `64000` | Max task-start JSON body in bytes (request-flood guard). |
+| `SECUSCAN_MAX_EXPORT_FINDINGS` | `10000` | Ceiling on a single bulk findings export. Requests above it are rejected rather than truncated, so an export is never silently partial. |
+| `SECUSCAN_EXPORT_BATCH_SIZE` | `500` | Findings read per database round trip while streaming an export. Bounds memory, not the export size. |
 
 ## Logging & Audit
 

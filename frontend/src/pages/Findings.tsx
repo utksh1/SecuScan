@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { getFindings, FindingsResponse } from '../api'
+import { getFindings, exportFindings, FindingsResponse, FindingExportFormat } from '../api'
 import { formatLocaleDate, parseDateSafe, getCurrentTimeZone } from '../utils/date'
 import SavedViewsPanel from '../components/SavedViewsPanel'
 import { useSavedViews, FilterPreset } from '../hooks/useSavedViews'
 import { useEscapeToClose } from '../hooks/useEscapeToClose'
-import { exportFindingsAsCSV, exportFindingsAsJSON } from '../utils/exportUtils'
+import { downloadBlob, findingsExportFilename } from '../utils/exportUtils'
+import { useToast } from '../components/ToastContext'
 
 type RiskFactor = {
   factor: string
@@ -177,6 +178,8 @@ export default function Findings() {
   // ── Multi-select export state & handlers ───────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false)
+  const [exporting, setExporting] = useState(false)
+  const { addToast } = useToast()
 
   const closeExportDropdown = useCallback(() => setExportDropdownOpen(false), [])
   useEscapeToClose(exportDropdownOpen, closeExportDropdown)
@@ -425,14 +428,25 @@ export default function Findings() {
     })
   }
 
-  const handleExportCSV = () => {
-    const selectedFindings = findings.filter((f) => selectedIds.has(f.id))
-    exportFindingsAsCSV(selectedFindings)
-  }
-
-  const handleExportJSON = () => {
-    const selectedFindings = findings.filter((f) => selectedIds.has(f.id))
-    exportFindingsAsJSON(selectedFindings)
+  // Export runs on the backend against the database. Sending ids rather than
+  // finding objects is what lets a selection cover pages this component never
+  // loaded; sending none at all exports everything the caller owns.
+  const handleExport = async (format: FindingExportFormat) => {
+    if (exporting) return
+    const ids = selectedIds.size > 0 ? Array.from(selectedIds) : undefined
+    setExporting(true)
+    try {
+      const { blob, count } = await exportFindings(format, ids)
+      downloadBlob(blob, findingsExportFilename(format))
+      const exported = count ?? ids?.length ?? totalItems
+      addToast(`Exported ${exported} finding${exported === 1 ? '' : 's'} as ${format.toUpperCase()}`)
+    } catch (err) {
+      if ((err as Error).message !== 'AUTH_REQUIRED') {
+        addToast('Export failed. Please try again.', 'error')
+      }
+    } finally {
+      setExporting(false)
+    }
   }
 
   const sortedFindings = useMemo(() => {
@@ -1070,39 +1084,40 @@ export default function Findings() {
                     )}
                   </div>
 
-                  {selectedIds.size > 0 && (
+                  {totalItems > 0 && (
                     <div className="relative">
                       <button
                         type="button"
                         id="bulk-export-btn"
+                        disabled={exporting}
+                        aria-busy={exporting}
                         onClick={() => setExportDropdownOpen(!exportDropdownOpen)}
-                        className="bg-rag-blue text-black border-2 border-black px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-rag-blue/90 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center gap-2"
+                        className="bg-rag-blue text-black border-2 border-black px-4 py-2 text-xs font-black uppercase tracking-wider shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-rag-blue/90 active:translate-x-0.5 active:translate-y-0.5 active:shadow-none transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Bulk Export
+                        {exporting
+                          ? 'Exporting…'
+                          : selectedIds.size > 0
+                            ? `Export Selected (${selectedIds.size})`
+                            : `Export All (${totalItems})`}
                         <span className="material-symbols-outlined text-sm">arrow_drop_down</span>
                       </button>
                       {exportDropdownOpen && (
                         <div className="absolute right-0 mt-2 w-48 border-2 border-black bg-charcoal-dark shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] z-30">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleExportCSV()
-                              setExportDropdownOpen(false)
-                            }}
-                            className="w-full text-left px-4 py-3 text-xs font-mono uppercase tracking-wider text-silver-bright hover:bg-silver-bright/10 transition-all border-b border-black"
-                          >
-                            Export as CSV
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleExportJSON()
-                              setExportDropdownOpen(false)
-                            }}
-                            className="w-full text-left px-4 py-3 text-xs font-mono uppercase tracking-wider text-silver-bright hover:bg-silver-bright/10 transition-all"
-                          >
-                            Export as JSON
-                          </button>
+                          {(['csv', 'json', 'sarif'] as const).map((format, index, all) => (
+                            <button
+                              key={format}
+                              type="button"
+                              onClick={() => {
+                                handleExport(format)
+                                setExportDropdownOpen(false)
+                              }}
+                              className={`w-full text-left px-4 py-3 text-xs font-mono uppercase tracking-wider text-silver-bright hover:bg-silver-bright/10 transition-all${
+                                index < all.length - 1 ? ' border-b border-black' : ''
+                              }`}
+                            >
+                              Export as {format.toUpperCase()}
+                            </button>
+                          ))}
                         </div>
                       )}
                     </div>

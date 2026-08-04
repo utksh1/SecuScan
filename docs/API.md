@@ -142,6 +142,62 @@ curl -H "X-Api-Key: $API_KEY" \
   "http://localhost:8000/api/v1/search?q=sql+injection&limit=10"
 ```
 
+## Findings API
+
+### Bulk Export
+
+**Endpoint:** `POST /api/v1/findings/export`
+
+**Description:** Streams the caller's findings as a downloadable file. Findings
+are read from the database rather than from a page of results, so an export can
+cover findings the client never fetched.
+
+Results are owner-scoped (see
+[Authentication and ownership](#authentication-and-ownership)). Ids belonging to
+another `X-User-Id` are skipped silently rather than rejected, so the endpoint
+cannot be used to test whether a given finding exists.
+
+Free-text fields (`target`, `description`, `remediation`, `proof`,
+`confidence_reason`), evidence, and metadata pass through the same redaction as
+task reports before they are written out.
+
+**Request Body:**
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| finding_ids | string[] \| null | No | `null` | Findings to export. Omit or send `null` to export everything the caller owns. An empty array exports nothing — it is never read as "everything". Duplicates are collapsed. |
+| format | string | No | `csv` | One of `csv`, `json`, `sarif`. |
+
+**Response (200 OK):** the export file, with `Content-Disposition` set to
+`attachment` and `X-Export-Finding-Count` carrying the number of findings
+written.
+
+| Format | Media type | Contents |
+|--------|-----------|----------|
+| csv | `text/csv; charset=utf-8` | RFC 4180 CSV. The header row is always present, so an empty export is still a valid file. |
+| json | `application/json` | A JSON array of finding objects, minus `owner_id`. |
+| sarif | `application/json` | SARIF v2.1.0, the same schema as the per-task SARIF report. |
+
+**Errors:**
+
+| Status | Cause |
+|--------|-------|
+| 400 | More findings requested than `SECUSCAN_MAX_EXPORT_FINDINGS` allows (default 10000). |
+| 422 | Unknown `format`. |
+| 429 | Endpoint rate limit — shared with report downloads. |
+
+```bash
+# Export a selection
+curl -X POST -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
+  -d '{"finding_ids": ["finding-1", "finding-2"], "format": "csv"}' \
+  -OJ "http://localhost:8000/api/v1/findings/export"
+
+# Export everything the caller owns, as SARIF
+curl -X POST -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
+  -d '{"format": "sarif"}' \
+  -OJ "http://localhost:8000/api/v1/findings/export"
+```
+
 ## See Also
 
 * [API Authentication](api-authentication.md) — How requests are authenticated with the API key and authorized per owner (`X-User-Id` → `owner_id`), including the cross-owner test requirement.
