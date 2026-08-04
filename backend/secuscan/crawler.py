@@ -9,6 +9,8 @@ from urllib.parse import parse_qsl, urljoin, urlparse
 
 import httpx
 
+_HEADER_NAME_re = re.compile(r"^[a-zA-Z0-9!#$%&'*+\-.^_`|~]+$")
+
 
 class _SurfaceParser(HTMLParser):
     def __init__(self) -> None:
@@ -59,7 +61,13 @@ class _SurfaceParser(HTMLParser):
         if tag == "form":
             self._current_form = None
 
-
+def _validate_header_item(key: str, value: str) -> None:
+    """Issue #44: Validate that a header name and value conform to HTTP specs"""
+    if "\r" in key or "\n" in key or "\r" in value or "\n" in value:
+        raise ValueError("Header names and values must not contain CR or LF characters.")
+    if not _HEADER_NAME_re.match(key):
+        raise ValueError(f"Invalid HTTP header name : {key!r}")
+    
 def _build_headers(extra_headers: Dict[str, Any] | None = None) -> Dict[str, str]:
     headers: Dict[str, str] = {
         "User-Agent": "SecuScan-Crawler/1.0",
