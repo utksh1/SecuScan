@@ -19,6 +19,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import { ThemeProvider } from './components/ThemeContext'
 import { ToastProvider } from './components/ToastContext'
 import { AuthProvider } from './components/AuthContext'
+import { CursorProvider } from './context/CursorContext'
 import { routes } from './routes'
 
 
@@ -57,6 +58,7 @@ export function AppRoutes() {
 export default function App() {
   return (
     <ThemeProvider>
+<<<<<<< HEAD
       <ToastProvider>
         <ErrorBoundary>
           <AuthProvider>
@@ -66,6 +68,21 @@ export default function App() {
           </AuthProvider>
         </ErrorBoundary>
       </ToastProvider>
+=======
+      <I18nProvider>
+        <ToastProvider>
+          <CursorProvider>
+            <ErrorBoundary>
+              <AuthProvider>
+                <Router>
+                  <AppRoutes />
+                </Router>
+              </AuthProvider>
+            </ErrorBoundary>
+          </CursorProvider>
+        </ToastProvider>
+      </I18nProvider>
+>>>>>>> 7cc25d36 (feat(frontend): add custom cursor selector and particle effects)
     </ThemeProvider>
   )
 }

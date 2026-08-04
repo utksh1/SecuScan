@@ -3,6 +3,8 @@ import { NavLink, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Background from './Background'
 import GlobalSearch from './GlobalSearch'
+import { CustomCursor } from './CustomCursor'
+import { CursorSelector } from './CursorSelector'
 import { useShortcuts } from '../hooks/useShortcuts'
 import { SidebarProvider, useSidebar } from '../context/SidebarContext'
 import { routes } from '../routes'
@@ -90,6 +92,7 @@ function AppShellInner({ children }: AppShellProps) {
     return (
         <>
             <Background state="idle" />
+            <CustomCursor />
             <div className="flex bg-charcoal-dark min-h-screen">
                 <Sidebar />
                 <div className="lg:hidden fixed inset-x-0 top-0 z-[60] bg-[var(--bg-secondary)] border-b border-accent-silver/10 h-14 px-4 flex items-center gap-3">
@@ -106,6 +109,7 @@ function AppShellInner({ children }: AppShellProps) {
                         </span>
                     </button>
                     <GlobalSearch className="flex-1 min-w-0" />
+                    <CursorSelector />
                 </div>
 
                 {mobileMenuOpen && (
@@ -150,8 +154,9 @@ function AppShellInner({ children }: AppShellProps) {
                     className="flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out ml-0 lg:ml-[var(--sidebar-width)]"
                     style={{ '--sidebar-width': `${desktopSidebarWidth}px` } as React.CSSProperties}
                 >
-                    <div className="hidden lg:flex items-center h-14 px-6 border-b border-accent-silver/10 bg-[var(--bg-secondary)]">
+                    <div className="hidden lg:flex items-center justify-between h-14 px-6 border-b border-accent-silver/10 bg-[var(--bg-secondary)]">
                         <GlobalSearch className="w-full max-w-md" />
+                        <CursorSelector />
                     </div>
                     <main
                         className="flex-1 overflow-auto pt-14 lg:pt-0 pb-20 lg:pb-0"
