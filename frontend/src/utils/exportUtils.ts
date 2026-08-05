@@ -1,10 +1,15 @@
+// Matches a formula-injection prefix (=, +, -, @) even when it is preceded by
+// leading whitespace or control characters (e.g. "\t=HYPERLINK(...)"), which
+// spreadsheet parsers may otherwise still evaluate as a formula.
+const DANGEROUS_PREFIX_RE = /^[\x00-\x20]*[=+\-@]/
+
 export function escapeCSV(val: any): string {
   if (val === null || val === undefined) return ''
   let str = String(val)
   // Neutralize CSV formula injection (CWE-1236): spreadsheet apps evaluate
   // cells beginning with =, +, -, or @ as formulas. Scanner-supplied values
   // can carry such prefixes, so prefix them with a single quote (text marker).
-  if (/^[=+\-@]/.test(str)) {
+  if (DANGEROUS_PREFIX_RE.test(str)) {
     str = `'${str}`
   }
   if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {

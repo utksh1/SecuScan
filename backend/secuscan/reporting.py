@@ -1104,12 +1104,17 @@ class ReportGenerator:
         """Neutralize CSV formula injection (CWE-1236).
 
         Spreadsheet applications interpret cells beginning with ``=``, ``+``,
-        ``-``, or ``@`` as formulas. Finding fields are derived from
-        attacker-controlled scan targets (reflected headers, banners, page
-        titles), so prefix such string cells with a single quote to force
-        literal text interpretation.
+        ``-``, or ``@`` as formulas — including when the prefix is preceded by
+        leading whitespace or control characters (e.g. ``"\\t=HYPERLINK(...)"``).
+        Finding fields are derived from attacker-controlled scan targets
+        (reflected headers, banners, page titles), so prefix such string cells
+        with a single quote to force literal text interpretation.
         """
-        if isinstance(value, str) and value and value[0] in ("=", "+", "-", "@"):
+        if (
+            isinstance(value, str)
+            and value
+            and re.match(r"^[\x00-\x20]*[=+\-@]", value)
+        ):
             return "'" + value
         return value
 

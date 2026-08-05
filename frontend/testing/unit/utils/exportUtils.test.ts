@@ -22,6 +22,16 @@ describe("exportUtils utility", () => {
     expect(escapeCSV("@SUM(A1:A2)")).toBe("'@SUM(A1:A2)");
   });
 
+  test("escapeCSV neutralizes formula prefixes after leading whitespace or control characters", () => {
+    expect(escapeCSV("\t=HYPERLINK(\"http://evil.example\")")).toBe("\"'\t=HYPERLINK(\"\"http://evil.example\"\")\"");
+    expect(escapeCSV("   +cmd|'/C calc'!A0")).toBe("'   +cmd|'/C calc'!A0");
+    expect(escapeCSV("\r\n-2+3")).toBe("\"'\r\n-2+3\"");
+    expect(escapeCSV("\x00@SUM(A1:A2)")).toBe("'\x00@SUM(A1:A2)");
+    expect(escapeCSV("\x1f=WEBSERVICE(\"http://evil.example/\")")).toBe("\"'\x1f=WEBSERVICE(\"\"http://evil.example/\"\")\"");
+    expect(escapeCSV("   ")).toBe("   ");
+    expect(escapeCSV("not dangerous =1+1")).toBe("not dangerous =1+1");
+  });
+
   test("escapeCSV preserves quoting on formula strings", () => {
     expect(escapeCSV('=1+1, safe')).toBe('"\'=1+1, safe"');
     expect(escapeCSV('=1+1\nnext')).toBe('"\'=1+1\nnext"');
