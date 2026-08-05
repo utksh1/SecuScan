@@ -12,8 +12,9 @@ import {
     Pdf02Icon,
     Refresh01Icon,
 } from '@hugeicons/core-free-icons'
-import { API_BASE, getPluginSchema, getTaskResult, getTaskStatus, PluginFieldSchema, PluginSchemaResponse, startTask } from '../api'
+import { API_BASE, getPluginSchema, getTaskResult, getTaskStatus, PluginFieldSchema, PluginSchemaResponse, startTask, ExecutionContext, EvidenceRecord, AssetServiceRecord } from '../api'
 import ScanTimeline from '../components/ScanTimeline'
+import { useTaskSubscription } from '../hooks/useTaskSubscription'
 import { routes, routePath } from '../routes'
 import { parseDateSafe, formatDateLong, formatLocaleTime } from '../utils/date'
 import {

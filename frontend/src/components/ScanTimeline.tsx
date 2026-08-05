@@ -36,7 +36,6 @@ function getStageStates(status: string): StageState[] {
 
 export default function ScanTimeline({ status, latestOutputLine }: ScanTimelineProps) {
     const states = getStageStates(status)
-    const activeIndex = states.findIndex(s => s === 'active')
 
     return (
         <div className="border border-white/8 bg-charcoal p-6">
