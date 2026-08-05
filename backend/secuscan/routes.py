@@ -117,7 +117,7 @@ from .validation import validate_target, validate_task_start_payload, validate_u
 from .reporting import reporting
 from .vault import VaultCrypto
 from .workflows import scheduler, _finalize_workflow_run
-from .auth import require_api_key, get_current_owner
+from .auth import require_api_key, get_current_owner, require_owned_task
 from .execution_context import is_offensive_validation, normalize_execution_context
 from .finding_intelligence import build_asset_summary, build_finding_groups
 from .knowledgebase import KnowledgeBase
@@ -201,21 +201,6 @@ async def get_or_set_cached(key: str, builder):
     value = await builder()
     await cache.set_json(key, value)
     return value
-
-
-async def require_owned_task(db, task_id: str, owner: str, columns: str = "owner_id") -> Dict[str, Any]:
-    """Fetch a task and enforce that it belongs to ``owner`` (issue #401).
-
-    Returns the selected row on success. Raises 404 when the task does not
-    exist and 403 when it is owned by a different user/workspace. ``columns``
-    must include ``owner_id`` so the ownership comparison can be made.
-    """
-    row = await db.fetchone(f"SELECT {columns} FROM tasks WHERE id = ?", (task_id,))
-    if row is None:
-        raise HTTPException(status_code=404, detail="Task not found")
-    if row.get("owner_id") != owner:
-        raise HTTPException(status_code=403, detail="You do not have access to this task")
-    return row
 
 
 def _report_generation_error_response(task_id: str, report_format: str) -> JSONResponse:
@@ -703,16 +688,25 @@ async def stream_task_output(task_id: str, owner: str = Depends(get_current_owne
 async def download_csv_report(task_id: str, owner: str = Depends(get_current_owner)):
     """Download task results as a CSV report."""
     db = await get_db()
-    task_row = await db.fetchone(
-        "SELECT id, owner_id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
-        (task_id,)
+
+    task_row = await require_owned_task(
+        db,
+        task_id,
+        owner,
+        columns="""
+            id,
+            owner_id,
+            plugin_id,
+            tool_name,
+            target,
+            status,
+            created_at,
+            preset,
+            inputs_json,
+            command_used,
+            structured_json
+        """,
     )
-
-    if not task_row:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    if task_row["owner_id"] != owner:
-        raise HTTPException(status_code=403, detail="You do not have access to this task")
 
     if task_row["status"] not in ["completed", "failed"]:
         raise HTTPException(status_code=400, detail="Task is not finished yet")
@@ -741,16 +735,25 @@ async def download_csv_report(task_id: str, owner: str = Depends(get_current_own
 async def download_html_report(task_id: str, owner: str = Depends(get_current_owner)):
     """Download task results as an HTML report."""
     db = await get_db()
-    task_row = await db.fetchone(
-        "SELECT id, owner_id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
-        (task_id,)
+
+    task_row = await require_owned_task(
+        db,
+        task_id,
+        owner,
+        columns="""
+            id,
+            owner_id,
+            plugin_id,
+            tool_name,
+            target,
+            status,
+            created_at,
+            preset,
+            inputs_json,
+            command_used,
+            structured_json
+        """,
     )
-
-    if not task_row:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    if task_row["owner_id"] != owner:
-        raise HTTPException(status_code=403, detail="You do not have access to this task")
 
     if task_row["status"] not in ["completed", "failed"]:
         raise HTTPException(status_code=400, detail="Task is not finished yet")
@@ -779,16 +782,24 @@ async def download_html_report(task_id: str, owner: str = Depends(get_current_ow
 async def download_pdf_report(task_id: str, owner: str = Depends(get_current_owner)):
     """Download task results as a PDF report."""
     db = await get_db()
-    task_row = await db.fetchone(
-        "SELECT id, owner_id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
-        (task_id,)
+    task_row = await require_owned_task(
+        db,
+        task_id,
+        owner,
+        columns="""
+            id,
+            owner_id,
+            plugin_id,
+            tool_name,
+            target,
+            status,
+            created_at,
+            preset,
+            inputs_json,
+            command_used,
+            structured_json
+        """,
     )
-
-    if not task_row:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    if task_row["owner_id"] != owner:
-        raise HTTPException(status_code=403, detail="You do not have access to this task")
 
     if task_row["status"] not in ["completed", "failed"]:
         raise HTTPException(status_code=400, detail="Task is not finished yet")
@@ -818,16 +829,24 @@ async def download_pdf_report(task_id: str, owner: str = Depends(get_current_own
 async def download_sarif_report(task_id: str, owner: str = Depends(get_current_owner)):
     """Download task results as a SARIF report."""
     db = await get_db()
-    task_row = await db.fetchone(
-        "SELECT id, owner_id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
-        (task_id,)
+    task_row = await require_owned_task(
+        db,
+        task_id,
+        owner,
+        columns="""
+            id,
+            owner_id,
+            plugin_id,
+            tool_name,
+            target,
+            status,
+            created_at,
+            preset,
+            inputs_json,
+            command_used,
+            structured_json
+        """,
     )
-
-    if not task_row:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    if task_row["owner_id"] != owner:
-        raise HTTPException(status_code=403, detail="You do not have access to this task")
 
     if task_row["status"] not in ["completed", "failed"]:
         raise HTTPException(status_code=400, detail="Task is not finished yet")
@@ -1221,14 +1240,12 @@ async def get_finding_groups(
 @router.get("/task/{task_id}/diff", dependencies=[Depends(read_heavy_limiter)])
 async def get_task_diff(task_id: str, owner: str = Depends(get_current_owner)):
     db = await get_db()
-    task_row = await db.fetchone(
-        "SELECT owner_id, structured_json FROM tasks WHERE id = ?",
-        (task_id,),
+    task_row = await require_owned_task(
+        db,
+        task_id,
+        owner,
+        columns="owner_id, structured_json",
     )
-    if not task_row:
-        raise HTTPException(status_code=404, detail="Task not found")
-    if task_row["owner_id"] != owner:
-        raise HTTPException(status_code=403, detail="You do not have access to this task")
 
     structured = {}
     if task_row["structured_json"]:

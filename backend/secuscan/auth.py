@@ -24,6 +24,8 @@ from fastapi import Depends, HTTPException, Security, status, Request, Response
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
 from fastapi import APIRouter
 
+from typing import Any, Dict, Optional
+
 _bearer_scheme = HTTPBearer(auto_error=False)
 _api_key_header = APIKeyHeader(name="X-Api-Key", auto_error=False)
 
@@ -248,3 +250,17 @@ def resolve_owner_id(request: Request | None) -> str:
 async def get_current_owner(request: Request) -> str:
     """FastAPI dependency yielding the owner identity for the request."""
     return resolve_owner_id(request)
+
+async def require_owned_task(db, task_id: str, owner: str, columns: str = "owner_id") -> Dict[str, Any]:
+    """Fetch a task and enforce that it belongs to ``owner`` (issue #401).
+
+    Returns the selected row on success. Raises 404 when the task does not
+    exist and 403 when it is owned by a different user/workspace. ``columns``
+    must include ``owner_id`` so the ownership comparison can be made.
+    """
+    row = await db.fetchone(f"SELECT {columns} FROM tasks WHERE id = ?", (task_id,))
+    if row is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if row.get("owner_id") != owner:
+        raise HTTPException(status_code=403, detail="You do not have access to this task")
+    return row
