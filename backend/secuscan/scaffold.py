@@ -29,7 +29,7 @@ def generate_scaffold(
     print("=== SecuScan Plugin Scaffolding ===")
 
     # 1. Interactive Inputs & Fallbacks
-    if not plugin_id:
+    if plugin_id is None:
         while True:
             plugin_id = prompt_input("Plugin ID (e.g. my_scanner): ").lower()
             if not plugin_id:
@@ -39,6 +39,14 @@ def generate_scaffold(
                 print("[-] Plugin ID must contain only lowercase letters, numbers, underscores, or hyphens.")
                 continue
             break
+    else:
+        plugin_id = plugin_id.lower()
+        if not plugin_id:
+            print("[-] Error: Plugin ID cannot be empty.")
+            sys.exit(1)
+        if not re.match(r"^[a-z0-9_-]+$", plugin_id):
+            print("[-] Error: Plugin ID must contain only lowercase letters, numbers, underscores, or hyphens.")
+            sys.exit(1)
 
     if not name:
         name = prompt_input(f"Plugin Display Name [{plugin_id}]: ", default=plugin_id)
@@ -56,9 +64,18 @@ def generate_scaffold(
             print(f"[-] Error: Invalid safety level '{safety}'. Must be 'safe', 'intrusive', or 'exploit'.")
             sys.exit(1)
 
-    # 2. Check Existing Plugin
-    plugins_dir = Path(settings.plugins_dir)
-    target_dir = plugins_dir / plugin_id
+    # 2. Check Existing Plugin & Enforce Path Containment
+    plugins_dir = Path(settings.plugins_dir).resolve()
+    target_dir = (plugins_dir / plugin_id).resolve()
+
+    try:
+        target_dir.relative_to(plugins_dir)
+        if target_dir == plugins_dir:
+            raise ValueError()
+    except (ValueError, RuntimeError):
+        print(f"[-] Error: Target directory must be inside {plugins_dir}")
+        sys.exit(1)
+
     if target_dir.exists():
         print(f"[-] Error: Plugin directory already exists at: {target_dir}")
         sys.exit(1)
@@ -154,8 +171,15 @@ def parse_output(output: str) -> Dict[str, Any]:
 
     # 4. Write Files to Disk (Temporary without checksum)
     target_dir.mkdir(parents=True, exist_ok=True)
-    metadata_file = target_dir / "metadata.json"
-    parser_file = target_dir / "parser.py"
+    metadata_file = (target_dir / "metadata.json").resolve()
+    parser_file = (target_dir / "parser.py").resolve()
+
+    try:
+        metadata_file.relative_to(target_dir)
+        parser_file.relative_to(target_dir)
+    except (ValueError, RuntimeError):
+        print("[-] Error: Write target escaped containment.")
+        sys.exit(1)
 
     # Write initial files with LF line endings to avoid line ending/checksum issues
     metadata_file.write_text(json.dumps(metadata_template, indent=2), encoding="utf-8", newline="\n")
