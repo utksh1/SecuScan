@@ -18,7 +18,6 @@ import ProtectedRoute from './components/ProtectedRoute'
 
 import { ThemeProvider } from './components/ThemeContext'
 import { ToastProvider } from './components/ToastContext'
-import { I18nProvider } from './components/I18nContext'
 import { AuthProvider } from './components/AuthContext'
 import { routes } from './routes'
 
@@ -61,17 +60,15 @@ export function AppRoutes() {
 export default function App() {
   return (
     <ThemeProvider>
-      <I18nProvider>
-        <ToastProvider>
-          <ErrorBoundary>
-            <AuthProvider>
-              <Router>
-                <AppRoutes />
-              </Router>
-            </AuthProvider>
-          </ErrorBoundary>
-        </ToastProvider>
-      </I18nProvider>
+      <ToastProvider>
+        <ErrorBoundary>
+          <AuthProvider>
+            <Router>
+              <AppRoutes />
+            </Router>
+          </AuthProvider>
+        </ErrorBoundary>
+      </ToastProvider>
     </ThemeProvider>
   )
 }
