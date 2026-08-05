@@ -508,10 +508,11 @@ class TestRedactInputsEdgeCases:
         assert result["password"] == REDACTED
 
     def test_recursive_walk_into_nested_dict(self):
-        # Nested dicts are walked by _redact_value -> redact_dict, which uses
-        # pattern-based redaction (not the key-based redaction that fires at
-        # the top level). A nested secret-shaped string is still caught by
-        # the pattern redaction, but a nested sensitive key name is not.
+        # Nested dicts are walked by _redact_value -> redact_dict, so *both*
+        # defences apply at every depth: a secret-shaped string is caught by
+        # pattern redaction, and a sensitive key name is caught by name.
+        # This case covers the pattern half; the key half at depth is
+        # test_nested_sensitive_key_is_reached.
         inputs = {
             "outer": {
                 "any_key": "api_key=leaked123456789",
@@ -536,9 +537,10 @@ class TestRedactInputsEdgeCases:
         assert result["items"][1] == "Open port 80 detected"
 
     def test_sensitive_key_inside_nested_list_of_dicts(self):
-        # Key-based redaction only fires at the top level; nested string values
-        # are pattern-redacted, so a top-level-only key name in a nested dict
-        # will not trigger key-based redaction.
+        # A dict inside a list is still walked by _redact_value -> redact_dict,
+        # so key-based redaction reaches it. Here the key ("note") is not
+        # sensitive, so the secret is caught by the pattern half instead — see
+        # test_sensitive_key_inside_list_of_dicts for the key half.
         inputs = {
             "items": [
                 {"note": "api_key=leaked123456789"},
