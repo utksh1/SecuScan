@@ -44,13 +44,13 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Build ${{ matrix.service }} image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
@@ -64,7 +64,7 @@ jobs:
         run: docker save ${{ matrix.image }}:ci -o /tmp/${{ matrix.image }}.tar
 
       - name: Upload image artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ matrix.image }}-tar
           path: /tmp/${{ matrix.image }}.tar
@@ -85,10 +85,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Download image artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: ${{ matrix.image }}-tar
           path: /tmp
@@ -97,7 +97,7 @@ jobs:
         run: docker load -i /tmp/${{ matrix.image }}.tar
 
       - name: Run Trivy - table output
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           image-ref: ${{ matrix.image }}:ci
           format: table
@@ -107,7 +107,7 @@ jobs:
           severity: CRITICAL,HIGH
 
       - name: Run Trivy - SARIF report
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           image-ref: ${{ matrix.image }}:ci
           format: sarif
@@ -117,14 +117,14 @@ jobs:
           severity: CRITICAL,HIGH
 
       - name: Upload SARIF to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@47be0dbd5113ab1b79fe2dd3f68bdf7e426cdc87 # v3
         if: always()
         with:
           sarif_file: trivy-${{ matrix.service }}.sarif
           category: trivy-${{ matrix.service }}
 
       - name: Run Trivy - JSON report
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           image-ref: ${{ matrix.image }}:ci
           format: json
@@ -134,14 +134,14 @@ jobs:
           severity: CRITICAL,HIGH
 
       - name: Upload JSON vulnerability report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: trivy-report-${{ matrix.service }}
           path: trivy-${{ matrix.service }}.json
           retention-days: 30
 
       - name: Fail on CRITICAL vulnerabilities
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           image-ref: ${{ matrix.image }}:ci
           format: table
@@ -161,7 +161,7 @@ jobs:
       - name: Trivy scan of vulnerable image - expect non-zero exit
         id: vuln_scan
         continue-on-error: true
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           image-ref: python:3.8.20-slim-bullseye
           format: table
