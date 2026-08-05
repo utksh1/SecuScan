@@ -212,6 +212,38 @@ async def test_crawl_target_blocks_redirect_to_cloud_metadata():
 
 
 @pytest.mark.asyncio
+async def test_crawl_target_log_only_allows_denied_redirect():
+    """In log-only failure mode a denied redirect hop is allowed with a warning.
+
+    This mirrors the executor's fail-open behavior: policy violations are
+    logged but the crawl continues, so a dry-run/log-only network-policy
+    deployment does not abort crawler scans on denied redirect targets.
+    """
+    seed = "http://example.com/"
+    redirect_url = "http://169.254.169.254/latest/meta-data/"
+    client = _make_client(
+        _make_response(302, seed, headers={"location": redirect_url}),
+        _make_response(200, redirect_url, body=b"iam metadata"),
+    )
+    engine = _FakePolicyEngine()
+
+    with patch("backend.secuscan.crawler.httpx.AsyncClient", return_value=client), \
+         patch("backend.secuscan.crawler.settings") as mock_settings, \
+         patch("backend.secuscan.network_policy.get_policy_engine", return_value=engine), \
+         patch("socket.getaddrinfo", return_value=_fake_addrinfo("169.254.169.254")):
+        mock_settings.verify_ssl = True
+        mock_settings.enforce_network_policy = True
+        mock_settings.network_policy_failure_mode = "log_only"
+        result = await crawl_target(seed)
+
+    # The denied hop is still fetched (no pinning available for a denied target).
+    assert client.stream.call_count == 2
+    calls = client.stream.call_args_list
+    assert "169.254.169.254" in calls[1].args[1]
+    assert result["final_url"] == redirect_url
+
+
+@pytest.mark.asyncio
 async def test_crawl_target_strips_credentials_on_cross_origin_redirect():
     """Cross-origin redirects must not inherit the seed's Authorization or cookies."""
     seed = "https://example.com/"

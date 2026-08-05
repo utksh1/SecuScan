@@ -225,10 +225,18 @@ async def crawl_target(
                     _validate_redirect_target, current_url
                 )
                 if not allowed:
-                    raise ValueError(
-                        f"Redirect to {current_url} rejected by network policy: {reason}"
-                    )
-                if validated_ip:
+                    if settings.network_policy_failure_mode == "log_only":
+                        logger.warning(
+                            "[Log Only] Redirect to %s denied by network policy but "
+                            "allowed in log-only mode: %s",
+                            current_url,
+                            reason,
+                        )
+                    else:
+                        raise ValueError(
+                            f"Redirect to {current_url} rejected by network policy: {reason}"
+                        )
+                if allowed and validated_ip:
                     parsed_hop = urlparse(current_url)
                     hop_host = parsed_hop.hostname
                     new_netloc = (
