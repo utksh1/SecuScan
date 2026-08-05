@@ -187,7 +187,11 @@ class ScanRateLimiter:
 
             pipe = self._redis.pipeline()
             pipe.incr(minute_key)
-            pipe.expire(minute_key, self._rate_window * 2)  # 2x TTL for safety
+            pipe.expire(
+                minute_key,
+                self._rate_window * 2,
+                nx=True,
+            )  # Set TTL only if one does not already exist.
             results = await pipe.execute()
             minute_count = results[0]
 
@@ -218,7 +222,11 @@ class ScanRateLimiter:
 
             pipe2 = self._redis.pipeline()
             pipe2.incr(hour_key)
-            pipe2.expire(hour_key, self._burst_window * 2)
+            pipe2.expire(
+                hour_key,
+                self._burst_window * 2,
+                nx=True,
+            )  # Set TTL only if one does not already exist.
             results2 = await pipe2.execute()
             hour_count = results2[0]
 
