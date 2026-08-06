@@ -100,17 +100,14 @@ describe('Scanner catalog integration', () => {
     expect(await screen.findByRole('button', { name: /Subdomain Discovery, passive risk scanner/i })).toBeInTheDocument()
 
     const searchInput = screen.getByRole('textbox', { name: /Search scanner catalog/i })
-    reconTab.focus()
-    expect(reconTab).toHaveFocus()
 
     await user.type(searchInput, 'subdomain')
+
+    expect(searchInput).toHaveFocus()
 
     const panel = screen.getByRole('tabpanel')
     expect(panel).toHaveAttribute('aria-labelledby', 'scanner-tab-recon')
     expect(screen.getByRole('button', { name: /Subdomain Discovery, passive risk scanner/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /SSH Runner/i })).not.toBeInTheDocument()
-
-    reconTab.focus()
-    expect(reconTab).toHaveFocus()
   })
 })
