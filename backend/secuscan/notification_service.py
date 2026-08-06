@@ -46,6 +46,7 @@ _SEVERITY_RANK: Dict[str, int] = {
 _WEBHOOK_TIMEOUT_SECONDS = 10.0
 _WEBHOOK_CONNECT_TIMEOUT_SECONDS = 5.0
 _USER_AGENT = "SecuScan-Notifications/1.0"
+_MAX_WEBHOOK_RESPONSE_BYTES = 1024 * 1024  # 1 MiB
 
 def get_delivery_configuration() -> Dict[str, Any]:
     """Return the currently active configuration for notification delivery."""
@@ -170,13 +171,23 @@ class _PinnedIPTransport(httpx.AsyncBaseTransport):
             extensions=request.extensions,
         )
         resp = await self._pool.handle_async_request(req)
-        content = b""
+        content = bytearray()
+        total_bytes = 0
         async for chunk in resp.stream:
-            content += chunk
+            total_bytes += len(chunk)
+
+            if total_bytes > _MAX_WEBHOOK_RESPONSE_BYTES:
+                await resp.aclose()
+                raise httpx.HTTPError(
+                    f"Webhook response exceeded {_MAX_WEBHOOK_RESPONSE_BYTES} bytes"
+                )
+
+            content.extend(chunk)
         return httpx.Response(
             status_code=resp.status,
             headers=resp.headers,
-            content=content,
+            content=bytes(content),
+            request=request,
             extensions=resp.extensions,
         )
 
@@ -624,13 +635,31 @@ async def deliver_via_rule(
     channel = str(rule.get("channel_type", "")).lower()
     target = str(rule.get("target_url_or_email", ""))
 
-    if channel == NotificationChannelType.WEBHOOK.value:
-        ok, error = await send_webhook(target, payload)
-    elif channel == NotificationChannelType.EMAIL.value:
-        ok, error = await send_email(target, payload)
-    else:
-        ok, error = False, f"Unsupported channel type: {channel}"
 
+    config = get_delivery_configuration()
+    max_retries = config["max_retries"]
+    backoff = config["backoff_factor_seconds"]
+
+    attempt = 0
+
+    while True:
+        if channel == NotificationChannelType.WEBHOOK.value:
+            ok, error = await send_webhook(target, payload)
+        elif channel == NotificationChannelType.EMAIL.value:
+            ok, error = await send_email(target, payload)
+        else:
+            ok, error = False, f"Unsupported channel type: {channel}"
+
+        if ok:
+            break
+
+        if attempt >= max_retries:
+            break
+
+        attempt += 1
+
+        if backoff > 0:
+            await asyncio.sleep(backoff * attempt)
     status = (
         NotificationDeliveryStatus.SUCCESS if ok else NotificationDeliveryStatus.FAILED
     )
@@ -958,7 +987,7 @@ async def process_slack_notification(db: Database, task_id: str) -> None:
         (task_id,),
     )
     total_findings = len(findings)
-    
+
     severity_counts: Dict[str, int] = {}
     for row in findings:
         sev = str(row.get("severity") or "info").lower()
@@ -974,7 +1003,7 @@ async def process_slack_notification(db: Database, task_id: str) -> None:
 
     # Status-specific formatting
     status_icon = "✅" if status == "COMPLETED" else "❌" if status == "FAILED" else "ℹ️"
-    
+
     blocks = [
         {
             "type": "header",
