@@ -114,3 +114,80 @@ def test_semgrep_parser_severity_mapping():
 
         parsed = parser.parse(json_data)
         assert parsed["findings"][0]["severity"] == expected_secuscan_sev
+
+
+class TestSemgrepParserMalformedJsonFallback:
+    """
+    Verify the Semgrep parser's silent fallback behaviour when JSON is malformed.
+
+    The parser wraps all parsing in ``except Exception: pass``, so every
+    malformed-input variant must deterministically return
+    ``{"count": 0, "findings": []}``.
+    """
+
+    def test_truncated_json_returns_empty_findings(self):
+        """Truncated JSON (open object never closed) must return count=0, findings=[].
+
+        Simulates a scanner process that was killed mid-write, leaving an
+        incomplete JSON payload in stdout.
+        """
+        parser = _load_semgrep_parser()
+        truncated = '{"results": [{'
+
+        parsed = parser.parse(truncated)
+
+        assert parsed["count"] == 0
+        assert parsed["findings"] == []
+
+    def test_mixed_stdout_with_json_fragment_returns_deterministic_empty_result(self):
+        """Mixed stdout containing log lines + a JSON fragment must return count=0.
+
+        Real Semgrep invocations may print warning/info lines to stdout before
+        the JSON block.  If the full stdout is fed to the parser the result
+        must still be a deterministic empty-findings dict, not a crash.
+        """
+        parser = _load_semgrep_parser()
+        mixed_stdout = (
+            "Running semgrep...\n"
+            "Loading rules from registry...\n"
+            '{"results": [{"check_id": "rule-x"'  # fragment — never closed
+        )
+
+        parsed = parser.parse(mixed_stdout)
+
+        assert parsed["count"] == 0
+        assert parsed["findings"] == []
+        # Call twice to confirm determinism
+        parsed_again = parser.parse(mixed_stdout)
+        assert parsed_again["count"] == 0
+        assert parsed_again["findings"] == []
+
+    def test_valid_json_missing_top_level_results_key_returns_empty(self):
+        """Valid JSON that lacks the top-level ``results`` key must return count=0.
+
+        The parser calls ``data.get("results", [])``, so missing the key
+        should yield an empty findings list rather than raise.
+        """
+        parser = _load_semgrep_parser()
+        no_results_key = json.dumps({"version": "1.0", "errors": []})
+
+        parsed = parser.parse(no_results_key)
+
+        assert parsed["count"] == 0
+        assert parsed["findings"] == []
+
+    def test_valid_json_with_null_in_critical_fields_returns_empty_without_crash(self):
+        """Null values in critical fields must not raise and must return count=0.
+
+        Some Semgrep builds (or mocked environments) can emit ``null`` for
+        ``results`` itself.  The parser must absorb this gracefully because
+        ``null`` is valid JSON but iteration over it raises ``TypeError``,
+        which the broad ``except Exception`` clause catches.
+        """
+        parser = _load_semgrep_parser()
+        null_results = json.dumps({"results": None})
+
+        parsed = parser.parse(null_results)
+
+        assert parsed["count"] == 0
+        assert parsed["findings"] == []
