@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { getFindings, FindingsResponse } from '../api'
 import { formatLocaleDate, parseDateSafe, getCurrentTimeZone } from '../utils/date'
 import SavedViewsPanel from '../components/SavedViewsPanel'
 import { useSavedViews, FilterPreset } from '../hooks/useSavedViews'
+import { useEscapeToClose } from '../hooks/useEscapeToClose'
 import { exportFindingsAsCSV, exportFindingsAsJSON } from '../utils/exportUtils'
 
 type RiskFactor = {
@@ -176,6 +177,9 @@ export default function Findings() {
   // ── Multi-select export state & handlers ───────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false)
+
+  const closeExportDropdown = useCallback(() => setExportDropdownOpen(false), [])
+  useEscapeToClose(exportDropdownOpen, closeExportDropdown)
 
   const [columnVisibility, setColumnVisibility] = useState({
     category: true,

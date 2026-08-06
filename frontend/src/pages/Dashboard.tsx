@@ -181,6 +181,7 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null)
   const [backendConnected, setBackendConnected] = useState<boolean | null>(null)
   const [lastSync, setLastSync] = useState<string | null>(null)
+  const [healthFailed, setHealthFailed] = useState(false)
   const navigate = useNavigate()
 
   const applySummary = (data: Partial<Summary>) => {
@@ -190,43 +191,46 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    let cancelled = false
+  let cancelled = false
 
-    const load = async () => {
-      try {
-        await getHealth()
-        if (!cancelled) setBackendConnected(true)
-      } catch {
-        if (!cancelled) {
-          setBackendConnected(false)
-          setError('Unable to reach the SecuScan backend')
-          setLoading(false)
-        }
-        return
+  const load = async () => {
+    if (healthFailed) return
+
+    try {
+      await getHealth()
+      if (!cancelled) setBackendConnected(true)
+    } catch {
+      if (!cancelled) {
+        setBackendConnected(false)
+        setHealthFailed(true)
+        setError('Unable to reach the SecuScan backend')
+        setLoading(false)
       }
-
-      getDashboardSummary()
-        .then((data) => {
-          if (cancelled) return
-          applySummary(data as Partial<Summary>)
-        })
-        .catch((err) => {
-          if (cancelled) return
-          setError(err.message)
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false)
-        })
+      return
     }
 
-    load()
-    const interval = setInterval(load, 10000)
+    getDashboardSummary()
+      .then((data) => {
+        if (cancelled) return
+        applySummary(data as Partial<Summary>)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setError(err.message)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+  }
 
-    return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
-  }, [])
+  load()
+  const interval = setInterval(load, 10000)
+
+  return () => {
+    cancelled = true
+    clearInterval(interval)
+  }
+}, [healthFailed])
 
   const handleAbort = async (taskId: string) => {
     try {
@@ -356,7 +360,11 @@ export default function Dashboard() {
                 {error}. Please verify network connectivity.
               </p>
               <button
-                onClick={() => window.location.reload()}
+                onClick={() => {
+                  setHealthFailed(false)
+                  setError(null)
+                  setLoading(true)
+               }}
                 className="px-6 py-2 bg-rag-red/20 hover:bg-rag-red border border-rag-red/50 text-white text-xs font-bold uppercase tracking-widest rounded transition-all"
               >
                 Retry Connection

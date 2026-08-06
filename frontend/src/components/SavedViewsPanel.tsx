@@ -1,4 +1,5 @@
-import React, { useRef, useState } from 'react'
+import React, { useCallback, useRef, useState } from 'react'
+import { useEscapeToClose } from '../hooks/useEscapeToClose'
 import { AnimatePresence, motion } from 'framer-motion'
 import { FilterPreset, SavedView, UseSavedViewsReturn } from '../hooks/useSavedViews'
 
@@ -169,6 +170,9 @@ export default function SavedViewsPanel({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
+
+  const closePanel = useCallback(() => setOpen(false), [])
+  useEscapeToClose(open, closePanel)
 
   async function handleSave() {
     const trimmed = saveName.trim()
