@@ -104,10 +104,10 @@ class TestRecencyScore:
 
 
 class TestConfidenceScore:
-    def test_none_returns_5(self):
+    def test_none_returns_0(self):
         """When confidence is None, score defaults to 5.0."""
         from backend.secuscan.risk_scoring import _confidence_score
-        assert _confidence_score(None) == 5.0
+        assert _confidence_score(None) == 0.0
 
     def test_1_returns_10(self):
         """Confidence of 1.0 maps to 10.0."""

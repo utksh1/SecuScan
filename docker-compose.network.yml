@@ -1,0 +1,8 @@
+version: "3.9"
+services:
+  api:
+    ports:
+      - "0.0.0.0:8081:8081"
+  frontend:
+    ports:
+      - "0.0.0.0:5173:5173"

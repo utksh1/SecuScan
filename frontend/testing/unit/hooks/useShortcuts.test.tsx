@@ -1,6 +1,7 @@
 import { renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useShortcuts } from '../../../src/hooks/useShortcuts'
+import { ESCAPE_EVENT } from '../../../src/hooks/useEscapeToClose'
 import { routes } from '../../../src/routes'
 
 const mockNavigate = vi.fn()
@@ -89,5 +90,66 @@ describe('useShortcuts', () => {
     expect(document.activeElement).not.toBe(input)
 
     document.body.removeChild(input)
+  })
+
+  // ── Escape broadcast (issue #1845) ──────────────────────────────────────
+  // Escape used to be a no-op outside inputs, so custom popovers had nothing
+  // to listen for and stayed open.
+
+  it('broadcasts the escape event when Escape is pressed', () => {
+    const onEscape = vi.fn()
+    window.addEventListener(ESCAPE_EVENT, onEscape)
+    renderHook(() => useShortcuts())
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+
+    expect(onEscape).toHaveBeenCalledTimes(1)
+    window.removeEventListener(ESCAPE_EVENT, onEscape)
+  })
+
+  it('does not broadcast escape while typing in an input', () => {
+    const onEscape = vi.fn()
+    window.addEventListener(ESCAPE_EVENT, onEscape)
+    renderHook(() => useShortcuts())
+
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    input.focus()
+
+    input.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+    )
+
+    // The field is blurred instead, so a stray Escape mid-typing does not
+    // also tear down the surrounding panel.
+    expect(onEscape).not.toHaveBeenCalled()
+    expect(document.activeElement).not.toBe(input)
+
+    document.body.removeChild(input)
+    window.removeEventListener(ESCAPE_EVENT, onEscape)
+  })
+
+  it('does not broadcast escape for other keys', () => {
+    const onEscape = vi.fn()
+    window.addEventListener(ESCAPE_EVENT, onEscape)
+    renderHook(() => useShortcuts())
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }))
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'g' }))
+
+    expect(onEscape).not.toHaveBeenCalled()
+    window.removeEventListener(ESCAPE_EVENT, onEscape)
+  })
+
+  it('stops broadcasting once unmounted', () => {
+    const onEscape = vi.fn()
+    window.addEventListener(ESCAPE_EVENT, onEscape)
+    const { unmount } = renderHook(() => useShortcuts())
+
+    unmount()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+
+    expect(onEscape).not.toHaveBeenCalled()
+    window.removeEventListener(ESCAPE_EVENT, onEscape)
   })
 })
