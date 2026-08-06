@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { getFindings, FindingsResponse } from '../api'
 import { formatLocaleDate, parseDateSafe, getCurrentTimeZone } from '../utils/date'
 import SavedViewsPanel from '../components/SavedViewsPanel'
 import { useSavedViews, FilterPreset } from '../hooks/useSavedViews'
+import { useEscapeToClose } from '../hooks/useEscapeToClose'
 import { exportFindingsAsCSV, exportFindingsAsJSON } from '../utils/exportUtils'
 
 type RiskFactor = {
@@ -176,6 +177,9 @@ export default function Findings() {
   // ── Multi-select export state & handlers ───────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false)
+
+  const closeExportDropdown = useCallback(() => setExportDropdownOpen(false), [])
+  useEscapeToClose(exportDropdownOpen, closeExportDropdown)
 
   const [columnVisibility, setColumnVisibility] = useState({
     category: true,
@@ -617,8 +621,23 @@ export default function Findings() {
       setTotalItems(data.total ?? moreFindings.length)
     } finally {
       setLoadingMore(false)
+  if (loadingMore) return
+  setLoadingMore(true)
+  const nextPage = page + 1
+  try {
+    const data = await getFindings(nextPage, perPage)
+    const rawFindings = data.findings || []
+    const moreFindings = rawFindings.filter(
+      (finding) => typeof finding.id === 'string',
+    ) as Finding[]
+    if (rawFindings.length > 0) {
+      setFindings((prev) => [...prev, ...moreFindings])
+      setPage(nextPage)
     }
+  } finally {
+    setLoadingMore(false)
   }
+}
   // ─── Keyboard navigation ────────────────────────────────────────────────────
 
   function handleListKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
@@ -648,16 +667,30 @@ export default function Findings() {
     overscan: 6,
   })
 
-  // Scroll selected finding into view when it changes
+  // Keep latest virtualRows/virtualizer available without making them
+  // reactive dependencies — they change on every filter/sort, but we only
+  // want to re-scroll when the *selection* actually changes.
+  const virtualRowsRef = useRef(virtualRows)
   useEffect(() => {
-    if (!selectedFinding) return
-    const rowIdx = virtualRows.findIndex(
-      (row) => row.kind === 'finding' && row.finding.id === selectedFinding.id,
+    virtualRowsRef.current = virtualRows
+  })
+
+  const virtualizerRef = useRef(virtualizer)
+  useEffect(() => {
+    virtualizerRef.current = virtualizer
+  })
+
+  // Scroll selected finding into view when the selection changes
+  useEffect(() => {
+    if (!selectedFindingId) return
+    const rows = virtualRowsRef.current
+    const rowIdx = rows.findIndex(
+      (row) => row.kind === 'finding' && row.finding.id === selectedFindingId,
     )
     if (rowIdx !== -1) {
-      virtualizer.scrollToIndex(rowIdx, { align: 'auto', behavior: 'smooth' })
+      virtualizerRef.current.scrollToIndex(rowIdx, { align: 'auto', behavior: 'smooth' })
     }
-  }, [selectedFindingId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedFindingId])
   return (
     <div className="min-h-screen bg-charcoal-dark text-silver px-4 py-6 md:px-8 md:py-10">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8">
@@ -819,7 +852,7 @@ export default function Findings() {
             </div>
 
             <div className="flex flex-col gap-6">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              <div className="grid gap-x-4 gap-y-5 grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
                 <div className="space-y-2 min-w-0">
                   <label className={filterLabelClass}>Target</label>
                   <select

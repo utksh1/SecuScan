@@ -13,6 +13,7 @@ Covers:
 import os
 import stat
 import tempfile
+import pytest
 from pathlib import Path
 
 # Patch out the module-level _api_key before importing init_api_key
@@ -64,6 +65,7 @@ class TestInitApiKey:
         # No .api_key in data_dir either
         assert not (tmp_path / ".api_key").exists()
 
+    @pytest.mark.skipif(sys.platform == "win32", reason="POSIX file permission bits are not supported on Windows")
     def test_file_mode_is_0600(self, tmp_path: Path):
         """The key file is created with mode 0o600 (owner rw only)."""
         fresh_key(str(tmp_path))

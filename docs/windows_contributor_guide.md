@@ -222,6 +222,11 @@ docker compose up --build
 If `docker compose` fails even though Docker Desktop is installed, open Docker
 Desktop first and wait until the engine reports it is running.
 
+The quickstart uses default local-only credentials. To set custom PostgreSQL
+credentials (recommended for production), create a `.env` file in the project
+root before running `docker compose up --build`. See `.env.example` for the
+available variables.
+
 ---
 
 ## Common Windows Troubleshooting

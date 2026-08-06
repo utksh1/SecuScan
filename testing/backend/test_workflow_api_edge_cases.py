@@ -285,3 +285,94 @@ class TestValidScheduleSeconds:
         assert isinstance(response.json(), dict), (
             f"Expected JSON object, got: {response.text}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Workflow run — exploit-validation policy gate
+# ---------------------------------------------------------------------------
+
+class TestRunWorkflowExploitGate:
+    """POST /workflows/{id}/run must enforce the same exploit-validation gate as task start."""
+
+    @pytest.mark.asyncio
+    async def test_run_workflow_skips_exploit_step_without_policy(self):
+        from backend.secuscan.routes import run_workflow_once
+
+        workflow_row = {
+            "id": "wf-exploit",
+            "name": "exploit-bypass",
+            "owner_id": "user-1",
+            "schedule_seconds": None,
+            "enabled": 1,
+            "steps_json": json.dumps(
+                [{"plugin_id": "xss_exploiter", "inputs": {"target": "https://example.com"}}]
+            ),
+            "last_run_at": None,
+        }
+        version_row = {"id": "ver-1", "version_number": 3}
+
+        mock_db = AsyncMock()
+        mock_db.fetchone = AsyncMock(side_effect=[workflow_row, version_row])
+        mock_db.execute = AsyncMock(return_value=None)
+        mock_db.record_workflow_run = AsyncMock(return_value="run-1")
+
+        plugin = MagicMock()
+        plugin.safety = {"level": "exploit"}
+
+        with patch("backend.secuscan.routes.get_db", new_callable=AsyncMock, return_value=mock_db), \
+             patch("backend.secuscan.routes.workflow_rate_limiter.check_workflow_rate_limit",
+                   new_callable=AsyncMock, return_value=(True, "")), \
+             patch("backend.secuscan.routes.get_target_policy", new_callable=AsyncMock, return_value=None), \
+             patch("backend.secuscan.routes.get_plugin_manager") as mock_get_pm, \
+             patch("backend.secuscan.routes.executor.create_task", new_callable=AsyncMock, return_value="task-1") as mock_create, \
+             patch("backend.secuscan.routes._finalize_workflow_run", new_callable=AsyncMock):
+
+            mock_get_pm.return_value.get_plugin.return_value = plugin
+
+            response = await run_workflow_once("wf-exploit", owner="user-1")
+
+            mock_create.assert_not_called()
+            assert response["queued_task_ids"] == []
+
+    @pytest.mark.asyncio
+    async def test_run_workflow_keeps_exploit_step_when_policy_allows(self):
+        from backend.secuscan.routes import run_workflow_once
+
+        workflow_row = {
+            "id": "wf-exploit",
+            "name": "exploit-bypass",
+            "owner_id": "user-1",
+            "schedule_seconds": None,
+            "enabled": 1,
+            "steps_json": json.dumps(
+                [{"plugin_id": "xss_exploiter", "inputs": {"target": "https://example.com"}}]
+            ),
+            "last_run_at": None,
+        }
+        version_row = {"id": "ver-1", "version_number": 3}
+
+        mock_db = AsyncMock()
+        mock_db.fetchone = AsyncMock(side_effect=[workflow_row, version_row])
+        mock_db.execute = AsyncMock(return_value=None)
+        mock_db.record_workflow_run = AsyncMock(return_value="run-1")
+
+        plugin = MagicMock()
+        plugin.safety = {"level": "exploit"}
+
+        with patch("backend.secuscan.routes.get_db", new_callable=AsyncMock, return_value=mock_db), \
+             patch("backend.secuscan.routes.workflow_rate_limiter.check_workflow_rate_limit",
+                   new_callable=AsyncMock, return_value=(True, "")), \
+             patch("backend.secuscan.routes.get_target_policy", new_callable=AsyncMock,
+                   return_value={"allow_exploit_validation": True, "allow_public_targets": True}), \
+             patch("backend.secuscan.routes.get_plugin_manager") as mock_get_pm, \
+             patch("backend.secuscan.routes.executor.create_task", new_callable=AsyncMock, return_value="task-1") as mock_create, \
+             patch("backend.secuscan.routes.concurrent_limiter.acquire", new_callable=AsyncMock, return_value=(True, "")), \
+             patch("backend.secuscan.routes.executor.execute_task", new_callable=AsyncMock), \
+             patch("backend.secuscan.routes._finalize_workflow_run", new_callable=AsyncMock):
+
+            mock_get_pm.return_value.get_plugin.return_value = plugin
+
+            response = await run_workflow_once("wf-exploit", owner="user-1")
+
+            mock_create.assert_called_once()
+            assert response["queued_task_ids"] == ["task-1"]

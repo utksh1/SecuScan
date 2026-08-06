@@ -90,6 +90,24 @@ describe('Sidebar - Accessibility', () => {
     expect(sidebar).toHaveAttribute('aria-expanded', 'false')
   })
 
+  it('should default to expanded when localStorage JSON is corrupted', () => {
+    localStorage.setItem('sidebar-expanded', '{not-valid-json')
+
+    const { container } = renderSidebar()
+    const sidebar = container.querySelector('aside')
+
+    expect(sidebar).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('should default to expanded when localStorage value is a non-boolean JSON value', () => {
+    localStorage.setItem('sidebar-expanded', JSON.stringify({ expanded: false }))
+
+    const { container } = renderSidebar()
+    const sidebar = container.querySelector('aside')
+
+    expect(sidebar).toHaveAttribute('aria-expanded', 'true')
+  })
+
   it('should not toggle sidebar on navigation item click', () => {
     const { container } = renderSidebar()
     const sidebar = container.querySelector('aside')

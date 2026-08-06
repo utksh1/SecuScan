@@ -222,6 +222,42 @@ async def test_deliver_records_failure_on_webhook_error(test_db):
     assert row["status"] == NotificationDeliveryStatus.FAILED.value
     assert row["error_message"] == "connection refused"
 
+@pytest.mark.asyncio
+async def test_deliver_via_rule_retries_before_success(test_db):
+    _, finding_id = await _seed_finding(test_db)
+    rule_id = await _seed_rule(test_db)
+
+    finding = await test_db.fetchone(
+        "SELECT * FROM findings WHERE id = ?", (finding_id,)
+    )
+    rule = await test_db.fetchone(
+        "SELECT * FROM notification_rules WHERE id = ?", (rule_id,)
+    )
+
+    with (
+        patch(
+            "backend.secuscan.notification_service.get_delivery_configuration",
+            return_value={
+                "webhook_timeout_seconds": 10,
+                "webhook_connect_timeout_seconds": 3,
+                "max_retries": 2,
+                "backoff_factor_seconds": 0,
+            },
+        ),
+        patch(
+            "backend.secuscan.notification_service.send_webhook",
+            new=AsyncMock(
+                side_effect=[
+                    (False, "temporary error"),
+                    (True, None),
+                ]
+            ),
+        ) as mock_send,
+    ):
+        result = await deliver_via_rule(test_db, rule, finding)
+
+    assert result.status == NotificationDeliveryStatus.SUCCESS
+    assert mock_send.await_count == 2
 
 @pytest.mark.asyncio
 async def test_email_placeholder_records_success(test_db):
@@ -573,6 +609,93 @@ async def test_send_webhook_redirect_to_blocked_ip():
 
     assert ok is False
     assert "blocked" in err.lower()
+
+
+@pytest.mark.asyncio
+async def test_send_webhook_redirect_to_allowed_ip_reports_failure():
+    """Redirect to a non-blocked IP reports failure (payload was not delivered)."""
+    from backend.secuscan.notification_service import send_webhook
+
+    mock_response = AsyncMock()
+    mock_response.status_code = 302
+    mock_response.headers = {"location": "https://new-hooks.example.com/v2/alert"}
+    mock_post = AsyncMock(return_value=mock_response)
+
+    def fake_getaddrinfo(hostname, port=None, *args, **kwargs):
+        if "hooks.example.com" in hostname:
+            return [(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]
+        return [(socket.AF_INET, None, None, None, ("93.184.216.35", 443))]
+
+    with (
+        patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)),
+        patch(
+            "backend.secuscan.notification_service.socket.getaddrinfo",
+            side_effect=fake_getaddrinfo,
+        ),
+    ):
+        ok, err = await send_webhook(
+            "https://hooks.example.com/alert", {"event": "test"}
+        )
+
+    assert ok is False
+    assert "redirect" in err.lower()
+    assert "not delivered" in err.lower()
+
+
+@pytest.mark.asyncio
+async def test_send_webhook_redirect_empty_location():
+    """Redirect with no Location header reports failure."""
+    from backend.secuscan.notification_service import send_webhook
+
+    mock_response = AsyncMock()
+    mock_response.status_code = 302
+    mock_response.headers = {}
+    mock_post = AsyncMock(return_value=mock_response)
+
+    def fake_getaddrinfo(*args, **kwargs):
+        return [(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]
+
+    with (
+        patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)),
+        patch(
+            "backend.secuscan.notification_service.socket.getaddrinfo",
+            side_effect=fake_getaddrinfo,
+        ),
+    ):
+        ok, err = await send_webhook(
+            "https://hooks.example.com/alert", {"event": "test"}
+        )
+
+    assert ok is False
+    assert "no Location" in err.lower() or "no location" in err.lower()
+
+
+@pytest.mark.asyncio
+async def test_send_webhook_redirect_relative_location():
+    """Redirect to a relative URL (no hostname) reports failure."""
+    from backend.secuscan.notification_service import send_webhook
+
+    mock_response = AsyncMock()
+    mock_response.status_code = 301
+    mock_response.headers = {"location": "/v2/alert"}
+    mock_post = AsyncMock(return_value=mock_response)
+
+    def fake_getaddrinfo(*args, **kwargs):
+        return [(socket.AF_INET, None, None, None, ("93.184.216.34", 443))]
+
+    with (
+        patch("httpx.AsyncClient", return_value=_mock_async_client(mock_post)),
+        patch(
+            "backend.secuscan.notification_service.socket.getaddrinfo",
+            side_effect=fake_getaddrinfo,
+        ),
+    ):
+        ok, err = await send_webhook(
+            "https://hooks.example.com/alert", {"event": "test"}
+        )
+
+    assert ok is False
+    assert "no hostname" in err.lower() or "redirect" in err.lower()
 
 
 @pytest.mark.asyncio

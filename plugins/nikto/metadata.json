@@ -333,5 +333,9 @@
     ]
   },
   "docker_image": "sullo/nikto",
-  "checksum": "31c89129a6242562db4d08cfe17d12abbc5f8b1450980db309f361fa2892fb74"
+  "capabilities": [
+    "network",
+    "intrusive"
+  ],
+  "checksum": "0fe1d8f5ab5873b2aae34cface3e17d1086fbad9b9a627bf65e019d01f5823ac"
 }

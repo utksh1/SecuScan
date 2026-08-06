@@ -681,8 +681,6 @@ class TestSecurityNegativeTests:
         """PluginManager._verify_plugin_integrity should return False if checksum mismatches."""
         from backend.secuscan.plugins import PluginManager
         from backend.secuscan.models import PluginMetadata
-
-        # 1. Create a valid metadata but with wrong checksum
         data = _minimal_valid()
         data["checksum"] = "b" * 64  # wrong checksum
         data["presets"] = {}
@@ -690,6 +688,36 @@ class TestSecurityNegativeTests:
             if f["type"] == "number":
                 f["type"] = "integer"
         plugin_dir = _write_metadata(tmp_path, data)
+
+        plugin = PluginMetadata(**data)
+        mgr = PluginManager(plugins_dir=str(tmp_path))
+
+        assert mgr._verify_plugin_integrity(plugin, plugin_dir) is False
+
+    def test_declared_signature_requires_key_even_when_enforcement_off(self, tmp_path, monkeypatch):
+        """A plugin with a signature must not load when the signing key is missing."""
+        from backend.secuscan.plugins import PluginManager
+        from backend.secuscan.config import settings
+        from backend.secuscan.models import PluginMetadata
+
+        monkeypatch.setattr(settings, "enforce_plugin_signatures", False)
+        monkeypatch.setattr(settings, "plugin_signature_key", None)
+
+        data = _minimal_valid()
+        data["presets"] = {}
+        for field in data["fields"]:
+            if field["type"] == "number":
+                field["type"] = "integer"
+
+        plugin_dir = _write_metadata(tmp_path, data)
+        metadata_file = plugin_dir / "metadata.json"
+        parser_file = plugin_dir / "parser.py"
+        parser_file.write_text("def parse(output):\n    return {'findings': []}\n", encoding="utf-8")
+
+        digest = PluginManager.compute_plugin_digest(metadata_file, parser_file)
+        data["checksum"] = digest
+        data["signature"] = "a" * 64
+        metadata_file.write_text(json.dumps(data), encoding="utf-8")
 
         plugin = PluginMetadata(**data)
         mgr = PluginManager(plugins_dir=str(tmp_path))

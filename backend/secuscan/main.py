@@ -167,26 +167,27 @@ app = FastAPI(
     title="SecuScan API",
     description="Backend for SecuScan Pentesting Toolkit",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
+    docs_url="/docs" if settings.debug else None,
+    redoc_url="/redoc" if settings.debug else None,
+    openapi_url="/openapi.json" if settings.debug else None,
     lifespan=lifespan
 )
 
-@app.get("/api/docs", include_in_schema=False)
-async def redirect_api_docs():
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/docs")
+if settings.debug:
+    @app.get("/api/docs", include_in_schema=False)
+    async def redirect_api_docs():
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/docs")
 
-@app.get("/api/redoc", include_in_schema=False)
-async def redirect_api_redoc():
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/redoc")
+    @app.get("/api/redoc", include_in_schema=False)
+    async def redirect_api_redoc():
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/redoc")
 
-@app.get("/api/openapi.json", include_in_schema=False)
-async def redirect_api_openapi():
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/openapi.json")
+    @app.get("/api/openapi.json", include_in_schema=False)
+    async def redirect_api_openapi():
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url="/openapi.json")
 
 # CORS middleware
 cors_allow_all = "*" in settings.cors_allowed_origins

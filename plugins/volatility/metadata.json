@@ -67,5 +67,9 @@
     "python_packages": [],
     "system_packages": []
   },
-  "checksum": "733f04bb43785f9b3350876fe9bd9c88e3294b58f540175877d34636091f1df9"
+  "capabilities": [
+    "filesystem",
+    "intrusive"
+  ],
+  "checksum": "f15e4b8b76266f42c3e2674e9f1fa304b1be1a5b78b84cedaacf5463be0add8e"
 }

@@ -29,7 +29,7 @@ import httpcore
 
 from .database import Database
 from .models import NotificationChannelType, NotificationDeliveryStatus
-from .redaction import redact_dict, redact_inputs
+from .redaction import redact_dict, redact_inputs, redact
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +46,7 @@ _SEVERITY_RANK: Dict[str, int] = {
 _WEBHOOK_TIMEOUT_SECONDS = 10.0
 _WEBHOOK_CONNECT_TIMEOUT_SECONDS = 5.0
 _USER_AGENT = "SecuScan-Notifications/1.0"
+_MAX_WEBHOOK_RESPONSE_BYTES = 1024 * 1024  # 1 MiB
 
 def get_delivery_configuration() -> Dict[str, Any]:
     """Return the currently active configuration for notification delivery."""
@@ -170,13 +171,23 @@ class _PinnedIPTransport(httpx.AsyncBaseTransport):
             extensions=request.extensions,
         )
         resp = await self._pool.handle_async_request(req)
-        content = b""
+        content = bytearray()
+        total_bytes = 0
         async for chunk in resp.stream:
-            content += chunk
+            total_bytes += len(chunk)
+
+            if total_bytes > _MAX_WEBHOOK_RESPONSE_BYTES:
+                await resp.aclose()
+                raise httpx.HTTPError(
+                    f"Webhook response exceeded {_MAX_WEBHOOK_RESPONSE_BYTES} bytes"
+                )
+
+            content.extend(chunk)
         return httpx.Response(
             status_code=resp.status,
             headers=resp.headers,
-            content=content,
+            content=bytes(content),
+            request=request,
             extensions=resp.extensions,
         )
 
@@ -254,7 +265,7 @@ def build_alert_payload(
             "title": finding.get("title"),
             "category": finding.get("category"),
             "severity": finding.get("severity"),
-            "target": finding.get("target"),
+            "target": redact(finding.get("target") or ""),
             "description": finding.get("description"),
             "remediation": finding.get("remediation"),
             "metadata": metadata,
@@ -423,33 +434,48 @@ async def send_webhook(
 
         if response.status_code in (301, 302, 303, 307, 308):
             redirect_url = response.headers.get("location", "")
-            if redirect_url:
-                from urllib.parse import urlparse
+            if not redirect_url:
+                return (
+                    False,
+                    f"Webhook returned HTTP {response.status_code} with no Location header, payload not delivered",
+                )
 
-                parsed_redirect = urlparse(redirect_url)
-                if parsed_redirect.hostname:
-                    try:
-                        redirect_ips = socket.getaddrinfo(
-                            parsed_redirect.hostname, parsed_redirect.port or 443
-                        )
-                        for _family, _stype, _proto, _cname, sockaddr in redirect_ips:
-                            rip = ipaddress.ip_address(sockaddr[0])
-                            for blocked_cidr in settings.notification_blocked_ip_ranges:
-                                try:
-                                    if rip in ipaddress.ip_network(
-                                        blocked_cidr, strict=False
-                                    ):
-                                        return (
-                                            False,
-                                            f"Redirect to blocked IP range: {blocked_cidr}",
-                                        )
-                                except ValueError:
-                                    continue
-                    except OSError:
-                        return (
-                            False,
-                            f"Could not resolve redirect target: {redirect_url}",
-                        )
+            from urllib.parse import urlparse
+
+            parsed_redirect = urlparse(redirect_url)
+            if not parsed_redirect.hostname:
+                return (
+                    False,
+                    f"Webhook returned HTTP {response.status_code} redirect with no hostname: {redirect_url}, payload not delivered",
+                )
+
+            try:
+                redirect_ips = socket.getaddrinfo(
+                    parsed_redirect.hostname, parsed_redirect.port or 443
+                )
+                for _family, _stype, _proto, _cname, sockaddr in redirect_ips:
+                    rip = ipaddress.ip_address(sockaddr[0])
+                    for blocked_cidr in settings.notification_blocked_ip_ranges:
+                        try:
+                            if rip in ipaddress.ip_network(
+                                blocked_cidr, strict=False
+                            ):
+                                return (
+                                    False,
+                                    f"Redirect to blocked IP range: {blocked_cidr}",
+                                )
+                        except ValueError:
+                            continue
+            except OSError:
+                return (
+                    False,
+                    f"Could not resolve redirect target: {redirect_url}",
+                )
+
+            return (
+                False,
+                f"Webhook returned HTTP {response.status_code} redirect to {redirect_url}, payload not delivered",
+            )
 
         return True, None
     except httpx.HTTPError as exc:
@@ -609,13 +635,31 @@ async def deliver_via_rule(
     channel = str(rule.get("channel_type", "")).lower()
     target = str(rule.get("target_url_or_email", ""))
 
-    if channel == NotificationChannelType.WEBHOOK.value:
-        ok, error = await send_webhook(target, payload)
-    elif channel == NotificationChannelType.EMAIL.value:
-        ok, error = await send_email(target, payload)
-    else:
-        ok, error = False, f"Unsupported channel type: {channel}"
 
+    config = get_delivery_configuration()
+    max_retries = config["max_retries"]
+    backoff = config["backoff_factor_seconds"]
+
+    attempt = 0
+
+    while True:
+        if channel == NotificationChannelType.WEBHOOK.value:
+            ok, error = await send_webhook(target, payload)
+        elif channel == NotificationChannelType.EMAIL.value:
+            ok, error = await send_email(target, payload)
+        else:
+            ok, error = False, f"Unsupported channel type: {channel}"
+
+        if ok:
+            break
+
+        if attempt >= max_retries:
+            break
+
+        attempt += 1
+
+        if backoff > 0:
+            await asyncio.sleep(backoff * attempt)
     status = (
         NotificationDeliveryStatus.SUCCESS if ok else NotificationDeliveryStatus.FAILED
     )
@@ -727,7 +771,7 @@ async def _gather_scan_summary(db: Database, task_id: str) -> Optional[Dict[str,
         return None
 
     status = str(task.get("status") or "unknown").lower()
-    target = task.get("target") or "Unknown Target"
+    target = redact(task.get("target")) or "Unknown Target"
     tool_name = task.get("tool_name") or task.get("plugin_id") or "Security Scan"
 
     findings = await db.fetchall(
@@ -933,7 +977,7 @@ async def process_slack_notification(db: Database, task_id: str) -> None:
 
     status = str(task.get("status") or "unknown").upper()
     tool_name = task.get("tool_name") or task.get("plugin_id") or "Security Scan"
-    target = task.get("target") or "Unknown Target"
+    target = redact(task.get("target")) or "Unknown Target"
     duration = task.get("duration_seconds")
     duration_str = f"{duration:.2f}s" if duration is not None else "N/A"
 
@@ -943,7 +987,7 @@ async def process_slack_notification(db: Database, task_id: str) -> None:
         (task_id,),
     )
     total_findings = len(findings)
-    
+
     severity_counts: Dict[str, int] = {}
     for row in findings:
         sev = str(row.get("severity") or "info").lower()
@@ -959,7 +1003,7 @@ async def process_slack_notification(db: Database, task_id: str) -> None:
 
     # Status-specific formatting
     status_icon = "✅" if status == "COMPLETED" else "❌" if status == "FAILED" else "ℹ️"
-    
+
     blocks = [
         {
             "type": "header",

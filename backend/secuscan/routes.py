@@ -297,6 +297,40 @@ async def get_plugin_schema(plugin_id: str):
         raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
 
 
+@router.post("/plugin/{plugin_id}/preview")
+async def get_plugin_preview(plugin_id: str, payload: Dict[str, Any] = Body(...)):
+    """Generate a preview of the command to be executed by a plugin, with sensitive values redacted."""
+    plugin_manager = await get_plugin_manager_for_request()
+    plugin = plugin_manager.get_plugin(plugin_id)
+    if not plugin:
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {plugin_id}")
+
+    inputs = payload.get("inputs", {})
+
+    try:
+        # Check missing required fields
+        missing_fields = []
+        for field in plugin.fields:
+            if field.required:
+                val = inputs.get(field.id)
+                if val is None or val == "":
+                    missing_fields.append(field.label)
+
+        if missing_fields:
+            raise ValueError(f"Missing required fields: {', '.join(missing_fields)}")
+
+        command_args = plugin_manager.build_command(plugin_id, inputs)
+        if not command_args:
+            raise ValueError("Failed to build command")
+
+        redacted_args = [redact(arg) for arg in command_args]
+        return {
+            "command": redacted_args
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.get("/presets", dependencies=[Depends(read_heavy_limiter)])
 async def get_all_presets():
     """Get all plugin presets"""
@@ -324,9 +358,18 @@ async def start_task(
     if not ok:
         raise HTTPException(status_code=status_code, detail=error_msg)
 
+    db = await get_db()
+
     # Validate consent
     if settings.require_consent and not request.consent_granted:
         logger.warning(f"Task start failed: Consent not granted. Request: {request}")
+        await db.log_audit(
+            "scan_blocked_consent",
+            f"Scan start blocked: consent not granted for plugin {request.plugin_id}",
+            severity="warning",
+            context={"plugin_id": request.plugin_id},
+            plugin_id=request.plugin_id,
+        )
         raise HTTPException(
             status_code=400,
             detail="Consent required. You must acknowledge the legal notice."
@@ -349,7 +392,6 @@ async def start_task(
         logger.warning("Task start failed: %s", preset_error)
         raise HTTPException(status_code=400, detail=preset_error)
 
-    db = await get_db()
     target_policy = await get_target_policy(db, owner, execution_context.get("target_policy_id"))
     credential_profile = await get_credential_profile(db, owner, execution_context.get("credential_profile_id"))
     session_profile = await get_session_profile(db, owner, execution_context.get("session_profile_id"))
@@ -423,6 +465,18 @@ async def start_task(
 
             if not is_valid:
                 logger.warning(f"Task start failed: Target validation failed for '{target}': {error_msg}")
+                await db.log_audit(
+                    "scan_blocked_target_validation",
+                    f"Scan start blocked: target validation failed for plugin {request.plugin_id}",
+                    severity="warning",
+                    context={
+                        "plugin_id": request.plugin_id,
+                        "target": target_str,
+                        "safe_mode": safe_mode,
+                        "reason": error_msg,
+                    },
+                    plugin_id=request.plugin_id,
+                )
                 raise HTTPException(status_code=400, detail=error_msg)
 
     # Check rate limits per (client, plugin) so one client cannot exhaust
@@ -1193,14 +1247,89 @@ async def get_reports(owner: str = Depends(get_current_owner)):
     """Return the caller's generated reports."""
 
     async def build():
+        from .time_utils import to_utc_iso
+
         db = await get_db()
         rows = await db.fetchall(
             "SELECT * FROM reports WHERE owner_id = ? ORDER BY generated_at DESC",
             (owner,),
         )
-        return {"reports": parse_json_fields(rows, ["metadata_json"])}
+        reports = []
+        for row in parse_json_fields(rows, ["metadata_json"]):
+            report = dict(row)
+            if report.get("generated_at"):
+                report["generated_at"] = to_utc_iso(report["generated_at"])
+            reports.append(report)
+        return {"reports": reports}
 
     return await get_or_set_cached(f"reports:list:{owner}", build)
+
+
+def _escape_like(value: str) -> str:
+    """Escape SQLite LIKE wildcards so user input can't inject % or _ patterns."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+@router.get("/search", dependencies=[Depends(read_heavy_limiter)])
+async def search(
+    q: str = Query(..., min_length=1, max_length=200),
+    limit: int = Query(20, ge=1, le=100),
+    owner: str = Depends(get_current_owner),
+):
+    """Search the caller's findings and reports by title/description/name."""
+    from .time_utils import to_utc_iso
+
+    db = await get_db()
+    pattern = f"%{_escape_like(q.strip())}%"
+
+    finding_rows = await db.fetchall(
+        """
+        SELECT id, task_id, title, category, severity, target, discovered_at
+        FROM findings
+        WHERE owner_id = ? AND (title LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')
+        ORDER BY discovered_at DESC
+        LIMIT ?
+        """,
+        (owner, pattern, pattern, limit),
+    )
+
+    report_rows = await db.fetchall(
+        """
+        SELECT id, task_id, name, type, generated_at
+        FROM reports
+        WHERE owner_id = ? AND name LIKE ? ESCAPE '\\'
+        ORDER BY generated_at DESC
+        LIMIT ?
+        """,
+        (owner, pattern, limit),
+    )
+
+    return {
+        "query": q,
+        "findings": [
+            {
+                "id": row["id"],
+                "task_id": row["task_id"],
+                "title": row["title"],
+                "category": row["category"],
+                "severity": row["severity"],
+                "target": row["target"],
+                "discovered_at": to_utc_iso(row["discovered_at"]) if row["discovered_at"] else row["discovered_at"],
+            }
+            for row in finding_rows
+        ],
+        "reports": [
+            {
+                "id": row["id"],
+                "task_id": row["task_id"],
+                "name": row["name"],
+                "type": row["type"],
+                "generated_at": to_utc_iso(row["generated_at"]) if row["generated_at"] else row["generated_at"],
+            }
+            for row in report_rows
+        ],
+        "total": len(finding_rows) + len(report_rows),
+    }
 
 
 @router.get("/tasks", dependencies=[Depends(read_heavy_limiter)])
@@ -2007,6 +2136,21 @@ async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_o
     for step in steps:
         execution_context = normalize_execution_context(step.get("execution_context") or {})
         target_policy = await get_target_policy(db, owner, execution_context.get("target_policy_id"))
+        plugin = get_plugin_manager().get_plugin(step.get("plugin_id"))
+        if not plugin:
+            logger.warning("Workflow %s: plugin %s not found, skipping step", workflow_id, step.get("plugin_id"))
+            continue
+        requires_exploit_policy = (
+            plugin.safety.get("level") == "exploit"
+            or execution_context.get("validation_mode") == ValidationMode.CONTROLLED_EXTRACT.value
+        )
+        if requires_exploit_policy and not (target_policy and target_policy.get("allow_exploit_validation")):
+            logger.warning(
+                "Workflow %s: skipping exploit-level step %s: no target policy allows exploit validation",
+                workflow_id,
+                step.get("plugin_id"),
+            )
+            continue
         safe_mode = bool(
             settings.safe_mode_default
             and not (target_policy and target_policy.get("allow_public_targets"))
@@ -2462,6 +2606,8 @@ async def list_notification_history(
 @router.get("/finding/{finding_id}")
 async def get_finding_details(finding_id: str, owner: str = Depends(get_current_owner)):
     """Get detailed information for a specific finding"""
+    from .time_utils import to_utc_iso
+
     db = await get_db()
 
     finding_row = await db.fetchone(
@@ -2508,7 +2654,7 @@ async def get_finding_details(finding_id: str, owner: str = Depends(get_current_
         "proof": finding_row["proof"],
         "cvss": finding_row["cvss"],
         "cve": finding_row["cve"],
-        "discovered_at": finding_row["discovered_at"],
+        "discovered_at": to_utc_iso(finding_row["discovered_at"]) if finding_row.get("discovered_at") else finding_row.get("discovered_at"),
         "metadata": metadata,
         "exploitability": finding_row.get("exploitability"),
         "confidence": finding_row.get("confidence"),

@@ -12,6 +12,29 @@ import os
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+# Mandatory network denylist. These ranges cover cloud metadata endpoints,
+# loopback, RFC1918/CGNAT private space, and IPv6 link-local/unique-local
+# addresses. They are enforced unconditionally by NetworkPolicyEngine
+# regardless of operator configuration, and are intentionally NOT part of
+# the SECUSCAN_NETWORK_DENYLIST env-configurable setting below: Pydantic
+# treats an env-provided list as a full replacement of the field default,
+# so if these lived only in that field, an operator adding a single custom
+# denylist entry would silently drop all of them and reopen SSRF to
+# 169.254.169.254 and friends. Keeping them here means they can never be
+# disabled via configuration, only supplemented.
+MANDATORY_DENYLIST: List[str] = [
+    "169.254.169.254/32",          # Cloud metadata (AWS/GCP/Azure/OCI)
+    "169.254.0.0/16",               # Reserved/link-local (incl. metadata)
+    "127.0.0.0/8",                  # Loopback
+    "10.0.0.0/8",                   # Private RFC 1918
+    "172.16.0.0/12",                # Private RFC 1918
+    "192.168.0.0/16",                # Private RFC 1918
+    "100.64.0.0/10",                 # Carrier-grade NAT (RFC 6598)
+    "fc00::/7",                       # IPv6 Unique Local Address
+    "fe80::/10",                      # IPv6 Link-local
+    "::1/128",                        # IPv6 Loopback
+]
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables"""
@@ -19,7 +42,7 @@ class Settings(BaseSettings):
     # Server Configuration
     bind_address: str = "127.0.0.1"
     bind_port: int = 8000
-    debug: bool = True
+    debug: bool = False
 
     # Primary data store
     database_path: str = str(PROJECT_ROOT / "data" / "secuscan.db")
@@ -33,11 +56,13 @@ class Settings(BaseSettings):
     raw_output_dir: str = str(PROJECT_ROOT / "data" / "raw")
     reports_dir: str = str(PROJECT_ROOT / "data" / "reports")
     plugins_dir: str = str(PROJECT_ROOT.parent / "plugins")
+    disabled_plugins: List[str] = []
     wordlists_dir: str = str(PROJECT_ROOT / "wordlists")
     knowledgebase_dir: str = str(PROJECT_ROOT / "data" / "knowledgebase")
 
     # Security
     safe_mode_default: bool = True
+    verify_ssl: bool = True
     dns_resolution_timeout_seconds: float = 1.5
     dns_cache_ttl_seconds: int = 60
     dns_rebind_check: bool = True
@@ -67,20 +92,13 @@ class Settings(BaseSettings):
 
     # Network Policy Configuration
     network_allowlist: List[str] = []  # IPs/networks to allow (CIDR); empty = deny all egress
-    network_denylist: List[str] = [    # IPs/networks to deny (CIDR)
-        "169.254.169.254/32",          # AWS metadata
-        "169.254.0.0/16",              # Reserved/metadata
-        "127.0.0.0/8",                 # Loopback (for remote execution)
-        "10.0.0.0/8",                  # Private RFC 1918
-        "172.16.0.0/12",               # Private RFC 1918
-        "192.168.0.0/16",              # Private RFC 1918
-        "100.64.0.0/10",               # Carrier-grade NAT (RFC 6598)
-        "fc00::/7",                    # IPv6 Unique Local Address
-        "fe80::/10",                   # IPv6 Link-local
-        "::1/128",                     # IPv6 Loopback
-    ]
+    # Operator-supplied ADDITIONS to the denylist (CIDR). This is on top of,
+    # never a replacement for, MANDATORY_DENYLIST above -- see the comment
+    # on MANDATORY_DENYLIST for why those ranges live outside this field.
+    network_denylist: List[str] = []
     network_audit_log_file: str = str(PROJECT_ROOT / "logs" / "network.audit.log")
     network_audit_retention_days: int = 90
+    network_audit_max_entries: int = 10000
     enforce_network_policy: bool = True
     network_policy_failure_mode: str = "block"  # "block" or "log_only"
 
@@ -166,6 +184,16 @@ class Settings(BaseSettings):
     ai_summary_api_key: str = ""
     ai_summary_base_url: str = ""
     ai_summary_model: str = "gpt-4o-mini"
+
+    # AI Triage Engine — LLM-assisted false positive reduction (opt-in, off by default)
+    triage_engine_enabled: bool = False
+    triage_engine_api_key: str = ""
+    triage_engine_base_url: str = ""
+    triage_engine_model: str = "gpt-4o-mini"
+    # Findings at/above this confidence score already skip LLM triage (already trusted).
+    triage_engine_min_confidence_to_skip: float = 0.9
+    # Only these finding categories are eligible for LLM triage by default (AST/pattern-based SAST).
+    triage_engine_eligible_categories: List[str] = ["code security", "static analysis", "sast"]
 
     # SMTP Configuration for Email Notifications
     smtp_host: str = "smtp.gmail.com"

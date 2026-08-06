@@ -26,6 +26,17 @@ describe("date utilities", () => {
       expect(result).not.toBeNull()
     })
 
+    test("treats naive timestamps as UTC for consistent generated_at/discovered_at rendering", () => {
+      const withZ = parseDateSafe("2026-07-15T12:00:00Z")
+      const withOffset = parseDateSafe("2026-07-15T12:00:00+00:00")
+      const naiveIso = parseDateSafe("2026-07-15T12:00:00")
+      const sqlite = parseDateSafe("2026-07-15 12:00:00")
+
+      expect(withZ?.getTime()).toBe(withOffset?.getTime())
+      expect(naiveIso?.getTime()).toBe(withZ?.getTime())
+      expect(sqlite?.getTime()).toBe(withZ?.getTime())
+    })
+
     test("returns null for invalid input", () => {
       expect(parseDateSafe("invalid-date")).toBeNull()
     })
