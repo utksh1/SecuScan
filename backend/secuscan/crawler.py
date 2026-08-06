@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
 from html.parser import HTMLParser
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 from urllib.parse import parse_qsl, urljoin, urlparse
 
 import httpx
 
-from .config import settings
+from .config import settings, MANDATORY_DENYLIST
 
 
 class _SurfaceParser(HTMLParser):
@@ -83,38 +84,105 @@ async def crawl_target(
     max_redirects: int = 10,
     max_size: int = 5 * 1024 * 1024,
 ) -> Dict[str, Any]:
-    """Fetch a target and normalize discovered links/forms/scripts/API hints."""
-    headers = _build_headers(extra_headers)
+    """Fetch a target and normalize discovered links/forms/scripts/API hints.
+
+    Redirects are followed manually instead of relying on httpx's automatic
+    redirect handling so that:
+      - every redirect hop is re-validated against the network policy before
+        it is fetched (blocking pivots into private, loopback, link-local and
+        cloud-metadata ranges), and
+      - operator-supplied credentials (Authorization header and session
+        cookies) are only sent to same-origin URLs and stripped on any
+        cross-origin redirect, mirroring browser behavior.
+    """
+    base_headers = _build_headers()
+    extra_headers = dict(extra_headers) if extra_headers else {}
+    operator_cookies = dict(cookies) if cookies else {}
+    seed_origin = _origin_of(url)
+    current_url = url
+    redirect_history: List[Dict[str, Any]] = []
+    same_origin_cookies: Dict[str, str] = {}
+
     async with httpx.AsyncClient(
-        follow_redirects=True,
-        max_redirects=max_redirects,
+        follow_redirects=False,
         timeout=timeout,
-        headers=headers,
-        cookies=cookies or {},
+        headers=base_headers,
         verify=settings.verify_ssl,
     ) as client:
-        async with client.stream("GET", url) as response:
-            # Check Content-Length header if present
-            content_length = response.headers.get("content-length")
-            if content_length:
-                try:
-                    cl_val = int(content_length)
-                except ValueError:
-                    cl_val = 0
-                if cl_val > max_size:
-                    raise ValueError(f"Response size exceeds limit of {max_size} bytes")
+        response = None
+        redirects_followed = 0
+        while True:
+            is_cross_origin = _origin_of(current_url) != seed_origin
+            if is_cross_origin:
+                hop_headers = dict(base_headers)
+                hop_cookies: Dict[str, str] = {}
+            else:
+                hop_headers = _build_headers(extra_headers)
+                hop_cookies = {**operator_cookies, **same_origin_cookies}
 
-            # Read response in chunks to enforce size limit
-            body_chunks = []
-            bytes_read = 0
-            async for chunk in response.aiter_bytes():
-                bytes_read += len(chunk)
-                if bytes_read > max_size:
-                    raise ValueError(f"Response size exceeds limit of {max_size} bytes")
-                body_chunks.append(chunk)
+            if redirects_followed > 0:
+                allowed, reason = await _validate_hop_target(current_url)
+                if not allowed:
+                    raise ValueError(
+                        f"Redirect target blocked by network policy: {current_url} ({reason})"
+                    )
 
-            body_bytes = b"".join(body_chunks)
-            body = body_bytes.decode("utf-8", errors="replace")
+            async with client.stream(
+                "GET", current_url, headers=hop_headers, cookies=hop_cookies
+            ) as resp:
+                if resp.status_code in (301, 302, 303, 307, 308):
+                    location = resp.headers.get("location")
+                    if not location:
+                        response = resp
+                        break
+                    if redirects_followed >= max_redirects:
+                        raise httpx.TooManyRedirects(
+                            f"Exceeded maximum redirects ({max_redirects})",
+                            request=httpx.Request("GET", current_url),
+                        )
+                    redirect_history.append(
+                        {
+                            "url": current_url,
+                            "status_code": resp.status_code,
+                            "location": location,
+                        }
+                    )
+                    if not is_cross_origin:
+                        _capture_cookies(resp, same_origin_cookies)
+                    current_url = urljoin(current_url, location)
+                    redirects_followed += 1
+                    continue
+
+                response = resp
+                break
+
+        if response is None:
+            raise httpx.TooManyRedirects(
+                f"Exceeded maximum redirects ({max_redirects})",
+                request=httpx.Request("GET", current_url),
+            )
+
+        # Check Content-Length header if present
+        content_length = response.headers.get("content-length")
+        if content_length:
+            try:
+                cl_val = int(content_length)
+            except ValueError:
+                cl_val = 0
+            if cl_val > max_size:
+                raise ValueError(f"Response size exceeds limit of {max_size} bytes")
+
+        # Read response in chunks to enforce size limit
+        body_chunks = []
+        bytes_read = 0
+        async for chunk in response.aiter_bytes():
+            bytes_read += len(chunk)
+            if bytes_read > max_size:
+                raise ValueError(f"Response size exceeds limit of {max_size} bytes")
+            body_chunks.append(chunk)
+
+        body_bytes = b"".join(body_chunks)
+        body = body_bytes.decode("utf-8", errors="replace")
     parser = _SurfaceParser()
     parser.feed(body)
 
@@ -143,14 +211,7 @@ async def crawl_target(
     set_cookie_headers = list(response.headers.get_list("set-cookie")) if hasattr(response.headers, "get_list") else []
     tech_hints = _extract_tech_hints(headers_snapshot, parser.meta_generators, normalized_scripts, body)
     cms_hints = _extract_cms_hints(parser.meta_generators, body, normalized_scripts)
-    redirect_chain = [
-        {
-            "url": str(item.url),
-            "status_code": item.status_code,
-            "location": item.headers.get("location"),
-        }
-        for item in response.history
-    ]
+    redirect_chain = redirect_history
 
     return {
         "seed_url": url,
@@ -172,6 +233,72 @@ async def crawl_target(
         "path_hints": path_hints[:100],
         "body_preview": body[:4000],
     }
+
+
+def _origin_of(target_url: str) -> Tuple[str, str, int]:
+    """Return a comparable (scheme, host, port) tuple for a URL."""
+    parsed = urlparse(target_url)
+    if parsed.scheme not in ("http", "https"):
+        return (parsed.scheme, parsed.hostname or "", 0)
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    return (parsed.scheme, parsed.hostname or "", port)
+
+
+def _capture_cookies(response: Any, store: Dict[str, str]) -> None:
+    """Record Set-Cookie headers into a name -> value store for same-origin hops."""
+    if not hasattr(response.headers, "get_list"):
+        return
+    for raw in response.headers.get_list("set-cookie"):
+        name, sep, value = str(raw).partition("=")
+        if sep and name.strip():
+            store[name.strip()] = value.split(";", 1)[0].strip()
+
+
+async def _validate_hop_target(target_url: str) -> Tuple[bool, str]:
+    """Validate a redirect hop destination against egress controls."""
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(_check_hop_egress, target_url),
+            timeout=float(settings.dns_resolution_timeout_seconds),
+        )
+    except asyncio.TimeoutError:
+        return False, "Redirect target resolution timed out"
+
+
+def _check_hop_egress(target_url: str) -> Tuple[bool, str]:
+    """Synchronous hop check: scheme guard + network policy validation."""
+    parsed = urlparse(target_url)
+    if parsed.scheme not in ("http", "https"):
+        return False, f"Unsupported redirect scheme: {parsed.scheme}"
+    host = parsed.hostname
+    if not host:
+        return False, "Redirect target has no host"
+    if settings.enforce_network_policy:
+        from .network_policy import get_policy_engine
+
+        allowed, reason = get_policy_engine().validate_egress_target(
+            host, parsed.port or (443 if parsed.scheme == "https" else 80)
+        )
+        if not allowed:
+            return False, reason or "Destination denied by network policy"
+    elif _is_in_mandatory_denylist(host):
+        return False, "Redirect target blocked by mandatory denylist (private, link-local, or cloud metadata)"
+    return True, ""
+
+
+def _is_in_mandatory_denylist(host: str) -> bool:
+    """Check a host/IP against the unconditional SSRF denylist ranges."""
+    import ipaddress
+    import socket
+
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        try:
+            ip = ipaddress.ip_address(socket.gethostbyname(host))
+        except Exception:
+            return False
+    return any(ip in ipaddress.ip_network(cidr, strict=False) for cidr in MANDATORY_DENYLIST)
 
 
 def _extract_title(html: str) -> str:
