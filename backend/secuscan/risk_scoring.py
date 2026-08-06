@@ -87,9 +87,9 @@ def _recency_score(discovered_at: Optional[datetime]) -> float:
 
 
 def _confidence_score(confidence: Optional[float]) -> float:
-    """Map confidence 0–1 to 0–10. Default 0.5 → 5.0."""
+    """Map confidence 0–1 to 0–10. Default unknown confidence → 0.0."""
     if confidence is None:
-        return 5.0
+        return 0.0
     return max(0.0, min(10.0, confidence * 10.0))
 
 
@@ -196,8 +196,8 @@ def compute_risk_score(
         business_criticality=business_criticality,
         custom_override=severity_override,
     )
-    ev = _clamp(exploitability if exploitability is not None else 5.0)
-    av = ASSET_EXPOSURE_MAP.get(asset_exposure.lower() if asset_exposure else None, 5.0)
+    ev = _clamp(exploitability if exploitability is not None else 0.0)
+    av = ASSET_EXPOSURE_MAP.get(asset_exposure.lower() if asset_exposure else None, 0.0)
     rv = _recency_score(discovered_at)
     cv = _confidence_score(confidence)
 
