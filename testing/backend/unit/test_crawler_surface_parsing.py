@@ -13,6 +13,7 @@ Currently covered here (and only here):
   - _normalize_form with a non-standard method (DELETE) is state_changing
   - _normalize_form when inputs contain a non-dict entry is tolerated
 """
+import pytest 
 
 from backend.secuscan.crawler import (
     _classify_path_hint,
@@ -20,6 +21,7 @@ from backend.secuscan.crawler import (
     _extract_tech_hints,
     _extract_title,
     _normalize_form,
+    _validate_header_item
 )
 
 
@@ -82,3 +84,23 @@ def test_normalize_form_tolerates_non_dict_input_item():
     # The valid dict is still counted; the bad entry is skipped without raising.
     assert result["input_count"] == 2
     assert result["state_changing"] is True
+
+
+# _validate_header_item - HTTP header spec and CRLF injection tests
+
+
+def test_validate_header_item_accepts_valid_header():
+    # Valid HTTP headers must pass without raising exceptions
+    _validate_header_item("X-custom-Header", "valid_value_123")
+
+
+def test_validate_header_item_rejects_crlf_injection():
+    # CR or LF characters in names or values raise ValueError
+    with pytest.raises(ValueError, match="CR or LF characters"):
+        _validate_header_item("X-Header", "value\r\nInjected-Header: evil")
+
+
+def test_validate_header_item_rejects_trailing_invalid_chars():
+    # Verifies fullmatch catches invalid characters at the end of header name
+    with pytest.raises(ValueError, match="Invalid HTTP header name"):
+        _validate_header_item("X-Test@invalid", "valid_value")
