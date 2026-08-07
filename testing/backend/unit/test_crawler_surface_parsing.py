@@ -13,7 +13,7 @@ Currently covered here (and only here):
   - _normalize_form with a non-standard method (DELETE) is state_changing
   - _normalize_form when inputs contain a non-dict entry is tolerated
 """
-import pytest 
+import pytest
 
 from backend.secuscan.crawler import (
     _classify_path_hint,
