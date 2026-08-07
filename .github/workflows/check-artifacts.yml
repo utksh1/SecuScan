@@ -20,5 +20,8 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Run artifact guard regression tests
+        run: bash scripts/check-artifacts.sh --test
+
       - name: Run artifact guard
         run: bash scripts/check-artifacts.sh origin/main
