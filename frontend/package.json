@@ -43,7 +43,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.27",
     "cross-env": "^10.1.0",
-    "jsdom": "^29.0.1",
+    "jsdom": "^25.0.1",
     "postcss": "^8.5.8",
     "tailwindcss": "^3.4.19",
     "typescript": "5.5.4",
@@ -54,6 +54,7 @@
     "esbuild": "^0.28.1",
     "react-router": "^6.30.4",
     "dompurify": "^3.4.10",
-    "@babel/core": "^7.29.7"
+    "@babel/core": "^7.29.7",
+    "undici": "^8.10.0"
   }
 }
