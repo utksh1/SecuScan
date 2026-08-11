@@ -50,8 +50,6 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
 
     const addToast = useCallback((message: string, type: ToastType = 'success') => {
         setToasts((prev) => {
-            // Collapse repeated identical notifications into a single entry instead of
-            // stacking duplicates (e.g. a backend call that keeps failing).
             const existing = prev.find((t) => t.message === message && t.type === type)
             if (existing) {
                 scheduleRemoval(existing.id)
@@ -65,7 +63,6 @@ export const ToastProvider = ({ children }: { children: ReactNode }) => {
         })
     }, [scheduleRemoval])
 
-    // Clear any pending dismissal timers on unmount.
     useEffect(() => () => {
         Object.values(timers.current).forEach(clearTimeout)
         timers.current = {}

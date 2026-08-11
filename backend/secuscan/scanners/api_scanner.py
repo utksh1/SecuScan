@@ -12,8 +12,6 @@ from ..crawler import crawl_target
 
 
 class APIScanner(BaseScanner):
-    """API discovery plus lightweight REST/GraphQL assessment."""
-
     COMMON_SPEC_PATHS = [
         "/openapi.json",
         "/swagger.json",

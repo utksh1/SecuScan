@@ -1,23 +1,3 @@
-"""
-triage_engine.py — LLM-powered context analysis for false positive reduction.
-
-Implements the TriageEngine described in issue #1719: a secondary validation
-layer that intercepts AST/regex-based static analysis findings before they
-reach the user, extracts the surrounding code context (snippet, variable
-definitions, data flow hints), and asks an LLM to judge whether the finding
-is a true or false positive, with a short rationale and remediation note.
-
-Design mirrors ai_summary.py:
-  - Opt-in and OFF by default (config.settings.triage_engine_enabled).
-  - Uses any OpenAI-compatible endpoint (OpenAI, Ollama, local LLM, etc).
-  - Fails open: any error (missing package, network failure, malformed
-    response) leaves the original finding untouched rather than blocking
-    the scan pipeline or discarding data.
-  - Never sends secrets/credentials extracted from evidence to the LLM
-    verbatim beyond what's already present in the finding's own metadata;
-    callers remain responsible for redaction upstream (see redaction.py).
-"""
-
 from __future__ import annotations
 
 import json
@@ -53,17 +33,6 @@ def is_eligible_for_triage(
     eligible_categories: Optional[List[str]] = None,
     min_confidence_to_skip: float = 0.9,
 ) -> bool:
-    """
-    Decide whether a finding should be sent through LLM triage.
-
-    Findings are skipped (left as-is) when they:
-      - already carry a triage verdict (idempotent — don't re-triage),
-      - fall outside the configured eligible categories (non-SAST findings
-        such as network/recon observations gain little from this analysis
-        and would just add latency/cost), or
-      - already have a high computed confidence score, since those findings
-        are already well corroborated and re-analysis adds little value.
-    """
     if finding.get("triage_verdict"):
         return False
 
@@ -80,16 +49,6 @@ def is_eligible_for_triage(
 
 
 def extract_code_context(finding: Dict[str, Any], *, repo_root: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Extract the surrounding code context for a static-analysis finding.
-
-    Looks for a file path and line number in the finding's metadata (the
-    shape produced by plugins such as code_analyzer/semgrep_scanner) and,
-    when the source file is readable on disk, pulls a small window of
-    lines around the flagged line. Falls back to whatever snippet/proof
-    text the plugin already captured when the file can't be read (e.g. the
-    scan ran in a different environment than the triage step).
-    """
     metadata = finding.get("metadata") if isinstance(finding.get("metadata"), dict) else {}
     file_path = str(metadata.get("file") or metadata.get("filename") or "").strip()
     try:
@@ -128,7 +87,6 @@ _VAR_RE = re.compile(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*=")
 
 
 def _extract_variable_hints(finding: Dict[str, Any]) -> List[str]:
-    """Best-effort variable name extraction from proof/description text."""
     text = " ".join(
         str(finding.get(key) or "")
         for key in ("proof", "description", "title")
@@ -221,14 +179,6 @@ def triage_finding(
     repo_root: Optional[str] = None,
     timeout: float = 15.0,
 ) -> Optional[Dict[str, Any]]:
-    """
-    Run a single finding through LLM-assisted context analysis.
-
-    Returns a dict with triage_verdict / triage_confidence / triage_reasoning
-    / triage_remediation on success, or None on any failure — callers should
-    treat None as "leave the finding as-is" and never let it interrupt the
-    scan pipeline.
-    """
     if OpenAI is None:
         logger.warning(
             "triage_engine: 'openai' package not installed. "
@@ -270,12 +220,6 @@ def triage_findings(
     min_confidence_to_skip: float = 0.9,
     timeout: float = 15.0,
 ) -> List[Dict[str, Any]]:
-    """
-    Apply LLM triage to a batch of findings in place (returns the same list
-    with eligible entries annotated). Ineligible findings, and any finding
-    where the LLM call fails, pass through unmodified so this can safely sit
-    in front of existing report/notification code paths.
-    """
     if not findings:
         return findings
 

@@ -49,6 +49,8 @@ benchmark_results.json
 *.db
 *.sqlite
 *.sqlite3
+*.db-shm
+*.db-wal
 
 # SecuScan Specific
 data/raw/*

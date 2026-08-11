@@ -1,3 +1,0 @@
-Sniper simulation started
-target=secuscan.in
-status=planned_exploit_path

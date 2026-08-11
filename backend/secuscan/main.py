@@ -1,7 +1,3 @@
-"""
-SecuScan Backend - Main application entry point
-"""
-
 import logging
 import sys
 import shutil
@@ -29,9 +25,8 @@ from .database import init_db, db as global_db
 from .routes import router
 from .saved_views import saved_views_router
 from .workflows import scheduler
-from .plugins import init_plugins, get_plugin_check_latency_ms
+from .plugins import init_plugins
 
-# Import rate limiter
 from .rate_limiter import make_scan_rate_limiter, RateLimitExceeded
 
 logging.basicConfig(
@@ -54,7 +49,6 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan manager"""
     # Startup
     logger.info("🚀 Starting SecuScan backend...")
     
@@ -62,11 +56,9 @@ async def lifespan(app: FastAPI):
     settings.ensure_directories()
     logger.info("✓ Directories initialized")
 
-    # Initialize API key authentication
     api_key = init_api_key(settings.data_dir)
     logger.info("✓ API key authentication ready (key file: %s/.api_key)", settings.data_dir)
     
-    # Initialize database
     await init_db(settings.database_path)
     logger.info("✓ SQLite connected")
 
@@ -74,11 +66,9 @@ async def lifespan(app: FastAPI):
     logger.info("✓ In-memory cache initialized")
     
     # ─── RATE LIMITER SETUP ──────────────────────────────────────────────
-    # Initialize rate limiter with Redis client from cache
     # The cache client is stored in global_cache (which is a Redis client)
     logger.info("🔒 Initializing rate limiter...")
     
-    # Check if rate limiting is enabled
     if getattr(settings, 'rate_limit_enabled', True):
         try:
             # Use the global_cache Redis client for rate limiting storage
@@ -106,7 +96,6 @@ async def lifespan(app: FastAPI):
     await init_plugins(settings.plugins_dir)
     logger.info("✓ Plugins loaded")
 
-    # If docker is enabled, verify and auto-create the restricted docker network
     if settings.docker_enabled:
         if shutil.which("docker"):
             logger.info(f"Docker is enabled. Verifying network '{settings.docker_network}'...")
@@ -162,7 +151,6 @@ async def lifespan(app: FastAPI):
     await scheduler.stop()
     logger.info("✓ Shutdown complete")
 
-# Create FastAPI application
 app = FastAPI(
     title="SecuScan API",
     description="Backend for SecuScan Pentesting Toolkit",
@@ -209,10 +197,6 @@ app.add_middleware(RequestIDMiddleware)
 # ─── CUSTOM 429 RATE LIMIT EXCEPTION HANDLER ──────────────────────────────
 @app.exception_handler(RateLimitExceeded)
 async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
-    """
-    Custom handler for rate limit exceeded errors.
-    Returns a consistent JSON 429 response matching the API's error schema.
-    """
     logger.warning(
         f"Rate limit exceeded for {request.client.host if request.client else 'unknown'} "
         f"on {request.url.path} - {str(exc)}"
@@ -237,13 +221,6 @@ async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded):
 # Also handle generic 429 exceptions (for compatibility)
 @app.exception_handler(HTTP_429_TOO_MANY_REQUESTS)
 async def generic_rate_limit_handler(request: Request, exc: Exception):
-    """
-    Generic handler for 429 status code exceptions.
-
-    Merges headers from the original exception (e.g. X-RateLimit-Limit,
-    X-RateLimit-Remaining, Retry-After) with default headers, so
-    callers always receive accurate rate-limit metadata.
-    """
     exc_headers = getattr(exc, "headers", None) or {}
     headers = {
         "X-Request-ID": getattr(request.state, "request_id", get_request_id()),
@@ -298,7 +275,6 @@ app.include_router(saved_views_router)
 # Health check endpoint
 @app.get("/api/v1/health")
 async def health_check():
-    """Health check endpoint"""
     import platform
     import sys
     
@@ -319,36 +295,23 @@ async def health_check():
             "rate_limit": getattr(settings, 'scan_rate_limit', '5/minute'),
             "burst_limit": getattr(settings, 'scan_burst_limit', '10/hour'),
         },
-        "plugin_check_latency_ms": get_plugin_check_latency_ms(),
     }
 
 # Root endpoint
 @app.get("/")
 async def root():
-    """Root endpoint - API information"""
     return {
         "name": "SecuScan API",
         "version": "0.1.0-alpha",
         "status": "under development",
-        "api_docs": f"{settings.base_url}/api/docs" if settings.debug else None,
+        "api_docs": f"http://{settings.bind_address}:{settings.bind_port}/api/docs" if settings.debug else None,
         "legal_notice": "For authorized testing only. Unauthorized scanning may be illegal."
     }
 
 def main():
-    """Main entry point"""
     import uvicorn
     
     logger.info("""
-    ╔═══════════════════════════════════════════════════════╗
-    ║                                                       ║
-    ║              SecuScan v0.1.0-alpha                    ║
-    ║         Local-First Pentesting Toolkit               ║
-    ║                                                       ║
-    ║  ⚠️  For authorized testing only                      ║
-    ║                                                       ║
-    ╚═══════════════════════════════════════════════════════╝
-    """)
-    
     uvicorn.run(
         "backend.secuscan.main:app",
         host=settings.bind_address,

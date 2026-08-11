@@ -11,11 +11,6 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 class ReconScanner(BaseScanner):
-    """
-    Orchestrates multiple reconnaissance tools (Subfinder, WHOIS, DNS).
-    Equivalent to Pentest-Tools 'Recon Tools'.
-    """
-
     @property
     def name(self) -> str:
         return "Reconnaissance Scanner"
@@ -25,9 +20,6 @@ class ReconScanner(BaseScanner):
         return "Information Gathering"
 
     async def run(self, target: str, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Executes multiple recon tasks and aggregates findings.
-        """
         findings = []
         summary = []
         rows = []

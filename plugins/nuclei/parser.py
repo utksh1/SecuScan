@@ -3,9 +3,6 @@ import re
 from typing import Dict, Any, List
 
 def parse(output: str) -> Dict[str, Any]:
-    """
-    Parse Nuclei JSON-per-line output.
-    """
     findings = []
     
     for line in output.strip().split('\n'):

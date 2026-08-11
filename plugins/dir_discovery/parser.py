@@ -2,9 +2,6 @@ import json
 from typing import Dict, Any
 
 def parse(output: str) -> Dict[str, Any]:
-    """
-    Parse ffuf JSON output.
-    """
     findings = []
     
     try:

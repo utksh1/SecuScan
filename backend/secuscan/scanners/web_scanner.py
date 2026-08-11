@@ -10,11 +10,6 @@ from ..plugins import get_plugin_manager
 
 
 class WebScanner(BaseScanner):
-    """
-    Orchestrates a layered web assessment using passive evidence first and
-    external scanners as corroborating sources.
-    """
-
     SECURITY_HEADERS = {
         "content-security-policy": ("Content-Security-Policy", "medium"),
         "strict-transport-security": ("Strict-Transport-Security", "low"),

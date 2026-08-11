@@ -1,27 +1,4 @@
-/**
- * Plugin field validation utility.
- *
- * Defines the shared validation contract used by plugin metadata,
- * the frontend form generator (ToolConfig), and plugin authors.
- *
- * Supported validation keys on a field's `validation` object:
- *   - pattern       {string}  — a regex string the value must match
- *   - message       {string}  — custom error message shown on failure
- *   - min           {number}  — minimum value for integer fields
- *   - max           {number}  — maximum value for integer fields
- *   - validation_type {string} — optional named preset: 'url' | 'hostname' | 'domain' | 'ipv4' | 'port' | 'cidr'
- *
- * Named validation_type presets (override pattern/message if set):
- *   - url      valid HTTP/HTTPS URL
- *   - hostname  valid hostname (letters, digits, hyphens, dots)
- *   - domain    valid domain name (at least one dot, no scheme)
- *   - ipv4      valid IPv4 address (0-255 per octet)
- *   - port      integer 1–65535
- *   - cidr      IPv4 CIDR notation e.g. 192.168.1.0/24
- *
- * Backwards compatible: existing plugins using only `validation.pattern`
- * continue to work without any changes.
- */
+
 
 export type ValidationTypeName = 'url' | 'hostname' | 'domain' | 'ipv4' | 'port' | 'cidr'
 
@@ -65,15 +42,7 @@ const VALIDATION_PRESETS: Record<ValidationTypeName, ValidationPreset> = {
   },
 }
 
-/**
- * Returns a validation error message for a field value, or null if valid.
- *
- * Handles:
- *   - required field check
- *   - validation_type named presets (url, hostname, domain, ipv4, port, cidr)
- *   - custom regex pattern
- *   - integer min/max range
- */
+
 export function getValidationError(
   field: {
     id: string
@@ -84,7 +53,6 @@ export function getValidationError(
   },
   value: unknown,
 ): string | null {
-  // Required check
   if (field.required) {
     if (value === undefined || value === null) return `${field.label} is required`
     if (typeof value === 'string' && value.trim().length === 0) return `${field.label} is required`
@@ -94,11 +62,9 @@ export function getValidationError(
   const validation = (field.validation ?? {}) as FieldValidation
   const customMessage = validation.message ?? null
 
-  // String-based validation (text / string fields)
   if (typeof value === 'string' && value.trim().length > 0) {
     const trimmed = value.trim()
 
-    // Named preset takes priority over raw pattern
     const typeName = validation.validation_type
     if (typeName && VALIDATION_PRESETS[typeName]) {
       const preset = VALIDATION_PRESETS[typeName]
@@ -108,7 +74,6 @@ export function getValidationError(
       return null
     }
 
-    // Raw pattern fallback
     const rawPattern = validation.pattern
     if (typeof rawPattern === 'string') {
       try {
@@ -116,12 +81,10 @@ export function getValidationError(
           return customMessage ?? `${field.label} is not valid`
         }
       } catch {
-        // Malformed regex — skip silently
       }
     }
   }
 
-  // Integer range validation
   if (field.type === 'integer' && value !== '' && value !== undefined && value !== null) {
     const num = typeof value === 'number' ? value : Number(value)
     if (!Number.isFinite(num) || !Number.isInteger(num)) {
@@ -136,9 +99,7 @@ export function getValidationError(
   return null
 }
 
-/**
- * Returns true if all required fields are valid and no validation errors exist.
- */
+
 export function isFormValid(
   fields: Array<{ id: string; label: string; type: string; required?: boolean; validation?: Record<string, unknown> }>,
   inputs: Record<string, unknown>,

@@ -7,6 +7,7 @@ import {
   parseDateSafe,
   formatLocaleDate,
   formatLocaleTime,
+  formatDuration,
 } from "../utils/date";
 import { ConfirmModal } from "../components/ConfirmModal";
 import { useToast } from "../components/ToastContext";
@@ -69,7 +70,6 @@ export default function Scans() {
   const [total, setTotal] = useState(0);
   const PAGE_LIMIT = 10;
 
-  // Modal state for confirm dialogs
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
     title: string;
@@ -84,7 +84,6 @@ export default function Scans() {
     type: "warning",
   });
 
-  // Ref so the visibilitychange handler always sees the current timer id
   const pollingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestSeqRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
@@ -283,16 +282,9 @@ export default function Scans() {
     }
   }
 
-  function formatDuration(seconds?: number) {
-    if (!seconds) return null;
-    if (seconds < 60) return `${Math.round(seconds)}s`;
-    if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
-    return `${Math.round(seconds / 3600)}h`;
-  }
-
   return (
     <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
-      {/* Neo-Brutalist Header */}
+      {}
       <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10">
         <div className="space-y-4">
           <div className="bg-rag-blue text-black px-4 py-1 text-xs font-black uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
@@ -330,7 +322,7 @@ export default function Scans() {
 
       
 
-      {/* Filtration Block */}
+      {}
       <section className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col xl:flex-row justify-between items-center gap-12">
         <div className="flex flex-wrap items-center gap-4">
           <button
@@ -383,9 +375,9 @@ export default function Scans() {
         </div>
       </section>
 
-      {/* Timeline Operations Feed */}
+      {}
       <section className="relative">
-        {/* Vertical Timeline Cable */}
+        {}
         <div className="absolute left-[39px] top-0 bottom-0 w-1 bg-silver-bright/5 hidden md:block"></div>
 
         <AnimatePresence mode="popLayout">
@@ -412,7 +404,7 @@ export default function Scans() {
                     layout
                     className={`relative group md:pl-20 transition-all`}
                   >
-                    {/* Timeline Node */}
+                    {}
                     <div
                       className={`absolute left-[31px] top-12 w-5 h-5 border-4 border-black z-10 hidden md:block transition-all duration-500 ${
                         task.status === "completed"
@@ -531,7 +523,7 @@ export default function Scans() {
                         </div>
                       </div>
 
-                      {/* Error Notification Panel */}
+                      {}
                       {task.status === "failed" && task.error_message && (() => {
                         const isTimeoutFailure =
                           task.error_message?.toLowerCase().includes("timeout") ||
@@ -575,7 +567,7 @@ export default function Scans() {
                         );
                       })()}
 
-                      {/* Expandable Details Block */}
+                      {}
                       <AnimatePresence>
                         {expandedId === task.task_id && (
                           <motion.div
@@ -730,7 +722,7 @@ export default function Scans() {
         )}
       </section>
 
-      {/* Floating Bulk Action Bar */}
+      {}
       <AnimatePresence>
         {selectedIds.length > 0 && (
           <motion.div
@@ -775,7 +767,7 @@ export default function Scans() {
         )}
       </AnimatePresence>
 
-      {/* Restricted Footer */}
+      {}
       <footer className="pt-24 opacity-20 pointer-events-none select-none flex flex-col md:flex-row justify-between items-center gap-8 text-[9px] font-black uppercase tracking-[0.5em] italic">
         <div className="flex items-center gap-4">
           <span className="w-8 h-8 border-4 border-silver/20 flex items-center justify-center font-serif text-lg">
@@ -790,7 +782,7 @@ export default function Scans() {
         </div>
       </footer>
 
-      {/* Confirm Modal */}
+      {}
       <ConfirmModal
         isOpen={modalState.isOpen}
         title={modalState.title}

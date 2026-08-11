@@ -1,17 +1,4 @@
-/**
- * Frontend auth tests.
- *
- * Covers:
- * - getStoredApiKey returns null when no key is stored
- * - setStoredApiKey stores the key in memory (not localStorage)
- * - request() includes X-Api-Key header when a key is stored
- * - request() omits X-Api-Key when no key is stored
- * - request() fires AUTH_REQUIRED_EVENT on HTTP 401
- * - request() throws 'AUTH_REQUIRED' on HTTP 401 (not a generic error)
- * - request() throws a generic error on other non-200 statuses
- * - request() succeeds and returns parsed JSON on 200
- * - The raw key is never logged via console.log/warn/error
- */
+
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {

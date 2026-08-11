@@ -1,2 +1,0 @@
-Malware_Family_A /tmp/suspicious.exe
-Credential_Leak /home/user/config.env

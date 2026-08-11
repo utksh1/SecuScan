@@ -312,8 +312,6 @@ export default function TaskDetails() {
     const [rawSearch, setRawSearch] = useState('')
     const [wrapRawOutput, setWrapRawOutput] = useState(true)
 
-    // ✅ FIX: isMounted cleanup belongs here in TaskDetails, not in FindingDrawer.
-    // The ref is owned by this component — its teardown must live here too.
     useEffect(() => {
         return () => {
             isMounted.current = false
@@ -334,9 +332,6 @@ export default function TaskDetails() {
 
     const FindingDrawer = ({ finding, onClose }: { finding: Finding, onClose: () => void }) => {
         const drawerRef = useRef<HTMLDivElement>(null)
-
-        // ✅ FIX: Only focus + keydown logic here. No isMounted teardown —
-        // that ref belongs to TaskDetails and must not be touched by a child component.
         useEffect(() => {
             drawerRef.current?.focus()
 
@@ -1116,7 +1111,7 @@ export default function TaskDetails() {
                                                                     {asset.label || asset.target || asset.asset_id}
                                                                 </p>
                                                                 <p className="mt-1 text-[10px] font-mono uppercase tracking-[0.16em] text-silver/35">
-                                                                    {asset.services?.length || 0} services // {asset.finding_count || 0} findings // {asset.validated_count || 0} validated
+                                                                    {asset.services?.length || 0} services
                                                                 </p>
                                                             </div>
                                                             <span className={`px-2 py-1 text-[9px] font-black uppercase tracking-[0.16em] border ${severityTone(asset.highest_severity)}`}>

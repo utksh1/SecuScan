@@ -36,7 +36,6 @@ def parse(output: str) -> Dict[str, Any]:
             if p["port"] in critical_ports:
                 highest_severity = "medium"
 
-        # Create one consolidated major finding
         findings.append({
             "title": "Open Network Services Detected",
             "category": "Insecure Surface",

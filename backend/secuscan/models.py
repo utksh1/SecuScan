@@ -1,7 +1,3 @@
-"""
-Pydantic models for API requests and responses
-"""
-
 from typing import Optional, Dict, Any, List, Annotated
 from datetime import datetime
 from pydantic import BaseModel, Field, RootModel
@@ -11,14 +7,12 @@ from enum import Enum
 MAX_BULK_DELETE = 500
 
 class SafetyLevel(str, Enum):
-    """Plugin safety level classification"""
     SAFE = "safe"
     INTRUSIVE = "intrusive"
     EXPLOIT = "exploit"
 
 
 class TaskStatus(str, Enum):
-    """Task execution status"""
     QUEUED = "queued"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -35,15 +29,12 @@ class SandboxConfig(BaseModel):
 
 
 class SandboxViolation(Exception):
-    """Raised when sandbox constraints are violated."""
-
     def __init__(self, reason: str):
         super().__init__(reason)
         self.reason = reason
 
 
 class ScanPhase(str, Enum):
-    """Granular scan phase for progress display"""
     QUEUED = "queued"
     RUNNING_COMMAND = "running_command"
     PARSING = "parsing"
@@ -52,7 +43,6 @@ class ScanPhase(str, Enum):
 
 
 class PluginFieldType(str, Enum):
-    """Plugin field input types"""
     STRING = "string"
     TEXT = "text"
     INTEGER = "integer"
@@ -85,14 +75,12 @@ class EvidenceLevel(str, Enum):
 
 
 class FindingKind(str, Enum):
-    """Normalized finding classification."""
     OBSERVATION = "observation"
     SUSPECTED_ISSUE = "suspected_issue"
     VALIDATED_ISSUE = "validated_issue"
 
 
 class AnalystStatus(str, Enum):
-    """Analyst review state for a finding."""
     NEW = "new"
     CONFIRMED = "confirmed"
     NEEDS_REVIEW = "needs_review"
@@ -102,7 +90,6 @@ class AnalystStatus(str, Enum):
 
 
 class RetestStatus(str, Enum):
-    """Retest lifecycle state for a finding."""
     NOT_REQUESTED = "not_requested"
     PENDING = "pending"
     PASSED = "passed"
@@ -120,7 +107,6 @@ class ExecutionContext(BaseModel):
 
 
 class WorkflowStep(BaseModel):
-    """Single workflow step."""
     plugin_id: str
     inputs: Dict[str, Any]
     preset: Optional[str] = None
@@ -128,7 +114,6 @@ class WorkflowStep(BaseModel):
 
 
 class PluginField(BaseModel):
-    """Plugin input field definition"""
     id: str
     label: str
     type: PluginFieldType
@@ -141,7 +126,6 @@ class PluginField(BaseModel):
 
 
 class PluginMetadata(BaseModel):
-    """Plugin metadata schema"""
     id: str
     name: str
     version: str
@@ -172,7 +156,6 @@ class PluginMetadata(BaseModel):
 
 
 class TaskCreateRequest(BaseModel):
-    """Request to create a new task"""
     plugin_id: str
     preset: Optional[str] = None
     inputs: Dict[str, Any]
@@ -181,7 +164,6 @@ class TaskCreateRequest(BaseModel):
 
 
 class TaskResponse(BaseModel):
-    """Task information response"""
     task_id: str
     plugin_id: str
     tool: str
@@ -199,7 +181,6 @@ class TaskResponse(BaseModel):
 
 
 class Finding(BaseModel):
-    """Structured security finding"""
     id: Optional[str] = None
     title: str
     category: str
@@ -247,7 +228,6 @@ class Finding(BaseModel):
 
 
 class TaskResult(BaseModel):
-    """Task execution result"""
     task_id: str
     plugin_id: str
     tool: str
@@ -274,7 +254,6 @@ class TaskResult(BaseModel):
 
 
 class HealthResponse(BaseModel):
-    """Health check response"""
     status: str
     version: str
     uptime_seconds: Optional[int] = None
@@ -283,13 +262,11 @@ class HealthResponse(BaseModel):
 
 
 class PluginListResponse(BaseModel):
-    """List of available plugins"""
     plugins: List[Dict[str, Any]]
     total: int
 
 
 class ErrorResponse(BaseModel):
-    """Error response"""
     error: str
     message: str
     field: Optional[str] = None
@@ -297,7 +274,6 @@ class ErrorResponse(BaseModel):
 
 
 class NotificationChannelType(str, Enum):
-    """Supported notification delivery channels."""
     WEBHOOK = "webhook"
     EMAIL = "email"
 
@@ -312,13 +288,11 @@ class NotificationSeverityThreshold(str, Enum):
 
 
 class NotificationDeliveryStatus(str, Enum):
-    """Outcome of a notification delivery attempt."""
     SUCCESS = "success"
     FAILED = "failed"
 
 
 class NotificationRuleCreate(BaseModel):
-    """Request payload for creating or updating a notification rule."""
     name: str = Field(..., max_length=255)
     severity_threshold: NotificationSeverityThreshold
     channel_type: NotificationChannelType
@@ -327,7 +301,6 @@ class NotificationRuleCreate(BaseModel):
 
 
 class NotificationRuleUpdate(BaseModel):
-    """Partial update payload for a notification rule."""
     name: Optional[str] = Field(default=None, max_length=255)
     severity_threshold: Optional[NotificationSeverityThreshold] = None
     channel_type: Optional[NotificationChannelType] = None
@@ -336,12 +309,10 @@ class NotificationRuleUpdate(BaseModel):
 
 
 class ScanWebhookSettingsRequest(BaseModel):
-    """Request payload for setting the scan-completion webhook URL."""
     webhook_url: str = Field(..., max_length=2000)
 
 
 class ScanWebhookSettingsResponse(BaseModel):
-    """Stored scan-completion webhook setting returned by the API."""
     webhook_url: Optional[str] = None
     platform: Optional[str] = None
     configured: bool = False
@@ -349,7 +320,6 @@ class ScanWebhookSettingsResponse(BaseModel):
 
 
 class NotificationRuleResponse(BaseModel):
-    """Stored notification rule returned by the API."""
     id: str
     name: str
     severity_threshold: str
@@ -361,7 +331,6 @@ class NotificationRuleResponse(BaseModel):
 
 
 class NotificationHistoryResponse(BaseModel):
-    """Record of a single notification delivery attempt."""
     id: str
     rule_id: str
     finding_id: str
@@ -371,7 +340,6 @@ class NotificationHistoryResponse(BaseModel):
 
 
 class NotificationDiagnosticsResponse(BaseModel):
-    """Diagnostic configuration details for notification delivery."""
     webhook_timeout_seconds: float
     webhook_connect_timeout_seconds: float
     max_retries: int

@@ -1,7 +1,3 @@
-"""
-SecuScan CLI - Command line interface for running security scans
-"""
-
 import asyncio
 import argparse
 import json
@@ -11,7 +7,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, Any
 
-# Add the parent directory to sys.path to allow absolute imports
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
 from backend.secuscan.executor import executor
@@ -27,7 +22,6 @@ async def run_scan(target: str, plugin_id: str, output_format: str, output_file:
     # Ensure directories exist
     settings.ensure_directories()
 
-    # Initialize backend components
     await init_db(settings.database_path)
     await init_cache()
     await init_plugins(settings.plugins_dir)
@@ -36,7 +30,6 @@ async def run_scan(target: str, plugin_id: str, output_format: str, output_file:
 
     # If target is "." and no plugin specified, default to a sensible one for code
     if target == "." and plugin_id == "nmap":
-        # Check if we should use secret_scanner or code_analyzer instead
         plugin_id = "secret_scanner" if plugin_manager.get_plugin("secret_scanner") else "code_analyzer"
         print(f"[*] Detected directory target '.', defaulting to plugin: {plugin_id}")
 
@@ -47,7 +40,6 @@ async def run_scan(target: str, plugin_id: str, output_format: str, output_file:
         print(f"Available plugins include: {available}...")
         return 1
 
-    # Create task
     safe_mode = bool(settings.safe_mode_default)
     inputs = {"target": target, "safe_mode": safe_mode}
     try:

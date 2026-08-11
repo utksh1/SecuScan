@@ -9,8 +9,6 @@ from ..crawler import crawl_target
 
 
 class ZAPScanner(BaseScanner):
-    """Container-oriented ZAP baseline/passive orchestration."""
-
     @property
     def name(self) -> str:
         return "OWASP ZAP Orchestrator"

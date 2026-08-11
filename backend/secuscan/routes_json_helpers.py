@@ -1,16 +1,3 @@
-"""
-Pure JSON deserialization helpers for routes.py.
-
-These helpers were originally defined inline in routes.py. They were extracted
-into this small import-safe module so that they can be unit-tested directly
-without pulling in the heavy routes.py import chain (FastAPI, reporting,
-xhtml2pdf, etc.). routes.py re-imports them from here so the public API is
-unchanged.
-
-The functions are pure: they take rows (dicts) and return new lists of dicts.
-They never mutate their inputs.
-"""
-
 from __future__ import annotations
 
 import json
@@ -20,19 +7,6 @@ from .models import WorkflowStep  # noqa: E402
 
 
 def parse_json_fields(rows: List[Dict], fields: List[str]) -> List[Dict]:
-    """Parse stringified JSON fields from a list of row dicts.
-
-    For each row in *rows*, the named *fields* are checked. If a field is
-    present, truthy, and a string, it is parsed with :func:`json.loads`.
-    Parsing failures are silently preserved (the original string is kept).
-
-    Args:
-        rows:   Iterable of row dicts (typically from a SQL query).
-        fields: Column names whose values may be JSON-encoded strings.
-
-    Returns:
-        A new list of row dicts with the named fields parsed.
-    """
     parsed = []
     for row in rows:
         item = dict(row)
@@ -57,13 +31,6 @@ FINDING_JSON_FIELDS = [
 
 
 def deserialize_finding_rows(rows: List[Dict]) -> List[Dict[str, Any]]:
-    """Parse JSON fields on finding rows and rename them to friendly keys.
-
-    The ``*_json`` suffix is stripped from the parsed values:
-    ``metadata_json`` -> ``metadata``, ``evidence_json`` -> ``evidence``, etc.
-    Rows that do not contain a given ``*_json`` key are passed through.
-    Timestamps are normalized to ISO-8601 UTC with an explicit offset.
-    """
     from .time_utils import to_utc_iso
 
     findings = parse_json_fields(rows, FINDING_JSON_FIELDS)
@@ -99,11 +66,6 @@ def deserialize_finding_rows(rows: List[Dict]) -> List[Dict[str, Any]]:
 
 
 def deserialize_asset_service_rows(rows: List[Dict]) -> List[Dict[str, Any]]:
-    """Parse JSON fields on asset-service rows and rename them.
-
-    Only ``metadata_json`` and ``cert_san_json`` are parsed; both are renamed
-    to ``metadata`` and ``cert_san`` respectively.
-    """
     items = parse_json_fields(rows, ["metadata_json", "cert_san_json"])
     for item in items:
         if "metadata_json" in item:
@@ -121,16 +83,6 @@ from typing import Optional
 
 
 def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
-    """Parse and normalize raw workflow steps from a JSON string or list.
-
-    Handles three input forms:
-    - A list of step dicts (pass-through)
-    - A JSON string (parsed with json.loads)
-    - None or falsy (returns empty list)
-
-    Each step dict is validated against the WorkflowStep model; invalid
-    entries are silently skipped.
-    """
     if isinstance(raw_steps, list):
         parsed = raw_steps
     elif not raw_steps:
@@ -158,11 +110,6 @@ def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
 
 
 def _json_payload(value: Any, fallback: str) -> str:
-    """Return JSON-encoded value, or fall back to the parsed fallback string.
-
-    If *value* is not None it is JSON-serialized directly. If it is None,
-    *fallback* is parsed as JSON and that result is JSON-serialized.
-    """
     return json.dumps(value if value is not None else json.loads(fallback))
 
 
@@ -170,16 +117,6 @@ def _serialize_workflow(
     row: Dict[str, Any],
     queued_task_ids: Optional[list[str]] = None,
 ) -> Dict[str, Any]:
-    """Return the workflow shape consumed by the frontend.
-
-    Args:
-        row: A database row dict for a workflow record.
-        queued_task_ids: Optional list of currently-queued task IDs.
-
-    Returns:
-        A dict with id, name, schedule_seconds, enabled, steps, created_at,
-        last_run_at, and queued_task_ids fields.
-    """
     return {
         "id": row["id"],
         "name": row["name"],
@@ -201,12 +138,6 @@ _SSE_CHUNK_SIZE = 64 * 1024
 
 
 def iter_raw_output_chunks(path: str, chunk_size: int = _SSE_CHUNK_SIZE):
-    """Yield raw output from *path* in bounded chunks.
-
-    Each yielded value is a string of at most *chunk_size* bytes.
-    An empty or short file produces fewer chunks. Unicode is decoded
-    with errors='replace' to avoid crashing on malformed bytes.
-    """
     with open(path, "r", encoding="utf-8", errors="replace") as output_file:
         while True:
             chunk = output_file.read(chunk_size)

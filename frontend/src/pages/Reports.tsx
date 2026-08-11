@@ -177,7 +177,7 @@ export default function Reports() {
 
   return (
     <div className="min-h-screen bg-charcoal-dark text-silver p-6 md:p-12 space-y-12">
-      {/* Neo-Brutalist Header */}
+      {}
       <header className="relative flex flex-col md:flex-row justify-between items-start md:items-end gap-8 pb-12 border-b-4 border-silver-bright/10 font-black">
         <div className="space-y-4">
           <div className="bg-rag-amber text-black px-4 py-1 text-xs uppercase tracking-widest inline-block shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-black">
@@ -221,7 +221,7 @@ export default function Reports() {
         </div>
       </header>
 
-      {/* Loading State */}
+      {}
       {loading && (
         <div className="flex items-center justify-center py-40 gap-6">
           <div className="animate-spin">
@@ -233,7 +233,7 @@ export default function Reports() {
         </div>
       )}
 
-      {/* Error State */}
+      {}
       {!loading && error && (
         <div className="border-4 border-rag-red bg-rag-red/10 p-8 flex items-center gap-6 shadow-[6px_6px_0px_0px_rgba(0,0,0,1)]">
           <div className="space-y-1">
@@ -251,7 +251,7 @@ export default function Reports() {
 
       {!loading && !error && (
         <>
-          {/* Metrics Row */}
+          {}
           <section className="grid grid-cols-2 md:grid-cols-4 gap-6">
             {[
               { label: 'Archived_Briefings', val: reports.length, color: 'bg-rag-blue', unit: 'FILES' },
@@ -273,11 +273,11 @@ export default function Reports() {
           </section>
 
           <div className="grid grid-cols-1 xl:grid-cols-4 gap-12">
-            {/* Filtration Sidebar */}
+            {}
             <aside className="xl:col-span-1 space-y-12">
               <section className="bg-charcoal border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] space-y-8">
 
-                {/* Type Filter */}
+                {}
                 <div className="space-y-4">
                   <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic">Classification_Isolation</label>
                   <div className="grid grid-cols-1 gap-2">
@@ -298,7 +298,7 @@ export default function Reports() {
                   </div>
                 </div>
 
-                {/* Status Filter */}
+                {}
                 <div className="space-y-4">
                   <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic">Status_Filter</label>
                   <div className="grid grid-cols-1 gap-2">
@@ -325,7 +325,7 @@ export default function Reports() {
                   </div>
                 </div>
 
-                {/* Date Range Filter */}
+                {}
                 <div className="space-y-4">
                   <label className="text-[10px] font-black text-silver-bright uppercase tracking-[0.2em] italic">Date_Range</label>
                   <div className="grid grid-cols-1 gap-2">
@@ -364,7 +364,7 @@ export default function Reports() {
               </section>
             </aside>
 
-            {/* Ledger Section */}
+            {}
             <main className="xl:col-span-3 space-y-8">
               <div className="flex flex-col md:flex-row justify-between items-end gap-6 border-b-4 border-black pb-8">
                 <h2 className="text-5xl font-black text-silver-bright italic uppercase tracking-tighter shrink-0">Historical_Ledger</h2>
@@ -388,7 +388,7 @@ export default function Reports() {
                       variants={itemVariants}
                       className="group bg-charcoal border-4 border-black p-10 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[14px_14px_0px_0px_rgba(0,0,0,1)] transition-all relative overflow-hidden"
                     >
-                      {/* Status Top Bar */}
+                      {}
                       <div className={`absolute top-0 left-0 h-2 transition-all duration-500 ${
                         report.status === 'ready' ? 'bg-rag-green w-full' :
                           report.status === 'failed' ? 'bg-rag-red w-full' : 'bg-rag-amber w-1/2 animate-pulse'
@@ -487,7 +487,7 @@ export default function Reports() {
                         </div>
                       </div>
 
-                      {/* Background Hover Icon */}
+                      {}
                       <div className="absolute -right-12 -bottom-12 opacity-0 group-hover:opacity-[0.03] transition-all duration-1000 transform scale-150 rotate-12 pointer-events-none">
                         <div className="text-silver-bright">
                           <ReportIcon
@@ -546,7 +546,7 @@ export default function Reports() {
         />
       )}
 
-      {/* Tactical Footer */}
+      {}
       <footer className="pt-24 border-t-4 border-black/5 flex flex-col md:flex-row justify-between items-center gap-8 text-[9px] font-black uppercase tracking-[0.5em] italic opacity-20">
         <div className="flex items-center gap-6">
           <div className="w-12 h-1 bg-silver/20"></div>

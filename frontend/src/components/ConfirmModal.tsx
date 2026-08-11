@@ -26,23 +26,17 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
-  // Focus trap and keyboard handling
   useEffect(() => {
     if (!isOpen) return;
 
-    // Store previously focused element
     previousFocusRef.current = document.activeElement as HTMLElement;
 
-    // Focus the confirm button
     confirmButtonRef.current?.focus();
 
-    // Handle keyboard events
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onCancel();
       } else if (e.key === 'Enter' && !e.shiftKey) {
-        // Only trigger onConfirm if the active element is NOT a button
-        // (buttons already handle Enter via their onClick)
         const activeElement = document.activeElement;
         if (activeElement?.tagName !== 'BUTTON') {
           e.preventDefault();
@@ -76,7 +70,6 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
     };
   }, [isOpen, onConfirm, onCancel]);
 
-  // Lock body scroll when modal opens
   useEffect(() => {
     if (!isOpen) return;
 
@@ -103,17 +96,14 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
     }
   };
 
-  // Render modal using Portal - goes OUTSIDE #root
   return createPortal(
     <>
-      {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/60 z-40"
         onClick={onCancel}
         aria-hidden="true"
       />
 
-      {/* Modal - Neo-brutalist style */}
       <div
         ref={modalRef}
         className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-md"
@@ -123,21 +113,18 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
         aria-describedby="modal-description"
       >
         <div className="bg-charcoal border-4 border-black shadow-[12px_12px_0px_0px_rgba(0,0,0,1)]">
-          {/* Header */}
           <div className="border-b-4 border-black p-6">
             <h2 id="modal-title" className="text-xl font-black uppercase tracking-wider text-silver-bright">
               {title}
             </h2>
           </div>
 
-          {/* Body */}
           <div className="p-6">
             <p id="modal-description" className="text-sm font-mono text-silver-bright/70 leading-relaxed">
               {message}
             </p>
           </div>
 
-          {/* Footer */}
           <div className="border-t-4 border-black p-6 flex justify-end gap-4">
             <button
               onClick={onCancel}

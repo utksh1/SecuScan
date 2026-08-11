@@ -1,7 +1,3 @@
-"""
-Rate limiting for task execution and endpoints
-"""
-
 from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Tuple, Dict, List
@@ -12,8 +8,6 @@ from .config import settings
 
 
 class RateLimiter:
-    """Rate limiter for controlling task execution frequency"""
-
     def __init__(self):
         self.task_history: Dict[str, List[datetime]] = defaultdict(list)
         self.lock = asyncio.Lock()
@@ -24,23 +18,6 @@ class RateLimiter:
         max_per_hour: int = 50,
         client_id: str = "global",
     ) -> Tuple[bool, str]:
-        """
-        Check if a task can be executed based on rate limits.
-
-        Each (client_id, plugin_id) pair has its own independent quota so
-        one client exhausting their limit does not block other clients from
-        running the same plugin.
-
-        Args:
-            plugin_id: Plugin identifier
-            max_per_hour: Maximum tasks per hour for this (client, plugin) pair
-            client_id: Opaque client identifier (IP, API key, user ID, etc.).
-                       Defaults to ``"global"`` for backwards-compatible callers
-                       that do not supply a client identity.
-
-        Returns:
-            Tuple of (allowed, error_message)
-        """
         bucket = f"{client_id}:{plugin_id}"
 
         async with self.lock:
@@ -63,7 +40,6 @@ class RateLimiter:
             return True, ""
 
     async def reset(self, plugin_id: str = None):
-        """Reset rate limits for a plugin (all clients) or all buckets"""
         async with self.lock:
             if plugin_id:
                 # Remove every bucket that ends with :<plugin_id>
@@ -75,23 +51,12 @@ class RateLimiter:
 
 
 class ConcurrentTaskLimiter:
-    """Limits concurrent task execution"""
-
     def __init__(self, max_concurrent: int = 3):
         self.max_concurrent = max_concurrent
         self.running_tasks: List[str] = []
         self.lock = asyncio.Lock()
 
     async def acquire(self, task_id: str) -> Tuple[bool, str]:
-        """
-        Try to acquire a slot for task execution.
-
-        Args:
-            task_id: Task identifier
-
-        Returns:
-            Tuple of (acquired, error_message)
-        """
         async with self.lock:
             if len(self.running_tasks) >= self.max_concurrent:
                 return False, f"Maximum concurrent tasks ({self.max_concurrent}) reached"
@@ -100,24 +65,16 @@ class ConcurrentTaskLimiter:
             return True, ""
 
     async def release(self, task_id: str):
-        """Release a task slot"""
         async with self.lock:
             if task_id in self.running_tasks:
                 self.running_tasks.remove(task_id)
 
     async def get_available_slots(self) -> int:
-        """Get number of available execution slots"""
         async with self.lock:
             return self.max_concurrent - len(self.running_tasks)
 
 
 def resolve_client_identity(request: Request) -> str:
-    """
-    Resolves client identity in priority order:
-    1. API Key: Check standard headers X-API-Key/X-Api-Key, or Authorization bearer/basic token
-    2. Authenticated User: Check X-User-ID or request.state.user_id / request.state.user.id / request.state.user
-    3. Client IP: Connection IP, respecting X-Forwarded-For *only* if the connection IP is a trusted proxy.
-    """
     # 1. API Key Check
     for key_header in ("x-api-key", "x-key"):
         if value := request.headers.get(key_header):
@@ -159,9 +116,6 @@ def resolve_client_identity(request: Request) -> str:
 
 
 class EndpointRateLimiter:
-    """
-    Sliding window rate limiter applied as a FastAPI dependency.
-    """
     def __init__(self, bucket_name: str, limit: int, window_seconds: int):
         self.bucket_name = bucket_name
         self.limit = limit
@@ -231,15 +185,12 @@ class EndpointRateLimiter:
             response.headers["X-RateLimit-Reset"] = str(reset_in)
 
     async def reset(self):
-        """Clear all rate limiting history for this bucket."""
         async with self.lock:
             self.history.clear()
             self.last_cleanup = None
 
 
 class WorkflowRateLimiter:
-    """Rate limiter for scheduler-triggered workflow scans."""
-
     def __init__(self):
         self._last_run: Dict[str, datetime] = {}
         self.lock = asyncio.Lock()
@@ -298,7 +249,6 @@ scheduler_tick_limiter = EndpointRateLimiter(
 )
 
 async def reset_all_endpoint_limiters():
-    """Reset rate limiting history for all route-specific buckets."""
     await task_start_limiter.reset()
     await vault_limiter.reset()
     await report_download_limiter.reset()
