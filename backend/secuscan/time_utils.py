@@ -11,12 +11,21 @@ from typing import Any, Optional
 
 
 def ensure_utc(value: datetime) -> datetime:
+    """Coerce a datetime to timezone-aware UTC.
+
+    Naive datetimes are treated as UTC (matching SQLite ``datetime('now')``
+    storage semantics in this project).
+    """
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)
     return value.astimezone(UTC)
 
 
 def parse_to_utc(value: Any) -> Optional[datetime]:
+    """Parse a datetime or ISO-8601 string into timezone-aware UTC.
+
+    Returns ``None`` when the value cannot be parsed.
+    """
     if value is None:
         return None
     if isinstance(value, datetime):
@@ -51,6 +60,14 @@ def parse_to_utc(value: Any) -> Optional[datetime]:
 
 
 def to_utc_iso(value: Any = None, *, timespec: str = "auto") -> str:
+    """Convert a value to an ISO-8601 UTC string with an explicit offset.
+
+    ``None`` (or omitted) uses the current UTC time. Unparseable values fall
+    back to ``utc_now()`` so API responses always include a timezone offset.
+
+    ``timespec="auto"`` preserves microseconds when present so callers that
+    compare against ``datetime.now(timezone.utc)`` stay consistent.
+    """
     parsed = utc_now() if value is None else parse_to_utc(value)
     if parsed is None:
         parsed = utc_now()
@@ -58,6 +75,7 @@ def to_utc_iso(value: Any = None, *, timespec: str = "auto") -> str:
 
 
 def format_utc_display(value: Any, *, fmt: str = "%b %d, %Y %H:%M UTC") -> str:
+    """Format a timestamp for human-readable report pages in UTC."""
     parsed = parse_to_utc(value)
     if parsed is None:
         return "Unknown"

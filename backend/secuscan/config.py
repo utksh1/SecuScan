@@ -1,3 +1,7 @@
+"""
+Configuration management for SecuScan backend
+"""
+
 from pathlib import Path
 from typing import Any, List, Optional
 from pydantic import field_validator
@@ -33,6 +37,8 @@ MANDATORY_DENYLIST: List[str] = [
 
 
 class Settings(BaseSettings):
+    """Application settings loaded from environment variables"""
+
     # Server Configuration
     bind_address: str = "127.0.0.1"
     bind_port: int = 8000
@@ -191,6 +197,12 @@ class Settings(BaseSettings):
 
     @property
     def resolved_vault_key(self) -> bytes:
+        """Return a deterministic 32-byte key for credential vault encryption.
+
+        Raises RuntimeError when neither SECUSCAN_VAULT_KEY nor
+        SECUSCAN_PLUGIN_SIGNATURE_KEY is set, rather than falling back to the
+        insecure hardcoded string that was present in earlier versions.
+        """
         seed = self.vault_key or self.plugin_signature_key
         if not seed:
             raise RuntimeError(
@@ -203,6 +215,7 @@ class Settings(BaseSettings):
         return base64.urlsafe_b64encode(digest)
 
     def ensure_directories(self) -> None:
+        """Create necessary directories if they don't exist"""
         for directory in [
             self.raw_output_dir,
             self.reports_dir,
@@ -212,6 +225,7 @@ class Settings(BaseSettings):
         ]:
             Path(directory).mkdir(parents=True, exist_ok=True)
 
+        # Create gitkeep files
         (Path(self.raw_output_dir) / ".gitkeep").touch()
         (Path(self.reports_dir) / ".gitkeep").touch()
 

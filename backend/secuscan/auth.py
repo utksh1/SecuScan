@@ -1,3 +1,17 @@
+"""
+API key authentication for SecuScan backend.
+
+A random key is generated at startup and written to <data_dir>/.api_key.
+Clients must supply it via:
+  - Authorization: Bearer <key>
+  - X-Api-Key: <key>
+
+Session management (signed cookie, no server-side state):
+  - POST /api/v1/auth/session — validate API key and set HttpOnly session cookie
+  - GET  /api/v1/auth/session/check — verify active session cookie
+  - POST /api/v1/auth/session/logout — clear session cookie
+"""
+
 import base64
 import hmac
 import json
@@ -70,6 +84,16 @@ auth_router = APIRouter(prefix="/api/v1/auth")
 
 @auth_router.post("/session")
 async def create_session(request: Request, response: Response):
+    """Validate the API key and set an HttpOnly session cookie.
+
+    The client sends the API key via the X-Api-Key header (or Authorization
+    Bearer). On success the server sets a signed HttpOnly session cookie so
+    the key itself never needs to touch localStorage. The cookie is self-
+    contained (HMAC-signed) and requires no server-side session store.
+    The Secure flag is only set when the request arrives over HTTPS or
+    carries an X-Forwarded-Proto: https header, preserving HTTP localhost
+    development.
+    """
     if _api_key is None:
         raise HTTPException(
             status_code=503, detail="Authentication service not initialised"
@@ -98,6 +122,7 @@ async def create_session(request: Request, response: Response):
 
 @auth_router.get("/session/check")
 async def check_session(request: Request):
+    """Return whether the request carries a valid signed session cookie."""
     token = request.cookies.get(COOKIE_NAME)
     if token and _verify_signed_token(token):
         return {"authenticated": True}
@@ -106,6 +131,7 @@ async def check_session(request: Request):
 
 @auth_router.post("/session/logout")
 async def logout_session(request: Request, response: Response):
+    """Destroy the session cookie."""
     response.delete_cookie(COOKIE_NAME)
     return {"status": "logged_out"}
 
@@ -116,6 +142,12 @@ def is_authenticated_by_session(request: Request) -> bool:
 
 
 def init_api_key(data_dir: str) -> str:
+    """
+    Load the persisted API key, or generate and persist a new one.
+
+    Called once during application startup; the returned key is also stored in
+    the module-level ``_api_key`` variable so the FastAPI dependency can reach it.
+    """
     global _api_key
     # Allow operators to redirect the key file via env var (e.g. Docker secrets).
     custom_path = os.environ.get("SECUSCAN_API_KEY_FILE", "").strip()
@@ -135,6 +167,15 @@ async def require_api_key(
     bearer: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
     x_api_key: str | None = Security(_api_key_header),
 ) -> str:
+    """
+    FastAPI dependency — rejects requests that do not carry the correct API key
+    or a valid session cookie.
+
+    Accepts the key in either:
+    - ``Authorization: Bearer <key>``
+    - ``X-Api-Key: <key>``
+    - Valid ``secuscan_session`` HttpOnly cookie (set via POST /auth/session)
+    """
     if request is not None and request.url.path.startswith("/api/v1/admin"):
         # Admin endpoints have their own separate verify_admin_access dependency.
         # We bypass require_api_key verification to avoid blocking valid admin key requests.
@@ -193,6 +234,7 @@ _OWNER_HEADER = "x-user-id"
 
 
 def resolve_owner_id(request: Request | None) -> str:
+    """Resolve the owning user/workspace identity for the current request."""
     if request is not None:
         user_id = request.headers.get(_OWNER_HEADER)
         if user_id and user_id.strip():
@@ -201,4 +243,5 @@ def resolve_owner_id(request: Request | None) -> str:
 
 
 async def get_current_owner(request: Request) -> str:
+    """FastAPI dependency yielding the owner identity for the request."""
     return resolve_owner_id(request)

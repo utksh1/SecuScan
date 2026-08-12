@@ -43,6 +43,12 @@ _SOURCE_QUALITY = {
 
 
 def generate_finding_key(finding: Dict[str, Any], plugin_id: str, target: str, owner_id: str) -> str:
+    """
+    Generate a stable deduplication key for a finding that is consistent
+    across different scan tasks targeting the same asset. Unlike the per-task
+    finding ID, this key intentionally excludes any task identifier so that
+    the same vulnerability discovered by separate tasks produces the same key.
+    """
     asset_ref = _guess_asset_ref(finding, target)
     asset_id = _stable_id("asset", target, asset_ref)
     signature = _issue_signature(finding)
@@ -196,12 +202,16 @@ def _dedupe_evidence(items: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     unique: List[Dict[str, Any]] = []
     seen = set()
     for item in items:
-        key = (
-            item.get("type"),
-            item.get("label"),
-            str(item.get("value")),
-            item.get("artifact_ref"),
-            item.get("source"),
+        key = json.dumps(
+            {
+                "type": item.get("type"),
+                "label": item.get("label"),
+                "value": item.get("value"),
+                "artifact_ref": item.get("artifact_ref"),
+                "source": item.get("source"),
+            },
+            sort_keys=True,
+            default=str,
         )
         if key in seen:
             continue
@@ -303,6 +313,7 @@ async def normalize_and_correlate_findings(
     target: str,
     findings: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
+    """Normalize evidence and correlate repeated findings across scans."""
     observed_at = to_utc_iso()
     staged: Dict[str, Dict[str, Any]] = {}
 
@@ -354,32 +365,32 @@ async def normalize_and_correlate_findings(
         staged_item["cve"] = staged_item.get("cve") or finding.get("cve")
         staged_item["cpe"] = staged_item.get("cpe") or finding.get("cpe")
         staged_item["service_fingerprint"] = staged_item.get("service_fingerprint") or finding.get("service_fingerprint")
-        staged_item["description"] = (staged_item.get("description" if str(staged_item.get("description" or "").strip() else ""), finding.get("description", ""))
-        staged_item["remediation"] = (staged_item.get("remediation" if str(staged_item.get("remediation" or "").strip() else ""), finding.get("remediation", ""))
-        staged_item["proof"] = (staged_item.get("proof" if str(staged_item.get("proof" or "").strip() else ""), finding.get("proof", ""))
-        staged_item["validation_method"] = (staged_item.get("validation_method" if str(staged_item.get("validation_method" or "").strip() else ""), finding.get("validation_method", ""))
-        staged_item["confidence_reason"] = (staged_item.get("confidence_reason" if str(staged_item.get("confidence_reason" or "").strip() else ""), finding.get("confidence_reason", ""))
+        staged_item["description"] = staged_item.get("description") or finding.get("description", "")
+        staged_item["remediation"] = staged_item.get("remediation") or finding.get("remediation", "")
+        staged_item["proof"] = staged_item.get("proof") or finding.get("proof", "")
+        staged_item["validation_method"] = staged_item.get("validation_method") or finding.get("validation_method", "")
+        staged_item["confidence_reason"] = staged_item.get("confidence_reason") or finding.get("confidence_reason", "")
         staged_item["asset_refs"] = sorted({*staged_item.get("asset_refs", []), *[str(ref) for ref in finding.get("asset_refs", []) if str(ref).strip()]})
         staged_item["references"] = [
             *staged_item.get("references", []),
             *[item for item in finding.get("references", []) if isinstance(item, dict)],
         ]
         staged_item["evidence"] = _dedupe_evidence([*staged_item.get("evidence", []), *normalized_evidence])
-        staged_item["corroborating_sources"] = sorted({str(s).strip() for s in [*staged_item.get("corroborating_sources", [] if str(s).strip()}), *sources])
+        staged_item["corroborating_sources"] = sorted({str(s).strip() for s in [*staged_item.get("corroborating_sources", []), *sources] if str(s).strip()})
         staged_item["metadata"].update({key: value for key, value in (finding.get("metadata") or {}).items() if value not in ("", None, [], {})})
 
-    all_group_ids = list(staged.keys())
-    previous_map = {}
-    if all_group_ids:
-        previous_rows = await db.fetchall(
-            f"SELECT * FROM findings WHERE owner_id = ? AND finding_group_id IN ({','.join('?' * len(all_group_ids))})",
-            (owner_id, *all_group_ids)
-        )
-        previous_map = {row["finding_group_id"]: row for row in previous_rows}
-    
     normalized: List[Dict[str, Any]] = []
     for finding_group_id, finding in staged.items():
-        previous = previous_map.get(finding_group_id)
+        previous = await db.fetchone(
+            """
+            SELECT first_seen_at, occurrence_count, corroborating_sources_json, analyst_status, retest_status
+            FROM findings
+            WHERE owner_id = ? AND finding_group_id = ?
+            ORDER BY discovered_at DESC
+            LIMIT 1
+            """,
+            (owner_id, finding_group_id),
+        )
         prior_sources = []
         if previous and previous.get("corroborating_sources_json"):
             try:
@@ -387,7 +398,7 @@ async def normalize_and_correlate_findings(
             except json.JSONDecodeError:
                 prior_sources = []
 
-        finding["corroborating_sources"] = sorted({str(s).strip() for s in [*finding.get("corroborating_sources", [] if str(s).strip()}), *prior_sources])
+        finding["corroborating_sources"] = sorted({str(s).strip() for s in [*finding.get("corroborating_sources", []), *prior_sources] if str(s).strip()})
         previous_count = int(previous["occurrence_count"]) if previous and previous.get("occurrence_count") else 0
         local_count = int(finding.get("occurrence_count", 1))
         occurrence_count = previous_count + local_count
@@ -417,7 +428,7 @@ async def normalize_and_correlate_findings(
 
     if settings.triage_engine_enabled and settings.triage_engine_api_key:
         try:
-            await triage_engine.triage_findings_async(
+            triage_engine.triage_findings(
                 normalized,
                 model=settings.triage_engine_model,
                 api_key=settings.triage_engine_api_key,
@@ -477,7 +488,7 @@ def build_finding_groups(findings: List[Dict[str, Any]]) -> List[Dict[str, Any]]
         current["first_seen_at"] = min(str(current.get("first_seen_at") or ""), str(finding.get("first_seen_at") or finding.get("discovered_at") or ""))
         current["occurrence_count"] = max(int(current.get("occurrence_count") or 1), int(finding.get("occurrence_count") or 1))
         current["evidence_count"] = max(int(current.get("evidence_count") or 0), int(finding.get("evidence_count") or len(finding.get("evidence", []))))
-        current["corroborating_sources"] = sorted({str(s).strip() for s in [*current.get("corroborating_sources", [] if str(s).strip()}), *finding.get("corroborating_sources", [])])
+        current["corroborating_sources"] = sorted({str(s).strip() for s in [*current.get("corroborating_sources", []), *finding.get("corroborating_sources", [])] if str(s).strip()})
         current["confidence"] = max(float(current.get("confidence") or 0.0), float(finding.get("confidence") or 0.0))
         current["findings"].append(finding)
 

@@ -1,3 +1,11 @@
+"""
+Notification delivery service for high-severity findings.
+
+Evaluates active rules, deduplicates deliveries, redacts alert payloads,
+and records outcomes in notification_history. Webhook delivery is live;
+email is a logged placeholder until SMTP is added.
+"""
+
 from __future__ import annotations
 
 import json
@@ -42,6 +50,7 @@ _USER_AGENT = "SecuScan-Notifications/1.0"
 _MAX_WEBHOOK_RESPONSE_BYTES = 1024 * 1024  # 1 MiB
 
 def get_delivery_configuration() -> Dict[str, Any]:
+    """Return the currently active configuration for notification delivery."""
     return {
         "webhook_timeout_seconds": _WEBHOOK_TIMEOUT_SECONDS,
         "webhook_connect_timeout_seconds": _WEBHOOK_CONNECT_TIMEOUT_SECONDS,
@@ -54,6 +63,9 @@ SOCKET_OPTION = Tuple[int, int, int | bytes]
 
 class _PinnedIPNetworkStream(httpcore.AsyncNetworkStream):
     """Wraps a network stream so that ``start_tls`` always uses the original
+    hostname for SNI / certificate verification, even when the TCP connection
+    was made to a different (resolved-IP) address."""
+
     __slots__ = ("_inner", "_original_hostname")
 
     def __init__(
@@ -89,6 +101,8 @@ class _PinnedIPNetworkStream(httpcore.AsyncNetworkStream):
 
 class _PinnedIPNetworkBackend(httpcore.AsyncNetworkBackend):
     """Network backend that connects TCP to the validated (pinned) IP while
+    preserving the original hostname for subsequent TLS negotiation."""
+
     __slots__ = ("_resolved_ip", "_original_hostname", "_default_backend")
 
     def __init__(self, resolved_ip: str, original_hostname: str) -> None:
@@ -131,6 +145,9 @@ class _PinnedIPNetworkBackend(httpcore.AsyncNetworkBackend):
 
 class _PinnedIPTransport(httpx.AsyncBaseTransport):
     """httpx transport that wraps an ``httpcore.AsyncConnectionPool`` using a
+    ``_PinnedIPNetworkBackend`` so that every outgoing connection is pinned to a
+    pre-validated IP address while the original hostname is used for TLS."""
+
     __slots__ = ("_pool",)
 
     def __init__(self, resolved_ip: str, original_hostname: str) -> None:
@@ -211,6 +228,7 @@ class NotificationRuleConflictError(Exception):
 
 
 def severity_meets_threshold(finding_severity: str, rule_threshold: str) -> bool:
+    """Return True when finding severity is at or above the rule threshold."""
     finding_rank = _SEVERITY_RANK.get(str(finding_severity).lower())
     threshold_rank = _SEVERITY_RANK.get(str(rule_threshold).lower())
     if finding_rank is None or threshold_rank is None:
@@ -262,7 +280,13 @@ async def was_already_delivered(
     rule_id: str,
     finding_id: str,
 ) -> bool:
+    """Return True when this rule already successfully notified this finding."""
     row = await db.fetchone(
+        """
+        SELECT id FROM notification_history
+        WHERE rule_id = ? AND finding_id = ? AND status = ?
+        LIMIT 1
+        """,
         (rule_id, finding_id, NotificationDeliveryStatus.SUCCESS.value),
     )
     return row is not None
@@ -275,8 +299,13 @@ async def record_delivery(
     status: NotificationDeliveryStatus,
     error_message: Optional[str] = None,
 ) -> str:
+    """Persist a delivery attempt and return the history row id."""
     history_id = str(uuid.uuid4())
     await db.execute(
+        """
+        INSERT INTO notification_history (id, rule_id, finding_id, status, error_message)
+        VALUES (?, ?, ?, ?, ?)
+        """,
         (
             history_id,
             rule_id,
@@ -292,6 +321,23 @@ async def send_webhook(
     target_url: str, payload: Dict[str, Any]
 ) -> tuple[bool, Optional[str]]:
     """POST a redacted alert payload to a webhook URL with SSRF protections.
+
+    Always resolves the target hostname and validates every returned IP against
+    the configured SECUSCAN_NOTIFICATION_BLOCKED_IP_RANGES, independent of the
+    general enforce_network_policy setting.
+
+    The address actually contacted is the validated IP (not the hostname) to
+    prevent DNS-rebinding / TOCTOU attacks.  How this is achieved differs by
+    scheme so that TLS verification is not broken:
+
+    * **http**: the URL is rewritten to the resolved IP and the ``Host`` header
+      is set to the original hostname.  Plain HTTP has no TLS so there is no
+      certificate-verification concern.
+
+    * **https**: a custom ``_PinnedIPTransport`` binds the TCP connection to the
+      validated IP while the original hostname is preserved for TLS SNI and
+      certificate verification, keeping the original hostname in the URL.
+    """
     from .config import settings
     from urllib.parse import urlparse, urlunparse
 
@@ -300,6 +346,7 @@ async def send_webhook(
     if not hostname:
         return False, "Webhook URL has no hostname"
 
+    # Resolve and validate every address the hostname may return.
     try:
         addrs = socket.getaddrinfo(
             hostname, parsed.port or 443, proto=socket.IPPROTO_TCP
@@ -345,6 +392,7 @@ async def send_webhook(
         request_url = target_url
         extra_headers: dict[str, str] = {}
     else:
+        # Rewrite the URL to the resolved IP and set the Host header.
         # This is safe for plain HTTP because there is no TLS handshake.
         new_netloc = f"[{resolved_ip}]" if ":" in resolved_ip else resolved_ip
         if parsed.port:
@@ -443,6 +491,7 @@ def _send_smtp_email_sync(
     body_text: str,
     body_html: str,
 ) -> None:
+    """Synchronously send an email using settings SMTP parameters."""
     from .config import settings
 
     msg = MIMEMultipart("alternative")
@@ -465,6 +514,7 @@ async def send_email(
     target_email: str,
     payload: Dict[str, Any],
 ) -> tuple[bool, Optional[str]]:
+    """Send a rich SMTP email notification containing finding details asynchronously."""
     from .config import settings
 
     finding = payload.get("finding", {})
@@ -501,6 +551,40 @@ async def send_email(
     remediation_esc = html.escape(str(finding.get('remediation') or "")).replace('\n', '<br>')
 
     body_html = f"""<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h2 style="color: #991b1b; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">🛡️ SecuScan Alert</h2>
+  <p>A new high-priority security vulnerability has been identified:</p>
+  <table style="border-collapse: collapse; width: 100%; margin: 20px 0;">
+    <tr style="background-color: #f8fafc;">
+      <td style="padding: 10px; border: 1px solid #e2e8f0; font-weight: bold; width: 140px;">Title</td>
+      <td style="padding: 10px; border: 1px solid #e2e8f0;">{title_esc}</td>
+    </tr>
+    <tr>
+      <td style="padding: 10px; border: 1px solid #e2e8f0; font-weight: bold;">Category</td>
+      <td style="padding: 10px; border: 1px solid #e2e8f0;">{category_esc}</td>
+    </tr>
+    <tr style="background-color: #f8fafc;">
+      <td style="padding: 10px; border: 1px solid #e2e8f0; font-weight: bold;">Severity</td>
+      <td style="padding: 10px; border: 1px solid #e2e8f0; text-transform: uppercase; font-weight: bold; color: #991b1b;">{severity_esc}</td>
+    </tr>
+    <tr>
+      <td style="padding: 10px; border: 1px solid #e2e8f0; font-weight: bold;">Target</td>
+      <td style="padding: 10px; border: 1px solid #e2e8f0;">{target_esc}</td>
+    </tr>
+  </table>
+  <h3>Description</h3>
+  <p style="color: #475569; background-color: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0;">{description_esc}</p>
+  <h3>Remediation Guidance</h3>
+  <p style="color: #166534; background-color: #f0fdf4; padding: 15px; border-radius: 8px; border: 1px solid #bbf7d0; border-left: 4px solid #22c55e;">
+    {remediation_esc}
+  </p>
+  <p style="font-size: 11px; color: #64748b; margin-top: 40px; border-top: 1px solid #e2e8f0; padding-top: 15px;">
+    This is an automated notification from your SecuScan installation.
+  </p>
+</body>
+</html>"""
+
     try:
         await asyncio.to_thread(_send_smtp_email_sync, target_email, subject, body_text, body_html)
         return True, None
@@ -514,6 +598,7 @@ async def deliver_via_rule(
     rule: Dict[str, Any],
     finding: Dict[str, Any],
 ) -> DeliveryResult:
+    """Attempt delivery for one rule/finding pair."""
     rule_id = str(rule["id"])
     finding_id = str(finding["id"])
 
@@ -593,6 +678,7 @@ async def process_finding_notifications(
     db: Database,
     finding_id: str,
 ) -> List[DeliveryResult]:
+    """Evaluate all active rules against one finding and attempt delivery."""
     finding = await db.fetchone("SELECT * FROM findings WHERE id = ?", (finding_id,))
     if not finding:
         return []
@@ -610,6 +696,7 @@ async def process_task_notifications(
     db: Database,
     task_id: str,
 ) -> List[DeliveryResult]:
+    """Evaluate notifications for every finding produced by a task."""
     findings = await db.fetchall(
         "SELECT id FROM findings WHERE task_id = ? ORDER BY discovered_at ASC",
         (task_id,),
@@ -626,12 +713,18 @@ async def update_notification_rule(
     current_rule: Dict[str, Any],
     updates: Dict[str, Any],
 ) -> Dict[str, Any]:
+    """Apply an optimistic-lock update to a notification rule row."""
     assignments = [f"{column} = ?" for column in updates]
     params = list(updates.values())
     assignments.append("updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now')")
     params.extend((current_rule["id"], current_rule["updated_at"]))
 
     cursor = await db.execute(
+        f"""
+        UPDATE notification_rules
+        SET {', '.join(assignments)}
+        WHERE id = ? AND updated_at = ?
+        """,
         tuple(params),
     )
     if cursor.rowcount == 0:
@@ -653,6 +746,13 @@ async def update_notification_rule(
 
 
 def detect_webhook_platform(webhook_url: str) -> str:
+    """Classify a webhook URL as 'slack', 'discord', or 'generic'.
+
+    Slack and Discord incoming webhooks both accept a simple JSON body
+    (``{"text": ...}`` / ``{"content": ...}``) so both work out of the box
+    with no extra configuration; anything else falls back to a plain JSON
+    payload.
+    """
     try:
         hostname = (urlparse(webhook_url).hostname or "").lower()
     except ValueError:
@@ -666,6 +766,7 @@ def detect_webhook_platform(webhook_url: str) -> str:
 
 
 async def _gather_scan_summary(db: Database, task_id: str) -> Optional[Dict[str, Any]]:
+    """Collect task status, severity counts, and a report link for a scan."""
     task = await db.fetchone("SELECT * FROM tasks WHERE id = ?", (task_id,))
     if not task:
         return None
@@ -701,6 +802,7 @@ async def _gather_scan_summary(db: Database, task_id: str) -> Optional[Dict[str,
 
 
 def build_scan_completion_payload(platform: str, summary: Dict[str, Any]) -> Dict[str, Any]:
+    """Build a webhook body for the given platform from a scan summary."""
     status = str(summary["status"]).upper()
     target = summary["target"]
     total = summary["total_findings"]
@@ -774,6 +876,7 @@ def build_scan_completion_payload(platform: str, summary: Dict[str, Any]) -> Dic
 
 
 async def get_scan_webhook_url(db: Database, owner_id: str) -> Optional[str]:
+    """Fetch the configured scan-completion webhook URL for an owner, if any."""
     row = await db.fetchone(
         "SELECT webhook_url FROM scan_webhook_settings WHERE owner_id = ?",
         (owner_id,),
@@ -782,7 +885,15 @@ async def get_scan_webhook_url(db: Database, owner_id: str) -> Optional[str]:
 
 
 async def set_scan_webhook_url(db: Database, owner_id: str, webhook_url: str) -> Dict[str, Any]:
+    """Create or update the scan-completion webhook URL for an owner."""
     await db.execute(
+        """
+        INSERT INTO scan_webhook_settings (owner_id, webhook_url)
+        VALUES (?, ?)
+        ON CONFLICT(owner_id) DO UPDATE SET
+            webhook_url = excluded.webhook_url,
+            updated_at = strftime('%Y-%m-%d %H:%M:%f', 'now')
+        """,
         (owner_id, webhook_url),
     )
     row = await db.fetchone(
@@ -793,6 +904,7 @@ async def set_scan_webhook_url(db: Database, owner_id: str, webhook_url: str) ->
 
 
 async def delete_scan_webhook_url(db: Database, owner_id: str) -> bool:
+    """Remove the scan-completion webhook URL for an owner. Returns True if a row was deleted."""
     cursor = await db.execute(
         "DELETE FROM scan_webhook_settings WHERE owner_id = ?",
         (owner_id,),
@@ -802,6 +914,11 @@ async def delete_scan_webhook_url(db: Database, owner_id: str) -> bool:
 
 async def process_scan_completion_webhook(db: Database, task_id: str) -> None:
     """Deliver the per-owner scan-completion webhook (Slack/Discord/generic).
+
+    Non-blocking with respect to scan execution: every failure path here is
+    caught and logged rather than raised, per issue #1615's acceptance
+    criteria that delivery problems must never surface as a scan error.
+    """
     try:
         task = await db.fetchone(
             "SELECT owner_id FROM tasks WHERE id = ?",

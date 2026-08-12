@@ -11,6 +11,8 @@ from .base import BaseScanner
 
 
 class XSSValidationScanner(BaseScanner):
+    """Bounded reflected-XSS validation with local evidence only."""
+
     MARKER = "SECUSCAN_XSS_MARKER"
     PAYLOAD = "<script>SECUSCAN_XSS_MARKER</script>"
 

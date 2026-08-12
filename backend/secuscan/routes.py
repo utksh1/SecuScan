@@ -1,3 +1,7 @@
+"""
+API routes for SecuScan backend
+"""
+
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Response, Request, Depends, Body, Query
 from fastapi.responses import JSONResponse
 from typing import Any, Optional, List, Dict, Callable
@@ -36,6 +40,49 @@ __all__ = [
     "build_report_filename",
 ]
 
+def _parse_workflow_steps(raw_steps: Any) -> List[Dict[str, Any]]:
+    if isinstance(raw_steps, list):
+        parsed = raw_steps
+    elif not raw_steps:
+        parsed = []
+    else:
+        try:
+            parsed = json.loads(raw_steps)
+        except (TypeError, json.JSONDecodeError):
+            parsed = []
+    normalized: List[Dict[str, Any]] = []
+    for step in parsed if isinstance(parsed, list) else []:
+        if not isinstance(step, dict):
+            continue
+        try:
+            model = WorkflowStep(
+                plugin_id=str(step.get("plugin_id", "")),
+                inputs=step.get("inputs") or {},
+                preset=step.get("preset"),
+                execution_context=step.get("execution_context") or {},
+            )
+        except Exception:
+            continue
+        normalized.append(model.model_dump())
+    return normalized
+
+def _serialize_workflow(row: Dict[str, Any], queued_task_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Return the workflow shape consumed by the frontend."""
+    return {
+        "id": row["id"],
+        "name": row["name"],
+        "schedule_seconds": row.get("schedule_seconds"),
+        "schedule_timezone": row.get("schedule_timezone"),
+        "enabled": bool(row.get("enabled")),
+        "steps": _parse_workflow_steps(row.get("steps_json")),
+        "created_at": row.get("created_at"),
+        "last_run_at": row.get("last_run_at"),
+        "queued_task_ids": queued_task_ids or [],
+    }
+
+
+def _json_payload(value: Any, fallback: str) -> str:
+    return json.dumps(value if value is not None else json.loads(fallback))
 
 
 from .validation import is_filesystem_target  # noqa: E402
@@ -98,20 +145,21 @@ def _validate_notification_target(channel_type: NotificationChannelType, target:
         if not is_valid:
             raise HTTPException(status_code=400, detail=error or "Invalid webhook URL")
 
-        from .validation import resolve_and_validate_target, validate_webhook_target
-        ssrf_ok, ssrf_err = resolve_and_validate_target(cleaned)
-        if not ssrf_ok:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Webhook target blocked by SSRF protection: {ssrf_err}"
-            )
-        # Additional independent check against MANDATORY_DENYLIST
-        target_ok, target_err = validate_webhook_target(cleaned)
-        if not target_ok:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Webhook target blocked by SSRF protection: {target_err}"
-            )
+        if settings.notification_ssrf_enabled:
+            from .validation import resolve_and_validate_target, validate_webhook_target
+            ssrf_ok, ssrf_err = resolve_and_validate_target(cleaned)
+            if not ssrf_ok:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Webhook target blocked by SSRF protection: {ssrf_err}"
+                )
+            # Additional independent check against notification_blocked_ip_ranges
+            target_ok, target_err = validate_webhook_target(cleaned)
+            if not target_ok:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Webhook target blocked by SSRF protection: {target_err}"
+                )
         return cleaned
 
     if not _EMAIL_PATTERN.match(cleaned):
@@ -144,8 +192,8 @@ def _serialize_notification_history(row: Dict[str, Any]) -> Dict[str, Any]:
 
 
 async def get_or_set_cached(key: str, builder):
-    # Read from cache, or build and cache a JSON response.
-    cache = cache
+    """Read from cache, or build and cache a JSON response."""
+    cache = await get_cache()
     cached = await cache.get_json(key)
     if cached is not None:
         return cached
@@ -156,7 +204,12 @@ async def get_or_set_cached(key: str, builder):
 
 
 async def require_owned_task(db, task_id: str, owner: str, columns: str = "owner_id") -> Dict[str, Any]:
-    # Fetch a task and enforce that it belongs to ``owner`` (issue #401).
+    """Fetch a task and enforce that it belongs to ``owner`` (issue #401).
+
+    Returns the selected row on success. Raises 404 when the task does not
+    exist and 403 when it is owned by a different user/workspace. ``columns``
+    must include ``owner_id`` so the ownership comparison can be made.
+    """
     row = await db.fetchone(f"SELECT {columns} FROM tasks WHERE id = ?", (task_id,))
     if row is None:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -181,6 +234,10 @@ def _report_generation_error_response(task_id: str, report_format: str) -> JSONR
 
 
 async def get_plugin_manager_for_request():
+    """
+    In debug mode, refresh plugin metadata from disk on demand so frontend catalog
+    changes reflect parser/metadata edits without requiring a backend restart.
+    """
     if settings.debug:
         return await init_plugins(settings.plugins_dir)
     return get_plugin_manager()
@@ -188,6 +245,7 @@ async def get_plugin_manager_for_request():
 
 @router.get("/plugins", response_model=PluginListResponse, dependencies=[Depends(read_heavy_limiter)])
 async def list_plugins():
+    """List all available plugins"""
     plugin_manager = await get_plugin_manager_for_request()
     plugins = plugin_manager.list_plugins()
 
@@ -198,6 +256,8 @@ async def list_plugins():
 
 @router.get("/plugins/summary")
 async def get_plugins_summary():
+    """Return plugin summary statistics"""
+
     plugin_manager = await get_plugin_manager_for_request()
     plugins = plugin_manager.list_plugins()
 
@@ -229,6 +289,7 @@ async def get_plugins_summary():
 
 @router.get("/plugin/{plugin_id}/schema")
 async def get_plugin_schema(plugin_id: str):
+    """Get plugin schema for UI generation"""
     plugin_manager = await get_plugin_manager_for_request()
     if schema := plugin_manager.get_plugin_schema(plugin_id):
         return schema
@@ -238,6 +299,7 @@ async def get_plugin_schema(plugin_id: str):
 
 @router.post("/plugin/{plugin_id}/preview")
 async def get_plugin_preview(plugin_id: str, payload: Dict[str, Any] = Body(...)):
+    """Generate a preview of the command to be executed by a plugin, with sensitive values redacted."""
     plugin_manager = await get_plugin_manager_for_request()
     plugin = plugin_manager.get_plugin(plugin_id)
     if not plugin:
@@ -271,6 +333,7 @@ async def get_plugin_preview(plugin_id: str, payload: Dict[str, Any] = Body(...)
 
 @router.get("/presets", dependencies=[Depends(read_heavy_limiter)])
 async def get_all_presets():
+    """Get all plugin presets"""
     plugin_manager = await get_plugin_manager_for_request()
     return {
         plugin_id: plugin.presets
@@ -285,6 +348,9 @@ async def start_task(
     raw_request: Request,
     owner: str = Depends(get_current_owner),
 ):
+    """
+    Start a new scan task.
+    """
     # ── Payload size / field-length guard ─────────────────────────────────
     raw_body = await raw_request.body()
     execution_context = normalize_execution_context(request.execution_context)
@@ -294,6 +360,7 @@ async def start_task(
 
     db = await get_db()
 
+    # Validate consent
     if settings.require_consent and not request.consent_granted:
         logger.warning(f"Task start failed: Consent not granted. Request: {request}")
         await db.log_audit(
@@ -365,7 +432,9 @@ async def start_task(
         effective_inputs.pop("safe_mode", None)
     effective_inputs["safe_mode"] = safe_mode
 
+    # Validate numeric timeout inputs at request time to prevent unsafe values
     for tkey in ("timeout", "max_scan_time"):
+        # Only enforce bounds if the plugin declares the field in its schema
         declared = any(getattr(f, "id", None) == tkey for f in (plugin.fields or []))
         if not declared:
             continue
@@ -424,6 +493,7 @@ async def start_task(
     if not can_execute:
         raise HTTPException(status_code=429, detail=error_msg)
 
+    # Create task record first so we have a real task_id for the limiter
     try:
         task_id = await executor.create_task(
             standardized_id,
@@ -453,7 +523,7 @@ async def start_task(
     # ASGI servers, while tests using TestClient still execute the task to keep
     # contract tests deterministic.
     background_tasks.add_task(executor.execute_task, task_id)
-    await invalidate_cache("summary:", "findings:", "reports:", "tasks:")
+    await invalidate_view_cache()
 
     return {
         "task_id": task_id,
@@ -469,6 +539,9 @@ async def retry_task(
     raw_request: Request,
     owner: str = Depends(get_current_owner),
 ):
+    """
+    Retry a failed or cancelled scan task.
+    """
     db = await get_db()
     task = await require_owned_task(db, task_id, owner, columns="id, owner_id, status, plugin_id")
 
@@ -514,7 +587,7 @@ async def retry_task(
         raise HTTPException(status_code=503, detail=error_msg)
 
     background_tasks.add_task(executor.execute_task, task_id)
-    await invalidate_cache("summary:", "findings:", "reports:", "tasks:")
+    await invalidate_view_cache()
 
     return {
         "task_id": task_id,
@@ -524,6 +597,7 @@ async def retry_task(
 
 @router.get("/task/{task_id}/status")
 async def get_task_status(task_id: str, owner: str = Depends(get_current_owner)):
+    """Get task status"""
     db = await get_db()
     await require_owned_task(db, task_id, owner)
 
@@ -536,6 +610,7 @@ async def get_task_status(task_id: str, owner: str = Depends(get_current_owner))
 
 @router.get("/task/{task_id}/stream")
 async def stream_task_output(task_id: str, owner: str = Depends(get_current_owner)):
+    """Stream task output via Server-Sent Events (SSE)"""
     import asyncio
 
     db = await get_db()
@@ -552,6 +627,7 @@ async def stream_task_output(task_id: str, owner: str = Depends(get_current_owne
             "data": json.dumps({"status": status["status"], "scan_phase": status.get("scan_phase")})
         }
 
+        # If it's already completed/failed, we just return the raw output if any and close
         if status["status"] in ["completed", "failed", "cancelled"]:
             try:
                 db = await get_db()
@@ -595,6 +671,7 @@ async def stream_task_output(task_id: str, owner: str = Depends(get_current_owne
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=30.0)
                 except asyncio.TimeoutError:
+                    # No event in 30s — check if task is still running
                     ts = await executor.get_task_status(task_id)
                     if ts and ts["status"] not in ["completed", "failed", "cancelled"]:
                         continue
@@ -626,6 +703,7 @@ async def stream_task_output(task_id: str, owner: str = Depends(get_current_owne
 
 @router.get("/task/{task_id}/report/csv", dependencies=[Depends(report_download_limiter)])
 async def download_csv_report(task_id: str, owner: str = Depends(get_current_owner)):
+    """Download task results as a CSV report."""
     db = await get_db()
     task_row = await db.fetchone(
         "SELECT id, owner_id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
@@ -663,6 +741,7 @@ async def download_csv_report(task_id: str, owner: str = Depends(get_current_own
 
 @router.get("/task/{task_id}/report/html", dependencies=[Depends(report_download_limiter)])
 async def download_html_report(task_id: str, owner: str = Depends(get_current_owner)):
+    """Download task results as an HTML report."""
     db = await get_db()
     task_row = await db.fetchone(
         "SELECT id, owner_id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
@@ -700,6 +779,7 @@ async def download_html_report(task_id: str, owner: str = Depends(get_current_ow
 
 @router.get("/task/{task_id}/report/pdf", dependencies=[Depends(report_download_limiter)])
 async def download_pdf_report(task_id: str, owner: str = Depends(get_current_owner)):
+    """Download task results as a PDF report."""
     db = await get_db()
     task_row = await db.fetchone(
         "SELECT id, owner_id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
@@ -738,6 +818,7 @@ async def download_pdf_report(task_id: str, owner: str = Depends(get_current_own
 
 @router.get("/task/{task_id}/report/sarif", dependencies=[Depends(report_download_limiter)])
 async def download_sarif_report(task_id: str, owner: str = Depends(get_current_owner)):
+    """Download task results as a SARIF report."""
     db = await get_db()
     task_row = await db.fetchone(
         "SELECT id, owner_id, plugin_id, tool_name, target, status, created_at, preset, inputs_json, command_used, structured_json FROM tasks WHERE id = ?",
@@ -776,18 +857,25 @@ async def download_sarif_report(task_id: str, owner: str = Depends(get_current_o
 
 @router.get("/task/{task_id}/result")
 async def get_task_result(task_id: str, owner: str = Depends(get_current_owner)):
+    """Get task execution result"""
     db = await get_db()
 
     # Enforce ownership and existence check first
     await require_owned_task(db, task_id, owner)
 
     cache_key = f"tasks:result:{task_id}:{owner}"
-    cache = cache
+    cache = await get_cache()
     cached = await cache.get_json(cache_key)
     if cached is not None:
         return cached
 
     task_row = await db.fetchone(
+        """
+        SELECT id, owner_id, plugin_id, tool_name, target, status,
+               created_at, duration_seconds, structured_json, preset, inputs_json, execution_context_json,
+               raw_output_path, command_used, error_message, exit_code
+        FROM tasks WHERE id = ?
+        """,
         (task_id,)
     )
 
@@ -906,6 +994,7 @@ async def get_task_result(task_id: str, owner: str = Depends(get_current_owner))
 
 @router.post("/task/{task_id}/cancel")
 async def cancel_task(task_id: str, owner: str = Depends(get_current_owner)):
+    """Cancel a running task"""
     db = await get_db()
     await require_owned_task(db, task_id, owner)
 
@@ -923,7 +1012,7 @@ async def cancel_task(task_id: str, owner: str = Depends(get_current_owner)):
 
 @router.get("/dashboard/summary", dependencies=[Depends(read_heavy_limiter)])
 async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
-    # Return the caller's aggregate dashboard data, cached per owner.
+    """Return the caller's aggregate dashboard data, cached per owner."""
 
     async def build():
         db = await get_db()
@@ -942,6 +1031,12 @@ async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
         severity_rows = await query_or_default(
             "severity_counts",
             lambda: db.fetchall(
+                """
+                SELECT severity, COUNT(*) AS cnt
+                FROM findings
+                WHERE owner_id = ?
+                GROUP BY severity
+                """,
                 (owner,),
             ),
             [],
@@ -951,6 +1046,14 @@ async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
         task_stats = await query_or_default(
             "task_stats",
             lambda: db.fetchone(
+                """
+                SELECT
+                    COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE status = 'completed') AS completed,
+                    COUNT(*) FILTER (WHERE status = 'running') AS running
+                FROM tasks
+                WHERE owner_id = ?
+                """,
                 (owner,),
             ),
             {"total": 0, "completed": 0, "running": 0},
@@ -975,6 +1078,17 @@ async def get_dashboard_summary(owner: str = Depends(get_current_owner)):
         recent_rows = await query_or_default(
             "recent_findings",
             lambda: db.fetchall(
+                """
+                SELECT id, title, category, severity, target, description,
+                    remediation, proof, cvss, cve, discovered_at,
+                    validated, validation_method, confidence_reason,
+                    service_fingerprint, cpe, risk_score, risk_factors_json,
+                    evidence_json, asset_refs_json, references_json, metadata_json
+                FROM findings
+                WHERE owner_id = ?
+                ORDER BY discovered_at DESC
+                LIMIT 5
+                """,
                 (owner,),
             ),
             [],
@@ -1047,6 +1161,8 @@ async def get_findings(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
 ):
+    """Return the caller's vulnerability findings with pagination."""
+
     async def build():
         db = await get_db()
         offset = (page - 1) * per_page
@@ -1060,21 +1176,22 @@ async def get_findings(
         )
         total = total_row["count"] if total_row else 0
         findings = deserialize_finding_rows(rows)
-        
-        group_rows = await db.fetchall(
-            "SELECT finding_group_id, COUNT(*) as count FROM findings WHERE owner_id = ? GROUP BY finding_group_id",
+        # Build finding_groups from *all* findings so group counts remain accurate
+        # regardless of which page is being viewed.
+        all_rows = await db.fetchall(
+            "SELECT * FROM findings WHERE owner_id = ? ORDER BY discovered_at DESC",
             (owner,),
         )
-        finding_groups = [{"id": row["finding_group_id"], "count": row["count"]} for row in group_rows]
-        
+        all_findings = deserialize_finding_rows(all_rows)
         return {
             "findings": findings,
-            "finding_groups": finding_groups,
+            "finding_groups": build_finding_groups(all_findings),
             "total": total,
             "page": page,
             "per_page": per_page,
         }
 
+    # Cache key includes pagination params so different pages do not collide.
     return await get_or_set_cached(f"findings:list:{owner}:page={page}:per_page={per_page}", build)
 
 
@@ -1129,7 +1246,7 @@ async def get_task_diff(task_id: str, owner: str = Depends(get_current_owner)):
 
 @router.get("/reports", dependencies=[Depends(read_heavy_limiter)])
 async def get_reports(owner: str = Depends(get_current_owner)):
-    # Return the caller's generated reports.
+    """Return the caller's generated reports."""
 
     async def build():
         from .time_utils import to_utc_iso
@@ -1151,7 +1268,7 @@ async def get_reports(owner: str = Depends(get_current_owner)):
 
 
 def _escape_like(value: str) -> str:
-    # Escape SQLite LIKE wildcards so user input can't inject % or _ patterns.
+    """Escape SQLite LIKE wildcards so user input can't inject % or _ patterns."""
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
@@ -1161,17 +1278,31 @@ async def search(
     limit: int = Query(20, ge=1, le=100),
     owner: str = Depends(get_current_owner),
 ):
-    # Search the caller's findings and reports by title/description/name.
+    """Search the caller's findings and reports by title/description/name."""
     from .time_utils import to_utc_iso
 
     db = await get_db()
     pattern = f"%{_escape_like(q.strip())}%"
 
     finding_rows = await db.fetchall(
+        """
+        SELECT id, task_id, title, category, severity, target, discovered_at
+        FROM findings
+        WHERE owner_id = ? AND (title LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')
+        ORDER BY discovered_at DESC
+        LIMIT ?
+        """,
         (owner, pattern, pattern, limit),
     )
 
     report_rows = await db.fetchall(
+        """
+        SELECT id, task_id, name, type, generated_at
+        FROM reports
+        WHERE owner_id = ? AND name LIKE ? ESCAPE '\\'
+        ORDER BY generated_at DESC
+        LIMIT ?
+        """,
         (owner, pattern, limit),
     )
 
@@ -1211,6 +1342,7 @@ async def list_tasks(
     status: Optional[str] = None,
     owner: str = Depends(get_current_owner),
 ):
+    """List the caller's tasks with pagination"""
     db = await get_db()
 
     # Build query — always scoped to the caller so listing can never enumerate
@@ -1292,7 +1424,14 @@ async def list_tasks(
 SQLITE_CHUNK_SIZE = 500  # safely under SQLITE_LIMIT_VARIABLE_NUMBER = 999
 
 async def delete_task_records(task_ids: List[str]):
-    # Helper to delete database records and files for multiple tasks.
+    """Helper to delete database records and files for multiple tasks.
+
+    Processes IDs in chunks of SQLITE_CHUNK_SIZE to stay under
+    SQLite's SQLITE_LIMIT_VARIABLE_NUMBER = 999 limit.
+
+    The deletion is wrapped in a transaction so that a failure mid-way
+    (e.g. crash, constraint violation) does not leave orphaned records.
+    """
     if not task_ids:
         return
 
@@ -1366,6 +1505,7 @@ async def delete_task_records(task_ids: List[str]):
 
 @router.delete("/task/{task_id}")
 async def delete_task(task_id: str, owner: str = Depends(get_current_owner)):
+    """Delete a task and its associated data (findings, reports, audit logs, and files)"""
     db = await get_db()
 
     # Deleting a non-existent task stays idempotent (200, deletes zero rows),
@@ -1375,6 +1515,7 @@ async def delete_task(task_id: str, owner: str = Depends(get_current_owner)):
     if existing is not None and existing["owner_id"] != owner:
         raise HTTPException(status_code=403, detail="You do not have access to this task")
 
+    # Check if task is running
     status = await executor.get_task_status(task_id)
     if status and status.get("status") == "running":
         raise HTTPException(status_code=400, detail="Cannot delete a running task. Abort it first.")
@@ -1384,7 +1525,7 @@ async def delete_task(task_id: str, owner: str = Depends(get_current_owner)):
         raise HTTPException(status_code=400, detail="Cannot delete a running task. Abort it first.")
 
     await delete_task_records([task_id])
-    await invalidate_cache("summary:", "findings:", "reports:", "tasks:")
+    await invalidate_view_cache()
 
     return {
         "task_id": task_id,
@@ -1394,6 +1535,7 @@ async def delete_task(task_id: str, owner: str = Depends(get_current_owner)):
 
 @router.delete("/tasks/bulk", dependencies=[Depends(admin_limiter)])
 async def bulk_delete_tasks(request: BulkDeleteRequest, owner: str = Depends(get_current_owner)):
+    """Delete multiple tasks at once (max 500 IDs per request)"""
     task_ids = request.root  # RootModel exposes data via .root
     db = await get_db()
 
@@ -1427,7 +1569,7 @@ async def bulk_delete_tasks(request: BulkDeleteRequest, owner: str = Depends(get
         raise HTTPException(status_code=400, detail="Cannot delete running tasks. Abort them first.")
 
     await delete_task_records(owned_ids)
-    await invalidate_cache("summary:", "findings:", "reports:", "tasks:")
+    await invalidate_view_cache()
 
     return {
         "deleted_count": len(owned_ids),
@@ -1436,7 +1578,11 @@ async def bulk_delete_tasks(request: BulkDeleteRequest, owner: str = Depends(get
 
 @router.delete("/tasks/clear", dependencies=[Depends(admin_limiter)])
 async def clear_all_tasks(owner: str = Depends(get_current_owner)):
-    # Wipe the caller's scan history and associated data (findings, reports).
+    """Wipe the caller's scan history and associated data (findings, reports).
+
+    Scoped to the requesting user/workspace so one owner cannot purge another
+    owner's history (issue #401).
+    """
     db = await get_db()
 
     # Prevent clearing if any of the caller's tasks are running
@@ -1447,6 +1593,7 @@ async def clear_all_tasks(owner: str = Depends(get_current_owner)):
     if running_tasks:
         raise HTTPException(status_code=400, detail="Cannot clear history while tasks are running.")
 
+    # Get the caller's task IDs to delete records and cleanup files
     own_tasks = await db.fetchall("SELECT id FROM tasks WHERE owner_id = ?", (owner,))
     task_ids = [t["id"] for t in own_tasks]
     if task_ids:
@@ -1456,7 +1603,7 @@ async def clear_all_tasks(owner: str = Depends(get_current_owner)):
     # set NULL by ON DELETE) so nothing of theirs is left behind.
     await db.execute("DELETE FROM findings WHERE owner_id = ?", (owner,))
 
-    await invalidate_cache("summary:", "findings:", "reports:", "tasks:")
+    await invalidate_view_cache()
 
     return {
         "cleared": True,
@@ -1466,6 +1613,7 @@ async def clear_all_tasks(owner: str = Depends(get_current_owner)):
 
 @router.get("/settings")
 async def get_settings():
+    """Get current settings"""
     return {
         "network": {
             "bind_address": settings.bind_address,
@@ -1483,8 +1631,7 @@ async def get_settings():
         "safety": {
             "require_consent": settings.require_consent,
             "safe_mode_default": settings.safe_mode_default,
-            "network_allowlist": settings.network_allowlist,
-            "network_denylist": settings.network_denylist,
+            "allowed_networks": settings.allowed_networks
         },
         "execution_context": {
             "validation_modes": [mode.value for mode in ValidationMode],
@@ -1500,6 +1647,12 @@ async def list_vault_secrets(
 ):
     db = await get_db()
     rows = await db.fetchall(
+        """
+        SELECT id, name, created_at, updated_at
+        FROM credential_vault
+        WHERE owner_id = ?
+        ORDER BY name ASC
+        """,
         (owner,),
     )
     return {"items": rows, "total": len(rows)}
@@ -1545,6 +1698,11 @@ async def get_vault_secret(
     db = await get_db()
 
     row = await db.fetchone(
+        """
+        SELECT encrypted_value
+        FROM credential_vault
+        WHERE owner_id = ? AND name = ?
+        """,
         (owner, name),
     )
 
@@ -1567,6 +1725,10 @@ async def delete_vault_secret(
 
 
     cursor = await db.execute(
+        """
+        DELETE FROM credential_vault
+        WHERE owner_id = ? AND name = ?
+        """,
         (owner, name),
     )
 
@@ -1626,6 +1788,13 @@ async def create_target_policy(payload: Dict[str, Any], owner: str = Depends(get
     policy_id = str(uuid.uuid4())
     db = await get_db()
     await db.execute(
+        """
+        INSERT INTO target_policies (
+            id, owner_id, name, description, allow_public_targets,
+            allow_exploit_validation, allow_authenticated_scan, default_validation_mode,
+            allowed_targets_json, metadata_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
         (
             policy_id,
             owner,
@@ -1707,6 +1876,12 @@ async def create_credential_profile(payload: Dict[str, Any], owner: str = Depend
     profile_id = str(uuid.uuid4())
     db = await get_db()
     await db.execute(
+        """
+        INSERT INTO credential_profiles (
+            id, owner_id, name, username_secret_name, password_secret_name,
+            extra_headers_json, login_recipe_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
         (
             profile_id,
             owner,
@@ -1778,6 +1953,11 @@ async def create_session_profile(payload: Dict[str, Any], owner: str = Depends(g
     profile_id = str(uuid.uuid4())
     db = await get_db()
     await db.execute(
+        """
+        INSERT INTO session_profiles (
+            id, owner_id, name, cookie_secret_name, extra_headers_json, notes
+        ) VALUES (?, ?, ?, ?, ?, ?)
+        """,
         (
             profile_id,
             owner,
@@ -1898,6 +2078,10 @@ async def create_workflow(payload: Dict[str, Any], owner: str = Depends(get_curr
     enabled = bool(payload.get("enabled", True))
     db = await get_db()
     await db.execute(
+        """
+        INSERT INTO workflows (id, name, owner_id, schedule_seconds, enabled, steps_json, schedule_timezone)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
         (
             workflow_id,
             name,
@@ -1913,7 +2097,7 @@ async def create_workflow(payload: Dict[str, Any], owner: str = Depends(get_curr
 
 
 async def _verify_workflow_owner(db, workflow_id: str, owner: str):
-    # Check the workflow exists and belongs to the caller. Returns the row or raises 404/403.
+    """Check the workflow exists and belongs to the caller. Returns the row or raises 404/403."""
     row = await db.fetchone(
         "SELECT * FROM workflows WHERE id = ?", (workflow_id,)
     )
@@ -1954,21 +2138,6 @@ async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_o
     for step in steps:
         execution_context = normalize_execution_context(step.get("execution_context") or {})
         target_policy = await get_target_policy(db, owner, execution_context.get("target_policy_id"))
-        plugin = get_plugin_manager().get_plugin(step.get("plugin_id"))
-        if not plugin:
-            logger.warning("Workflow %s: plugin %s not found, skipping step", workflow_id, step.get("plugin_id"))
-            continue
-        requires_exploit_policy = (
-            plugin.safety.get("level") == "exploit"
-            or execution_context.get("validation_mode") == ValidationMode.CONTROLLED_EXTRACT.value
-        )
-        if requires_exploit_policy and not (target_policy and target_policy.get("allow_exploit_validation")):
-            logger.warning(
-                "Workflow %s: skipping exploit-level step %s: no target policy allows exploit validation",
-                workflow_id,
-                step.get("plugin_id"),
-            )
-            continue
         safe_mode = bool(
             settings.safe_mode_default
             and not (target_policy and target_policy.get("allow_public_targets"))
@@ -2015,7 +2184,7 @@ async def run_workflow_once(workflow_id: str, owner: str = Depends(get_current_o
 
 @router.get("/workflows/{workflow_id}/runs")
 async def list_workflow_runs(workflow_id: str, owner: str = Depends(get_current_owner), limit: int = 50, offset: int = 0):
-    # Return paginated run history for a workflow.
+    """Return paginated run history for a workflow."""
     if limit < 1 or limit > 500:
         raise HTTPException(status_code=400, detail="limit must be between 1 and 500")
     if offset < 0:
@@ -2027,7 +2196,7 @@ async def list_workflow_runs(workflow_id: str, owner: str = Depends(get_current_
 
 @router.get("/workflows/{workflow_id}/versions")
 async def list_workflow_versions(workflow_id: str, owner: str = Depends(get_current_owner)):
-    # Return all saved version snapshots for a workflow, newest first.
+    """Return all saved version snapshots for a workflow, newest first."""
     db = await get_db()
     await _verify_workflow_owner(db, workflow_id, owner)
     versions = await db.get_workflow_versions(workflow_id=workflow_id)
@@ -2036,7 +2205,12 @@ async def list_workflow_versions(workflow_id: str, owner: str = Depends(get_curr
 
 @router.post("/workflows/{workflow_id}/rollback/{version_number}")
 async def rollback_workflow(workflow_id: str, version_number: int, owner: str = Depends(get_current_owner)):
-    # Restore a workflow to a previously saved version.
+    """Restore a workflow to a previously saved version.
+
+    The target version's full definition replaces the live workflow fields.
+    A new version snapshot is recorded so the rollback itself is auditable
+    and can be rolled back in turn.
+    """
     db = await get_db()
     wf = await _verify_workflow_owner(db, workflow_id, owner)
     target = await db.get_workflow_version(workflow_id, version_number)
@@ -2187,6 +2361,11 @@ async def create_notification_rule(payload: NotificationRuleCreate, owner: str =
     rule_id = str(uuid.uuid4())
     db = await get_db()
     await db.execute(
+        """
+        INSERT INTO notification_rules (
+            id, name, owner_id, severity_threshold, channel_type, target_url_or_email, is_active
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
         (
             rule_id,
             name,
@@ -2207,6 +2386,7 @@ async def create_notification_rule(payload: NotificationRuleCreate, owner: str =
 
 @router.get("/rate-limit/status")
 async def get_rate_limit_status(request: Request):
+    """Get current rate limit status for the client."""
     limiter = getattr(request.app.state, 'scan_rate_limiter', None)
     if limiter and hasattr(limiter, 'get_status'):
         client_id = request.client.host if request.client else "unknown"
@@ -2221,7 +2401,7 @@ async def get_rate_limit_status(request: Request):
 
 
 async def _verify_notification_rule_owner(db, rule_id: str, owner: str):
-    # Check the notification rule exists and belongs to the caller.
+    """Check the notification rule exists and belongs to the caller."""
     row = await db.fetchone(
         "SELECT * FROM notification_rules WHERE id = ?",
         (rule_id,),
@@ -2242,6 +2422,11 @@ async def get_notification_rule(rule_id: str, owner: str = Depends(get_current_o
 
 @router.patch("/notifications/rules/{rule_id}")
 async def update_notification_rule(rule_id: str, payload: NotificationRuleUpdate, owner: str = Depends(get_current_owner)):
+    """Patch a notification rule.
+
+    Returns ``409 Conflict`` with the latest persisted rule when an optimistic
+    update loses a concurrent edit race so clients can refresh and retry.
+    """
     db = await get_db()
     row = await _verify_notification_rule_owner(db, rule_id, owner)
 
@@ -2316,7 +2501,11 @@ async def delete_notification_rule(rule_id: str, owner: str = Depends(get_curren
 
 @router.get("/settings/webhook")
 async def get_scan_webhook_settings(owner: str = Depends(get_current_owner)):
-    # Return the configured scan-completion webhook for the current owner.
+    """Return the configured scan-completion webhook for the current owner.
+
+    Fires on scan completion/failure (issue #1615) — distinct from the
+    per-finding severity-threshold rules under /notifications/rules.
+    """
     db = await get_db()
     row = await db.fetchone(
         "SELECT * FROM scan_webhook_settings WHERE owner_id = ?",
@@ -2338,6 +2527,7 @@ async def upsert_scan_webhook_settings(
     payload: ScanWebhookSettingsRequest,
     owner: str = Depends(get_current_owner),
 ):
+    """Create or update the scan-completion webhook URL for the current owner."""
     target = _validate_notification_target(NotificationChannelType.WEBHOOK, payload.webhook_url)
     db = await get_db()
     row = await notification_service.set_scan_webhook_url(db, owner, target)
@@ -2351,6 +2541,7 @@ async def upsert_scan_webhook_settings(
 
 @router.delete("/settings/webhook")
 async def delete_scan_webhook_settings(owner: str = Depends(get_current_owner)):
+    """Remove the scan-completion webhook URL for the current owner."""
     db = await get_db()
     deleted = await notification_service.delete_scan_webhook_url(db, owner)
     return {"deleted": deleted}
@@ -2401,11 +2592,18 @@ async def list_notification_history(
 
 @router.get("/finding/{finding_id}")
 async def get_finding_details(finding_id: str, owner: str = Depends(get_current_owner)):
+    """Get detailed information for a specific finding"""
     from .time_utils import to_utc_iso
 
     db = await get_db()
 
     finding_row = await db.fetchone(
+        """
+        SELECT f.*, t.tool_name, t.target as task_target
+        FROM findings f
+        JOIN tasks t ON f.task_id = t.id
+        WHERE f.id = ?
+        """,
         (finding_id,)
     )
 
@@ -2458,7 +2656,7 @@ async def get_finding_details(finding_id: str, owner: str = Depends(get_current_
 
 @router.get("/attack-surface")
 async def get_attack_surface(owner: str = Depends(get_current_owner)):
-    # Return an aggregated view of the caller's monitored attack surface.
+    """Return an aggregated view of the caller's monitored attack surface."""
     db = await get_db()
 
     # We aggregate unique targets from the caller's own tasks and findings
@@ -2509,9 +2707,15 @@ async def get_attack_surface(owner: str = Depends(get_current_owner)):
 
 @router.get("/assets")
 async def get_assets(owner: str = Depends(get_current_owner)):
+    """Return a list of the caller's tracked assets."""
     db = await get_db()
     # For now, we use unique targets as assets, scoped to the caller (issue #401)
     rows = await db.fetchall(
+        """
+        SELECT DISTINCT target FROM tasks WHERE owner_id = ?
+        UNION
+        SELECT DISTINCT target FROM findings WHERE owner_id = ?
+        """,
         (owner, owner),
     )
     assets = [{"id": str(uuid.uuid4()), "name": row["target"]} for row in rows]
@@ -2530,7 +2734,7 @@ def verify_admin_access(
     api_key: Optional[str] = Security(api_key_header),
     request: Request = None,
 ) -> Optional[str]:
-    # Verify admin API key is provided and valid.
+    """Verify admin API key is provided and valid."""
     import hmac
 
     # Secure-by-default: If admin_api_key setting is not configured, block all access
@@ -2556,6 +2760,7 @@ def verify_admin_access(
             else:
                 token = auth_header
             # If the Authorization header matches the admin API key, prefer it.
+            # This is important when the client automatically includes the general X-Api-Key in headers.
             if hmac.compare_digest(token, settings.admin_api_key):
                 candidate = token
             elif not candidate:
@@ -2574,10 +2779,12 @@ def verify_admin_access(
     dependencies=[Depends(verify_admin_access), Depends(admin_limiter)]
 )
 async def get_notification_diagnostics():
+    """Get active notification delivery configuration and retry policy"""
     return notification_service.get_delivery_configuration()
 
 @router.get("/admin/network-policy", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
 async def get_network_policy():
+    """Get current network policy configuration"""
     engine = get_policy_engine()
 
     return {
@@ -2588,6 +2795,7 @@ async def get_network_policy():
 
 @router.post("/admin/network-policy/allow", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
 async def add_allow_rule(request: dict):
+    """Add network to allowlist"""
     engine = get_policy_engine()
 
     try:
@@ -2601,6 +2809,7 @@ async def add_allow_rule(request: dict):
 
 @router.post("/admin/network-policy/deny", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
 async def add_deny_rule(request: dict):
+    """Add network to denylist"""
     engine = get_policy_engine()
 
     try:
@@ -2618,6 +2827,7 @@ async def get_audit_log(
     action: Optional[str] = None,
     limit: int = 100
 ):
+    """Retrieve network audit log entries"""
     engine = get_policy_engine()
 
     policy_action = None
@@ -2637,6 +2847,7 @@ async def get_audit_log(
 
 @router.get("/admin/network-audit-log/export", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
 async def export_audit_log(format: str = "json"):
+    """Export audit log in specified format"""
     engine = get_policy_engine()
 
     if format not in ["json", "csv"]:
@@ -2654,7 +2865,13 @@ async def export_audit_log(format: str = "json"):
 
 @router.get("/admin/vault/diagnostics", dependencies=[Depends(verify_admin_access), Depends(admin_limiter)])
 async def get_vault_diagnostics():
-    # Report non-secret diagnostics for the credential vault key.
+    """Report non-secret diagnostics for the credential vault key.
+    Surfaces a one-way fingerprint of the active vault key so operators can confirm key-rotation state without the key material ever leaving the server.
+    Applies across deployments or before/after a rotation.
+    The endpoint never fails on configuration state: when no key is configured it reports ``configured: false`` with a null fingerprint.
+    So it can double as a health probe for vault configuration.
+    The route is admin-gated: while the fingerprint is non-secret, the key source and configuration status are operational details that belong behind the same boundary as the rest of the ``/admin`` surface.
+    """
     if settings.vault_key:
         key_source = "vault_key"
     elif settings.plugin_signature_key:

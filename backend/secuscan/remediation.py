@@ -1,3 +1,7 @@
+"""
+Dependency graph resolution and remediation conflict validation.
+"""
+
 import json
 import re
 import importlib.metadata
@@ -8,6 +12,10 @@ from packaging.specifiers import SpecifierSet
 
 
 def parse_remediation_suggestion(remediation_str: str) -> Tuple[str, str] | None:
+    """Parse recommendation string to extract package name and target upgrade version.
+
+    Example: "Update framer-motion to version 11.0.0" -> ("framer-motion", "11.0.0")
+    """
     pattern = r"(?:update|upgrade)\s+([a-zA-Z0-9_\-\.]+)\s+(?:to\s+)?(?:version\s+)?([a-zA-Z0-9_\-\.\+\~]+)"
     match = re.search(pattern, remediation_str, re.IGNORECASE)
     if match:
@@ -18,6 +26,12 @@ def parse_remediation_suggestion(remediation_str: str) -> Tuple[str, str] | None
 
 
 def handle_caret(ver_str: str) -> List[str]:
+    """Convert NPM caret specification to PEP 440 constraints.
+
+    ^1.2.3 -> >=1.2.3, <2.0.0
+    ^0.2.3 -> >=0.2.3, <0.3.0
+    ^0.0.3 -> >=0.0.3, <0.0.4
+    """
     parts = ver_str.split(".")
     while len(parts) < 3:
         parts.append("0")
@@ -38,6 +52,11 @@ def handle_caret(ver_str: str) -> List[str]:
 
 
 def handle_tilde(ver_str: str) -> List[str]:
+    """Convert NPM tilde specification to PEP 440 constraints.
+
+    ~1.2.3 -> >=1.2.3, <1.3.0
+    ~1.2   -> >=1.2.0, <1.3.0
+    """
     parts = ver_str.split(".")
     while len(parts) < 2:
         parts.append("0")
@@ -48,6 +67,7 @@ def handle_tilde(ver_str: str) -> List[str]:
 
 
 def handle_wildcard(part: str) -> List[str]:
+    """Convert wildcard version strings (e.g. 1.x or 1.*) to PEP 440 constraints."""
     part = part.replace("*", "x")
     parts = part.split(".")
     if len(parts) == 1 or parts[0] == "x":
@@ -65,6 +85,7 @@ def handle_wildcard(part: str) -> List[str]:
 
 
 def semver_to_pep440(semver_str: str) -> SpecifierSet:
+    """Convert NPM/semver package version specifier into PEP 440 SpecifierSet."""
     semver_str = semver_str.strip()
     if not semver_str or semver_str in ("*", "x", "any"):
         return SpecifierSet()
@@ -101,6 +122,7 @@ def semver_to_pep440(semver_str: str) -> SpecifierSet:
 
 
 def parse_package_lock(filepath: str) -> Dict[str, List[Tuple[str, str]]]:
+    """Parse a package-lock.json and extract direct and transitive package dependency requirements."""
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -142,6 +164,7 @@ def parse_package_lock(filepath: str) -> Dict[str, List[Tuple[str, str]]]:
 
 
 def parse_package_json(filepath: str) -> Dict[str, List[Tuple[str, str]]]:
+    """Parse a package.json for direct project dependencies."""
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -157,6 +180,7 @@ def parse_package_json(filepath: str) -> Dict[str, List[Tuple[str, str]]]:
 
 
 def parse_requirement_line(line: str) -> Tuple[str, SpecifierSet] | None:
+    """Parse a single requirements.txt line into a normalized package name and SpecifierSet."""
     line = line.strip()
     if not line or line.startswith(('#', '-')):
         return None
@@ -176,6 +200,7 @@ def parse_requirement_line(line: str) -> Tuple[str, SpecifierSet] | None:
     return name, spec
 
 def get_python_transitive_dependencies(package_name: str) -> List[Tuple[str, SpecifierSet]]:
+    """Retrieve python transitive dependencies from installed metadata."""
     try:
         reqs = importlib.metadata.requires(package_name)
         if not reqs:
@@ -204,6 +229,7 @@ def get_python_transitive_dependencies(package_name: str) -> List[Tuple[str, Spe
 
 
 def build_dependency_graph(target_dir: str) -> Dict[str, List[Dict[str, Any]]]:
+    """Scan the target directory for Python/Node manifests and construct a transitive dependency constraint graph."""
     graph: Dict[str, List[Dict[str, Any]]] = {}
 
     if not target_dir:
@@ -274,6 +300,7 @@ def build_dependency_graph(target_dir: str) -> Dict[str, List[Dict[str, Any]]]:
 
 
 def validate_remediation(remediation_str: str, graph: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:
+    """Validate a remediation string against a dependency graph, yielding safety status and alternative actions."""
     res = {
         "safe_to_apply": True,
         "compatible_range": None,
