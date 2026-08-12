@@ -1166,11 +1166,9 @@ class TaskExecutor:
         structured_result["finding_groups"] = build_finding_groups(normalized_findings)
         structured_result["asset_summary"] = build_asset_summary(normalized_findings, asset_services)
         structured_result["scan_diff"] = build_scan_diff(normalized_findings, previous_findings)
-        severity_counts: Dict[str, int] = {}
-        for f in normalized_findings:
-            sev = str(f.get("severity", "info")).lower()
-            severity_counts[sev] = severity_counts.get(sev, 0) + 1
-        structured_result["severity_counts"] = severity_counts
+        from collections import Counter
+        severity_counts = Counter(str(f.get("severity", "info")).lower() for f in normalized_findings)
+        structured_result["severity_counts"] = dict(severity_counts)
         structured_result["count"] = len(normalized_findings)
         return structured_result, previous_findings, asset_services
 
@@ -1299,20 +1297,104 @@ class TaskExecutor:
         )
         findings_data: List[Dict[str, Any]] = []
         async with db.transaction():
+            insert_sql = """INSERT INTO findings (
+                id, owner_id, task_id, plugin_id, title, category, severity, target, description,
+                remediation, proof, cvss, cve, metadata_json, discovered_at, exploitability,
+                confidence, validated, validation_method, confidence_reason, finding_kind,
+                finding_group_id, asset_id, first_seen_at, last_seen_at, occurrence_count,
+                corroborating_sources_json, evidence_count, analyst_status, retest_status,
+                evidence_json, asset_refs_json, service_fingerprint, cpe, references_json,
+                asset_exposure, risk_score, risk_factors_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(owner_id, finding_group_id) DO UPDATE SET
+                occurrence_count = occurrence_count + 1,
+                last_seen_at = excluded.last_seen_at,
+                evidence_count = excluded.evidence_count,
+                corroborating_sources_json = excluded.corroborating_sources_json"""
+            
+            batch_data = []
             for finding in structured_result.get("findings", []):
-                findings_data.append(
-                    await self._persist_finding(
-                        db,
-                        owner_id=owner_id,
-                        task_id=task_id,
-                        plugin_id=plugin_id,
-                        target=target,
-                        finding=finding,
-                    )
+                finding_id = generate_id("finding")
+                discovered = datetime.now(timezone.utc)
+                target_value = str(finding.get("target") or target)
+                metadata = finding.get("metadata", {}) if isinstance(finding.get("metadata"), dict) else {}
+                evidence = finding.get("evidence", []) if isinstance(finding.get("evidence"), list) else []
+                asset_refs = finding.get("asset_refs", []) if isinstance(finding.get("asset_refs"), list) else []
+                exploitability = finding.get("exploitability")
+                asset_exposure = finding.get("asset_exposure")
+                confidence = finding.get("confidence")
+                finding_group_id = self._compute_finding_group_id(
+                    owner_id=owner_id,
+                    target=target_value,
+                    title=finding["title"],
+                    category=finding["category"],
+                    severity=finding["severity"],
+                    host=finding.get("host"),
+                    port=finding.get("port"),
+                    path=finding.get("path"),
+                    cve=finding.get("cve"),
                 )
+                references = finding.get("references", []) if isinstance(finding.get("references"), list) else []
+                corroborating_sources = finding.get("corroborating_sources", []) if isinstance(finding.get("corroborating_sources"), list) else []
+                first_seen_at = str(finding.get("first_seen_at") or to_utc_iso(discovered))
+                last_seen_at = str(finding.get("last_seen_at") or to_utc_iso(discovered))
+                occurrence_count = int(finding.get("occurrence_count") or 1)
+                evidence_count = int(finding.get("evidence_count") or len(evidence))
+                risk_score = compute_risk_score(
+                    severity=finding["severity"],
+                    exploitability=exploitability,
+                    asset_exposure=asset_exposure,
+                    discovered_at=discovered,
+                    confidence=confidence,
+                )
+                risk_factors = compute_risk_factors(
+                    severity=finding["severity"],
+                    exploitability=exploitability,
+                    asset_exposure=asset_exposure,
+                    discovered_at=discovered,
+                    confidence=confidence,
+                    risk_score=risk_score,
+                )
+                
+                batch_data.append((
+                    finding_id, owner_id, task_id, plugin_id, finding["title"], finding["category"],
+                    finding["severity"], target_value, finding["description"], finding.get("remediation", ""),
+                    finding.get("proof"), finding.get("cvss"), finding.get("cve"), json.dumps(metadata),
+                    to_utc_iso(discovered), exploitability, confidence, 1 if finding.get("validated") else 0,
+                    finding.get("validation_method"), finding.get("confidence_reason"),
+                    str(finding.get("finding_kind") or "observation"), finding_group_id, finding.get("asset_id"),
+                    first_seen_at, last_seen_at, occurrence_count, json.dumps(corroborating_sources),
+                    evidence_count, str(finding.get("analyst_status") or "new"),
+                    str(finding.get("retest_status") or "not_requested"), json.dumps(evidence),
+                    json.dumps(asset_refs), finding.get("service_fingerprint"), finding.get("cpe"),
+                    json.dumps(references), asset_exposure, risk_score, json.dumps(risk_factors)
+                ))
+                
+                findings_data.append({
+                    **finding,
+                    "id": finding_id,
+                    "plugin_id": plugin_id,
+                    "target": target_value,
+                    "discovered_at": to_utc_iso(discovered),
+                    "metadata": metadata,
+                    "evidence": evidence,
+                    "asset_refs": asset_refs,
+                    "references": references,
+                    "corroborating_sources": corroborating_sources,
+                    "first_seen_at": first_seen_at,
+                    "last_seen_at": last_seen_at,
+                    "occurrence_count": occurrence_count,
+                    "evidence_count": evidence_count,
+                    "risk_score": risk_score,
+                    "risk_factors": risk_factors,
+                })
+            
+            if batch_data:
+                await db.executemany(insert_sql, batch_data)
 
             structured_result["findings"] = findings_data
-            structured_result["severity_counts"] = self._build_severity_counts(findings_data)
+            from collections import Counter
+            structured_result["severity_counts"] = dict(Counter(str(f.get("severity", "info")).lower() for f in findings_data))
             structured_result["finding_groups"] = build_finding_groups(findings_data)
             structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
             structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)

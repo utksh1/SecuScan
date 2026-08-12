@@ -1,6 +1,7 @@
 import json
 from typing import Any, Optional, Dict
 import time
+import heapq
 import logging
 
 from .config import settings
@@ -29,19 +30,20 @@ class CacheClient:
 
     def _sweep_expired(self):
         now = time.time()
-        keys = [k for k, exp in list(self._expires.items()) if exp <= now]
+        keys = [k for k, exp in self._expires.items() if exp <= now]
         for k in keys:
             self._data.pop(k, None)
             self._expires.pop(k, None)
             self._access_order.pop(k, None)
         if keys:
+            logger.debug("Swept %d expired cache entries", len(keys))
 
     def _evict_lru(self):
         if len(self._data) < self.max_entries:
             return
-        sorted_keys = sorted(self._access_order, key=lambda k: self._access_order[k])
         evict_count = max(1, int(self.max_entries * SWEEP_EVICT_FRACTION))
-        for k in sorted_keys[:evict_count]:
+        lru_keys = heapq.nsmallest(evict_count, self._access_order, key=self._access_order.get)
+        for k in lru_keys:
             self._data.pop(k, None)
             self._expires.pop(k, None)
             self._access_order.pop(k, None)

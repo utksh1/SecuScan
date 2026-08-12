@@ -1045,8 +1045,6 @@ async def get_findings(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
 ):
-    # Return the caller's vulnerability findings with pagination.
-
     async def build():
         db = await get_db()
         offset = (page - 1) * per_page
@@ -1060,22 +1058,21 @@ async def get_findings(
         )
         total = total_row["count"] if total_row else 0
         findings = deserialize_finding_rows(rows)
-        # Build finding_groups from *all* findings so group counts remain accurate
-        # regardless of which page is being viewed.
-        all_rows = await db.fetchall(
-            "SELECT * FROM findings WHERE owner_id = ? ORDER BY discovered_at DESC",
+        
+        group_rows = await db.fetchall(
+            "SELECT finding_group_id, COUNT(*) as count FROM findings WHERE owner_id = ? GROUP BY finding_group_id",
             (owner,),
         )
-        all_findings = deserialize_finding_rows(all_rows)
+        finding_groups = [{"id": row["finding_group_id"], "count": row["count"]} for row in group_rows]
+        
         return {
             "findings": findings,
-            "finding_groups": build_finding_groups(all_findings),
+            "finding_groups": finding_groups,
             "total": total,
             "page": page,
             "per_page": per_page,
         }
 
-    # Cache key includes pagination params so different pages do not collide.
     return await get_or_set_cached(f"findings:list:{owner}:page={page}:per_page={per_page}", build)
 
 

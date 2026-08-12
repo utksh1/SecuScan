@@ -196,16 +196,12 @@ def _dedupe_evidence(items: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     unique: List[Dict[str, Any]] = []
     seen = set()
     for item in items:
-        key = json.dumps(
-            {
-                "type": item.get("type"),
-                "label": item.get("label"),
-                "value": item.get("value"),
-                "artifact_ref": item.get("artifact_ref"),
-                "source": item.get("source"),
-            },
-            sort_keys=True,
-            default=str,
+        key = (
+            item.get("type"),
+            item.get("label"),
+            str(item.get("value")),
+            item.get("artifact_ref"),
+            item.get("source"),
         )
         if key in seen:
             continue
@@ -372,11 +368,18 @@ async def normalize_and_correlate_findings(
         staged_item["corroborating_sources"] = sorted({str(s).strip() for s in [*staged_item.get("corroborating_sources", [] if str(s).strip()}), *sources])
         staged_item["metadata"].update({key: value for key, value in (finding.get("metadata") or {}).items() if value not in ("", None, [], {})})
 
+    all_group_ids = list(staged.keys())
+    previous_map = {}
+    if all_group_ids:
+        previous_rows = await db.fetchall(
+            f"SELECT * FROM findings WHERE owner_id = ? AND finding_group_id IN ({','.join('?' * len(all_group_ids))})",
+            (owner_id, *all_group_ids)
+        )
+        previous_map = {row["finding_group_id"]: row for row in previous_rows}
+    
     normalized: List[Dict[str, Any]] = []
     for finding_group_id, finding in staged.items():
-        previous = await db.fetchone(
-            (owner_id, finding_group_id),
-        )
+        previous = previous_map.get(finding_group_id)
         prior_sources = []
         if previous and previous.get("corroborating_sources_json"):
             try:
@@ -414,7 +417,7 @@ async def normalize_and_correlate_findings(
 
     if settings.triage_engine_enabled and settings.triage_engine_api_key:
         try:
-            triage_engine.triage_findings(
+            await triage_engine.triage_findings_async(
                 normalized,
                 model=settings.triage_engine_model,
                 api_key=settings.triage_engine_api_key,

@@ -24,65 +24,59 @@ class ReconScanner(BaseScanner):
         summary = []
         rows = []
         
-        # 1. Subdomain Discovery (if applicable)
+        tasks = []
         if "." in target and not target.replace(".", "").isdigit():
-            self.update_progress(0.1)
-            try:
-                sub_findings = await self._run_subfinder(target)
-                findings.extend(sub_findings)
-                if sub_findings:
-                    for f in sub_findings:
-                        if f.get("metadata"):
-                            rows.append({
-                                "tool": "SUBDOMAIN",
-                                "subdomain": f["metadata"].get("subdomain"),
-                                "details": f.get("description")
-                            })
-                    summary.append(f"Discovered {len(sub_findings)} subdomains.")
-            except Exception as e:
-                logger.error(f"Subdomain discovery failed: {e}")
-            self.update_progress(0.4)
-
-        # 2. WHOIS Lookup
-        self.update_progress(0.5)
-        try:
-            whois_findings = await self._run_whois(target)
+            tasks.append(self._run_subfinder(target))
+        else:
+            tasks.append(asyncio.sleep(0, result=[]))
+        
+        tasks.append(self._run_whois(target))
+        tasks.append(self._run_dns_enum(target))
+        
+        self.update_progress(0.1)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        self.update_progress(0.9)
+        
+        sub_findings, whois_findings, dns_findings = results
+        
+        if not isinstance(sub_findings, Exception) and sub_findings:
+            findings.extend(sub_findings)
+            for f in sub_findings:
+                if f.get("metadata"):
+                    rows.append({
+                        "tool": "SUBDOMAIN",
+                        "subdomain": f["metadata"].get("subdomain"),
+                        "details": f.get("description")
+                    })
+            summary.append(f"Discovered {len(sub_findings)} subdomains.")
+        
+        if not isinstance(whois_findings, Exception) and whois_findings:
             findings.extend(whois_findings)
-            if whois_findings:
-                # Add to rows for tabular display
-                for f in whois_findings:
-                    if f.get("metadata"):
-                        meta = f["metadata"]
-                        rows.append({
-                            "tool": "WHOIS",
-                            "registrar": meta.get("registrar") or meta.get("registrar_name", "N/A"),
-                            "organization": meta.get("org") or meta.get("organization", "N/A"),
-                            "expiry": str(meta.get("expiration_date", "N/A")).split(' ')[0]
-                        })
-                summary.append("Retrieved WHOIS registration records.")
-            self.update_progress(0.7)
-        except Exception as e:
-            logger.error(f"WHOIS scan failed: {e}")
-
-        # 2. DNS Enumeration
-        try:
-            dns_findings = await self._run_dns_enum(target)
+            for f in whois_findings:
+                if f.get("metadata"):
+                    meta = f["metadata"]
+                    rows.append({
+                        "tool": "WHOIS",
+                        "registrar": meta.get("registrar") or meta.get("registrar_name", "N/A"),
+                        "organization": meta.get("org") or meta.get("organization", "N/A"),
+                        "expiry": str(meta.get("expiration_date", "N/A")).split(' ')[0]
+                    })
+            summary.append("Retrieved WHOIS registration records.")
+        
+        if not isinstance(dns_findings, Exception) and dns_findings:
             findings.extend(dns_findings)
-            if dns_findings:
-                for f in dns_findings:
-                    if f.get("metadata"):
-                        meta = f["metadata"]
-                        rows.append({
-                            "tool": "DNS",
-                            "record": meta.get("record_type", "N/A"),
-                            "value": meta.get("value", "N/A"),
-                            "details": f.get("description", "N/A")
-                        })
-                summary.append(f"Discovered {len(dns_findings)} DNS records.")
-            self.update_progress(1.0)
-        except Exception as e:
-            logger.error(f"DNS enumeration failed: {e}")
-
+            for f in dns_findings:
+                if f.get("metadata"):
+                    meta = f["metadata"]
+                    rows.append({
+                        "tool": "DNS",
+                        "record": meta.get("record_type", "N/A"),
+                        "value": meta.get("value", "N/A"),
+                        "details": f.get("description", "N/A")
+                    })
+            summary.append(f"Discovered {len(dns_findings)} DNS records.")
+        
+        self.update_progress(1.0)
         return {
             "findings": findings,
             "rows": rows,
@@ -95,7 +89,7 @@ class ReconScanner(BaseScanner):
         cmd = pm.build_command("subdomain_discovery", {"target": target})
         if not cmd: return []
         
-        output, _ = await self._execute_command(cmd)
+        output, _ = await asyncio.wait_for(self._execute_command(cmd), timeout=120)
         findings = []
         for line in output.splitlines():
             if line.strip() and "." in line:
@@ -114,7 +108,7 @@ class ReconScanner(BaseScanner):
         cmd = pm.build_command("whois_lookup", {"target": target})
         if not cmd: return []
         
-        output, _ = await self._execute_command(cmd)
+        output, _ = await asyncio.wait_for(self._execute_command(cmd), timeout=120)
         
         try:
             data = json.loads(output)
@@ -151,7 +145,7 @@ class ReconScanner(BaseScanner):
         cmd = pm.build_command("dns_enum", {"target": target})
         if not cmd: return []
         
-        output, _ = await self._execute_command(cmd)
+        output, _ = await asyncio.wait_for(self._execute_command(cmd), timeout=120)
         findings = []
         # Look for A, MX, NS records
         patterns = {

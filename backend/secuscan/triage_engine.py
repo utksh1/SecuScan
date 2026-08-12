@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -25,6 +26,28 @@ _CONTEXT_WINDOW = 6
 _DEFAULT_ELIGIBLE_CATEGORIES = {"code security", "static analysis", "sast"}
 
 _VALID_VERDICTS = {"true_positive", "false_positive", "needs_review"}
+
+_client_cache: Dict[str, Any] = {}
+
+
+@lru_cache(maxsize=128)
+def _read_file_cached(file_path: str) -> Optional[str]:
+    try:
+        return Path(file_path).read_text(errors="replace")
+    except OSError:
+        return None
+
+
+def _get_or_create_client(api_key: str, base_url: Optional[str] = None, timeout: float = 15.0) -> Any:
+    if OpenAI is None:
+        return None
+    cache_key = f"{api_key}:{base_url or 'default'}"
+    if cache_key not in _client_cache:
+        client_kwargs = {"api_key": api_key, "timeout": timeout}
+        if base_url:
+            client_kwargs["base_url"] = base_url
+        _client_cache[cache_key] = OpenAI(**client_kwargs)
+    return _client_cache[cache_key]
 
 
 def is_eligible_for_triage(
@@ -68,16 +91,14 @@ def extract_code_context(finding: Dict[str, Any], *, repo_root: Optional[str] = 
         return context
 
     candidate = Path(repo_root) / file_path if repo_root else Path(file_path)
-    try:
-        if candidate.is_file():
-            lines = candidate.read_text(errors="replace").splitlines()
-            start = max(0, line_no - 1 - _CONTEXT_WINDOW)
-            end = min(len(lines), line_no + _CONTEXT_WINDOW)
-            context["snippet"] = "\n".join(lines[start:end])
-        else:
-            context["snippet"] = str(finding.get("proof") or finding.get("description") or "").strip()
-    except OSError as exc:
-        logger.debug("triage_engine: could not read %s for context — %s", file_path, exc)
+    candidate_str = str(candidate.resolve())
+    content = _read_file_cached(candidate_str)
+    if content:
+        lines = content.splitlines()
+        start = max(0, line_no - 1 - _CONTEXT_WINDOW)
+        end = min(len(lines), line_no + _CONTEXT_WINDOW)
+        context["snippet"] = "\n".join(lines[start:end])
+    else:
         context["snippet"] = str(finding.get("proof") or finding.get("description") or "").strip()
 
     return context
@@ -189,12 +210,15 @@ def triage_finding(
     context = extract_code_context(finding, repo_root=repo_root)
     prompt = _build_triage_prompt(finding, context)
 
-    client_kwargs: Dict[str, Any] = {"api_key": api_key, "timeout": timeout}
-    if base_url:
-        client_kwargs["base_url"] = base_url
+    client = _get_or_create_client(api_key, base_url, timeout)
+    if client is None:
+        logger.warning(
+            "triage_engine: 'openai' package not installed. "
+            "Run `pip install openai>=1.0.0` to enable AI triage."
+        )
+        return None
 
     try:
-        client = OpenAI(**client_kwargs)
         response = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],
@@ -207,6 +231,55 @@ def triage_finding(
         return None
 
     return _parse_triage_response(raw)
+
+
+async def triage_findings_async(
+    findings: List[Dict[str, Any]],
+    *,
+    model: str,
+    api_key: str,
+    base_url: Optional[str] = None,
+    repo_root: Optional[str] = None,
+    eligible_categories: Optional[List[str]] = None,
+    min_confidence_to_skip: float = 0.9,
+    timeout: float = 15.0,
+) -> List[Dict[str, Any]]:
+    if not findings:
+        return findings
+    
+    import asyncio
+    
+    async def triage_single(finding: Dict[str, Any]) -> Dict[str, Any]:
+        if not isinstance(finding, dict):
+            return finding
+        if not is_eligible_for_triage(
+            finding,
+            eligible_categories=eligible_categories,
+            min_confidence_to_skip=min_confidence_to_skip,
+        ):
+            return finding
+        
+        result = await asyncio.to_thread(
+            triage_finding,
+            finding,
+            model=model,
+            api_key=api_key,
+            base_url=base_url,
+            repo_root=repo_root,
+            timeout=timeout,
+        )
+        
+        if result:
+            finding.update(result)
+            if result["triage_verdict"] == "false_positive":
+                finding["confidence_reason"] = (
+                    f"{finding.get('confidence_reason', '').rstrip('.')}; "
+                    f"AI triage: likely false positive — {result['triage_reasoning']}"
+                ).strip("; ").strip()
+        
+        return finding
+    
+    return await asyncio.gather(*[triage_single(f) for f in findings])
 
 
 def triage_findings(
@@ -246,9 +319,6 @@ def triage_findings(
 
         finding.update(result)
         if result["triage_verdict"] == "false_positive":
-            # Surface the LLM's own reasoning as the confidence_reason so it's
-            # visible in the UI/report right next to the existing confidence
-            # scoring, without overwriting the analyst's own status field.
             finding["confidence_reason"] = (
                 f"{finding.get('confidence_reason', '').rstrip('.')}; "
                 f"AI triage: likely false positive — {result['triage_reasoning']}"

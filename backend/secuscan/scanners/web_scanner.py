@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from typing import Any, Dict, List
@@ -48,24 +49,35 @@ class WebScanner(BaseScanner):
         )
         self.update_progress(0.3)
 
-        nuclei_findings = await self._run_nuclei(target)
-        findings.extend(nuclei_findings)
-        if nuclei_findings:
-            summary.append(f"Discovered {len(nuclei_findings)} template-based observations via Nuclei.")
-        self.update_progress(0.55)
-
         if intensity in ["deep", "custom"]:
-            nikto_findings = await self._run_nikto(target)
-            findings.extend(nikto_findings)
-            if nikto_findings:
-                summary.append("Completed normalized Nikto server checks.")
-            self.update_progress(0.75)
-
-            dir_findings = await self._run_ffuf(target)
-            findings.extend(dir_findings)
-            if dir_findings:
-                summary.append("Enumerated exposed paths and admin/docs surfaces.")
-            self.update_progress(1.0)
+            nuclei_task, nikto_task, ffuf_task = await asyncio.gather(
+                asyncio.wait_for(self._run_nuclei(target), timeout=300),
+                asyncio.wait_for(self._run_nikto(target), timeout=300),
+                asyncio.wait_for(self._run_ffuf(target), timeout=300),
+                return_exceptions=True
+            )
+            if not isinstance(nuclei_task, Exception):
+                findings.extend(nuclei_task)
+                if nuclei_task:
+                    summary.append(f"Discovered {len(nuclei_task)} template-based observations via Nuclei.")
+            if not isinstance(nikto_task, Exception):
+                findings.extend(nikto_task)
+                if nikto_task:
+                    summary.append("Completed normalized Nikto server checks.")
+            if not isinstance(ffuf_task, Exception):
+                findings.extend(ffuf_task)
+                if ffuf_task:
+                    summary.append("Enumerated exposed paths and admin/docs surfaces.")
+        else:
+            try:
+                nuclei_findings = await asyncio.wait_for(self._run_nuclei(target), timeout=300)
+                findings.extend(nuclei_findings)
+                if nuclei_findings:
+                    summary.append(f"Discovered {len(nuclei_findings)} template-based observations via Nuclei.")
+            except asyncio.TimeoutError:
+                pass
+        
+        self.update_progress(1.0)
 
         rows = []
         for page in crawl.get("pages", [])[:100]:

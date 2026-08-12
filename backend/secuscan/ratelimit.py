@@ -1,6 +1,6 @@
-from collections import defaultdict
+from collections import defaultdict, deque
 from datetime import datetime, timedelta
-from typing import Tuple, Dict, List
+from typing import Tuple, Dict
 import asyncio
 
 from fastapi import Request, Response, HTTPException
@@ -9,7 +9,7 @@ from .config import settings
 
 class RateLimiter:
     def __init__(self):
-        self.task_history: Dict[str, List[datetime]] = defaultdict(list)
+        self.task_history: Dict[str, deque] = defaultdict(lambda: deque())
         self.lock = asyncio.Lock()
 
     async def can_execute(
@@ -24,28 +24,24 @@ class RateLimiter:
             now = datetime.now()
             hour_ago = now - timedelta(hours=1)
 
-            # Clean old entries for this bucket
-            self.task_history[bucket] = [
-                ts for ts in self.task_history[bucket]
-                if ts > hour_ago
-            ]
+            history = self.task_history[bucket]
+            while history and history[0] <= hour_ago:
+                history.popleft()
 
-            recent_count = len(self.task_history[bucket])
+            recent_count = len(history)
 
             if recent_count >= max_per_hour:
                 return False, f"Rate limit exceeded: {recent_count}/{max_per_hour} per hour"
 
-            # Record this execution
-            self.task_history[bucket].append(now)
+            history.append(now)
             return True, ""
 
     async def reset(self, plugin_id: str = None):
         async with self.lock:
             if plugin_id:
-                # Remove every bucket that ends with :<plugin_id>
                 keys_to_clear = [k for k in self.task_history if k.endswith(f":{plugin_id}")]
                 for k in keys_to_clear:
-                    self.task_history[k] = []
+                    self.task_history[k].clear()
             else:
                 self.task_history.clear()
 

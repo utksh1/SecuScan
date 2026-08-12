@@ -12,6 +12,9 @@ from .config import settings, MANDATORY_DENYLIST
 
 logger = logging.getLogger(__name__)
 
+_HOSTNAME_RE = re.compile(r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$')
+_COMMAND_HOSTNAME_RE = re.compile(r'^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?)*$')
+
 
 # Blocked network ranges
 BLOCKED_NETWORKS = [
@@ -200,7 +203,7 @@ def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
     except ValueError:
         pass
 
-    if not re.match(r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$', hostname_to_validate):
+    if not _HOSTNAME_RE.match(hostname_to_validate):
         return False, "Invalid hostname format"
 
     # Check blocked TLDs in safe mode
@@ -575,20 +578,9 @@ def validate_command_network_egress(command: list[str], safe_mode: bool, plugin_
 
         is_host = False
         if not is_ip:
-            # Basic hostname check (with dots and valid characters, or 'localhost')
-            # Normalize candidate to lowercase for matching so uppercase hostnames
-            # (e.g. EXAMPLE.COM) are detected. A lowercase-only regex avoids
-            # misidentifying dotted plugin parameters (e.g. "windows.pslist.PsList")
-            # as network destinations, since real hostnames never contain mixed-case
-            # labels per RFC 952/1123 conventions.
             lowered = candidate.lower()
             if lowered == "localhost" or (
-                re.match(
-                    r'^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?)+$',
-                    lowered
-                )
-                # Reject labels with mixed case (e.g. "PsList") — these are module
-                # paths, not hostnames. All-uppercase (EXAMPLE) is fine.
+                _COMMAND_HOSTNAME_RE.match(lowered)
                 and not any(
                     part != part.lower() and part != part.upper()
                     for part in candidate.split(".")

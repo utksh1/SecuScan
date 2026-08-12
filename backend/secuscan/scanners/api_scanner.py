@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any, Dict, List
 from urllib.parse import urljoin
@@ -53,10 +54,11 @@ class APIScanner(BaseScanner):
             cookies={str(k): str(v) for k, v in cookies.items()},
             verify=settings.verify_ssl,
         ) as client:
-            for path in self.COMMON_SPEC_PATHS:
-                url = urljoin(target.rstrip("/") + "/", path.lstrip("/"))
-                document = await self._fetch_spec(client, url)
-                if not document:
+            urls = [urljoin(target.rstrip("/") + "/", p.lstrip("/")) for p in self.COMMON_SPEC_PATHS]
+            documents = await asyncio.gather(*[self._fetch_spec(client, u) for u in urls], return_exceptions=True)
+            
+            for url, document in zip(urls, documents):
+                if isinstance(document, Exception) or not document:
                     continue
                 api_hints.append(url)
                 spec_findings, endpoints = self._analyze_spec(url, document, target)
@@ -76,7 +78,7 @@ class APIScanner(BaseScanner):
             endpoint_inventory.extend(graphql_endpoints)
             api_hints.extend(item["url"] for item in graphql_endpoints if item.get("url"))
 
-            method_findings = await self._probe_api_hints(client, sorted(set(api_hints))[:30], target)
+            method_findings = await self._probe_api_hints(client, sorted(set(api_hints)), target)
             findings.extend(method_findings)
 
         if crawl.get("api_hints"):
@@ -216,16 +218,20 @@ class APIScanner(BaseScanner):
     ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         findings: List[Dict[str, Any]] = []
         endpoints: List[Dict[str, Any]] = []
-        for path in self.GRAPHQL_PATHS:
+        
+        async def probe_path(path: str) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+            path_findings: List[Dict[str, Any]] = []
+            path_endpoints: List[Dict[str, Any]] = []
             url = urljoin(target.rstrip("/") + "/", path.lstrip("/"))
+            
             try:
                 response = await client.options(url)
             except Exception:
-                continue
+                return path_findings, path_endpoints
 
             allowed_methods = response.headers.get("allow", "")
             if response.status_code == 200:
-                endpoints.append(
+                path_endpoints.append(
                     {
                         "type": "graphql_endpoint",
                         "url": url,
@@ -236,7 +242,7 @@ class APIScanner(BaseScanner):
                 )
 
                 if "GET" in allowed_methods.upper() and "POST" in allowed_methods.upper():
-                    findings.append(
+                    path_findings.append(
                         {
                             "title": f"GraphQL Endpoint Exposed at {path}",
                             "category": "API Exposure",
@@ -254,51 +260,62 @@ class APIScanner(BaseScanner):
                     }
                 )
 
-            if not allow_introspection:
+            if allow_introspection:
+                try:
+                    gql_response = await client.post(url, json={"query": "{__schema{queryType{name}}}"})
+                    if gql_response.status_code == 200 and "__schema" in gql_response.text:
+                        path_findings.append(
+                            {
+                                "title": "GraphQL Introspection Enabled",
+                                "category": "API Exposure",
+                                "severity": "medium",
+                                "target": target,
+                                "description": "GraphQL introspection responded successfully and disclosed schema metadata.",
+                                "remediation": "Restrict introspection in production or ensure the endpoint is appropriately authenticated.",
+                                "validated": True,
+                                "validation_method": "graphql_introspection",
+                                "confidence_reason": "The endpoint returned GraphQL schema metadata to an introspection query under an explicitly allowed policy.",
+                                "evidence": [
+                                    {"type": "url", "label": "Endpoint", "value": url, "source": "graphql"},
+                                    {"type": "status_code", "label": "Status code", "value": gql_response.status_code, "source": "graphql"},
+                                ],
+                                "references": [],
+                                "metadata": {"url": url},
+                            }
+                        )
+                except Exception:
+                    pass
+            
+            return path_findings, path_endpoints
+        
+        results = await asyncio.gather(*[probe_path(p) for p in self.GRAPHQL_PATHS], return_exceptions=True)
+        for result in results:
+            if isinstance(result, Exception):
                 continue
-
-            try:
-                gql_response = await client.post(url, json={"query": "{__schema{queryType{name}}}"})
-            except Exception:
-                continue
-            if gql_response.status_code == 200 and "__schema" in gql_response.text:
-                findings.append(
-                    {
-                        "title": "GraphQL Introspection Enabled",
-                        "category": "API Exposure",
-                        "severity": "medium",
-                        "target": target,
-                        "description": "GraphQL introspection responded successfully and disclosed schema metadata.",
-                        "remediation": "Restrict introspection in production or ensure the endpoint is appropriately authenticated.",
-                        "validated": True,
-                        "validation_method": "graphql_introspection",
-                        "confidence_reason": "The endpoint returned GraphQL schema metadata to an introspection query under an explicitly allowed policy.",
-                        "evidence": [
-                            {"type": "url", "label": "Endpoint", "value": url, "source": "graphql"},
-                            {"type": "status_code", "label": "Status code", "value": gql_response.status_code, "source": "graphql"},
-                        ],
-                        "references": [],
-                        "metadata": {"url": url},
-                    }
-                )
+            path_findings, path_endpoints = result
+            findings.extend(path_findings)
+            endpoints.extend(path_endpoints)
+        
         return findings, endpoints
 
     async def _probe_api_hints(self, client: httpx.AsyncClient, api_hints: List[str], target: str) -> List[Dict[str, Any]]:
         findings: List[Dict[str, Any]] = []
-        for url in api_hints:
-            try:
-                response = await client.options(url)
-            except Exception:
-                continue
-            allow_header = response.headers.get("allow", "")
-            if not allow_header:
-                continue
-            methods = [item.strip().lower() for item in allow_header.split(",") if item.strip()]
-            risky = sorted(self.RISKY_METHODS.intersection(methods))
-            if not risky:
-                continue
-            findings.append(
-                {
+        sem = asyncio.Semaphore(10)
+        
+        async def probe_hint(url: str) -> Dict[str, Any] | None:
+            async with sem:
+                try:
+                    response = await asyncio.wait_for(client.options(url), timeout=5)
+                except Exception:
+                    return None
+                allow_header = response.headers.get("allow", "")
+                if not allow_header:
+                    return None
+                methods = [item.strip().lower() for item in allow_header.split(",") if item.strip()]
+                risky = sorted(self.RISKY_METHODS.intersection(methods))
+                if not risky:
+                    return None
+                return {
                     "title": f"State-Changing Methods Exposed on {url}",
                     "category": "API Exposure",
                     "severity": "medium" if any(token in url.lower() for token in self.HIGH_VALUE_TOKENS) else "low",
@@ -313,7 +330,9 @@ class APIScanner(BaseScanner):
                     ],
                     "metadata": {"url": url, "methods": methods},
                 }
-            )
+        
+        results = await asyncio.gather(*[probe_hint(url) for url in api_hints], return_exceptions=True)
+        findings = [r for r in results if r and not isinstance(r, Exception)]
         return findings
 
     def _dedupe_endpoints(self, endpoints: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
