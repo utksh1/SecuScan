@@ -129,7 +129,6 @@ export default function ToolConfig() {
           setCredentialProfiles(credentials.items || [])
           setSessionProfiles(sessions.items || [])
         } catch (e) {
-          // non-fatal; default to null
         }
       } catch (error) {
         if (!cancelled) {

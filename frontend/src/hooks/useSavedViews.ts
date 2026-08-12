@@ -19,7 +19,6 @@ export interface SavedView {
   updatedAt: string   // ISO string
 }
 
-// Pydantic-shaped payload the backend expects.
 interface BackendPayload {
   name: string
   filter_json: string
@@ -36,7 +35,7 @@ interface BackendRow {
 const VALID_SORT_MODES = ['severity', 'newest', 'oldest', 'target'] as const
 const VALID_SEVERITIES = ['all', 'critical', 'high', 'medium', 'low', 'info'] as const
 
-/** Returns true when obj looks like a real FilterPreset (not garbage data). */
+
 export function isValidPreset(obj: unknown): obj is FilterPreset {
   if (!obj || typeof obj !== 'object') return false
   const p = obj as Record<string, unknown>
@@ -81,7 +80,6 @@ function writeToStorage(views: SavedView[]): void {
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(views))
   } catch {
-    // Storage quota exceeded — silently ignore.
   }
 }
 
@@ -102,25 +100,7 @@ function rowToView(row: BackendRow): SavedView | null {
   }
 }
 
-/**
- * Backend sync failure behaviour
- * ─────────────────────────────
- * All backend calls are fire-and-forget with a hard 8-second timeout.
- * On any network error, non-2xx response, or timeout:
- *
- *   • The optimistic local state (already written to localStorage) is
- *     kept as-is — the user never sees an error for a backend outage.
- *   • `backendAvailable` stays false so subsequent mutations skip the
- *     network entirely rather than hammering an unreachable server.
- *   • On the next page load the hook retries the backend hydration; if
- *     it succeeds, remote state is merged (remote wins on timestamp).
- *   • There is intentionally no retry queue — SecuScan is local-first
- *     and localStorage is the source of truth.  The backend is a
- *     convenience sync layer, not a required dependency.
- *
- * Callers (SavedViewsPanel) can rely on the returned Promise always
- * resolving — it never rejects due to a backend failure.
- */
+
 async function apiFetch<T>(
   path: string,
   init?: RequestInit,
@@ -148,35 +128,28 @@ async function apiFetch<T>(
 export interface UseSavedViewsReturn {
   views: SavedView[]
   loading: boolean
-  /** Save a new preset or overwrite an existing one (matched by name). */
   saveView: (name: string, preset: FilterPreset) => Promise<SavedView>
-  /** Delete by id. */
   deleteView: (id: string) => Promise<void>
-  /** Rename an existing view. */
   renameView: (id: string, newName: string) => Promise<void>
 }
 
 export function useSavedViews(): UseSavedViewsReturn {
   const [views, setViews] = useState<SavedView[]>([])
   const [loading, setLoading] = useState(true)
-  // Track whether we managed to hydrate from the backend at least once.
   const backendAvailable = useRef(false)
 
-  // ── Mount: prefer backend, fall back to localStorage ──────────────────────
   useEffect(() => {
     let cancelled = false
 
     async function hydrate() {
-      // Try backend first
       const data = await apiFetch<{ views: BackendRow[] }>('/saved-views')
       if (!cancelled) {
         if (data && Array.isArray(data.views)) {
           const parsed = data.views.map(rowToView).filter(Boolean) as SavedView[]
           backendAvailable.current = true
           setViews(parsed)
-          writeToStorage(parsed) // keep local in sync
+          writeToStorage(parsed)
         } else {
-          // Backend unreachable — use localStorage
           setViews(readFromStorage())
         }
         setLoading(false)
@@ -199,7 +172,6 @@ export function useSavedViews(): UseSavedViewsReturn {
       if (!trimmed) throw new Error('View name cannot be empty')
       if (!isValidPreset(preset)) throw new Error('Invalid filter preset')
 
-      // Check whether we're overwriting an existing name
       const existing = views.find(
         (v) => v.name.toLowerCase() === trimmed.toLowerCase(),
       )
@@ -211,7 +183,6 @@ export function useSavedViews(): UseSavedViewsReturn {
         const next = views.map((v) => (v.id === existing.id ? updated : v))
         syncSet(next)
 
-        // Backend sync (optimistic, fire-and-forget)
         if (backendAvailable.current) {
           const payload: BackendPayload = {
             name: trimmed,

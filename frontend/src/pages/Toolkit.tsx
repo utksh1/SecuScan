@@ -288,7 +288,6 @@ export default function Scanner() {
       try {
         localStorage.setItem(RECENT_TOOLS_STORAGE_KEY, JSON.stringify(next))
       } catch {
-        // Ignore localStorage write errors and continue.
       }
       return next
     })
@@ -370,7 +369,7 @@ export default function Scanner() {
         ))}
       </nav>
 
-      {/* Quick Access section removed per user request */}
+      {}
 
       <main
         role="tabpanel"

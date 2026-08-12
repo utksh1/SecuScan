@@ -1,15 +1,3 @@
-"""
-ai_summary.py — LLM-powered executive summary generation for SecuScan reports.
-
-Opt-in feature: returns an empty string when disabled or when the openai
-package is not installed. Zero impact on existing report behaviour.
-
-Supports any OpenAI-compatible endpoint:
-  - OpenAI:  leave AI_SUMMARY_BASE_URL blank
-  - Ollama:  AI_SUMMARY_BASE_URL=http://localhost:11434/v1
-  - Any other local / cloud LLM with a /v1/chat/completions endpoint
-"""
-
 from __future__ import annotations
 
 import logging
@@ -19,7 +7,6 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# Top-level import so the symbol can be patched in tests.
 # If openai is not installed this will be None and generate_summary() handles it.
 try:
     from openai import OpenAI
@@ -37,16 +24,10 @@ _SENSITIVE_RE = re.compile(
 
 
 def _sanitize_title(title: str) -> str:
-    """Remove hostnames, IPs, URLs, and credentials from a finding title."""
     return _SENSITIVE_RE.sub("[redacted]", title).strip()
 
 
 def _build_prompt(findings: list[dict]) -> str:
-    """Build a privacy-safe prompt from finding metadata only.
-
-    Titles are sanitized to remove any embedded hostnames, IPs, URLs, or
-    credentials before being included in the prompt.
-    """
     total = len(findings)
 
     severity_counts: Counter = Counter()
@@ -102,20 +83,6 @@ def generate_summary(
     base_url: Optional[str] = None,
     timeout: float = 15.0,
 ) -> str:
-    """Generate an LLM executive summary from scan findings.
-
-    Args:
-        findings: List of normalised finding dicts from a completed scan.
-        model:    Model name e.g. ``"gpt-4o-mini"`` or ``"llama3"``.
-        api_key:  API key for the OpenAI-compatible endpoint.
-        base_url: Optional base URL override for non-OpenAI providers.
-        timeout:  HTTP timeout in seconds (default 15). Prevents LLM calls
-                  from stalling report generation.
-
-    Returns:
-        A plain-text executive summary string, or ``""`` on any failure so
-        that callers always get a safe value to embed in reports.
-    """
     if not findings:
         return ""
 

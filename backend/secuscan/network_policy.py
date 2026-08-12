@@ -1,10 +1,3 @@
-"""
-Network egress policy enforcement for scanners.
-
-Implements deny-by-default network access control with configurable
-allowlist/denylist policies. Supports both IPv4 and IPv6.
-"""
-
 import ipaddress
 import json
 import logging
@@ -21,13 +14,11 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 class PolicyAction(Enum):
-    """Network policy decision outcome"""
     ALLOW = "allow"
     DENY = "deny"
 
 @dataclass
 class NetworkPolicy:
-    """Single network access policy rule"""
     cidr: str                      # Network in CIDR notation
     action: PolicyAction          # Allow or deny
     reason: str                   # Why this rule exists
@@ -35,7 +26,6 @@ class NetworkPolicy:
     expires_at: Optional[datetime] = None  # Optional expiration
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for logging"""
         return {
             "cidr": self.cidr,
             "action": self.action.value,
@@ -46,7 +36,6 @@ class NetworkPolicy:
 
 @dataclass
 class AuditLogEntry:
-    """Network access audit trail entry"""
     timestamp: datetime
     plugin_id: str
     task_id: str
@@ -58,7 +47,6 @@ class AuditLogEntry:
     reason: str
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for JSON logging"""
         return {
             "timestamp": self.timestamp.isoformat(),
             "plugin_id": self.plugin_id,
@@ -72,15 +60,6 @@ class AuditLogEntry:
         }
 
 class NetworkPolicyEngine:
-    """
-    Enforce network access policies for scanners.
-
-    Logic:
-      1. Check explicit denylist (highest priority, fails fast)
-      2. Check explicit allowlist (allows if matched)
-      3. Default deny (no match = blocked)
-    """
-
     def __init__(self, audit_log_path: str = "/var/log/secuscan/network.audit.log", max_audit_entries: int = 10000):
         self.allowlist: List[Tuple[ipaddress.ip_network, NetworkPolicy]] = []
         self.denylist: List[Tuple[ipaddress.ip_network, NetworkPolicy]] = []
@@ -88,11 +67,9 @@ class NetworkPolicyEngine:
         self.audit_entries: List[AuditLogEntry] = []
         self._max_audit_entries = max_audit_entries
 
-        # Create audit log file
         self._init_audit_log()
 
     def _init_audit_log(self):
-        """Initialize audit log file with header"""
         try:
             # Ensure the directory exists
             Path(self.audit_log_path).parent.mkdir(parents=True, exist_ok=True)
@@ -109,14 +86,6 @@ class NetworkPolicyEngine:
         reason: str = "Operator configured",
         expires_at: Optional[datetime] = None
     ) -> None:
-        """
-        Add a network to the allowlist.
-
-        Args:
-            cidr: Network in CIDR notation (e.g., "10.0.0.0/8")
-            reason: Human-readable reason for this rule
-            expires_at: Optional expiration timestamp
-        """
         try:
             net = ipaddress.ip_network(cidr, strict=False)
             policy = NetworkPolicy(
@@ -138,14 +107,6 @@ class NetworkPolicyEngine:
         reason: str = "System blocked",
         expires_at: Optional[datetime] = None
     ) -> None:
-        """
-        Add a network to the denylist.
-
-        Args:
-            cidr: Network in CIDR notation
-            reason: Human-readable reason for this rule
-            expires_at: Optional expiration timestamp
-        """
         try:
             net = ipaddress.ip_network(cidr, strict=False)
             policy = NetworkPolicy(
@@ -169,19 +130,6 @@ class NetworkPolicyEngine:
         task_id: str = "unknown",
         dest_hostname: Optional[str] = None,
     ) -> Tuple[bool, str, NetworkPolicy]:
-        """
-        Check if outbound connection is allowed.
-
-        Args:
-            dest_ip: Destination IP address
-            dest_port: Destination port (informational)
-            plugin_id: Plugin making the connection
-            task_id: Task ID for audit context
-            dest_hostname: Optional resolved hostname
-
-        Returns:
-            Tuple of (allowed: bool, decision_reason: str, matched_policy: NetworkPolicy)
-        """
         # Clean dest_ip if it is a full URL, has a port, or has brackets
         original_dest_ip = dest_ip
         target_host = dest_ip.strip()
@@ -309,22 +257,7 @@ class NetworkPolicyEngine:
         plugin_id: str = "unknown",
         task_id: str = "unknown",
     ) -> Tuple[Optional[str], bool, str]:
-        """Resolve target hostname once and validate against network policy.
-
-        Pins the resolved IP so the scanner subprocess cannot be victimized
-        by a DNS rebinding attack (where DNS switches to a malicious IP
-        between policy check and scan execution). Passes plugin/task context
-        through to the audit trail in check_access.
-
-        Args:
-            target: Hostname or IP address to resolve.
-            plugin_id: Plugin making the request (for audit trail).
-            task_id: Task ID (for audit trail).
-
-        Returns:
-            Tuple of (pinned_ip, is_allowed, reason).
-            pinned_ip is None if the hostname is unresolvable.
-        """
+        """Resolve target hostname once and validate against network policy."""
         try:
             ip = ipaddress.ip_address(target)
             pinned = str(ip)
@@ -348,7 +281,6 @@ class NetworkPolicyEngine:
             return (None, False, f"Unresolvable hostname: {target}")
 
     def _is_expired(self, policy: NetworkPolicy) -> bool:
-        """Check if a policy has expired"""
         if policy.expires_at is None:
             return False
         return datetime.now() > policy.expires_at
@@ -373,17 +305,6 @@ class NetworkPolicyEngine:
         action: Optional[PolicyAction] = None,
         limit: int = 1000
     ) -> List[AuditLogEntry]:
-        """
-        Retrieve audit log entries with optional filtering.
-
-        Args:
-            plugin_id: Filter by plugin (optional)
-            action: Filter by action (ALLOW or DENY)
-            limit: Maximum number of entries to return
-
-        Returns:
-            List of matching audit entries
-        """
         entries = self.audit_entries
 
         if plugin_id:
@@ -395,19 +316,10 @@ class NetworkPolicyEngine:
         return entries[-limit:]  # Return most recent N
 
     def clear_audit_entries(self) -> None:
-        """Clear all in-memory audit entries."""
         self.audit_entries.clear()
 
     def validate_egress_target(self, host: str, port: int = 443) -> Tuple[bool, str]:
-        """Validate an outbound webhook/egress destination against network policy.
-
-        Args:
-            host: Hostname to validate
-            port: Destination port
-
-        Returns:
-            Tuple of (allowed, reason)
-        """
+        """Validate an outbound webhook/egress destination against network policy."""
         target_host = host
         if "://" in target_host:
             try:
@@ -441,15 +353,6 @@ class NetworkPolicyEngine:
         return False, "Destination denied by default policy"
 
     def export_audit_log(self, format: str = "json") -> str:
-        """
-        Export audit log in specified format.
-
-        Args:
-            format: "json" or "csv"
-
-        Returns:
-            Formatted audit log string
-        """
         if format == "csv":
             import csv
             import io
@@ -470,7 +373,6 @@ class NetworkPolicyEngine:
 _policy_engine: Optional[NetworkPolicyEngine] = None
 
 def get_policy_engine() -> NetworkPolicyEngine:
-    """Get or create global policy engine singleton"""
     global _policy_engine
     if _policy_engine is None:
         from .config import settings
@@ -482,7 +384,6 @@ def get_policy_engine() -> NetworkPolicyEngine:
     return _policy_engine
 
 def _init_default_policies(engine: NetworkPolicyEngine) -> None:
-    """Initialize default security policies"""
     from .config import settings, MANDATORY_DENYLIST
 
     # Add the mandatory denylist first. These entries (cloud metadata,

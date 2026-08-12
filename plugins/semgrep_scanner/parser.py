@@ -3,9 +3,6 @@ from typing import Dict, Any
 
 
 def parse(output: str) -> Dict[str, Any]:
-    """
-    Parse Semgrep JSON output.
-    """
     findings = []
     try:
         data = json.loads(output)

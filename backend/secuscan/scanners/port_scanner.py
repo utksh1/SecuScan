@@ -5,11 +5,6 @@ from .base import BaseScanner
 from ..plugins import get_plugin_manager
 
 class PortScanner(BaseScanner):
-    """
-    Orchestrates Nmap scanning with refined result parsing.
-    Equivalent to Pentest-Tools 'Port Scanner'.
-    """
-
     @property
     def name(self) -> str:
         return "Port Scanner"
@@ -24,12 +19,6 @@ class PortScanner(BaseScanner):
 
     @staticmethod
     def _resolve_scan_type(raw: Any) -> str:
-        """Map caller-supplied scan_type to the nmap plugin's SELECT value.
-
-        The plugin field 'scan_type' accepts only "S" | "T" | "U".
-        Callers may pass the raw letter, "-sX", or "sX" forms.
-        Raises ValueError for any value that cannot be resolved.
-        """
         _VALID = {"S", "T", "U"}
         if not raw:
             return "T"
@@ -48,19 +37,12 @@ class PortScanner(BaseScanner):
 
     @staticmethod
     def _resolve_ports(raw: Any) -> str:
-        """Map shorthand port specs to a clean numeric range string accepted by the plugin.
-
-        Returns:
-            Empty string  → use plugin default (top-100 via command template)
-            Numeric range → passed through as-is
-        """
         if not raw or raw in ("", "top100"):
             return ""
         if raw == "top1000":
             return "1-1000"
         if raw == "all":
             return "1-65535"
-        # Validate strict port spec: comma-separated port numbers/ranges
         if re.match(r"^\d+(-\d+)?(,\d+(-\d+)?)*$", str(raw)):
             return str(raw)
         raise ValueError(
@@ -69,7 +51,6 @@ class PortScanner(BaseScanner):
         )
 
     async def run(self, target: str, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        """Runs Nmap scan and parses output into structured findings."""
         self.update_progress(0.1)
 
         plugin_inputs = {

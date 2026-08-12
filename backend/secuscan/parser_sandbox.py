@@ -1,42 +1,3 @@
-"""
-Sandboxed parser execution for custom plugin parser.py files.
-
-Plugin parsers run untrusted third-party code.  This module executes each
-parser in a fresh, short-lived subprocess so that:
-
-  - A crash, infinite loop, or memory explosion in the parser cannot kill the
-    backend process.
-  - The parser cannot access the backend's secrets, database handles, or any
-    other in-process state.
-  - Environment variables (which may contain SECUSCAN_VAULT_KEY, API keys, etc.)
-    are stripped from the child process.
-  - Execution is bounded by a configurable timeout.
-  - Output size is capped so a runaway parser cannot exhaust backend memory.
-  - On Linux with unprivileged user namespaces available, the child runs in
-    a fresh network namespace with no interfaces configured, so it cannot
-    open outbound connections to exfiltrate scan data. See
-    "Network isolation for the parser subprocess" below for the fallback
-    behaviour on hosts where this isn't available.
-
-Communication contract
-----------------------
-  stdin  → JSON line: {"input": <parser_input_string>}
-  stdout → JSON line: <parsed_result_dict>
-  stderr → captured for diagnostics only
-
-The child process is a minimal Python bootstrap that imports the plugin's
-parser.py, calls parse(input_data), and writes the result to stdout.  It
-imports nothing from the backend package, so no application state leaks.
-
-Security note on stderr
------------------------
-Stderr from the child process may contain stack traces, file paths, partial
-parser-input excerpts, or other diagnostic data. It is intentionally NOT
-included in the user-facing exception message or stored in ``error_message``.
-Full stderr is logged at DEBUG level (internal diagnostics only) so operators
-can investigate failures without leaking sensitive details to API callers.
-"""
-
 from __future__ import annotations
 
 import json
@@ -65,7 +26,6 @@ _LINENO_RE = re.compile(r'\bline \d+\b', re.IGNORECASE)
 
 
 def _sanitize_stderr(stderr: str, max_chars: int = 500) -> str:
-    """Strip file paths and line numbers from stderr; truncate to *max_chars*."""
     sanitized = _PATH_RE.sub("[PATH]", stderr)
     sanitized = _LINENO_RE.sub("[LINE]", sanitized)
     return sanitized[:max_chars]
@@ -73,14 +33,6 @@ def _sanitize_stderr(stderr: str, max_chars: int = 500) -> str:
 
 class ParserSandboxError(RuntimeError):
     """Raised when the sandboxed parser fails for any reason.
-
-    The public exception message intentionally contains only the *reason*
-    string (a short, controlled description) and never includes raw stderr
-    content.  Stderr is stored privately on the instance so callers that need
-    it for internal diagnostics can access it, but it must not be forwarded to
-    API responses or stored as a user-facing error message.
-    """
-
     def __init__(self, plugin_id: str, reason: str, stderr: str = "") -> None:
         self.plugin_id = plugin_id
         self.reason = reason
@@ -139,12 +91,6 @@ _BOOTSTRAP_TEMPLATE = string.Template(
 
 
 def _sanitised_env() -> Dict[str, str]:
-    """Return a minimal environment for the child process.
-
-    Retains PATH and PYTHONPATH (needed to locate the interpreter and any
-    installed packages) while stripping all credentials and application
-    secrets present in the parent's environment.
-    """
     keep_keys = {"PATH", "PYTHONPATH", "HOME", "TMPDIR", "TEMP", "TMP", "LANG", "LC_ALL"}
     return {k: v for k, v in os.environ.items() if k in keep_keys}
 
@@ -166,7 +112,6 @@ def _sanitised_env() -> Dict[str, str]:
 # posture rather than an allowlist.
 #
 # `unshare --net` alone requires CAP_SYS_ADMIN; combining it with `--user`
-# lets an unprivileged caller create both namespaces together and acquire
 # that capability inside its own new user namespace, which is what makes
 # this usable without running the backend as root. This is Linux-only
 # (util-linux); on other platforms, or if the capability probe fails for any
@@ -180,7 +125,6 @@ _unshare_warning_logged = False
 
 
 def _unshare_net_supported() -> bool:
-    """Probe once whether `unshare --user --net` works on this host, caching the result."""
     global _unshare_capability_checked, _unshare_available
 
     if _unshare_capability_checked:
@@ -209,7 +153,6 @@ def _unshare_net_supported() -> bool:
 
 
 def _sandbox_argv(python_executable: str, bootstrap_code: str) -> list[str]:
-    """Build the argv for the parser subprocess, network-isolated when possible."""
     base_argv = [python_executable, "-c", bootstrap_code]
 
     if _unshare_net_supported():
@@ -235,21 +178,6 @@ def run_parser_in_sandbox(
     timeout_seconds: int = _DEFAULT_TIMEOUT_SECONDS,
     max_output_bytes: int = _DEFAULT_MAX_OUTPUT_BYTES,
 ) -> Dict[str, Any]:
-    """Execute plugin parser.py in an isolated subprocess and return its result.
-
-    Args:
-        parser_path:     Absolute path to the plugin's parser.py.
-        plugin_id:       Plugin identifier used in log and error messages.
-        parser_input:    The raw string output from the scanner to parse.
-        timeout_seconds: Hard wall-clock timeout; the child is killed when exceeded.
-        max_output_bytes: Maximum bytes accepted from the child's stdout.
-
-    Returns:
-        The dict returned by the parser's ``parse()`` function.
-
-    Raises:
-        ParserSandboxError: on timeout, crash, oversized output, or malformed JSON.
-    """
     if not parser_path.exists():
         raise ParserSandboxError(plugin_id, "parser.py not found")
 

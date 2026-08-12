@@ -424,7 +424,7 @@ function HistoryVersionsDrawer({ workflow, onClose, onRollbackSuccess }: History
 
   return (
     <>
-      {/* Backdrop */}
+      {}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -434,7 +434,7 @@ function HistoryVersionsDrawer({ workflow, onClose, onRollbackSuccess }: History
         onClick={onClose}
       />
 
-      {/* Drawer Container */}
+      {}
       <motion.div
         initial={{ x: '100%' }}
         animate={{ x: 0 }}

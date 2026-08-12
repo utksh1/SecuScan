@@ -36,7 +36,7 @@ export default function Pagination({
           <span className="text-silver-bright">
             {start}–{end}
           </span>{" "}
-          // Total: <span className="text-rag-blue">{total}</span>
+          Total: <span className="text-rag-blue">{total}</span>
         </span>
       </p>
       <div className="flex items-center gap-4">

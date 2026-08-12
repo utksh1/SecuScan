@@ -1,25 +1,3 @@
-"""
-backend/secuscan/rate_limiter.py
-
-Redis-backed sliding window rate limiter for scan execution endpoints.
-
-Algorithm: Sliding window counter using Redis INCR + EXPIRE.
-- Per-IP counters stored as Redis keys with TTL.
-- Two-tier limits: per-minute (burst protection) and per-hour (sustained limit).
-- Returns HTTP 429 with Retry-After header when limits are exceeded.
-- When Redis is unavailable, falls back to in-memory rate limiting and logs
-  an ERROR, so a Redis outage does not take down the scan service entirely.
-
-Key schema:
-  rate_limit:scan:{ip}:minute:{window_start_minute}  → request count
-  rate_limit:scan:{ip}:hour:{window_start_hour}      → request count
-
-Fallback:
-  In-memory dictionary is used when Redis is unreachable to maintain
-  rate limiting coverage. A circuit breaker periodically attempts to
-  reconnect to Redis.
-"""
-
 import logging
 import time
 from collections import defaultdict
@@ -32,19 +10,10 @@ logger = logging.getLogger(__name__)
 
 
 class RateLimitExceeded(HTTPException):
-    """Raised when a rate limit is exceeded. Caught by a global exception handler."""
+    pass
 
 
 class ScanRateLimiter:
-    """
-    Sliding window rate limiter for scan execution endpoints.
-
-    Usage:
-        limiter = ScanRateLimiter(redis_client, rate_limit=5, rate_window=60,
-                                   burst_limit=10, burst_window=3600)
-        await limiter.check(request)   # raises HTTP 429 if limit exceeded
-    """
-
     def __init__(
         self,
         redis_client: Optional[aioredis.Redis],
@@ -62,17 +31,10 @@ class ScanRateLimiter:
         self._fallback_history: Dict[str, List[float]] = defaultdict(list)
 
     async def reset(self) -> None:
-        """Clear in-memory fallback state and reset circuit breaker."""
-
         self._fallback_history.clear()
         self._redis_failed = False
 
     def _get_client_ip(self, request: Request) -> str:
-        """
-        Extract the real client IP.
-        Checks X-Forwarded-For first (for reverse-proxy / Docker deployments),
-        falls back to direct connection address.
-        """
         forwarded_for = request.headers.get("X-Forwarded-For")
         if forwarded_for:
             # X-Forwarded-For can be a comma-separated list; take the first
@@ -80,11 +42,9 @@ class ScanRateLimiter:
         return request.client.host if request.client else "unknown"
 
     def _make_key(self, ip: str, window_type: str, window_value: int) -> str:
-        """Build a namespaced Redis key for this IP and time window."""
         return f"rate_limit:scan:{ip}:{window_type}:{window_value}"
 
     async def _check_fallback(self, request: Request) -> None:
-        """In-memory fallback rate limit check used when Redis is down."""
         ip = self._get_client_ip(request)
         now = time.time()
 
@@ -142,17 +102,6 @@ class ScanRateLimiter:
         self._fallback_history[bucket_hr].append(now)
 
     async def check(self, request: Request) -> None:
-        """
-        Check rate limits for the incoming request.
-        Raises HTTP 429 if either the per-minute or per-hour limit is exceeded.
-        Falls back to in-memory rate limiting if Redis is unavailable.
-
-        Args:
-            request: The incoming FastAPI request object.
-
-        Raises:
-            HTTPException: 429 Too Many Requests with Retry-After header.
-        """
         # If rate limiting is disabled (limit set to 0), pass through immediately
         if self._rate_limit == 0:
             return
@@ -263,10 +212,6 @@ def make_scan_rate_limiter(
     burst_limit: int,
     burst_window: int,
 ) -> ScanRateLimiter:
-    """
-    Factory function for creating a ScanRateLimiter.
-    Intended to be called once at app startup and reused across requests.
-    """
     return ScanRateLimiter(
         redis_client=redis_client,
         rate_limit=rate_limit,
@@ -277,11 +222,6 @@ def make_scan_rate_limiter(
 
 
 async def check_scan_rate_limit(request: Request) -> None:
-    """FastAPI dependency that checks scan rate limits for scan-triggering endpoints.
-
-    Retrieves the ``ScanRateLimiter`` instance from ``request.app.state``
-    (initialized during app startup) and delegates to its ``check`` method.
-    """
     limiter = getattr(request.app.state, "scan_rate_limiter", None)
     if limiter:
         await limiter.check(request)

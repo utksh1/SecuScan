@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { getDashboardSummary, getHealth, cancelTask } from '../api'
 import { ExecutiveStatsBar } from '../components/ExecutiveStatsBar'
 import { routePath, routes } from '../routes'
-import { formatBriefingDate, formatTaskInit, formatLocaleDate, formatLocaleTime } from '../utils/date'
+import { formatBriefingDate, formatTaskInit, formatLocaleDate, formatLocaleTime, formatDuration } from '../utils/date'
+import { asString, asNumber, asOptionalNumber } from '../utils/typeGuards'
 
 type Finding = {
   id: string
@@ -37,19 +38,6 @@ type Summary = {
   recent_tasks: Task[]
   scan_activity: { total: number; completed: number; running: number }
 }
-
-function asString(value: unknown, fallback = '') {
-  return typeof value === 'string' ? value : fallback
-}
-
-function asNumber(value: unknown, fallback = 0) {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
-}
-
-function asOptionalNumber(value: unknown): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
-}
-
 
 function normalizeSummary(data: Partial<Summary> | null | undefined): Summary {
   const summary = data && typeof data === 'object' ? data : {}
@@ -118,15 +106,6 @@ const emptySummary: Summary = {
   scan_activity: { total: 0, completed: 0, running: 0 },
 }
 
-
-function formatDuration(seconds?: number | null) {
-  if (seconds == null || !Number.isFinite(seconds) || seconds <= 0) return 'N/A'
-  if (seconds < 60) return `${Math.round(seconds)}s`
-  const mins = Math.floor(seconds / 60)
-  const secs = Math.round(seconds % 60)
-  return `${mins}m ${secs.toString().padStart(2, '0')}s`
-}
-
 function displayToolName(task: Task) {
   const name = task.tool_name?.trim()
   if (!name || name.toLowerCase() === 'history') {
@@ -154,7 +133,6 @@ function severityTone(severity: string) {
   }
 }
 
-// Animation variants
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
@@ -181,6 +159,7 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null)
   const [backendConnected, setBackendConnected] = useState<boolean | null>(null)
   const [lastSync, setLastSync] = useState<string | null>(null)
+  const [healthFailed, setHealthFailed] = useState(false)
   const navigate = useNavigate()
 
   const applySummary = (data: Partial<Summary>) => {
@@ -190,48 +169,50 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    let cancelled = false
+  let cancelled = false
 
-    const load = async () => {
-      try {
-        await getHealth()
-        if (!cancelled) setBackendConnected(true)
-      } catch {
-        if (!cancelled) {
-          setBackendConnected(false)
-          setError('Unable to reach the SecuScan backend')
-          setLoading(false)
-        }
-        return
+  const load = async () => {
+    if (healthFailed) return
+
+    try {
+      await getHealth()
+      if (!cancelled) setBackendConnected(true)
+    } catch {
+      if (!cancelled) {
+        setBackendConnected(false)
+        setHealthFailed(true)
+        setError('Unable to reach the SecuScan backend')
+        setLoading(false)
       }
-
-      getDashboardSummary()
-        .then((data) => {
-          if (cancelled) return
-          applySummary(data as Partial<Summary>)
-        })
-        .catch((err) => {
-          if (cancelled) return
-          setError(err.message)
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false)
-        })
+      return
     }
 
-    load()
-    const interval = setInterval(load, 10000)
+    getDashboardSummary()
+      .then((data) => {
+        if (cancelled) return
+        applySummary(data as Partial<Summary>)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        setError(err.message)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+  }
 
-    return () => {
-      cancelled = true
-      clearInterval(interval)
-    }
-  }, [])
+  load()
+  const interval = setInterval(load, 10000)
+
+  return () => {
+    cancelled = true
+    clearInterval(interval)
+  }
+}, [healthFailed])
 
   const handleAbort = async (taskId: string) => {
     try {
       await cancelTask(taskId)
-      // Refresh summary immediately
       const data = await getDashboardSummary() as Summary
       applySummary(data)
     } catch (err) {
@@ -356,7 +337,11 @@ export default function Dashboard() {
                 {error}. Please verify network connectivity.
               </p>
               <button
-                onClick={() => window.location.reload()}
+                onClick={() => {
+                  setHealthFailed(false)
+                  setError(null)
+                  setLoading(true)
+               }}
                 className="px-6 py-2 bg-rag-red/20 hover:bg-rag-red border border-rag-red/50 text-white text-xs font-bold uppercase tracking-widest rounded transition-all"
               >
                 Retry Connection
@@ -561,7 +546,7 @@ export default function Dashboard() {
 
                   </div>
 
-                  {/* Operational Stats: Minimized and Integrated */}
+                  {}
                   <div className="pt-6 grid grid-cols-1 md:grid-cols-3 gap-px bg-accent-silver/10 border border-accent-silver/5">
                     <div className="bg-charcoal px-6 py-5">
                       <span className="text-xs font-bold text-silver/70 uppercase tracking-[0.2em] block mb-2">Total Cycles</span>
@@ -585,7 +570,7 @@ export default function Dashboard() {
                 </div>
               </motion.section>
 
-              {/* Section: Recent Findings Ledger */}
+              {}
               <motion.section variants={itemVariants} className="px-8">
                   <header className="mb-10">
                     <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-silver-bright flex items-center gap-3">

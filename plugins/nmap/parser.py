@@ -2,9 +2,6 @@ import re
 from typing import Dict, Any, List
 
 def parse(output: str) -> Dict[str, Any]:
-    """
-    Parse Nmap standard output.
-    """
     findings = []
     ports = []
     services = []

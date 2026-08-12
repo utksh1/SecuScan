@@ -6,7 +6,6 @@ function readPreferredFormat(): string | null {
     try {
         return localStorage.getItem(STORAGE_KEY)
     } catch {
-        // Private mode / blocked storage — do not crash render.
         return null
     }
 }
@@ -18,7 +17,6 @@ export function usePreferredExportFormat() {
         try {
             localStorage.setItem(STORAGE_KEY, format)
         } catch {
-            // Ignore write failures (quota / private mode); still update React state.
         }
         setPreferred(format)
     }

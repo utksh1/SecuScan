@@ -71,9 +71,6 @@ def _parse_plain_text(output: str) -> Dict[str, Any]:
     }
 
 def parse(output: str) -> Dict[str, Any]:
-    """
-    Parse WHOIS output (JSON format from whois_tool.py).
-    """
     try:
         # Robust JSON extraction: find the first '{' and last '}'
         start = output.find('{')

@@ -2,9 +2,6 @@ import re
 from typing import Dict, Any
 
 def parse(output: str) -> Dict[str, Any]:
-    """
-    Parse OpenSSL s_client output for TLS details.
-    """
     findings = []
     metadata = {}
     

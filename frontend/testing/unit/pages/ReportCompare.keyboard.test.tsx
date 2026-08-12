@@ -71,19 +71,19 @@ const REPORT_C = {
   findings: 1,
 }
 
-/** Two findings present only in task-a (baseline). */
+
 const FINDINGS_A_ONLY = [
   { id: 'f-a1', task_id: 'task-a', title: 'Alpha Finding One', target: '10.0.0.1', category: 'network', severity: 'high' },
   { id: 'f-a2', task_id: 'task-a', title: 'Alpha Finding Two', target: '10.0.0.2', category: 'crypto', severity: 'medium' },
 ]
 
-/** One finding matching baseline (same fingerprint) + one new in task-b. */
+
 const FINDINGS_B_MIXED = [
   { id: 'f-b1', task_id: 'task-b', title: 'Alpha Finding One', target: '10.0.0.1', category: 'network', severity: 'high' },
   { id: 'f-b2', task_id: 'task-b', title: 'Beta New Finding', target: '10.0.0.3', category: 'web', severity: 'critical' },
 ]
 
-/** One finding in task-c with a severity escalation on the shared fingerprint. */
+
 const FINDINGS_C_SEVERITY = [
   { id: 'f-c1', task_id: 'task-c', title: 'Alpha Finding One', target: '10.0.0.1', category: 'network', severity: 'critical' },
 ]
@@ -103,7 +103,7 @@ function renderCompare() {
   )
 }
 
-/** Wait for the loading state to disappear so selectors are mounted. */
+
 async function waitForReady() {
   await waitFor(() =>
     expect(screen.queryByText(/loading comparison data/i)).not.toBeInTheDocument(),

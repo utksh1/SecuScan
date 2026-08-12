@@ -7,66 +7,7 @@ RECORD_REMEDIATION = (
 )
 
 
-def _unique(items: List[str]) -> List[str]:
-    seen = set()
-    unique_items = []
-    for item in items:
-        if item in seen:
-            continue
-        seen.add(item)
-        unique_items.append(item)
-    return unique_items
-
-
-def _split_record_value(value: str) -> tuple[str, List[str]]:
-    parts = value.split()
-    if not parts:
-        return "Unknown", []
-    return parts[0], parts[1:]
-
-
-def _format_group_description(rec_type: str, host: str, details: List[str], total: int) -> str:
-    if details:
-        detail_label = "Resolved values" if rec_type in {"A", "AAAA", "NS", "SOA", "MX"} else "Values"
-        return (
-            f"{rec_type} record for {host}\n"
-            f"{detail_label} ({len(details)}):\n"
-            + "\n".join(f"- {detail}" for detail in details)
-        )
-    return f"{rec_type} record observed for {host}. Seen {total} time{'s' if total != 1 else ''}."
-
-
-def _summarize_dns_records(records: List[Dict[str, str]], groups: List[Dict[str, Any]]) -> List[str]:
-    if not records:
-        return ["DNS reconnaissance did not return structured DNS records."]
-
-    counts_by_type: Dict[str, int] = {}
-    for record in records:
-        counts_by_type[record["type"]] = counts_by_type.get(record["type"], 0) + 1
-
-    type_summary = ", ".join(
-        f"{record_type}: {count}"
-        for record_type, count in sorted(counts_by_type.items())
-    )
-    summary = [
-        f"DNS reconnaissance found {len(records)} record values grouped into {len(groups)} readable DNS entries.",
-        f"Record types observed: {type_summary}.",
-    ]
-
-    name_servers = [group["host"] for group in groups if group["type"] == "NS"]
-    mail_exchangers = [group["host"] for group in groups if group["type"] == "MX"]
-    if name_servers:
-        summary.append(f"Authoritative name servers: {', '.join(_unique(name_servers)[:6])}.")
-    if mail_exchangers:
-        summary.append(f"Mail exchangers: {', '.join(_unique(mail_exchangers)[:6])}.")
-
-    return summary
-
-
 def parse(output: str) -> Dict[str, Any]:
-    """
-    Parse DNSRecon output.
-    """
     records: List[Dict[str, str]] = []
     grouped_records: Dict[tuple[str, str], Dict[str, Any]] = {}
     
@@ -78,18 +19,12 @@ def parse(output: str) -> Dict[str, Any]:
         value = value.strip()
         records.append({"type": rec_type, "value": value})
 
-        host, details = _split_record_value(value)
+        parts = value.split()
+        host = parts[0] if parts else "Unknown"
+        details = parts[1:] if parts else []
+        
         key = (rec_type, host)
-        group = grouped_records.setdefault(
-            key,
-            {
-                "type": rec_type,
-                "host": host,
-                "values": [],
-                "raw_values": [],
-                "count": 0,
-            },
-        )
+        group = grouped_records.setdefault(key, {"type": rec_type, "host": host, "values": [], "raw_values": [], "count": 0})
         group["count"] += 1
         group["raw_values"].append(value)
         group["values"].extend(details)
@@ -97,30 +32,21 @@ def parse(output: str) -> Dict[str, Any]:
     groups = []
     findings = []
     for group in grouped_records.values():
-        values = _unique(group["values"])
-        raw_values = _unique(group["raw_values"])
-        normalized_group = {
-            "type": group["type"],
-            "host": group["host"],
-            "values": values,
-            "raw_values": raw_values,
-            "count": group["count"],
-        }
+        values = sorted(set(group["values"]))
+        raw_values = sorted(set(group["raw_values"]))
+        normalized_group = {"type": group["type"], "host": group["host"], "values": values, "raw_values": raw_values, "count": group["count"]}
         groups.append(normalized_group)
+
+        detail_label = "Resolved values" if group["type"] in {"A", "AAAA", "NS", "SOA", "MX"} else "Values"
+        desc = f"{group['type']} record for {group['host']}\n{detail_label} ({len(values)}):\n" + "\n".join(f"- {d}" for d in values) if values else f"{group['type']} record observed for {group['host']}. Seen {group['count']} time{'s' if group['count'] != 1 else ''}."
 
         findings.append({
             "title": f"DNS {group['type']} Record: {group['host']}",
             "category": "DNS Configuration",
             "severity": "info",
-            "description": _format_group_description(group["type"], group["host"], values, group["count"]),
+            "description": desc,
             "remediation": RECORD_REMEDIATION,
-            "metadata": {
-                "type": group["type"],
-                "host": group["host"],
-                "values": values,
-                "raw_values": raw_values,
-                "record_count": group["count"],
-            }
+            "metadata": {"type": group["type"], "host": group["host"], "values": values, "raw_values": raw_values, "record_count": group["count"]}
         })
         
     if "Zone Transfer Successful" in output:
@@ -131,12 +57,21 @@ def parse(output: str) -> Dict[str, Any]:
             "description": "The DNS server allowed a full zone transfer (AXFR). This exposes all internal DNS records.",
             "remediation": "Restrict AXFR transfers to authorized slave servers only."
         })
+
+    if not records:
+        summary = ["DNS reconnaissance did not return structured DNS records."]
+    else:
+        counts_by_type = {}
+        for r in records:
+            counts_by_type[r["type"]] = counts_by_type.get(r["type"], 0) + 1
+        type_summary = ", ".join(f"{t}: {c}" for t, c in sorted(counts_by_type.items()))
+        summary = [f"DNS reconnaissance found {len(records)} record values grouped into {len(groups)} readable DNS entries.", f"Record types observed: {type_summary}."]
+        
+        ns = sorted(set(g["host"] for g in groups if g["type"] == "NS"))[:6]
+        mx = sorted(set(g["host"] for g in groups if g["type"] == "MX"))[:6]
+        if ns:
+            summary.append(f"Authoritative name servers: {', '.join(ns)}.")
+        if mx:
+            summary.append(f"Mail exchangers: {', '.join(mx)}.")
             
-    return {
-        "findings": findings,
-        "count": len(records),
-        "total_count": len(findings),
-        "records": records,
-        "record_groups": groups,
-        "summary": _summarize_dns_records(records, groups),
-    }
+    return {"findings": findings, "count": len(records), "total_count": len(findings), "records": records, "record_groups": groups, "summary": summary}

@@ -1,7 +1,3 @@
-"""
-Input validation and security checks
-"""
-
 import re
 import ipaddress
 import socket
@@ -12,9 +8,12 @@ from fnmatch import fnmatch
 
 import logging
 
-from .config import settings
+from .config import settings, MANDATORY_DENYLIST
 
 logger = logging.getLogger(__name__)
+
+_HOSTNAME_RE = re.compile(r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$')
+_COMMAND_HOSTNAME_RE = re.compile(r'^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?)*$')
 
 
 # Blocked network ranges
@@ -36,11 +35,6 @@ ALLOWED_PRIVATE = [
 BLOCKED_TLDS = [".mil", ".gov"]
 
 
-def _net_within_allowed_networks(net: ipaddress._BaseNetwork) -> bool:
-    """Return True if net is permitted by settings.allowed_networks (best-effort, conservative)."""
-    patterns = [str(p).strip() for p in (settings.allowed_networks or []) if str(p).strip()]
-    if not patterns:
-        return True
 
     def wildcard_to_net(pattern: str) -> ipaddress.IPv4Network | None:
         # Convert simple trailing-octet wildcards like "10.*.*.*" → 10.0.0.0/8.
@@ -108,12 +102,6 @@ def _parse_url_hostname(target: str) -> str | None:
 
 
 def _resolve_host_ips(hostname: str) -> list[ipaddress._BaseAddress]:
-    """Resolve hostname to a list of IP addresses (A/AAAA).
-
-    Note: This function is synchronous and may block on DNS resolution. Callers
-    in async request paths should run it in a thread and enforce timeouts.
-    Results are cached for a short TTL to reduce repeated resolutions.
-    """
     now = time.time()
     cached = _DNS_CACHE.get(hostname)
     if cached and cached[0] > now:
@@ -167,23 +155,11 @@ def _validate_resolved_ips_safe_mode(resolved_ips: list[ipaddress._BaseAddress])
         )
         if not is_private:
             return False, "Public IPs/networks not allowed in safe mode (SecuScan Guardrail)"
-        if not _net_within_allowed_networks(ip_net):
-            return False, "Target not within allowed networks in safe mode (SecuScan Guardrail)"
 
     return True, ""
 
 
 def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
-    """
-    Validate scan target address (IP, Hostname, URL, or CIDR).
-    
-    Args:
-        target: IP address, hostname, or network range to validate
-        safe_mode: Whether to enforce safe mode restrictions
-    
-    Returns:
-        Tuple of (is_valid, error_message)
-    """
     target = target.strip()
     if not target:
         return False, "Target cannot be empty"
@@ -209,9 +185,6 @@ def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
             if not is_private:
                 return False, "Public IPs/networks not allowed in safe mode (SecuScan Guardrail)"
 
-            if not _net_within_allowed_networks(net):
-                return False, "Target not within allowed networks in safe mode (SecuScan Guardrail)"
-
         return True, ""
 
     except ValueError:
@@ -224,15 +197,13 @@ def validate_target(target: str, safe_mode: bool = True) -> Tuple[bool, str]:
     if parsed_host is not None:
         hostname_to_validate = parsed_host
 
-    # If host is an IP literal (including URL host), validate it via the same IP/CIDR path.
     try:
         net = ipaddress.ip_network(hostname_to_validate, strict=False)
         return validate_target(str(net), safe_mode=safe_mode)
     except ValueError:
         pass
 
-    # Validate hostname format (RFC 1123)
-    if not re.match(r'^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*$', hostname_to_validate):
+    if not _HOSTNAME_RE.match(hostname_to_validate):
         return False, "Invalid hostname format"
 
     # Check blocked TLDs in safe mode
@@ -269,15 +240,6 @@ _DNS_CACHE: dict[str, tuple[float, list[ipaddress._BaseAddress]]] = {}
 
 
 def validate_port(port: int) -> Tuple[bool, str]:
-    """
-    Validate port number.
-
-    Args:
-        port: Port number to validate
-
-    Returns:
-        Tuple of (is_valid, error_message)
-    """
     if not isinstance(port, int) or isinstance(port, bool):
         return False, "Port must be an integer"
     if port < 1 or port > 65535:
@@ -286,22 +248,6 @@ def validate_port(port: int) -> Tuple[bool, str]:
 
 
 def validate_port_range(port_range: str) -> Tuple[bool, str]:
-    """
-    Validate port range specification.
-
-    Supports three formats:
-      - Single port:              "80"
-      - Hyphen range:             "1-1000"
-      - Comma-separated (mixed):  "22,80,443-8080"
-
-    Mixed comma+range specs (nmap-style) are fully supported.
-
-    Args:
-        port_range: Port range string
-
-    Returns:
-        Tuple of (is_valid, error_message)
-    """
     # Handle comma-separated ports (supports mixed specs like "80,443-8080")
     if ',' in port_range:
         for port_str in port_range.split(','):
@@ -346,15 +292,6 @@ def validate_port_range(port_range: str) -> Tuple[bool, str]:
 
 
 def validate_url(url: str) -> Tuple[bool, str]:
-    """
-    Validate URL format.
-    
-    Args:
-        url: URL to validate
-    
-    Returns:
-        Tuple of (is_valid, error_message)
-    """
     url_pattern = re.compile(
         r'^https?://'
         r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'
@@ -377,20 +314,6 @@ def validate_url(url: str) -> Tuple[bool, str]:
 
 
 def validate_webhook_target(url: str) -> Tuple[bool, Optional[str]]:
-    """
-    Validate webhook URL against SSRF attacks by resolving DNS and
-    checking resolved IPs against blocked/private networks.
-
-    Uses the configured SECUSCAN_NOTIFICATION_BLOCKED_IP_RANGES to determine
-    which IP ranges to reject. This runs independently of enforce_network_policy
-    so webhook SSRF protection is always active.
-
-    Args:
-        url: Webhook URL to validate
-
-    Returns:
-        Tuple of (is_safe, error_message)
-    """
     hostname = urlparse(url).hostname
     if not hostname:
         return False, "Webhook URL has no hostname"
@@ -405,7 +328,7 @@ def validate_webhook_target(url: str) -> Tuple[bool, Optional[str]]:
             ip = ipaddress.ip_address(addr[4][0])
         except ValueError:
             continue
-        for blocked_cidr in settings.notification_blocked_ip_ranges:
+        for blocked_cidr in MANDATORY_DENYLIST:
             try:
                 if ip in ipaddress.ip_network(blocked_cidr, strict=False):
                     return False, f"Webhook URL resolves to blocked address ({ip}) in range {blocked_cidr}"
@@ -415,23 +338,6 @@ def validate_webhook_target(url: str) -> Tuple[bool, Optional[str]]:
 
 
 def sanitize_input(value: str) -> str:
-    """
-    Sanitize user input to prevent command injection.
-
-    Uses an allowlist-adjacent approach: removes shell metacharacters and
-    control characters that would be dangerous in ``argv`` values executed
-    by ``asyncio.create_subprocess_exec``.
-
-    Backslashes are converted to forward slashes to preserve Windows path
-    separators.  Leading dashes are stripped because they can be interpreted
-    as tool options even in argv-passed invocations.
-
-    Args:
-        value: Input value to sanitize
-
-    Returns:
-        Sanitized value
-    """
     # Convert backslashes to forward slashes to preserve path separators on Windows.
     value = value.replace('\\', '/')
 
@@ -448,16 +354,6 @@ def sanitize_input(value: str) -> str:
 
 
 def is_safe_path(path: str, base_dir: str) -> bool:
-    """
-    Check if a path is safe (no directory traversal).
-    
-    Args:
-        path: Path to check
-        base_dir: Base directory to restrict to
-    
-    Returns:
-        True if path is safe
-    """
     import os
     try:
         real_base = os.path.realpath(base_dir)
@@ -469,16 +365,6 @@ def is_safe_path(path: str, base_dir: str) -> bool:
 
 
 def match_pattern(value: str, pattern: str) -> bool:
-    """
-    Match value against wildcard pattern.
-    
-    Args:
-        value: Value to match
-        pattern: Pattern with wildcards (* and ?)
-    
-    Returns:
-        True if value matches pattern
-    """
     return fnmatch(value, pattern)
 
 
@@ -491,25 +377,6 @@ def validate_task_start_payload(
     inputs: Dict[str, Any],
     execution_context: Optional[Dict[str, Any]] = None,
 ) -> Tuple[bool, int, str]:
-    """
-    Enforce size and field-length limits on POST /task/start payloads.
-
-    Checks are run in order:
-      1. Total body size  → HTTP 413
-      2. inputs dict type → HTTP 400
-      3. Per-field string length and array length → HTTP 400
-
-    Error messages never echo back input values to avoid leaking sensitive
-    or oversized data into logs/responses.
-
-    Args:
-        raw_body: Raw request bytes (for total-size check).
-        inputs:   The parsed ``inputs`` dict from the request body.
-
-    Returns:
-        (ok, status_code, error_message)
-        ok is True and status_code is 0 when all checks pass.
-    """
     # 1. Total body size
     if len(raw_body) > settings.task_start_max_body_bytes:
         return (
@@ -545,7 +412,6 @@ def validate_preset_name(
     preset: Optional[str],
     presets: Optional[Dict[str, Any]],
 ) -> Tuple[bool, str]:
-    """Validate that an optional preset name exists for the selected plugin."""
     if preset in (None, ""):
         return True, ""
 
@@ -557,7 +423,6 @@ def validate_preset_name(
 
 
 def _check_field(key: str, value: Any) -> Tuple[bool, int, str]:
-    """Check a single input field value (string or list)."""
     if isinstance(value, str):
         if len(value) > settings.task_start_max_field_length:
             # Do NOT include the value itself — it may be huge or sensitive.
@@ -599,16 +464,6 @@ def _check_field(key: str, value: Any) -> Tuple[bool, int, str]:
 
 def is_filesystem_target(target: str) -> bool:
     """Best-effort detection for path-based targets that should bypass host validation.
-
-    Returns True only for genuine local filesystem paths:
-      - Unix absolute paths:   /home/user/repo
-      - Unix relative paths:   ./src, ../lib
-      - Home-relative paths:   ~/projects
-      - Windows paths:         C:\\Users\\repo, D:/work
-
-    CIDR notation (e.g. 8.8.8.8/32), bare hostnames, URLs, and
-    domain paths all return False and are subject to validate_target().
-    """
     # Unix absolute, relative, and home-relative paths
     if target.startswith(("/", "./", "../", "~/")):
         return True
@@ -619,10 +474,6 @@ def is_filesystem_target(target: str) -> bool:
 
 def resolve_and_validate_target(url: str) -> Tuple[bool, str]:
     """Resolve a webhook URL and validate it against SSRF protections.
-
-    Performs DNS resolution, IP range validation, and port checks
-    to prevent Server-Side Request Forgery attacks.
-    """
     try:
         parsed = urlparse(url)
     except Exception:
@@ -659,7 +510,7 @@ def resolve_and_validate_target(url: str) -> Tuple[bool, str]:
             continue
 
         # Check against blocked ranges
-        for blocked_cidr in settings.notification_blocked_ip_ranges:
+        for blocked_cidr in MANDATORY_DENYLIST:
             try:
                 blocked_net = ipaddress.ip_network(blocked_cidr, strict=False)
                 if ip in blocked_net:
@@ -685,10 +536,6 @@ def resolve_and_validate_target(url: str) -> Tuple[bool, str]:
 
 
 def validate_command_network_egress(command: list[str], safe_mode: bool, plugin_id: str, task_id: str, pinned_ip: Optional[str] = None) -> Tuple[bool, str]:
-    """
-    Inspect all command arguments. If any argument represents an outbound network
-    destination (IP, hostname, URL), validate it against both Safe Mode and Network Policy.
-    """
     from .network_policy import get_policy_engine
 
     for arg in command:
@@ -700,7 +547,6 @@ def validate_command_network_egress(command: list[str], safe_mode: bool, plugin_
         if is_filesystem_target(arg_str):
             continue  # Ignore local paths
 
-        # Check if it looks like a URL
         is_url = False
         hostname = None
         if "://" in arg_str:
@@ -712,7 +558,6 @@ def validate_command_network_egress(command: list[str], safe_mode: bool, plugin_
             except Exception:
                 pass
 
-        # If it's a URL, validate the hostname. If not, check if it could be a hostname or IP.
         candidate = hostname if is_url else arg_str
         if not candidate:
             continue
@@ -733,20 +578,9 @@ def validate_command_network_egress(command: list[str], safe_mode: bool, plugin_
 
         is_host = False
         if not is_ip:
-            # Basic hostname check (with dots and valid characters, or 'localhost')
-            # Normalize candidate to lowercase for matching so uppercase hostnames
-            # (e.g. EXAMPLE.COM) are detected. A lowercase-only regex avoids
-            # misidentifying dotted plugin parameters (e.g. "windows.pslist.PsList")
-            # as network destinations, since real hostnames never contain mixed-case
-            # labels per RFC 952/1123 conventions.
             lowered = candidate.lower()
             if lowered == "localhost" or (
-                re.match(
-                    r'^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?)+$',
-                    lowered
-                )
-                # Reject labels with mixed case (e.g. "PsList") — these are module
-                # paths, not hostnames. All-uppercase (EXAMPLE) is fine.
+                _COMMAND_HOSTNAME_RE.match(lowered)
                 and not any(
                     part != part.lower() and part != part.upper()
                     for part in candidate.split(".")
@@ -755,12 +589,10 @@ def validate_command_network_egress(command: list[str], safe_mode: bool, plugin_
                 is_host = True
 
         if is_ip or is_host:
-            # Validate against safe mode
             is_valid, err = validate_target(candidate, safe_mode=safe_mode)
             if not is_valid:
                 return False, f"Command argument '{arg_str}' violates safe mode: {err}"
 
-            # Validate against network policy
             if settings.enforce_network_policy:
                 engine = get_policy_engine()
                 check_ip = pinned_ip if (pinned_ip and is_host) else candidate

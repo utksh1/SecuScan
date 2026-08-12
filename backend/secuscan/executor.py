@@ -1,7 +1,3 @@
-"""
-Task execution engine with Docker sandboxing
-"""
-
 import asyncio
 from asyncio import subprocess
 import os
@@ -52,14 +48,6 @@ from .vault import VaultCrypto
 
 async def _terminate_process_group(pid: int, task_id: str, grace_seconds: int = _CANCEL_GRACE_SECONDS) -> None:
     """Send SIGTERM to the process group of *pid*, wait *grace_seconds*, then SIGKILL.
-
-    Using a process group (via start_new_session=True on subprocess creation)
-    ensures every child and grandchild spawned by the scanner receives the
-    signal, leaving no orphan processes after cancellation or timeout.
-
-    Errors are logged but never re-raised so callers can always proceed to
-    update task status regardless of OS-level kill failures.
-    """
     try:
         pgid = os.getpgid(pid)
     except (ProcessLookupError, PermissionError) as exc:
@@ -91,7 +79,6 @@ async def _terminate_process_group(pid: int, task_id: str, grace_seconds: int = 
 
 
 def _parse_discovered_at(finding: dict) -> Optional[datetime]:
-    """Extract and parse discovered_at from a finding dict as timezone-aware UTC."""
     from .time_utils import parse_to_utc, utc_now
 
     parsed = parse_to_utc(finding.get("discovered_at"))
@@ -99,7 +86,6 @@ def _parse_discovered_at(finding: dict) -> Optional[datetime]:
 
 
 def _validate_risk_fields(finding: dict) -> None:
-    """Validate exploitability, confidence, and asset_exposure bounds in-place."""
     exp = finding.get("exploitability")
     if exp is not None:
         if not isinstance(exp, (int, float)):
@@ -154,7 +140,6 @@ def _stable_asset_id(target: str, host: Any, port: Any, protocol: Any) -> str:
 
 
 def _row_value(row: Any, key: str, default: Any = None) -> Any:
-    """Read a dict/sqlite row key with a default for backward-compatible mocks."""
     if row is None:
         return default
     if isinstance(row, dict):
@@ -166,8 +151,6 @@ def _row_value(row: Any, key: str, default: Any = None) -> Any:
 
 
 class TaskExecutor:
-    """Executes security scanning tasks in isolated environments"""
-
     def __init__(self):
         self.running_tasks: Dict[str, asyncio.Task] = {}
         self._process_pids: Dict[str, int] = {}
@@ -176,7 +159,6 @@ class TaskExecutor:
         self._capability_enforcer: CapabilityEnforcer = build_enforcer_from_settings()
 
     def subscribe(self, task_id: str) -> asyncio.Queue:
-        """Subscribe to a task's real-time events."""
         if task_id not in self._listeners:
             self._listeners[task_id] = []
         q = asyncio.Queue(maxsize=STREAM_LISTENER_QUEUE_MAXSIZE)
@@ -184,21 +166,18 @@ class TaskExecutor:
         return q
 
     def unsubscribe(self, task_id: str, q: asyncio.Queue):
-        """Unsubscribe from a task's real-time events."""
         if task_id in self._listeners and q in self._listeners[task_id]:
             self._listeners[task_id].remove(q)
             if not self._listeners[task_id]:
                 self._listeners.pop(task_id, None)
 
     async def _broadcast(self, task_id: str, event_type: str, data: Any):
-        """Broadcast an event to all active listeners of a task."""
         if task_id in self._listeners:
             event = {"type": event_type, "data": data}
             for q in list(self._listeners[task_id]):
                 self._enqueue_listener_event(task_id, q, event)
 
     def _enqueue_listener_event(self, task_id: str, q: asyncio.Queue, event: Dict[str, Any]):
-        """Add an event to a bounded listener queue without unbounded memory growth."""
         try:
             q.put_nowait(event)
             return
@@ -214,26 +193,14 @@ class TaskExecutor:
             logger.warning("Dropping stream event for slow listener on task %s", task_id)
 
     def _cleanup_listeners(self, task_id: str):
-        """Remove all listener queues for a completed task to prevent memory leaks."""
         if task_id in self._listeners:
             self._listeners.pop(task_id, None)
 
     async def _broadcast_phase(self, task_id: str, phase: str):
-        """Broadcast a scan phase transition and persist it to the database."""
         await self._broadcast(task_id, "phase", phase)
         db = await get_db()
         now = datetime.now(timezone.utc).isoformat()
         await db.execute(
-            """
-            UPDATE tasks
-            SET scan_phase = ?,
-                phase_timestamps_json = json_set(
-                    phase_timestamps_json,
-                    '$.' || COALESCE(scan_phase, 'unknown') || '.completed_at', ?,
-                    '$.' || ? || '.started_at', ?
-                )
-            WHERE id = ?
-            """,
             (phase, now, phase, now, task_id)
         )
 
@@ -247,22 +214,6 @@ class TaskExecutor:
         consent_granted: bool = False,
         owner_id: str = DEFAULT_OWNER_ID,
     ) -> str:
-        """
-        Create a new scan task.
-
-        Args:
-            plugin_id: Plugin identifier
-            inputs: User input values
-            preset: Optional preset name
-            consent_granted: Whether user granted consent
-            owner_id: Owning user/workspace identity used to scope later
-                access (issue #401). Defaults to the shared default owner for
-                internal callers (workflows, scheduler, CLI) that are not tied
-                to a request.
-
-        Returns:
-            Task ID
-        """
         task_id = str(uuid.uuid4())
         plugin_manager = get_plugin_manager()
         plugin = plugin_manager.get_plugin(plugin_id)
@@ -282,12 +233,6 @@ class TaskExecutor:
         # Store task in database
         db = await get_db()
         await db.execute(
-            """
-            INSERT INTO tasks (
-                id, owner_id, plugin_id, tool_name, target, inputs_json, preset,
-                execution_context_json, status, scan_phase, phase_timestamps_json, consent_granted, safe_mode
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
             (
                 task_id,
                 owner_id,
@@ -322,24 +267,8 @@ class TaskExecutor:
         return task_id
 
     async def mark_task_failed(self, task_id: str, reason: str) -> None:
-        """
-        Mark a task as failed without running it.
-        Used to roll back a created-but-unscheduled task record.
-
-        Args:
-            task_id: Task identifier
-            reason: Human-readable failure reason stored as error_message
-        """
         db = await get_db()
         await db.execute(
-            """
-            UPDATE tasks SET
-                status = ?,
-                completed_at = ?,
-                duration_seconds = ?,
-                error_message = ?
-            WHERE id = ?
-            """,
             (
                 TaskStatus.FAILED.value,
                 datetime.now().isoformat(),
@@ -363,13 +292,6 @@ class TaskExecutor:
         safe_mode: bool,
         task_id: str,
     ) -> Tuple[bool, Optional[str]]:
-        """Enforce Safe Mode target validation and Network Policy access checks.
-
-        Returns:
-            Tuple of (all_checks_pass, pinned_ip).
-            pinned_ip is set when network policy is enforced and the target
-            hostname was resolved to a stable IP, preventing DNS rebinding attacks.
-        """
         if not target:
             return (True, None)
 
@@ -443,7 +365,6 @@ class TaskExecutor:
         return (True, None)
 
     async def _ensure_docker_network(self) -> None:
-        """Validate and automatically create the configured Docker network if missing."""
         _net_check = await asyncio.create_subprocess_exec(
             "docker", "network", "inspect", settings.docker_network,
             stdout=asyncio.subprocess.DEVNULL,
@@ -490,7 +411,6 @@ class TaskExecutor:
         inputs: Dict[str, Any],
         safe_mode: bool,
     ) -> tuple[str, float]:
-        """Execute a modular scanner and persist findings/report."""
         scanner_class = MODULAR_SCANNERS[plugin_id]
         scanner = scanner_class(task_id, db, safe_mode=safe_mode)
 
@@ -509,15 +429,6 @@ class TaskExecutor:
         )
 
         await db.execute(
-            """
-            UPDATE tasks SET
-                status = ?,
-                completed_at = ?,
-                duration_seconds = ?,
-                structured_json = ?,
-                error_message = ?
-            WHERE id = ?
-            """,
             (
                 final_status,
                 datetime.now().isoformat(),
@@ -553,7 +464,6 @@ class TaskExecutor:
         inputs: Dict[str, Any],
         safe_mode: bool,
     ) -> tuple[str, float, int]:
-        """Execute a standard CLI/Docker plugin and persist findings/report."""
         plugin_manager = get_plugin_manager()
         command = plugin_manager.build_command(plugin_id, inputs)
 
@@ -596,7 +506,10 @@ class TaskExecutor:
         output, exit_code = await self._execute_command(
             command,
             task_id,
-            timeout=self._resolve_execution_timeout(inputs),
+            timeout=min(
+                int(inputs.get("max_scan_time") or inputs.get("timeout") or settings.sandbox_timeout),
+                settings.sandbox_timeout
+            ),
         )
         duration = time.time() - start_time
 
@@ -607,24 +520,13 @@ class TaskExecutor:
             f.write(output)
 
         # Classify result
-        final_status, error_message = self._classify_command_result(
-            plugin=plugin,
-            output=output,
-            exit_code=exit_code,
+        final_status, error_message = (
+            (TaskStatus.COMPLETED.value, None)
+            if exit_code == 0 or (plugin.ignore_exit_code and output.strip())
+            else (TaskStatus.FAILED.value, f"Command exited with code {exit_code}")
         )
 
         await db.execute(
-            """
-            UPDATE tasks SET
-                status = ?,
-                completed_at = ?,
-                duration_seconds = ?,
-                exit_code = ?,
-                raw_output_path = ?,
-                command_used = ?,
-                error_message = ?
-            WHERE id = ?
-            """,
             (
                 final_status,
                 datetime.now().isoformat(),
@@ -653,12 +555,6 @@ class TaskExecutor:
         return final_status, duration, exit_code
 
     async def execute_task(self, task_id: str) -> None:
-        """
-        Execute a task asynchronously.
-
-        Args:
-            task_id: Task identifier
-        """
         db = await get_db()
         self.running_tasks[task_id] = asyncio.current_task()
         start_time = time.time()
@@ -707,7 +603,6 @@ class TaskExecutor:
             if pinned_ip:
                 inputs["__pinned_ip"] = pinned_ip
 
-            # Check if this is a modular scanner or a standard plugin
             plugin_manager = get_plugin_manager()
             plugin = plugin_manager.get_plugin(plugin_id)
             if not plugin:
@@ -767,13 +662,6 @@ class TaskExecutor:
         except asyncio.CancelledError:
             duration = (time.time() - start_time) if 'start_time' in locals() else 0
             await db.execute(
-                """
-                UPDATE tasks SET
-                    status = ?,
-                    completed_at = ?,
-                    duration_seconds = ?
-                WHERE id = ? AND status = ?
-                """,
                 (
                     TaskStatus.CANCELLED.value,
                     datetime.now().isoformat(),
@@ -790,14 +678,6 @@ class TaskExecutor:
             logger.warning("Task %s blocked by capability policy: %s", task_id, e)
             duration = (time.time() - start_time) if "start_time" in locals() else 0
             await db.execute(
-                """
-                UPDATE tasks SET
-                    status = ?,
-                    completed_at = ?,
-                    duration_seconds = ?,
-                    error_message = ?
-                WHERE id = ?
-                """,
                 (
                     TaskStatus.FAILED.value,
                     datetime.now().isoformat(),
@@ -826,14 +706,6 @@ class TaskExecutor:
             duration = (time.time() - start_time) if 'start_time' in locals() else 0
             safe_error = redact(str(e))
             await db.execute(
-                """
-                UPDATE tasks SET
-                    status = ?,
-                    completed_at = ?,
-                    duration_seconds = ?,
-                    error_message = ?
-                WHERE id = ?
-                """,
                 (
                     TaskStatus.FAILED.value,
                     datetime.now().isoformat(),
@@ -866,17 +738,6 @@ class TaskExecutor:
         task_id: str,
         timeout: int = 600
     ) -> tuple:
-        """
-        Execute command in subprocess and stream output.
-
-        Args:
-            command: Command as list
-            task_id: Task identifier for logging
-            timeout: Execution timeout in seconds
-
-        Returns:
-            Tuple of (output, exit_code)
-        """
         try:
             process = await asyncio.create_subprocess_exec(
                 *command,
@@ -940,12 +801,6 @@ class TaskExecutor:
             return f"Execution error: {str(e)}", -1
 
     def _resolve_execution_timeout(self, inputs: Dict[str, Any]) -> int:
-        """Resolve per-task process timeout from plugin inputs.
-
-        The caller may request a shorter timeout than the operator cap, but
-        never a longer one. ``settings.sandbox_timeout`` is the hard ceiling
-        and is always enforced regardless of what the client supplies.
-        """
         for key in ("max_scan_time", "timeout"):
             raw_value = inputs.get(key)
             try:
@@ -957,7 +812,6 @@ class TaskExecutor:
         return settings.sandbox_timeout
 
     def _classify_command_result(self, plugin, output: str, exit_code: int) -> tuple[str, Optional[str]]:
-        """Map raw process exit codes into task status with plugin-specific tolerances."""
         normalized_output = output.lower()
 
         if "unknown option:" in normalized_output or "flag provided but not defined:" in normalized_output:
@@ -997,15 +851,6 @@ class TaskExecutor:
         )
 
     async def cancel_task(self, task_id: str) -> bool:
-        """
-        Cancel a running task.
-
-        Args:
-            task_id: Task identifier
-
-        Returns:
-            True if cancelled successfully
-        """
         if task_id not in self.running_tasks:
             return False
         task = self.running_tasks[task_id]
@@ -1047,14 +892,8 @@ class TaskExecutor:
         return True
 
     async def get_task_status(self, task_id: str) -> Optional[Dict]:
-        """Get task status and progress"""
         db = await get_db()
         task_row = await db.fetchone(
-            """
-            SELECT id, plugin_id, tool_name, target, status, scan_phase, phase_timestamps_json, created_at, started_at, completed_at,
-                   duration_seconds, exit_code, error_message, preset, inputs_json, execution_context_json
-            FROM tasks WHERE id = ?
-            """,
             (task_id,)
         )
         if not task_row:
@@ -1107,7 +946,6 @@ class TaskExecutor:
         inputs: Dict[str, Any],
         execution_context: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """Add auth/session material derived from stored profiles."""
         effective_inputs = dict(inputs)
         target_policy = await get_target_policy(
             db,
@@ -1205,14 +1043,6 @@ class TaskExecutor:
         task_id: str,
     ) -> List[Dict[str, Any]]:
         previous_task = await db.fetchone(
-            """
-            SELECT id
-            FROM tasks
-            WHERE owner_id = ? AND plugin_id = ? AND target = ? AND id != ?
-              AND status IN (?, ?)
-            ORDER BY COALESCE(completed_at, created_at) DESC
-            LIMIT 1
-            """,
             (
                 owner_id,
                 plugin_id,
@@ -1260,13 +1090,6 @@ class TaskExecutor:
             "metadata": metadata,
             "service_fingerprint": fingerprint,
         }
-
-    def _build_severity_counts(self, findings: List[Dict[str, Any]]) -> Dict[str, int]:
-        severity_counts: Dict[str, int] = {}
-        for finding in findings:
-            severity = str(finding.get("severity", "info")).lower()
-            severity_counts[severity] = severity_counts.get(severity, 0) + 1
-        return severity_counts
 
     async def _build_result_contract(
         self,
@@ -1320,8 +1143,23 @@ class TaskExecutor:
             task_id=task_id,
         )
         asset_services = [
-            self._normalize_asset_service_record(target, item)
-            for item in (result.get("asset_services") or result.get("services") or [])
+            {
+                "asset_id": _stable_asset_id(
+                    target,
+                    item.get("host"),
+                    item.get("port"),
+                    item.get("protocol"),
+                ),
+                "target": target,
+                "host": item.get("host"),
+                "port": item.get("port"),
+                "protocol": item.get("protocol"),
+                "service_name": item.get("service_name"),
+                "service_version": item.get("service_version"),
+                "banner": item.get("banner"),
+                "metadata": item.get("metadata", {}),
+            }
+            for item in result.get("asset_services", [])
             if isinstance(item, dict)
         ]
         structured_result = dict(result)
@@ -1331,7 +1169,9 @@ class TaskExecutor:
         structured_result["finding_groups"] = build_finding_groups(normalized_findings)
         structured_result["asset_summary"] = build_asset_summary(normalized_findings, asset_services)
         structured_result["scan_diff"] = build_scan_diff(normalized_findings, previous_findings)
-        structured_result["severity_counts"] = self._build_severity_counts(normalized_findings)
+        from collections import Counter
+        severity_counts = Counter(str(f.get("severity", "info")).lower() for f in normalized_findings)
+        structured_result["severity_counts"] = dict(severity_counts)
         structured_result["count"] = len(normalized_findings)
         return structured_result, previous_findings, asset_services
 
@@ -1381,55 +1221,6 @@ class TaskExecutor:
         )
 
         await db.execute(
-            """
-            INSERT INTO findings (
-                id, owner_id, task_id, plugin_id, title, category, severity,
-                target, description, remediation, proof, cvss, cve,
-                metadata_json, discovered_at,
-                exploitability, confidence, validated, validation_method,
-                confidence_reason, finding_kind, finding_group_id, asset_id,
-                first_seen_at, last_seen_at, occurrence_count, corroborating_sources_json,
-                evidence_count, analyst_status, retest_status, evidence_json, asset_refs_json,
-                service_fingerprint, cpe, references_json,
-                asset_exposure, risk_score, risk_factors_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (owner_id, finding_group_id) DO UPDATE SET
-                task_id = EXCLUDED.task_id,
-                plugin_id = EXCLUDED.plugin_id,
-                title = EXCLUDED.title,
-                category = EXCLUDED.category,
-                severity = EXCLUDED.severity,
-                target = EXCLUDED.target,
-                description = EXCLUDED.description,
-                remediation = EXCLUDED.remediation,
-                proof = EXCLUDED.proof,
-                cvss = EXCLUDED.cvss,
-                cve = EXCLUDED.cve,
-                metadata_json = EXCLUDED.metadata_json,
-                discovered_at = EXCLUDED.discovered_at,
-                exploitability = EXCLUDED.exploitability,
-                confidence = EXCLUDED.confidence,
-                validated = EXCLUDED.validated,
-                validation_method = EXCLUDED.validation_method,
-                confidence_reason = EXCLUDED.confidence_reason,
-                finding_kind = EXCLUDED.finding_kind,
-                asset_id = EXCLUDED.asset_id,
-                last_seen_at = EXCLUDED.last_seen_at,
-                occurrence_count = COALESCE(findings.occurrence_count, 0) + EXCLUDED.occurrence_count,
-                corroborating_sources_json = EXCLUDED.corroborating_sources_json,
-                evidence_count = EXCLUDED.evidence_count,
-                analyst_status = EXCLUDED.analyst_status,
-                retest_status = EXCLUDED.retest_status,
-                evidence_json = EXCLUDED.evidence_json,
-                asset_refs_json = EXCLUDED.asset_refs_json,
-                service_fingerprint = EXCLUDED.service_fingerprint,
-                cpe = EXCLUDED.cpe,
-                references_json = EXCLUDED.references_json,
-                asset_exposure = EXCLUDED.asset_exposure,
-                risk_score = EXCLUDED.risk_score,
-                risk_factors_json = EXCLUDED.risk_factors_json
-            """,
             (
                 finding_id,
                 owner_id,
@@ -1498,7 +1289,6 @@ class TaskExecutor:
         }
 
     async def _upsert_findings_and_report(self, db, task_id: str, owner_id: str, plugin, plugin_id: str, target: str, status: str, output: str = ""):
-        """Persist derived findings and report records into SQLite."""
         parsed = self._parse_results(plugin, output)
         structured_result, previous_findings, asset_services = await self._build_result_contract(
             db,
@@ -1510,20 +1300,104 @@ class TaskExecutor:
         )
         findings_data: List[Dict[str, Any]] = []
         async with db.transaction():
+            insert_sql = """INSERT INTO findings (
+                id, owner_id, task_id, plugin_id, title, category, severity, target, description,
+                remediation, proof, cvss, cve, metadata_json, discovered_at, exploitability,
+                confidence, validated, validation_method, confidence_reason, finding_kind,
+                finding_group_id, asset_id, first_seen_at, last_seen_at, occurrence_count,
+                corroborating_sources_json, evidence_count, analyst_status, retest_status,
+                evidence_json, asset_refs_json, service_fingerprint, cpe, references_json,
+                asset_exposure, risk_score, risk_factors_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(owner_id, finding_group_id) DO UPDATE SET
+                occurrence_count = occurrence_count + 1,
+                last_seen_at = excluded.last_seen_at,
+                evidence_count = excluded.evidence_count,
+                corroborating_sources_json = excluded.corroborating_sources_json"""
+            
+            batch_data = []
             for finding in structured_result.get("findings", []):
-                findings_data.append(
-                    await self._persist_finding(
-                        db,
-                        owner_id=owner_id,
-                        task_id=task_id,
-                        plugin_id=plugin_id,
-                        target=target,
-                        finding=finding,
-                    )
+                finding_id = generate_id("finding")
+                discovered = datetime.now(timezone.utc)
+                target_value = str(finding.get("target") or target)
+                metadata = finding.get("metadata", {}) if isinstance(finding.get("metadata"), dict) else {}
+                evidence = finding.get("evidence", []) if isinstance(finding.get("evidence"), list) else []
+                asset_refs = finding.get("asset_refs", []) if isinstance(finding.get("asset_refs"), list) else []
+                exploitability = finding.get("exploitability")
+                asset_exposure = finding.get("asset_exposure")
+                confidence = finding.get("confidence")
+                finding_group_id = self._compute_finding_group_id(
+                    owner_id=owner_id,
+                    target=target_value,
+                    title=finding["title"],
+                    category=finding["category"],
+                    severity=finding["severity"],
+                    host=finding.get("host"),
+                    port=finding.get("port"),
+                    path=finding.get("path"),
+                    cve=finding.get("cve"),
                 )
+                references = finding.get("references", []) if isinstance(finding.get("references"), list) else []
+                corroborating_sources = finding.get("corroborating_sources", []) if isinstance(finding.get("corroborating_sources"), list) else []
+                first_seen_at = str(finding.get("first_seen_at") or to_utc_iso(discovered))
+                last_seen_at = str(finding.get("last_seen_at") or to_utc_iso(discovered))
+                occurrence_count = int(finding.get("occurrence_count") or 1)
+                evidence_count = int(finding.get("evidence_count") or len(evidence))
+                risk_score = compute_risk_score(
+                    severity=finding["severity"],
+                    exploitability=exploitability,
+                    asset_exposure=asset_exposure,
+                    discovered_at=discovered,
+                    confidence=confidence,
+                )
+                risk_factors = compute_risk_factors(
+                    severity=finding["severity"],
+                    exploitability=exploitability,
+                    asset_exposure=asset_exposure,
+                    discovered_at=discovered,
+                    confidence=confidence,
+                    risk_score=risk_score,
+                )
+                
+                batch_data.append((
+                    finding_id, owner_id, task_id, plugin_id, finding["title"], finding["category"],
+                    finding["severity"], target_value, finding["description"], finding.get("remediation", ""),
+                    finding.get("proof"), finding.get("cvss"), finding.get("cve"), json.dumps(metadata),
+                    to_utc_iso(discovered), exploitability, confidence, 1 if finding.get("validated") else 0,
+                    finding.get("validation_method"), finding.get("confidence_reason"),
+                    str(finding.get("finding_kind") or "observation"), finding_group_id, finding.get("asset_id"),
+                    first_seen_at, last_seen_at, occurrence_count, json.dumps(corroborating_sources),
+                    evidence_count, str(finding.get("analyst_status") or "new"),
+                    str(finding.get("retest_status") or "not_requested"), json.dumps(evidence),
+                    json.dumps(asset_refs), finding.get("service_fingerprint"), finding.get("cpe"),
+                    json.dumps(references), asset_exposure, risk_score, json.dumps(risk_factors)
+                ))
+                
+                findings_data.append({
+                    **finding,
+                    "id": finding_id,
+                    "plugin_id": plugin_id,
+                    "target": target_value,
+                    "discovered_at": to_utc_iso(discovered),
+                    "metadata": metadata,
+                    "evidence": evidence,
+                    "asset_refs": asset_refs,
+                    "references": references,
+                    "corroborating_sources": corroborating_sources,
+                    "first_seen_at": first_seen_at,
+                    "last_seen_at": last_seen_at,
+                    "occurrence_count": occurrence_count,
+                    "evidence_count": evidence_count,
+                    "risk_score": risk_score,
+                    "risk_factors": risk_factors,
+                })
+            
+            if batch_data:
+                await db.executemany(insert_sql, batch_data)
 
             structured_result["findings"] = findings_data
-            structured_result["severity_counts"] = self._build_severity_counts(findings_data)
+            from collections import Counter
+            structured_result["severity_counts"] = dict(Counter(str(f.get("severity", "info")).lower() for f in findings_data))
             structured_result["finding_groups"] = build_finding_groups(findings_data)
             structured_result["asset_summary"] = build_asset_summary(findings_data, asset_services)
             structured_result["scan_diff"] = build_scan_diff(findings_data, previous_findings)
@@ -1534,16 +1408,6 @@ class TaskExecutor:
             )
 
             await db.execute(
-                """
-                INSERT INTO reports (
-                    id, owner_id, task_id, name, type, generated_at, status, findings, pages
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (id) DO UPDATE SET
-                    status = EXCLUDED.status,
-                    findings = EXCLUDED.findings,
-                    pages = EXCLUDED.pages,
-                    generated_at = EXCLUDED.generated_at
-                """,
                 (
                     f"report:{task_id}",
                     owner_id,
@@ -1567,7 +1431,6 @@ class TaskExecutor:
             )
 
     async def _upsert_findings_and_report_from_scanner(self, db, task_id: str, owner_id: str, scanner: Any, plugin_id: str, target: str, status: str, result: Dict[str, Any]):
-        """Persist modular scanner results into findings, and reports."""
         structured_result, previous_findings, asset_services = await self._build_result_contract(
             db,
             task_id=task_id,
@@ -1601,18 +1464,7 @@ class TaskExecutor:
                 (json.dumps(structured_result), task_id)
             )
 
-            # Create/Update report
             await db.execute(
-                """
-                INSERT INTO reports (
-                    id, owner_id, task_id, name, type, generated_at, status, findings, pages
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT (id) DO UPDATE SET
-                    status = EXCLUDED.status,
-                    findings = EXCLUDED.findings,
-                    pages = EXCLUDED.pages,
-                    generated_at = EXCLUDED.generated_at
-                """,
                 (
                     f"report:{task_id}",
                     owner_id,
@@ -1668,7 +1520,6 @@ class TaskExecutor:
             )
 
     def _parse_results(self, plugin, output: str) -> Dict[str, Any]:
-        """Route to appropriate parser based on plugin metadata."""
         parser_type = plugin.output.get("parser")
         parser_input = self._resolve_parser_input(plugin, output)
 
@@ -1698,7 +1549,6 @@ class TaskExecutor:
                 return self._normalize_parsed_result(plugin, parser_input, parsed)
             except ParserSandboxError as exc:
                 logger.error("Parser sandbox error for plugin '%s': %s", plugin.id, exc)
-                # For plugins that declared a custom parser, sandbox failure is a hard
                 # error — do NOT fall through to built-in parsers, which would produce
                 # empty or misleading results unrelated to the custom parser's logic.
                 raise RuntimeError(
@@ -1719,7 +1569,6 @@ class TaskExecutor:
         return self._normalize_parsed_result(plugin, parser_input, {"findings": [], "raw": parser_input})
 
     def _resolve_parser_input(self, plugin, output: str) -> str:
-        """Prefer report-file content when configured, fallback to command output."""
         report_path = plugin.output.get("report_path")
         if isinstance(report_path, str) and report_path.strip():
             path = Path(report_path)
@@ -1733,10 +1582,6 @@ class TaskExecutor:
         return output
 
     def _normalize_parsed_result(self, plugin, parser_input: str, parsed: Any) -> Dict[str, Any]:
-        """
-        Normalize parser output shape so downstream report/asset logic always receives:
-        { findings: List[Finding], ... }.
-        """
         normalized: Dict[str, Any]
         raw_findings: Any
 
@@ -1773,7 +1618,6 @@ class TaskExecutor:
         return normalized
 
     def _normalize_finding(self, plugin, finding: Dict[str, Any]) -> Dict[str, Any]:
-        """Ensure finding has all required keys and normalized severity."""
         severity = str(finding.get("severity", "info")).lower()
         severity_map = {
             "critical": "critical",
@@ -1821,7 +1665,6 @@ class TaskExecutor:
         }
 
     def _parse_json_fallback_findings(self, plugin, parser_input: str) -> List[Dict[str, Any]]:
-        """Best-effort conversion of JSON payloads into finding entries."""
         try:
             data = json.loads(parser_input)
         except Exception:
@@ -1884,7 +1727,6 @@ class TaskExecutor:
         )
 
     def _parse_nmap_output(self, output: str) -> Dict[str, Any]:
-        """Simple regex-based nmap output parser."""
         findings = []
         ports = []
         services = []
@@ -1912,7 +1754,6 @@ class TaskExecutor:
         }
 
     def _parse_http_output(self, output: str) -> Dict[str, Any]:
-        """Simple regex-based curl/http output parser."""
         findings = []
         techs = []
 
@@ -1946,7 +1787,6 @@ class TaskExecutor:
         }
 
     async def _dispatch_task_notifications(self, db, task_id: str) -> None:
-        """Evaluate notification rules for all findings on a completed task."""
         try:
             results = await process_task_notifications(db, task_id)
             sent = sum(
@@ -1975,7 +1815,6 @@ class TaskExecutor:
             )
 
     async def _invalidate_cached_views(self):
-        """Clear cached aggregate views after write operations."""
         try:
             cache_client = await get_cache()
             await cache_client.delete_prefix("summary:")

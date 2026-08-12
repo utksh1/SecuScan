@@ -1,9 +1,6 @@
 from typing import Dict, Any, List
 
 def parse(output: str) -> Dict[str, Any]:
-    """
-    Parse Scapy script output (e.g., UP: 192.168.1.1 - 00:11:22:33:44:55).
-    """
     findings = []
     hosts = []
     

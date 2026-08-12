@@ -41,7 +41,6 @@ export const ExecutiveStatsBar: React.FC<ExecutiveStatsBarProps> = ({
       className="w-full bg-[var(--bg-secondary)] border-y border-white/5 py-10 md:py-16 grid grid-cols-1 md:grid-cols-4 md:divide-x divide-white/5 gap-y-16 md:gap-y-0"
       aria-busy={loading}
     >
-      {/* 1. Risk Profile */}
       <div className="px-6 md:first:pl-8 flex flex-col justify-between">
         <span className="text-xs font-bold text-silver uppercase tracking-[0.3em] block mb-1">Status Profile</span>
         <div className="space-y-2">
@@ -69,7 +68,6 @@ export const ExecutiveStatsBar: React.FC<ExecutiveStatsBarProps> = ({
         </div>
       </div>
 
-      {/* 2. Critical Vulns */}
       <div className="px-6 flex flex-col justify-between">
         <span className="text-xs font-bold text-silver uppercase tracking-[0.3em] block mb-1">Critical Vulns</span>
         <div className="space-y-2">
@@ -94,7 +92,6 @@ export const ExecutiveStatsBar: React.FC<ExecutiveStatsBarProps> = ({
         </div>
       </div>
 
-      {/* 3. Total Findings */}
       <div className="px-6 flex flex-col justify-between">
         <span className="text-xs font-bold text-silver uppercase tracking-[0.3em] block mb-1">Total Findings</span>
         <div className="space-y-2">
@@ -116,7 +113,6 @@ export const ExecutiveStatsBar: React.FC<ExecutiveStatsBarProps> = ({
         </div>
       </div>
 
-      {/* 4. Scan Activity */}
       <div className="px-6 md:last:pr-8 flex flex-col justify-between">
         <span className="text-xs font-bold text-silver uppercase tracking-[0.3em] block mb-1">Scan Cycles</span>
         <div className="space-y-2">
