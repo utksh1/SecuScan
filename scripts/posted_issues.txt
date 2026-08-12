@@ -1,0 +1,110 @@
+86	TaskDetails hook order: refs declared after useTaskSubscription	https://github.com/utksh1/SecuScan/issues/1860
+1	Disable TLS certificate verification in crawler allows MITM/SSRF	https://github.com/utksh1/SecuScan/issues/1861
+87	Findings infinite-scroll loadMore never updates totalItems	https://github.com/utksh1/SecuScan/issues/1862
+2	Network policy default-allow exposes all public egress (incl. cloud metadata IP)	https://github.com/utksh1/SecuScan/issues/1863
+88	No XSS found, but i18n layer is entirely dead code	https://github.com/utksh1/SecuScan/issues/1864
+3	network_policy.check_access has no DNS-rebinding protection	https://github.com/utksh1/SecuScan/issues/1865
+89	Scans polling can interleave overlapping fetches on page/filter change	https://github.com/utksh1/SecuScan/issues/1866
+4	Plugins with missing/malformed metadata.json are silently dropped at load	https://github.com/utksh1/SecuScan/issues/1867
+90	Reports malformed generated_at yields NaN sort (no try/catch)	https://github.com/utksh1/SecuScan/issues/1868
+91	Feature: Add per-plugin sandbox network namespace enforcement	https://github.com/utksh1/SecuScan/issues/1869
+5	plugin_validator.py is not wired into runtime plugin loading	https://github.com/utksh1/SecuScan/issues/1870
+92	Feature: Centralize WebSocket + SSE base URL resolution and add reconnect backoff	https://github.com/utksh1/SecuScan/issues/1871
+6	Schema mismatch: validator accepts field types the model rejects	https://github.com/utksh1/SecuScan/issues/1872
+93	Improvement: Add a strict plugin-load mode that fails fast on bad metadata	https://github.com/utksh1/SecuScan/issues/1873
+7	Explicit capabilities can downgrade enforcement (safety escape hatch)	https://github.com/utksh1/SecuScan/issues/1874
+94	Feature: Bulk-export findings across all pages (not just loaded)	https://github.com/utksh1/SecuScan/issues/1875
+8	CLI and workflow scheduler bypass plugin consent	https://github.com/utksh1/SecuScan/issues/1876
+95	Improvement: Make AI executive summary async and non-blocking with timeout	https://github.com/utksh1/SecuScan/issues/1877
+9	Workflow concurrency limit is not actually enforced	https://github.com/utksh1/SecuScan/issues/1878
+96	Feature: Add saved-view ownership/tenant scoping and sharing	https://github.com/utksh1/SecuScan/issues/1879
+10	Signature declared but unverified is accepted at exec time	https://github.com/utksh1/SecuScan/issues/1880
+11	Redis scan rate limiter trusts X-Forwarded-For without trusted-proxy check	https://github.com/utksh1/SecuScan/issues/1881
+97	Improvement: Standardize timezone handling (UTC everywhere) in API + reports	https://github.com/utksh1/SecuScan/issues/1882
+12	Raw API keys embedded in rate-limit identity leak into logs	https://github.com/utksh1/SecuScan/issues/1883
+13	Redis INCR/EXPIRE race can permanently block an IP	https://github.com/utksh1/SecuScan/issues/1884
+99	Improvement: Add end-to-end tests for network_policy + rate limiter under Redis down	https://github.com/utksh1/SecuScan/issues/1885
+14	Scan rate limiter fails open on Redis errors (limits silently disabled)	https://github.com/utksh1/SecuScan/issues/1886
+16	redact() misses JWTs, DB connection URIs, and userinfo URLs	https://github.com/utksh1/SecuScan/issues/1887
+18	Webhook response buffered unbounded into memory (DoS)	https://github.com/utksh1/SecuScan/issues/1888
+19	Slack/email alerts include raw error_message without redaction	https://github.com/utksh1/SecuScan/issues/1889
+20	DNS resolution in send_webhook blocks the event loop	https://github.com/utksh1/SecuScan/issues/1890
+22	Info-severity findings default to 5.0/10 risk score	https://github.com/utksh1/SecuScan/issues/1891
+23	CacheClient has no locking; eviction/sweep can leave inconsistent TTL state	https://github.com/utksh1/SecuScan/issues/1892
+24	Vault blob has no key-version/id marker for rotation	https://github.com/utksh1/SecuScan/issues/1893
+25	_resolve_wordlist_path falls through to raw, unvalidated value	https://github.com/utksh1/SecuScan/issues/1894
+26	Unknown input fields bypass validation via __ prefix	https://github.com/utksh1/SecuScan/issues/1895
+27	CapabilityEnforcer crashes app startup on bad denied token	https://github.com/utksh1/SecuScan/issues/1896
+28	plugin_validator skips placeholder validation inside --if tokens	https://github.com/utksh1/SecuScan/issues/1897
+29	Top-level validation block validated but never used	https://github.com/utksh1/SecuScan/issues/1898
+30	amass writes to a hardcoded predictable /tmp/amass path	https://github.com/utksh1/SecuScan/issues/1899
+31	parser_sandbox retains PYTHONPATH/HOME (sandbox escape vector)	https://github.com/utksh1/SecuScan/issues/1900
+32	Parser subprocess children/grandchildren not killed on timeout	https://github.com/utksh1/SecuScan/issues/1901
+33	sandbox_executor memory-limit unit bug across platforms	https://github.com/utksh1/SecuScan/issues/1902
+34	SandboxConfig.allow_network is never enforced (dead field)	https://github.com/utksh1/SecuScan/issues/1903
+35	No timeout when sandbox timeout_seconds is 0/None	https://github.com/utksh1/SecuScan/issues/1904
+36	preexec_fn RLIMIT_AS only on Linux; macOS gets no memory cap	https://github.com/utksh1/SecuScan/issues/1905
+37	CLI --output writes arbitrary paths (no traversal check)	https://github.com/utksh1/SecuScan/issues/1906
+38	Workflow target re-resolved separately from validate_target (rebind gap)	https://github.com/utksh1/SecuScan/issues/1907
+39	custom parser declared but missing parser.py still validates	https://github.com/utksh1/SecuScan/issues/1908
+40	54 of 61 plugins omit capabilities, blocking granular denial	https://github.com/utksh1/SecuScan/issues/1909
+41	get_plugin_check_latency_ms does O(N) subprocess spawns	https://github.com/utksh1/SecuScan/issues/1910
+42	compute_plugin_digest re-reads metadata from disk (inconsistency vs in-memory)	https://github.com/utksh1/SecuScan/issues/1911
+43	crawler has no max-redirects or response-size cap	https://github.com/utksh1/SecuScan/issues/1912
+44	crawler injects extra-header values unsanitized	https://github.com/utksh1/SecuScan/issues/1913
+45	Custom parser sandbox does not drop privileges	https://github.com/utksh1/SecuScan/issues/1914
+46	Plugin command templates may embed absolute paths that are non-portable	https://github.com/utksh1/SecuScan/issues/1915
+47	Wordlist/safe-mode default not surfaced when plugin omits defaults	https://github.com/utksh1/SecuScan/issues/1916
+48	Workflow scheduled tasks re-share one request id across all steps	https://github.com/utksh1/SecuScan/issues/1917
+49	Plugin metadata 'engine' section not validated for required keys	https://github.com/utksh1/SecuScan/issues/1918
+50	CSV report leaks unredacted finding data (target/evidence)	https://github.com/utksh1/SecuScan/issues/1919
+51	SARIF $schema and informationUri hardcode a personal repo	https://github.com/utksh1/SecuScan/issues/1920
+52	SARIF region parsing conflates host:port with file:line	https://github.com/utksh1/SecuScan/issues/1921
+53	Evidence values dropped from HTML/PDF reports	https://github.com/utksh1/SecuScan/issues/1922
+54	redact_dict redacts values but leaks sensitive key names	https://github.com/utksh1/SecuScan/issues/1923
+55	reporting uses naive local time (generated_at) inconsistent with UTC	https://github.com/utksh1/SecuScan/issues/1924
+56	Notification dedup blocks manual re-send; failed deliveries never retried	https://github.com/utksh1/SecuScan/issues/1925
+57	send_webhook follow_redirects=False but dead redirect handling remains	https://github.com/utksh1/SecuScan/issues/1926
+58	AI summary generation blocks report rendering (availability risk)	https://github.com/utksh1/SecuScan/issues/1927
+59	AI prompt sanitization over-redacts hostnames in titles	https://github.com/utksh1/SecuScan/issues/1928
+60	Finding grouping logic inconsistent between two functions	https://github.com/utksh1/SecuScan/issues/1929
+61	fingerprint_score default 0.35 inflates confidence for unverified findings	https://github.com/utksh1/SecuScan/issues/1930
+62	knowledgebase version normalization causes false-positive CVE associations	https://github.com/utksh1/SecuScan/issues/1931
+63	knowledgebase silently drops malformed feed files	https://github.com/utksh1/SecuScan/issues/1932
+64	EndpointRateLimiter sets X-RateLimit-Reset as a delta, not a timestamp	https://github.com/utksh1/SecuScan/issues/1933
+65	ConcurrentTaskLimiter.release can raise ValueError on double-release	https://github.com/utksh1/SecuScan/issues/1934
+66	EndpointRateLimiter memory grows unbounded under header-spoofing	https://github.com/utksh1/SecuScan/issues/1935
+67	WorkflowRateLimiter._last_run never evicts old workflow IDs	https://github.com/utksh1/SecuScan/issues/1936
+68	useWebSocket: ping interval can leak across reconnects	https://github.com/utksh1/SecuScan/issues/1937
+69	useTaskSubscription SSE->polling fallback never recovers to SSE	https://github.com/utksh1/SecuScan/issues/1938
+70	Keyboard shortcut collision: g+s and g+h both go to scans	https://github.com/utksh1/SecuScan/issues/1939
+71	Escape key does not close custom popovers (Saved Views panel)	https://github.com/utksh1/SecuScan/issues/1940
+72	usePreferredExportFormat reads localStorage during render without try/catch	https://github.com/utksh1/SecuScan/issues/1941
+73	CSV export vulnerable to formula injection (CSV injection)	https://github.com/utksh1/SecuScan/issues/1942
+74	downloadFile revokes object URL immediately (broken on Safari)	https://github.com/utksh1/SecuScan/issues/1943
+75	Export selection silently drops unloaded paginated rows	https://github.com/utksh1/SecuScan/issues/1944
+76	Sidebar JSON.parse on localStorage can crash the app	https://github.com/utksh1/SecuScan/issues/1945
+77	Sidebar toggle bound to entire aside surface (accidental collapse)	https://github.com/utksh1/SecuScan/issues/1946
+78	Dashboard 10s polling never backs off on error	https://github.com/utksh1/SecuScan/issues/1947
+79	ReportCompare only compares first 50 findings per task	https://github.com/utksh1/SecuScan/issues/1948
+80	Settings.handleClearApiKey uses native window.confirm	https://github.com/utksh1/SecuScan/issues/1949
+81	ToolConfig integer max conflated with server timeout	https://github.com/utksh1/SecuScan/issues/1950
+82	Workflows create form performs no step schema validation	https://github.com/utksh1/SecuScan/issues/1951
+83	App initial auth check renders blank (no loading state)	https://github.com/utksh1/SecuScan/issues/1952
+84	parseDateSafe only replaces first space; can produce invalid date	https://github.com/utksh1/SecuScan/issues/1953
+85	formatBriefingDate result string-split in Dashboard is fragile	https://github.com/utksh1/SecuScan/issues/1954
+86	TaskDetails hook order: refs declared after useTaskSubscription	https://github.com/utksh1/SecuScan/issues/1955
+87	Findings infinite-scroll loadMore never updates totalItems	https://github.com/utksh1/SecuScan/issues/1956
+88	No XSS found, but i18n layer is entirely dead code	https://github.com/utksh1/SecuScan/issues/1957
+89	Scans polling can interleave overlapping fetches on page/filter change	https://github.com/utksh1/SecuScan/issues/1958
+90	Reports malformed generated_at yields NaN sort (no try/catch)	https://github.com/utksh1/SecuScan/issues/1959
+91	Feature: Add per-plugin sandbox network namespace enforcement	https://github.com/utksh1/SecuScan/issues/1960
+92	Feature: Centralize WebSocket + SSE base URL resolution and add reconnect backoff	https://github.com/utksh1/SecuScan/issues/1961
+93	Improvement: Add a strict plugin-load mode that fails fast on bad metadata	https://github.com/utksh1/SecuScan/issues/1962
+94	Feature: Bulk-export findings across all pages (not just loaded)	https://github.com/utksh1/SecuScan/issues/1963
+95	Improvement: Make AI executive summary async and non-blocking with timeout	https://github.com/utksh1/SecuScan/issues/1964
+96	Feature: Add saved-view ownership/tenant scoping and sharing	https://github.com/utksh1/SecuScan/issues/1965
+97	Improvement: Standardize timezone handling (UTC everywhere) in API + reports	https://github.com/utksh1/SecuScan/issues/1966
+98	Feature: Add a plugin 'dry run' mode that prints the resolved command without executing	https://github.com/utksh1/SecuScan/issues/1967
+99	Improvement: Add end-to-end tests for network_policy + rate limiter under Redis down	https://github.com/utksh1/SecuScan/issues/1968
+100	Feature: Keyboard-accessible command palette and consistent shortcut map	https://github.com/utksh1/SecuScan/issues/1969
