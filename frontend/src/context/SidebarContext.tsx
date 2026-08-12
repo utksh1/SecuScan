@@ -9,10 +9,7 @@ const SidebarContext = createContext<SidebarContextType | undefined>(undefined)
 
 const SIDEBAR_EXPANDED_KEY = 'sidebar-expanded'
 
-/**
- * Read the persisted sidebar expanded flag from localStorage.
- * Corrupted or non-boolean values must not crash the app — default to true.
- */
+
 function readSidebarExpanded(): boolean {
     try {
         const saved = localStorage.getItem(SIDEBAR_EXPANDED_KEY)

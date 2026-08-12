@@ -1,7 +1,3 @@
-"""
-SQLite database access for SecuScan.
-"""
-
 import asyncio
 import contextlib
 import json
@@ -15,8 +11,6 @@ from .risk_scoring import compute_risk_score, compute_risk_factors
 
 
 class Database:
-    """SQLite database manager with an async-friendly interface."""
-
     db_path: str
     _connection: Optional[aiosqlite.Connection]
 
@@ -27,7 +21,6 @@ class Database:
 
     @property
     def connection(self) -> aiosqlite.Connection:
-        """Get the active database connection, raising an error if it's not connected."""
         if self._connection is None:
             raise RuntimeError(
                 "Database not connected. Did you forget to await connect()?"
@@ -35,8 +28,6 @@ class Database:
         return self._connection
 
     async def connect(self):
-        """Establish database connection and ensure schema exists."""
-        # Ensure data directory exists
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
 
         conn = await aiosqlite.connect(self.db_path)
@@ -49,369 +40,13 @@ class Database:
         await self._run_migrations()
 
     async def disconnect(self):
-        """Close the current database connection."""
         conn = self._connection
         if conn is not None:
             await conn.close()
             self._connection = None
 
     async def _create_schema(self):
-        """Create the application schema using SQLite dialect and handle migrations."""
         await self.connection.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS tasks (
-                id TEXT PRIMARY KEY,
-                owner_id TEXT NOT NULL DEFAULT 'default',
-                plugin_id TEXT NOT NULL,
-                tool_name TEXT NOT NULL,
-                target TEXT NOT NULL,
-                inputs_json TEXT NOT NULL DEFAULT '{}',
-                execution_context_json TEXT NOT NULL DEFAULT '{}',
-                preset TEXT,
-                status TEXT NOT NULL DEFAULT 'queued',
-                scan_phase TEXT,
-                phase_timestamps_json TEXT NOT NULL DEFAULT '{}',
-                consent_granted BOOLEAN NOT NULL DEFAULT 0,
-                safe_mode BOOLEAN NOT NULL DEFAULT 1,
-                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-                started_at TIMESTAMP,
-                completed_at TIMESTAMP,
-                duration_seconds REAL,
-                exit_code INTEGER,
-                structured_json TEXT,
-                raw_output_path TEXT,
-                command_used TEXT,
-                error_message TEXT,
-                container_id TEXT,
-                cpu_seconds REAL,
-                memory_peak_mb REAL
-            );
-
-            CREATE TABLE IF NOT EXISTS plugins (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                version TEXT NOT NULL,
-                category TEXT NOT NULL,
-                metadata_json TEXT NOT NULL,
-                enabled BOOLEAN NOT NULL DEFAULT 1,
-                checksum TEXT,
-                signature TEXT,
-                installed_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-                last_updated TIMESTAMP,
-                last_used TIMESTAMP,
-                binary_path TEXT,
-                docker_image TEXT,
-                python_packages_json TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS findings (
-                id TEXT PRIMARY KEY,
-                owner_id TEXT NOT NULL DEFAULT 'default',
-                task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
-                plugin_id TEXT NOT NULL,
-                title TEXT NOT NULL,
-                category TEXT NOT NULL,
-                severity TEXT NOT NULL,
-                target TEXT NOT NULL,
-                description TEXT NOT NULL,
-                remediation TEXT NOT NULL DEFAULT '',
-                proof TEXT,
-                cvss REAL,
-                cve TEXT,
-                exploitability REAL,
-                confidence REAL,
-                validated BOOLEAN NOT NULL DEFAULT 0,
-                validation_method TEXT,
-                confidence_reason TEXT,
-                finding_kind TEXT NOT NULL DEFAULT 'observation',
-                finding_group_id TEXT,
-                asset_id TEXT,
-                first_seen_at TIMESTAMP,
-                last_seen_at TIMESTAMP,
-                occurrence_count INTEGER NOT NULL DEFAULT 1,
-                corroborating_sources_json TEXT NOT NULL DEFAULT '[]',
-                evidence_count INTEGER NOT NULL DEFAULT 0,
-                analyst_status TEXT NOT NULL DEFAULT 'new',
-                retest_status TEXT NOT NULL DEFAULT 'not_requested',
-                evidence_json TEXT NOT NULL DEFAULT '[]',
-                asset_refs_json TEXT NOT NULL DEFAULT '[]',
-                service_fingerprint TEXT,
-                cpe TEXT,
-                references_json TEXT NOT NULL DEFAULT '[]',
-                asset_exposure TEXT,
-                risk_score REAL,
-                risk_factors_json TEXT NOT NULL DEFAULT '[]',
-                discovered_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-                metadata_json TEXT NOT NULL DEFAULT '{}'
-            );
-
-
-            CREATE TABLE IF NOT EXISTS reports (
-                id TEXT PRIMARY KEY,
-                owner_id TEXT NOT NULL DEFAULT 'default',
-                task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL,
-                name TEXT NOT NULL,
-                type TEXT NOT NULL DEFAULT 'technical',
-                generated_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-                status TEXT NOT NULL DEFAULT 'ready',
-                findings INTEGER NOT NULL DEFAULT 0,
-                pages INTEGER NOT NULL DEFAULT 0,
-                file_path TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS target_policies (
-                id TEXT PRIMARY KEY,
-                owner_id TEXT NOT NULL DEFAULT 'default',
-                name TEXT NOT NULL,
-                description TEXT,
-                allow_public_targets BOOLEAN NOT NULL DEFAULT 0,
-                allow_exploit_validation BOOLEAN NOT NULL DEFAULT 0,
-                allow_authenticated_scan BOOLEAN NOT NULL DEFAULT 0,
-                default_validation_mode TEXT NOT NULL DEFAULT 'proof',
-                allowed_targets_json TEXT NOT NULL DEFAULT '[]',
-                metadata_json TEXT NOT NULL DEFAULT '{}',
-                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-                updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS credential_profiles (
-                id TEXT PRIMARY KEY,
-                owner_id TEXT NOT NULL DEFAULT 'default',
-                name TEXT NOT NULL,
-                username_secret_name TEXT,
-                password_secret_name TEXT,
-                extra_headers_json TEXT NOT NULL DEFAULT '{}',
-                login_recipe_json TEXT NOT NULL DEFAULT '{}',
-                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-                updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS session_profiles (
-                id TEXT PRIMARY KEY,
-                owner_id TEXT NOT NULL DEFAULT 'default',
-                name TEXT NOT NULL,
-                cookie_secret_name TEXT,
-                extra_headers_json TEXT NOT NULL DEFAULT '{}',
-                notes TEXT,
-                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-                updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS crawl_runs (
-                id TEXT PRIMARY KEY,
-                owner_id TEXT NOT NULL DEFAULT 'default',
-                task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
-                plugin_id TEXT NOT NULL,
-                target TEXT NOT NULL,
-                seed_url TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'completed',
-                summary_json TEXT NOT NULL DEFAULT '{}',
-                pages_json TEXT NOT NULL DEFAULT '[]',
-                forms_json TEXT NOT NULL DEFAULT '[]',
-                scripts_json TEXT NOT NULL DEFAULT '[]',
-                params_json TEXT NOT NULL DEFAULT '[]',
-                api_hints_json TEXT NOT NULL DEFAULT '[]',
-                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS asset_services (
-                id TEXT PRIMARY KEY,
-                owner_id TEXT NOT NULL DEFAULT 'default',
-                task_id TEXT REFERENCES tasks(id) ON DELETE CASCADE,
-                plugin_id TEXT NOT NULL,
-                target TEXT NOT NULL,
-                asset_id TEXT,
-                host TEXT NOT NULL,
-                ip TEXT,
-                port INTEGER,
-                protocol TEXT,
-                service TEXT,
-                product TEXT,
-                version TEXT,
-                cpe TEXT,
-                confidence REAL,
-                title TEXT,
-                banner TEXT,
-                cert_subject TEXT,
-                cert_san_json TEXT NOT NULL DEFAULT '[]',
-                cert_expiry TEXT,
-                service_fingerprint TEXT,
-                metadata_json TEXT NOT NULL DEFAULT '{}',
-                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS settings (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL,
-                type TEXT NOT NULL,
-                description TEXT,
-                updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS audit_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-                event_type TEXT NOT NULL,
-                severity TEXT NOT NULL,
-                user_id TEXT,
-                ip_address TEXT,
-                message TEXT NOT NULL,
-                context_json TEXT,
-                task_id TEXT,
-                plugin_id TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS presets (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                plugin_id TEXT NOT NULL,
-                config_json TEXT NOT NULL,
-                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-                last_used TIMESTAMP,
-                use_count INTEGER NOT NULL DEFAULT 0,
-                UNIQUE(plugin_id, name)
-            );
-
-            CREATE TABLE IF NOT EXISTS credential_vault (
-                id TEXT PRIMARY KEY,
-                owner_id TEXT NOT NULL DEFAULT 'default',
-                name TEXT NOT NULL,
-                encrypted_value TEXT NOT NULL,
-                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-                updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-                UNIQUE(owner_id, name)
-                );
-
-
-
-CREATE INDEX IF NOT EXISTS idx_credential_vault_owner
-ON credential_vault(owner_id);
-
-            CREATE TABLE IF NOT EXISTS workflows (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                owner_id TEXT NOT NULL DEFAULT 'default',
-                schedule_seconds INTEGER,
-                schedule_timezone TEXT,
-                enabled BOOLEAN NOT NULL DEFAULT 1,
-                steps_json TEXT NOT NULL DEFAULT '[]',
-                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-                last_run_at TIMESTAMP,
-                UNIQUE(owner_id, name)
-            );
-
-            CREATE TABLE IF NOT EXISTS workflow_versions (
-                id              TEXT PRIMARY KEY,
-                workflow_id     TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
-                version_number  INTEGER NOT NULL,
-                definition_json TEXT NOT NULL,
-                created_at      TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-                created_by      TEXT NOT NULL DEFAULT 'system',
-                UNIQUE(workflow_id, version_number)
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_wf_versions_workflow ON workflow_versions(workflow_id, version_number DESC);
-
-            CREATE TABLE IF NOT EXISTS workflow_runs (
-                id              TEXT PRIMARY KEY,
-                workflow_id     TEXT NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
-                version_id      TEXT REFERENCES workflow_versions(id) ON DELETE SET NULL,
-                version_number  INTEGER,
-                triggered_by    TEXT NOT NULL DEFAULT 'manual',
-                status          TEXT NOT NULL DEFAULT 'queued',
-                task_ids_json   TEXT NOT NULL DEFAULT '[]',
-                started_at      TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-                completed_at    TIMESTAMP,
-                error_message   TEXT
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_wf_runs_workflow   ON workflow_runs(workflow_id, started_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_wf_runs_status     ON workflow_runs(status);
-            CREATE INDEX IF NOT EXISTS idx_wf_runs_version_id ON workflow_runs(version_id);
-
-            CREATE TABLE IF NOT EXISTS notification_rules (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                owner_id TEXT NOT NULL DEFAULT 'default',
-                severity_threshold TEXT NOT NULL,
-                channel_type TEXT NOT NULL,
-                target_url_or_email TEXT NOT NULL,
-                is_active BOOLEAN NOT NULL DEFAULT 1,
-                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-                updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS notification_history (
-                id TEXT PRIMARY KEY,
-                rule_id TEXT NOT NULL REFERENCES notification_rules(id) ON DELETE CASCADE,
-                finding_id TEXT NOT NULL REFERENCES findings(id) ON DELETE CASCADE,
-                status TEXT NOT NULL,
-                error_message TEXT,
-                sent_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
-            );
-
-            -- Per-owner webhook fired on scan completion/failure (issue #1615).
-            -- Distinct from notification_rules, which fires per-finding above a
-            -- severity threshold; this fires once per scan regardless of severity.
-            CREATE TABLE IF NOT EXISTS scan_webhook_settings (
-                owner_id TEXT PRIMARY KEY,
-                webhook_url TEXT NOT NULL,
-                created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-                updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
-            );
-
-            -- Tasks indexes (existing)
-            CREATE INDEX IF NOT EXISTS idx_tasks_created ON tasks(created_at);
-            CREATE INDEX IF NOT EXISTS idx_tasks_target ON tasks(target);
-            CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-            CREATE INDEX IF NOT EXISTS idx_tasks_plugin ON tasks(plugin_id);
-            -- Composite index for dashboard running tasks query
-            CREATE INDEX IF NOT EXISTS idx_tasks_status_created ON tasks(status, created_at DESC);
-            -- Owner scoping (BOLA prevention, issue #401)
-            CREATE INDEX IF NOT EXISTS idx_tasks_owner ON tasks(owner_id);
-            CREATE INDEX IF NOT EXISTS idx_tasks_execution_context ON tasks(owner_id, plugin_id, created_at DESC);
-
-            -- Findings indexes (new)
-            CREATE INDEX IF NOT EXISTS idx_findings_severity ON findings(severity);
-            CREATE INDEX IF NOT EXISTS idx_findings_task_id ON findings(task_id);
-            CREATE INDEX IF NOT EXISTS idx_findings_discovered_at ON findings(discovered_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_findings_plugin_id ON findings(plugin_id);
-            CREATE INDEX IF NOT EXISTS idx_findings_target ON findings(target);
-            -- Composite index for severity counting by task
-            CREATE INDEX IF NOT EXISTS idx_findings_task_severity ON findings(task_id, severity);
-            -- Owner scoping (BOLA prevention, issue #401)
-            CREATE INDEX IF NOT EXISTS idx_findings_owner ON findings(owner_id);
-            CREATE INDEX IF NOT EXISTS idx_findings_cpe ON findings(cpe);
-            CREATE INDEX IF NOT EXISTS idx_findings_validated ON findings(validated);
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_findings_group_id ON findings(owner_id, finding_group_id);
-            CREATE INDEX IF NOT EXISTS idx_findings_asset_id ON findings(owner_id, asset_id);
-
-            -- Reports indexes (new)
-            CREATE INDEX IF NOT EXISTS idx_reports_task_id ON reports(task_id);
-            CREATE INDEX IF NOT EXISTS idx_reports_generated_at ON reports(generated_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status);
-
-            -- Audit log indexes (new)
-            CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp DESC);
-            CREATE INDEX IF NOT EXISTS idx_audit_event_type ON audit_log(event_type);
-            CREATE INDEX IF NOT EXISTS idx_audit_task_id ON audit_log(task_id);
-
-            -- Workflows index (existing)
-            CREATE INDEX IF NOT EXISTS idx_workflows_enabled ON workflows(enabled);
-            CREATE INDEX IF NOT EXISTS idx_notification_rules_active ON notification_rules(is_active);
-            CREATE INDEX IF NOT EXISTS idx_notification_rules_severity ON notification_rules(severity_threshold);
-            CREATE INDEX IF NOT EXISTS idx_notification_history_rule_id ON notification_history(rule_id);
-            CREATE INDEX IF NOT EXISTS idx_notification_history_finding_id ON notification_history(finding_id);
-            CREATE INDEX IF NOT EXISTS idx_notification_history_sent_at ON notification_history(sent_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_target_policies_owner ON target_policies(owner_id);
-            CREATE INDEX IF NOT EXISTS idx_credential_profiles_owner ON credential_profiles(owner_id);
-            CREATE INDEX IF NOT EXISTS idx_session_profiles_owner ON session_profiles(owner_id);
-            CREATE INDEX IF NOT EXISTS idx_crawl_runs_task_id ON crawl_runs(task_id);
-            CREATE INDEX IF NOT EXISTS idx_crawl_runs_owner_created ON crawl_runs(owner_id, created_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_asset_services_task_id ON asset_services(task_id);
-            CREATE INDEX IF NOT EXISTS idx_asset_services_owner_created ON asset_services(owner_id, created_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_asset_services_asset_id ON asset_services(owner_id, asset_id);
-            """
         )
 
         # Migration logic: ensure latest columns exist in 'tasks' table
@@ -555,38 +190,6 @@ ON credential_vault(owner_id);
             if not has_composite:
                 await self.connection.executescript(
                     """CREATE TABLE credential_vault_new (
-                        id TEXT PRIMARY KEY,
-                        owner_id TEXT NOT NULL DEFAULT 'default',
-                        name TEXT NOT NULL,
-                        encrypted_value TEXT NOT NULL,
-                        created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-                        updated_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-                        UNIQUE(owner_id, name)
-                        );
-
-
-            INSERT INTO credential_vault_new
-            (
-                id,
-                owner_id,
-                name,
-                encrypted_value,
-                created_at,
-                updated_at
-            )
-            SELECT
-                id,
-                COALESCE(owner_id, 'default'),
-                name,
-                encrypted_value,
-                created_at,
-                updated_at
-            FROM credential_vault;
-
-            DROP TABLE credential_vault;
-            ALTER TABLE credential_vault_new
-            RENAME TO credential_vault;
-        """)
                 await self.connection.commit()
 
         # Workflows table migration: ensure owner_id and composite unique exist
@@ -602,9 +205,7 @@ ON credential_vault(owner_id);
             except Exception as e:
                 print(f"Failed to add 'owner_id' to workflows: {e}")
 
-        # On legacy databases the old CREATE TABLE had UNIQUE on name alone,
         # which blocks same-named workflows across owners.  SQLite cannot
-        # ALTER TABLE … DROP CONSTRAINT, so we must recreate the table.
         wf_schema = await self.fetchone(
             "SELECT sql FROM sqlite_master WHERE type='table' AND name='workflows'"
         )
@@ -619,27 +220,6 @@ ON credential_vault(owner_id);
                     await self.execute("PRAGMA foreign_keys = OFF")
                 try:
                     await self.connection.executescript("""
-                        CREATE TABLE workflows_new (
-                            id TEXT PRIMARY KEY,
-                            name TEXT NOT NULL,
-                            owner_id TEXT NOT NULL DEFAULT 'default',
-                            schedule_seconds INTEGER,
-                            enabled BOOLEAN NOT NULL DEFAULT 1,
-                            steps_json TEXT NOT NULL DEFAULT '[]',
-                            created_at TIMESTAMP NOT NULL DEFAULT (datetime('now')),
-                            last_run_at TIMESTAMP,
-                            UNIQUE(owner_id, name)
-                        );
-                        INSERT INTO workflows_new
-                            (id, name, owner_id, schedule_seconds, enabled,
-                             steps_json, created_at, last_run_at)
-                        SELECT
-                            id, name, COALESCE(owner_id, 'default'),
-                            schedule_seconds, enabled, steps_json, created_at, last_run_at
-                        FROM workflows;
-                        DROP TABLE workflows;
-                        ALTER TABLE workflows_new RENAME TO workflows;
-                    """)
                     await self.connection.commit()
                     print(
                         "Replaced workflows UNIQUE(name) constraint with UNIQUE(owner_id, name)."
@@ -691,40 +271,21 @@ ON credential_vault(owner_id);
 
         # Owner indexes must run after ALTER TABLE backfills owner_id on legacy DBs.
         await self.connection.executescript(
-            """
-            CREATE INDEX IF NOT EXISTS idx_tasks_owner ON tasks(owner_id);
-            CREATE INDEX IF NOT EXISTS idx_findings_owner ON findings(owner_id);
-            CREATE INDEX IF NOT EXISTS idx_reports_owner ON reports(owner_id);
-            CREATE INDEX IF NOT EXISTS idx_credential_vault_owner ON credential_vault(owner_id);
-            CREATE INDEX IF NOT EXISTS idx_workflows_owner ON workflows(owner_id);
-            CREATE INDEX IF NOT EXISTS idx_notification_rules_owner ON notification_rules(owner_id);
-            CREATE INDEX IF NOT EXISTS idx_notification_history_owner ON notification_history(owner_id);
-            """
             )
 
 
     async def _ensure_schema_migrations_table(self):
-        """Create the migration tracking table if it does not already exist."""
         await self.connection.execute(
-            """
-            CREATE TABLE IF NOT EXISTS schema_migrations (
-                version TEXT PRIMARY KEY,
-                applied_at TIMESTAMP NOT NULL DEFAULT (datetime('now'))
-            )
-            """
         )
         await self.connection.commit()
 
     async def _applied_migrations(self) -> set[str]:
-        """Return the set of migration filenames already applied."""
         rows = await self.fetchall(
             "SELECT version FROM schema_migrations"
         )
         return {row["version"] for row in rows}
 
     async def _validate_schema_version(self):
-        """Ensure the database was not created by a newer application."""
-
         applied = await self._applied_migrations()
 
         available = {
@@ -741,12 +302,7 @@ ON credential_vault(owner_id);
             )
 
     async def _record_migration(self, version: str):
-        """Record a successfully applied migration."""
         await self.execute(
-            """
-            INSERT INTO schema_migrations(version)
-            VALUES (?)
-            """,
             (version,),
         )
 
@@ -781,7 +337,6 @@ ON credential_vault(owner_id);
         await self._backfill_risk_scores()
 
     async def _backfill_risk_scores(self):
-        """Compute risk scores for existing findings that have none."""
         from datetime import datetime, timezone
 
         rows = await self.fetchall(
@@ -819,21 +374,6 @@ ON credential_vault(owner_id);
 
     @contextlib.asynccontextmanager
     async def transaction(self) -> AsyncIterator["Database"]:
-        """Context manager for atomic transactions.
-
-        Usage::
-
-            async with db.transaction():
-                await db.execute("INSERT INTO ...")
-                await db.execute("UPDATE ...")
-
-        If any statement raises, the entire transaction is rolled back.
-        On success the transaction is committed automatically.
-
-        Nested calls are safe: when a transaction is already active the
-        inner context manager becomes a no-op so the outer transaction
-        controls the commit/rollback.
-        """
         if self._in_transaction:
             yield self
         else:
@@ -846,52 +386,44 @@ ON credential_vault(owner_id);
                 raise
 
     async def execute(self, query: str, params: tuple = ()):
-        """Execute a write query and return the cursor (so callers can inspect rowcount)."""
         cursor = await self.connection.execute(query, params)
         if not self._in_transaction:
             await self.connection.commit()
         return cursor
 
     async def execute_no_commit(self, query: str, params: tuple = ()):
-        """Execute a write query without committing (for use inside transactions)."""
         cursor = await self.connection.execute(query, params)
         return cursor
 
     async def begin(self):
-        """Begin a transaction. No-op if already in a transaction."""
         if self._in_transaction:
             return
         await self.connection.execute("BEGIN")
         self._in_transaction = True
 
     async def commit(self):
-        """Commit the current transaction. No-op if not in a transaction."""
         if not self._in_transaction:
             return
         await self.connection.commit()
         self._in_transaction = False
 
     async def rollback(self):
-        """Roll back the current transaction. No-op if not in a transaction."""
         if not self._in_transaction:
             return
         await self.connection.rollback()
         self._in_transaction = False
 
     async def fetchone(self, query: str, params: tuple = ()) -> Optional[Dict]:
-        """Fetch one row."""
         async with await self.connection.execute(query, params) as cursor:
             row = await cursor.fetchone()
             return dict(row) if row else None
 
     async def fetchall(self, query: str, params: tuple = ()) -> List[Dict]:
-        """Fetch all rows."""
         async with await self.connection.execute(query, params) as cursor:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
 
     async def executescript(self, script: str):
-        """Execute a schema or migration script."""
         await self.connection.executescript(script)
         await self.connection.commit()
 
@@ -905,8 +437,6 @@ ON credential_vault(owner_id);
         plugin_id: Optional[str] = None,
         request_id: Optional[str] = None,
     ):
-        """Log an audit event."""
-
         from .request_context import get_request_id
 
         request_id = request_id or get_request_id()
@@ -915,17 +445,6 @@ ON credential_vault(owner_id);
         context["request_id"] = request_id
 
         await self.execute(
-            """
-            INSERT INTO audit_log (
-                event_type,
-                severity,
-                message,
-                context_json,
-                task_id,
-                plugin_id
-            )
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
             (
                 event_type,
                 severity,
@@ -946,11 +465,6 @@ ON credential_vault(owner_id);
         created_by: str = "system",
         schedule_timezone: Optional[str] = None,
     ) -> Dict:
-        """Snapshot the current workflow definition as a new version row.
-
-        Returns the new version record including its auto-assigned version_number.
-        The version_number is the next integer in the per-workflow sequence.
-        """
         version_id = json.dumps(None)
         row = await self.fetchone(
             "SELECT MAX(version_number) AS max_v FROM workflow_versions WHERE workflow_id = ?",
@@ -979,7 +493,6 @@ ON credential_vault(owner_id);
         }
 
     async def get_workflow_versions(self, workflow_id: str) -> List[Dict]:
-        """Return all versions for a workflow ordered newest first."""
         rows = await self.fetchall(
             "SELECT id, workflow_id, version_number, definition_json, created_at, created_by "
             "FROM workflow_versions WHERE workflow_id = ? ORDER BY version_number DESC",
@@ -1006,7 +519,6 @@ ON credential_vault(owner_id);
     async def get_workflow_version(
         self, workflow_id: str, version_number: int
     ) -> Optional[Dict]:
-        """Return a specific version record or None if it does not exist."""
         row = await self.fetchone(
             "SELECT id, workflow_id, version_number, definition_json, created_at, created_by "
             "FROM workflow_versions WHERE workflow_id = ? AND version_number = ?",
@@ -1035,7 +547,6 @@ ON credential_vault(owner_id);
         task_ids: List[str],
         triggered_by: str = "manual",
     ) -> str:
-        """Insert a workflow run record and return the run ID."""
         run_id = __import__("uuid").uuid4().hex
         await self.execute(
             "INSERT INTO workflow_runs "
@@ -1055,11 +566,6 @@ ON credential_vault(owner_id);
     async def finalize_workflow_run(
         self, run_id: str, status: str, error_message: Optional[str] = None
     ) -> None:
-        """Mark a workflow run as completed, failed, or cancelled with a timestamp.
-
-        status must be one of: completed | failed | cancelled.
-        This is called once all tasks in the run reach a terminal state.
-        """
         await self.execute(
             "UPDATE workflow_runs SET status = ?, completed_at = datetime('now'), error_message = ? "
             "WHERE id = ?",
@@ -1067,14 +573,6 @@ ON credential_vault(owner_id);
         )
 
     async def check_workflow_run_tasks(self, run_id: str) -> Optional[str]:
-        """Inspect the task statuses for a run and return the appropriate run status.
-
-        Returns:
-          'completed' if all tasks are completed.
-          'failed'    if any task failed and none are still running/queued.
-          'cancelled' if any task was cancelled and none are still running/queued.
-          None        if tasks are still in progress.
-        """
         run_row = await self.fetchone(
             "SELECT task_ids_json FROM workflow_runs WHERE id = ?", (run_id,)
         )
@@ -1105,7 +603,6 @@ ON credential_vault(owner_id);
     async def get_workflow_runs(
         self, workflow_id: str, limit: int = 50, offset: int = 0
     ) -> Dict:
-        """Return paginated run history for a workflow."""
         count_row = await self.fetchone(
             "SELECT COUNT(*) AS total FROM workflow_runs WHERE workflow_id = ?",
             (workflow_id,),
@@ -1143,7 +640,6 @@ db: Optional[Database] = None
 
 
 async def init_db(db_path: Optional[str] = None) -> Database:
-    """Initialize the global database connection."""
     global db
 
     path = db_path or f"{settings.data_dir}/secuscan.db"
@@ -1156,7 +652,6 @@ async def init_db(db_path: Optional[str] = None) -> Database:
 
 
 async def get_db() -> Database:
-    """Get the global database instance."""
     if db is None:
         raise RuntimeError("Database not initialized")
 

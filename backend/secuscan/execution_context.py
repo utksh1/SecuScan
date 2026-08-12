@@ -8,7 +8,6 @@ from .models import EvidenceLevel, ExecutionContext, ValidationMode
 
 
 def normalize_execution_context(raw: Any) -> Dict[str, Any]:
-    """Return a validated execution-context payload as a plain dict."""
     if isinstance(raw, ExecutionContext):
         return raw.model_dump(mode="json")
     if isinstance(raw, dict):
@@ -17,7 +16,6 @@ def normalize_execution_context(raw: Any) -> Dict[str, Any]:
 
 
 def is_offensive_validation(context: Dict[str, Any]) -> bool:
-    """True when validation mode goes beyond detect-only."""
     mode = str(context.get("validation_mode") or ValidationMode.PROOF.value)
     return mode in {
         ValidationMode.PROOF.value,
@@ -26,7 +24,6 @@ def is_offensive_validation(context: Dict[str, Any]) -> bool:
 
 
 def evidence_level_rank(level: str) -> int:
-    """Comparable evidence-level rank."""
     ordering = {
         EvidenceLevel.MINIMAL.value: 0,
         EvidenceLevel.STANDARD.value: 1,

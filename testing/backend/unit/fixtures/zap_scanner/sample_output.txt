@@ -1,4 +1,0 @@
-PASS: Passive scan completed
-WARN-NEW: X-Frame-Options Header Not Set [10020]
-FAIL-NEW: SQL Injection [40018]
-WARN-NEW: Content Security Policy Header Not Set [10038]

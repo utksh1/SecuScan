@@ -1,10 +1,4 @@
-/**
- * Schema coverage for src/data/toolCheatSheets.ts (issue #1417).
- *
- * These tests verify that the cheat-sheet data conforms to its TypeScript
- * interface contract: every tool entry has the required fields, each flag
- * has a non-empty flag and description, and the ethical tip is present.
- */
+
 
 import { describe, it, expect } from 'vitest'
 import toolCheatSheets, { type CheatSheet } from '../../../src/data/toolCheatSheets'

@@ -1,12 +1,4 @@
-/**
- * Frontend API request behavior tests.
- *
- * Covers:
- * - Successful JSON responses
- * - Non-OK HTTP responses
- * - Timeout + abort behavior
- * - Timeout cleanup
- */
+
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getHealth, listPlugins } from '../../src/api'

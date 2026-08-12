@@ -5,7 +5,6 @@ from .request_context import set_request_id
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-
         # Accept existing X-Request-ID or generate one
         request_id = request.headers.get("X-Request-ID")
         request_id = set_request_id(request_id)

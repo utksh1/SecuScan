@@ -2,10 +2,6 @@ import json
 from typing import Dict, Any, List
 
 def parse(output: str) -> Dict[str, Any]:
-    """
-    Parse Gitleaks JSON report.
-    Note: Gitleaks output is usually saved to a file, but we might get it as a string if configured.
-    """
     findings = []
     try:
         data = json.loads(output)

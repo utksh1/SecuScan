@@ -1,10 +1,4 @@
-/**
- * Schema coverage for src/data/scanTools.ts (issue #1416).
- *
- * These tests verify that every entry in the scanTools array conforms to the
- * ScanTool interface contract: required fields are present, enum fields
- * have valid literal values, and id uniqueness is enforced.
- */
+
 
 import { describe, it, expect } from 'vitest'
 import { scanTools, type ScanTool } from '../../../src/data/scanTools'

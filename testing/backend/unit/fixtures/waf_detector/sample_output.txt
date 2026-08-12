@@ -1,3 +1,0 @@
-Checking https://secuscan.in
-Detected Cloudflare WAF
-Scan completed

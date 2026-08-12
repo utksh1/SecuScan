@@ -6,11 +6,9 @@ function resolveApiBase(): string {
     const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     const isViteDevServer = window.location.port === '5173'
 
-    // For localhost preview/static modes (e.g. :8080), call backend directly.
     if (isLocalHost && !isViteDevServer) return 'http://127.0.0.1:8000/api/v1'
   }
 
-  // Default for Vite dev server where /api is proxied to backend.
   return '/api/v1'
 }
 
@@ -385,7 +383,6 @@ export async function logoutSession(): Promise<void> {
       credentials: 'include',
     })
   } catch {
-    // ignore
   }
   _apiKey = null
 }
@@ -394,7 +391,7 @@ export function getApiKey(): string | null {
   return _apiKey
 }
 
-/** Fired on the window when any API request receives HTTP 401. */
+
 export const AUTH_REQUIRED_EVENT = 'secuscan:auth-required'
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

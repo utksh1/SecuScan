@@ -1,9 +1,5 @@
 #!/usr/bin/env node
 
-/**
- * SecuScan Frontend Quality Gate
- * CI-style automated quality checks for frontend code
- */
 
 const fs = require('fs');
 const path = require('path');

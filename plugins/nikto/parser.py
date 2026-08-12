@@ -8,13 +8,6 @@ JSON_BLOCK_RE = re.compile(r"(\{.*\}|\[.*\])", re.DOTALL)
 
 
 def parse(output: str) -> Dict[str, Any]:
-    """
-    Parse Nikto output into SecuScan findings.
-
-    Nikto can emit JSON with -Format json, but older wrappers and some runtime
-    failures still produce the classic text report. Support both so the plugin
-    remains useful even when Nikto prints banners or warnings around JSON.
-    """
     data = _load_json_payload(output)
     if data is not None:
         return _parse_json_output(data, output)

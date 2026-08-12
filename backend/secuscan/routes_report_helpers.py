@@ -1,9 +1,3 @@
-"""
-Pure helpers extracted from routes.py for safe import in unit tests.
-
-These functions contain no FastAPI or database dependencies.
-routes.py re-exports them so existing call sites keep working.
-"""
 import re
 from typing import Any
 from urllib.parse import urlparse

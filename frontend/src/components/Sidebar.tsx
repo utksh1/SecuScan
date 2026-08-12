@@ -33,7 +33,7 @@ const NavItem = ({ to, icon, label, isExpanded, highlight = false }: NavItemProp
         >
             {({ isActive }) => (
                 <>
-                    {/* Active Indicator Glow */}
+                    {}
                     {isActive && (
                         <motion.div
                             layoutId="activeGlow"
@@ -43,7 +43,7 @@ const NavItem = ({ to, icon, label, isExpanded, highlight = false }: NavItemProp
                         />
                     )}
 
-                    {/* Active Side bar */}
+                    {}
                     {isActive && (
                         <motion.div
                             layoutId="activeBar"
@@ -117,7 +117,7 @@ export default function Sidebar() {
             aria-label="Main navigation"
             aria-expanded={isExpanded}
         >
-            {/* Header / Logo */}
+            {}
             <div className={`flex flex-col pt-8 pb-4 mb-4`}>
                 <div className={`flex items-center gap-4 px-6`}>
                     <motion.div
@@ -147,7 +147,7 @@ export default function Sidebar() {
                 </div>
             </div>
 
-            {/* Navigation Body */}
+            {}
             <div className="flex-1 flex flex-col overflow-y-auto no-scrollbar py-4">
                 <NavItem to={routes.toolkit} icon="add_circle" label="Toolkit" isExpanded={isExpanded} highlight />
 
@@ -163,7 +163,7 @@ export default function Sidebar() {
 
             </div>
 
-            {/* Bottom Actions */}
+            {}
             <div className="p-4 mt-auto border-t border-accent-silver/5 bg-bg-primary/30 backdrop-blur-md space-y-3">
                 <NavItem to={routes.settings} icon="settings" label="Settings" isExpanded={isExpanded} />
                 {isAuthenticated && (

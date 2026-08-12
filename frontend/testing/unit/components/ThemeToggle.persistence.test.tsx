@@ -7,12 +7,7 @@ import { ThemeProvider, useTheme } from '../../../src/components/ThemeContext'
 
 const STORAGE_KEY = 'secuscan-theme'
 
-/**
- * Regression coverage for theme persistence, reload, and reset-to-system flows.
- * Complements ThemeToggle.test.tsx (click/toggle behavior) with the gaps this
- * issue calls out: surviving a fresh mount (reload), reset-to-system, and
- * system-preference fallback when no manual override exists.
- */
+
 
 function mockMatchMedia(prefersLight: boolean) {
   const listeners: Array<(e: MediaQueryListEvent) => void> = []
