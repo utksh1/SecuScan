@@ -5,17 +5,7 @@ interface Props {
   onSaved: () => void
 }
 
-/**
- * Full-page first-run / 401 gate.
- *
- * Replaces the entire app until the operator provides the API key.
- * Because this component renders instead of the normal route tree, no page
- * component mounts and no protected API call fires before the key is saved.
- *
- * The operator reads the key from the server key file and pastes it here.
- * The key is sent to the backend which validates it and sets an HttpOnly
- * session cookie; the raw key is never persisted in the browser.
- */
+
 export default function ApiKeySetupScreen({ onSaved }: Props) {
   const [key, setKey] = useState('')
   const [error, setError] = useState('')

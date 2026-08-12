@@ -2,9 +2,6 @@ import json
 from typing import Dict, Any, List
 
 def parse(output: str) -> Dict[str, Any]:
-    """
-    Parse Bandit JSON output.
-    """
     findings = []
     try:
         data = json.loads(output)

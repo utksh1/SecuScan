@@ -3,7 +3,7 @@ export default {
   darkMode: 'class',
   content: [
     "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
+    "./src*.{js,ts,jsx,tsx}",
   ],
   theme: {
     extend: {
@@ -21,7 +21,7 @@ export default {
         charcoal: {
           light: 'var(--bg-tertiary)',
           DEFAULT: 'var(--bg-secondary)',
-          dark: 'var(--bg-primary)', /* mapped for backward compatibility */
+          dark: 'var(--bg-primary)', 
         },
         silver: {
           bright: 'var(--text-primary)',

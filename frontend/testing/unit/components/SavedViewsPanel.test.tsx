@@ -5,9 +5,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import SavedViewsPanel from '../../../src/components/SavedViewsPanel'
 import { ESCAPE_EVENT } from '../../../src/hooks/useEscapeToClose'
 
-/* ------------------------------------------------------------------ */
-/*  Mocks                                                             */
-/* ------------------------------------------------------------------ */
+
+
+
 
 // Mock framer-motion to render plain elements so tests focus on behavior,
 // not animation internals.
@@ -42,9 +42,9 @@ vi.mock('framer-motion', async () => {
   }
 })
 
-/* ------------------------------------------------------------------ */
-/*  Test Data & Helpers                                               */
-/* ------------------------------------------------------------------ */
+
+
+
 
 const mockPreset = {
   severity: 'high',
@@ -98,9 +98,9 @@ function renderSavedViewsPanel(props = {}) {
   }
 }
 
-/* ------------------------------------------------------------------ */
-/*  Tests                                                             */
-/* ------------------------------------------------------------------ */
+
+
+
 
 describe('SavedViewsPanel', () => {
   beforeEach(() => {

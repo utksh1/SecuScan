@@ -1,16 +1,3 @@
-"""
-Risk scoring model with explainable finding prioritization.
-
-Computes a composite risk score (0–10) from five factors:
-  - severity      (30%)
-  - exploitability (25%)
-  - asset exposure (20%)
-  - recency        (15%)
-  - confidence     (10%)
-
-Each factor also produces a human-readable explanation entry.
-"""
-
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -44,7 +31,7 @@ EXPOSURE_CONTEXT_MAP: Dict[str, float] = {
 # Business criticality factors (multiplicative)
 CRITICALITY_MAP: Dict[str, float] = {
     "critical": 1.5,     # Critical business function
-    "high": 1.25,        # Important business function
+    "high": 1.25,
     "medium": 1.0,       # Standard business function (no multiplier)
     "low": 0.8,          # Non-critical function
 }
@@ -60,12 +47,10 @@ WEIGHTS = {
 
 
 def _severity_score(severity: str) -> float:
-    """Map severity label to a numeric 0–10 value."""
     return SEVERITY_MAP.get(severity.lower(), 0.5)
 
 
 def _recency_score(discovered_at: Optional[datetime]) -> float:
-    """Score recency (10 = today, down to 0 for very old)."""
     if discovered_at is None:
         return 5.0
     now = datetime.now(timezone.utc)
@@ -87,28 +72,10 @@ def _recency_score(discovered_at: Optional[datetime]) -> float:
 
 
 def _confidence_score(confidence: Optional[float]) -> float:
-    """Map confidence 0–1 to 0–10. Default unknown confidence → 0.0."""
     if confidence is None:
         return 0.0
     return max(0.0, min(10.0, confidence * 10.0))
 
-
-def _clamp(value: float, lo: float = 0.0, hi: float = 10.0) -> float:
-    return max(lo, min(hi, value))
-
-
-def _system_exposure_factor(exposure_context: Optional[str]) -> float:
-    """Get the exposure context multiplier for severity adjustment."""
-    if exposure_context is None:
-        return 1.0
-    return EXPOSURE_CONTEXT_MAP.get(exposure_context.lower(), 1.0)
-
-
-def _business_criticality_factor(criticality: Optional[str]) -> float:
-    """Get the business criticality multiplier for severity adjustment."""
-    if criticality is None:
-        return 1.0
-    return CRITICALITY_MAP.get(criticality.lower(), 1.0)
 
 
 def _contextual_severity_score(
@@ -117,37 +84,14 @@ def _contextual_severity_score(
     business_criticality: Optional[str] = None,
     custom_override: Optional[float] = None,
 ) -> float:
-    """
-    Calculate context-aware severity score.
-
-    Accounts for system exposure (public/private/internal) and business
-    criticality (data sensitivity, user count) to provide more accurate
-    prioritization beyond raw CVSS score.
-
-    Parameters
-    ----------
-    base_severity : float
-        Base severity score 0-10 (from CVSS)
-    exposure_context : str or None
-        System exposure: 'public', 'internet_facing', 'internal', 'private'
-    business_criticality : str or None
-        Business impact: 'critical', 'high', 'medium', 'low'
-    custom_override : float or None
-        Manual override (0-10). If set, bypasses calculated score.
-
-    Returns
-    -------
-    float
-        Context-adjusted severity score (0-10)
-    """
     if custom_override is not None:
-        return _clamp(custom_override)
+        return max(0.0, min(10.0, custom_override))
 
-    exposure_mult = _system_exposure_factor(exposure_context)
-    criticality_mult = _business_criticality_factor(business_criticality)
+    exposure_mult = EXPOSURE_CONTEXT_MAP.get((exposure_context or "").lower(), 1.0)
+    criticality_mult = CRITICALITY_MAP.get((business_criticality or "").lower(), 1.0)
 
     contextual_score = base_severity * exposure_mult * criticality_mult
-    return _clamp(contextual_score)
+    return max(0.0, min(10.0, contextual_score))
 
 
 # ---------------------------------------------------------------------------
@@ -165,30 +109,6 @@ def compute_risk_score(
     business_criticality: Optional[str] = None,
     severity_override: Optional[float] = None,
 ) -> float:
-    """
-    Compute a weighted composite risk score in [0, 10].
-
-    Parameters
-    ----------
-    severity : str
-        One of "critical", "high", "medium", "low", "info".
-    exploitability : float or None
-        0–10. Defaults to 5.0 when None.
-    asset_exposure : str or None
-        One of "critical", "high", "medium", "low". Defaults to "medium".
-    discovered_at : datetime or None
-        When the finding was discovered. Defaults to 90-day-old equivalent.
-    confidence : float or None
-        0–1. Defaults to 0.5 when None.
-    exposure_context : str or None
-        System exposure: 'public', 'internet_facing', 'internal', 'private'.
-        Adjusts severity by system context.
-    business_criticality : str or None
-        Business impact: 'critical', 'high', 'medium', 'low'.
-        Adjusts severity by business function importance.
-    severity_override : float or None
-        Manual override for severity (0-10). Bypasses context calculation.
-    """
     base_severity = _severity_score(severity)
     sv = _contextual_severity_score(
         base_severity,
@@ -196,7 +116,7 @@ def compute_risk_score(
         business_criticality=business_criticality,
         custom_override=severity_override,
     )
-    ev = _clamp(exploitability if exploitability is not None else 0.0)
+    ev = max(0.0, min(10.0, exploitability if exploitability is not None else 0.0))
     av = ASSET_EXPOSURE_MAP.get(asset_exposure.lower() if asset_exposure else None, 0.0)
     rv = _recency_score(discovered_at)
     cv = _confidence_score(confidence)
@@ -208,7 +128,7 @@ def compute_risk_score(
         + rv * WEIGHTS["recency"]
         + cv * WEIGHTS["confidence"]
     )
-    return round(_clamp(score), 1)
+    return round(max(0.0, min(10.0, score)), 1)
 
 
 def compute_risk_factors(
@@ -222,16 +142,6 @@ def compute_risk_factors(
     severity_override: Optional[float] = None,
     risk_score: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
-    """
-    Return a list of explainable factor dicts, each with:
-      - factor:   short key name
-      - label:    human-readable label
-      - value:    raw value
-      - score:    numeric sub-score (0–10)
-      - weight:   contribution weight
-      - contribution: weighted contribution to total
-      - detail:   short explanation sentence
-    """
     if risk_score is None:
         risk_score = compute_risk_score(
             severity, exploitability, asset_exposure, discovered_at, confidence,
@@ -247,7 +157,7 @@ def compute_risk_factors(
         business_criticality=business_criticality,
         custom_override=severity_override,
     )
-    ev = _clamp(exploitability if exploitability is not None else 5.0)
+    ev = max(0.0, min(10.0, exploitability if exploitability is not None else 5.0))
     av = ASSET_EXPOSURE_MAP.get(asset_exposure.lower() if asset_exposure else None, 5.0)
     rv = _recency_score(discovered_at)
     cv = _confidence_score(confidence)

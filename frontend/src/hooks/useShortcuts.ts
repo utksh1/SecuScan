@@ -3,19 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { routes } from '../routes'
 import { ESCAPE_EVENT } from './useEscapeToClose'
 
-/**
- * Global keyboard shortcuts hook for SecuScan.
- *
- * g + d : Dashboard
- * g + s : Scanners
- * g + h : History
- * g + f : Findings
- * g + r : Reports
- * g + t : Settings (Tools)
- * g + b : Toggle Sidebar
- * Esc   : Blur the focused field, or broadcast ESCAPE_EVENT so open
- *         popovers and dropdowns close (see useEscapeToClose).
- */
+
 export function useShortcuts(onToggleSidebar?: () => void) {
     const navigate = useNavigate()
 
@@ -23,7 +11,6 @@ export function useShortcuts(onToggleSidebar?: () => void) {
         let lastChar = ''
 
         const handleKeyDown = (e: KeyboardEvent) => {
-            // Ignore if user is typing in an input
             const target = e.target as HTMLElement
             if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
                 if (e.key === 'Escape') {
@@ -33,8 +20,6 @@ export function useShortcuts(onToggleSidebar?: () => void) {
             }
 
             if (e.key === 'Escape') {
-                // Broadcast so open popovers/dropdowns can close themselves.
-                // See useEscapeToClose for the subscriber side.
                 window.dispatchEvent(new CustomEvent(ESCAPE_EVENT))
                 return
             }
@@ -45,7 +30,6 @@ export function useShortcuts(onToggleSidebar?: () => void) {
                 switch (key) {
                     case 'd': navigate(routes.dashboard); break
                     case 's': navigate(routes.scans); break
-                    case 'h': navigate(routes.scans); break
                     case 'f': navigate(routes.findings); break
                     case 'r': navigate(routes.reports); break
                     case 't': navigate(routes.settings); break
@@ -57,7 +41,6 @@ export function useShortcuts(onToggleSidebar?: () => void) {
                 lastChar = ''
             } else if (key === 'g') {
                 lastChar = 'g'
-                // Clear g after 1 second if no matching key follows
                 setTimeout(() => { lastChar = '' }, 1000)
             } else {
                 lastChar = ''

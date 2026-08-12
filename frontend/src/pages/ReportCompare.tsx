@@ -35,7 +35,7 @@ function reportHasFindings(
   return (findingsByTask[report.task_id]?.length ?? 0) > 0
 }
 
-/** Compare uses finding diffs; include ready reports and failed scans that still produced findings. */
+
 function comparableReports(
   rows: ReportOption[],
   findingsByTask: Record<string, ComparableFinding[]>,

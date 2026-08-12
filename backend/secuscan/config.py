@@ -1,7 +1,3 @@
-"""
-Configuration management for SecuScan backend
-"""
-
 from pathlib import Path
 from typing import Any, List, Optional
 from pydantic import field_validator
@@ -37,8 +33,6 @@ MANDATORY_DENYLIST: List[str] = [
 
 
 class Settings(BaseSettings):
-    """Application settings loaded from environment variables"""
-
     # Server Configuration
     bind_address: str = "127.0.0.1"
     bind_port: int = 8000
@@ -68,7 +62,6 @@ class Settings(BaseSettings):
     dns_rebind_check: bool = True
     require_consent: bool = True
     allow_loopback_scans: bool = True
-    allowed_networks: List[str] = ["127.0.0.1", "192.168.*.*", "10.*.*.*", "172.16.*.*"]
     cors_allowed_origins: List[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
@@ -85,7 +78,6 @@ class Settings(BaseSettings):
     plugin_signature_key: Optional[str] = None
     enforce_plugin_signatures: bool = False
     enforce_parser_integrity: bool = True
-    parser_hash_algorithm: str = "sha256"
     vault_key: Optional[str] = None
     denied_capabilities: List[str] = []
     admin_api_key: Optional[str] = None
@@ -97,7 +89,6 @@ class Settings(BaseSettings):
     # on MANDATORY_DENYLIST for why those ranges live outside this field.
     network_denylist: List[str] = []
     network_audit_log_file: str = str(PROJECT_ROOT / "logs" / "network.audit.log")
-    network_audit_retention_days: int = 90
     network_audit_max_entries: int = 10000
     enforce_network_policy: bool = True
     network_policy_failure_mode: str = "block"  # "block" or "log_only"
@@ -139,7 +130,6 @@ class Settings(BaseSettings):
     sandbox_cpu_quota: float = 0.5
     sandbox_memory_mb: int = 512
     sandbox_max_output_bytes: int = 5_242_880  # 5 MB
-    sandbox_allow_network: bool = True
     docker_network: str = "restricted"  # Docker network name for sandboxed containers
 
     # Task-start payload limits (tunable via env vars)
@@ -154,24 +144,8 @@ class Settings(BaseSettings):
     # Workflow Configuration
     workflow_min_interval_seconds: int = 60
 
-    # Notification SSRF Protection
-    notification_ssrf_enabled: bool = True
+    # Notification SSRF Protection (always enabled, uses MANDATORY_DENYLIST)
     notification_allowed_ip_ranges: List[str] = []
-    notification_blocked_ip_ranges: List[str] = [
-        "169.254.169.254/32",
-        "169.254.0.0/16",
-        "127.0.0.0/8",
-        "10.0.0.0/8",
-        "172.16.0.0/12",
-        "192.168.0.0/16",
-        "100.64.0.0/10",
-        "fc00::/7",
-        "fe80::/10",
-        "::1/128",
-        "224.0.0.0/4",
-        "ff00::/8",
-        "0.0.0.0/8",
-    ]
     notification_max_redirects: int = 0
     notification_allowed_ports: List[int] = [80, 443, 8080, 8443]
 
@@ -214,37 +188,9 @@ class Settings(BaseSettings):
         env_prefix = "SECUSCAN_"
         case_sensitive = False
 
-    @field_validator(
-        "cors_allowed_origins",
-        "cors_allowed_methods",
-        "cors_allowed_headers",
-        "trusted_proxies",
-        "network_allowlist",
-        "network_denylist",
-        "notification_allowed_ip_ranges",
-        "notification_blocked_ip_ranges",
-        mode="before",
-    )
-    @classmethod
-    def parse_csv_or_list(cls, value: Any) -> Any:
-        """Allow comma-separated env values in addition to JSON arrays."""
-        if isinstance(value, str):
-            return [item.strip() for item in value.split(",") if item.strip()]
-        return value
-
-    @property
-    def base_url(self) -> str:
-        """Full base URL for the API"""
-        return f"http://{self.bind_address}:{self.bind_port}"
 
     @property
     def resolved_vault_key(self) -> bytes:
-        """Return a deterministic 32-byte key for credential vault encryption.
-
-        Raises RuntimeError when neither SECUSCAN_VAULT_KEY nor
-        SECUSCAN_PLUGIN_SIGNATURE_KEY is set, rather than falling back to the
-        insecure hardcoded string that was present in earlier versions.
-        """
         seed = self.vault_key or self.plugin_signature_key
         if not seed:
             raise RuntimeError(
@@ -257,7 +203,6 @@ class Settings(BaseSettings):
         return base64.urlsafe_b64encode(digest)
 
     def ensure_directories(self) -> None:
-        """Create necessary directories if they don't exist"""
         for directory in [
             self.raw_output_dir,
             self.reports_dir,
@@ -267,7 +212,6 @@ class Settings(BaseSettings):
         ]:
             Path(directory).mkdir(parents=True, exist_ok=True)
 
-        # Create gitkeep files
         (Path(self.raw_output_dir) / ".gitkeep").touch()
         (Path(self.reports_dir) / ".gitkeep").touch()
 

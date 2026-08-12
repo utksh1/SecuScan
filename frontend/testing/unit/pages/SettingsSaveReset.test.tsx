@@ -87,7 +87,6 @@ describe('Settings save/reset behavior', () => {
   window.localStorage.setItem('secuscan_recent_tools', JSON.stringify([]))
   window.localStorage.setItem('secuscan-theme', 'dark')
   window.localStorage.setItem('sidebar-expanded', 'true')
-  // Set up an unrelated key
   window.localStorage.setItem('some-other-app-key', 'should-not-be-deleted')
 
   const user = userEvent.setup()

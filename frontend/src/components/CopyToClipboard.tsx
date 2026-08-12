@@ -3,9 +3,7 @@ import { AlertTriangle, Check, Copy } from 'lucide-react';
 
 interface CopyToClipboardProps {
   textToCopy: string;
-  /** Idle-state button label. Defaults to "Copy Output". */
   label?: string;
-  /** Native tooltip / accessible title. Defaults to "Copy to clipboard". */
   title?: string;
 }
 

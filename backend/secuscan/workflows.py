@@ -46,11 +46,6 @@ class WorkflowScheduler:
     async def tick(self):
         db = await get_db()
         rows = await db.fetchall(
-            """
-            SELECT id, name, owner_id, schedule_seconds, last_run_at, steps_json
-            FROM workflows
-            WHERE enabled = 1 AND schedule_seconds IS NOT NULL AND schedule_seconds > 0
-            """
         )
         now = datetime.now(timezone.utc)
         for row in rows:
@@ -86,7 +81,6 @@ class WorkflowScheduler:
         logger.info("Running workflow %s with %d step(s)", workflow_id, len(steps))
         db = await get_db()
 
-        # Retrieve the latest version snapshot or create one if it doesn't exist
         active_version = await db.fetchone(
             "SELECT id, version_number FROM workflow_versions "
             "WHERE workflow_id = ? ORDER BY version_number DESC LIMIT 1",
@@ -229,13 +223,6 @@ class WorkflowScheduler:
 
 
 async def _finalize_workflow_run(run_id: str, poll_interval: float = 5.0, max_polls: int = 720) -> None:
-    """Background task that polls task statuses and marks the run terminal.
-
-    Polls every *poll_interval* seconds for up to *max_polls* iterations
-    (default: 5 s × 720 = 1 hour). If tasks are still running after the
-    limit, the run is marked failed with a timeout message so it never stays
-    permanently in the 'queued' state.
-    """
     for _ in range(max_polls):
         await asyncio.sleep(poll_interval)
         try:

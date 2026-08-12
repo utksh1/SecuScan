@@ -1,7 +1,3 @@
-"""
-Dependency graph resolution and remediation conflict validation.
-"""
-
 import json
 import re
 import importlib.metadata
@@ -11,44 +7,17 @@ from packaging.version import Version
 from packaging.specifiers import SpecifierSet
 
 
-def normalize_package_name(name: str) -> str:
-    """Normalize a package name to lowercase with PEP 503 compatibility."""
-    return re.sub(r"[-_.]+", "-", name).strip().lower()
-
-
-def clean_version_string(ver_str: str) -> str:
-    """Extract numeric prefix from version strings for comparison."""
-    ver_str = ver_str.strip().lower()
-    if ver_str.startswith("v"):
-        ver_str = ver_str[1:]
-    # Match the first sequence of digits and dots (e.g., "1.2.3" in "1.2.3-ubuntu")
-    match = re.match(r"^([0-9]+(?:\.[0-9]+)*)", ver_str)
-    if match:
-        return match.group(1)
-    return ver_str
-
-
 def parse_remediation_suggestion(remediation_str: str) -> Tuple[str, str] | None:
-    """Parse recommendation string to extract package name and target upgrade version.
-
-    Example: "Update framer-motion to version 11.0.0" -> ("framer-motion", "11.0.0")
-    """
     pattern = r"(?:update|upgrade)\s+([a-zA-Z0-9_\-\.]+)\s+(?:to\s+)?(?:version\s+)?([a-zA-Z0-9_\-\.\+\~]+)"
     match = re.search(pattern, remediation_str, re.IGNORECASE)
     if match:
-        pkg_name = normalize_package_name(match.group(1))
+        pkg_name = re.sub(r"[-_.]+", "-", match.group(1)).strip().lower()
         version = match.group(2)
         return pkg_name, version
     return None
 
 
 def handle_caret(ver_str: str) -> List[str]:
-    """Convert NPM caret specification to PEP 440 constraints.
-
-    ^1.2.3 -> >=1.2.3, <2.0.0
-    ^0.2.3 -> >=0.2.3, <0.3.0
-    ^0.0.3 -> >=0.0.3, <0.0.4
-    """
     parts = ver_str.split(".")
     while len(parts) < 3:
         parts.append("0")
@@ -69,11 +38,6 @@ def handle_caret(ver_str: str) -> List[str]:
 
 
 def handle_tilde(ver_str: str) -> List[str]:
-    """Convert NPM tilde specification to PEP 440 constraints.
-
-    ~1.2.3 -> >=1.2.3, <1.3.0
-    ~1.2   -> >=1.2.0, <1.3.0
-    """
     parts = ver_str.split(".")
     while len(parts) < 2:
         parts.append("0")
@@ -84,7 +48,6 @@ def handle_tilde(ver_str: str) -> List[str]:
 
 
 def handle_wildcard(part: str) -> List[str]:
-    """Convert wildcard version strings (e.g. 1.x or 1.*) to PEP 440 constraints."""
     part = part.replace("*", "x")
     parts = part.split(".")
     if len(parts) == 1 or parts[0] == "x":
@@ -102,7 +65,6 @@ def handle_wildcard(part: str) -> List[str]:
 
 
 def semver_to_pep440(semver_str: str) -> SpecifierSet:
-    """Convert NPM/semver package version specifier into PEP 440 SpecifierSet."""
     semver_str = semver_str.strip()
     if not semver_str or semver_str in ("*", "x", "any"):
         return SpecifierSet()
@@ -139,7 +101,6 @@ def semver_to_pep440(semver_str: str) -> SpecifierSet:
 
 
 def parse_package_lock(filepath: str) -> Dict[str, List[Tuple[str, str]]]:
-    """Parse a package-lock.json and extract direct and transitive package dependency requirements."""
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -161,7 +122,7 @@ def parse_package_lock(filepath: str) -> Dict[str, List[Tuple[str, str]]]:
         all_deps = {**deps, **peer_deps}
 
         if all_deps:
-            relations[parent] = [(normalize_package_name(k), v) for k, v in all_deps.items()]
+            relations[parent] = [(re.sub(r"[-_.]+", "-", k).strip().lower(), v) for k, v in all_deps.items()]
 
     # Fallback to dependencies key (NPM lockfile v1)
     dependencies = data.get("dependencies", {})
@@ -169,7 +130,7 @@ def parse_package_lock(filepath: str) -> Dict[str, List[Tuple[str, str]]]:
         for name, info in deps_dict.items():
             requires = info.get("requires", {})
             if requires:
-                relations[name] = [(normalize_package_name(k), v) for k, v in requires.items()]
+                relations[name] = [(re.sub(r"[-_.]+", "-", k).strip().lower(), v) for k, v in requires.items()]
             child_deps = info.get("dependencies", {})
             if child_deps:
                 parse_v1_deps(child_deps)
@@ -181,7 +142,6 @@ def parse_package_lock(filepath: str) -> Dict[str, List[Tuple[str, str]]]:
 
 
 def parse_package_json(filepath: str) -> Dict[str, List[Tuple[str, str]]]:
-    """Parse a package.json for direct project dependencies."""
     try:
         with open(filepath, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -190,14 +150,13 @@ def parse_package_json(filepath: str) -> Dict[str, List[Tuple[str, str]]]:
         peer_deps = data.get("peerDependencies", {})
         all_deps = {**deps, **dev_deps, **peer_deps}
         return {
-            "root": [(normalize_package_name(k), v) for k, v in all_deps.items()]
+            "root": [(re.sub(r"[-_.]+", "-", k).strip().lower(), v) for k, v in all_deps.items()]
         }
     except Exception:
         return {}
 
 
 def parse_requirement_line(line: str) -> Tuple[str, SpecifierSet] | None:
-    """Parse a single requirements.txt line into a normalized package name and SpecifierSet."""
     line = line.strip()
     if not line or line.startswith(('#', '-')):
         return None
@@ -209,7 +168,7 @@ def parse_requirement_line(line: str) -> Tuple[str, SpecifierSet] | None:
     name, spec_str = match.groups()
     # Normalize comparison operators if present
     spec_str = spec_str.strip()
-    name = normalize_package_name(name)
+    name = re.sub(r"[-_.]+", "-", name).strip().lower()
     try:
         spec = SpecifierSet(spec_str)
     except Exception:
@@ -217,7 +176,6 @@ def parse_requirement_line(line: str) -> Tuple[str, SpecifierSet] | None:
     return name, spec
 
 def get_python_transitive_dependencies(package_name: str) -> List[Tuple[str, SpecifierSet]]:
-    """Retrieve python transitive dependencies from installed metadata."""
     try:
         reqs = importlib.metadata.requires(package_name)
         if not reqs:
@@ -234,7 +192,7 @@ def get_python_transitive_dependencies(package_name: str) -> List[Tuple[str, Spe
                     dep_name, dep_spec = match2.groups()
                 else:
                     continue
-            dep_name = normalize_package_name(dep_name)
+            dep_name = re.sub(r"[-_.]+", "-", dep_name).strip().lower()
             try:
                 spec = SpecifierSet(dep_spec)
             except Exception:
@@ -246,7 +204,6 @@ def get_python_transitive_dependencies(package_name: str) -> List[Tuple[str, Spe
 
 
 def build_dependency_graph(target_dir: str) -> Dict[str, List[Dict[str, Any]]]:
-    """Scan the target directory for Python/Node manifests and construct a transitive dependency constraint graph."""
     graph: Dict[str, List[Dict[str, Any]]] = {}
 
     if not target_dir:
@@ -317,7 +274,6 @@ def build_dependency_graph(target_dir: str) -> Dict[str, List[Dict[str, Any]]]:
 
 
 def validate_remediation(remediation_str: str, graph: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:
-    """Validate a remediation string against a dependency graph, yielding safety status and alternative actions."""
     res = {
         "safe_to_apply": True,
         "compatible_range": None,
@@ -335,7 +291,12 @@ def validate_remediation(remediation_str: str, graph: Dict[str, List[Dict[str, A
     constraints = graph[pkg_name]
     specifiers = [c["specifier"] for c in constraints]
 
-    clean_target = clean_version_string(target_version)
+    clean_target = target_version.strip().lower()
+    if clean_target.startswith("v"):
+        clean_target = clean_target[1:]
+    match = re.match(r"^([0-9]+(?:\.[0-9]+)*)", clean_target)
+    if match:
+        clean_target = match.group(1)
 
     is_safe = True
     try:

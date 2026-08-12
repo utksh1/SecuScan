@@ -1,11 +1,3 @@
-"""
-plugin_validator.py — SecuScan plugin metadata validator
-
-Shared validation logic used by:
-  - scripts/validate_plugins.py  (CLI helper for contributors)
-  - backend plugin loading        (via PluginManager._validate_plugin)
-"""
-
 from __future__ import annotations
 
 import json
@@ -83,18 +75,6 @@ class ValidationResult:
 
 
 class PluginMetadataValidator:
-    """
-    Validates a single plugin directory.
-
-    Usage::
-
-        validator = PluginMetadataValidator(Path("plugins/nmap"))
-        result = validator.validate()
-        if not result.valid:
-            for err in result.errors:
-                print(err.display())
-    """
-
     def __init__(self, plugin_dir: Path) -> None:
         self.plugin_dir = plugin_dir
         self.metadata_file = plugin_dir / "metadata.json"

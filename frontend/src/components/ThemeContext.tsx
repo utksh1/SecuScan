@@ -43,10 +43,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     try {
       if (typeof window === 'undefined') return 'dark'
-      // Priority 1: manual localStorage override
       const saved = localStorage.getItem(STORAGE_KEY)
       if (saved === 'light' || saved === 'dark') return saved
-      // Priority 2: OS preference
       return getSystemTheme()
     } catch {
       return 'dark'
@@ -64,12 +62,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   )
 
-  // Apply theme class on every change
   useEffect(() => {
     applyTheme(theme)
   }, [theme])
 
-  // Listen for OS preference changes — only auto-follow if no manual override
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
@@ -87,7 +83,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     try {
       localStorage.setItem(STORAGE_KEY, next)
     } catch {
-      // ignore storage write errors (e.g., incognito/private mode)
     }
     setIsSystemControlled(false)
     setThemeState(next)
@@ -101,7 +96,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     try {
       localStorage.removeItem(STORAGE_KEY)
     } catch {
-      // ignore storage errors
     }
     setIsSystemControlled(true)
     const sys = getSystemTheme()

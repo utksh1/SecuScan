@@ -18,12 +18,10 @@ import ProtectedRoute from './components/ProtectedRoute'
 
 import { ThemeProvider } from './components/ThemeContext'
 import { ToastProvider } from './components/ToastContext'
-import { I18nProvider } from './components/I18nContext'
 import { AuthProvider } from './components/AuthContext'
 import { routes } from './routes'
 
-/** Authenticated app chrome. Rendered only inside ProtectedRoute, so no page
- *  (and therefore no protected API call) mounts until the session is confirmed. */
+
 function ShellLayout() {
   return (
     <AppShell>
@@ -35,10 +33,8 @@ function ShellLayout() {
 export function AppRoutes() {
   return (
     <Routes>
-      {/* Public: the API-key sign-in entry. */}
       <Route path={routes.signIn} element={<SignIn />} />
 
-      {/* Everything else requires a valid backend session. */}
       <Route element={<ProtectedRoute />}>
         <Route element={<ShellLayout />}>
           <Route path={routes.dashboard} element={<Dashboard />} />
@@ -61,17 +57,15 @@ export function AppRoutes() {
 export default function App() {
   return (
     <ThemeProvider>
-      <I18nProvider>
-        <ToastProvider>
-          <ErrorBoundary>
-            <AuthProvider>
-              <Router>
-                <AppRoutes />
-              </Router>
-            </AuthProvider>
-          </ErrorBoundary>
-        </ToastProvider>
-      </I18nProvider>
+      <ToastProvider>
+        <ErrorBoundary>
+          <AuthProvider>
+            <Router>
+              <AppRoutes />
+            </Router>
+          </AuthProvider>
+        </ErrorBoundary>
+      </ToastProvider>
     </ThemeProvider>
   )
 }

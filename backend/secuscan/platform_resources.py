@@ -78,12 +78,6 @@ async def persist_crawl_run(
 ) -> str:
     crawl_id = str(uuid.uuid4())
     await db.execute(
-        """
-        INSERT INTO crawl_runs (
-            id, owner_id, task_id, plugin_id, target, seed_url, status,
-            summary_json, pages_json, forms_json, scripts_json, params_json, api_hints_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
         (
             crawl_id,
             owner_id,
@@ -159,13 +153,6 @@ async def replace_asset_services(
                     or None
                 )
             await db.execute(
-                """
-                INSERT INTO asset_services (
-                    id, owner_id, task_id, plugin_id, target, asset_id, host, ip, port, protocol,
-                    service, product, version, cpe, confidence, title, banner, cert_subject,
-                    cert_san_json, cert_expiry, service_fingerprint, metadata_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
                 (
                     str(uuid.uuid4()),
                     owner_id,

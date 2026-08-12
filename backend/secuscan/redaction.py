@@ -1,20 +1,3 @@
-"""
-Secret redaction utility.
-
-Provides a single ``redact()`` function that replaces common secret patterns
-in scanner output, logs, and report content with a safe ``[REDACTED]``
-placeholder before any data is persisted or exported.
-
-Design goals
-------------
-* Conservative patterns only — prefer false negatives over false positives so
-  legitimate finding content (URLs, headers, port strings) is never destroyed.
-* Pre-compiled regexes for performance; redaction is called on every raw output
-  blob so speed matters.
-* Replacements preserve surrounding context so analysts can still read the
-  finding while the secret value itself is hidden.
-"""
-
 import re
 import logging
 from typing import Any
@@ -165,22 +148,6 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 
 
 def redact(text: str) -> str:
-    """
-    Scan *text* for common secret patterns and replace matched secret values
-    with ``[REDACTED]``.
-
-    The function is deliberately conservative: it replaces only the secret
-    *value* portion of each match, preserving labels and surrounding context
-    so the output remains readable for analysts.
-
-    Args:
-        text: Raw scanner output, log line, finding description, etc.
-
-    Returns:
-        A copy of *text* with secret values replaced by ``[REDACTED]``.
-        If *text* is empty or ``None`` the original value is returned
-        unchanged.
-    """
     if not text:
         return text
 
@@ -198,11 +165,6 @@ def redact(text: str) -> str:
 
 
 def redact_dict(data: dict[str, Any]) -> dict[str, Any]:
-    """
-    Recursively redact all string values inside a dict (e.g. a finding dict).
-
-    Non-string values are left untouched; nested dicts and lists are walked.
-    """
     if not isinstance(data, dict):
         return data
     result: dict[str, Any] = {}
@@ -239,22 +201,6 @@ _SENSITIVE_INPUT_KEYS: frozenset[str] = frozenset({
 
 
 def redact_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
-    """
-    Redact sensitive values from a task inputs dict before it is included in
-    any API response.
-
-    Keys whose names appear in ``_SENSITIVE_INPUT_KEYS`` (case-insensitive) have
-    their value replaced with ``[REDACTED]``.  All other string values are also
-    passed through the pattern-based ``redact()`` function so that accidentally
-    embedded secrets (e.g. a token pasted into a ``target`` field) are caught as
-    well.  Non-string values are left untouched.
-
-    Args:
-        inputs: Parsed task inputs dict (from ``inputs_json`` column).
-
-    Returns:
-        A new dict with sensitive values replaced by ``[REDACTED]``.
-    """
     if not isinstance(inputs, dict):
         return inputs
 
@@ -283,19 +229,7 @@ def _redact_value(value: Any) -> Any:
 def _apply_pattern(
     name: str, pattern: re.Pattern[str], text: str
 ) -> tuple[str, int]:
-    """
-    Apply a single compiled pattern to *text*.
-
-    Patterns that have two capture groups replace group 2 (the secret) with
-    ``[REDACTED]`` while keeping group 1 (the label).
-
-    Patterns with one or three groups (e.g. PEM key blocks) replace the entire
-    match or the middle group respectively.
-
-    Returns ``(new_text, replacement_count)``.
-    """
     groups = pattern.groups  # number of capture groups
-
     count = 0
 
     if groups == 0:

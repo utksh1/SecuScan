@@ -93,8 +93,6 @@ const severityConfig: Record<string, { label: string; accent: string; chip: stri
   },
 }
 
-// Plain-language blurbs for the severity legend help affordance. Ordering mirrors
-// `severityOrder` (highest → lowest risk). Reuses `severityConfig` for label + colors.
 const severityLegend: { id: (typeof severityOrder)[number]; blurb: string }[] = [
   { id: 'critical', blurb: 'Confirmed or highly likely exploitation with severe impact — triage first.' },
   { id: 'high', blurb: 'Serious weakness, likely exploitable. Remediate promptly.' },
@@ -139,13 +137,10 @@ const filterControlClass =
 
 type SortMode = 'risk' | 'severity' | 'newest' | 'oldest' | 'target'
 
-// ─── Virtual row types ────────────────────────────────────────────────────────
-
 type HeaderRow = { kind: 'header'; severity: string; count: number }
 type FindingRow = { kind: 'finding'; finding: Finding & { status: FindingStatus }; isLastInGroup: boolean }
 type VirtualRow = HeaderRow | FindingRow
 
-// Estimated heights for virtualizer
 const ROW_HEIGHTS: Record<VirtualRow['kind'], number> = {
   header: 72,
   finding: 140,
@@ -174,7 +169,6 @@ export default function Findings() {
   const [reviewState, setReviewState] = useState<ReviewState>({})
   const [copiedFindingId, setCopiedFindingId] = useState<string | null>(null)
 
-  // ── Multi-select export state & handlers ───────────────────────────────────
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false)
 
@@ -201,7 +195,6 @@ export default function Findings() {
     cvss: 'CVSS',
   }
 
-  // ── Severity legend help affordance ────────────────────────────────────────
   const [legendOpen, setLegendOpen] = useState(false)
   const legendRef = useRef<HTMLDivElement>(null)
   const legendButtonRef = useRef<HTMLButtonElement>(null)
@@ -227,7 +220,6 @@ export default function Findings() {
     }
   }, [legendOpen])
 
-  // ── Saved views ────────────────────────────────────────────────────────────
   const { views, loading: viewsLoading, saveView, deleteView, renameView } = useSavedViews()
 
   const currentPreset: FilterPreset = {
@@ -272,7 +264,6 @@ export default function Findings() {
         setReviewState(JSON.parse(saved))
       }
     } catch {
-      // Ignore malformed local review state.
     }
   }, [])
 
@@ -296,7 +287,6 @@ export default function Findings() {
     [findings, reviewState],
   )
 
-  // Collect unique targets and categories so we can build filter dropdowns.
   const uniqueTargets = useMemo(() => {
     const seen = new Set<string>()
     for (const f of enrichedFindings) {
@@ -305,7 +295,6 @@ export default function Findings() {
     return Array.from(seen).sort()
   }, [enrichedFindings])
 
-  // plugin_id values serve as the "scanner/tool" filter per issue #43
   const uniqueScanners = useMemo(() => {
     const seen = new Set<string>()
     for (const f of enrichedFindings) {
@@ -390,7 +379,6 @@ export default function Findings() {
     })
   }, [enrichedFindings, filterSeverity, filterTarget, filterScanner, filterAsset, filterKind, filterAnalystStatus, filterValidatedOnly, filterHighConfidence, searchQuery, dateFrom, dateTo])
 
-  // ── Multi-select export state & handlers ───────────────────────────────────
   const visibleIds = useMemo(() => filteredFindings.map((f) => f.id), [filteredFindings])
   const isAllSelected = useMemo(() => {
     if (visibleIds.length === 0) return false
@@ -466,8 +454,6 @@ export default function Findings() {
     }
   }, [filteredFindings, sortMode])
 
-  // Build the flat virtual row list: header + findings per severity group
-  // For non-severity sort modes, all findings appear in a single flat list
   const virtualRows = useMemo<VirtualRow[]>(() => {
     const rows: VirtualRow[] = []
     if (sortMode === 'severity') {
@@ -484,7 +470,6 @@ export default function Findings() {
         })
       }
     } else {
-      // For newest/oldest/target sort — single flat list, no headers
       sortedFindings.forEach((finding, idx) => {
         rows.push({
           kind: 'finding',
@@ -528,7 +513,6 @@ export default function Findings() {
     }
   }, [sortedFindings, selectedFinding])
 
-  // Derives a flat list of active filter chips from non-default filter state.
   const activeFilters = useMemo(() => {
     const chips: { key: string; label: string }[] = []
     if (searchQuery.trim())      chips.push({ key: 'search',  label: `Search: "${searchQuery.trim()}"` })
@@ -619,7 +603,6 @@ export default function Findings() {
     setLoadingMore(false)
   }
 }
-  // ─── Keyboard navigation ────────────────────────────────────────────────────
 
   function handleListKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     if (!sortedFindings.length) return
@@ -638,7 +621,6 @@ export default function Findings() {
     }
 }
 
-  // ─── Virtualizer ────────────────────────────────────────────────────────────
   const parentRef = useRef<HTMLDivElement>(null)
 
   const virtualizer = useVirtualizer({
@@ -648,9 +630,6 @@ export default function Findings() {
     overscan: 6,
   })
 
-  // Keep latest virtualRows/virtualizer available without making them
-  // reactive dependencies — they change on every filter/sort, but we only
-  // want to re-scroll when the *selection* actually changes.
   const virtualRowsRef = useRef(virtualRows)
   useEffect(() => {
     virtualRowsRef.current = virtualRows
@@ -661,7 +640,6 @@ export default function Findings() {
     virtualizerRef.current = virtualizer
   })
 
-  // Scroll selected finding into view when the selection changes
   useEffect(() => {
     if (!selectedFindingId) return
     const rows = virtualRowsRef.current
@@ -675,7 +653,7 @@ export default function Findings() {
   return (
     <div className="min-h-screen bg-charcoal-dark text-silver px-4 py-6 md:px-8 md:py-10">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-8">
-        {/* Header */}
+        {}
         <header className="border-b-4 border-silver-bright/10 pb-8">
           <div className="mb-4 inline-block bg-rag-red px-4 py-1 text-xs font-black uppercase tracking-widest text-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
             Triage Workspace v5.1
@@ -709,7 +687,7 @@ export default function Findings() {
           </div>
         </header>
 
-        {/* Filter Bar */}
+        {}
         <section className="border-2 border-black bg-charcoal/95 p-6 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] backdrop-blur lg:sticky lg:top-4 lg:z-20">
           <div className="grid gap-8">
             <div className="grid gap-6 2xl:grid-cols-[minmax(320px,1fr)_auto] 2xl:items-end">
@@ -759,7 +737,7 @@ export default function Findings() {
                   </button>
                 ))}
 
-                {/* Severity scale legend — help affordance (issue #835) */}
+                {}
                 <div className="relative" ref={legendRef}>
                   <button
                     ref={legendButtonRef}
@@ -1012,7 +990,7 @@ export default function Findings() {
           </div>
         </section>
 
-        {/* ── Active filter summary strip ── */}
+        {}
         {activeFilters.length > 0 && (
           <div
             aria-label="active filters"
@@ -1032,9 +1010,9 @@ export default function Findings() {
           </div>
         )}
 
-        {/* Main Split Layout */}
+        {}
         <div className="grid gap-8 xl:grid-cols-[minmax(0,1.2fr)_420px]">
-          {/* ── Virtualized Findings List ── */}
+          {}
           <motion.section variants={sectionVariants} initial="hidden" animate="visible">
             {loading ? (
               <div className="border-4 border-dashed border-silver-bright/10 bg-charcoal/40 px-6 py-16 text-center">
@@ -1047,7 +1025,7 @@ export default function Findings() {
               </div>
             ) : (
               <>
-                {/* Selection & Export Toolbar */}
+                {}
                 <div className="flex flex-wrap items-center justify-between gap-4 border-2 border-black bg-charcoal p-4 mb-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                   <div className="flex items-center gap-3">
                     <input
@@ -1118,7 +1096,7 @@ export default function Findings() {
                   className="border-2 border-black bg-charcoal shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] focus:outline-none focus:ring-2 focus:ring-rag-red/40"
                   style={{ height: '72vh', overflowY: 'auto' }}
                 >
-                {/* Virtualizer inner container */}
+                {}
                 <div
                   style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}
                 >
@@ -1139,7 +1117,7 @@ export default function Findings() {
                         }}
                       >
                         {row.kind === 'header' ? (
-                          /* ── Severity group header ── */
+                          
                           <div className="flex w-full items-center justify-between border-b border-silver-bright/8 px-5 py-4 bg-charcoal">
                             <div className="flex items-center gap-4">
                               <span className={`h-3 w-3 rotate-45 ${severityConfig[row.severity].rail}`} />
@@ -1154,7 +1132,7 @@ export default function Findings() {
                             </div>
                           </div>
                         ) : (
-                          /* ── Finding row ── */
+                          
                           (() => {
                             const { finding, isLastInGroup } = row
                             const isSelected = selectedFinding?.id === finding.id
@@ -1167,7 +1145,7 @@ export default function Findings() {
                                   !isLastInGroup ? 'border-b border-silver-bright/6' : ''
                                 } ${isSelected ? 'bg-silver-bright/6' : 'hover:bg-silver-bright/3'}`}
                               >
-                                {/* Checkbox column */}
+                                {}
                                 <div className="pl-4 pr-1 flex items-center justify-center">
                                   <input
                                     type="checkbox"
@@ -1178,7 +1156,7 @@ export default function Findings() {
                                   />
                                 </div>
 
-                                {/* Details button */}
+                                {}
                                 <button
                                   type="button"
                                   role="option"
@@ -1279,7 +1257,7 @@ export default function Findings() {
           )}
           </motion.section>
 
-          {/* ── Detail Panel (unchanged) ── */}
+          {}
           <motion.aside variants={sectionVariants} initial="hidden" animate="visible" className="xl:sticky xl:top-32 xl:self-start">
             <div className="border-4 border-black bg-charcoal shadow-[10px_10px_0px_0px_rgba(0,0,0,1)]">
               {selectedFinding ? (

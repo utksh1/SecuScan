@@ -101,12 +101,6 @@ class SavedViewUpdate(BaseModel):
 
 
 async def require_owned_saved_view(db, view_id: str, owner: str) -> Dict[str, Any]:
-    """Fetch a saved view and enforce that it belongs to ``owner`` (issue #1743).
-
-    Raises 404 when the view does not exist and 403 when it exists but is
-    owned by a different user/workspace, matching require_owned_task's
-    behaviour for tasks in routes.py.
-    """
     row = await db.fetchone(
         "SELECT id, owner_id FROM saved_views WHERE id = ?", (view_id,)
     )
@@ -121,7 +115,6 @@ async def require_owned_saved_view(db, view_id: str, owner: str) -> Dict[str, An
 
 @saved_views_router.get("")
 async def list_saved_views(owner: str = Depends(get_current_owner)) -> Dict[str, Any]:
-    """Return all saved views for the current owner, ordered by creation date."""
     db = await get_db()
     rows: List[Dict] = await db.fetchall(
         "SELECT id, name, filter_json, created_at, updated_at "
@@ -135,10 +128,6 @@ async def list_saved_views(owner: str = Depends(get_current_owner)) -> Dict[str,
 async def create_saved_view(
     body: SavedViewCreate, owner: str = Depends(get_current_owner)
 ) -> Dict[str, Any]:
-    """
-    Create a new saved view for the current owner.
-    Returns 409 if the owner already has a view with the same name.
-    """
     db = await get_db()
 
     existing = await db.fetchone(
@@ -154,10 +143,6 @@ async def create_saved_view(
 
     view_id = str(uuid.uuid4())
     await db.execute(
-        """
-        INSERT INTO saved_views (id, name, filter_json, owner_id)
-        VALUES (?, ?, ?, ?)
-        """,
         (view_id, body.name, body.filter_json, owner),
     )
     return {"id": view_id, "name": body.name, "created": True}
@@ -169,10 +154,6 @@ async def update_saved_view(
     body: SavedViewUpdate,
     owner: str = Depends(get_current_owner),
 ) -> Dict[str, Any]:
-    """
-    Overwrite name and/or filter_json for an existing view owned by the caller.
-    Also accepts PATCH semantics — only supplied fields are updated.
-    """
     db = await get_db()
 
     await require_owned_saved_view(db, view_id, owner)
@@ -217,9 +198,6 @@ async def update_saved_view(
 async def delete_saved_view(
     view_id: str, owner: str = Depends(get_current_owner)
 ) -> Dict[str, Any]:
-    """Delete a saved view owned by the caller. Idempotent — returns 200 even
-    if the view was already gone. Raises 403 if it exists but belongs to a
-    different owner, so callers can't confirm/erase other users' views."""
     db = await get_db()
 
     row = await db.fetchone(

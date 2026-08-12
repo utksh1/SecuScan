@@ -69,7 +69,7 @@ function ViewRow({ view, onApply, onRename, onDelete }: ViewRowProps) {
       className="group border-b border-silver-bright/6 last:border-0"
     >
       <div className="flex items-start gap-3 px-4 py-3">
-        {/* Apply button + name */}
+        {}
         <button
           type="button"
           onClick={onApply}
@@ -109,10 +109,10 @@ function ViewRow({ view, onApply, onRename, onDelete }: ViewRowProps) {
           </p>
         </button>
 
-        {/* Action icons — visible on hover */}
+        {}
         {!editing && (
           <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-            {/* Rename */}
+            {}
             <button
               type="button"
               aria-label="Rename view"
@@ -245,7 +245,7 @@ export default function SavedViewsPanel({
             role="dialog"
             aria-label="Saved filter views panel"
           >
-            {/* Header */}
+            {}
             <div className="flex items-center justify-between border-b-2 border-black px-4 py-3">
               <p className="text-[10px] font-black uppercase tracking-[0.3em] text-silver-bright">
                 Filter_Presets
