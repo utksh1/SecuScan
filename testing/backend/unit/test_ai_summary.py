@@ -178,7 +178,7 @@ class TestReportGeneratorAiSummary:
         with patch("backend.secuscan.config.settings") as ms:
             ms.ai_summary_enabled = True
             ms.ai_summary_api_key = ""
-            result = asyncio.run(ReportGenerator._get_ai_summary([{"title": "x", "severity": "high"}]))
+            result = ReportGenerator._get_ai_summary([{"title": "x", "severity": "high"}])
         assert result == ""
 
     def test_sarif_report_unchanged(self):

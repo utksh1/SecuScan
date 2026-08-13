@@ -105,20 +105,50 @@ class ReportGenerator:
             output.close()
 
     @classmethod
-    async def _get_ai_summary(cls, findings):
-        """Return an AI executive summary, or '' when the feature is disabled."""
-        from .config import settings as _settings
-        if not _settings.ai_summary_enabled:
-            return ""
-        if not _settings.ai_summary_api_key:
-            return ""
-        return await generate_summary(
-            findings=findings,
-            model=_settings.ai_summary_model,
-            api_key=_settings.ai_summary_api_key,
-            base_url=_settings.ai_summary_base_url or None,
-        )
-
+    def _get_ai_summary(cls, findings):
+         """Return an AI executive summary, or '' when the feature is disabled."""
+         from .config import settings as _settings
+         if not _settings.ai_summary_enabled:
+             return ""
+         if not _settings.ai_summary_api_key:
+             return ""
+         import asyncio
+         try:
+             loop = asyncio.get_running_loop()
+         except RuntimeError:
+             loop = None
+     
+         if loop and loop.is_running():
+             # Called from async context (HTTP handler) — run in thread executor
+             import concurrent.futures
+             with concurrent.futures.ThreadPoolExecutor() as pool:
+                 future = pool.submit(
+                     asyncio.run,
+                     generate_summary(
+                         findings=findings,
+                         model=_settings.ai_summary_model,
+                         api_key=_settings.ai_summary_api_key,
+                         base_url=_settings.ai_summary_base_url or None,
+                     )
+                 )
+                 try:
+                     return future.result(timeout=20)
+                 except Exception:
+                     return ""
+         else:
+             # Called from sync context (CLI) — safe to use asyncio.run
+             try:
+                 return asyncio.run(
+                     generate_summary(
+                         findings=findings,
+                         model=_settings.ai_summary_model,
+                         api_key=_settings.ai_summary_api_key,
+                         base_url=_settings.ai_summary_base_url or None,
+                     )
+                 )
+             except Exception:
+                 return ""
+            
     @staticmethod
     def _hex_to_rgb(value: str) -> tuple[int, int, int]:
         value = value.strip("#")
@@ -401,7 +431,7 @@ class ReportGenerator:
         findings = payload["findings"]
         severity_counts = payload["severity_counts"]
         try:
-          ai_summary = asyncio.run(cls._get_ai_summary(findings))
+          ai_summary = cls._get_ai_summary(findings)
         except Exception:
           ai_summary = ""
         shield_icon = cls._icon_data_uri("shield", "1e3a5f")
@@ -733,7 +763,7 @@ class ReportGenerator:
         findings = payload["findings"]
         severity_counts = payload["severity_counts"]
         try:
-          ai_summary = asyncio.run(cls._get_ai_summary(findings))
+          ai_summary = cls._get_ai_summary(findings)
         except Exception:
           ai_summary = ""
         shield_icon = cls._icon_data_uri("shield", "1e3a5f")

@@ -140,7 +140,10 @@ def test_malformed_plugin_does_not_crash_loader(setup_test_environment, tmp_path
     manager = PluginManager(str(tmp_path / "plugins"))
     loaded = asyncio.run(manager.load_plugins())
 
-    assert loaded >= 0
+    assert loaded == 1, (
+        f"Expected 1 plugin to load (good_plugin), got {loaded}. "
+        "Malformed plugin should be skipped, not crash the loader."
+    )
 
 
 def test_malformed_plugin_logs_clear_error(setup_test_environment, tmp_path, caplog):
