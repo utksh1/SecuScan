@@ -414,3 +414,29 @@ SecuScan is licensed under the [MIT License](LICENSE). Third-party tools and sca
 Thanks to everyone contributing code, plugins, tests, docs, design, issue triage, and reviews.
 
 [View contributors](https://github.com/utksh1/SecuScan/graphs/contributors)
+
+## Troubleshooting
+
+### Installation fails
+- Ensure you are using the supported Node.js version.
+- Run `npm install` or `npm ci`.
+- Delete `node_modules` and reinstall dependencies if necessary.
+
+### Environment variables not loading
+- Verify that a `.env` file exists.
+- Ensure all required variables are defined.
+- Restart the development server after making changes.
+
+## FAQ
+
+### How do I start the project?
+Run:
+
+```bash
+npm install
+npm run dev
+```
+
+### How do I report a bug?
+Please open a GitHub issue with reproduction steps and relevant logs.
+
