@@ -1,9 +1,9 @@
-pytest>=8.3.5
-pytest-cov>=6.0.0
+pytest>=9.1.1
+pytest-cov>=7.1.0
 httpx>=0.28.1
-ruff>=0.15.12
-pytest-asyncio>=0.24.0
-anyio>=4.0.0
-pip-audit>=2.6.0
-pyyaml>=6.0
-trio>=0.27.0
+ruff>=0.16.3
+pytest-asyncio>=1.4.0
+anyio>=4.14.2
+pip-audit>=2.10.1
+pyyaml>=6.0.3
+trio>=0.34.0
