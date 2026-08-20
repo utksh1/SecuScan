@@ -235,6 +235,14 @@ class PluginMetadataValidator:
                         f"{prefix}.options",
                         f"Field '{fid}' is type '{ftype}' and must have a non-empty 'options' list",
                     )
+                elif isinstance(options, list):
+                    for j, opt in enumerate(options):
+                        opt_val = opt.get("value") if isinstance(opt, dict) else opt
+                        if not isinstance(opt_val, str) or not opt_val.strip():
+                            result.add(
+                                f"{prefix}.options[{j}]",
+                                f"Field '{fid}' option at index {j} must be a non-empty string or object with non-empty 'value'",
+                            )
 
             if not f.get("help"):
                 result.add_warning(
@@ -322,10 +330,10 @@ class PluginMetadataValidator:
                     "Must contain at least two field ids",
                 )
 
-            for field_id in mutually_exclusive:
-                if field_id not in field_ids:
+            for j, field_id in enumerate(mutually_exclusive):
+                if not isinstance(field_id, str) or field_id not in field_ids:
                     result.add(
-                        f"{prefix}.mutually_exclusive",
+                        f"{prefix}.mutually_exclusive[{j}]",
                         f"Unknown field '{field_id}'",
                     )
 
@@ -365,6 +373,13 @@ class PluginMetadataValidator:
         python_packages = deps.get("python_packages")
         if python_packages is not None and not isinstance(python_packages, list):
             result.add("dependencies.python_packages", "Must be a list of strings")
+        elif isinstance(python_packages, list):
+            for i, pkg in enumerate(python_packages):
+                if not isinstance(pkg, str) or not pkg.strip():
+                    result.add(
+                        f"dependencies.python_packages[{i}]",
+                        "Each python package dependency must be a non-empty string",
+                    )
 
     def _check_custom_parser(self, data: dict, result: ValidationResult) -> None:
         output = data.get("output")

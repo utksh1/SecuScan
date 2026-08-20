@@ -1,0 +1,60 @@
+{
+  "id": "nested_invalid_plugin",
+  "name": "Nested Invalid Plugin Fixture",
+  "description": "Fixture with validation failures inside nested objects and lists.",
+  "version": "1.0.0",
+  "category": "utils",
+  "icon": "bug",
+  "engine": {
+    "type": "spaceship"
+  },
+  "command_template": [
+    "run",
+    "{mode}"
+  ],
+  "fields": [
+    {
+      "id": "mode",
+      "label": "Mode",
+      "type": "select",
+      "help": "Select execution mode",
+      "options": [
+        "fast",
+        ""
+      ]
+    },
+    {
+      "id": "target",
+      "label": "Target Host",
+      "type": "text",
+      "help": "Target IP or domain"
+    }
+  ],
+  "output": {
+    "parser": "telepathy"
+  },
+  "safety": {
+    "level": "apocalyptic",
+    "requires_consent": true
+  },
+  "validation": {
+    "mode_rule": {
+      "required": "yes",
+      "mutually_exclusive": [
+        "mode",
+        "ghost_field"
+      ]
+    }
+  },
+  "dependencies": {
+    "binaries": [
+      "nmap",
+      ""
+    ],
+    "python_packages": [
+      "",
+      "requests"
+    ]
+  },
+  "checksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

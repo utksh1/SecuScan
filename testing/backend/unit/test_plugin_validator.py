@@ -32,6 +32,7 @@ from backend.secuscan.plugin_validator import (
 FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "plugins"
 VALID_FIXTURE = FIXTURES_DIR / "valid_plugin"
 INVALID_FIXTURE = FIXTURES_DIR / "invalid_plugin"
+NESTED_INVALID_FIXTURE = FIXTURES_DIR / "nested_invalid_plugin"
 
 
 # ---------------------------------------------------------------------------
@@ -795,3 +796,78 @@ class TestSecurityNegativeTests:
                 )
 
             assert "timed out" in str(exc_info.value)
+
+
+# ===========================================================================
+# Nested object & array validation paths (#2164)
+# ===========================================================================
+
+
+class TestNestedObjectValidationPaths:
+    def test_nested_invalid_fixture_fails(self):
+        result = validate_one_plugin(NESTED_INVALID_FIXTURE)
+        assert not result.valid, "Nested invalid fixture should fail validation"
+
+    def test_nested_invalid_fixture_reports_engine_type_path(self):
+        result = validate_one_plugin(NESTED_INVALID_FIXTURE)
+        assert "engine.type" in _error_paths(result)
+
+    def test_nested_invalid_fixture_reports_safety_level_path(self):
+        result = validate_one_plugin(NESTED_INVALID_FIXTURE)
+        assert "safety.level" in _error_paths(result)
+
+    def test_nested_invalid_fixture_reports_safety_consent_message_path(self):
+        result = validate_one_plugin(NESTED_INVALID_FIXTURE)
+        assert "safety.consent_message" in _error_paths(result)
+
+    def test_nested_invalid_fixture_reports_output_parser_path(self):
+        result = validate_one_plugin(NESTED_INVALID_FIXTURE)
+        assert "output.parser" in _error_paths(result)
+
+    def test_nested_invalid_fixture_reports_field_options_indexed_path(self):
+        result = validate_one_plugin(NESTED_INVALID_FIXTURE)
+        assert "fields[0].options[1]" in _error_paths(result)
+
+    def test_nested_invalid_fixture_reports_dependencies_binaries_indexed_path(self):
+        result = validate_one_plugin(NESTED_INVALID_FIXTURE)
+        assert "dependencies.binaries[1]" in _error_paths(result)
+
+    def test_nested_invalid_fixture_reports_dependencies_python_packages_indexed_path(self):
+        result = validate_one_plugin(NESTED_INVALID_FIXTURE)
+        assert "dependencies.python_packages[0]" in _error_paths(result)
+
+    def test_nested_invalid_fixture_reports_validation_required_path(self):
+        result = validate_one_plugin(NESTED_INVALID_FIXTURE)
+        assert "validation.mode_rule.required" in _error_paths(result)
+
+    def test_nested_invalid_fixture_reports_validation_mutually_exclusive_indexed_path(self):
+        result = validate_one_plugin(NESTED_INVALID_FIXTURE)
+        assert "validation.mode_rule.mutually_exclusive[1]" in _error_paths(result)
+
+    def test_valid_nested_objects_accepted(self, tmp_path):
+        data = _minimal_valid()
+        data["dependencies"] = {
+            "binaries": ["ping"],
+            "python_packages": ["pytest"],
+        }
+        data["validation"] = {
+            "target_count": {
+                "required": True,
+                "mutually_exclusive": ["target", "count"],
+            }
+        }
+        plugin_dir = _write_metadata(tmp_path, data)
+        result = validate_one_plugin(plugin_dir)
+
+        nested_paths = {
+            "engine.type",
+            "safety.level",
+            "output.parser",
+            "dependencies.binaries[0]",
+            "dependencies.python_packages[0]",
+            "validation.target_count.required",
+            "validation.target_count.mutually_exclusive[0]",
+            "validation.target_count.mutually_exclusive[1]",
+        }
+        reported = _error_paths(result)
+        assert not (reported & nested_paths), f"Unexpected errors on valid nested paths: {reported & nested_paths}"
