@@ -40,7 +40,7 @@ from backend.secuscan.parser_sandbox import (
 def _write_parser(tmp_path: Path, body: str) -> Path:
     """Write a parser.py with the given body and return its path."""
     p = tmp_path / "parser.py"
-    p.write_text(textwrap.dedent(body))
+    p.write_text(textwrap.dedent(body), encoding="utf-8")
     return p
 
 
@@ -403,3 +403,92 @@ class TestParserSandboxError:
     def test_str_contains_plugin_id(self):
         err = ParserSandboxError("my_plugin", "bad thing")
         assert "my_plugin" in str(err)
+
+
+# ---------------------------------------------------------------------------
+# Multibyte UTF-8 Output & Boundary Coverage
+# ---------------------------------------------------------------------------
+
+
+class TestMultibyteUtf8OutputBoundaries:
+    """Coverage for multibyte UTF-8 output byte boundaries and safe failure handling."""
+
+    def test_multibyte_utf8_output_within_boundary(self, tmp_path):
+        """Parser output with multibyte UTF-8 characters within limit decodes cleanly."""
+        p = _write_parser(
+            tmp_path,
+            """\
+            def parse(output):
+                return {"summary": "Scan result: 🚀 日本語 € ñ", "count": 42}
+            """,
+        )
+        result = run_parser_in_sandbox(p, "utf8_valid", "input")
+        assert result["summary"] == "Scan result: 🚀 日本語 € ñ"
+        assert result["count"] == 42
+
+    def test_multibyte_utf8_output_straddling_byte_limit(self, tmp_path):
+        """Streaming multibyte UTF-8 output crossing size limit on a byte boundary raises safely."""
+        # 4-byte UTF-8 emoji repeated to cross max_output_bytes boundary mid-character
+        p = _write_parser(
+            tmp_path,
+            """\
+            import sys
+            def parse(output):
+                # Write 4-byte UTF-8 character (🔥 = b'\\xf0\\x9f\\x94\\xa5') repeatedly
+                emoji = "🔥".encode("utf-8")
+                for _ in range(500):
+                    sys.stdout.buffer.write(emoji)
+                    sys.stdout.buffer.flush()
+                return {}
+            """,
+        )
+        cap = 200  # Cap falls mid-stream across multibyte boundary
+        with pytest.raises(ParserSandboxError) as exc_info:
+            run_parser_in_sandbox(p, "utf8_overflow", "input", max_output_bytes=cap)
+
+        assert "limit" in exc_info.value.reason or "exceeded" in exc_info.value.reason
+        assert exc_info.value.plugin_id == "utf8_overflow"
+        # Exception string formatting must be safe and not raise UnicodeDecodeError
+        assert "utf8_overflow" in str(exc_info.value)
+
+    def test_multibyte_utf8_stderr_truncation_boundary_safety(self, tmp_path):
+        """Oversized multibyte UTF-8 stderr exceeding 64KB boundary is safely decoded and truncated."""
+        p = _write_parser(
+            tmp_path,
+            """\
+            import sys
+            def parse(output):
+                # Write 20,000 4-byte emojis (= 80,000 bytes > 65,536 bytes _MAX_STDERR_BYTES cap)
+                msg = ("🚀" * 20000).encode("utf-8")
+                sys.stderr.buffer.write(msg)
+                sys.stderr.buffer.flush()
+                raise RuntimeError("exploded after stderr flood")
+            """,
+        )
+        with pytest.raises(ParserSandboxError) as exc_info:
+            run_parser_in_sandbox(p, "utf8_stderr_flood", "input")
+
+        assert exc_info.value.plugin_id == "utf8_stderr_flood"
+        # Stderr excerpt must be decoded safely without UnicodeDecodeError
+        excerpt = exc_info.value.stderr_excerpt
+        assert len(excerpt) <= 2000
+        assert isinstance(excerpt, str)
+
+    def test_multibyte_utf8_non_json_stdout_truncation(self, tmp_path):
+        """Non-JSON stdout with invalid/partial multibyte UTF-8 sequence is safely handled."""
+        p = _write_parser(
+            tmp_path,
+            """\
+            import sys
+            def parse(output):
+                # Write invalid UTF-8 byte sequence to stdout
+                sys.stdout.buffer.write(b"not json: \\xf0\\x9f\\x99\\x80 partial: \\xf0\\x9f")
+                sys.stdout.buffer.flush()
+                return {}
+            """,
+        )
+        with pytest.raises(ParserSandboxError) as exc_info:
+            run_parser_in_sandbox(p, "utf8_invalid_json", "input")
+
+        assert "non-JSON output" in exc_info.value.reason
+        assert exc_info.value.plugin_id == "utf8_invalid_json"
