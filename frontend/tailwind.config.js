@@ -8,25 +8,25 @@ export default {
   theme: {
     extend: {
       colors: {
-        'primary': 'var(--bg-primary)',
-        'secondary': 'var(--bg-secondary)',
-        'bg-primary': 'var(--bg-primary)',
-        'bg-secondary': 'var(--bg-secondary)',
-        'bg-tertiary': 'var(--bg-tertiary)',
-        'bg-elevated': 'var(--bg-elevated)',
-        'primary-text': 'var(--text-primary)',
-        'secondary-text': 'var(--text-secondary)',
-        'muted': 'var(--text-muted)',
-        'charcoal-dark': 'var(--bg-primary)',
+        'primary': 'color-mix(in srgb, var(--bg-primary) 100%, transparent)',
+        'secondary': 'color-mix(in srgb, var(--bg-secondary) 100%, transparent)',
+        'bg-primary': 'color-mix(in srgb, var(--bg-primary) 100%, transparent)',
+        'bg-secondary': 'color-mix(in srgb, var(--bg-secondary) 100%, transparent)',
+        'bg-tertiary': 'color-mix(in srgb, var(--bg-tertiary) 100%, transparent)',
+        'bg-elevated': 'color-mix(in srgb, var(--bg-elevated) 100%, transparent)',
+        'primary-text': 'color-mix(in srgb, var(--text-primary) 100%, transparent)',
+        'secondary-text': 'color-mix(in srgb, var(--text-secondary) 100%, transparent)',
+        'muted': 'color-mix(in srgb, var(--text-muted) 100%, transparent)',
+        'charcoal-dark': 'color-mix(in srgb, var(--bg-primary) 100%, transparent)',
         charcoal: {
-          light: 'var(--bg-tertiary)',
-          DEFAULT: 'var(--bg-secondary)',
-          dark: 'var(--bg-primary)', /* mapped for backward compatibility */
+          light: 'color-mix(in srgb, var(--bg-tertiary) 100%, transparent)',
+          DEFAULT: 'color-mix(in srgb, var(--bg-secondary) 100%, transparent)',
+          dark: 'color-mix(in srgb, var(--bg-primary) 100%, transparent)', /* mapped for backward compatibility */
         },
         silver: {
-          bright: 'var(--text-primary)',
-          DEFAULT: 'var(--text-secondary)',
-          dark: 'var(--text-muted)',
+          bright: 'color-mix(in srgb, var(--text-primary) 100%, transparent)',
+          DEFAULT: 'color-mix(in srgb, var(--text-secondary) 100%, transparent)',
+          dark: 'color-mix(in srgb, var(--text-muted) 100%, transparent)',
         },
         rag: {
           red: '#ef4444',
@@ -37,7 +37,7 @@ export default {
           'blue-bright': '#3b82f6',    
         },
         accent: {
-          silver: 'var(--accent-silver)'
+          silver: 'color-mix(in srgb, var(--accent-silver) 100%, transparent)'
         }
       },
       fontFamily: {
