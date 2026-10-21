@@ -102,6 +102,7 @@ class PluginManager:
     def __init__(self, plugins_dir: str):
         self.plugins_dir = Path(plugins_dir)
         self.plugins: Dict[str, PluginMetadata] = {}
+        self.plugin_locations: Dict[str, Path] = {}
 
     def _scan_plugin_dirs(self) -> List[Path]:
         """Scan the plugins directory for plugin directories."""
@@ -123,6 +124,8 @@ class PluginManager:
         Returns:
             Number of successfully loaded plugins
         """
+        self.plugins.clear()
+        self.plugin_locations.clear()
         plugin_dirs = self._scan_plugin_dirs()
         loaded = 0
 
@@ -135,9 +138,19 @@ class PluginManager:
             try:
                 plugin_meta = await self._load_plugin_metadata(metadata_file)
 
+                # Check for duplicate plugin identifier
+                if plugin_meta.id in self.plugins:
+                    existing_loc = self.plugin_locations.get(plugin_meta.id)
+                    logger.error(
+                        f"Duplicate plugin identifier '{plugin_meta.id}' found in {plugin_dir} "
+                        f"(conflicts with existing plugin at {existing_loc})"
+                    )
+                    continue
+
                 # Validate plugin
                 if await self._validate_plugin(plugin_meta, plugin_dir):
                     self.plugins[plugin_meta.id] = plugin_meta
+                    self.plugin_locations[plugin_meta.id] = plugin_dir
                     loaded += 1
                     logger.info(f"✓ Loaded plugin: {plugin_meta.name} v{plugin_meta.version}")
                 else:

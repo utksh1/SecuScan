@@ -1,4 +1,6 @@
 import asyncio
+import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -475,3 +477,60 @@ def test_plugin_build_command_allows_legitimate_targets(setup_test_environment):
     )
     assert command is not None
     assert "https://example.com" in command
+
+
+def test_plugin_loader_duplicate_identifier_diagnostics(tmp_path, caplog):
+    """Loader must log error diagnostics identifying both conflicting plugin locations when duplicate IDs exist."""
+    dir1 = tmp_path / "plugin_alpha"
+    dir1.mkdir()
+    dir2 = tmp_path / "plugin_beta"
+    dir2.mkdir()
+
+    meta1 = {
+        "id": "duplicate_scanner",
+        "name": "Alpha Scanner",
+        "description": "First plugin instance",
+        "version": "1.0.0",
+        "category": "web",
+        "icon": "shield",
+        "engine": {"type": "cli", "binary": "echo"},
+        "command_template": ["echo", "test"],
+        "fields": [],
+        "presets": {},
+        "output": {"parser": "text"},
+        "safety": {"level": "safe"},
+    }
+
+    meta2 = {
+        "id": "duplicate_scanner",
+        "name": "Beta Scanner",
+        "description": "Second plugin instance with duplicate identifier",
+        "version": "2.0.0",
+        "category": "web",
+        "icon": "shield",
+        "engine": {"type": "cli", "binary": "echo"},
+        "command_template": ["echo", "test"],
+        "fields": [],
+        "presets": {},
+        "output": {"parser": "text"},
+        "safety": {"level": "safe"},
+    }
+
+    (dir1 / "metadata.json").write_text(json.dumps(meta1), encoding="utf-8")
+    (dir2 / "metadata.json").write_text(json.dumps(meta2), encoding="utf-8")
+
+    manager = PluginManager(str(tmp_path))
+    with caplog.at_level(logging.ERROR):
+        loaded = asyncio.run(manager.load_plugins())
+
+    # Only 1 plugin should be loaded successfully (the duplicate is skipped)
+    assert loaded == 1
+    loaded_plugin = manager.get_plugin("duplicate_scanner")
+    assert loaded_plugin is not None
+    assert loaded_plugin.name == "Alpha Scanner"
+
+    # Verify that an error log was captured identifying the duplicate ID and BOTH locations
+    error_logs = [rec.message for rec in caplog.records if rec.levelno == logging.ERROR]
+    assert any("duplicate_scanner" in msg for msg in error_logs)
+    assert any(str(dir1) in msg or dir1.name in msg for msg in error_logs)
+    assert any(str(dir2) in msg or dir2.name in msg for msg in error_logs)
