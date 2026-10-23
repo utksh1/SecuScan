@@ -1,3 +1,14 @@
+> [!IMPORTANT]
+> **SecuScan v2 is out — this repository is superseded.**
+> The project has been rewritten from the ground up in **Rust + React** and now lives at
+> **[utksh1/SecuScan-v2](https://github.com/utksh1/SecuScan-v2)**.
+> v2 keeps everything v1 stood for (local-first, authorized-use-only scanning) and adds:
+> a declarative TOML plugin system (no plugin code executes), 4 native Rust scanners,
+> JWT auth with roles & API keys, workspaces + registered targets, scan diff between runs,
+> recurring schedules, async report jobs (PDF/DOCX/XLSX/MD/JSON/CSV/HTML/SARIF) with signed
+> webhooks, and a verified-in-CI test suite (115 Rust + 64 frontend tests).
+> This v1 repo remains available for reference. New development happens exclusively in v2.
+
 <p align="center">
   <img src="assets/logo.png" alt="SecuScan logo" width="180">
 </p>
